@@ -1,10 +1,12 @@
 import { PlayIcon, SquareIcon } from "lucide-react"
+import { clockAt } from "@/lib/church-time"
+import { churchTimeZone } from "@/stores/timing-input"
 import { Button } from "@/components/ui/button"
-import { clockText, phaseRange } from "@/lib/run-of-show"
+import { phaseRange } from "@/lib/run-of-show"
 import { usePhaseRun } from "@/stores/phase-run-store"
 import { useQueueStore } from "@/stores/queue-store"
 
-const at = (ms: number) => { const d = new Date(ms); return clockText(d.getHours() * 60 + d.getMinutes()) }
+const at = (ms: number) => clockAt(ms, churchTimeZone())
 
 /**
  * Present's automated phases (approved design): the loops and the warm-up start and stop here;
@@ -14,7 +16,8 @@ export function PhaseStrip() {
   const headers = useQueueStore((s) => s.headers)
   const items = useQueueStore((s) => s.items)
   const run = usePhaseRun((s) => s.run)
-  const auto = headers.filter((h) => h.type === "phase" && (h.rule === "loop" || h.rule === "auto_once"))
+  // A phase skipped for this service (#193) has nothing to run.
+  const auto = headers.filter((h) => h.type === "phase" && !h.disabled && (h.rule === "loop" || h.rule === "auto_once"))
   if (auto.length === 0) return null
   const running = run ? headers.find((h) => h.id === run.headerId) : null
   const range = running ? phaseRange(items.length, headers, running.id) : null

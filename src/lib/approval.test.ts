@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { approvalBlockers, approvalLabel, approvalState } from "./approval"
+import { approvalBlockers, approvalLabel, approvalState, eventPlanApprovalState } from "./approval"
 import type { ImageQueueItem, SongQueueItem, VerseQueueItem } from "@/types"
 
 describe("approval state", () => {
@@ -11,6 +11,14 @@ describe("approval state", () => {
     expect(approvalLabel({ revision: 5, approved_revision: 3, approved_at: null })).toBe("Changed since approval (v3 approved, now v5)")
     expect(approvalLabel({ revision: 3, approved_revision: 3, approved_at: null })).toBe("Approved")
     expect(approvalLabel({ revision: 3, approved_revision: 3, approved_at: null, approved_by: "Tolu" })).toBe("Approved by Tolu")
+  })
+
+  it("derives an event plan's approval from the saved service revision", () => {
+    expect(eventPlanApprovalState(null, false)).toBe("draft")
+    expect(eventPlanApprovalState({ revision: 3, approved_revision: null }, false)).toBe("draft")
+    expect(eventPlanApprovalState({ revision: 3, approved_revision: 3 }, false)).toBe("approved")
+    expect(eventPlanApprovalState({ revision: 4, approved_revision: 3 }, false)).toBe("changed")
+    expect(eventPlanApprovalState({ revision: 3, approved_revision: 3 }, true)).toBe("changed")
   })
 
   it("refuses approval while a song or picture is missing, in plain words", () => {

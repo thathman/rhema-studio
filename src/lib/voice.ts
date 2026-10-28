@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import { create } from "zustand"
-import { useSettingsStore } from "@/stores/settings-store"
+import { DEFAULT_TALK_RULES, useSettingsStore } from "@/stores/settings-store"
+import { roleLabel } from "@/lib/remote-roles"
 
 /**
  * Rhema Comms voice (C3, ADR 0002): one LAN talk channel, full duplex. The host is the hub: each
@@ -18,8 +19,8 @@ export const CHANNEL_IDS: readonly string[] = CHANNELS.map((c) => c.id)
 export const HOST = "host"
 /** The main desk talking to everyone over the others: their voices drop while it holds Talk. */
 export const PRIORITY = "priority"
-/** How loud the others are while the main desk talks with priority. */
-const DUCKED = 0.2
+/** How loud the others are while the main desk talks with priority, unless Settings → Audio says otherwise. */
+const DUCKED = DEFAULT_TALK_RULES.duck
 
 /** Where a voice goes: "all", a channel id, or "to:<name>" (one person; "to:host" for the main desk). */
 export function talkName(talk: string, hostName = "Main desk"): string {
@@ -54,10 +55,48 @@ export function callTarget(talk: string, people: Iterable<[string, { name: strin
   return found.length === 1 ? found[0][0] : undefined
 }
 
+/**
+ * Whether a desk with `role` may hear and talk on `channel` (Settings → Audio → Talk channels). All
+ * crew is everyone's; a channel the rules do not list is open to every role; the main desk and a
+ * desk with no known role (this computer itself, a shared key) may use every channel.
+ */
+export function mayUseChannel(rules: { channels: Partial<Record<string, readonly string[]>> } | undefined, channel: string, role?: string): boolean {
+  if (!role || channel === "all" || channel === PRIORITY || channel.startsWith("to:")) return true
+  const allowed = rules?.channels[channel]
+  return !allowed || allowed.includes(role)
+}
+
+/** The talk channels a desk with `role` may use, by the host's rules (all of them when it says none). */
+export function channelsFor(rights: Record<string, string[]> | undefined, role?: string): { id: string; name: string }[] {
+  return CHANNELS.filter((c) => mayUseChannel({ channels: rights ?? {} }, c.id, role))
+}
+
+/** A person in the talk channel as the crew reads them: their name and their desk's role ("Ade · Bible"). */
+export function speakerName(p: { name: string; role?: string }): string {
+  return p.role ? `${p.name} · ${roleLabel(p.role)}` : p.name
+}
+
+/**
+ * How loud one person is heard (0–1), from a listener's own levels: muted is silent, otherwise its
+ * volume, and full for anyone not set. Each listener's levels change only what they hear.
+ */
+export interface PersonLevel { volume: number; muted?: boolean }
+export function levelOf(levels: Readonly<Record<string, PersonLevel | number>> | undefined, key: string): number {
+  const l = levels?.[key]
+  if (l === undefined) return 1
+  if (typeof l === "number") return Number.isFinite(l) ? Math.min(1, Math.max(0, l)) : 1
+  return l.muted ? 0 : Math.min(1, Math.max(0, l.volume))
+}
+
+/** The key a joined desk or phone uses for the main desk in its levels (it knows the others by name). */
+export const HOST_LEVEL = "to:host"
+
 export interface VoicePerson {
   /** The desk's key id: on the main desk only, never sent to joined desks. */
   id?: string
   name: string
+  /** The desk's role ("bible", "stage"…), so the crew can tell who is talking (absent for the main desk and older hosts). */
+  role?: string
   /** Whom they talk to ("all", a channel, "to:<name>"). */
   talk?: string
   /** Talk held. */
@@ -81,9 +120,18 @@ interface VoiceState {
   hostTalkTo: string
   /** Whose key the main desk's private call goes to (see callTarget). */
   hostTalkToId: string | null
+  /** How loud the main desk hears each desk, by key id (its own output only). */
+  hostLevels: Record<string, PersonLevel>
 }
 
-export const useVoice = create<VoiceState>(() => ({ peers: [], hostTalking: false, hostSpeaking: false, micError: null, micNote: null, volume: 1, hostListen: [...CHANNEL_IDS], hostTalkTo: "all", hostTalkToId: null }))
+export const useVoice = create<VoiceState>(() => ({ peers: [], hostTalking: false, hostSpeaking: false, micError: null, micNote: null, volume: 1, hostListen: [...CHANNEL_IDS], hostTalkTo: "all", hostTalkToId: null, hostLevels: {} }))
+
+/** How loud the main desk hears one desk (by key id), or mutes it; only what the main desk hears changes. */
+export function setHostLevel(id: string, level: PersonLevel): void {
+  const volume = Math.min(1, Math.max(0, Number.isFinite(level.volume) ? level.volume : 1))
+  useVoice.setState((s) => ({ hostLevels: { ...s.hostLevels, [id]: { volume, ...(level.muted ? { muted: true } : {}) } } }))
+  rewire()
+}
 
 /** How loud the main desk hears the crew (its own output only). */
 export function setVoiceVolume(v: number): void {
@@ -168,6 +216,10 @@ interface Peer {
   talkTo: string
   /** Whose key its private call goes to, found when it chose it. */
   toId?: string
+  /** Its paired role, from the main desk's list of devices (for channel rights and the crew list). */
+  role?: string
+  /** How loud it hears each person (0–1), by name, or HOST_LEVEL for the main desk: set on that desk. */
+  levels: Record<string, number>
 }
 
 let ctx: AudioContext | null = null
@@ -186,9 +238,13 @@ const routes = new Map<string, Map<string, { gain: GainNode; source: AudioNode }
 function rewire() {
   if (!ctx) return
   const v = useVoice.getState()
-  const ends = new Map<string, { source: AudioNode | null; sink: AudioNode; listen: readonly string[]; talk: string; toId?: string | null }>()
-  if (monitor) ends.set(HOST, { source: hostMic?.gate ?? null, sink: monitor, listen: v.hostListen, talk: v.hostTalkTo, toId: v.hostTalkToId })
-  for (const [id, p] of peers) ends.set(id, { source: p.analyser, sink: p.mix, listen: p.listen, talk: p.talkTo, toId: p.toId })
+  const rules = useSettingsStore.getState().talkRules ?? DEFAULT_TALK_RULES
+  const duck = Number.isFinite(rules.duck) && rules.duck > 0 ? rules.duck : DUCKED
+  type End = { source: AudioNode | null; sink: AudioNode; listen: readonly string[]; talk: string; toId?: string | null; role?: string; level: (from: string) => number }
+  const ends = new Map<string, End>()
+  if (monitor) ends.set(HOST, { source: hostMic?.gate ?? null, sink: monitor, listen: v.hostListen, talk: v.hostTalkTo, toId: v.hostTalkToId, level: (from) => levelOf(v.hostLevels, from) })
+  // A desk sets levels by the names it sees; the main desk's is HOST_LEVEL.
+  for (const [id, p] of peers) ends.set(id, { source: p.analyser, sink: p.mix, listen: p.listen, talk: p.talkTo, toId: p.toId, role: p.role, level: (from) => levelOf(p.levels, from === HOST ? HOST_LEVEL : peers.get(from)?.name ?? "") })
   // Routes whose speaker or listener left, or whose speaker's node changed, go.
   for (const [from, row] of routes) {
     for (const [to, r] of row) {
@@ -212,9 +268,11 @@ function rewire() {
         gain.connect(b.sink)
         row.set(to, (r = { gain, source: a.source }))
       }
-      // While the main desk talks with priority, everyone else is quieter for every listener.
+      // While the main desk talks with priority, everyone else is quieter for every listener (never silent).
       const ducked = v.hostTalking && v.hostTalkTo === PRIORITY && from !== HOST
-      r.gain.gain.value = hears(a.talk, to, b.listen, a.toId) ? (ducked ? DUCKED : 1) : 0
+      // A channel's rights by role: a speaker it does not allow reaches nobody on it, and a listener it does not allow never hears it.
+      const allowed = mayUseChannel(rules, a.talk, a.role) && mayUseChannel(rules, a.talk, b.role)
+      r.gain.gain.value = allowed && hears(a.talk, to, b.listen, a.toId) ? (ducked ? duck : 1) * b.level(from) : 0
     }
   }
 }
@@ -257,7 +315,7 @@ async function audio(): Promise<AudioContext> {
 
 function publishPeers() {
   const before = useVoice.getState().peers
-  useVoice.setState({ peers: [...peers.entries()].map(([id, p]) => ({ id, name: p.name, talk: p.talkTo, talking: p.talking, speaking: !!before.find((x) => x.id === id)?.speaking })) })
+  useVoice.setState({ peers: [...peers.entries()].map(([id, p]) => ({ id, name: p.name, ...(p.role ? { role: p.role } : {}), talk: p.talkTo, talking: p.talking, speaking: !!before.find((x) => x.id === id)?.speaking })) })
 }
 
 function drop(id: string) {
@@ -286,13 +344,26 @@ function talker(p: { by?: unknown; byId?: unknown }): string {
   return typeof p.byId === "string" && p.byId ? p.byId : `name:${String(p.by ?? "")}`
 }
 
+/** A paired desk's role, by its key id (none for this computer itself or a shared key). */
+function deviceRole(id: string): string | undefined {
+  return useSettingsStore.getState().remoteDevices.find((d) => d.hash === id)?.role
+}
+
+/** A desk's levels as it sent them (percent, by name): at most 32 people, each 0–1. */
+function asLevels(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {}
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>).slice(0, 32)) if (typeof v === "number" && Number.isFinite(v)) out[k.slice(0, 84)] = Math.min(100, Math.max(0, v)) / 100
+  return out
+}
+
 /** A desk's offer: answer it with what that desk should hear. `by` is its key id, `name` for people to read. */
 async function answer(id: string, by: string, name: string, sdp: string) {
   const a = await audio()
   drop(by) // a desk that reconnects replaces its old connection
   const pc = new RTCPeerConnection({ iceServers: [] })
   const mix = a.createMediaStreamDestination()
-  const peer: Peer = { name, pc, mix, voice: null, analyser: null, talking: false, listen: [...CHANNEL_IDS], talkTo: "all" }
+  const peer: Peer = { name, pc, mix, voice: null, analyser: null, talking: false, listen: [...CHANNEL_IDS], talkTo: "all", role: deviceRole(by), levels: {} }
   peers.set(by, peer)
   rewire()
   pc.ontrack = (e) => {
@@ -408,9 +479,18 @@ export function startVoiceHub(): () => void {
     // Another headset chosen for this computer: the crew is heard there now, the microphone from the next Talk.
     if (s.talkOutputId !== p.talkOutputId && ctx) void toOutput(ctx, s.talkOutputId)
     if (s.talkInputId !== p.talkInputId) closeHostMic()
+    // The channels' rights or priority level changed: everyone's routes follow at once.
+    if (s.talkRules !== p.talkRules) rewire()
     if (s.remoteDevices === p.remoteDevices) return
     const kept = new Set(s.remoteDevices.map((d) => d.hash))
     for (const d of p.remoteDevices) if (!kept.has(d.hash)) drop(d.hash)
+    // A desk given another role: its channel rights and crew label follow.
+    let changed = false
+    for (const [id, peer] of peers) {
+      const role = deviceRole(id)
+      if (role !== peer.role) { peer.role = role; changed = true }
+    }
+    if (changed) { rewire(); publishPeers() }
   })
   const offs = [
     listen<string>("remote:voice_offer", (e) => {
@@ -430,11 +510,14 @@ export function startVoiceHub(): () => void {
     }),
     listen<string>("remote:voice_channels", (e) => {
       try {
-        const p = JSON.parse(e.payload) as { by: string; byId?: string; listen: string[]; talk: string }
+        const p = JSON.parse(e.payload) as { by: string; byId?: string; listen: string[]; talk: string; levels?: unknown }
         const peer = peers.get(talker(p))
         if (!peer) return
         peer.listen = (Array.isArray(p.listen) ? p.listen : []).filter((c) => CHANNEL_IDS.includes(c))
         peer.talkTo = validTalk(String(p.talk))
+        // Priority is the main desk's alone.
+        if (peer.talkTo === PRIORITY) peer.talkTo = "all"
+        peer.levels = asLevels(p.levels)
         // A private call: whose key it goes to is found now, when it is chosen.
         peer.toId = callTarget(peer.talkTo, peers)
         rewire()
@@ -607,9 +690,14 @@ export class TalkClient {
     void invoke("join_command", { address: this.address, token: this.token, command: { command: "voice_talk", value: false } }).catch(() => {})
   }
 
-  /** Channels heard besides All crew, and whom to talk to ("all", a channel, "to:<name>"). */
-  channels(listen: string[], talk: string): void {
-    void invoke("join_command", { address: this.address, token: this.token, command: { command: "voice_channels", value: { listen, talk } } }).catch(() => {})
+  /**
+   * Channels heard besides All crew, whom to talk to ("all", a channel, "to:<name>"), and how loud
+   * this desk hears each person (0–1, by name; HOST_LEVEL for the main desk). The main desk mixes
+   * what this desk hears, so the levels are applied there.
+   */
+  channels(listen: string[], talk: string, levels: Record<string, PersonLevel> = {}): void {
+    const percent = Object.fromEntries(Object.keys(levels).map((k) => [k, Math.round(levelOf(levels, k) * 100)]).filter(([, v]) => v !== 100))
+    void invoke("join_command", { address: this.address, token: this.token, command: { command: "voice_channels", value: { listen, talk, ...(Object.keys(percent).length ? { levels: percent } : {}) } } }).catch(() => {})
   }
 
   /** Hold or let go of Talk; everyone sees it. Nothing while the connection is down. */

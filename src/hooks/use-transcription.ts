@@ -29,9 +29,17 @@ const NOT_RUNNING_ERROR = "Transcription is not running"
 export const transcriptionActions = {
   async start(onMissingApiKey?: () => void): Promise<void> {
     const settings = useSettingsStore.getState()
-    // RG-08 / NFR-09: no microphone audio leaves this computer until someone here has agreed to it.
-    if (settings.sttProvider === "deepgram" && !settings.cloudSpeechConsentAt) {
-      useCloudConsentStore.getState().ask(() => void transcriptionActions.start(onMissingApiKey))
+    // Keep persisted older settings from routing Yoruba to Deepgram, which does not support it.
+    const provider = settings.speechLanguage === "yo" && settings.sttProvider === "deepgram"
+      ? "whisper"
+      : settings.sttProvider
+    const cloudProvider = provider === "deepgram" || provider === "openai" ? provider : null
+    // A grant for one cloud provider must not authorize sending audio to another.
+    const consentAt = cloudProvider
+      ? settings.cloudSpeechConsents[cloudProvider] ?? (cloudProvider === "deepgram" ? settings.cloudSpeechConsentAt : "")
+      : ""
+    if (cloudProvider && !consentAt) {
+      useCloudConsentStore.getState().ask(cloudProvider, () => void transcriptionActions.start(onMissingApiKey))
       return
     }
     const transcript = useTranscriptStore.getState()
@@ -40,16 +48,19 @@ export const transcriptionActions = {
     try {
       await invoke("start_transcription", {
         apiKey:
-          settings.sttProvider === "deepgram"
+          provider === "deepgram"
             ? (settings.deepgramApiKey ?? "")
+            : provider === "openai"
+              ? (settings.openaiApiKey ?? "")
             : "",
         deviceId: settings.audioDeviceId,
         gain: settings.gain,
-        provider: settings.sttProvider,
+        provider,
+        language: settings.speechLanguage,
       })
       transcript.setTranscribing(true)
       // What is actually running (the setting can change mid-session without restarting it).
-      useCloudConsentStore.setState({ runningProvider: settings.sttProvider })
+      useCloudConsentStore.setState({ runningProvider: provider })
     } catch (e) {
       const msg = String(e)
       transcript.setConnectionStatus("error")
@@ -135,12 +146,12 @@ export function useTranscriptionEvents(): void {
   })
 
   useTauriEvent<TranscriptPartialPayload>("transcript_partial", (payload) => {
-    mark(`transcript_partial received "${payload.text.slice(0, 30)}"`)
+    mark(`transcript_partial received ${payload.text.length} characters`)
     useTranscriptStore.getState().setPartial(payload.text)
   })
 
   useTauriEvent<TranscriptPartialPayload>("transcript_final", (payload) => {
-    mark(`transcript_final received "${payload.text.slice(0, 30)}"`)
+    mark(`transcript_final received ${payload.text.length} characters`)
     useTranscriptStore.getState().addSegment({
       id: crypto.randomUUID(),
       text: payload.text,

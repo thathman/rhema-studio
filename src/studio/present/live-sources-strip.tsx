@@ -6,6 +6,7 @@ import { cameraSending, useRouterHealth, watchRouter } from "@/lib/cameras"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { activatedLabel, cameraPathOf, cameraSourceId, followerCount, followsLowerThird, followsTicker, lowerThirdWords, tickerWords, timerWords, type AnySourceId } from "@/lib/live-sources"
 import { cameraWords } from "@/lib/show-health"
+import { sceneForOutput } from "@/lib/scenes"
 import { tickerForScreens, timerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
@@ -14,7 +15,7 @@ import { CONTENT_TYPES } from "@/types/broadcast"
 const ON = "flex items-center gap-1 rounded-full border border-live-pulse/40 bg-live-pulse/10 py-0.5 pr-0.5 pl-2.5 text-[0.6875rem]"
 const OFF = "flex items-center gap-1 rounded-full border border-border py-0.5 pr-0.5 pl-2.5 text-[0.6875rem] text-muted-foreground"
 
-const SENDING_WORDS = { sending: "Sending", "not-sending": "Not sending", "router-off": "Camera router off" } as const
+const SENDING_WORDS = { sending: "Sending", frozen: "Frozen: nothing arriving", "not-sending": "Not sending", "router-off": "Camera router off" } as const
 
 /**
  * What each live source holds (ADR 0001): the content the feeds follow (Romans 8:28 can stay on the
@@ -130,7 +131,7 @@ export function LiveSourcesStrip() {
 function lowerThirdFeeds(outputs: readonly BroadcastOutput[], scenes: readonly Scene[]): number {
   return outputs.filter((o) => {
     if ((o.role ?? "congregation") !== "congregation") return false
-    const scene = o.sceneId ? scenes.find((x) => x.id === o.sceneId) : undefined
+    const scene = sceneForOutput(o, scenes)
     return followsLowerThird(o) || !!scene?.layers.some((l) => l.kind === "lowerThird")
   }).length
 }

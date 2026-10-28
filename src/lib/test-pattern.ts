@@ -95,6 +95,14 @@ export function testPatternFrame(url: string, spec: PatternSpec): Record<string,
   return { theme, verse: null, overlay: null, ticker: null, sound: false }
 }
 
+/**
+ * The camera-lag test's frame (#213): the test pattern with a large running clock over it, which
+ * the output draws itself (it moves every frame). For a screen or a browser feed, not NDI.
+ */
+export function latencyClockFrame(url: string, spec: PatternSpec): Record<string, unknown> {
+  return { ...testPatternFrame(url, spec), latencyClock: true }
+}
+
 export interface TestRiskInput {
   type: BroadcastOutputType
   name: string

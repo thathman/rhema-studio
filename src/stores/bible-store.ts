@@ -2,13 +2,15 @@ import { create } from "zustand"
 import { load } from "@tauri-apps/plugin-store"
 import { invoke } from "@tauri-apps/api/core"
 import type {
-  SongWithSections, Translation, Book, Verse, CrossReference, SongQueueItem, SlideQueueItem, ImageQueueItem } from "@/types"
+  SongWithSections, Translation, Book, Verse, CrossReference, SongQueueItem, SlideQueueItem, ImageQueueItem, AudioQueueItem, CueQueueItem } from "@/types"
 import type { SemanticSearchResult } from "@/types/detection"
 
 interface PendingNavigation {
   bookNumber: number
   chapter: number
   verse: number
+  /** The first-run Genesis selection is an example, not a service item. */
+  sample?: boolean
   /**
    * Present the verse to the live output once navigation lands. Set only by
    * manual operator actions (quick search); detections leave it unset so the
@@ -19,7 +21,7 @@ interface PendingNavigation {
 
 /** What Preview shows when a song or custom slide is selected: the item and the step. */
 export interface SelectedSlide {
-  item: SongQueueItem | SlideQueueItem | ImageQueueItem
+  item: SongQueueItem | SlideQueueItem | ImageQueueItem | AudioQueueItem | CueQueueItem
   index: number
   /** A slide of the live song as it went live (words saved since apply next time it starts). */
   song?: SongWithSections
@@ -33,8 +35,12 @@ interface BibleState {
   searchResults: Verse[]
   semanticResults: SemanticSearchResult[]
   selectedVerse: Verse | null
+  /** True only for the first-run Genesis example selected by SearchPanel. */
+  samplePreview: boolean
   /** A song slide in Preview. Set by previewing a song; cleared by selecting a verse. */
   selectedSlide: SelectedSlide | null
+  /** The exact rundown item whose content was selected, so repeated references stay distinct. */
+  selectedQueueItemId: string | null
   currentChapter: Verse[]
   crossReferences: CrossReference[]
   pendingNavigation: PendingNavigation | null
@@ -63,6 +69,10 @@ interface BibleState {
   setSemanticResults: (results: SemanticSearchResult[]) => void
   selectVerse: (verse: Verse | null) => void
   selectSlide: (slide: SelectedSlide | null) => void
+  /** Clear only a matching temporary slide preview; preserve a newer selection. */
+  clearSlidePreview: (itemId: string) => void
+  setSamplePreview: (sample: boolean) => void
+  setSelectedQueueItemId: (id: string | null) => void
   setCurrentChapter: (verses: Verse[]) => void
   setCrossReferences: (refs: CrossReference[]) => void
   setPendingNavigation: (nav: PendingNavigation | null) => void
@@ -78,7 +88,9 @@ export const useBibleStore = create<BibleState>((set) => ({
   searchResults: [],
   semanticResults: [],
   selectedVerse: null,
+  samplePreview: false,
   selectedSlide: null,
+  selectedQueueItemId: null,
   currentChapter: [],
   crossReferences: [],
   pendingNavigation: null,
@@ -105,8 +117,11 @@ export const useBibleStore = create<BibleState>((set) => ({
   setBooks: (books) => set({ books }),
   setSearchResults: (searchResults) => set({ searchResults }),
   setSemanticResults: (semanticResults) => set({ semanticResults }),
-  selectVerse: (selectedVerse) => set({ selectedVerse, selectedSlide: null }),
-  selectSlide: (selectedSlide) => set({ selectedSlide }),
+  selectVerse: (selectedVerse) => set({ selectedVerse, selectedSlide: null, selectedQueueItemId: null, samplePreview: false }),
+  selectSlide: (selectedSlide) => set({ selectedSlide, selectedQueueItemId: null, samplePreview: false }),
+  clearSlidePreview: (itemId) => set((state) => state.selectedSlide?.item.id === itemId ? { selectedSlide: null } : state),
+  setSamplePreview: (samplePreview) => set({ samplePreview }),
+  setSelectedQueueItemId: (selectedQueueItemId) => set({ selectedQueueItemId }),
   setCurrentChapter: (currentChapter) => set({ currentChapter }),
   setCrossReferences: (crossReferences) => set({ crossReferences }),
   setPendingNavigation: (pendingNavigation) => set({ pendingNavigation }),

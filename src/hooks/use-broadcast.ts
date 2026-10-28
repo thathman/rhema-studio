@@ -5,14 +5,15 @@ import { currentActor, useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
 import { useQueueStore } from "@/stores/queue-store"
 import type { VerseRenderData } from "@/types"
-import type { ImageQueueItem, SlideQueueItem, SongQueueItem, SongWithSections, Verse } from "@/types"
+import type { AudioQueueItem, ImageQueueItem, SlideQueueItem, SongQueueItem, SongWithSections, Verse } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { loadThemeImage } from "@/lib/theme-image-cache"
 import { isMissing, resolveTranslations, type ItemTranslations } from "@/lib/translation-policy"
-import { buildSlides, toLyricRenderData } from "@/lib/lyrics"
+import { songSlides, toLyricRenderData } from "@/lib/lyrics"
+import { pinnedSong } from "@/stores/song-pins-store"
 import { useSongStore } from "@/stores/song-store"
 import { useSoundStore } from "@/stores/sound-store"
-import { CAC_TAG } from "@/lib/cac-hymnbook"
+import { hymnNumbersFromLibrary, isHymnSong } from "@/lib/song-kind"
 import { approvalHolds } from "@/stores/approval-gate-store"
 
 export function toVerseRenderData(
@@ -277,7 +278,8 @@ export async function presentSlide(
   let song = null
   try {
     // Stepping within the live song uses it as it went live (see LiveSlide.song).
-    song = opts.song ?? (await useSongStore.getState().load(item.song.song_id))
+    // Otherwise the approved service's words of the song, when it has them (#193), else the library's.
+    song = opts.song ?? pinnedSong(item.song.song_id) ?? (await useSongStore.getState().load(item.song.song_id))
   } catch (e) {
     console.warn("[broadcast] song load failed:", e)
   }
@@ -286,7 +288,7 @@ export async function presentSlide(
     warn(`${item.song.title} not shown: the song is no longer in the library.`)
     return "empty"
   }
-  const slides = buildSlides(song, item.song.arrangement_id, item.song.languages)
+  const slides = songSlides(song, item.song)
   const langs = item.song.languages.length ? item.song.languages : [song.song.primary_language]
   if (slides.length === 0) {
     warn(`${item.song.title} not shown: it has no lyrics in ${langs.join(" / ").toUpperCase()}.`)
@@ -297,9 +299,14 @@ export async function presentSlide(
   const layer = await backgroundLayer(item.background)
   if (ticket !== presentSeq) return "superseded"
   useBibleStore.getState().selectSlide({ item, index: i })
-  // A hymn of the hymn book has its own look where an output gives it one.
-  const content = song.song.tags.split(",").some((t) => t.trim().toLowerCase() === CAC_TAG) ? "hymn" : "song"
-  useBroadcastStore.getState().setLiveVerse({ ...toLyricRenderData(song, slide), ...layer, content }, null, {
+  // Keep the planned hymn identity even if its library metadata changes after it was added.
+  const libraryNumbers = hymnNumbersFromLibrary(song.numbers)
+  const hymn = isHymnSong(item.song, song.song.tags, libraryNumbers)
+  const hymnNumbers = hymn ? (item.song.hymn_numbers ?? libraryNumbers) : []
+  const content = hymn ? "hymn" : "song"
+  const lyric = toLyricRenderData(song, slide)
+  const referenceLabel = hymnNumbers.length ? `${hymnNumbers.join(", ")} · ` : hymn ? "Hymn · " : ""
+  useBroadcastStore.getState().setLiveVerse({ ...lyric, reference: `${referenceLabel}${lyric.reference}`, ...layer, content }, null, {
     goLive: opts.goLive,
     by,
     slide: { itemId: item.id, songId: song.song.id, index: i, total: slides.length, arrangementId: item.song.arrangement_id, languages: item.song.languages, song },
@@ -362,23 +369,46 @@ export function toImageRenderData(item: ImageQueueItem, url: string): VerseRende
 }
 
 /**
- * A sound item: its sound starts on this computer and every screen keeps
- * what it shows. The rundown position moves (the caller set it), so Next
- * continues after it, and Preview follows so Show live means this item.
+ * An audio cue only plays locally. It has no public-screen payload and does
+ * not enter the visual-present sequence, so it cannot supersede a pending Take.
  */
-function playSoundItem(item: ImageQueueItem, asset: { id: string; present: boolean }): PresentOutcome {
+export async function presentAudioCue(item: AudioQueueItem): Promise<PresentOutcome> {
   useBibleStore.getState().selectSlide({ item, index: 0 })
+  const media = useMediaStore.getState()
+  const asset = media.assets.find((a) => a.id === item.audio.media_id) ?? (await media.list()).find((a) => a.id === item.audio.media_id)
+  if (!asset || asset.kind !== "audio") {
+    useBroadcastStore.getState().setPresentWarning(item.audio.name + " not played: this audio cue is missing from the local media library.")
+    return "empty"
+  }
   if (!asset.present) {
-    useBroadcastStore.getState().setPresentWarning(`${item.image.name} not played: the sound file is missing from the media folder.`)
+    useBroadcastStore.getState().setPresentWarning(item.audio.name + " not played: the sound file is missing from the media folder.")
     return "empty"
   }
   if (useBroadcastStore.getState().rehearsal) {
-    useBroadcastStore.getState().setPresentWarning(`Rehearsal: ${item.image.name} was not played. Use the ♪ button to play it on purpose.`)
+    useBroadcastStore.getState().setPresentWarning("Rehearsal: " + item.audio.name + " was not played. Use the ♪ button to play it on purpose.")
     return "presented"
   }
   const sound = useSoundStore.getState()
   // Already playing (Show live again from Preview): leave it running.
-  if (sound.assetId !== asset.id || !sound.playing) void sound.play({ id: asset.id, name: item.image.name })
+  if (sound.assetId !== asset.id || sound.itemId !== item.id || !sound.playing) {
+    const started = await sound.play({
+      id: asset.id,
+      name: item.audio.name,
+      itemId: item.id,
+      outputDeviceId: item.audio.output_device_id,
+      volume: item.audio.volume,
+      loop: item.audio.loop,
+      fadeInMs: item.audio.fade_in_ms,
+      fadeOutMs: item.audio.fade_out_ms,
+    })
+    if (!started) {
+      const played = useSoundStore.getState()
+      useBroadcastStore.getState().setPresentWarning(item.audio.name + " not played: " + (played.error ?? "playback did not start."))
+      return "empty"
+    }
+  }
+  const played = useSoundStore.getState()
+  if (played.outputNote) useBroadcastStore.getState().setPresentWarning(played.outputNote)
   return "presented"
 }
 
@@ -390,14 +420,20 @@ function playSoundItem(item: ImageQueueItem, asset: { id: string; present: boole
 export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolean } = {}): Promise<PresentOutcome> {
   const media = useMediaStore.getState()
   const cached = media.assets.find((a) => a.id === item.image.media_id)
-  // A sound item changes no screen, so it must not supersede a screen still loading.
-  if (cached?.kind === "audio") return playSoundItem(item, cached)
+  // A wrong kind reference must never turn a visual Take into local playback.
+  if (cached?.kind === "audio") {
+    useBroadcastStore.getState().setPresentWarning(item.image.name + " is an audio file. Add it as an audio cue to play it locally.")
+    return "empty"
+  }
   if (reachesScreen(opts) && approvalHolds(() => void presentImage(item, opts))) return "held_for_approval"
   presentSeq += 1
   const ticket = presentSeq
   const by = currentActor()
   const asset = cached ?? (await media.list()).find((a) => a.id === item.image.media_id)
-  if (asset?.kind === "audio") return ticket === presentSeq ? playSoundItem(item, asset) : "superseded"
+  if (asset?.kind === "audio") {
+    useBroadcastStore.getState().setPresentWarning(item.image.name + " is an audio file. Add it as an audio cue to play it locally.")
+    return "empty"
+  }
   // A video asset streams to the outputs; nothing is decoded here.
   if (asset?.kind === "video") {
     const videoUrl = asset.present ? await media.fileUrl(asset.id).catch(() => null) : null

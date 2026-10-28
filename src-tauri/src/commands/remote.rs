@@ -27,20 +27,77 @@ impl Default for RemoteKeys {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum RemoteAccessChange {
+    Revoked,
+    RoleChanged { from: Role, to: Role },
+}
+
+/// Changes suitable for a local audit log. Credentials and operator-entered device names stay out.
+fn remote_access_changes(previous: &[KeyEntry], current: &[KeyEntry]) -> Vec<RemoteAccessChange> {
+    previous
+        .iter()
+        .filter_map(|old| match current.iter().find(|new| new.hash == old.hash) {
+            Some(new) if new.role != old.role => Some(RemoteAccessChange::RoleChanged {
+                from: old.role,
+                to: new.role,
+            }),
+            Some(_) => None,
+            None => Some(RemoteAccessChange::Revoked),
+        })
+        .collect()
+}
+
 /// Replace the accepted keys: the shared key (if any) plus every paired
 /// device. `require_auth` is the operator's switch; it is forced on while
 /// any key exists, and when on with no keys every command is refused.
+/// An OBS companion unpaired, paused or given another role loses its camera reading at once (#209).
 #[tauri::command]
-pub fn remote_set_keys(remote: State<'_, RemoteKeys>, shared: Option<String>, devices: Vec<KeyEntry>, require_auth: Option<bool>) -> Result<usize, String> {
+pub fn remote_set_keys(app: AppHandle, remote: State<'_, RemoteKeys>, shared: Option<String>, devices: Vec<KeyEntry>, require_auth: Option<bool>) -> Result<usize, String> {
     let mut entries: Vec<KeyEntry> = devices.into_iter().filter(|d| d.hash.len() == 64).collect();
     if let Some(s) = shared.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
         entries.push(KeyEntry { hash: hash_key(&s), name: "Shared key".into(), role: Role::Configure, paused: false });
     }
     let n = entries.len();
-    let mut k = remote.keys.write().map_err(|e| e.to_string())?;
-    k.require_auth = require_auth.unwrap_or(false) || n > 0;
-    k.entries = entries;
+    let previous = remote.keys.read().map_err(|e| e.to_string())?.entries.clone();
+    {
+        let mut k = remote.keys.write().map_err(|e| e.to_string())?;
+        k.require_auth = require_auth.unwrap_or(false) || n > 0;
+        k.entries = entries;
+    }
+    let current = remote.keys.read().map_err(|e| e.to_string())?.entries.clone();
+    for change in remote_access_changes(&previous, &current) {
+        match change {
+            RemoteAccessChange::RoleChanged { from, to } => log::info!(
+                "Remote device role changed: {} → {}",
+                from.as_str(),
+                to.as_str()
+            ),
+            RemoteAccessChange::Revoked => log::info!("Remote access credential revoked"),
+        }
+    }
+    super::camera_router::desks_changed(&app);
     Ok(n)
+}
+
+/// The effective authentication switch and number of accepted credentials, for Show Health.
+#[derive(serde::Serialize)]
+pub struct RemoteAuthStatus {
+    pub required: bool,
+    pub credential_count: usize,
+}
+
+fn remote_auth_status(keys: &KeySet) -> Result<RemoteAuthStatus, String> {
+    let keys = keys.read().map_err(|e| e.to_string())?;
+    Ok(RemoteAuthStatus {
+        required: keys.require_auth,
+        credential_count: keys.entries.len(),
+    })
+}
+
+#[tauri::command]
+pub fn get_remote_auth_status(remote: State<'_, RemoteKeys>) -> Result<RemoteAuthStatus, String> {
+    remote_auth_status(&remote.keys)
 }
 
 /// Open the two-minute pairing window; returns the code to show on screen.
@@ -84,6 +141,10 @@ impl CommandSink for TauriSink {
         super::media::media_file_path(media.inner(), file)
     }
 
+    fn lookup(&self, q: &rhema_api::Lookup) -> Result<serde_json::Value, String> {
+        answer_lookup(&self.app, q)
+    }
+
     fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
         self.app
             .emit(event, payload.to_string())
@@ -116,12 +177,49 @@ impl CommandSink for TauriSink {
     }
 }
 
+/// A joined desk's lookup in this computer's library (desk consoles, #197), its role already checked
+/// by the server: the Bible translations this computer has, a chapter, a words search, or songs and
+/// hymns (the hymn book too: a number like "CAC 245" finds its hymn). Read only.
+fn answer_lookup(app: &AppHandle, q: &rhema_api::Lookup) -> Result<serde_json::Value, String> {
+    use rhema_api::lookup::MAX_RESULTS;
+    use rhema_api::Lookup;
+    let json = |v: Result<serde_json::Value, serde_json::Error>| v.map_err(|e| e.to_string());
+    match q {
+        Lookup::Songs { query } => {
+            let content = app.try_state::<super::content::ContentState>().ok_or("Songs are not available on the host")?;
+            let guard = content.0.lock().map_err(|e| e.to_string())?;
+            let db = guard.as_ref().ok_or("Songs are not available on the host")?;
+            let songs = db.list_songs_tagged(Some(query.as_str()).filter(|q| !q.is_empty()), MAX_RESULTS, None).map_err(|e| e.to_string())?;
+            json(Ok(serde_json::json!({ "songs": songs.iter().map(|s| serde_json::json!({
+                "id": s.id, "title": s.title, "numbers": s.numbers, "firstLine": s.first_line.chars().take(120).collect::<String>(),
+                "hymn": s.tags.split(',').any(|t| t.trim().eq_ignore_ascii_case("cacghb")),
+            })).collect::<Vec<_>>() })))
+        }
+        _ => {
+            let state = app.try_state::<Mutex<crate::state::AppState>>().ok_or("The Bible is not available on the host")?;
+            let app_state = state.lock().map_err(|e| e.to_string())?;
+            let db = app_state.bible_db.as_ref().ok_or("The Bible is not available on the host")?;
+            let verses = |v: Vec<rhema_bible::Verse>| serde_json::json!({ "verses": v.into_iter().take(200).map(|v| serde_json::json!({ "book": v.book_number, "bookName": v.book_name, "chapter": v.chapter, "verse": v.verse, "text": v.text, "translation": v.translation_id })).collect::<Vec<_>>() });
+            match q {
+                Lookup::Translations => {
+                    let list = db.list_translations().map_err(|e| e.to_string())?;
+                    json(Ok(serde_json::json!({ "active": app_state.active_translation_id, "translations": list.iter().filter(|t| t.is_downloaded).map(|t| serde_json::json!({ "id": t.id, "abbreviation": t.abbreviation, "name": t.title, "language": t.language })).collect::<Vec<_>>() })))
+                }
+                Lookup::Chapter { translation, book, chapter } => Ok(verses(db.get_chapter(*translation, *book, *chapter).map_err(|e| e.to_string())?)),
+                Lookup::Search { query, translation } => Ok(verses(db.search_verses(query, *translation, MAX_RESULTS).map_err(|e| e.to_string())?)),
+                Lookup::Songs { .. } => unreachable!("answered above"),
+            }
+        }
+    }
+}
+
 // --- OSC Runtime ---
 
 /// Managed state for the OSC runtime.
 pub struct OscRuntime {
     handle: Option<OscHandle>,
     bound_port: Option<u16>,
+    lan: bool,
 }
 
 impl OscRuntime {
@@ -129,6 +227,7 @@ impl OscRuntime {
         Self {
             handle: None,
             bound_port: None,
+            lan: false,
         }
     }
 }
@@ -154,9 +253,10 @@ pub async fn start_osc(
         return Err("OSC listener is already running".into());
     }
 
+    let lan = lan.unwrap_or(true);
     let config = OscConfig {
         port: port.unwrap_or(8000),
-        host: bind_host(lan).into(),
+        host: bind_host(Some(lan)).into(),
         keys: remote.keys.clone(),
     };
 
@@ -166,6 +266,7 @@ pub async fn start_osc(
     let bound_port = result.bound_port;
     runtime.handle = Some(result.handle);
     runtime.bound_port = Some(bound_port);
+    runtime.lan = lan;
 
     log::info!("OSC listener started on port {bound_port}");
     Ok(bound_port)
@@ -180,6 +281,7 @@ pub async fn stop_osc(state: State<'_, Mutex<OscRuntime>>) -> Result<(), String>
         Some(mut handle) => {
             handle.stop();
             runtime.bound_port = None;
+            runtime.lan = false;
             log::info!("OSC listener stopped");
             Ok(())
         }
@@ -197,6 +299,7 @@ pub async fn get_osc_status(
     Ok(OscStatus {
         running: runtime.handle.as_ref().is_some_and(rhema_api::OscHandle::is_active),
         port: runtime.bound_port,
+        lan: runtime.lan,
     })
 }
 
@@ -204,6 +307,7 @@ pub async fn get_osc_status(
 pub struct OscStatus {
     pub running: bool,
     pub port: Option<u16>,
+    pub lan: bool,
 }
 
 // --- HTTP Runtime ---
@@ -225,8 +329,12 @@ pub struct HttpRuntime {
     tls_port: Option<u16>,
     /// SHA-256 of the https certificate, sent to a Rhema Receiver TV with a feed's https link (#198).
     tls_fingerprint: Option<String>,
+    /// SHA-256 of this computer's local CA, which Rhema Studio Companion pins when it pairs (#209).
+    tls_ca_fingerprint: Option<String>,
     /// Phone cameras and the camera router (#209); kept across restarts of the listener.
     cameras: rhema_api::SharedCameras,
+    /// Who is connected and when each desk was last seen (Production → Operators); cleared on stop.
+    presence: rhema_api::SharedPresence,
     /// The church name (Brand Kit) this host announces itself by (#197).
     church: String,
     /// This host's announcement on the network, while the listener is reachable from it (#197).
@@ -240,12 +348,14 @@ impl HttpRuntime {
             bound_port: None,
             tls_port: None,
             tls_fingerprint: None,
+            tls_ca_fingerprint: None,
             lan: false,
             status: new_shared_status(),
             live: new_live_hub(),
             feeds: new_feed_hub(),
             voice: new_voice_hub(),
             cameras: rhema_api::new_camera_hub(),
+            presence: rhema_api::new_presence(),
             church: String::new(),
             advert: None,
         }
@@ -306,9 +416,9 @@ pub async fn start_http(
     lan: Option<bool>,
     https: Option<bool>,
 ) -> Result<u16, String> {
-    let (status, live, feeds, voice, cameras, already_running) = {
+    let (status, live, feeds, voice, cameras, presence, already_running) = {
         let runtime = state.lock().map_err(|e| e.to_string())?;
-        (runtime.shared_status(), runtime.live.clone(), runtime.feeds.clone(), runtime.voice.clone(), runtime.cameras(), runtime.handle.is_some())
+        (runtime.shared_status(), runtime.live.clone(), runtime.feeds.clone(), runtime.voice.clone(), runtime.cameras(), runtime.presence.clone(), runtime.handle.is_some())
     };
 
     if already_running {
@@ -329,6 +439,7 @@ pub async fn start_http(
         None
     };
     let fingerprint = tls.as_ref().and_then(|t| rhema_api::tls::fingerprint(&t.server).ok());
+    let ca_fingerprint = tls.as_ref().and_then(|t| rhema_api::tls::fingerprint(&rhema_api::tls::Pem { cert: t.ca_cert.clone(), key: String::new() }).ok());
     let config = HttpConfig {
         port,
         host: bind_host(lan).into(),
@@ -339,6 +450,7 @@ pub async fn start_http(
         voice,
         tls,
         cameras,
+        presence,
     };
 
     let sink = Arc::new(TauriSink { app });
@@ -354,6 +466,7 @@ pub async fn start_http(
         runtime.bound_port = Some(bound_port);
         runtime.tls_port = result.tls_port;
         runtime.tls_fingerprint = result.tls_port.and(fingerprint);
+        runtime.tls_ca_fingerprint = result.tls_port.and(ca_fingerprint);
         runtime.lan = bind_host(lan) != "127.0.0.1";
         runtime.refresh_advert();
     }
@@ -373,6 +486,8 @@ pub async fn stop_http(state: State<'_, Mutex<HttpRuntime>>) -> Result<(), Strin
             runtime.bound_port = None;
             runtime.tls_port = None;
             runtime.tls_fingerprint = None;
+            runtime.tls_ca_fingerprint = None;
+            runtime.presence.clear();
             runtime.refresh_advert();
             log::info!("HTTP API server stopped");
             Ok(())
@@ -393,6 +508,60 @@ pub async fn get_http_status(
         lan: runtime.lan,
         port: runtime.bound_port,
         tls_port: runtime.tls_port,
+        tls_certificate: runtime.tls_ca_fingerprint.clone(),
+    })
+}
+
+/// What Production → Operators shows about hosting: whether the listener runs and for whom, this
+/// computer's addresses on the church network, its https port and certificate check, and each
+/// paired desk with whether it is connected now and when it was last seen.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostStatus {
+    pub running: bool,
+    pub lan: bool,
+    pub port: Option<u16>,
+    pub tls_port: Option<u16>,
+    /// The local CA's fingerprint (https on): each joined computer shows the same.
+    pub ca_fingerprint: Option<String>,
+    /// "192.168.1.20:8080", one per network this computer is on (wired, Wi-Fi).
+    pub addresses: Vec<String>,
+    pub desks: Vec<rhema_api::DeskPresence>,
+}
+
+/// This computer's IPv4 addresses on its networks (private first, then link-local); never loopback.
+fn lan_addresses() -> Vec<std::net::Ipv4Addr> {
+    let mut ips: Vec<std::net::Ipv4Addr> = if_addrs::get_if_addrs()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|i| match i.ip() {
+            std::net::IpAddr::V4(v4) if !v4.is_loopback() && !v4.is_unspecified() && (v4.is_private() || v4.is_link_local()) => Some(v4),
+            _ => None,
+        })
+        .collect();
+    ips.sort_by_key(|ip| (ip.is_link_local(), *ip));
+    ips.dedup();
+    ips
+}
+
+#[tauri::command]
+pub fn host_status(state: State<'_, Mutex<HttpRuntime>>, remote: State<'_, RemoteKeys>) -> Result<HostStatus, String> {
+    // Only desks that still have a key here: a revoked one is gone from the card at once.
+    let listed: Vec<String> = remote.keys.read().map_err(|e| e.to_string())?.entries.iter().map(|e| e.hash.clone()).collect();
+    let runtime = state.lock().map_err(|e| e.to_string())?;
+    let running = runtime.handle.as_ref().is_some_and(rhema_api::HttpHandle::is_active);
+    let addresses = match (running && runtime.lan, runtime.bound_port) {
+        (true, Some(port)) => lan_addresses().into_iter().map(|ip| format!("{ip}:{port}")).collect(),
+        _ => Vec::new(),
+    };
+    Ok(HostStatus {
+        running,
+        lan: runtime.lan,
+        port: runtime.bound_port,
+        tls_port: runtime.tls_port,
+        ca_fingerprint: runtime.tls_ca_fingerprint.clone(),
+        addresses,
+        desks: if running { runtime.presence.list().into_iter().filter(|d| listed.contains(&d.hash)).collect() } else { Vec::new() },
     })
 }
 
@@ -506,13 +675,32 @@ pub fn publish_live_state(state: State<'_, Mutex<HttpRuntime>>, json: String) ->
 pub struct FeedEntry {
     id: String,
     token: String,
+    /// Each paired TV's own key (#198), by the TV's address; absent from an older window.
+    #[serde(default)]
+    tvs: Vec<FeedTvEntry>,
 }
 
-/// The browser feeds (outputs of type "browser") and their secrets, kept in step with the outputs.
+#[derive(serde::Deserialize)]
+pub struct FeedTvEntry {
+    id: String,
+    token: String,
+}
+
+/// The keys `feeds_set` hands the server: keys shorter than 16 characters are never accepted.
+fn feed_keys(feeds: Vec<FeedEntry>) -> Vec<rhema_api::FeedKeys> {
+    feeds
+        .into_iter()
+        .filter(|f| f.token.len() >= 16)
+        .map(|f| rhema_api::FeedKeys { id: f.id, token: f.token, tvs: f.tvs.into_iter().filter(|t| t.token.len() >= 16).map(|t| (t.id, t.token)).collect() })
+        .collect()
+}
+
+/// The browser feeds (outputs of type "browser") and their secrets, with each paired TV's own key,
+/// kept in step with the outputs. A key no longer listed stops working at once.
 #[tauri::command]
 pub fn feeds_set(state: State<'_, Mutex<HttpRuntime>>, feeds: Vec<FeedEntry>) -> Result<(), String> {
     let hub = state.lock().map_err(|e| e.to_string())?.feeds.clone();
-    hub.set(&feeds.into_iter().filter(|f| f.token.len() >= 16).map(|f| (f.id, f.token)).collect::<Vec<_>>());
+    hub.set_keys(&feed_keys(feeds));
     Ok(())
 }
 
@@ -578,6 +766,9 @@ pub struct HttpStatus {
     pub lan: bool,
     /// The https port for phone pages, when https is on.
     pub tls_port: Option<u16>,
+    /// The fingerprint of this computer's certificate (its local CA) while https runs: Rhema
+    /// Companion shows the same one when it pairs, and pins it (#209).
+    pub tls_certificate: Option<String>,
 }
 
 /// Where the listeners bind: the whole network (default, what existing setups
@@ -613,6 +804,69 @@ pub fn feed_status(state: State<'_, Mutex<HttpRuntime>>, id: String) -> Result<O
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn remote_auth_health_reports_only_effective_gate_and_credential_count() {
+        let keys = new_key_set();
+        assert_eq!(
+            remote_auth_status(&keys).unwrap().credential_count,
+            0
+        );
+        keys.write().unwrap().require_auth = true;
+        keys.write().unwrap().entries.push(KeyEntry {
+            hash: "private-hash".into(),
+            name: "private label".into(),
+            role: Role::Present,
+            paused: false,
+        });
+        let status = remote_auth_status(&keys).unwrap();
+        assert!(status.required);
+        assert_eq!(status.credential_count, 1);
+    }
+
+    #[test]
+    fn remote_access_audit_changes_exclude_names_and_credential_hashes() {
+        let entry = |hash: char, name: &str, role| KeyEntry {
+            hash: hash.to_string().repeat(64),
+            name: name.into(),
+            role,
+            paused: false,
+        };
+        let previous = [
+            entry('a', "Private phone label", Role::Configure),
+            entry('b', "Another device", Role::Present),
+        ];
+        let current = [
+            entry('a', "Private phone label", Role::Screens),
+            entry('c', "New device", Role::Present),
+        ];
+
+        assert_eq!(
+            remote_access_changes(&previous, &current),
+            [
+                RemoteAccessChange::RoleChanged {
+                    from: Role::Configure,
+                    to: Role::Screens,
+                },
+                RemoteAccessChange::Revoked,
+            ]
+        );
+        assert!(remote_access_changes(&current, &current).is_empty());
+    }
+
+    #[test]
+    fn feed_keys_keep_each_tv_key_and_drop_short_ones() {
+        let feeds: Vec<FeedEntry> = serde_json::from_value(serde_json::json!([
+            { "id": "hall", "token": "feed-key-0123456789", "tvs": [{ "id": "192.168.1.40:8095", "token": "tv-key-0123456789ab" }, { "id": "192.168.1.41:8095", "token": "short" }] },
+            { "id": "old", "token": "feed-key-from-before" },
+            { "id": "bad", "token": "short" },
+        ]))
+        .unwrap();
+        let keys = feed_keys(feeds);
+        assert_eq!(keys.len(), 2);
+        assert_eq!(keys[0].tvs, [("192.168.1.40:8095".to_string(), "tv-key-0123456789ab".to_string())]);
+        assert!(keys[1].tvs.is_empty(), "an older window sends no TV keys");
+    }
 
     #[test]
     fn the_https_certificate_is_kept_while_the_addresses_stay_the_same() {

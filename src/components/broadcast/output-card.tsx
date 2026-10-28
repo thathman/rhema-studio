@@ -79,7 +79,7 @@ export function OutputCard({
     <div className="flex flex-col gap-2.5 rounded-lg border border-border bg-card p-2.5 transition-colors hover:border-foreground/20">
       <div className="relative overflow-hidden rounded-md border border-foreground/10">
         {frame?.stage && onAir ? (
-          <div className="flex aspect-video w-full items-center justify-center bg-black text-xs text-white/70">Stage display: words, next, note, timer</div>
+          <div className="flex aspect-video w-full items-center justify-center bg-black text-xs text-white/70">{output.stageLayout === "countdown" ? "Countdown display" : output.stageLayout === "pastor" ? "Stage display: pastor's confidence monitor" : output.stageLayout === "band" ? "Stage display: band" : output.stageLayout === "manager" ? "Stage display: stage manager" : "Stage display: words, next, note, timer"}</div>
         ) : onAir && !frame ? (
           // On, but nothing sent yet (for example turned on during rehearsal): the window is black too.
           <div className="aspect-video w-full bg-black" />

@@ -21,6 +21,12 @@ interface JoinState {
   paused: boolean
   /** A passing note that is not an error (the host moved to another service and this desk refreshed). */
   note: string | null
+  /**
+   * How this desk reaches the host while connected: true = https with the host's certificate
+   * checked (kept at pairing); false = plain http (the host does not run https, or was paired
+   * without it), which the desk warns about; null = not connected yet.
+   */
+  secure: boolean | null
   live: LiveStateV1 | null
   /** This desk's monotonic time when `live` arrived: a running timer counts on from it (no clock skew). */
   receivedAt: number
@@ -30,7 +36,8 @@ interface JoinState {
    * count as skew. Null until one arrives.
    */
   clockSkewMs: number | null
-  pair: (address: string, code: string, name: string) => Promise<void>
+  /** `asCompanion`: this computer runs OBS only (#209) and pairs as an OBS companion, which the host may change. */
+  pair: (address: string, code: string, name: string, asCompanion?: boolean) => Promise<void>
   connect: () => Promise<void>
   leave: (forget?: boolean) => Promise<void>
   /**
@@ -38,10 +45,11 @@ interface JoinState {
    * main desk has taken back control, or if it is for another service. Says whether the host did it,
    * and if not, why in the host's words.
    */
-  send: (command: { command: string; value?: string | number | Record<string, unknown> }) => Promise<SendResult>
+  send: (command: { command: string; value?: string | number | Record<string, unknown>; seen?: Record<string, number> }) => Promise<SendResult>
 }
 
-export type SendResult = { ok: true } | { ok: false; error: string }
+/** `note`: what the host said about a command it took (a scene change sent to the main desk to accept). `stale`: the desk's copy of a scene was older than the host's. */
+export type SendResult = { ok: true; note?: string } | { ok: false; error: string; stale?: true }
 
 /** What a desk is told when someone changed that part of the service before its command arrived. */
 export const STALE_MESSAGE = "Someone changed this first — look again"
@@ -51,9 +59,11 @@ export const STALE_MESSAGE = "Someone changed this first — look again"
  * R7), so the host can refuse it if someone changed that part first, and, for an Unable answer, the
  * reason this desk could not do what was asked (Comms, #251). Older hosts ignore both.
  */
-export function withWhatWasSeen(command: { command: string; value?: unknown }, live: LiveStateV1 | null): Record<string, unknown> {
+export function withWhatWasSeen(command: { command: string; value?: unknown; seen?: Record<string, number> }, live: LiveStateV1 | null): Record<string, unknown> {
   const out: Record<string, unknown> = { ...command }
-  if (live?.revisions) out.seen = live.revisions
+  // What a command says it saw itself wins: a scene editor sends the scene's revision from when it
+  // was opened, not from the Live State now (#243 SC.16).
+  if (live?.revisions || command.seen) out.seen = { ...live?.revisions, ...command.seen }
   const v = command.value as { id?: unknown; state?: unknown } | undefined
   if (command.command === "notice_ack" && v?.state === "unable" && typeof v.id === "string") {
     const why = takeUnableReason(v.id)
@@ -102,9 +112,12 @@ async function listenOnce() {
   })
   await listen<string>("join:state", (e) => {
     try {
-      const p = JSON.parse(e.payload) as { state: string; error?: string }
+      const p = JSON.parse(e.payload) as { state: string; error?: string; secure?: boolean; me?: { name?: unknown; role?: unknown; paused?: unknown } | null }
       const status: JoinStatus = p.state === "connected" ? "connected" : p.state === "reconnecting" ? "reconnecting" : p.state === "refused" ? "refused" : "off"
-      useJoin.setState({ status, error: p.error ?? null })
+      // Each (re)connection says what the host makes of this desk now: the main desk may have
+      // changed its role or taken back control while it was away (the host ends the stream then).
+      const me = p.me && typeof p.me.name === "string" && typeof p.me.role === "string" ? { me: { name: p.me.name, role: p.me.role }, paused: p.me.paused === true } : {}
+      useJoin.setState({ status, error: p.error ?? null, ...(typeof p.secure === "boolean" ? { secure: p.secure } : {}), ...me })
     } catch {
       // ignore
     }
@@ -117,26 +130,30 @@ export const useJoin = create<JoinState>((set, get) => ({
   me: null,
   paused: false,
   note: null,
+  secure: null,
   live: null,
   receivedAt: 0,
   clockSkewMs: null,
-  pair: async (address, code, name) => {
+  pair: async (address, code, name, asCompanion = false) => {
     set({ status: "connecting", error: null })
     try {
-      const token = await invoke<string>("join_pair", { address, code, name })
-      useSettingsStore.getState().setJoin({ joinAddress: address.trim(), joinName: name.trim(), joinToken: token })
+      const paired = await invoke<Paired | string>("join_pair", asCompanion ? { address, code, name, role: "obs-companion" } : { address, code, name })
+      const { token, secure } = typeof paired === "string" ? { token: paired, secure: null } : paired
+      useSettingsStore.getState().setJoin({ joinAddress: address.trim(), joinName: name.trim(), joinToken: token, joinSecure: secure })
       await get().connect()
     } catch (e) {
       set({ status: "off", error: String(e) })
     }
   },
   connect: async () => {
-    const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
+    const { joinAddress: address, joinToken: token, joinSecure } = useSettingsStore.getState()
     if (!address || !token) return
     await listenOnce()
     gaps = []
-    set({ status: "connecting", error: null, clockSkewMs: null })
+    set({ status: "connecting", error: null, clockSkewMs: null, secure: null })
     try {
+      // How this host is reached, as kept at pairing: https with its certificate authority, or http.
+      await invoke("join_secure", { address, secure: joinSecure ? { port: joinSecure.port, fingerprint: joinSecure.fingerprint } : null })
       const me = await invoke<{ name: string; role: string; paused?: boolean }>("join_me", { address, token })
       set({ me: { name: me.name, role: me.role }, paused: me.paused === true })
       await invoke("join_connect", { address, token })
@@ -147,15 +164,15 @@ export const useJoin = create<JoinState>((set, get) => ({
   leave: async (forget = false) => {
     await invoke("join_disconnect").catch(() => {})
     gaps = []
-    set({ status: "off", live: null, me: null, error: null, paused: false, note: null, clockSkewMs: null })
-    if (forget) useSettingsStore.getState().setJoin({ joinAddress: "", joinToken: "" })
+    set({ status: "off", live: null, me: null, error: null, paused: false, note: null, clockSkewMs: null, secure: null })
+    if (forget) useSettingsStore.getState().setJoin({ joinAddress: "", joinToken: "", joinSecure: null })
   },
   send: async (command) => {
     const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
     try {
-      await invoke("join_command", { address, token, command: withWhatWasSeen(command, get().live), service: serviceOf(get().live) })
+      const note = await invoke<string | null>("join_command", { address, token, command: withWhatWasSeen(command, get().live), service: serviceOf(get().live) })
       set({ error: null, note: null })
-      return { ok: true }
+      return typeof note === "string" && note ? { ok: true, note } : { ok: true }
     } catch (e) {
       const msg = String(e)
       // join_command marks the two refusals this desk handles itself (src-tauri/src/commands/join.rs).
@@ -168,7 +185,7 @@ export const useJoin = create<JoinState>((set, get) => ({
       if (msg.startsWith("stale:")) {
         const why = msg.slice("stale:".length).trim() || STALE_MESSAGE
         set({ error: why, note: null })
-        return { ok: false, error: why }
+        return { ok: false, error: why, stale: true }
       }
       if (msg.startsWith("other-service:")) {
         set({ error: null, note: OTHER_SERVICE_NOTE })
@@ -180,3 +197,20 @@ export const useJoin = create<JoinState>((set, get) => ({
     }
   },
 }))
+
+/** What pairing gives back (src-tauri/src/commands/join.rs `Paired`). */
+type Paired = { token: string; secure: { port: number; fingerprint: string } | null }
+
+/** A joined desk may send commands: connected, and the main desk has not taken back control. */
+export const useCanSend = () => useJoin((s) => s.status === "connected" && !s.paused)
+
+/**
+ * Look something up in the host's library (desk consoles, #197): `{ what: "translations" }`,
+ * `{ what: "chapter", translation, book, chapter }`, `{ what: "search", query, translation }` or
+ * `{ what: "songs", query }`. The host checks this desk's role; a refusal is thrown in its words.
+ * Read only: nothing on the host changes.
+ */
+export async function lookupOnHost<T>(asked: Record<string, unknown>): Promise<T> {
+  const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
+  return invoke<T>("join_lookup", { address, token, asked })
+}

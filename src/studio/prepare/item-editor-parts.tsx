@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from "react"
-import { ImageIcon, MessageSquareIcon, PinIcon, StickyNoteIcon, Volume2Icon, XIcon } from "lucide-react"
-import { cleanComments, commentKey, MAX_COMMENTS } from "@/lib/comments"
+import { ImageIcon, MessageSquareIcon, MusicIcon, PinIcon, StickyNoteIcon, Volume2Icon, XIcon } from "lucide-react"
+import { canDeleteComment, cleanComments, commentDeleted, commentKey, MAX_COMMENTS, MAX_COMMENT_HISTORY, tombstoneComment } from "@/lib/comments"
 import { itemAssignees, knownPeople, MAX_ASSIGNEES, withAssignees } from "@/lib/assignees"
 import { useSettingsStore } from "@/stores/settings-store"
 import { Input } from "@/components/ui/input"
@@ -11,8 +11,12 @@ import { cn } from "@/lib/utils"
 import { useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
 import { useMediaStore } from "@/stores/media-store"
+import { useSlideStore } from "@/stores/slide-store"
+import { useShellStore } from "@/studio/shell-store"
 
-import { GO_LIVE_CUES, isImageItem, isSlideItem, isSongItem, isVerseItem, type GoLiveCue, type ImageQueueItem, type QueueItem, type SlideQueueItem, type SongQueueItem, type TakeStep } from "@/types"
+import { CUE_TRIGGERS, GO_LIVE_CUES, ITEM_CUE_DOES, isAudioItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type AudioQueueItem, type CueQueueItem, type CueTrigger, type GoLiveCue, type ImageQueueItem, type ItemCue, type ItemCueDo, type QueueItem, type SlideQueueItem, type SongQueueItem, type TakeStep } from "@/types"
+import { CUE_DO_LABEL, cueTakesText, MAX_ITEM_CUES, TRIGGER_LABEL } from "@/lib/item-cues"
+import { useSongApproval, useSongPins } from "@/stores/song-pins-store"
 import { CUE_ACTIONS, takeImpact } from "@/lib/cues"
 import { cleanTakeSteps, obsStep, parseTakeStep, sceneStep, takeSteps, type ParsedTakeStep } from "@/lib/item-intent"
 import { useBroadcastStore } from "@/stores/broadcast-store"
@@ -46,6 +50,53 @@ export function ImageItemControls({ item }: { item: ImageQueueItem }) {
           <SelectItem value="stretch">Stretch</SelectItem>
         </SelectContent>
       </Select>
+    </div>
+  )
+}
+
+/** Prepare-only settings for a local audio cue; none of these controls changes a screen. */
+export function AudioItemControls({ item }: { item: AudioQueueItem }) {
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
+  useEffect(() => {
+    const md = navigator.mediaDevices
+    if (!md?.enumerateDevices) return
+    let active = true
+    const refresh = () => void md.enumerateDevices().then((list) => { if (active) setDevices(list.filter((d) => d.kind === "audiooutput" && d.deviceId && d.deviceId !== "default")) }).catch(() => {})
+    refresh()
+    md.addEventListener?.("devicechange", refresh)
+    return () => { active = false; md.removeEventListener?.("devicechange", refresh) }
+  }, [])
+  const setAudio = (patch: Partial<AudioQueueItem["audio"]>) => useQueueStore.getState().updateItem(item.id, (i) => (isAudioItem(i) ? { ...i, audio: { ...i.audio, ...patch } } : i))
+  const output = item.audio.output_device_id ?? "__system"
+  const outputName = devices.find((d) => d.deviceId === item.audio.output_device_id)?.label
+  return (
+    <div className="ml-7 flex flex-col gap-2 py-2 pl-2 text-xs">
+      <p className="flex items-center gap-1.5 text-muted-foreground"><MusicIcon className="size-3.5" /> Local audio cue · congregation and OBS screens stay unchanged.</p>
+      <label className="flex flex-wrap items-center gap-2">
+        <span className="w-24">Play through</span>
+        <Select value={output} onValueChange={(value) => setAudio({ output_device_id: value === "__system" ? undefined : value })}>
+          <SelectTrigger className="h-7 min-w-48 max-w-72 text-xs" aria-label="Audio cue output"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__system">This computer’s default output</SelectItem>
+            {devices.map((device) => <SelectItem key={device.deviceId} value={device.deviceId}>{device.label || "Audio output"}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {item.audio.output_device_id && !outputName && <span className="text-confidence-mid">Saved output unavailable; playback will use the system default.</span>}
+      </label>
+      <label className="flex max-w-md items-center gap-2">
+        <span className="w-24">Cue volume</span>
+        <input aria-label="Audio cue volume" type="range" min={0} max={1} step={0.05} value={item.audio.volume ?? 1} onChange={(e) => setAudio({ volume: Number(e.target.value) })} className="flex-1" />
+        <span className="w-9 text-right tabular-nums">{Math.round((item.audio.volume ?? 1) * 100)}%</span>
+      </label>
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-1.5"><input type="checkbox" checked={item.audio.loop === true} onChange={(e) => setAudio({ loop: e.target.checked })} /> Repeat until stopped</label>
+        <label className="flex items-center gap-2">Fade in
+          <input aria-label="Audio fade in seconds" type="number" min={0} max={30} step={0.5} value={(item.audio.fade_in_ms ?? 0) / 1000} onChange={(e) => setAudio({ fade_in_ms: Math.max(0, Math.min(30, Number(e.target.value) || 0)) * 1000 })} className="h-7 w-16 rounded border border-input bg-card px-2 tabular-nums" /> s
+        </label>
+        <label className="flex items-center gap-2">Fade out on next item
+          <input aria-label="Audio fade out seconds" type="number" min={0} max={30} step={0.5} value={(item.audio.fade_out_ms ?? 0) / 1000} onChange={(e) => setAudio({ fade_out_ms: Math.max(0, Math.min(30, Number(e.target.value) || 0)) * 1000 })} className="h-7 w-16 rounded border border-input bg-card px-2 tabular-nums" /> s
+        </label>
+      </div>
     </div>
   )
 }
@@ -243,33 +294,38 @@ function StartRule({ item }: { item: QueueItem }) {
 export function CommentsEditor({ item }: { item: QueueItem }) {
   const [draft, setDraft] = useState("")
   const me = useSettingsStore((s) => s.operatorName.trim())
-  const comments = item.comments ?? []
+  const currentItem = useQueueStore((s) => s.items.find((i) => i.id === item.id))
+  const comments = cleanComments((currentItem ?? item).comments ?? [])
+  const activeComments = comments.filter((c) => !commentDeleted(c)).length
   const add = () => {
-    if (comments.length >= MAX_COMMENTS) return // never push the oldest out
-    const next = cleanComments([...comments, { by: me || "Unnamed", at: new Date().toISOString(), text: draft }])
+    if (!me || activeComments >= MAX_COMMENTS || comments.length >= MAX_COMMENT_HISTORY) return
+    const next = cleanComments([...comments, { id: crypto.randomUUID(), by: me, at: new Date().toISOString(), text: draft }])
     if (next.length === comments.length) return // nothing left after cleaning
     // Written here, so already read here (also when no name is set).
     useSettingsStore.getState().markCommentsSeen([commentKey(next[next.length - 1])])
     useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, comments: next }))
     setDraft("")
   }
-  const remove = (index: number) =>
+  const remove = (id: string) =>
     useQueueStore.getState().updateItem(item.id, (i) => {
-      const left = (i.comments ?? []).filter((_, k) => k !== index)
-      return { ...i, comments: left.length ? left : null }
+      const comments = cleanComments(i.comments ?? [])
+      const comment = comments.find((c) => c.id === id)
+      if (!comment || !canDeleteComment(comment, useSettingsStore.getState().operatorName)) return i
+      const tombstone = tombstoneComment(comment, useSettingsStore.getState().operatorName)
+      if (!tombstone) return i
+      return { ...i, comments: comments.map((c) => (c.id === id ? tombstone : c)) }
     })
   return (
     <div className="ml-7 space-y-1 py-1 pl-2 text-xs">
-      {comments.map((c, k) => (
-        <div key={`${c.at}-${k}`} className="flex items-start gap-2 rounded bg-muted/40 px-2 py-1">
+      {comments.map((c) => (
+        <div key={c.id ?? `${c.at}-${c.by}`} className="flex items-start gap-2 rounded bg-muted/40 px-2 py-1">
           <MessageSquareIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden />
           <div className="min-w-0 flex-1">
             <span className="font-medium">{c.by}</span> <span className="text-muted-foreground">{commentTime(c.at)}</span>
             <p className="whitespace-pre-wrap break-words">{c.text}</p>
+            {commentDeleted(c) && <p className="text-muted-foreground">Removed by {c.deleted_by || "unknown operator"}{c.deleted_at ? ` · ${commentTime(c.deleted_at)}` : ""}</p>}
           </div>
-          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={`Remove ${c.by}'s comment`} onClick={() => remove(k)}>
-            <XIcon className="size-3" />
-          </button>
+          {canDeleteComment(c, me) && <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={`Remove ${c.by}'s comment`} onClick={() => remove(c.id ?? "")}><XIcon className="size-3" /></button>}
         </div>
       ))}
       <div className="flex items-center gap-2">
@@ -287,11 +343,12 @@ export function CommentsEditor({ item }: { item: QueueItem }) {
             }
           }}
         />
-        <Button size="sm" variant="outline" className="h-7" disabled={!draft.trim() || comments.length >= MAX_COMMENTS} onClick={add}>
+        <Button size="sm" variant="outline" className="h-7" disabled={!draft.trim() || !me || activeComments >= MAX_COMMENTS || comments.length >= MAX_COMMENT_HISTORY} onClick={add}>
           Comment
         </Button>
       </div>
       {!me && <p className="text-xs text-muted-foreground">Set your name in Team so the team knows who wrote it.</p>}
+      {comments.length >= MAX_COMMENT_HISTORY && <p className="text-xs text-muted-foreground">This thread has reached its retained history limit. Keep this service copy as its audit record.</p>}
     </div>
   )
 }
@@ -325,6 +382,10 @@ export function CustomSlideEditor({ item }: { item: SlideQueueItem }) {
     })
   return (
     <div className="ml-7 flex flex-col gap-1.5 py-1 pl-2">
+      {item.slide.source_asset_id && <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/50 px-2 py-1.5">
+        <p className="text-[0.6875rem] text-muted-foreground">This is this service’s copy. Changes here won’t change the reusable source.</p>
+        <Button size="xs" variant="outline" onClick={() => { useSlideStore.getState().requestEdit(item.slide.source_asset_id!); useShellStore.getState().openLibrarySection("slides") }}>Edit reusable source</Button>
+      </div>}
       <Input aria-label="Slide title" maxLength={200} value={item.slide.title} placeholder="Title" className="h-8 text-sm" onChange={(e) => update({ title: e.target.value })} />
       <Textarea
         aria-label="Slide text"
@@ -371,6 +432,10 @@ export function SongItemControls({ item }: { item: SongQueueItem }) {
           </button>
         ))}
       </span>
+      <label className="flex items-center gap-1.5" title="A slide with the song's title (and authors) before its words">
+        <input type="checkbox" className="size-3.5" checked={!!item.song.title_slide} onChange={(e) => update({ title_slide: e.target.checked || undefined })} />
+        Title slide first
+      </label>
       {song.arrangements.length > 1 && (
         <Select value={item.song.arrangement_id ?? "__default"} onValueChange={(v) => update({ arrangement_id: v === "__default" ? null : v })}>
           <SelectTrigger className="h-6 w-36 text-xs" aria-label="Order"><SelectValue /></SelectTrigger>
@@ -380,6 +445,23 @@ export function SongItemControls({ item }: { item: SongQueueItem }) {
           </SelectContent>
         </Select>
       )}
+    </div>
+  )
+}
+
+/**
+ * A song edited in the library since the service was approved (#193): Present shows the approved
+ * words; approving again pins the new ones, or Present can use them for this service.
+ */
+export function SongApprovalNote({ item }: { item: SongQueueItem }) {
+  const state = useSongApproval(item.song.song_id)
+  if (!state) return null
+  return (
+    <div role="status" className="mx-2 mt-2 flex flex-wrap items-center gap-2 rounded-md bg-tone-amber px-2 py-1.5 text-xs text-tone-amber-foreground">
+      <span className="min-w-0 flex-1">
+        Changed since approval: the song was edited in the library (approved at revision {state.approvedRevision}, now {state.libraryRevision}). {state.usingNew ? "Present shows the new words in this service." : "Present shows the approved words. Approve the service again to use the new ones, or choose them in Present."}
+      </span>
+      {state.usingNew && <Button size="xs" variant="outline" onClick={() => useSongPins.getState().setLatest(item.song.song_id, false)}>Back to the approved words</Button>}
     </div>
   )
 }
@@ -433,13 +515,86 @@ export function GoLiveCues({ item }: { item: QueueItem }) {
   )
 }
 
+/**
+ * The item's cue list (#193, #196 R6): more cues for when it starts, and cues for when its planned
+ * time is up, when it is paused (a hold, or the timer paused) and when it ends. Each is a stage
+ * message, an OBS recording marker or a timer step: none changes what the congregation sees, and
+ * none runs in rehearsal.
+ */
+export function ItemCuesEditor({ item }: { item: QueueItem }) {
+  const cues = item.cues ?? []
+  const write = (next: ItemCue[]) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, cues: next.length ? next : null }))
+  const change = (k: number, patch: Partial<ItemCue>) => write(cues.map((c, j) => (j === k ? { ...c, ...patch, ...(patch.do && !cueTakesText(patch.do) ? { text: undefined } : {}) } : c)))
+  return (
+    <section className="mt-4 ml-7 flex flex-col gap-2 border-t border-border pt-3 pl-2 text-xs" aria-labelledby={`cues-${item.id}`}>
+      <h3 id={`cues-${item.id}`} className="text-sm font-semibold">Cues</h3>
+      <p className="text-muted-foreground">More moments for this item: when its planned time is up, when it is paused, when it ends. None changes what the congregation sees, and none runs in rehearsal.</p>
+      {cues.length > 0 && (
+        <ul className="flex flex-col gap-1.5" aria-label={`Cues of ${item.reference}`}>
+          {cues.map((c, k) => (
+            <li key={k} className="flex flex-wrap items-center gap-1.5">
+              <select aria-label={`Cue ${k + 1}: when`} value={c.on} onChange={(e) => change(k, { on: e.target.value as CueTrigger })} className={cn(fieldSelect, "w-auto min-w-0 flex-1 basis-36")}>
+                {CUE_TRIGGERS.map((t) => <option key={t} value={t}>{TRIGGER_LABEL[t]}</option>)}
+              </select>
+              <select aria-label={`Cue ${k + 1}: what`} value={c.do} onChange={(e) => change(k, { do: e.target.value as ItemCueDo })} className={cn(fieldSelect, "w-auto min-w-0 flex-1 basis-36")}>
+                {ITEM_CUE_DOES.map((d) => <option key={d} value={d}>{CUE_DO_LABEL[d]}</option>)}
+              </select>
+              {cueTakesText(c.do) && (
+                <Input
+                  aria-label={c.do === "stage.message" ? `Cue ${k + 1}: stage message` : `Cue ${k + 1}: marker name`}
+                  value={c.text ?? ""}
+                  maxLength={120}
+                  placeholder={c.do === "stage.message" ? "Shown on the stage screen only" : `Marker name (else "${item.reference}")`}
+                  className="h-7 min-w-0 flex-1 basis-48 text-xs"
+                  onChange={(e) => change(k, { text: e.target.value })}
+                />
+              )}
+              <Button variant="ghost" size="icon-xs" aria-label={`Remove cue ${k + 1}`} onClick={() => write(cues.filter((_, j) => j !== k))}><XIcon /></Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {cues.length < MAX_ITEM_CUES && (
+        <Button variant="outline" size="xs" className="self-start" onClick={() => write([...cues, { on: "end", do: "obs.mark" }])}>Add a cue</Button>
+      )}
+    </section>
+  )
+}
+
+/** A cue-only item (#193): its name; it shows nothing and fires its cues when taken. */
+export function CueItemEditor({ item }: { item: CueQueueItem }) {
+  return (
+    <div className="flex flex-col gap-2 px-2 pt-3 text-xs">
+      <label className="min-w-0">
+        <span className={fieldLabel}>Name</span>
+        <Input
+          aria-label="Name of the cue"
+          value={item.reference}
+          maxLength={200}
+          className="h-7 text-xs"
+          onChange={(e) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, reference: e.target.value }))}
+        />
+      </label>
+      <p className="text-muted-foreground">A moment in the run of show with nothing on screen, e.g. "Sermon begins" with an OBS recording marker. Taking it in Present fires its cues (set them in Signals) and starts its time; the screens keep what they show.</p>
+    </div>
+  )
+}
+
 const fieldLabel = "mb-0.5 block text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase"
 const fieldSelect = "h-7 w-full rounded-md border border-input bg-transparent px-2 text-xs"
 
-/** One kind of Take step replaced (or removed, with null); the rest kept, in the order they run. */
-function setTakeStep(itemId: string, kind: ParsedTakeStep["kind"], step: TakeStep | null) {
+/** Replace one Take action; scene actions are keyed by their congregation output. */
+function setTakeStep(itemId: string, kind: ParsedTakeStep["kind"], step: TakeStep | null, sceneOutputId?: string | null) {
   useQueueStore.getState().updateItem(itemId, (i) => {
-    const rest = cleanTakeSteps(i.on_take).filter((s) => parseTakeStep(s)?.kind !== kind)
+    const parsedNext = step ? parseTakeStep(step) : null
+    const targetOutputId = sceneOutputId !== undefined
+      ? sceneOutputId
+      : parsedNext?.kind === "scene" ? parsedNext.outputId : null
+    const rest = cleanTakeSteps(i.on_take).filter((s) => {
+      const parsed = parseTakeStep(s)
+      if (parsed?.kind !== kind) return true
+      return kind === "scene" && parsed.kind === "scene" && parsed.outputId !== targetOutputId
+    })
     const next = cleanTakeSteps(step ? [...rest, step] : rest)
     return { ...i, on_take: next.length ? next : null }
   })
@@ -458,8 +613,8 @@ export function LookAndScene({ item }: { item: QueueItem }) {
   const setScene = (id: string | null) => {
     update({ scene_id: id })
     // A scene armed for the Take follows the item's scene (and goes when it has none).
-    const armed = takeSteps(item).find((s) => s.kind === "scene")
-    if (armed && armed.kind === "scene") setTakeStep(item.id, "scene", id ? sceneStep(id, armed.outputId) : null)
+    const shared = takeSteps(item).find((s) => s.kind === "scene" && s.outputId === null)
+    if (shared?.kind === "scene") setTakeStep(item.id, "scene", id ? sceneStep(id) : null, null)
   }
   const pick = (value: string) => (value === "" ? null : value)
   // A saved choice this computer does not have stays selected, and says so.
@@ -510,11 +665,14 @@ export function TakeSteps({ item }: { item: QueueItem }) {
   const obsScenes = useObsStore((s) => s.scenes)
   const obsOn = useSettingsStore((s) => s.obs.enabled)
   const steps = takeSteps(item)
-  const sceneArmed = steps.find((s) => s.kind === "scene")
+  const sceneSteps = steps.filter((s): s is Extract<ParsedTakeStep, { kind: "scene" }> => s.kind === "scene")
+  const sharedScene = sceneSteps.find((s) => s.outputId === null)
+  const sceneOverrides = sceneSteps.filter((s) => s.outputId !== null)
   const obs = steps.find((s) => s.kind === "obs")
   const sourceOnly = steps.some((s) => s.kind === "source")
   const [obsText, setObsText] = useState<string | null>(null)
-  const sceneName = scenes.find((s) => s.id === item.scene_id)?.name
+  const sharedSceneId = sharedScene?.sceneId ?? item.scene_id
+  const sceneName = scenes.find((s) => s.id === sharedSceneId)?.name
   const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation")
   const impact = takeImpact(item.on_take)
   const listId = `obs-scenes-${item.id}`
@@ -531,23 +689,80 @@ export function TakeSteps({ item }: { item: QueueItem }) {
         <input
           type="checkbox"
           className="mt-0.5 size-4"
-          checked={!!sceneArmed}
-          disabled={!item.scene_id && !sceneArmed}
-          onChange={(e) => setTakeStep(item.id, "scene", e.target.checked && item.scene_id ? sceneStep(item.scene_id) : null)}
+          checked={!!sharedScene}
+          disabled={!item.scene_id && !sharedScene}
+          onChange={(e) => setTakeStep(item.id, "scene", e.target.checked && sharedSceneId ? sceneStep(sharedSceneId) : null, null)}
         />
         <span>
-          <span className="font-medium">Take its scene{sceneName ? `, ${sceneName}` : ""}</span>
-          <span className="block text-muted-foreground">{item.scene_id ? "Arranges the screen as the scene; what is live stays live." : "Choose its scene first (Slides → Look and scene)."}</span>
+          <span className="font-medium">Take its scene{sceneName ? `, ${sceneName}` : ""} on every congregation screen</span>
+          <span className="block text-muted-foreground">{sharedSceneId ? "Arranges each congregation screen as this scene; screen overrides run after it. What is live stays live." : "Choose its scene first (Slides → Look and scene)."}</span>
         </span>
       </label>
-      {sceneArmed?.kind === "scene" && congregation.length > 1 && (
-        <label className="ml-6 min-w-0">
-          <span className={fieldLabel}>On</span>
-          <select aria-label={`Screen for the scene of ${item.reference}`} value={sceneArmed.outputId ?? ""} onChange={(e) => setTakeStep(item.id, "scene", sceneStep(sceneArmed.sceneId, e.target.value || null))} className={fieldSelect}>
-            <option value="">Every congregation screen</option>
-            {congregation.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
-        </label>
+      {sceneOverrides.map((override, index) => {
+        const output = outputs.find((candidate) => candidate.id === override.outputId)
+        const isValidOutput = !!output && (output.role ?? "congregation") === "congregation"
+        const optionsForThisOverride = congregation.filter((candidate) =>
+          candidate.id === override.outputId || !sceneOverrides.some((other) => other !== override && other.outputId === candidate.id),
+        )
+        const sceneExists = scenes.some((candidate) => candidate.id === override.sceneId)
+        return (
+          <div key={`${override.outputId}:${index}`} className="ml-6 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+            <label className="min-w-0">
+              <span className={fieldLabel}>Congregation screen</span>
+              <select
+                aria-label={`Screen target for ${item.reference} ${index + 1}`}
+                value={override.outputId!}
+                onChange={(e) => setTakeStep(item.id, "scene", sceneStep(override.sceneId, e.target.value), override.outputId)}
+                className={fieldSelect}
+              >
+                {!isValidOutput && (
+                  <option value={override.outputId!} disabled>
+                    {output ? `Not a congregation screen: ${output.name}` : `Screen not found: ${override.outputId}`}
+                  </option>
+                )}
+                {optionsForThisOverride.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+              </select>
+            </label>
+            <label className="min-w-0">
+              <span className={fieldLabel}>Scene on this screen</span>
+              <select
+                aria-label={`Scene override ${index + 1} for ${item.reference}`}
+                value={override.sceneId}
+                onChange={(e) => setTakeStep(item.id, "scene", sceneStep(e.target.value, override.outputId), override.outputId)}
+                className={fieldSelect}
+              >
+                {!sceneExists && <option value={override.sceneId} disabled>Scene not on this computer: {override.sceneId}</option>}
+                {scenes.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+              </select>
+            </label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`Remove screen override ${index + 1} for ${item.reference}`}
+              className="mt-3 size-7"
+              onClick={() => setTakeStep(item.id, "scene", null, override.outputId)}
+            >
+              <XIcon className="size-3.5" aria-hidden />
+            </Button>
+          </div>
+        )
+      })}
+      {congregation.some((o) => !sceneOverrides.some((override) => override.outputId === o.id)) && scenes.length > 0 && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-label={`Add screen override for ${item.reference}`}
+          className="ml-6 h-7 w-fit text-xs"
+          onClick={() => {
+            const target = congregation.find((o) => !sceneOverrides.some((override) => override.outputId === o.id))
+            const sceneId = item.scene_id && scenes.some((candidate) => candidate.id === item.scene_id) ? item.scene_id : scenes[0]?.id
+            if (target && sceneId) setTakeStep(item.id, "scene", sceneStep(sceneId, target.id))
+          }}
+        >
+          Add screen override
+        </Button>
       )}
       <label className="min-w-0">
         <span className={fieldLabel}>Switch OBS to</span>

@@ -217,7 +217,7 @@ export function churchSetup(i: ChurchSetupInput): ChurchSetup {
       ? { id: "bible", label: "Bible on this computer", state: "done" }
       : bible === "checking"
         ? { id: "bible", label: "Bible on this computer", state: "checking", detail: "Looking for the Bible library…" }
-        : { id: "bible", label: "Bible on this computer", state: "attention", detail: "No Bible edition was found. Reinstalling Rhema puts the bundled library back." },
+        : { id: "bible", label: "Bible on this computer", state: "attention", detail: "No Bible edition was found. Reinstalling Rhema Studio puts the bundled library back." },
     i.settingsSaveFailed
       ? { id: "saving", label: "Settings are saved", state: "attention", detail: "The last change could not be written to disk. Save a log in Settings → Diagnostics for whoever supports you." }
       : { id: "saving", label: "Settings are saved", state: "done" },
@@ -269,7 +269,7 @@ export interface EquipmentInput {
     tvs?: Array<{ name: string; address: string }>
   }>
   obs: { enabled: boolean; status: "off" | "connecting" | "connected" | "error"; error: string | null }
-  speech: { provider: "deepgram" | "whisper"; keySaved: boolean; consentGiven: boolean }
+  speech: { provider: "deepgram" | "whisper" | "openai"; keySaved: boolean; consentGiven: boolean }
   mcpEnabled: boolean
   join: { address: string; status: "off" | "connecting" | "connected" | "reconnecting" | "refused" }
   pairedDevices: number
@@ -326,7 +326,8 @@ export function equipment(i: EquipmentInput): { items: EquipmentItem[]; notUsing
   else items.push({ id: "obs", label: "OBS", state: "not-tested", detail: i.obs.status === "connecting" ? "Connecting…" : i.obs.error ? `Not connected: ${i.obs.error}` : "Not connected yet", attention: i.obs.status === "error" })
 
   // Cloud speech counts only once it is really in use: a key saved, or audio agreed to be sent.
-  const cloud = i.speech.provider === "deepgram" && (i.speech.keySaved || i.speech.consentGiven)
+  const cloudProvider = i.speech.provider === "deepgram" || i.speech.provider === "openai"
+  const cloud = cloudProvider && (i.speech.keySaved || i.speech.consentGiven)
   if (!cloud) notUsing.push("Cloud speech")
   else if (i.speech.keySaved) items.push({ id: "cloud-speech", label: "Cloud speech", state: "configured", detail: "Key saved. Checked when listening starts." })
   else items.push({ id: "cloud-speech", label: "Cloud speech", state: "not-tested", detail: "No key saved. Add it in Settings → Speech Recognition, or use speech on this computer.", attention: true })

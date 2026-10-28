@@ -161,8 +161,10 @@ pub fn run() {
             commands::remote::start_http,
             commands::remote::stop_http,
             commands::remote::get_http_status,
+            commands::remote::host_status,
             commands::remote::host_set_name,
             commands::remote::remote_set_keys,
+            commands::remote::get_remote_auth_status,
             commands::remote::remote_pair_start,
             commands::app_close::set_unsaved_work,
             commands::app_close::last_exit_unclean,
@@ -176,6 +178,8 @@ pub fn run() {
             commands::remote::mcp_server_command,
             commands::ai_drafts::ai_drafts_list,
             commands::ai_drafts::ai_draft_delete,
+            commands::ai_drafts::ai_draft_mark_opened,
+            commands::ai_drafts::ai_drafts_restore,
             commands::remote::publish_live_state,
             commands::remote::feeds_set,
             commands::remote::feed_publish,
@@ -188,6 +192,10 @@ pub fn run() {
             commands::join::host_discover,
             commands::join::join_me,
             commands::join::join_command,
+            commands::join::join_lookup,
+            commands::join::join_cameras,
+            commands::join::join_tally,
+            commands::companion::app_restart,
             commands::join::join_voice,
             commands::cameras::whep_offer,
             commands::camera_router::camera_router_start,
@@ -196,12 +204,16 @@ pub fn run() {
             commands::camera_router::cameras_set,
             commands::join::join_connect,
             commands::join::join_disconnect,
+            commands::join::join_secure,
             commands::content::content_list_programs,
             commands::content::content_create_program,
             commands::content::content_update_program,
             commands::content::content_set_program_archived,
             commands::content::content_set_program_template,
             commands::content::content_approve_program,
+            commands::content::content_approve_program_with_designs,
+            commands::content::content_approved_designs,
+            commands::content::content_approved_songs,
             commands::content::content_set_actor,
             commands::content::content_save_service_log,
             commands::content::content_list_service_logs,
@@ -211,11 +223,13 @@ pub fn run() {
             commands::media::church_folder_open,
             commands::content::content_get_service_log,
             commands::content::content_delete_service_log,
+            commands::content::content_remove_old_log_transcripts,
             commands::content::content_list_song_attachments,
             commands::content::content_add_song_attachment,
             commands::content::content_remove_song_attachment,
             commands::content::content_get_program,
             commands::content::content_replace_items,
+            commands::content::content_replace_items_with_history,
             commands::content::content_delete_program,
             commands::content::content_status,
             commands::setup::setup_data_paths,
@@ -228,6 +242,10 @@ pub fn run() {
             commands::content::content_create_song,
             commands::content::content_update_song,
             commands::content::content_delete_song,
+            commands::content::content_list_reusable_slides,
+            commands::content::content_create_reusable_slide,
+            commands::content::content_update_reusable_slide,
+            commands::content::content_delete_reusable_slide,
             commands::content::content_list_hymnbooks,
             commands::content::content_upsert_hymnbook,
             commands::content::content_delete_hymnbook,
@@ -270,6 +288,12 @@ pub fn run() {
 
             #[cfg(feature = "qa-bridge")]
             qa_bridge::spawn(app.handle());
+
+            // An OBS companion (#209) loads only what its one screen needs: no Bible search models.
+            let companion = app.path().app_data_dir().is_ok_and(|d| commands::companion::companion_mode(&d));
+            if companion {
+                log::info!("OBS companion mode: the Bible search models are not loaded");
+            }
 
             // User content (services, rundowns) lives in the app data dir.
             // Failure here must not stop the app: live presentation does not
@@ -360,7 +384,9 @@ pub fn run() {
             let embeddings_path = base_dir.join("embeddings/kjv-qwen3-0.6b.bin");
             let ids_path = base_dir.join("embeddings/kjv-qwen3-0.6b-ids.bin");
 
-            if model_path.exists() && tokenizer_path.exists() {
+            if companion {
+                // Nothing to load: the companion screen never searches the Bible.
+            } else if model_path.exists() && tokenizer_path.exists() {
                 use rhema_detection::semantic::embedder::TextEmbedder;
                 use rhema_detection::semantic::index::VectorIndex;
                 match rhema_detection::OnnxEmbedder::load(&model_path, &tokenizer_path) {

@@ -72,7 +72,35 @@ describe("time until a milestone (#196 R2)", () => {
     expect(countdownTarget(t, "endby:c")).toEqual(t.endBy.c)
     expect(countdownTarget(t, "endby:gone")).toBeNull()
     expect(countdownLine("end", t.end!, at(10, 44))).toEqual({ label: "End of the main service in", text: "20:00", tone: "ok" })
-    expect(countdownChoices(t).map((c) => c.value)).toEqual(["next", "end", "endby:c"])
+    expect(countdownChoices(t).filter((c) => !c.group).map((c) => c.value)).toEqual(["next", "end", "endby:c"])
+  })
+
+  it("a chosen item's start and a group's end (#196 R2.4): expected while to come, kept once begun", () => {
+    const grouped: OutlineHeader[] = [...headers(), { id: "g1", type: "group", name: "Worship set", at: 1 }, { id: "g2", type: "group", name: "Word", at: 2 }]
+    const t = countdownTargets(serviceTiming({ items, headers: grouped, firstOnAir: new Map([["a", at(10, 4)]]), onAirMs: new Map(), liveItemId: "a", now: at(10, 6) }))
+    // Welcome began at 10:04 (late): what follows moves with it.
+    expect(t.starts?.a).toEqual({ label: "Welcome starts", at: at(10, 4) })
+    expect(t.starts?.c).toEqual({ label: "Sermon starts", at: at(10, 29) })
+    expect(t.groupEnds?.g1).toEqual({ label: "End of Worship set", at: at(10, 29) })
+    expect(countdownTarget(t, "start:c")).toEqual(t.starts!.c)
+    expect(countdownTarget(t, "groupend:g1")).toEqual(t.groupEnds!.g1)
+    expect(countdownTarget(t, "start:gone")).toBeNull()
+    expect(countdownLine("start:c", t.starts!.c, at(10, 26))).toEqual({ label: "Sermon starts in", text: "3:00", tone: "ok" })
+    const choices = countdownChoices(t)
+    expect(choices.filter((c) => c.group === "start").map((c) => c.value)).toEqual(["start:a", "start:b", "start:c", "start:d"])
+    expect(choices.filter((c) => c.group === "groupend").map((c) => c.label)).toEqual(["End of Worship set", "End of Word"])
+    expect(["start:c", "groupend:g1"].every(isCountdownTo)).toBe(true)
+    expect(isCountdownTo("start:")).toBe(false)
+    // Once due it holds still, as the next item does.
+    const due = { ...t, starts: { c: { label: "Sermon starts", at: at(10, 29) } } }
+    const later = steadyTargets(due, { ...t, starts: { c: { label: "Sermon starts", at: at(10, 31) } } }, at(10, 31))
+    expect(later.starts?.c.at).toBe(at(10, 29))
+  })
+
+  it("a skipped item has no start to count to", () => {
+    const t = countdownTargets(timing({ now: at(10, 30), firstOnAir: new Map([["a", at(10, 0)], ["d", at(10, 5)]]), onAirMs: new Map([["a", 5 * MIN]]), liveItemId: "d" }))
+    expect(t.starts?.b).toBeUndefined()
+    expect(t.starts?.d).toEqual({ label: "Blessing starts", at: at(10, 5) })
   })
 
   it("a skipped item's end-by stays a milestone, but takes no time", () => {

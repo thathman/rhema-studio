@@ -3,9 +3,10 @@ import type { BroadcastOutputLanguage, LowerThird, Ticker } from "./broadcast-ou
 
 /**
  * What a "time until" clock counts down to (#196 R2): the next item's expected start, the main
- * service's expected end, or an item's "end by" (`endby:<item id>`).
+ * service's expected end, an item's "end by" (`endby:<item id>`), a chosen item's expected start
+ * (`start:<item id>`) or a group's expected end (`groupend:<group id>`).
  */
-export type CountdownTo = "next" | "end" | `endby:${string}`
+export type CountdownTo = "next" | "end" | `endby:${string}` | `start:${string}` | `groupend:${string}`
 
 /** A place in the frame, in % of its width and height (x/y = top-left). */
 export interface SceneBox {
@@ -45,6 +46,13 @@ export interface SceneClock {
   text: string
 }
 
+/**
+ * What a camera's box shows while the camera is not sending: SMPTE colour bars, TV static, its
+ * words (`cameraFallback`), or nothing (the layers below show through).
+ */
+export type NoSignal = "bars" | "static" | "words" | "none"
+export const NO_SIGNALS: readonly NoSignal[] = ["bars", "static", "words", "none"]
+
 export interface SceneLayer {
   id: string
   name: string
@@ -53,8 +61,12 @@ export interface SceneLayer {
   shows?: ContentType[]
   /** camera: its stream on the church network (WHEP, e.g. http://192.168.1.10:8889/pulpit/whep). */
   cameraUrl?: string
-  /** camera: words shown in its box while the camera is not playing (#213 fallback); absent = the background. */
+  /** camera: words shown in its box while the camera is not playing (#213 fallback), when `noSignal` is "words". */
   cameraFallback?: string
+  /** camera: what its box shows while the camera is not sending; absent = colour bars. */
+  noSignal?: NoSignal
+  /** camera: the colour bars carry a small ident with the camera's name (absent = no). */
+  noSignalName?: boolean
   /** clock: what it shows: the service timer (absent), the time of day, a countdown to `until`, or to the run of show's `countdownTo`. */
   clockShows?: "timer" | "time" | "until" | "countdown"
   /** clock "until": the time of day counted down to, "HH:MM" (e.g. the service start). */
@@ -96,6 +108,8 @@ export interface Scene {
   fadeMs?: number
   createdAt: number
   updatedAt: number
+  /** The operator who last saved this reusable design, when known. */
+  updatedBy?: string | null
   /** The Design → Library look this was copied from (Reset puts it back as that look has it). */
   libraryLookId?: string
 }
@@ -121,8 +135,18 @@ export interface SceneLayerFrame {
   clock?: SceneClock | null
   /** camera: its WHEP stream address. */
   cameraUrl?: string
-  /** camera: words for its box while the camera is not playing, in `theme`'s text style. */
+  /** camera: words for its box while the camera is not playing, in `theme`'s text style (`noSignal` "words"). */
   fallback?: string
+  /** camera: what its box shows while the camera is not playing (absent: colour bars). */
+  noSignal?: NoSignal
+  /** camera: the name the colour bars' ident shows (absent: no ident). */
+  ident?: string
+  /** camera: the operator's Retry count for it (#213): a new count makes every screen start its reader again. */
+  retry?: number
+  /** camera: Freeze: screens hold the last frame. */
+  hold?: boolean
+  /** camera: the router says it is connected but sending nothing: screens show the fallback, not a stale frame. */
+  stale?: boolean
   /** ticker: the running ticker (null when none runs). */
   ticker?: Ticker | null
   /** lowerThird: the lower third on air (null when none is up). */

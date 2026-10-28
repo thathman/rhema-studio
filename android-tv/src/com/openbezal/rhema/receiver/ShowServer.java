@@ -24,7 +24,8 @@ import java.util.concurrent.TimeUnit;
  * check, CodeProof, 1.2; "v": 2 since 1.3), then POST /show {"nonce","data"} → {"ok","name"|"error"}:
  * the feed's https link and Rhema's certificate fingerprint, encrypted with the check's key (1.3;
  * the plain {"url","proof"} of 1.2 is refused); and (#213, 1.1) GET /status →
- * {"ok","name","feed","problem"}: the id of the feed shown, never its secret link. Small bodies
+ * {"ok","name","feed","problem"} (and, 1.5, "width","height": the display's size): the id of the
+ * feed shown, never its secret link. Small bodies
  * only; nothing else is served.
  *
  * Any device on the network can reach this port, so (1.3): a few requests are served at a time and
@@ -128,19 +129,22 @@ final class ShowServer extends Thread {
         if (headers.containsKey("origin")) {
             // A web page on some computer here (Rhema itself never sends one).
             status = 403;
-            reply.put("ok", false).put("error", "Rhema Receiver does not answer web pages");
+            reply.put("ok", false).put("error", "Rhema Studio Receiver does not answer web pages");
         } else if (!Guard.ipLiteralHost(headers.get("host"))) {
             status = 403;
             reply.put("ok", false).put("error", "Ask this TV by its address, e.g. 192.168.1.40:8095");
         } else if ("GET".equals(request[0]) && "/status".equals(path)) {
+            int[] size = app.displaySize();
             reply.put("ok", true).put("name", app.name()).put("feed", app.feedShown()).put("problem", app.problem());
+            // 1.5: the display's size, for the host's TV list.
+            if (size[0] > 0 && size[1] > 0) reply.put("width", size[0]).put("height", size[1]);
         } else if (!post) {
             status = 404;
-            reply.put("ok", false).put("error", "Rhema Receiver only takes POST /challenge, POST /show and GET /status");
+            reply.put("ok", false).put("error", "Rhema Studio Receiver only takes POST /challenge, POST /show and GET /status");
         } else if (type == null || !"application/json".equalsIgnoreCase(type.split(";")[0].trim())) {
             // A web page can send text without asking first, but not JSON.
             status = 415;
-            reply.put("ok", false).put("error", "Rhema Receiver takes JSON only");
+            reply.put("ok", false).put("error", "Rhema Studio Receiver takes JSON only");
         } else if (length <= 0 || length > MAX_BODY) {
             status = 400;
             reply.put("ok", false).put("error", "Nothing was sent");
@@ -155,7 +159,7 @@ final class ShowServer extends Thread {
             String text = new String(body, StandardCharsets.UTF_8);
             if (!Guard.flatObject(text)) {
                 status = 400;
-                reply.put("ok", false).put("error", "That is not what Rhema sends");
+                reply.put("ok", false).put("error", "That is not what Rhema Studio sends");
             } else {
                 JSONObject req = new JSONObject(text);
                 String peer = c.getInetAddress().getHostAddress();
@@ -174,7 +178,7 @@ final class ShowServer extends Thread {
                 } else if (req.has("url")) {
                     // Rhema before 1.3's form: the link in clear text, which this TV no longer takes.
                     status = 403;
-                    reply.put("ok", false).put("error", "This Rhema Receiver takes only Rhema's secure link: update Rhema on the computer");
+                    reply.put("ok", false).put("error", "This Rhema Studio Receiver takes only Rhema Studio's secure link: update Rhema Studio on the computer");
                 } else {
                     String why = app.show(peer, req.optString("nonce", ""), req.optString("data", ""));
                     if (why == null) {

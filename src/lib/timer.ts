@@ -62,10 +62,10 @@ export function formatMs(ms: number): string {
   return `${sign}${h > 0 ? `${h}:` : ""}${mm}:${String(s).padStart(2, "0")}`
 }
 
-/** Which colour the chip should take: fine, under two minutes, or over. */
-export function timerTone(t: TimerState, now: number): "ok" | "warn" | "over" {
+/** Which colour the chip should take: fine, under two minutes (or the item's own warning, #196 R1.3), or over. */
+export function timerTone(t: TimerState, now: number, warnMs = 120_000): "ok" | "warn" | "over" {
   if (t.durationMs === 0) return "ok"
   const left = remainingMs(t, now)
   if (left < 0) return "over"
-  return left <= 120_000 ? "warn" : "ok"
+  return left <= warnMs ? "warn" : "ok"
 }

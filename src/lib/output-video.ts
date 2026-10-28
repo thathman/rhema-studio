@@ -4,6 +4,7 @@
  * media folder (crossOrigin keeps the canvas readable for NDI). While it
  * plays, `onFrame` runs at the current NDI rate so the window redraws and
  * pushes NDI; at the end, on error or when paused it stops forcing frames.
+ * Pause / Resume (`paused`) holds the picture on its frame and carries on from there.
  */
 export interface VideoSpec {
   url: string
@@ -13,6 +14,8 @@ export interface VideoSpec {
   name: string
   /** Changes on every present, so re-presenting the same file replays it while re-sends of the same live item do not. */
   token: number
+  /** Paused by the operator (Present → Pause video): the frame stays up, the sound stops; Resume carries on. Absent = playing. */
+  paused?: boolean
 }
 
 /** loading: nothing to show yet (draw the background, never a label); ready: draw frames; failed: draw "▶ name". */
@@ -29,6 +32,8 @@ export interface VideoPlayer {
 export interface VideoPlayerHooks {
   onFrame: () => void
   onEnded: () => void
+  /** Paused by the operator: draw the held frame once (and send it on NDI). */
+  onPaused?: () => void
   onError: (name: string) => void
   /** Sound is played by one window only, so screens do not echo; asked before each video starts. */
   allowSound: boolean | (() => boolean)
@@ -43,6 +48,8 @@ export function createVideoPlayer(h: VideoPlayerHooks): VideoPlayer {
   let name = "video"
   let failed = false
   let timer: ReturnType<typeof setTimeout> | null = null
+  /** The operator's Pause, as last sent. */
+  let wantPaused = false
 
   const stopTimer = () => {
     if (timer) clearTimeout(timer)
@@ -76,6 +83,8 @@ export function createVideoPlayer(h: VideoPlayerHooks): VideoPlayer {
     })
     v.addEventListener("playing", startTimer)
     v.addEventListener("pause", stopTimer)
+    // Opened paused (a paused video put back): its first frame, once it can be drawn.
+    v.addEventListener("loadeddata", () => { if (v.paused && wantPaused) h.onPaused?.() })
     el = v
     return v
   }
@@ -101,17 +110,32 @@ export function createVideoPlayer(h: VideoPlayerHooks): VideoPlayer {
       v.loop = spec.loop
       v.muted = !(spec.sound && (typeof h.allowSound === "function" ? h.allowSound() : h.allowSound))
       const next = `${spec.token}|${spec.url}`
+      const pause = spec.paused === true
       if (key !== next) {
         key = next
         failed = false
+        wantPaused = pause
         stopTimer()
         if (v.src === spec.url) v.currentTime = 0
         else v.src = spec.url
-        void v.play().catch((e) => console.warn("[output-video] play() refused", e))
+        // Put back while paused: it waits on its first frame for Resume.
+        if (!pause) void v.play().catch((e) => console.warn("[output-video] play() refused", e))
+        return
+      }
+      if (pause !== wantPaused) {
+        wantPaused = pause
+        if (pause) {
+          v.pause()
+          stopTimer()
+          h.onPaused?.()
+          return
+        }
+        // Resume from where it stopped (a video that had ended stays ended until it is shown again).
+        if (!v.ended && !failed) void v.play().catch((e) => console.warn("[output-video] play() refused", e))
         return
       }
       // Same item re-sent (theme edit, window re-sync): keep playing, never restart or force frames after the end.
-      startTimer()
+      if (!wantPaused) startTimer()
     },
     dispose() {
       this.sync(undefined)

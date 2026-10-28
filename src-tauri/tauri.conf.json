@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Rhema",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "identifier": "com.openbezal.rhema",
   "build": {
     "frontendDist": "../build",
@@ -44,6 +44,7 @@
     "active": true,
     "targets": "all",
     "macOS": {
+      "bundleName": "Rhema Studio",
       "minimumSystemVersion": "10.15",
       "signingIdentity": "-",
       "entitlements": "entitlements.plist",

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react"
-import { MicIcon } from "lucide-react"
+import { MicIcon, VolumeXIcon, Volume2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { CHANNELS, CHANNEL_IDS, HOST, PRIORITY, TalkClient, canChooseTalkOutput, talkName, useVoice, type TalkStatus, type VoicePerson } from "@/lib/voice"
-import { useSettingsStore } from "@/stores/settings-store"
+import { CHANNELS, CHANNEL_IDS, HOST, HOST_LEVEL, PRIORITY, TalkClient, canChooseTalkOutput, channelsFor, mayUseChannel, speakerName, talkName, useVoice, type PersonLevel, type TalkStatus, type VoicePerson } from "@/lib/voice"
+import { REMOTE_ROLES, roleLabel } from "@/lib/remote-roles"
+import { useSettingsStore, type RemoteRole } from "@/stores/settings-store"
+import { useJoin } from "@/stores/join-store"
 
 /**
  * Hold to talk (Rhema Comms C3): press and hold with the mouse, a finger, or Space / Enter on the
@@ -55,13 +57,13 @@ export function TalkButton({ onTalk, talking, disabled, className, compact }: { 
   )
 }
 
-/** Whom to talk to: All crew, a channel, or one person (a private call). */
-export function TalkTo({ value, onChange, people, compact, priority }: { value: string; onChange: (talk: string) => void; people: { key: string; name: string }[]; compact?: boolean; priority?: boolean }) {
+/** Whom to talk to: All crew, a channel (those this desk may use), or one person (a private call). */
+export function TalkTo({ value, onChange, people, compact, priority, channels = CHANNELS }: { value: string; onChange: (talk: string) => void; people: { key: string; name: string }[]; compact?: boolean; priority?: boolean; channels?: readonly { id: string; name: string }[] }) {
   return (
     <select aria-label="Talk to" title="Whom you talk to" value={value} onChange={(e) => onChange(e.target.value)} className={cn("rounded-md border border-input bg-card px-1.5 text-xs", compact ? "h-8 max-w-28" : "h-9")}>
       <option value="all">All crew</option>
       {priority && <option value={PRIORITY}>All crew, priority (others quieter)</option>}
-      {CHANNELS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      {channels.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       {people.length > 0 && <optgroup label="Only…">{people.map((p) => <option key={p.key} value={`to:${p.key}`}>{p.name}</option>)}</optgroup>}
     </select>
   )
@@ -76,11 +78,75 @@ export function Crew({ people }: { people: VoicePerson[] }) {
         <li key={p.id ?? p.name} className={cn("flex items-center gap-1.5 rounded-full border px-2 py-0.5", p.speaking ? "border-confidence-high text-foreground" : "border-border text-muted-foreground")}>
           <span aria-hidden className={cn("size-2 rounded-full", p.speaking ? "bg-confidence-high" : p.talking ? "bg-on-air" : "bg-muted-foreground/40")} />
           {p.name}
+          {p.role && <span className="text-muted-foreground">· {roleLabel(p.role)}</span>}
           {p.talk && p.talk !== "all" && <span className="text-muted-foreground">→ {talkName(p.talk)}</span>}
           <span className="sr-only">{p.speaking ? "speaking" : p.talking ? "holding Talk" : "listening"}</span>
         </li>
       ))}
     </ul>
+  )
+}
+
+/**
+ * Each person's mute and volume, for what this desk hears only (Comms, #251): nobody else's sound
+ * changes. `key` is how the levels know them (a key id on the main desk, a name on a joined desk).
+ */
+export function PersonLevels({ people, levels, onChange }: { people: { key: string; name: string; role?: string }[]; levels: Readonly<Record<string, PersonLevel>>; onChange: (key: string, level: PersonLevel) => void }) {
+  if (people.length === 0) return <p className="text-xs text-muted-foreground">No one else is in the talk channel yet.</p>
+  return (
+    <ul aria-label="Each person's volume" className="flex flex-col gap-1.5 text-xs">
+      {people.map((p) => {
+        const l = levels[p.key] ?? { volume: 1 }
+        const who = speakerName(p)
+        return (
+          <li key={p.key} className="flex items-center gap-2">
+            <button type="button" aria-pressed={!!l.muted} aria-label={l.muted ? `Unmute ${p.name}` : `Mute ${p.name}`} title={l.muted ? "Muted: you do not hear them" : "Mute them for you only"} onClick={() => onChange(p.key, { ...l, muted: !l.muted })} className={cn("flex size-7 shrink-0 items-center justify-center rounded-md border outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3.5", l.muted ? "border-border bg-muted text-muted-foreground" : "border-border bg-card text-foreground")}>
+              {l.muted ? <VolumeXIcon /> : <Volume2Icon />}
+            </button>
+            <span className={cn("min-w-0 flex-1 truncate", l.muted && "text-muted-foreground line-through")}>{who}</span>
+            <input type="range" min={0} max={1} step={0.05} value={l.volume} disabled={l.muted} onChange={(e) => onChange(p.key, { ...l, volume: Number(e.target.value) })} aria-label={`Volume of ${p.name}`} className="w-24 accent-primary" />
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+/**
+ * The church's talk-channel rules, on the main desk (Settings → Audio): which desk roles may hear and
+ * talk on Production and Stage & worship (All crew is everyone's, the main desk uses every channel),
+ * and how loud the others stay while the main desk talks with priority.
+ */
+export function TalkRulesSettings() {
+  const rules = useSettingsStore((s) => s.talkRules)
+  const set = useSettingsStore.getState().setTalkRules
+  const toggle = (channel: string, role: RemoteRole, on: boolean) => {
+    const now = rules.channels[channel] ?? REMOTE_ROLES.map((r) => r.id)
+    const next = on ? [...new Set([...now, role])] : now.filter((r) => r !== role)
+    const channels = { ...rules.channels }
+    // Every role ticked is the same as no limit: kept as none, so a role added later is in too.
+    if (REMOTE_ROLES.every((r) => next.includes(r.id))) delete channels[channel]
+    else channels[channel] = next
+    set({ channels })
+  }
+  return (
+    <div className="flex flex-col gap-2 text-xs">
+      {CHANNELS.map((c) => (
+        <fieldset key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <legend className="mb-1 font-medium text-foreground">{c.name}: who may hear and talk</legend>
+          {REMOTE_ROLES.map((r) => (
+            <label key={r.id} className="flex items-center gap-1">
+              <input type="checkbox" checked={mayUseChannel(rules, c.id, r.id)} onChange={(e) => toggle(c.id, r.id, e.target.checked)} /> {r.name}
+            </label>
+          ))}
+        </fieldset>
+      ))}
+      <label className="flex items-center gap-2">
+        <span className="text-muted-foreground">Others while the main desk talks with priority</span>
+        <input type="range" min={0.05} max={0.8} step={0.05} value={rules.duck} onChange={(e) => set({ duck: Number(e.target.value) })} aria-label="How loud the others stay under priority" className="w-28 accent-primary" />
+        <span className="w-9 tabular-nums">{Math.round(rules.duck * 100)}%</span>
+      </label>
+    </div>
   )
 }
 
@@ -147,6 +213,11 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
   const [talk, setTalk] = useState("all")
   const [listen, setListen] = useState<string[]>([...CHANNEL_IDS])
   const [status, setStatus] = useState<TalkStatus | null>(null)
+  // Each person's level here, by the name this desk sees (HOST_LEVEL for the main desk).
+  const [levels, setLevels] = useState<Record<string, PersonLevel>>({})
+  const role = useJoin((s) => s.me?.role)
+  const rights = useJoin((s) => s.live?.talkRights)
+  const channels = channelsFor(rights, role)
   const micNote = useVoice((s) => s.micNote)
   const input = useSettingsStore((s) => s.talkInputId)
   const output = useSettingsStore((s) => s.talkOutputId)
@@ -178,11 +249,26 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
     }
     setStatus(s)
   }
-  const route = (l: string[], t: string) => {
+  // Only the channels this desk's role may use count: one the main desk closed to it is left.
+  const allowed = channels.map((c) => c.id).join(",")
+  const usable = (l: string[], t: string): [string[], string] => {
+    const ids = allowed ? allowed.split(",") : []
+    return [l.filter((c) => ids.includes(c)), CHANNEL_IDS.includes(t) && !ids.includes(t) ? "all" : t]
+  }
+  const [hear, talkTo] = usable(listen, talk)
+  const route = (l: string[], t: string, lv = levels) => {
     setListen(l)
     setTalk(t)
-    client.current?.channels(l, t)
+    setLevels(lv)
+    client.current?.channels(...usable(l, t), lv)
   }
+  // The main desk changed who may use a channel: the host is told what this desk uses now.
+  useEffect(() => {
+    client.current?.channels(hear, talkTo, levels)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allowed])
+  const isHost = (name: string) => /\(main desk\)$|^Main desk$/.test(name)
+  const others = people.filter((p) => !isHost(p.name))
   const join = async () => {
     const { joinAddress, joinToken } = useSettingsStore.getState()
     setError(null)
@@ -195,7 +281,7 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
       // The desk was closed while joining: do not leave the microphone open.
       if (!mounted.current) return c.leave()
       client.current = c
-      c.channels(listen, talk)
+      c.channels(hear, talkTo, levels)
       setState("on")
     } catch (e) {
       c.leave()
@@ -209,7 +295,7 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
         {state === "on" ? (
           <>
             <TalkButton talking={talking} disabled={status === "dropped"} onTalk={(on) => { if (on && client.current?.dropping) return; client.current?.talk(on); setTalking(on) }} />
-            <TalkTo value={talk} onChange={(t) => route(listen, t)} people={[{ key: HOST, name: "The main desk" }, ...people.filter((p) => !/\(main desk\)$|^Main desk$/.test(p.name)).map((p) => ({ key: p.name, name: p.name }))]} />
+            <TalkTo value={talkTo} onChange={(t) => route(listen, t)} channels={channels} people={[{ key: HOST, name: "The main desk" }, ...others.map((p) => ({ key: p.name, name: p.name }))]} />
             <Button size="sm" variant="ghost" onClick={() => { client.current?.leave(); client.current = null; setState("off"); setTalking(false); setStatus(null) }}>Leave the talk channel</Button>
           </>
         ) : (
@@ -223,14 +309,22 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
         <fieldset className="flex flex-wrap items-center gap-3 text-xs">
           <legend className="sr-only">Channels you hear</legend>
           <span className="text-muted-foreground">Hear: All crew,</span>
-          {CHANNELS.map((c) => (
+          {channels.map((c) => (
             <label key={c.id} className="flex items-center gap-1">
-              <input type="checkbox" checked={listen.includes(c.id)} onChange={(e) => route(e.target.checked ? [...listen, c.id] : listen.filter((x) => x !== c.id), talk)} /> {c.name}
+              <input type="checkbox" checked={hear.includes(c.id)} onChange={(e) => route(e.target.checked ? [...listen, c.id] : listen.filter((x) => x !== c.id), talk)} /> {c.name}
             </label>
           ))}
         </fieldset>
       )}
       <Crew people={people} />
+      {state === "on" && (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-muted-foreground">Each person's volume</summary>
+          <div className="pt-1.5">
+            <PersonLevels people={[{ key: HOST_LEVEL, name: "The main desk" }, ...others.map((p) => ({ key: p.name, name: p.name, role: p.role }))]} levels={levels} onChange={(k, l) => route(listen, talk, { ...levels, [k]: l })} />
+          </div>
+        </details>
+      )}
       <details className="text-xs">
         <summary className="cursor-pointer text-muted-foreground">Headset</summary>
         <div className="pt-1.5"><TalkDevices /></div>

@@ -1,16 +1,20 @@
 import { LockIcon, PinIcon } from "lucide-react"
+import { clockAt } from "@/lib/church-time"
+import { churchTimeZone } from "@/stores/timing-input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useQueueStore } from "@/stores"
 import { cuesheet, pauseWords } from "@/lib/cuesheet"
 import { mmss } from "@/lib/journal"
-import { clockText } from "@/lib/run-of-show"
+
 import { formatMinutes } from "@/lib/service-timing"
 import { cn } from "@/lib/utils"
 import { itemAssignees } from "@/lib/assignees"
 import { DurationInput } from "@/studio/prepare/item-editor-parts"
 import { useServiceTiming } from "@/studio/use-service-timing"
+import { runOfShowClockRows } from "@/lib/run-of-show"
 
-const wallClock = (ms: number) => { const d = new Date(ms); return clockText(d.getHours() * 60 + d.getMinutes()) }
+// On the church's clock (#196 R1.1).
+const wallClock = (ms: number) => clockAt(ms, churchTimeZone())
 const offsetText = (m: number) => (m === 0 ? "on time" : `${m > 0 ? "+" : "−"}${formatMinutes(Math.abs(m) * 60_000)}`)
 const STATUS = { done: "Done", live: "On now", upcoming: "", skipped: "Skipped" } as const
 
@@ -23,10 +27,11 @@ const STATUS = { done: "Done", live: "On now", upcoming: "", skipped: "Skipped" 
 export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const items = useQueueStore((s) => s.items)
   const headers = useQueueStore((s) => s.headers)
+  const schedule = runOfShowClockRows(items, headers)
   const { timing, onAir } = useServiceTiming()
-  const rows = timing ? cuesheet(timing, headers, items.length, onAir) : []
-  // Who is preparing each item (#299 6.10), every name.
-  const people = new Map(items.map((i) => [i.id, itemAssignees(i).join(", ")]))
+  const rows = timing ? cuesheet(timing, schedule.headers, schedule.rows.length, onAir) : []
+  // Who is preparing each event (#299 6.10), aggregated across its moments.
+  const people = new Map(schedule.rows.map((row) => [row.id, [...new Set(row.moments.flatMap(itemAssignees))].join(", ")]))
   const th = "px-2 py-1.5 text-left text-[0.6875rem] font-semibold tracking-wide text-muted-foreground uppercase"
   const td = "px-2 py-1 tabular-nums"
   return (
@@ -43,7 +48,7 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             <table className="w-full border-collapse text-xs">
               <thead className="border-b border-border">
                 <tr>
-                  <th className={th}>Item</th><th className={th}>People</th><th className={th}>Plan start</th><th className={th}>Plan end</th><th className={cn(th, "w-24")}>Time</th>
+                  <th className={th}>Event / moment</th><th className={th}>People</th><th className={th}>Plan start</th><th className={th}>Plan end</th><th className={cn(th, "w-24")}>Time</th>
                   <th className={th}>Actual</th><th className={th}>Expected</th><th className={th}>Offset</th><th className={th}>End by</th><th className={th}>Status</th>
                 </tr>
               </thead>
@@ -78,10 +83,18 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                         <DurationInput
                           aria-label={`Planned time for ${r.event.label}`}
                           minutes={r.minutes || null}
-                          onChange={(m) => useQueueStore.getState().updateItem(r.event.id, (i) => ({ ...i, planned_minutes: m }))}
+                          onChange={(m) => {
+                            const row = schedule.rows.find((candidate) => candidate.id === r.event.id)
+                            if (row?.kind === "event") {
+                              const header = useQueueStore.getState().headers.find((candidate) => candidate.id === row.id)
+                              if (header?.event) useQueueStore.getState().updateHeader(row.id, { event: { ...header.event, duration_minutes: m ?? undefined } })
+                            } else if (row?.moments[0]) {
+                              useQueueStore.getState().updateItem(row.moments[0].id, (item) => ({ ...item, planned_minutes: m }))
+                            }
+                          }}
                         />
                       </td>
-                      <td className={td}>{r.event.actualStart === null ? "" : `${wallClock(r.event.actualStart)} · ${mmss(r.actualMs ?? 0)}`}</td>
+                      <td className={td}>{r.event.actualStart === null ? "" : r.event.untrusted ? `${wallClock(r.event.actualStart)} · not trusted` : `${wallClock(r.event.actualStart)} · ${mmss(r.actualMs ?? 0)}`}</td>
                       <td className={td}>{r.event.state === "done" || r.event.state === "skipped" ? "" : `${wallClock(r.event.expectedStart)}–${wallClock(r.event.expectedEnd)}`}</td>
                       <td className={cn(td, r.offsetMinutes !== null && r.offsetMinutes > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{r.offsetMinutes === null ? "" : offsetText(r.offsetMinutes)}</td>
                       <td className={td}>

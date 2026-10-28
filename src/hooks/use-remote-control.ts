@@ -1,12 +1,14 @@
 import { useTimerStore } from "@/stores/timer-store"
 import { useServiceOffset } from "@/stores/service-offset-store"
 import { useHold } from "@/stores/hold-store"
+import { useAuxTimers } from "@/stores/aux-timers-store"
 import { useEffect } from "react"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { invoke } from "@tauri-apps/api/core"
 import { actingAs, useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { pushRemoteKeys, useSettingsStore } from "@/stores/settings-store"
+import { stepLiveSection } from "@/lib/desk-consoles"
 import { REMOTE_EVENTS, REMOTE_PAIR_CLOSED_EVENT, REMOTE_PAIRED_EVENT } from "@/lib/remote-events"
 import { toast } from "sonner"
 import { runMacro } from "@/lib/cues"
@@ -16,6 +18,10 @@ import { activateBibleReference, previewBibleReference } from "@/lib/bible-activ
 import { songRequest } from "@/lib/song-request"
 import { cameraSourceId, isStateSource, type AnySourceId } from "@/lib/live-sources"
 import { useNotices } from "@/stores/notices-store"
+import { OBS_REHEARSAL_REASON, useObsStore } from "@/stores/obs-store"
+import { queueRequest } from "@/lib/queue-request"
+import { receiveDeskScene } from "@/lib/desk-scenes"
+import { asRemoteRole } from "@/lib/remote-roles"
 
 /** Every remote command lands in the service log, so "who pressed Next?" has an answer (QA-006). */
 /** A note in the service log that is not a remote command (a device paired). */
@@ -107,12 +113,14 @@ export function useRemoteControl() {
         [REMOTE_EVENTS.timer_adjust, (p) => {
           const m = typeof p?.minutes === "number" ? Math.trunc(p.minutes) : 0
           if (!m) return
-          useTimerStore.getState().adjustMinutes(m)
+          useTimerStore.getState().adjustMinutes(m, typeof p?.by === "string" ? p.by : null)
           useJournalStore.getState().add({ kind: "timing", label: `${byOf(p)}timer corrected by ${m > 0 ? "+" : "−"}${Math.abs(m)} min` })
         }],
         // A hold from a joined desk (#196 R3): as the main desk's Hold, with who in the log line.
         [REMOTE_EVENTS.hold, (p) => useHold.getState().start(typeof p?.reason === "string" ? p.reason : "", senderOf(p ?? null))],
         [REMOTE_EVENTS.resume, (p) => useHold.getState().resume(senderOf(p ?? null))],
+        // An extra timer from a joined desk (#196 R2.5): the host's server checked the timer's owner first.
+        [REMOTE_EVENTS.aux_timer, (p) => { if (typeof p?.id === "string" && typeof p?.action === "string") useAuxTimers.getState().remote(p.id, p.action, typeof p.by === "string" ? p.by : undefined) }],
       ] as const satisfies ReadonlyArray<readonly [string, (p: Record<string, unknown> | null | undefined) => void]>) {
         keep(await listen<string>(event, (e) => { if (!cancelled) run(parsePayload(e.payload)) }))
       }
@@ -131,7 +139,8 @@ export function useRemoteControl() {
       const SOURCES = ["bible", "song", "hymn", "slide", "picture", "ticker", "timer", "lowerThird", "stage"] as const
       const asSource = (v: unknown): AnySourceId | undefined =>
         SOURCES.find((s) => s === v) ?? (typeof v === "string" && isStateSource(v) && useSettingsStore.getState().cameras.some((c) => cameraSourceId(c.name) === v) ? v : undefined)
-      await withPayload(REMOTE_EVENTS.bible_activate, (p) => { if (typeof p.reference === "string") void activateBibleReference(p.reference.slice(0, 120)) })
+      // A Bible desk may name the translation it chose (desk consoles); else the host's own.
+      await withPayload(REMOTE_EVENTS.bible_activate, (p) => { if (typeof p.reference === "string") void activateBibleReference(p.reference.slice(0, 120), typeof p.translation === "string" ? p.translation.slice(0, 16) : undefined) })
       // An action request answered on a joined desk (Comms C2): a verse to Preview only, or a song or
       // hymn by title. What could not be done is said here, where the operator can act on it.
       const notDone = (p: Record<string, unknown>, what: string, why: string) => toast.warning(`${what} not shown`, { description: `${byOf(p)}${why}` })
@@ -147,6 +156,21 @@ export function useRemoteControl() {
           void songRequest(title, mode).then((why) => { if (why) notDone(p, title, why) })
         })
       }
+      // The song on the screens one section on or back, or the chorus again, from a Worship desk (desk consoles).
+      await withPayload(REMOTE_EVENTS.song_section, (p) => {
+        const step = p.to === "chorus" ? "chorus" : p.step === 1 ? 1 : p.step === -1 ? -1 : 0
+        if (step) void stepLiveSection(step).then((why) => { if (why) toast.warning("Section not changed", { description: `${byOf(p)}${why}` }) })
+      })
+      // A verse or a song asked for, queued from a joined desk or a phone (Comms C2): into the run
+      // of show for later, as the main desk's own Queue; nothing is shown.
+      await withPayload(REMOTE_EVENTS.queue_request, (p) => {
+        if ((p.kind !== "bible" && p.kind !== "song") || typeof p.value !== "string") return
+        const value = p.value.slice(0, 120)
+        void queueRequest({ kind: p.kind, value }).then((why) => {
+          if (why) toast.warning(`${value} not queued`, { description: `${byOf(p)}${why}` })
+          else useJournalStore.getState().add({ kind: "remote", label: `${byOf(p)}queued ${value}` })
+        })
+      })
       await withPayload(REMOTE_EVENTS.clear_source, (p) => { const id = asSource(p.id); if (id) useBroadcastStore.getState().clearSource(id) })
       await withPayload(REMOTE_EVENTS.restore_source, (p) => { const id = asSource(p.id); if (id) useBroadcastStore.getState().restoreSource(id) })
       await withPayload(REMOTE_EVENTS.take_scene, (p) => {
@@ -174,6 +198,26 @@ export function useRemoteControl() {
         }),
       )
       await withPayload(REMOTE_EVENTS.release_scene, (p) => { if (typeof p.output === "string") useBroadcastStore.getState().releaseScene(p.output) })
+      // Scenes made and changed on a joined desk (#243 SC.16): checked by the host's server, then here.
+      await withPayload(REMOTE_EVENTS.save_scene, (p) => receiveDeskScene(p))
+      await withPayload(REMOTE_EVENTS.delete_scene, (p) => receiveDeskScene(p, true))
+      // The stage message from a Stage desk: as the main desk's own box, stage screens only.
+      await withPayload(REMOTE_EVENTS.stage_message, (p) => { if (typeof p.text === "string") useBroadcastStore.getState().setStageMessage(p.text.trim().slice(0, 120)) })
+      // OBS from the OBS director's desk, on this computer's OBS connection; the OBS store refuses it in rehearsal.
+      const obsScene = (p: Record<string, unknown>) => (typeof p.scene === "string" && useObsStore.getState().scenes.includes(p.scene) ? p.scene : null)
+      await withPayload(REMOTE_EVENTS.obs_preview, (p) => { const scene = obsScene(p); if (scene) void useObsStore.getState().setPreview(scene) })
+      await withPayload(REMOTE_EVENTS.obs_take, () => void useObsStore.getState().take())
+      await withPayload(REMOTE_EVENTS.obs_program, (p) => { const scene = obsScene(p); if (scene) void useObsStore.getState().switchProgram(scene) })
+      // The transition and the recording from the OBS director's desk (#197); the host's server
+      // refused them in rehearsal, and so does this computer (rehearsal records nothing).
+      await withPayload(REMOTE_EVENTS.obs_transition, (p) => { if (typeof p.name === "string" && useObsStore.getState().transitions.includes(p.name)) void useObsStore.getState().setTransition(p.name) })
+      await withPayload(REMOTE_EVENTS.obs_record, (p) => {
+        if (useBroadcastStore.getState().rehearsal) return void toast.info("OBS not changed", { description: `${byOf(p)}${OBS_REHEARSAL_REASON}` })
+        const obs = useObsStore.getState()
+        if (p.action === "start") void obs.startRecording()
+        else if (p.action === "stop") void obs.stopRecording()
+        else if (p.action === "marker") void obs.mark((typeof p.label === "string" && p.label.trim() ? p.label.trim() : "Marker").slice(0, 60) + ` (${senderOf(p)})`)
+      })
 
       // remote:paired — a device completed pairing; remember its token hash
       keep(
@@ -182,7 +226,7 @@ export function useRemoteControl() {
           const p = parsePayload(event.payload)
           if (typeof p?.hash === "string" && typeof p?.name === "string") {
             noteRemote(`${REMOTE_PAIRED_EVENT} ${p.name}`)
-            useSettingsStore.getState().addRemoteDevice({ hash: p.hash, name: p.name, role: p.role === "configure" || p.role === "timekeeper" || p.role === "bible" || p.role === "screens" ? p.role : "present" })
+            useSettingsStore.getState().addRemoteDevice({ hash: p.hash, name: p.name, role: asRemoteRole(p.role) ?? "present" })
             toast.success(`${p.name} paired`, { description: "It can now send commands. Revoke it in Settings → Remote." })
           }
         }),

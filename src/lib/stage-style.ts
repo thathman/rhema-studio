@@ -1,5 +1,6 @@
 import type { StagePayload, StageStyle } from "@/types"
 import { isCountdownTo } from "@/lib/countdown"
+import { validTimeZone } from "@/lib/church-time"
 
 export const DEFAULT_STAGE_STYLE: StageStyle = {
   background: "#000000",
@@ -34,6 +35,11 @@ export function normalizeStageStyle(raw: Partial<StageStyle> | null | undefined)
     warnAtMinutes: typeof r.warnAtMinutes === "number" && Number.isFinite(r.warnAtMinutes) ? Math.min(30, Math.max(0, Math.round(r.warnAtMinutes))) : d.warnAtMinutes,
     warnWhenOver: flag(r.warnWhenOver, d.warnWhenOver),
     ...(isCountdownTo(r.countdown) ? { countdown: r.countdown } : {}),
+    // The clock (#196 R2.6): only what is set is kept, so a design saved before reads as it was.
+    ...(r.showClock === true ? { showClock: true } : {}),
+    ...(r.clockHours === 12 ? { clockHours: 12 as const } : {}),
+    ...(typeof r.secondZone === "string" && validTimeZone(r.secondZone.trim()) ? { secondZone: r.secondZone.trim() } : {}),
+    ...(typeof r.secondZoneLabel === "string" && r.secondZoneLabel.trim() ? { secondZoneLabel: r.secondZoneLabel.trim().slice(0, 24) } : {}),
     ...(typeof r.libraryLookId === "string" && r.libraryLookId ? { libraryLookId: r.libraryLookId } : {}),
   }
 }

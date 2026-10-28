@@ -17,7 +17,9 @@ type Song = {
 }
 
 const uid = () => crypto.randomUUID()
+type ReusableSlideRow = { id: string; kind: "slide" | "announcement"; title: string; body: string; link: string | null; background_media_id: string | null; revision: number; created_at: string; updated_at: string }
 const songs = new Map<string, Song>()
+const reusableSlides = new Map<string, ReusableSlideRow>()
 const hymnbooks = new Map<string, { id: string; code: string; name: string; language: string; publisher: string; licence_note: string }>()
 const programs = new Map<string, { program: Record<string, unknown>; items: unknown[] }>()
 const logs: Array<{ id: string; program_id: string | null; title: string; saved_at: string; bytes: number; body: string }> = []
@@ -27,13 +29,18 @@ const OYCB = { id: 7, abbreviation: "OYCB", title: "Yoruba Bible", language: "yo
 const BOOKS = [
   [1, "Genesis", "Gen", "OT"], [19, "Psalms", "Ps", "OT"], [43, "John", "Jn", "NT"], [45, "Romans", "Rom", "NT"], [62, "I John", "1Jn", "NT"],
 ].map(([n, name, abbr, t], i) => ({ id: i + 1, translation_id: 1, book_number: n, name, abbreviation: abbr, testament: t }))
+const SAMPLE_KJV: Record<string, string> = {
+  "19:23:1": "The LORD is my shepherd; I shall not want.",
+  "43:3:16": "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
+}
 
 function verse(translationId: number, bookNumber: number, chapter: number, v: number) {
   const book = BOOKS.find((b) => b.book_number === bookNumber)
   if (!book) return null
+  const reference = `${book.name} ${chapter}:${v}`
   const text = translationId === 7
-    ? `Nítorí Ọlọ́run fẹ́ aráyé tó bẹ́ẹ̀ gẹ́ẹ́, tí ó fi Ọmọ bíbí rẹ̀ kan ṣoṣo fúnni (${book.name} ${chapter}:${v})`
-    : `For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life. (${book.name} ${chapter}:${v})`
+    ? `[Sample OYCB text for ${reference}]`
+    : SAMPLE_KJV[`${bookNumber}:${chapter}:${v}`] ?? `[Sample KJV text for ${reference}]`
   return { id: bookNumber * 100000 + chapter * 1000 + v, translation_id: translationId, book_number: bookNumber, book_name: book.name, book_abbreviation: book.abbreviation, chapter, verse: v, text }
 }
 
@@ -72,14 +79,27 @@ function writeSong(id: string, input: Record<string, unknown>, revision: number)
 
 const invalid = (message: string) => ({ kind: "invalid", message })
 
-async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<unknown> {
+export async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<unknown> {
   switch (cmd) {
     case "list_translations": return [KJV, OYCB]
     case "list_books": return BOOKS
     case "get_verse": return verse(Number(args.translationId ?? 1), Number(args.bookNumber), Number(args.chapter), Number(args.verse))
     case "get_chapter": return Array.from({ length: 10 }, (_, i) => verse(Number(args.translationId ?? 1), Number(args.bookNumber), Number(args.chapter), i + 1))
-    case "search_verses": return [verse(1, 43, 3, 16)]
-    case "content_status": return { available: true, path: "(browser shim)", migrations: ["0001_programs", "0002_item_identity", "0003_songs"], last_backup: null }
+    case "search_verses": {
+      const translationId = Number(args.translationId ?? 1)
+      const query = String(args.query ?? "").trim().toLocaleLowerCase()
+      const limit = Math.max(0, Number(args.limit ?? 20))
+      return [[19, 23, 1], [43, 3, 16]].flatMap(([bookNumber, chapter, number]) => {
+        const result = verse(translationId, bookNumber, chapter, number)
+        if (!result) return []
+        const aliases = bookNumber === 19 ? ["psalm 23", "psalms 23"] : []
+        const searchable = [result.book_name, `${result.book_name} ${chapter}`, `${result.book_name} ${chapter}:${number}`, ...aliases, result.text]
+          .join(" ")
+          .toLocaleLowerCase()
+        return !query || searchable.includes(query) ? [result] : []
+      }).slice(0, limit)
+    }
+    case "content_status": return { available: true, path: "(browser shim)", migrations: ["0001_programs", "0002_item_identity", "0003_songs", "0015_reusable_slides"], last_backup: null }
     case "content_export_service_package": throw { message: "Not available in the browser shim" }
     case "content_import_service_package": throw { message: "Not available in the browser shim" }
     case "content_list_song_attachments": return []
@@ -90,8 +110,10 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
     case "remote_pair_cancel": return null
     case "get_audio_devices": return [] // the real command always returns a list; null crashed Settings
     case "damaged_store_files": return [] // nothing is set aside in the browser
+    case "ai_drafts_list": return [] // no assistant drafts in the browser; null crashed Prepare
+    case "content_remove_old_log_transcripts": return 0
     case "content_set_actor": return null
-    case "content_save_service_log": { const id = crypto.randomUUID(); logs.unshift({ id, program_id: (args.programId as string | null) ?? null, title: String(args.title), saved_at: new Date().toISOString(), bytes: String(args.body).length, body: String(args.body) }); return logs[0] }
+    case "content_save_service_log": { const id = crypto.randomUUID(); logs.unshift({ id, program_id: (args.programId as string | null) ?? null, title: String(args.title), saved_at: new Date().toISOString(), bytes: String(args.body).length + String(args.transcript ?? "").length, body: String(args.body) + String(args.transcript ?? "") }); return logs[0] }
     case "content_list_service_logs": { const q = String(args.query ?? "").toLowerCase(); return logs.filter((l) => !q || l.title.toLowerCase().includes(q) || l.body.toLowerCase().includes(q)) }
     case "content_get_service_log": return logs.find((l) => l.id === args.id) ?? null
     case "content_delete_service_log": { const i = logs.findIndex((l) => l.id === args.id); if (i >= 0) logs.splice(i, 1); return null }
@@ -100,8 +122,38 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
     case "setup_show_data_folder": return null
     case "setup_test_folder": throw "Not available in the browser shim"
     case "media_list": return []
+    case "content_list_reusable_slides": {
+      const q = String(args.query ?? "").toLowerCase().trim()
+      return [...reusableSlides.values()].filter((s) => !q || `${s.title} ${s.body}`.toLowerCase().includes(q)).sort((a, b) => a.title.localeCompare(b.title))
+    }
+    case "content_create_reusable_slide": {
+      const input = args.input as { kind: "slide" | "announcement"; title: string; body: string; link: string | null; background_media_id: string | null }
+      if (!input.title.trim() && !input.body.trim() && !input.link) throw invalid("a slide needs a title, text or link")
+      const now = new Date().toISOString()
+      const slide = { ...input, id: uid(), title: input.title.trim(), body: input.body.trim(), revision: 1, created_at: now, updated_at: now }
+      reusableSlides.set(slide.id, slide)
+      return slide
+    }
+    case "content_update_reusable_slide": {
+      const id = String(args.id)
+      const existing = reusableSlides.get(id)
+      if (!existing) throw { kind: "not_found", message: "Reusable slide not found" }
+      if (existing.revision !== args.expectedRevision) throw { kind: "conflict", message: "Reusable slide changed in another window", expected: args.expectedRevision, actual: existing.revision }
+      const input = args.input as Omit<ReusableSlideRow, "id" | "revision" | "created_at" | "updated_at">
+      const updated = { ...existing, ...input, revision: existing.revision + 1, updated_at: new Date().toISOString() }
+      reusableSlides.set(id, updated)
+      return updated
+    }
+    case "content_delete_reusable_slide": {
+      const id = String(args.id)
+      const existing = reusableSlides.get(id)
+      if (!existing) throw { kind: "not_found", message: "Reusable slide not found" }
+      if (existing.revision !== args.expectedRevision) throw { kind: "conflict", message: "Reusable slide changed in another window", expected: args.expectedRevision, actual: existing.revision }
+      reusableSlides.delete(id)
+      return null
+    }
     case "media_import": return (args.paths as string[]).map((path) => ({ status: "failed", path, message: "the browser shim has no media folder" }))
-    case "content_restore": return { snapshot: "(browser shim)", migrations: ["0001_programs", "0002_item_identity", "0003_songs"] }
+    case "content_restore": return { snapshot: "(browser shim)", migrations: ["0001_programs", "0002_item_identity", "0003_songs", "0015_reusable_slides"] }
     case "content_inspect_backup": return { services: 3, songs: 12, newest_service: "Sunday Service", newest_date: "2026-10-25", last_changed: "2026-10-23T10:00:00Z", newer: false }
     case "content_list_programs": return [...programs.values()].map((p) => p.program)
     case "content_create_program": {
@@ -111,7 +163,8 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
       return program
     }
     case "content_get_program": return programs.get(String(args.id)) ?? null
-    case "content_replace_items": {
+    case "content_replace_items":
+    case "content_replace_items_with_history": {
       const p = programs.get(String(args.programId))
       if (!p) throw { kind: "not_found", message: "no such program" }
       if (p.program.revision !== args.expectedRevision) throw { kind: "conflict", message: "conflict", expected: args.expectedRevision, actual: p.program.revision }

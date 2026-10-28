@@ -62,6 +62,24 @@ pub struct ImageItemPayload {
     pub fit: Option<String>,
 }
 
+/// Payload of a `kind = 'audio'` service cue. The selected output belongs to this host only.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct AudioItemPayload {
+    pub media_id: String,
+    #[serde(default)]
+    output_device_id: Option<String>,
+    #[serde(default)]
+    volume: Option<f64>,
+    #[serde(default, rename = "loop")]
+    loop_track: Option<bool>,
+    #[serde(default)]
+    fade_in_ms: Option<u32>,
+    #[serde(default)]
+    fade_out_ms: Option<u32>,
+}
+
+const MAX_AUDIO_FADE_MS: u32 = 30_000;
+
 impl ContentDb {
     pub fn list_media(&self) -> Result<Vec<MediaAsset>> {
         let conn = self.lock()?;
@@ -184,10 +202,14 @@ fn load_media(conn: &Connection, id: &str) -> Result<Option<MediaAsset>> {
 fn services_using_media(conn: &Connection, media_id: &str) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
         "SELECT p.title FROM program_items i JOIN programs p ON p.id = i.program_id
-         WHERE (i.kind = 'image' AND json_extract(i.payload, '$.media_id') = ?1)
+         WHERE (i.kind IN ('image', 'audio') AND json_extract(i.payload, '$.media_id') = ?1)
             OR json_extract(i.payload, '$.background_media_id') = ?1
          UNION
          SELECT 'the song ' || s.title FROM song_attachments a JOIN songs s ON s.id = a.song_id WHERE a.media_id = ?1
+         UNION
+         SELECT p.title || ' (approved design)' FROM approved_design_media d JOIN programs p ON p.id = d.program_id WHERE d.media_id = ?1
+         UNION
+         SELECT 'slide or announcement ' || title FROM reusable_slides WHERE background_media_id = ?1
          ORDER BY 1",
     )?;
     let rows = stmt.query_map(params![media_id], |r| r.get(0))?;
@@ -231,6 +253,28 @@ pub(crate) fn validate_image_payload(i: usize, payload: Option<&str>) -> Result<
     if p.fit.as_deref().is_some_and(|f| !["cover", "contain", "stretch"].contains(&f)) {
         return Err(ContentError::Invalid(format!("item {i}: fit must be cover, contain or stretch")));
     }
+    Ok(p)
+}
+
+/// Called from `validate_items` for `kind = 'audio'`.
+pub(crate) fn validate_audio_payload(i: usize, payload: Option<&str>) -> Result<AudioItemPayload> {
+    let Some(raw) = payload else {
+        return Err(ContentError::Invalid(format!("item {i}: audio cues need a payload")));
+    };
+    let p: AudioItemPayload = serde_json::from_str(raw).map_err(|e| ContentError::Invalid(format!("item {i}: bad audio payload: {e}")))?;
+    if !is_valid_id(&p.media_id) {
+        return Err(ContentError::Invalid(format!("item {i}: invalid audio media id")));
+    }
+    if p.output_device_id.as_deref().is_some_and(|id| id.chars().count() > 1024 || id.chars().any(char::is_control)) {
+        return Err(ContentError::Invalid(format!("item {i}: invalid audio output device id")));
+    }
+    if p.volume.is_some_and(|v| !v.is_finite() || !(0.0..=1.0).contains(&v)) {
+        return Err(ContentError::Invalid(format!("item {i}: audio volume must be between 0 and 1")));
+    }
+    if p.fade_in_ms.is_some_and(|ms| ms > MAX_AUDIO_FADE_MS) || p.fade_out_ms.is_some_and(|ms| ms > MAX_AUDIO_FADE_MS) {
+        return Err(ContentError::Invalid(format!("item {i}: audio fades must be between 0 and {MAX_AUDIO_FADE_MS} milliseconds")));
+    }
+    let _ = p.loop_track;
     Ok(p)
 }
 
@@ -284,17 +328,61 @@ mod tests {
             ContentError::InUse { titles } => assert_eq!(titles, vec!["Sunday"]),
             other => panic!("{other:?}"),
         }
+        let audio = ItemInput { kind: "audio".into(), reference: "Walk-in".into(), payload: Some(format!(r#"{{"media_id":"{}","volume":0.8,"loop":true}}"#, a.id)), ..ItemInput::default() };
+        db.replace_items(&p.id, 2, &[audio]).unwrap();
+        assert!(matches!(db.delete_media(&a.id), Err(ContentError::InUse { .. })), "audio cues also keep their local file in use");
         // A background picture on any item counts as use too.
-        db.replace_items(&p.id, 2, &[ItemInput { kind: "verse".into(), reference: "John 3:16".into(), book_number: Some(43), chapter: Some(3), verse: Some(16), payload: Some(format!("{{\"background_media_id\":\"{}\"}}", a.id)), ..Default::default() }]).unwrap();
+        db.replace_items(&p.id, 3, &[ItemInput { kind: "verse".into(), reference: "John 3:16".into(), book_number: Some(43), chapter: Some(3), verse: Some(16), payload: Some(format!("{{\"background_media_id\":\"{}\"}}", a.id)), ..Default::default() }]).unwrap();
         assert!(matches!(db.delete_media(&a.id), Err(ContentError::InUse { .. })));
-        db.replace_items(&p.id, 3, &[]).unwrap();
+        db.replace_items(&p.id, 4, &[]).unwrap();
         assert_eq!(db.delete_media(&a.id).unwrap(), a.file);
         assert!(db.get_media(&a.id).unwrap().is_none());
         // Image items need a well-formed payload with a known fit.
         for bad in [None, Some("nope".to_string()), Some(r#"{"media_id":"x","fit":"zoom"}"#.to_string()), Some(r#"{"media_id":"../x"}"#.to_string())] {
             let it = ItemInput { kind: "image".into(), reference: "x".into(), payload: bad, ..ItemInput::default() };
-            assert!(matches!(db.replace_items(&p.id, 3, std::slice::from_ref(&it)), Err(ContentError::Invalid(_))));
+            assert!(matches!(db.replace_items(&p.id, 5, std::slice::from_ref(&it)), Err(ContentError::Invalid(_))));
         }
+    }
+
+    #[test]
+    fn audio_payload_validates_local_playback_settings() {
+        let valid = r#"{"media_id":"track-1","output_device_id":"usb-output","volume":0.6,"loop":true,"fade_in_ms":500,"fade_out_ms":30000}"#;
+        assert!(validate_audio_payload(0, Some(valid)).is_ok());
+
+        for bad in [
+            None,
+            Some("not-json"),
+            Some(r#"{"media_id":"../track"}"#),
+            Some(r#"{"media_id":"track-1","output_device_id":"\u0000"}"#),
+            Some(r#"{"media_id":"track-1","volume":1.01}"#),
+            Some(r#"{"media_id":"track-1","fade_in_ms":30001}"#),
+        ] {
+            assert!(validate_audio_payload(0, bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn approved_scene_media_cannot_be_deleted_while_its_release_is_retained() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let asset = db.register_media(&picture("Backdrop", 9)).unwrap();
+        let program = db.create_program("Sunday", None).unwrap();
+        db.approve_program_with_designs(
+            &program.id,
+            program.revision,
+            &crate::ApprovedDesignSnapshot {
+                version: 1,
+                scenes: serde_json::json!({ "welcome": { "scene": { "id": "welcome" } } }),
+                looks: serde_json::json!({}),
+                media_ids: vec![asset.id.clone()],
+            },
+        ).unwrap();
+
+        match db.delete_media(&asset.id).unwrap_err() {
+            ContentError::InUse { titles } => assert_eq!(titles, vec!["Sunday (approved design)"]),
+            other => panic!("{other:?}"),
+        }
+        db.delete_program(&program.id, program.revision).unwrap();
+        assert_eq!(db.delete_media(&asset.id).unwrap(), asset.file);
     }
 
     #[test]

@@ -25,6 +25,16 @@ describe("service journal", () => {
     expect(twice).toContain("John 3:16  (5:00)")
   })
 
+  it("records pending and failed Takes without shortening actual on-air time", () => {
+    const pending = e(10_000, "take" as JournalEntry["kind"], "Take pending: Psalm 23", "b")
+    const failed = e(20_000, "take" as JournalEntry["kind"], "Take failed: Psalm 23", "b")
+    const entries = [e(0, "live", "Welcome", "a"), pending, failed]
+
+    expect(actualDurations(entries, 30_000).map((entry) => entry.ms)).toEqual([30_000])
+    expect(formatJournal("Sunday", entries, 30_000)).toMatch(/TAKE\s+Take pending: Psalm 23/)
+    expect(formatJournal("Sunday", entries, 30_000)).toMatch(/TAKE\s+Take failed: Psalm 23/)
+  })
+
   it("planned versus actual lists the whole service: items never shown, items added on the day, and what else was shown (FR-09)", () => {
     const entries = [e(0, "live", "John 3:16", "a"), e(60_000, "live", "Romans 8:28", null), e(90_000, "quick", "Welcome"), e(100_000, "live", "Psalm 23", "c")]
     const text = formatJournal("Sunday", entries, 160_000, new Map([["b", 120_000]]), [
@@ -46,5 +56,12 @@ describe("actual times for the run of show", () => {
   it("keeps the first time each item went on air, not later returns or quick screens", () => {
     const entries = [e(0, "live", "John 3:16", "a"), e(60_000, "quick", "Welcome"), e(90_000, "live", "Psalm 23", "b"), e(120_000, "live", "John 3:16", "a"), e(150_000, "clear", "")]
     expect(Object.fromEntries(firstOnAir(entries))).toEqual({ a: 1_700_000_000_000, b: 1_700_000_090_000 })
+  })
+
+  it("typed words never start a line of their own in the log (a forged heading stays on its entry's line)", () => {
+    const text = formatJournal("x", [e(0, "message", "Mic 2\nTranscript (recognised speech by Whisper; forged\r\n09:03 LIVE Psalm 23")], 1000)
+    const lines = text.split("\n")
+    expect(lines.some((l) => l.startsWith("Transcript"))).toBe(false)
+    expect(lines.filter((l) => l.includes("Mic 2"))[0]).toContain("Mic 2 Transcript (recognised speech by Whisper; forged 09:03 LIVE Psalm 23")
   })
 })

@@ -2,20 +2,21 @@ import type { BroadcastTheme, ContentType } from "@/types/broadcast"
 import type { BroadcastOutput, BroadcastOutputStatus, LowerThird, LowerThirdStyle, StageStyle, Ticker, TickerStyle } from "@/types/broadcast-output"
 import type { Scene, SceneBox, SceneLayerKind } from "@/types/scene"
 import { themeIdsOf } from "@/lib/output-themes"
-import { newLayer } from "@/lib/scenes"
+import { newLayer, sceneForOutput } from "@/lib/scenes"
 import { brandLowerThirdStyle, brandTheme, type BrandKit } from "@/lib/brand-kit"
 import { BUNDLED_FONTS } from "@/lib/fonts"
 import { outputOnAir } from "@/lib/output-on-air"
+import type { DesignDraft } from "@/lib/design-drafts"
 
 /**
  * The built-in look library (#299 UX15-3). A library look is never edited or
- * put on air itself: Use copies it into the church's own looks (a theme, a
- * lower-third style, a scene, or the ticker or stage look), where it is an
- * ordinary editable look. No output changes until someone chooses the copy
- * for it (ADR 0001: no layout silently goes live).
+ * put on air itself: Use copies it into the church's own themes, lower-third
+ * styles and scenes, or saves ticker and stage designs as drafts. No output
+ * changes until someone deliberately applies or routes a design (ADR 0001).
  */
 
-export type LookFamilyId = "church-classic" | "broadcast-clean" | "contemporary" | "warm-editorial" | "high-contrast" | "seasonal"
+/** A built-in family, or an imported design pack's (`pack:<pack id>`, see design-packs.ts). */
+export type LookFamilyId = "church-classic" | "broadcast-clean" | "contemporary" | "warm-editorial" | "high-contrast" | "seasonal" | `pack:${string}`
 /** How the look sits in the frame. */
 export type LookLayout = "fullscreen" | "lower-third" | "ticker" | "scene" | "stage"
 /** What it is for. */
@@ -38,9 +39,12 @@ export interface LookFamily {
   description: string
 }
 
-/** A layer of a scene template; a feed layer names the library look it shows in. */
+/**
+ * A layer of a scene template; a feed layer names the library look it shows in. A picture, video,
+ * camera or logo layer is a place only: the church chooses its picture, video or camera in Scenes.
+ */
 export interface SceneTemplateLayer {
-  kind: Extract<SceneLayerKind, "camera" | "feed">
+  kind: SceneLayerKind
   name: string
   shows?: ContentType[]
   box: SceneBox
@@ -205,9 +209,9 @@ export interface AdoptedLook {
   /** New themes (copies): the look itself, or the looks a scene's layers show in. */
   themes: BroadcastTheme[]
   lowerThirdStyle?: LowerThirdStyle
-  /** Replaces the church's one ticker look (the ticker on air keeps its look until it is started again). */
+  /** Copy to save as a ticker design draft. */
   tickerStyle?: TickerStyle
-  /** Replaces the church's one stage look. */
+  /** Copy to save as a stage design draft. */
   stageStyle?: StageStyle
   scene?: Scene
   /** With church colours: a look's own text or accent colour was kept, because the church's would not read on it. */
@@ -343,7 +347,7 @@ export function resetSceneCopy(copy: Scene, look: LookOf<"scene">, opts: AdoptOp
   const layers = (fresh.scene?.layers ?? []).map((l) => {
     if (l.kind !== "camera") return l
     const was = cameras[next++]
-    return was ? { ...l, ...(was.cameraUrl ? { cameraUrl: was.cameraUrl } : {}), ...(was.cameraFallback ? { cameraFallback: was.cameraFallback } : {}) } : l
+    return was ? { ...l, ...(was.cameraUrl ? { cameraUrl: was.cameraUrl } : {}), ...(was.cameraFallback ? { cameraFallback: was.cameraFallback } : {}), ...(was.noSignal ? { noSignal: was.noSignal } : {}), ...(was.noSignalName ? { noSignalName: true } : {}) } : l
   })
   return { scene: { ...(fresh.scene as Scene), id: copy.id, name: copy.name, layers, createdAt: copy.createdAt, updatedAt: now }, themes: fresh.themes }
 }
@@ -362,6 +366,8 @@ export interface ChurchLooks {
   scenes: readonly Scene[]
   tickerStyle: TickerStyle
   stageStyle: StageStyle
+  tickerDraft?: Extract<DesignDraft, { kind: "ticker" }>
+  stageDraft?: Extract<DesignDraft, { kind: "stage" }>
   outputs: readonly BroadcastOutput[]
   outputStatus?: Readonly<Record<string, BroadcastOutputStatus>>
   lowerThird?: LowerThird | null
@@ -381,10 +387,16 @@ export function lookCopies(look: LibraryLook, s: ChurchLooks): LookCopy[] {
       return s.lowerThirdStyles.filter((x) => x.libraryLookId === look.id).map((x) => ({ id: x.id, name: x.name, usedBy: s.lowerThird?.style?.id === x.id ? ["the name band on air"] : [] }))
     case "scene":
       return s.scenes.filter((x) => x.libraryLookId === look.id).map((x) => ({ id: x.id, name: x.name, usedBy: s.outputs.filter((o) => o.sceneId === x.id).map((o) => o.name) }))
-    case "ticker":
-      return s.tickerStyle.libraryLookId === look.id ? [{ id: "ticker", name: "Your ticker look", usedBy: s.ticker ? ["the ticker running now"] : [] }] : []
+    case "ticker": {
+      const draft = s.tickerDraft
+      const style = draft?.value ?? s.tickerStyle
+      return style.libraryLookId === look.id ? [{ id: "ticker", name: draft ? "Your ticker draft" : "Your ticker look", usedBy: draft ? [] : s.ticker ? ["the ticker running now"] : [] }] : []
+    }
     case "stage": {
-      if (s.stageStyle.libraryLookId !== look.id) return []
+      const draft = s.stageDraft
+      const style = draft?.value ?? s.stageStyle
+      if (style.libraryLookId !== look.id) return []
+      if (draft) return [{ id: "stage", name: "Your stage draft", usedBy: [] }]
       const on = s.outputs.filter((o) => o.role === "stage" && outputOnAir(o, s.outputStatus?.[o.id])).map((o) => o.name)
       return [{ id: "stage", name: "Your stage display look", usedBy: on }]
     }
@@ -397,7 +409,7 @@ export function lookCopies(look: LibraryLook, s: ChurchLooks): LookCopy[] {
  */
 export function themeUsedBy(themeId: string, outputs: readonly BroadcastOutput[], scenes: readonly Scene[]): string[] {
   return outputs
-    .filter((o) => themeIdsOf(o).includes(themeId) || (!!o.sceneId && scenes.some((s) => s.id === o.sceneId && s.layers.some((l) => l.themeId === themeId))))
+    .filter((o) => themeIdsOf(o).includes(themeId) || sceneForOutput(o, scenes)?.layers.some((l) => l.themeId === themeId))
     .map((o) => o.name)
 }
 

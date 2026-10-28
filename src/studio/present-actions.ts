@@ -4,9 +4,10 @@ import { bibleActions } from "@/hooks/use-bible"
 import { isMissing, resolveTranslations } from "@/lib/translation-policy"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
-import { isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem, type SongWithSections } from "@/types"
+import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem, type SongWithSections } from "@/types"
 import { presentQuickScreen, type QuickScreen } from "@/hooks/use-broadcast"
 import { useSongStore } from "@/stores/song-store"
+import { lowerThirdBacking } from "@/lib/lower-third-backing"
 
 /**
  * The Standard view's verb set. Thin wrappers over `remoteActions` so the big
@@ -30,12 +31,15 @@ export const presentActions = {
    * the active translation and the preview would stop matching live.
    */
   previewItem: (item: QueueItem) => {
-    if (isSlideItem(item) || isImageItem(item)) {
+    // A cue-only moment previews as what it will do (#193): nothing on the screens.
+    if (isSlideItem(item) || isImageItem(item) || isAudioItem(item) || isCueItem(item)) {
       useBibleStore.getState().selectSlide({ item, index: 0 })
+      useBibleStore.getState().setSelectedQueueItemId(item.id)
       return
     }
     if (isSongItem(item)) {
       presentActions.previewSlide(item, 0)
+      useBibleStore.getState().setSelectedQueueItemId(item.id)
       return
     }
     const choice = resolveTranslations(item, useBibleStore.getState())
@@ -43,15 +47,18 @@ export const presentActions = {
     if (isMissing(choice) || choice.source !== "item") {
       bibleActions.selectVerse(item.verse)
       bibleActions.navigateToVerse(book_number, chapter, verse)
+      useBibleStore.getState().setSelectedQueueItemId(item.id)
       return
     }
     bibleActions.selectVerse({ ...item.verse, translation_id: choice.primary })
+    useBibleStore.getState().setSelectedQueueItemId(item.id)
     void bibleActions
       .fetchVerse(book_number, chapter, verse, choice.primary)
       .then((fresh) => {
         const still = useBibleStore.getState().selectedVerse
         if (fresh?.text && still && still.book_number === book_number && still.chapter === chapter && still.verse === verse) {
           bibleActions.selectVerse(fresh)
+          useBibleStore.getState().setSelectedQueueItemId(item.id)
         }
       })
       .catch(() => {})
@@ -78,6 +85,13 @@ export const presentActions = {
   clear: () => remoteActions.toggleOnAir(false),
   restore: () => {
     if (presentActions.canRestore()) remoteActions.toggleOnAir(true)
+  },
+  /** Take the news ticker with its words, or Stop it when it runs (Shift+T, #187). Nothing without words. */
+  ticker: () => {
+    const b = useBroadcastStore.getState()
+    if (b.ticker) return b.setTicker(null)
+    if (!b.tickerItems.some((i) => i.trim())) return
+    void lowerThirdBacking(b.tickerStyle).then((backing) => { if (!useBroadcastStore.getState().ticker) useBroadcastStore.getState().setTicker({ backing }) }).catch(() => {})
   },
   canRestore: () => {
     const s = useBroadcastStore.getState()

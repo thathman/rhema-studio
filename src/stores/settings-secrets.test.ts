@@ -47,19 +47,21 @@ beforeEach(() => {
 describe("secrets in the system keychain (RG-08)", () => {
   it("moves secrets from an older settings file into one keychain entry, blanks the file, and reads them back next time", async () => {
     file.set("deepgramApiKey", "dg-1234567890")
+    file.set("openaiApiKey", "sk-openai-test-123456")
     file.set("remoteSecret", "sunday-key-1")
     file.set("obs", { enabled: true, host: "127.0.0.1", port: 4455, password: "obs-pass-99" })
     const { hydrateSettings, useSettingsStore } = await import("./settings-store")
     await hydrateSettings()
     await settle()
     expect(useSettingsStore.getState().deepgramApiKey).toBe("dg-1234567890")
-    expect(JSON.parse(keychain!)).toEqual({ deepgramApiKey: "dg-1234567890", remoteSecret: "sunday-key-1", obsPassword: "obs-pass-99" })
+    expect(JSON.parse(keychain!)).toEqual({ deepgramApiKey: "dg-1234567890", openaiApiKey: "sk-openai-test-123456", remoteSecret: "sunday-key-1", obsPassword: "obs-pass-99" })
     // Saved in the machine part (#298 M11) and at the top for older builds, blanked in both.
     const machine = file.get("machine") as Record<string, unknown>
     expect(machine.deepgramApiKey).toBe("")
+    expect(machine.openaiApiKey).toBe("")
     expect(machine.remoteSecret).toBe("")
     expect((machine.obs as { password: string }).password).toBe("")
-    expect([file.get("deepgramApiKey"), file.get("remoteSecret"), (file.get("obs") as { password: string }).password]).toEqual(["", "", ""])
+    expect([file.get("deepgramApiKey"), file.get("openaiApiKey"), file.get("remoteSecret"), (file.get("obs") as { password: string }).password]).toEqual(["", "", "", ""])
     expect(file.get("secretsInKeychain")).toBe(true)
 
     vi.resetModules()
@@ -68,16 +70,44 @@ describe("secrets in the system keychain (RG-08)", () => {
     await again.hydrateSettings()
     expect(calls).toEqual(["get"])
     expect(again.useSettingsStore.getState().deepgramApiKey).toBe("dg-1234567890")
+    expect(again.useSettingsStore.getState().openaiApiKey).toBe("sk-openai-test-123456")
     expect(again.useSettingsStore.getState().obs.password).toBe("obs-pass-99")
+  })
+
+  it("keeps each saved OBS computer's password in the keychain, never in the file or a backup (#197)", async () => {
+    const { hydrateSettings, useSettingsStore, settingsForBackup, currentSecrets } = await import("./settings-store")
+    await hydrateSettings()
+    useSettingsStore.getState().setOpenaiApiKey("sk-openai-test-456")
+    useSettingsStore.getState().setObsProfiles([
+      { id: "obs-a", label: "Main stream PC", host: "192.168.1.30", port: 4455, password: "main-pass-1" },
+      { id: "obs-b", label: "Backup laptop", host: "192.168.1.31", port: 4455, password: "" },
+    ])
+    await settle()
+    expect(JSON.parse(keychain!).openaiApiKey).toBe("sk-openai-test-456")
+    expect(JSON.parse(JSON.parse(keychain!).obsProfilePasswords)).toEqual({ "obs-a": "main-pass-1" })
+    const saved = (file.get("machine") as Record<string, unknown>).obsProfiles as Array<{ label: string; password: string }>
+    expect(saved.map((p) => [p.label, p.password])).toEqual([["Main stream PC", ""], ["Backup laptop", ""]])
+    expect(JSON.stringify(settingsForBackup())).not.toContain("main-pass-1")
+    expect(JSON.stringify(settingsForBackup())).not.toContain("sk-openai-test-456")
+    expect(JSON.stringify(settingsForBackup())).not.toContain("Main stream PC")
+    expect(currentSecrets()).toContain("main-pass-1")
+    expect(currentSecrets()).toContain("sk-openai-test-456")
+
+    vi.resetModules()
+    const again = await import("./settings-store")
+    await again.hydrateSettings()
+    expect(again.useSettingsStore.getState().obsProfiles.map((p) => [p.label, p.password])).toEqual([["Main stream PC", "main-pass-1"], ["Backup laptop", ""]])
   })
 
   it("keeps secrets in the file when the keychain is unavailable", async () => {
     keychainUp = false
     file.set("deepgramApiKey", "dg-1234567890")
+    file.set("openaiApiKey", "sk-openai-test-789")
     const { hydrateSettings } = await import("./settings-store")
     await hydrateSettings()
     await settle()
     expect((file.get("machine") as Record<string, unknown>).deepgramApiKey).toBe("dg-1234567890")
+    expect((file.get("machine") as Record<string, unknown>).openaiApiKey).toBe("sk-openai-test-789")
     expect(file.get("secretsInKeychain")).toBe(false)
   })
 

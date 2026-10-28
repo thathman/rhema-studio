@@ -8,7 +8,7 @@ vi.hoisted(() => {
 })
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => []) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
-vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn(async () => "0.3.2") }))
+vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn(async () => "0.3.3") }))
 
 import { act, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -91,7 +91,7 @@ describe("keyboard order (#215)", () => {
       </>,
     )
     await act(async () => document.querySelector<HTMLButtonElement>("button")!.focus())
-    expect(await walk(11)).toEqual(["Home", "Prepare", "Present", "Production", "Library", "Design", "Team", "Archive", "Collapse sidebar", "Your desk: Tolu, Main desk", "After"])
+    expect(await walk(12)).toEqual(["Home", "Prepare", "Present", "Production", "Library", "Design", "Connections", "Team", "Archive", "Collapse sidebar", "Your desk: Tolu, Main desk", "After"])
     // And back the same way.
     await tab(true)
     expect(focused()).toBe("Your desk: Tolu, Main desk")
@@ -106,10 +106,11 @@ describe("keyboard order (#215)", () => {
     await act(async () => trigger.click())
     // It opens on its first control.
     expect(focused()).toBe("Your name")
-    expect(await walk(14)).toEqual(["This computer", "See joined desks", "Join another host", "Light", "Dark", "System", expect.stringMatching(/^Settings/), "Complete setup", expect.stringMatching(/^Setup status/), "Keyboard shortcuts", "Help and the tour", "Diagnostics", expect.stringMatching(/^About Rhema Studio/), "Your name"])
+    expect(await walk(15)).toEqual(["This computer", "See joined desks", "Join another host", "Light", "Dark", "System", expect.stringMatching(/^Settings/), "Complete setup", expect.stringMatching(/^Setup status/), "This computer runs OBS only…", "Keyboard shortcuts", "Help and the tour", "Diagnostics", expect.stringMatching(/^About Rhema Studio/), "Your name"])
     await act(async () => void document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })))
     expect(document.querySelector('[aria-label="Your desk"]')).toBeNull()
-    expect(document.activeElement).toBe(trigger)
+    // Focus goes back to the Desk button after the menu's close; give it up to a second (slow CI).
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 1000 })
   })
 
   it("Settings search: the search box, then each section in order, then the open section; a match elsewhere is next after the search", async () => {

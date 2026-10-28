@@ -12,15 +12,17 @@ import { useQueueStore } from "@/stores"
 import { endByLeftMs, formatMinutes, projectedEnd, timingSummary } from "@/lib/service-timing"
 import { useServiceTiming } from "@/studio/use-service-timing"
 import { useHold } from "@/stores/hold-store"
+import { timeText } from "@/lib/church-time"
+import { churchTimeZone } from "@/stores/timing-input"
+import { useSettingsStore } from "@/stores/settings-store"
 
 const PRESETS = [20, 30, 45, 60]
 /** Manual timing correction, with its line in the service log (FR-07 "with audit"). */
 function correct(minutes: number) {
-  useTimerStore.getState().adjustMinutes(minutes)
+  useTimerStore.getState().adjustMinutes(minutes, useSettingsStore.getState().operatorName.trim() || null)
   useJournalStore.getState().add({ kind: "timing", label: `timer corrected by ${minutes > 0 ? "+" : "−"}${Math.abs(minutes)} min` })
 }
 
-const clock = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
 
 /**
  * The service timer, in the Present header: counts the sermon or the whole
@@ -32,19 +34,20 @@ export function ServiceTimer() {
   useTimerStore((s) => s.tick)
   const now = monotonicNow()
   const running = isRunning(timer)
-  const tone = timerTone(timer, now)
+  // With phases and a start time, the run of show's timing engine; otherwise from when the timer started.
+  const { timing, zone } = useServiceTiming()
+  // The item happening may warn earlier or later than two minutes before its end (#196 R1.3).
+  const tone = timerTone(timer, now, timing?.events.find((e) => e.state === "live")?.warnMs)
   const label = timer.durationMs > 0 ? formatMs(remainingMs(timer, now)) : formatMs(elapsedMs(timer, now))
   const idle = !running && elapsedMs(timer, now) === 0
   const items = useQueueStore((s) => s.items)
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const plan = timingSummary(items, idle ? null : activeIndex, elapsedMs(timer, now))
   const behind = plan.behindMs === null ? null : Math.round(plan.behindMs / 60_000)
-  // With phases and a start time, the run of show's timing engine; otherwise from when the timer started.
-  const { timing } = useServiceTiming()
   const ends = timing ? { plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd } : projectedEnd(plan, elapsedMs(timer, now), wallAt(now))
   // The item in hand may have to finish by a clock time ("sermon ends by 12:15").
   const endBy = activeIndex !== null ? items[activeIndex]?.end_by ?? null : null
-  const endByLeft = endByLeftMs(endBy, wallAt(now))
+  const endByLeft = endByLeftMs(endBy, wallAt(now), zone)
   const [armReset, setArmReset] = useState(false)
   // The timer store only ticks while the service timer runs; an end-by countdown must move regardless.
   const [, setClock] = useState(0)
@@ -132,9 +135,9 @@ export function ServiceTimer() {
         </div>
         {ends && (
           <p className="mt-2 text-xs tabular-nums">
-            Planned end {clock(ends.plannedEnd)}
+            Planned end {timeText(ends.plannedEnd, zone)}
             {Math.abs(ends.expectedEnd - ends.plannedEnd) >= 60_000 && (
-              <span className={cn("font-semibold", ends.expectedEnd > ends.plannedEnd ? "text-destructive" : "text-confidence-high")}> · now about {clock(ends.expectedEnd)}</span>
+              <span className={cn("font-semibold", ends.expectedEnd > ends.plannedEnd ? "text-destructive" : "text-confidence-high")}> · now about {timeText(ends.expectedEnd, zone)}</span>
             )}
           </p>
         )}
@@ -154,18 +157,21 @@ export function ServiceTimer() {
 export function HoldControl() {
   const hold = useHold((s) => s.hold)
   const [reason, setReason] = useState("")
+  // Refused by the run state (#196 R3.7): a finished service has nothing to hold.
+  const [refused, setRefused] = useState<string | null>(null)
   if (hold) {
     return (
       <div className="mt-3 flex items-center gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2 py-1.5 text-xs" role="status">
-        <span className="min-w-0 flex-1"><b>On hold</b> since {clock(hold.since)}: {hold.reason}{hold.by ? ` · by ${hold.by}` : ""}</span>
+        <span className="min-w-0 flex-1"><b>On hold</b> since {timeText(hold.since, churchTimeZone())}: {hold.reason}{hold.by ? ` · by ${hold.by}` : ""}</span>
         <Button size="xs" onClick={() => useHold.getState().resume()}>Resume</Button>
       </div>
     )
   }
   return (
-    <form className="mt-3 flex items-center gap-1.5 text-xs" onSubmit={(e) => { e.preventDefault(); useHold.getState().start(reason); setReason("") }}>
+    <form className="mt-3 flex items-center gap-1.5 text-xs" onSubmit={(e) => { e.preventDefault(); setRefused(useHold.getState().start(reason)); setReason("") }}>
       <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason, e.g. waiting for the pastor" maxLength={80} aria-label="Reason for the hold" className="h-7 flex-1 text-xs" />
       <Button size="xs" variant="outline" type="submit" title="Hold: noted in the service log and shown on the stage display; loops and timed moves wait until Resume">Hold</Button>
+      {refused && <span className="text-muted-foreground" role="status">{refused}</span>}
     </form>
   )
 }

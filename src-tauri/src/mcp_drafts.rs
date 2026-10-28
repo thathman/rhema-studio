@@ -17,6 +17,9 @@ const MAX_WAITING: usize = 50;
 const ROLES: [&str; 4] = ["pre", "warmup", "main", "post"];
 const RULES: [&str; 3] = ["loop", "auto_once", "manual"];
 const HYMN_TAG: &str = "cacghb";
+/// Cues an item may run as it goes live, none changing what the congregation sees
+/// (src/types/queue.ts GO_LIVE_CUES; a frontend test keeps the two lists the same).
+pub const GO_LIVE_CUES: [&str; 4] = ["timer.start", "timer.fresh", "timer.pause", "stage.clearMessage"];
 
 fn clock(s: &str) -> bool {
     let b = s.as_bytes();
@@ -36,6 +39,12 @@ fn short(v: Option<&Value>, max: usize) -> Option<String> {
     v.and_then(Value::as_str).map(str::trim).filter(|x| !x.is_empty()).map(|x| x.chars().take(max).collect())
 }
 
+/// One line of text: line breaks and other control characters become spaces, runs of space collapse.
+fn one_line(v: Option<&Value>, max: usize) -> Option<String> {
+    let line = v.and_then(Value::as_str)?.split(|c: char| c.is_control() || c.is_whitespace()).filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ");
+    (!line.is_empty()).then(|| line.chars().take(max).collect())
+}
+
 /// The outcome of checking a proposed service: the draft as Rhema would store it (when it can be
 /// stored), what was found or is missing, and anything that must be fixed first.
 pub struct Checked {
@@ -51,19 +60,31 @@ pub struct Checked {
 pub struct Looks {
     pub looks: Vec<String>,
     pub scenes: Vec<String>,
+    /// The cameras on the church network (Settings → Cameras), by router name and label; never their links.
+    pub cameras: Vec<Camera>,
+}
+
+pub struct Camera {
+    pub name: String,
+    pub label: String,
 }
 
 /// Built-in looks (src/lib/builtin-themes.ts; a frontend test keeps the two lists the same).
 pub const BUILTIN_LOOKS: [&str; 4] = ["Classic Dark", "Modern Light", "Lower Thirds", "Banner Split"];
 
 impl Looks {
-    /// From the app's saved looks file (`broadcast-themes.json`), read-only.
+    /// From the app's saved looks file (`broadcast-themes.json`) and its settings (cameras), read-only.
     pub fn read(dir: &Path) -> Self {
         let v: Value = std::fs::read_to_string(dir.join("broadcast-themes.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
         let names = |k: &str| v[k].as_array().map(|a| a.iter().filter_map(|x| x["name"].as_str().map(|s| s.chars().take(80).collect::<String>())).collect::<Vec<_>>()).unwrap_or_default();
         let mut looks: Vec<String> = BUILTIN_LOOKS.iter().map(|s| (*s).to_string()).collect();
         looks.extend(names("customThemes"));
-        Self { looks, scenes: names("scenes") }
+        let settings = crate::mcp::settings(dir);
+        let cameras = crate::mcp::setting(&settings, "machine", "cameras")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(|c| Some(Camera { name: c["name"].as_str()?.chars().take(40).collect(), label: c["label"].as_str().unwrap_or("").chars().take(80).collect() })).collect())
+            .unwrap_or_default();
+        Self { looks, scenes: names("scenes"), cameras }
     }
 }
 
@@ -166,7 +187,7 @@ pub fn check_with(content: Option<&ContentDb>, bible: Option<&BibleDb>, looks: O
             let group = short(it.get("group"), 80);
             match (&group, &last_group) {
                 (None, Some(g)) if !warned_after_group => {
-                    warnings.push(format!("{at}: it has no group but follows the group \"{g}\", so Rhema shows it in that group: give it a group or put it before the first group"));
+                    warnings.push(format!("{at}: it has no group but follows the group \"{g}\", so Rhema Studio shows it in that group: give it a group or put it before the first group"));
                     warned_after_group = true;
                 }
                 _ => {}
@@ -188,14 +209,45 @@ pub fn check_with(content: Option<&ContentDb>, bible: Option<&BibleDb>, looks: O
                     }
                 }
             }
-            let base = json!({ "planned_minutes": planned, "end_by": end_by, "group": group, "notes": notes, "suggested_look": look, "suggested_scene": scene });
+            // As it goes live (#193): a line for the stage screens only, and a cue that never changes
+            // the congregation's screens.
+            let stage_message = one_line(it.get("stage_message"), 120);
+            let mut cue = short(it.get("go_live_cue"), 30);
+            if let Some(c) = cue.clone() {
+                if !GO_LIVE_CUES.contains(&c.as_str()) {
+                    warnings.push(format!("{at}: go-live cue \"{c}\" is not one of {}, so it was left out", GO_LIVE_CUES.join(", ")));
+                    cue = None;
+                }
+            }
+            let mut on_live = serde_json::Map::new();
+            if let Some(m) = stage_message {
+                on_live.insert("stage_message".into(), json!(m));
+            }
+            if let Some(c) = cue {
+                on_live.insert("cue".into(), json!(c));
+            }
+            // The camera it plans to show (#243 RS.3), by the church's name or label: a plan, never switched by itself.
+            let mut camera = short(it.get("camera"), 80);
+            if let (Some(c), Some(l)) = (camera.clone(), looks) {
+                camera = l.cameras.iter().find(|x| x.name.eq_ignore_ascii_case(&c) || x.label.to_lowercase() == c.to_lowercase()).map(|x| x.name.clone());
+                if camera.is_none() {
+                    warnings.push(format!("{at}: \"{c}\" is not one of the church's cameras (rhema_get_church_profile), so it was left out"));
+                }
+            }
+            let on_take = take_steps(it.get("on_take"), &kind, looks, &at, &mut warnings);
+            let on_live = (!on_live.is_empty()).then_some(Value::Object(on_live));
+            let base = json!({ "planned_minutes": planned, "end_by": end_by, "group": group, "notes": notes, "suggested_look": look, "suggested_scene": scene, "on_live": on_live, "camera": camera, "on_take": on_take });
             let item = match kind.as_str() {
                 "song" | "hymn" => {
                     let wanted = short(it.get("title"), 120).unwrap_or_default();
                     match find_song(content, it, &kind) {
                         Some(song) => {
                             found += 1;
-                            json!({ "kind": "song", "song": song, "status": "found" })
+                            let mut item = json!({ "kind": "song", "song": song, "status": "found" });
+                            if let Some(full) = content.and_then(|c| c.get_song(item["song"]["id"].as_str().unwrap_or("")).ok().flatten()) {
+                                song_choices(&mut item, &full, it, &at, &mut warnings);
+                            }
+                            item
                         }
                         None if wanted.is_empty() && short(it.get("song_id"), 64).is_none() => {
                             errors.push(format!("{at}: a {kind} needs a title or a song_id"));
@@ -214,7 +266,16 @@ pub fn check_with(content: Option<&ContentDb>, bible: Option<&BibleDb>, looks: O
                         Ok(passage) => {
                             found += 1;
                             let first = &passage.rows[0];
-                            json!({ "kind": "verse", "reference": passage.reference(), "translation": passage.translation, "book_number": passage.book_number, "book_name": passage.book_name, "chapter": passage.chapter, "verse": first.verse, "verses": passage.rows.len(), "status": "found" })
+                            let mut v = json!({ "kind": "verse", "reference": passage.reference(), "translation": passage.translation, "book_number": passage.book_number, "book_name": passage.book_name, "chapter": passage.chapter, "verse": first.verse, "verses": passage.rows.len(), "status": "found" });
+                            // A second edition shown with the first (a Yorùbá Bible with KJV, SC3).
+                            if let Some(second) = short(it.get("second_translation"), 12) {
+                                match bible.and_then(|b| b.list_translations().ok()).and_then(|ts| ts.into_iter().find(|t| t.abbreviation.eq_ignore_ascii_case(&second))) {
+                                    Some(t) if t.abbreviation != passage.translation => v["second_translation"] = json!(t.abbreviation),
+                                    Some(_) => warnings.push(format!("{at}: the second translation is the same as the first, so it was left out")),
+                                    None => warnings.push(format!("{at}: \"{second}\" is not an installed Bible edition (rhema_list_translations), so it was left out")),
+                                }
+                            }
+                            v
                         }
                         Err(e) => {
                             errors.push(format!("{at}: \"{reference}\": {e}"));
@@ -257,7 +318,7 @@ pub fn check_with(content: Option<&ContentDb>, bible: Option<&BibleDb>, looks: O
         errors.push(format!("at most {MAX_ITEMS} items"));
     }
     if !roles_seen.iter().any(|r| r == "main") && !phases.is_empty() {
-        warnings.push("no phase has the role \"main\": Rhema times the service from the main phase's start time".into());
+        warnings.push("no phase has the role \"main\": Rhema Studio times the service from the main phase's start time".into());
     }
     if let Some(main) = phases.iter().find(|p| p["role"] == "main") {
         if main.get("starts_at").is_none() {
@@ -267,8 +328,83 @@ pub fn check_with(content: Option<&ContentDb>, bible: Option<&BibleDb>, looks: O
     let assumptions: Vec<String> = input.get("assumptions").and_then(Value::as_array).map(|a| a.iter().filter_map(|x| short(Some(x), 300)).take(20).collect()).unwrap_or_default();
     let ok = errors.is_empty();
     let report = json!({ "ok": ok, "errors": errors, "warnings": warnings, "items": count.min(MAX_ITEMS), "found": found, "missing": missing, "plannedMinutes": minutes });
-    let draft = ok.then(|| json!({ "title": title, "date": date, "assumptions": assumptions, "phases": phases }));
+    // The check's warnings go with the saved draft, so the people reviewing it see them too (#252 PV1).
+    let draft = ok.then(|| json!({ "title": title, "date": date, "assumptions": assumptions, "phases": phases, "warnings": warnings }));
     Checked { draft, report }
+}
+
+/// Steps armed for the operator's own Take of the item (#243 RS.4), by name: a congregation scene
+/// the church has, an OBS scene, or (a reading) the Bible feeds only. They run only when a person
+/// Takes the item in Present; neither the draft nor the MCP server ever runs them.
+fn take_steps(v: Option<&Value>, kind: &str, looks: Option<&Looks>, at: &str, warnings: &mut Vec<String>) -> Option<Value> {
+    let v = v.filter(|v| v.is_object())?;
+    let mut out = serde_json::Map::new();
+    if let Some(name) = short(v.get("scene"), 80) {
+        match looks.map(|l| l.scenes.iter().find(|n| n.to_lowercase() == name.to_lowercase()).cloned()) {
+            Some(Some(n)) => {
+                out.insert("scene".into(), json!(n));
+            }
+            Some(None) => warnings.push(format!("{at}: \"{name}\" is not one of the church's scenes (rhema_list_looks_and_scenes), so its Take step was left out")),
+            None => {
+                out.insert("scene".into(), json!(name));
+            }
+        }
+    }
+    if let Some(name) = one_line(v.get("obs_scene"), 80) {
+        out.insert("obs_scene".into(), json!(name));
+    }
+    if v.get("bible_feeds_only") == Some(&json!(true)) {
+        if kind == "bible" {
+            out.insert("bible_feeds_only".into(), json!(true));
+        } else {
+            warnings.push(format!("{at}: only a reading can go to the Bible feeds only, so that step was left out"));
+        }
+    }
+    (!out.is_empty()).then_some(Value::Object(out))
+}
+
+/// Why a song's licence needs a look before it is used, or None (#252 RS11).
+pub(crate) fn licence_warning(s: &rhema_content::Song) -> Option<&'static str> {
+    match s.licence.trim() {
+        "unknown" | "" => Some("has no licence recorded in the library"),
+        "ccli" if s.ccli_number.as_deref().map_or(true, |n| n.trim().is_empty()) => Some("is marked CCLI but has no CCLI song number"),
+        "custom" if s.licence_note.trim().is_empty() => Some("is marked custom permission but has no note of it"),
+        _ => None,
+    }
+}
+
+/// A found song's arrangement and languages as the draft asks (each checked against the song), and
+/// a warning when its licence needs a look (#252 RS5, RS11, SC3).
+fn song_choices(item: &mut Value, song: &rhema_content::SongWithSections, it: &Value, at: &str, warnings: &mut Vec<String>) {
+    let title = &song.song.title;
+    if let Some(w) = licence_warning(&song.song) {
+        warnings.push(format!("{at}: \"{title}\" {w}: check it before the service (Prepare → Songs)"));
+    }
+    if let Some(name) = short(it.get("arrangement"), 80) {
+        match song.arrangements.iter().find(|a| a.name.to_lowercase() == name.to_lowercase()) {
+            Some(a) => item["arrangement"] = json!({ "id": a.id, "name": a.name }),
+            None => {
+                let have: Vec<&str> = song.arrangements.iter().map(|a| a.name.as_str()).collect();
+                warnings.push(format!("{at}: \"{title}\" has no arrangement \"{name}\" (it has: {}), so its default is used", if have.is_empty() { "none".into() } else { have.join(", ") }));
+            }
+        }
+    }
+    if let Some(asked) = it.get("languages").and_then(Value::as_array) {
+        let mut has: Vec<&str> = song.sections.iter().flat_map(|x| x.texts.keys().map(String::as_str)).collect();
+        has.sort_unstable();
+        has.dedup();
+        let mut keep: Vec<String> = Vec::new();
+        for l in asked.iter().filter_map(|l| short(Some(l), 12)).take(6) {
+            match has.iter().find(|h| h.eq_ignore_ascii_case(&l)) {
+                Some(h) if !keep.iter().any(|k| k == h) => keep.push((*h).to_string()),
+                Some(_) => {}
+                None => warnings.push(format!("{at}: \"{title}\" has no words in \"{l}\", so that language was left out")),
+            }
+        }
+        if !keep.is_empty() {
+            item["languages"] = json!(keep);
+        }
+    }
 }
 
 fn find_song(content: Option<&ContentDb>, it: &Value, kind: &str) -> Option<Value> {
@@ -295,9 +431,8 @@ fn find_song(content: Option<&ContentDb>, it: &Value, kind: &str) -> Option<Valu
 pub fn save(data_dir: &Path, draft: &Value, client: &Value) -> Result<String, String> {
     let dir = data_dir.join(DRAFTS_DIR);
     std::fs::create_dir_all(&dir).map_err(|e| format!("could not make the drafts folder: {e}"))?;
-    let waiting = std::fs::read_dir(&dir).map(|r| r.filter_map(Result::ok).filter(|e| e.path().extension().is_some_and(|x| x == "json")).count()).unwrap_or(0);
-    if waiting >= MAX_WAITING {
-        return Err(format!("{MAX_WAITING} drafts are already waiting: review or remove some in Rhema → Prepare → AI drafts first"));
+    if waiting(data_dir) >= MAX_WAITING {
+        return Err(format!("{MAX_WAITING} drafts are already waiting: review or remove some in Rhema Studio → Prepare → AI drafts first"));
     }
     let id = uuid::Uuid::new_v4().to_string();
     let mut doc = draft.clone();
@@ -313,8 +448,16 @@ pub fn save(data_dir: &Path, draft: &Value, client: &Value) -> Result<String, St
     Ok(id)
 }
 
-fn is_draft_id(id: &str) -> bool {
+pub(crate) fn is_draft_id(id: &str) -> bool {
     id.len() == 36 && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+/// A draft people opened in Prepare (#252 UI4): it stops waiting, and an assistant cannot revise it.
+const OPENED: &str = "opened";
+
+/// Drafts still waiting for people (opened ones do not count against the 50).
+fn waiting(data_dir: &Path) -> usize {
+    list(data_dir).iter().filter(|d| d["status"] != OPENED).count()
 }
 
 /// The drafts waiting for review (newest first): what an assistant needs to find its own.
@@ -329,7 +472,7 @@ pub fn list(data_dir: &Path) -> Vec<Value> {
         .filter(|v| v.get("v") == Some(&json!(1)) && v.get("id").and_then(Value::as_str).is_some_and(is_draft_id))
         .map(|v| {
             let items: usize = v["phases"].as_array().map_or(0, |p| p.iter().map(|ph| ph["items"].as_array().map_or(0, Vec::len)).sum());
-            json!({ "id": v["id"], "title": v["title"], "date": v["date"], "items": items, "revision": revision(&v), "created_at": v["created_at"], "updated_at": v["updated_at"], "by": v["client"]["name"], "status": v["status"] })
+            json!({ "id": v["id"], "title": v["title"], "date": v["date"], "items": items, "revision": revision(&v), "created_at": v["created_at"], "updated_at": v["updated_at"], "by": v["client"]["name"], "status": v["status"], "opened_at": v["opened_at"] })
         })
         .collect();
     out.sort_by(|a, b| b["created_at"].as_str().unwrap_or("").cmp(a["created_at"].as_str().unwrap_or("")));
@@ -366,6 +509,9 @@ pub fn get(data_dir: &Path, id: &str) -> Result<Value, String> {
 /// new revision.
 pub fn update(data_dir: &Path, id: &str, read: u64, draft: &Value, client: &Value) -> Result<u64, String> {
     let old = read_draft(data_dir, id)?;
+    if old["status"] == OPENED {
+        return Err("people opened this draft in Prepare and are working on it as a service, so it is not revised: propose a new draft with rhema_create_service_draft instead".into());
+    }
     let now = revision(&old);
     if now != read {
         return Err(format!("this draft changed since you read it (you read revision {read}; it is now revision {now}), so nothing was saved: read it again with rhema_get_service_draft and revise that"));
@@ -386,8 +532,51 @@ pub fn update(data_dir: &Path, id: &str, read: u64, draft: &Value, client: &Valu
     Ok(now + 1)
 }
 
+/// Mark a draft opened in Prepare (#252 UI4): it stops waiting, keeps its place in the list for
+/// people, and an assistant can no longer revise it. `by` is the operator's name, when set.
+/// Returns the draft as now saved.
+pub fn mark_opened(data_dir: &Path, id: &str, by: Option<&str>) -> Result<Value, String> {
+    let mut doc = read_draft(data_dir, id)?;
+    doc["status"] = json!(OPENED);
+    doc["opened_at"] = json!(chrono_now());
+    if let Some(name) = by.map(str::trim).filter(|n| !n.is_empty()) {
+        doc["opened_by"] = json!(name.chars().take(60).collect::<String>());
+    }
+    write_draft(data_dir, id, &doc)?;
+    Ok(doc)
+}
+
+fn write_draft(data_dir: &Path, id: &str, doc: &Value) -> Result<(), String> {
+    let dir = data_dir.join(DRAFTS_DIR);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("could not make the drafts folder: {e}"))?;
+    let tmp = dir.join(format!(".{id}.tmp"));
+    std::fs::write(&tmp, serde_json::to_vec_pretty(doc).map_err(|e| e.to_string())?).map_err(|e| format!("could not save the draft: {e}"))?;
+    std::fs::rename(&tmp, dir.join(format!("{id}.json"))).map_err(|e| format!("could not save the draft: {e}"))
+}
+
+/// Put drafts from a backup back (#252 AccF): each well-formed one that is not here already, as it
+/// was saved (waiting or opened), until 50 wait. A draft here with the same id is kept. Returns how
+/// many were added.
+pub fn restore(data_dir: &Path, drafts: &[Value]) -> usize {
+    let mut added = 0;
+    for d in drafts {
+        let Some(id) = d.get("id").and_then(Value::as_str).filter(|id| is_draft_id(id)) else { continue };
+        let well_formed = d.get("v") == Some(&json!(1)) && d.get("phases").is_some_and(Value::is_array) && serde_json::to_vec(d).is_ok_and(|b| b.len() < 2 * 1024 * 1024);
+        if !well_formed || data_dir.join(DRAFTS_DIR).join(format!("{id}.json")).exists() {
+            continue;
+        }
+        if d["status"] != OPENED && waiting(data_dir) >= MAX_WAITING {
+            continue;
+        }
+        if write_draft(data_dir, id, d).is_ok() {
+            added += 1;
+        }
+    }
+    added
+}
+
 /// RFC 3339 UTC, without a date crate.
-fn chrono_now() -> String {
+pub(crate) fn chrono_now() -> String {
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let (days, rem) = (secs / 86_400, secs % 86_400);
     // Civil date from days since 1970-01-01 (Howard Hinnant's algorithm).
@@ -461,7 +650,7 @@ mod tests {
 
     #[test]
     fn suggested_looks_and_scenes_are_kept_and_checked_against_the_church_s() {
-        let looks = Looks { looks: BUILTIN_LOOKS.iter().map(|s| (*s).to_string()).chain(["Thanksgiving gold".to_string()]).collect(), scenes: vec!["Bible and lyrics".into()] };
+        let looks = Looks { looks: BUILTIN_LOOKS.iter().map(|s| (*s).to_string()).chain(["Thanksgiving gold".to_string()]).collect(), scenes: vec!["Bible and lyrics".into()], cameras: Vec::new() };
         let c = check_with(None, None, Some(&looks), &json!({ "title": "Sunday", "phases": [{ "name": "Main", "role": "main", "starts_at": "10:00", "items": [
             { "kind": "slide", "title": "Welcome", "suggested_look": "thanksgiving GOLD", "suggested_scene": "Bible and lyrics" },
             { "kind": "slide", "title": "Notices", "suggested_look": "Neon party", "suggested_scene": "Camera only" },
@@ -547,6 +736,101 @@ mod tests {
         assert!(update(&dir, old_id, 1, &first, &json!({})).is_err());
         assert_eq!(update(&dir, old_id, 0, &first, &json!({})).unwrap(), 1);
         assert_eq!(get(&dir, old_id).unwrap()["created_at"], "2026-10-22T05:00:00Z");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_draft_carries_stage_lines_cues_cameras_take_steps_and_two_languages() {
+        let dir = std::env::temp_dir().join(format!("rhema-drafts-plan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("studio.db");
+        {
+            let db = ContentDb::open(&path).unwrap();
+            let input: rhema_content::SongInput = serde_json::from_value(json!({ "title": "Ọlọ́run Ọba", "sections": [
+                { "id": "v1", "kind": "verse", "label": "V1", "texts": { "yo": "Ọba mi", "en": "My King" } },
+                { "id": "c", "kind": "chorus", "label": "C", "texts": { "yo": "Halleluyah", "en": "Hallelujah" } },
+            ], "arrangements": [{ "name": "Short", "sequence": ["v1"] }, { "name": "Full", "sequence": ["v1", "c", "v1"], "is_default": true }] })).unwrap();
+            db.create_song(&input).unwrap();
+        }
+        let content = ContentDb::open_read_only(&path).unwrap();
+        let looks = Looks { looks: BUILTIN_LOOKS.iter().map(|s| (*s).to_string()).collect(), scenes: vec!["Bible and lyrics".into()], cameras: vec![Camera { name: "pulpit".into(), label: "Pulpit".into() }] };
+        let b = bible();
+        let mut items = vec![
+            json!({ "kind": "slide", "title": "Welcome", "stage_message": "Pastor:\n  wrap up\tby 11", "go_live_cue": "timer.start", "camera": "PULPIT", "on_take": { "scene": "bible AND lyrics", "obs_scene": "Wide\nshot" } }),
+            json!({ "kind": "slide", "title": "Notices", "go_live_cue": "lights.on", "camera": "Drone", "on_take": { "scene": "Nope", "bible_feeds_only": true } }),
+            json!({ "kind": "song", "title": "Ọlọ́run Ọba", "languages": ["YO", "en", "fr", "yo"], "arrangement": "short" }),
+            json!({ "kind": "song", "title": "Ọlọ́run Ọba", "arrangement": "Long" }),
+        ];
+        if b.is_some() {
+            items.push(json!({ "kind": "bible", "reference": "John 3:16", "translation": "OYCB", "second_translation": "kjv", "on_take": { "bible_feeds_only": true } }));
+            items.push(json!({ "kind": "bible", "reference": "John 3:16", "translation": "KJV", "second_translation": "NOPE" }));
+        }
+        let c = check_with(Some(&content), b.as_ref(), Some(&looks), &json!({ "title": "Ìsìn", "phases": [{ "name": "Main", "role": "main", "starts_at": "10:00", "items": items }] }));
+        assert_eq!(c.report["ok"], true, "{}", c.report);
+        let draft = c.draft.unwrap();
+        let it = &draft["phases"][0]["items"];
+        assert_eq!(it[0]["on_live"], json!({ "stage_message": "Pastor: wrap up by 11", "cue": "timer.start" }), "one line for the stage");
+        assert_eq!(it[0]["camera"], "pulpit", "matched by label, kept by name");
+        assert_eq!(it[0]["on_take"], json!({ "scene": "Bible and lyrics", "obs_scene": "Wide shot" }));
+        assert!(it[1].get("on_live").is_none() && it[1].get("camera").is_none() && it[1].get("on_take").is_none(), "unknown ones left out: {}", it[1]);
+        assert_eq!(it[2]["languages"], json!(["yo", "en"]), "as the song spells them, once each, in the order asked");
+        assert_eq!(it[2]["arrangement"]["name"], "Short");
+        assert!(it[3].get("arrangement").is_none());
+        let warnings: Vec<String> = c.report["warnings"].as_array().unwrap().iter().map(|w| w.as_str().unwrap().to_string()).collect();
+        for w in ["item 2: go-live cue \"lights.on\" is not one of", "item 2: \"Drone\" is not one of the church's cameras", "item 2: \"Nope\" is not one of the church's scenes", "item 2: only a reading can go to the Bible feeds only", "item 3: \"Ọlọ́run Ọba\" has no words in \"fr\"", "item 4: \"Ọlọ́run Ọba\" has no arrangement \"Long\" (it has: Full, Short)", "item 3: \"Ọlọ́run Ọba\" has no licence recorded in the library"] {
+            assert!(warnings.iter().any(|x| x.contains(w)), "{w} in {warnings:?}");
+        }
+        assert_eq!(draft["warnings"], c.report["warnings"], "the warnings are saved with the draft for the reviewer");
+        if b.is_some() {
+            assert_eq!((it[4]["translation"].as_str(), it[4]["second_translation"].as_str(), it[4]["on_take"].clone()), (Some("OYCB"), Some("KJV"), json!({ "bible_feeds_only": true })));
+            assert!(it[5].get("second_translation").is_none());
+            assert!(warnings.iter().any(|x| x.contains("item 6: \"NOPE\" is not an installed Bible edition")));
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_opened_draft_stops_waiting_and_cannot_be_revised() {
+        let dir = std::env::temp_dir().join(format!("rhema-drafts-opened-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let draft = json!({ "title": "Sunday", "phases": [{ "name": "Main", "items": [{ "kind": "slide", "title": "Welcome" }] }] });
+        let id = save(&dir, &draft, &json!({ "name": "Claude" })).unwrap();
+        assert_eq!(waiting(&dir), 1);
+        let opened = mark_opened(&dir, &id, Some("  Tolu  ")).unwrap();
+        assert_eq!((opened["status"].as_str(), opened["opened_by"].as_str(), opened["revision"].as_u64()), (Some("opened"), Some("Tolu"), Some(1)));
+        assert!(opened["opened_at"].as_str().is_some_and(|t| t.ends_with('Z')));
+        assert_eq!(waiting(&dir), 0, "it does not count against the 50 waiting");
+        let listed = list(&dir);
+        assert_eq!((listed[0]["status"].as_str(), listed[0]["opened_at"].is_string()), (Some("opened"), true), "still listed for people");
+        let e = update(&dir, &id, 1, &draft, &json!({ "name": "Claude" })).unwrap_err();
+        assert!(e.contains("people opened this draft") && e.contains("rhema_create_service_draft"), "{e}");
+        assert!(mark_opened(&dir, "../settings", None).is_err(), "only draft ids");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn drafts_from_a_backup_come_back_once() {
+        let dir = std::env::temp_dir().join(format!("rhema-drafts-restore-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let here = save(&dir, &json!({ "title": "Here", "phases": [] }), &json!({ "name": "Claude" })).unwrap();
+        let mine = get(&dir, &here).unwrap();
+        let backup = vec![
+            json!({ "v": 1, "id": "33333333-3333-3333-3333-333333333333", "title": "From the backup", "status": "awaiting review", "revision": 2, "created_at": "2026-10-20T08:00:00Z", "phases": [{ "name": "Main", "items": [] }], "warnings": ["a warning"] }),
+            json!({ "v": 1, "id": "44444444-4444-4444-4444-444444444444", "title": "Opened before", "status": "opened", "opened_at": "2026-10-21T08:00:00Z", "created_at": "2026-10-20T09:00:00Z", "phases": [] }),
+            json!({ "v": 1, "id": here, "title": "Older copy of Here", "phases": [] }),
+            json!({ "v": 1, "id": "../../settings", "phases": [] }),
+            json!({ "v": 2, "id": "55555555-5555-5555-5555-555555555555", "phases": [] }),
+            json!({ "v": 1, "id": "66666666-6666-6666-6666-666666666666" }),
+            json!("not a draft"),
+        ];
+        assert_eq!(restore(&dir, &backup), 2);
+        let back = get(&dir, "33333333-3333-3333-3333-333333333333").unwrap();
+        assert_eq!((back["title"].as_str(), back["revision"].as_u64(), back["warnings"].clone()), (Some("From the backup"), Some(2), json!(["a warning"])), "as it was saved");
+        assert_eq!(get(&dir, "44444444-4444-4444-4444-444444444444").unwrap()["status"], "opened");
+        assert_eq!(get(&dir, &here).unwrap(), mine, "the one here is kept");
+        assert_eq!(restore(&dir, &backup), 0, "a second restore adds nothing");
+        assert_eq!(std::fs::read_dir(dir.join(DRAFTS_DIR)).unwrap().count(), 3);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

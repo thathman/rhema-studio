@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
-import type { ProgramItem, ProgramWithItems, VerseQueueItem } from "@/types"
+import type { ProgramItem, ProgramWithItems, QueueItem, VerseQueueItem } from "@/types"
+import type { OutlineHeader } from "@/lib/run-of-show"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 
+import { projectRunOfShowEvents } from "@/lib/run-of-show"
 import { rundownSignature, toItemInputs, toQueueItems } from "@/stores/service-store"
 import { useQueueStore } from "@/stores/queue-store"
 
@@ -38,6 +40,23 @@ describe("a service's phases and groups", () => {
     expect(back.map((i) => [i.id, i.kind])).toEqual([["h1", "phase"], ["a", "verse"], ["h2", "phase"], ["h3", "group"], ["b", "verse"]])
     // A key from a newer build is kept.
     expect(JSON.parse(back[0].payload!)).toEqual({ later: 1, rule: "auto_once", role: "warmup", advance_seconds: 12 })
+  })
+
+  it("round-trips event cue snapshots without dropping unrelated header data", () => {
+    const cues = [
+      { id: "cue-1", name: "Start prayer", trigger: "manual", steps: ["timer.fresh", "future.screen"] },
+      { id: "cue-2", name: "Future cue", trigger: "manual", steps: ["future.action"] },
+    ]
+    const source = program([
+      row("prayer", "group", "Opening Prayer", JSON.stringify({ run_of_show_event: { schema_version: 1, cues }, future_header_key: { keep: true } })),
+      row("moment", "verse", "John 3:16"),
+    ])
+    const { items, headers } = toQueueItems(source, 1, [])
+    expect(headers[0].event?.cues).toEqual(cues)
+    const saved = toItemInputs(items, undefined, undefined, headers)[0]
+    const payload = JSON.parse(saved.payload ?? "{}") as Record<string, unknown>
+    expect(payload.future_header_key).toEqual({ keep: true })
+    expect((payload.run_of_show_event as Record<string, unknown>).cues).toEqual(cues)
   })
 
   it("a plain service has no headers and saves as before", () => {
@@ -77,6 +96,22 @@ describe("a service's phases and groups", () => {
     useQueueStore.getState().setAddTarget(null)
   })
 
+  it("adds a moment to the end of an event without moving its nested group", () => {
+    const items = [verse("a"), verse("b"), verse("c"), verse("d")]
+    const headers: OutlineHeader[] = [
+      { id: "sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1, duration_minutes: 40, approval: "draft" } },
+      { id: "scripture", type: "group", name: "Scripture", at: 2 },
+      { id: "response", type: "group", name: "Response", at: 3, event: { schema_version: 1, approval: "draft" } },
+    ]
+    useQueueStore.setState({ items, headers, activeIndex: null, addTarget: "sermon" })
+    const moment: QueueItem = { id: "x", kind: "cue", reference: "Prayer cue", confidence: 1, source: "manual", added_at: 0 }
+    useQueueStore.getState().addItem(moment)
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["a", "b", "c", "x", "d"])
+    expect(useQueueStore.getState().headers.map(({ id, at }) => [id, at])).toEqual([["sermon", 0], ["scripture", 2], ["response", 4]])
+    expect(projectRunOfShowEvents(useQueueStore.getState().items, useQueueStore.getState().headers)[0].moments.map((item) => item.id)).toEqual(["a", "b", "c", "x"])
+    useQueueStore.getState().setAddTarget(null)
+  })
+
   it("an item's go-live message and cue are saved cleaned and come back; an unknown cue is dropped", () => {
     const saved = program([row("a", "verse", "John 3:16", JSON.stringify({ on_live: { stage_message: "  Wrap   up ", cue: "timer.fresh" } })), row("b", "verse", "John 3:16", JSON.stringify({ on_live: { cue: "quick.black" } }))])
     const { items, headers } = toQueueItems(saved, 1, [])
@@ -105,6 +140,17 @@ describe("a service's phases and groups", () => {
     const back = toItemInputs(items, undefined, undefined, headers)
     expect(JSON.parse(back[0].payload!)).toEqual({ scene_id: "scene-1", look_id: "classic-dark", camera: "pulpit", on_take: ["source.only", "scene.take:scene-1@main", "obs.scene:Sermon"] })
     expect(JSON.parse(back[1].payload!)).toEqual({ title: "Welcome", body: "" })
+  })
+
+  it("an AI suggestion mark stays through a save until someone accepts it (#252)", () => {
+    const saved = program([row("a", "slide", "Welcome", JSON.stringify({ title: "Welcome", body: "Words an assistant wrote", ai_suggestion: "Claude" })), row("b", "slide", "Notices", JSON.stringify({ title: "Notices", body: "", ai_suggestion: 7 }))])
+    const { items, headers } = toQueueItems(saved, 1, [])
+    expect(items[0].ai_suggestion).toBe("Claude")
+    expect(items[0].payload_extra).toBeUndefined()
+    expect("ai_suggestion" in items[1]).toBe(false)
+    expect(JSON.parse(toItemInputs(items, undefined, undefined, headers)[0].payload!)).toEqual({ title: "Welcome", body: "Words an assistant wrote", ai_suggestion: "Claude" })
+    const accepted = items.map((i) => ({ ...i, ai_suggestion: null }))
+    expect(JSON.parse(toItemInputs(accepted, undefined, undefined, headers)[0].payload!)).toEqual({ title: "Welcome", body: "Words an assistant wrote" })
   })
 
   it("a service saved before items had a plan opens and saves exactly as before", () => {

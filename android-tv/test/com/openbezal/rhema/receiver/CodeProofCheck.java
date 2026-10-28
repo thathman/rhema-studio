@@ -80,6 +80,21 @@ public final class CodeProofCheck {
         check("fingerprint in capitals", !Guard.fingerprint("ABECCE707AF4A66A8AA18CE9624EBEAD97A8F362335DD688E9D5899AF9428A19"));
         check("short fingerprint", !Guard.fingerprint("abecce"));
 
+        // The picture kept for a restart (1.5): bounded, the screen's shape, only of the feed shown.
+        int[] big = Guard.stillSize(3840, 2160);
+        check("a 4K screen is kept at 1080p", big != null && big[0] == 1920 && big[1] == 1080);
+        int[] small = Guard.stillSize(1280, 720);
+        check("a 720p screen is kept as it is", small != null && small[0] == 1280 && small[1] == 720);
+        int[] tall = Guard.stillSize(1080, 1920);
+        check("a tall screen keeps its shape", tall != null && tall[1] == 1080 && tall[0] == 608);
+        check("a screen with no size has no picture", Guard.stillSize(0, 1080) == null);
+        String feed = "https://192.168.3.10:8081/feed/abc?k=x";
+        check("the picture of the feed shown", Guard.stillFits(feed, feed, 300_000));
+        check("a picture of another feed", !Guard.stillFits("https://192.168.3.10:8081/feed/other?k=y", feed, 300_000));
+        check("no picture taken", !Guard.stillFits(null, feed, 300_000));
+        check("an empty picture", !Guard.stillFits(feed, feed, 0));
+        check("a picture too big", !Guard.stillFits(feed, feed, Guard.STILL_MAX_BYTES + 1));
+
         if (failed > 0) {
             System.err.println("CodeProofCheck: " + failed + " check(s) failed");
             System.exit(1);

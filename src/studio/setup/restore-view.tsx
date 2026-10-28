@@ -4,7 +4,7 @@ import { ArrowLeftIcon, ArrowRightIcon, FileUpIcon, InfoIcon, RotateCcwIcon } fr
 import { Button } from "@/components/ui/button"
 import { DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { importServicePackageFromFile, inspectBackup, pickBackupFile, restoreDatabaseFrom } from "@/lib/song-files"
-import { buildInstallationExport, installationChanges, parseInstallationExport, restoreInstallation, type InstallationChange, type InstallationExport } from "@/lib/installation-export"
+import { installationChanges, installationForBackup, parseInstallationExport, restoreInstallation, type InstallationChange, type InstallationExport } from "@/lib/installation-export"
 import { outputOnAir } from "@/lib/output-on-air"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useServiceStore } from "@/stores/service-store"
@@ -44,7 +44,7 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
   const look = async (path: string, undo: boolean) => {
     const summary = await inspectBackup(path)
     const incoming = parseInstallationExport(summary.installation)
-    setPicked({ path, summary, incoming, changes: incoming ? installationChanges(buildInstallationExport(), incoming) : [], undo })
+    setPicked({ path, summary, incoming, changes: incoming ? installationChanges(await installationForBackup(), incoming) : [], undo })
   }
   const choose = async () => {
     setBusy("inspect")
@@ -79,7 +79,7 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
       await reloadAfterRestore()
       // The settings and looks the backend read from the same file; the ones looked at, if it said none.
       const incoming = parseInstallationExport(r.installation) ?? picked.incoming
-      if (incoming) restoreInstallation(incoming)
+      if (incoming) await restoreInstallation(incoming)
       setRestored({ summary: picked.summary, settings: !!incoming, snapshot: r.snapshot, undo: picked.undo })
       setPicked(null)
       toast.success(picked.undo ? "Restore undone" : "Backup restored", { description: r.snapshot ? `What was here before is kept at ${r.snapshot}` : undefined })
@@ -105,7 +105,7 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
 
   const s = picked?.summary
   const blocked = s?.newer
-    ? "This backup was made by a newer Rhema Studio. Update Rhema on this computer first."
+    ? "This backup was made by a newer Rhema Studio. Update Rhema Studio on this computer first."
     : dirty
       ? "The open service has unsaved changes. Save or close it first."
       : onAir
@@ -124,8 +124,8 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
 
         <div className="mt-5 flex max-w-2xl flex-col gap-3 text-sm">
           <section aria-labelledby="restore-backup" className="rounded-lg border border-border bg-card p-4">
-            <h3 id="restore-backup" className="font-semibold">A Rhema backup file</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Every service and song, with the settings, outputs, looks and Brand Kit, as saved with Archive → Backups → Back up now (a .db file). Rhema looks inside it first.</p>
+            <h3 id="restore-backup" className="font-semibold">A Rhema Studio backup file</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Every service and song, with the settings, outputs, looks and Brand Kit, as saved with Archive → Backups → Back up now (a .db file). Rhema Studio looks inside it first.</p>
             {!s && (
               <Button size="sm" variant="outline" className="mt-3" disabled={busy !== null} onClick={() => void choose()}>
                 <RotateCcwIcon /> {busy === "inspect" ? "Looking inside…" : "Choose a backup file…"}
@@ -156,7 +156,7 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
                   </div>
                 )}
                 <p className="mt-2 text-xs">
-                  {picked.undo ? "Undoing puts back" : "Restoring replaces"} every service and song on this computer ({plural(servicesHere, "service")} here now){picked.incoming ? ", and the settings and looks above," : ""} with the {picked.undo ? "snapshot's" : "backup's"}. Saved keys and passwords, paired phones and desks and this computer's ID stay as they are. What is here now is kept as a snapshot file beside the database, so it can be undone.
+                  {picked.undo ? "Undoing puts back" : "Restoring replaces"} every service and song on this computer ({plural(servicesHere, "service")} here now){picked.incoming ? ", and the settings and looks above," : ""} with the {picked.undo ? "snapshot's" : "backup's"}. Saved keys and passwords, paired phones and desks and this computer's ID stay as they are; AI drafts from the backup are added beside the ones here. What is here now is kept as a snapshot file beside the database, so it can be undone.
                 </p>
                 {blocked && <p role="alert" className="mt-2 text-xs font-medium text-confidence-mid">{blocked}</p>}
                 <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -189,7 +189,7 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
 
           <section aria-labelledby="restore-songs" className="rounded-lg border border-border bg-card p-4">
             <h3 id="restore-songs" className="font-semibold">Songs and hymns on their own</h3>
-            <p className="mt-1 text-xs text-muted-foreground">A Rhema songs file or OpenLyrics files. Library adds them; songs already here are kept.</p>
+            <p className="mt-1 text-xs text-muted-foreground">A Rhema Studio songs file or OpenLyrics files. Library adds them; songs already here are kept.</p>
             <Button size="sm" variant="outline" className="mt-3" onClick={() => onLeave(() => useShellStore.getState().goTo("library"))}>Open Library</Button>
           </section>
 

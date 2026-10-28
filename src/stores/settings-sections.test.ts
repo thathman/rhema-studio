@@ -27,6 +27,7 @@ const OLD_FILE: Record<string, unknown> = {
   churchFolder: "/Volumes/Church",
   requireApproval: true,
   cloudSpeechConsentAt: "2026-10-01T09:00:00.000Z",
+  cloudSpeechConsents: { openai: "2026-10-02T09:00:00.000Z" },
   openedPackages: ["abc123"],
   openedFrom: { p1: { file: "Sunday.json", sha256: "abc123", modified: 1 } },
   commentsSeen: ["1|Ade"],
@@ -35,6 +36,7 @@ const OLD_FILE: Record<string, unknown> = {
   joinAddress: "192.168.1.10:8080",
   joinName: "Tolu · Sanctuary desk",
   joinToken: "join-token-123456",
+  joinSecure: { port: 8081, fingerprint: "ab".repeat(32) },
   talkInputId: "headset-mic",
   talkOutputId: "headset-ears",
   timekeeperCountdown: { to: "endby:sermon", chime: true, chimeMinutes: 5 },
@@ -55,6 +57,7 @@ const OLD_FILE: Record<string, unknown> = {
   cooldownMs: 3000,
   onboardingComplete: true,
   sttProvider: "whisper",
+  speechLanguage: "yo",
   secretsInKeychain: false,
 }
 
@@ -157,7 +160,38 @@ describe("settings in three parts: church, machine, operator (#298 M11)", () => 
     const st = useSettingsStore.getState()
     expect(settingsSection(st, "operator").operatorName).toBe("Tolu")
     expect(settingsSection(st, "machine").gain).toBe(1.2)
-    expect(Object.keys(settingsSection(st, "church")).sort()).toEqual(["brandKit", "customMacros", "hymnFirstLanguage", "requireApproval"])
+    expect(Object.keys(settingsSection(st, "church")).sort()).toEqual(["brandKit", "customMacros", "hymnFirstLanguage", "requireApproval", "talkRules", "transcriptRetentionDays"])
+  })
+})
+
+describe("OBS companion mode (#209)", () => {
+  it("is this computer's: saved in the machine part, read back, never carried by a backup", async () => {
+    file.set("machine", { companionMode: true, companionLatencyMs: 400 })
+    const { hydrateSettings, useSettingsStore, settingsForBackup, restoreSettingsFromBackup, sectionOf } = await import("./settings-store")
+    await hydrateSettings()
+    expect(sectionOf("companionMode")).toBe("machine")
+    expect(useSettingsStore.getState().companionMode).toBe(true)
+    expect(useSettingsStore.getState().companionLatencyMs).toBe(400)
+    useSettingsStore.getState().setCompanionLatencyMs(120)
+    await settle()
+    expect((file.get("machine") as Record<string, unknown>).companionLatencyMs).toBe(120)
+    expect(file.get("companionMode")).toBe(true) // the top-level copy, for an older build
+    const backup = settingsForBackup()
+    expect(backup.machine).not.toHaveProperty("companionMode")
+    backup.machine.companionMode = false
+    restoreSettingsFromBackup(backup)
+    expect(useSettingsStore.getState().companionMode).toBe(true)
+  })
+
+  it("a delay buffer of the wrong size is skipped", async () => {
+    file.set("machine", { companionLatencyMs: 5 })
+    file.set("companionMode", "yes")
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+    expect(useSettingsStore.getState().companionLatencyMs).toBe(200)
+    expect(useSettingsStore.getState().companionMode).toBe(false)
+    useSettingsStore.getState().setCompanionLatencyMs(99999)
+    expect(useSettingsStore.getState().companionLatencyMs).toBe(200)
   })
 })
 
@@ -171,7 +205,7 @@ describe("settings in a backup file (#298 E6)", () => {
     for (const secret of ["dg-1234567890", "sk-openai-123456", "sk-claude-123456", "sunday-key-1", "join-token-123456", "obs-pass-99", "t".repeat(32), "a".repeat(64)]) {
       expect(text, secret).not.toContain(secret)
     }
-    for (const kept of ["remoteDevices", "deepgramApiKey", "remoteAuthRequired", "remoteListeners", "joinAddress", "mcpEnabled", "cloudSpeechConsentAt"]) expect(parts.machine, kept).not.toHaveProperty(kept)
+    for (const kept of ["remoteDevices", "deepgramApiKey", "remoteAuthRequired", "remoteListeners", "joinAddress", "mcpEnabled", "cloudSpeechConsentAt", "cloudSpeechConsents"]) expect(parts.machine, kept).not.toHaveProperty(kept)
     expect((parts.machine.obs as { host: string }).host).toBe("192.168.1.20")
     expect(parts.church.brandKit).toEqual(OLD_FILE.brandKit)
     expect(parts.operator.operatorName).toBe("Tolu")
@@ -188,7 +222,7 @@ describe("settings in a backup file (#298 E6)", () => {
     })
     const backup = settingsForBackup({ ...useSettingsStore.getState(), operatorName: "Tolu", gain: 1.7, obs: { enabled: true, host: "10.0.0.5", port: 4455, password: "" }, cameras: [{ name: "pulpit", label: "Pulpit cam", token: "" }, { name: "choir", label: "Choir", token: "" }], setup: { ...useSettingsStore.getState().setup, deviceId: "dev-old", deviceName: "Old desk" } })
     // Even if a file says so, nothing that lets others in is taken from it.
-    Object.assign(backup.machine, { remoteListeners: { osc: true, http: true, oscPort: 9000, httpPort: 9090, lan: true }, mcpEnabled: true, cloudSpeechConsentAt: "2026-01-01T00:00:00Z", remoteAuthRequired: false })
+    Object.assign(backup.machine, { remoteListeners: { osc: true, http: true, oscPort: 9000, httpPort: 9090, lan: true }, mcpEnabled: true, cloudSpeechConsentAt: "2026-01-01T00:00:00Z", cloudSpeechConsents: { openai: "2026-01-01T00:00:00Z" }, remoteAuthRequired: false })
     backup.machine.cooldownMs = "soon" // wrong part and wrong shape: ignored
     backup.operator.cooldownMs = Number.NaN
     const changed = restoreSettingsFromBackup(backup)
@@ -204,6 +238,7 @@ describe("settings in a backup file (#298 E6)", () => {
     expect(s.cameras.find((c) => c.name === "choir")?.token).toMatch(/^[0-9a-f]{32}$/)
     expect(s.setup.deviceId).toBe("dev-here")
     expect(s.setup.deviceName).toBe("Old desk")
+    expect(s.cloudSpeechConsents).toEqual({})
     expect(Number.isFinite(s.cooldownMs)).toBe(true)
     expect([s.remoteListeners.http, s.mcpEnabled, s.cloudSpeechConsentAt]).toEqual([false, false, ""])
     expect(restoreSettingsFromBackup("junk")).toEqual([])

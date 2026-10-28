@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { adjust, idleTimer, pause, reset, setDuration, start, type TimerState } from "@/lib/timer"
+import { useTimeChange } from "@/stores/time-change-store"
 
 /** The clock the engine runs on: monotonic, immune to wall-clock changes. */
 export const monotonicNow = (): number => (typeof performance !== "undefined" ? performance.now() : Date.now())
@@ -33,7 +34,7 @@ interface TimerStoreState {
   reset: () => void
   setDurationMinutes: (minutes: number) => void
   /** Manual correction (FR-07); the caller records it in the service log (this store must not import the journal: import cycle). */
-  adjustMinutes: (minutes: number) => void
+  adjustMinutes: (minutes: number, by?: string | null) => void
 }
 
 let ticker: ReturnType<typeof setInterval> | null = null
@@ -61,7 +62,9 @@ export const useTimerStore = create<TimerStoreState>((set, get) => ({
     ensureTicker(false)
   },
   setDurationMinutes: (minutes) => set({ timer: setDuration(get().timer, minutes * 60_000) }),
-  adjustMinutes: (minutes) => {
+  adjustMinutes: (minutes, by) => {
     set({ timer: adjust(get().timer, minutes * 60_000, monotonicNow()) })
+    // Who changed the time last, for the Timekeeper desks (#196 R2.9).
+    if (minutes) useTimeChange.getState().note(`timer corrected by ${minutes > 0 ? "+" : "−"}${Math.abs(minutes)} min`, by)
   },
 }))

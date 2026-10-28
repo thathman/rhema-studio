@@ -25,7 +25,8 @@ describe("Present touch targets (#215 G9.3)", () => {
   it("the Scenes strip: its fold, screens, scenes and actions", () => {
     const src = read("./scenes-strip.tsx")
     const classes = classesOf(src, "<button")
-    expect(classes.length).toBe(4)
+    // The fifth button refreshes a saved preview without taking it live.
+    expect(classes.length).toBe(5)
     for (const c of classes) expect(c).toMatch(/\b(?:min-)?h-11\b/)
     expect(src).not.toMatch(/\bh-8\b/)
   })
@@ -34,7 +35,8 @@ describe("Present touch targets (#215 G9.3)", () => {
     const src = read("./rundown-list.tsx")
     expect(src).toMatch(/className="flex min-h-11 min-w-0 flex-1 items-center/)
     expect(src).toMatch(/mode === "present" \? "h-11" : "h-7"/)
-    expect(src.match(/size="icon-xs" className="size-11"/g)).toHaveLength(3)
+    // Move up, Move down, Hide (#193) and Remove.
+    expect(src.match(/size="icon-xs" className="size-11"/g)).toHaveLength(4)
     expect(src).not.toMatch(/className="size-8"/)
   })
 

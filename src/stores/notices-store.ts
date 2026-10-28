@@ -8,7 +8,7 @@ import { useSettingsStore } from "@/stores/settings-store"
  * catches up (each desk gets only the ones for it), and never reach a screen, the stage, a feed or
  * the service log.
  */
-export type NoticeTo = "all" | "host" | "timekeeper" | "bible" | "screens" | "present"
+export type NoticeTo = "all" | "host" | "timekeeper" | "bible" | "screens" | "present" | "worship" | "stage" | "camera" | "obs"
 /** A group, or one paired desk or person by name. */
 export type NoticeTarget = NoticeTo | { name: string }
 export type NoticeAnswer = "seen" | "ready" | "unable"
@@ -16,10 +16,16 @@ export type NoticeAnswer = "seen" | "ready" | "unable"
  * An action request (Comms C2): what the recipient is asked to do. It is only offered on their desk
  * as a button; nothing runs until they press it. bible: a reference; song: a song or hymn's title
  * in the library; scene: a scene id; event: a run-of-show item id; camera: a camera's name, asked
- * whether it is framed (answering Ready or Unable is the action).
+ * whether it is framed (answering Ready or Unable is the action); sceneEdit: a scene change from a
+ * joined desk waiting for the main desk (src/lib/desk-scenes.ts), by its request id: Accept puts it
+ * in, Decline (Unable) leaves the scene as it is. Only the host makes sceneEdit notices; its server
+ * drops that kind from a desk's notice. wrap: a wrap-up warning for the preacher, the line to put
+ * on the stage display (stage screens only, never the congregation's).
  */
-export interface NoticeAction { kind: "bible" | "song" | "scene" | "event" | "camera"; value: string }
-export const ACTION_KINDS: readonly NoticeAction["kind"][] = ["bible", "song", "scene", "event", "camera"]
+export interface NoticeAction { kind: "bible" | "song" | "scene" | "event" | "camera" | "sceneEdit" | "wrap"; value: string }
+export const ACTION_KINDS: readonly NoticeAction["kind"][] = ["bible", "song", "scene", "event", "camera", "sceneEdit", "wrap"]
+/** What a wrap-up warning says on the stage display unless the sender writes another line. */
+export const WRAP_UP_LINE = "Please start wrapping up"
 /**
  * How the recipient carries out a request that puts something on screen: Show (as the button says)
  * or Preview (into the main desk's Preview only; nothing goes live).
@@ -27,6 +33,8 @@ export const ACTION_KINDS: readonly NoticeAction["kind"][] = ["bible", "song", "
 export type ActionMode = "show" | "preview"
 /** Requests that can go to Preview first: a verse, a song or hymn. A scene has no Preview: it is taken or not. */
 export const canPreview = (a: NoticeAction): boolean => a.kind === "bible" || a.kind === "song"
+/** Requests that can be added to the main desk's run of show for later (Queue), without showing anything. */
+export const canQueue = canPreview
 
 export interface Notice {
   id: string
@@ -50,7 +58,7 @@ export interface Notice {
   answers: { by: string; state: NoticeAnswer; at: number; why?: string }[]
 }
 
-export const NOTICE_TARGETS: readonly NoticeTo[] = ["all", "host", "timekeeper", "bible", "screens", "present"]
+export const NOTICE_TARGETS: readonly NoticeTo[] = ["all", "host", "timekeeper", "bible", "worship", "screens", "stage", "camera", "obs", "present"]
 const ANSWERS: readonly NoticeAnswer[] = ["seen", "ready", "unable"]
 const MAX = 100
 
@@ -136,7 +144,7 @@ export function asTarget(to: unknown): NoticeTarget {
 export function targetName(to: NoticeTarget): string {
   return typeof to === "object" ? to.name : TARGET_NAMES[to]
 }
-export const TARGET_NAMES: Record<NoticeTo, string> = { all: "Everyone", host: "The main desk", timekeeper: "Timekeeper", bible: "Bible", screens: "Screens", present: "Present desks" }
+export const TARGET_NAMES: Record<NoticeTo, string> = { all: "Everyone", host: "The main desk", timekeeper: "Timekeeper", bible: "Bible", worship: "Worship", screens: "Screens", stage: "Stage", camera: "Camera", obs: "OBS director", present: "Present desks" }
 
 /**
  * Whether a notice is for a desk with this role ("host" for the main desk) and, for one sent to a

@@ -136,7 +136,7 @@ describe("Bring in a previous installation (#298)", () => {
     expect(text()).toContain("One service as a file")
     expect(text()).toContain("Church folder")
     await click("Back")
-    expect(text()).toContain("Welcome to Rhema Studio")
+    expect(document.querySelector('img[alt="Rhema Studio"]')).not.toBeNull()
     await click("Bring in a previous installation")
     await click("Continue to church setup")
     expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe("Church identity")

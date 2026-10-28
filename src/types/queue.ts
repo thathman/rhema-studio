@@ -18,6 +18,8 @@ interface QueueItemBase {
   starts_at?: string | null
   /** A planned pause before it, in minutes (#196 R3); lateness before it uses this up first. */
   gap_minutes?: number | null
+  /** Its timing rules beyond the plan (#196 R1.2): a milestone, a soft end, its own warning. Absent: none. */
+  timing?: ItemTiming | null
   /**
    * Who is preparing this item (CL-007), as one short line. Older builds read and edit only this;
    * this build keeps it as the names in `assignees` joined ("Tolu, Ade").
@@ -29,6 +31,14 @@ interface QueueItemBase {
   comments?: ItemComment[] | null
   /** What happens as it goes live (issue #193): a stage-only message, one cue that never changes the screen. */
   on_live?: OnLive | null
+  /**
+   * Its cue list beyond `on_live` (#193, #196 R6): what runs as it starts, when its planned time is
+   * up, when it is paused, and when it ends. None changes what the congregation sees. Older builds
+   * keep it untouched and run only `on_live`.
+   */
+  cues?: ItemCue[] | null
+  /** Kept in the service, but skipped by Next/Previous and timed runs and not shown in Present (#193). */
+  hidden?: boolean | null
   /** Moves on to the next item of its phase after its planned minutes, while timed moves are on in Present (issue #193). */
   auto_advance?: boolean | null
   /**
@@ -41,6 +51,11 @@ interface QueueItemBase {
   camera?: string | null
   /** What the operator's own Take of this item also does (#243 RS.4, OB.2); see `TakeStep`. */
   on_take?: TakeStep[] | null
+  /**
+   * Words an AI assistant wrote (an AI draft's slide, #252), not yet accepted by a person: the
+   * assistant's name. Shown as "AI suggestion" until someone checks the words and accepts it.
+   */
+  ai_suggestion?: string | null
   /** Payload fields this build does not edit (from a newer version or a service file), written back unchanged (FR-03). */
   payload_extra?: Record<string, unknown>
 }
@@ -65,10 +80,16 @@ export interface VerseQueueItem extends QueueItemBase {
 export interface SongQueueRef {
   song_id: string
   title: string
+  /** Saved identity: hymn and song stay distinct even if the library later changes. */
+  hymn?: boolean
+  /** Human-readable hymnbook numbers captured when this item was added. */
+  hymn_numbers?: string[]
   /** null = the song's default arrangement. */
   arrangement_id: string | null
   /** Language tags to show, first is primary; empty = the song's primary language. */
   languages: string[]
+  /** A slide with the song's title (and authors) before its words (#193). */
+  title_slide?: boolean
 }
 
 export interface SongQueueItem extends QueueItemBase {
@@ -77,13 +98,16 @@ export interface SongQueueItem extends QueueItemBase {
   verse?: undefined
 }
 
-/** An announcement or any free-text screen: one slide, no library behind it. */
+/** An announcement or free-text screen. Library-backed items hold a content snapshot plus source identity. */
 export interface CustomSlide {
   title: string
   /** Plain text; each line is drawn on its own line. */
   body: string
   /** A safe http(s) link shown as a QR code with the text beside it (SG-003). */
   link?: string
+  /** The reusable library source this occurrence was copied from. The content above stays local to this service item. */
+  source_asset_id?: string
+  source_revision?: number
 }
 
 export interface SlideQueueItem extends QueueItemBase {
@@ -109,7 +133,39 @@ export interface ImageQueueItem extends QueueItemBase {
   verse?: undefined
 }
 
-export type QueueItem = VerseQueueItem | SongQueueItem | SlideQueueItem | ImageQueueItem
+/** A local audio cue. It plays through this computer's audio output and has no screen content. */
+export interface AudioQueueRef {
+  media_id: string
+  name: string
+  /** A device id on this computer; absent means the system default output. */
+  output_device_id?: string
+  /** 0–1; absent means the current Sound control volume. */
+  volume?: number
+  /** Repeat until another cue or the operator stops it. */
+  loop?: boolean
+  /** Fade in when the cue starts, in milliseconds. */
+  fade_in_ms?: number
+  /** Fade out when a later rundown item succeeds, in milliseconds. */
+  fade_out_ms?: number
+}
+
+export interface AudioQueueItem extends QueueItemBase {
+  kind: "audio"
+  audio: AudioQueueRef
+  verse?: undefined
+}
+
+/**
+ * A moment in the run of show that shows nothing (#193): taking it fires its cues (an OBS
+ * recording chapter, a stage message, the timer) and starts its event; the screens keep what they
+ * show. Its `reference` is its name.
+ */
+export interface CueQueueItem extends QueueItemBase {
+  kind: "cue"
+  verse?: undefined
+}
+
+export type QueueItem = VerseQueueItem | SongQueueItem | SlideQueueItem | ImageQueueItem | AudioQueueItem | CueQueueItem
 
 export function isVerseItem(item: QueueItem): item is VerseQueueItem {
   return item.kind === undefined || item.kind === "verse"
@@ -127,16 +183,55 @@ export function isImageItem(item: QueueItem): item is ImageQueueItem {
   return item.kind === "image"
 }
 
+export function isAudioItem(item: QueueItem): item is AudioQueueItem {
+  return item.kind === "audio"
+}
+
+export function isCueItem(item: QueueItem): item is CueQueueItem {
+  return item.kind === "cue"
+}
+
+/**
+ * An item's timing rules (#196 R1.2). `milestone`: a moment, not a stretch of time (it takes no
+ * minutes; "Livestream begins"). `soft_end_minutes`: its planned minutes are the aim, and it may run
+ * to this many before it counts as over. `warn_minutes`: how long before its end its timer turns
+ * amber and the stage warns (otherwise 2 minutes, and the stage look's own warning).
+ */
+export interface ItemTiming {
+  milestone?: boolean
+  soft_end_minutes?: number
+  warn_minutes?: number
+}
+
 /** One team comment on a rundown item (CL-007). `at` is an ISO time. */
 export interface ItemComment {
+  /** Stable across service copies; older service files receive a deterministic id when read. */
+  id?: string
   by: string
   at: string
   text: string
+  /** A soft delete is permanent and retained with the service for audit and sync. */
+  deleted_by?: string
+  deleted_at?: string
 }
 
 /** Cues an item may run as it goes live: none changes what the congregation sees. */
 export const GO_LIVE_CUES = ["timer.start", "timer.fresh", "timer.pause", "stage.clearMessage"] as const
 export type GoLiveCue = (typeof GO_LIVE_CUES)[number]
+
+/** When an item's cue runs (#196 R6): as its event starts, when its planned time is up, when it is paused (a hold or the timer), when it ends. */
+export const CUE_TRIGGERS = ["live", "finish", "pause", "end"] as const
+export type CueTrigger = (typeof CUE_TRIGGERS)[number]
+/** What an item's cue may do: the go-live cues, a stage-only message, an OBS recording marker. Never the screens. */
+export const ITEM_CUE_DOES = [...GO_LIVE_CUES, "stage.message", "obs.mark"] as const
+export type ItemCueDo = (typeof ITEM_CUE_DOES)[number]
+
+export interface ItemCue {
+  on: CueTrigger
+  do: ItemCueDo
+  /** The stage message, or the marker's name (the item's name when empty). One line, at most 120 characters. */
+  text?: string
+}
 
 export interface OnLive {
   /** Shown on stage outputs only. One line, at most 120 characters. */

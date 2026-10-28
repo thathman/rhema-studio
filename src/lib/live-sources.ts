@@ -82,6 +82,12 @@ export interface StateSource {
   lowerThird?: LowerThird
   /** Stage message: the one up, or cleared (for Restore). */
   message?: string
+  /** Camera (#213): switched to its backup camera (Production → Cameras); its scenes' camera layers play that one. */
+  backup?: boolean
+  /** Camera: frozen: the screens hold its last frame. */
+  hold?: boolean
+  /** Camera: how many times the operator pressed Retry (each makes every screen start its reader again). */
+  retry?: number
 }
 
 export type StateSources = Partial<Record<StateSourceId, StateSource>>
@@ -99,6 +105,18 @@ export function cameraPathOf(url: string): string | null {
     return m ? decodeURIComponent(m[1]) : null
   } catch {
     return null
+  }
+}
+
+/** The same camera address for another of the router's cameras (…/pulpit/whep → …/choir/whep); the address itself if it is not one. */
+export function withCameraPath(url: string, name: string): string {
+  try {
+    const u = new URL(url)
+    if (!/^\/[^/]+\/whep\/?$/.test(u.pathname)) return url
+    u.pathname = `/${encodeURIComponent(name)}/whep`
+    return u.toString()
+  } catch {
+    return url
   }
 }
 
@@ -136,9 +154,9 @@ export function lowerThirdWords(lt: Pick<LowerThird, "line1" | "line2" | "follow
 }
 
 /** How many outputs follow a kind of content: on their own, or through the scene they show (a scene's feed layer). */
-export function followerCount(kind: ContentType, outputs: readonly { shows?: readonly FeedSourceKind[]; sceneId?: string; role?: string }[], scenes: readonly { id: string; layers: readonly { kind: string; shows?: readonly ContentType[] }[] }[]): number {
+export function followerCount(kind: ContentType, outputs: readonly { shows?: readonly FeedSourceKind[]; sceneId?: string; role?: string; sceneSnapshot?: { id: string; layers: readonly { kind: string; shows?: readonly ContentType[] }[] } }[], scenes: readonly { id: string; layers: readonly { kind: string; shows?: readonly ContentType[] }[] }[]): number {
   const sceneFollows = new Set(scenes.filter((sc) => sc.layers.some((l) => l.kind === "feed" && l.shows?.includes(kind))).map((sc) => sc.id))
-  return outputs.filter((o) => o.shows?.includes(kind) || (o.sceneId !== undefined && (o.role ?? "congregation") === "congregation" && sceneFollows.has(o.sceneId))).length
+  return outputs.filter((o) => o.shows?.includes(kind) || (o.sceneId !== undefined && (o.role ?? "congregation") === "congregation" && (o.sceneSnapshot?.id === o.sceneId ? o.sceneSnapshot.layers.some((l) => l.kind === "feed" && l.shows?.includes(kind)) : sceneFollows.has(o.sceneId)))).length
 }
 
 /** The ticker's first words, for the strip, the log and joined desks. */

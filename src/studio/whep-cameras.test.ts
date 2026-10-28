@@ -32,10 +32,10 @@ describe("cameras on the church network (OP-009)", () => {
     expect(frame.layers[0].cameraUrl).toBe("http://192.168.1.10:8889/pulpit/whep")
   })
 
-  it("a camera that is not playing shows its fallback words (#213), on outputs only", async () => {
+  it("a camera that is not playing shows its fallback words when it is set to Words (#213), on outputs only", async () => {
     const { drawScene } = await import("@/lib/scene-renderer")
     const scene = newScene("Camera", SCENE_PRESETS[0])
-    scene.layers = [newLayer("camera", { cameraUrl: "http://10.0.0.5:8889/a/whep", cameraFallback: "  Camera back shortly  " })]
+    scene.layers = [newLayer("camera", { cameraUrl: "http://10.0.0.5:8889/a/whep", cameraFallback: "  Camera back shortly  ", noSignal: "words" })]
     const back = normalizeScene(JSON.parse(JSON.stringify(scene)))!
     expect(back.layers[0].cameraFallback).toBe("Camera back shortly")
     const theme = { id: "t", verseText: { color: "#fafafa", fontFamily: "Inter", fontWeight: 700 } } as never

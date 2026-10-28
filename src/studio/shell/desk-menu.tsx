@@ -1,35 +1,25 @@
 import { useEffect, useRef, useState } from "react"
 import { getVersion } from "@tauri-apps/api/app"
-import { ChevronsUpDownIcon, CircleHelpIcon, ClipboardCheckIcon, FileTextIcon, HistoryIcon, InfoIcon, KeyboardIcon, ListChecksIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon, UserRoundIcon, UsersRoundIcon } from "lucide-react"
+import { CameraIcon, ChevronsUpDownIcon, CircleHelpIcon, ClipboardCheckIcon, FileTextIcon, HistoryIcon, InfoIcon, KeyboardIcon, ListChecksIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon, UserRoundIcon, UsersRoundIcon } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useTheme } from "@/components/theme-provider"
 import { openSettings } from "@/lib/settings-dialog"
 import { cn } from "@/lib/utils"
 import { setupStatusLabel, shortDeviceId } from "@/lib/setup-readiness"
-import { putBack, useRecovery } from "@/lib/live-recovery"
+import { acceptPartialRecovery, putBack, useRecovery } from "@/lib/live-recovery"
 import { Button } from "@/components/ui/button"
-import { openProductionTab } from "@/studio/production/production-tab"
+import { openConnectionsHub } from "@/studio/connections/navigation"
 import { useJoin, type JoinStatus } from "@/stores/join-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
 import { ShortcutsDialog } from "@/studio/shell/shortcuts-dialog"
+import { switchMode } from "@/stores/companion-mode"
 import { useSetupStatus } from "@/studio/setup/use-setup-status"
-
-/** The roles a host can give a joined computer, as the Desk menu names them. */
-const ROLES: Record<string, string> = { timekeeper: "Timekeeper", bible: "Bible", screens: "Screens", present: "Present", configure: "Present and settings" }
-
-/** What each role lets this desk do (the host checks every command again; it always keeps every control). */
-const ROLE_PERMITS: Record<string, string> = {
-  timekeeper: "Start and move the event clock. Nothing on the screens.",
-  bible: "Send passages to the Bible source. Nothing else on the screens.",
-  screens: "Take congregation scenes. Nothing else.",
-  present: "Move through the service, send Bible passages and take scenes.",
-  configure: "Everything Present does, and the host's settings too.",
-}
+import { roleLabel, rolePermits } from "@/lib/remote-roles"
 
 /** What this desk is, honestly: the main desk on its own, or the role a host gave it while joined. */
 function deskRole(status: JoinStatus, me: { role: string } | null, host: string): string {
-  if (status === "connected" && me) return `${ROLES[me.role] ?? me.role} desk · joined ${host || "a host"}`
+  if (status === "connected" && me) return `${roleLabel(me.role)} desk · joined ${host || "a host"}`
   if ((status === "connecting" || status === "reconnecting") && host) return `Main desk · joining ${host}…`
   return "Main desk"
 }
@@ -61,12 +51,14 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
   const deviceName = useSettingsStore((s) => s.setup.deviceName.trim())
   const deviceId = useSettingsStore((s) => s.setup.deviceId)
   const recovery = useRecovery((s) => s.offer)
+  const restoreError = useRecovery((s) => s.restoreError)
   const { theme, setTheme } = useTheme()
   const [open, setOpen] = useState(false)
   const [shortcuts, setShortcuts] = useState(false)
   const [draft, setDraft] = useState(name)
   const [deviceDraft, setDeviceDraft] = useState(deviceName)
   const [confirmPutBack, setConfirmPutBack] = useState(false)
+  const [confirmCompanion, setConfirmCompanion] = useState(false)
   const [version, setVersion] = useState<string | null>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const nameBox = useRef<HTMLInputElement>(null)
@@ -104,6 +96,7 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
       setDraft(name)
       setDeviceDraft(deviceName)
       setConfirmPutBack(false)
+      setConfirmCompanion(false)
     } else {
       commit()
       commitDevice()
@@ -220,18 +213,18 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
           <div role="group" aria-labelledby="desk-role" className="rounded-md border border-border px-2.5 py-2">
             <p id="desk-role" className="text-xs font-semibold">{role}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {joined ? ROLE_PERMITS[joined.role] ?? "What the host allows." : "Every control, on this computer. Desks that join it do only what their role allows."}
+              {joined ? rolePermits(joined.role) : "Every control, on this computer. Desks that join it do only what their role allows."}
             </p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {joined || status !== "off" ? (
                 <>
                   <Button size="xs" variant="outline" onClick={() => run(() => void useJoin.getState().leave())}>Leave this host</Button>
-                  <Button size="xs" variant="ghost" onClick={() => run(() => openProductionTab("operators"))}><UsersRoundIcon /> Operators</Button>
+                  <Button size="xs" variant="ghost" onClick={() => run(openConnectionsHub)}><UsersRoundIcon /> Connections</Button>
                 </>
               ) : (
                 <>
-                  <Button size="xs" variant="outline" onClick={() => run(() => openProductionTab("operators"))}><UsersRoundIcon /> See joined desks</Button>
-                  <Button size="xs" variant="ghost" onClick={() => run(() => openProductionTab("operators"))}>Join another host</Button>
+                  <Button size="xs" variant="outline" onClick={() => run(openConnectionsHub)}><UsersRoundIcon /> See joined desks</Button>
+                  <Button size="xs" variant="ghost" onClick={() => run(openConnectionsHub)}>Join another host</Button>
                 </>
               )}
             </div>
@@ -264,8 +257,10 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
               confirmPutBack ? (
                 <div role="group" aria-label="Put back the last session's screens" className="mx-1 mb-1 rounded-md border border-on-air/40 bg-on-air/10 px-2 py-1.5 text-xs">
                   <p className="font-medium">Put back what was on the screens at {new Date(recovery.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}? It replaces what is on them now.</p>
+                  {restoreError && <p role="alert" className="mt-1 text-destructive">{restoreError}</p>}
                   <div className="mt-1.5 flex gap-1.5">
                     <Button size="xs" onClick={() => run(() => void putBack(recovery))}>Put back</Button>
+                    {restoreError && <Button size="xs" variant="outline" onClick={() => run(acceptPartialRecovery)}>Continue with available state</Button>}
                     <Button size="xs" variant="ghost" onClick={() => setConfirmPutBack(false)}>Cancel</Button>
                   </div>
                 </div>
@@ -283,6 +278,19 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
               <ListChecksIcon /> Complete setup
             </button>
             <SetupStatusRow onOpen={() => run(() => useShellStore.getState().setSetupStatusOpen(true))} />
+            {confirmCompanion ? (
+              <div role="group" aria-label="Use this computer for OBS only" className="mx-1 mb-1 rounded-md border border-border bg-muted/50 px-2 py-1.5 text-xs">
+                <p className="font-medium">Make this computer an OBS companion? Rhema Studio starts again with one small screen: join the main computer and add its cameras to OBS here. The studio comes back from that screen.</p>
+                <div className="mt-1.5 flex gap-1.5">
+                  <Button size="xs" onClick={() => run(() => void switchMode(true))}>Start as OBS companion</Button>
+                  <Button size="xs" variant="ghost" onClick={() => setConfirmCompanion(false)}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className={ROW} onClick={() => setConfirmCompanion(true)}>
+                <CameraIcon /> This computer runs OBS only…
+              </button>
+            )}
             <button type="button" className={ROW} onClick={() => run(() => setShortcuts(true))}>
               <KeyboardIcon /> Keyboard shortcuts
             </button>

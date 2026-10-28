@@ -1,10 +1,13 @@
 import type { QueueItem, StagePayload, VerseRenderData } from "@/types"
+import { warnMs } from "@/lib/item-timing"
 import { elapsedMs, formatMs, remainingMs, timerTone, type TimerState } from "@/lib/timer"
+import { nextVisibleItem, type OutlineHeader } from "@/lib/run-of-show"
 
 export interface StageInput {
   isLive: boolean
   liveVerse: VerseRenderData | null
   items: QueueItem[]
+  headers?: OutlineHeader[]
   activeIndex: number | null
   timer: TimerState
   now: number
@@ -39,13 +42,13 @@ export function stageFontVh(lines: string[]): number {
 export function buildStagePayload(i: StageInput): StagePayload {
   const live = i.isLive && i.liveVerse ? i.liveVerse : null
   const active = i.activeIndex === null ? null : i.items[i.activeIndex] ?? null
-  const next = i.activeIndex === null ? i.items[0] ?? null : i.items[i.activeIndex + 1] ?? null
+  const next = nextVisibleItem(i.items, i.headers ?? [], i.activeIndex)
   const running = i.timer.startedAt !== null || i.timer.accumulatedMs > 0
   return {
     current: live ? { title: live.reference, lines: currentLines(live) } : null,
-    next: next ? next.reference : null,
+    next: next?.label ?? null,
     note: active?.notes?.trim() || null,
-    timer: running ? { label: i.timer.durationMs > 0 ? formatMs(remainingMs(i.timer, i.now)) : formatMs(elapsedMs(i.timer, i.now)), tone: timerTone(i.timer, i.now) } : null,
+    timer: running ? { label: i.timer.durationMs > 0 ? formatMs(remainingMs(i.timer, i.now)) : formatMs(elapsedMs(i.timer, i.now)), tone: timerTone(i.timer, i.now, warnMs(active?.timing)) } : null,
     message: i.message?.trim() || null,
     band: i.song ? [i.song.key.trim() ? `Key ${i.song.key.trim()}` : "", i.song.tempo ? `${i.song.tempo} bpm` : ""].filter(Boolean).join(" · ") || null : null,
   }

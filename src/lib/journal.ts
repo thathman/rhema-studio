@@ -9,16 +9,20 @@ export interface JournalEntry {
   /** Monotonic ms, for durations (immune to clock changes). */
   mono: number
   /** "event": a run-of-show event started (the event clock, ADR 0001); the others are what the screens and desk did. */
-  kind: "live" | "clear" | "restore" | "quick" | "message" | "rehearsal" | "remote" | "obs" | "sound" | "timing" | "event" | "source" | "recovery" | "scene"
+  kind: "live" | "clear" | "restore" | "quick" | "message" | "rehearsal" | "remote" | "obs" | "sound" | "timing" | "event" | "moment" | "source" | "recovery" | "scene" | "shown" | "take"
   /** Reference, title or message text. */
   label: string
   itemId?: string | null
+  /** The planned Run of Show event containing this moment (#409); absent on legacy entries. */
+  eventId?: string | null
   /** The live source it came from or changed (ADR 0001): "Bible", "Hymns"… Shown in the log. */
   source?: string
   /** Who did it (#243 EX.1): the operator's name, a joined desk or phone; absent when not known. The label says it too. */
   by?: string
   /** The source's or scene Take's revision (one count for both): higher is newer. */
   revision?: number
+  /** A "shown" entry (#246 C17): the screen whose page first drew the new content, and how soon (ms). */
+  afterMs?: number
   /** A scene entry: the output it was taken to or released from, and the scene (absent: back to its own feed). */
   outputId?: string
   sceneId?: string
@@ -39,7 +43,7 @@ export function actualDurations(entries: JournalEntry[], nowMono: number): Actua
     .filter((e) => e.kind === "live" || e.kind === "quick" || e.kind === "restore")
     .map((e) => {
       const i = entries.indexOf(e)
-      const next = entries.slice(i + 1).find((n) => n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote" && n.kind !== "obs" && n.kind !== "sound" && n.kind !== "timing" && n.kind !== "event" && n.kind !== "source" && n.kind !== "recovery" && n.kind !== "scene")
+      const next = entries.slice(i + 1).find((n) => n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote" && n.kind !== "obs" && n.kind !== "sound" && n.kind !== "timing" && n.kind !== "event" && n.kind !== "moment" && n.kind !== "source" && n.kind !== "recovery" && n.kind !== "scene" && n.kind !== "shown" && n.kind !== "take")
       return { entry: e, itemId: e.itemId ?? null, label: e.label, ms: Math.max(0, (next?.mono ?? nowMono) - e.mono) }
     })
 }
@@ -51,19 +55,47 @@ export function actualByItem(entries: JournalEntry[], nowMono: number): Map<stri
   return out
 }
 
-/** When each run-of-show event first started (wall clock ms), from the event clock's entries (C03). */
+/** When each queue moment or legacy item first became active (wall clock ms). */
 export function eventStarts(entries: JournalEntry[]): Map<string, number> {
   const out = new Map<string, number>()
-  for (const e of entries) if (e.kind === "event" && e.itemId && !out.has(e.itemId)) out.set(e.itemId, e.at)
+  for (const e of entries) if ((e.kind === "event" || e.kind === "moment") && e.itemId && !out.has(e.itemId)) out.set(e.itemId, e.at)
   return out
 }
 
-/** How long each event ran: until the next event started, the last one until `nowMono`. */
+/** When each event ID first started; supports the event-level clock entries and legacy item IDs. */
+export function eventPlanStarts(entries: JournalEntry[]): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const e of entries) {
+    const id = e.kind === "event" ? e.eventId ?? e.itemId : null
+    if (id && !out.has(id)) out.set(id, e.at)
+  }
+  return out
+}
+
+/**
+ * How long each event ran: until the next event started (or the service was finished), the last
+ * one until `nowMono`.
+ */
 export function eventTimes(entries: JournalEntry[], nowMono: number): Map<string, number> {
   const out = new Map<string, number>()
-  const starts = entries.filter((e) => e.kind === "event" && e.itemId)
-  starts.forEach((e, i) => out.set(e.itemId!, (out.get(e.itemId!) ?? 0) + Math.max(0, (starts[i + 1]?.mono ?? nowMono) - e.mono)))
+  const marks = entries.filter((e) => e.kind === "event" || e.kind === "moment")
+  marks.forEach((e, i) => {
+    const id = e.eventId ?? e.itemId
+    if (id) out.set(id, (out.get(id) ?? 0) + Math.max(0, (marks[i + 1]?.mono ?? nowMono) - e.mono))
+  })
   return out
+}
+
+/** The event-clock entry that finishes the service (#196 R3.7): an "event" with no item. */
+export const SERVICE_FINISHED = "Service finished"
+
+/** When the service was finished (wall ms), if that is the last thing the event clock did; else null. */
+export function serviceFinishedAt(entries: JournalEntry[]): number | null {
+  for (let k = entries.length - 1; k >= 0; k--) {
+    const e = entries[k]
+    if (e.kind === "event") return e.eventId || e.itemId ? null : e.at
+  }
+  return null
 }
 
 /** When each rundown item first went on air (wall clock ms), for the run of show's actual times. */
@@ -85,14 +117,19 @@ export interface RundownLine {
   inserted?: boolean
 }
 
+/** Line breaks (and other control characters) in typed words as spaces. */
+// eslint-disable-next-line no-control-regex -- matching control characters is the point
+const oneLine = (s: string) => s.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ")
+
 export function formatJournal(title: string, entries: JournalEntry[], nowMono: number, planned: Map<string, number> = new Map(), rundown?: RundownLine[]): string {
   const lines = [`${title}`, `Service log — ${entries[0] ? new Date(entries[0].at).toLocaleDateString() : ""}`, ""]
   const durations = actualDurations(entries, nowMono)
   for (const e of entries) {
     const d = durations.find((x) => x.entry === e)
-    const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote", obs: "OBS", sound: "sound", timing: "timer", event: "EVENT", source: "source", recovery: "RECOVERED", scene: "SCENE" }[e.kind]
+    const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote", obs: "OBS", sound: "sound", timing: "timer", event: "EVENT", moment: "MOMENT", source: "source", recovery: "RECOVERED", scene: "SCENE", shown: "shown", take: "TAKE" }[e.kind]
     const dur = d && (e.kind === "live" || e.kind === "quick" || e.kind === "restore") ? `  (${mmss(d.ms)})` : ""
-    lines.push(`${hhmm(e.at)}  ${verb.padEnd(13)} ${e.label}${dur}${e.source && e.kind !== "source" ? `  · ${e.source}` : ""}`)
+    // One entry, one line: typed words (a notice, a hold reason, a scene name) never start a line of their own.
+    lines.push(`${hhmm(e.at)}  ${verb.padEnd(13)} ${oneLine(e.label)}${dur}${e.source && e.kind !== "source" ? `  · ${oneLine(e.source)}` : ""}`)
   }
   const totals = actualByItem(entries, nowMono)
   const versus = (ms: number | undefined, plan: number | undefined) =>

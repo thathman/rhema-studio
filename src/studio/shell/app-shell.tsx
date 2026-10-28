@@ -22,6 +22,7 @@ import { LibraryWorkspace } from "@/studio/library/library-workspace"
 import { ArchiveWorkspace } from "@/studio/archive/archive-workspace"
 import { ProductionWorkspace } from "@/studio/production/production-workspace"
 import { TeamWorkspace } from "@/studio/team/team-workspace"
+import { ConnectionsWorkspace } from "@/studio/connections/connections-workspace"
 import { openSettings } from "@/lib/settings-dialog"
 import { Sidebar } from "@/studio/shell/sidebar"
 import { WORKSPACE_ITEMS, churchItems, type NavItem } from "@/studio/shell/nav-items"
@@ -34,6 +35,8 @@ import { startCameras } from "@/lib/cameras"
 import { startLiveRecovery } from "@/lib/live-recovery"
 import { RecoveryBanner } from "@/studio/shell/recovery-banner"
 import { SignalWatch } from "@/studio/shell/signal-watch"
+import { ShareReadiness } from "@/studio/share-readiness"
+import { useSettingsStore } from "@/stores/settings-store"
 import { startVoiceHub } from "@/lib/voice"
 import { GlobalSearch } from "@/studio/shell/global-search"
 import { SetupWizard } from "@/studio/setup/setup-wizard"
@@ -44,9 +47,10 @@ import "@/stores/on-live-cues"
 import "@/stores/stage-time-warnings"
 import "@/stores/stage-finish"
 import "@/lib/app-tick"
+import { removeOldTranscripts } from "@/lib/journal-transcript"
 
 /** What the top bar calls each page. */
-const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", production: "Production control", library: "Library", design: "Design studio", team: "Team", archive: "Archive", settings: "Settings", more: "More tools" }
+const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", production: "Production control", library: "Library", design: "Design studio", connections: "Connections", team: "Team", archive: "Archive", settings: "Settings", more: "More tools" }
 
 const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   home: () => <HomeWorkspace />,
@@ -56,6 +60,7 @@ const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   library: () => <LibraryWorkspace />,
   archive: () => <ArchiveWorkspace />,
   production: () => <ProductionWorkspace />,
+  connections: () => <ConnectionsWorkspace />,
   team: () => <TeamWorkspace />,
   settings: () => <SettingsPage />,
   more: () => <MoreWorkspace />,
@@ -68,6 +73,8 @@ export function AppShell() {
   const setOutputsOpen = useShellStore((s) => s.setOutputsDialogOpen)
   const isLive = useBroadcastStore((s) => s.isLive)
   const church = useMemo(() => churchItems(), [])
+  // A joined director sees this computer's readiness checks (desk consoles): worked out only while someone is paired.
+  const paired = useSettingsStore((s) => s.remoteDevices.length > 0)
 
   // Going anywhere from Design first settles an unsaved theme (keep editing, or discard it), as closing the designer did.
   const go = useCallback(async (next: Workspace) => {
@@ -92,6 +99,9 @@ export function AppShell() {
   useEffect(() => startCountdownChime(), [])
   // Browser feeds: the LAN listener knows each feed and its secret.
   useEffect(() => startBrowserFeeds(), [])
+  // Kept transcripts older than the church allows lose their transcript (#246 C17), at start and on a change.
+  const transcriptDays = useSettingsStore((s) => s.transcriptRetentionDays)
+  useEffect(() => { void removeOldTranscripts(transcriptDays) }, [transcriptDays])
   // Cameras (#209): the camera page's list, and the camera router when cameras are added.
   useEffect(() => startCameras(), [])
   // What was on the screens, for recovery after an unexpected close.
@@ -178,6 +188,7 @@ export function AppShell() {
         <TopBar title={TITLES[workspace]} />
         <RecoveryBanner />
         <SignalWatch />
+        {paired && <ShareReadiness />}
         <main id="main" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 outline-none">
           {/* One view failing leaves the navigation, the remote, the outputs and the other views working. */}
           <ErrorBoundary key={workspace} name={`the ${TITLES[workspace]} view`}>{WORKSPACE[workspace]()}</ErrorBoundary>

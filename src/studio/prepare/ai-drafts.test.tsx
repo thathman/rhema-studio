@@ -104,4 +104,25 @@ describe("Prepare → AI drafts", () => {
     expect(useQueueStore.getState().items[0]).toMatchObject({ reference: markup, notes: orders })
     expect(invoke).not.toHaveBeenCalledWith("ai_draft_delete", expect.anything())
   })
+
+  it("shows the check's warnings, marks a draft opened when it is opened, and counts only waiting ones", async () => {
+    const waiting: AiDraft = { ...draft, id: "44444444-4444-4444-4444-444444444444", title: "Harvest Sunday", warnings: ["Main, item 2: \"Ọlọ́run Ọba\" has no licence recorded in the library: check it before the service (Prepare → Songs)"] }
+    const opened: AiDraft = { ...draft, id: "55555555-5555-5555-5555-555555555555", title: "Last week", status: "opened", opened_at: "2026-10-23T09:00:00Z", opened_by: "Tolu" }
+    drafts = [waiting, opened]
+    useSettingsStore.setState({ mcpEnabled: true, operatorName: "Ade" })
+    useQueueStore.setState({ items: [], headers: [] })
+    useServiceStore.setState({ current: null, dirty: false })
+    invoke.mockClear()
+    await mount()
+    const text = () => document.body.textContent ?? ""
+    expect(button("AI drafts (1)")).toBeTruthy()
+    expect(text()).toContain("The check found one thing to look at:")
+    expect(text()).toContain("has no licence recorded in the library")
+    expect(text()).toContain("by Tolu: no longer waiting, and the assistant cannot revise it")
+    expect(button("Open again in the rundown")).toBeTruthy()
+    await act(async () => button("Open in the rundown").click())
+    expect(invoke).toHaveBeenCalledWith("ai_draft_mark_opened", { id: waiting.id, by: "Ade" })
+    // The slide the assistant wrote waits to be accepted.
+    expect(useQueueStore.getState().items[0]).toMatchObject({ reference: "Welcome", ai_suggestion: "Claude" })
+  })
 })

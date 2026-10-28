@@ -39,6 +39,7 @@ describe("settings store", () => {
     mockGet.mockImplementation(async (key: string) => {
       if (key === "gain") return 2.5
       if (key === "sttProvider") return "whisper"
+      if (key === "speechLanguage") return "yo"
       if (key === "deepgramApiKey") return "dg-key"
       return null
     })
@@ -49,10 +50,52 @@ describe("settings store", () => {
     const state = useSettingsStore.getState()
     expect(state.gain).toBe(2.5)
     expect(state.sttProvider).toBe("whisper")
+    expect(state.speechLanguage).toBe("yo")
     expect(state.deepgramApiKey).toBe("dg-key")
     // Defaults remain for keys with null
     expect(state.autoMode).toBe(false)
     expect(state.confidenceThreshold).toBe(0.8)
+  })
+
+  it("repairs an older Yoruba setting that still points at Deepgram", async () => {
+    mockGet.mockImplementation(async (key: string) => {
+      if (key === "sttProvider") return "deepgram"
+      if (key === "speechLanguage") return "yo"
+      return null
+    })
+
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+
+    expect(useSettingsStore.getState().speechLanguage).toBe("yo")
+    expect(useSettingsStore.getState().sttProvider).toBe("whisper")
+  })
+
+  it("selecting Yoruba immediately selects local Whisper", async () => {
+    mockGet.mockResolvedValue(null)
+
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+
+    useSettingsStore.getState().setSpeechLanguage("yo")
+
+    expect(useSettingsStore.getState().speechLanguage).toBe("yo")
+    expect(useSettingsStore.getState().sttProvider).toBe("whisper")
+  })
+
+  it("allows OpenAI transcription for Yoruba and keeps Deepgram unavailable for Yoruba", async () => {
+    mockGet.mockResolvedValue(null)
+
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+    const settings = useSettingsStore.getState()
+
+    settings.setSpeechLanguage("yo")
+    expect(useSettingsStore.getState().sttProvider).toBe("whisper")
+    useSettingsStore.getState().setSttProvider("openai")
+    expect(useSettingsStore.getState().sttProvider).toBe("openai")
+    useSettingsStore.getState().setSttProvider("deepgram")
+    expect(useSettingsStore.getState().sttProvider).toBe("whisper")
   })
 
   it("hydrate with no persisted values falls back to defaults", async () => {
@@ -162,7 +205,8 @@ describe("settings store", () => {
     expect(s.operatorName).toBe("")
     expect(s.remoteSecret).toBe("")
     expect(s.remoteDevices).toEqual([])
-    expect(s.remoteAuthRequired).toBe(false)
+    // Absent from the file: the new default (a key or a paired device is required).
+    expect(s.remoteAuthRequired).toBe(true)
     expect([s.talkInputId, s.talkOutputId]).toEqual(["", ""]) // the system's headset
     expect(s.timekeeperCountdown).toEqual({ to: "next", chime: false, chimeMinutes: 2 }) // no chime unless turned on
     expect(mockSet).not.toHaveBeenCalled()
@@ -188,7 +232,7 @@ describe("settings store", () => {
     await hydrateSettings()
     const s = useSettingsStore.getState()
     expect(s.remoteDevices).toEqual([])
-    expect(s.remoteAuthRequired).toBe(false)
+    expect(s.remoteAuthRequired).toBe(true)
     expect(s.operatorName).toBe("")
     expect(s.gain).toBe(before.gain)
     expect(s.brandKit).toEqual(before.brandKit)
@@ -218,6 +262,45 @@ describe("settings store", () => {
     expect(s.operatorName).toBe("Tolu")
     // The talk headset (Rhema Comms) is kept per computer.
     expect([s.talkInputId, s.talkOutputId]).toEqual(["headset-mic", "headset-ears"])
+  })
+
+  it("a new install requires a key on the network; a church that saved it off keeps it off", async () => {
+    const { useSettingsStore: fresh } = await import("./settings-store")
+    expect(fresh.getState().remoteAuthRequired).toBe(true)
+    vi.resetModules()
+    mockGet.mockImplementation(async (key: string) => (key === "remoteAuthRequired" ? false : key === "machine" ? { remoteAuthRequired: false } : undefined))
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+    expect(useSettingsStore.getState().remoteAuthRequired).toBe(false)
+  })
+
+  it("keeps authentication required when a shared key or paired device exists", async () => {
+    mockGet.mockResolvedValue(null)
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+
+    useSettingsStore.getState().setRemoteSecret("shared controller key")
+    useSettingsStore.getState().setRemoteAuthRequired(false)
+    expect(useSettingsStore.getState().remoteAuthRequired).toBe(true)
+
+    useSettingsStore.setState({ remoteSecret: "", remoteDevices: [{ hash: "h", name: "Phone", paired_at: "2026-10-27T10:00:00Z" }] as never })
+    useSettingsStore.getState().setRemoteAuthRequired(false)
+    expect(useSettingsStore.getState().remoteAuthRequired).toBe(true)
+  })
+
+  it("keeps authentication on when the last legacy credential is removed", async () => {
+    mockGet.mockResolvedValue(null)
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+
+    useSettingsStore.setState({ remoteAuthRequired: false, remoteSecret: "legacy-key", remoteDevices: [] })
+    useSettingsStore.getState().setRemoteSecret("")
+    expect(useSettingsStore.getState().remoteAuthRequired).toBe(true)
+
+    const phone = { hash: "phone-hash", name: "Phone", paired_at: "2026-10-27T10:00:00Z" }
+    useSettingsStore.setState({ remoteAuthRequired: false, remoteSecret: "", remoteDevices: [phone] as never })
+    useSettingsStore.getState().revokeRemoteDevice(phone.hash)
+    expect(useSettingsStore.getState().remoteAuthRequired).toBe(true)
   })
 
   it("an old settings file without the setup section keeps everything and gets the setup defaults (#298)", async () => {

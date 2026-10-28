@@ -1,17 +1,18 @@
 import { create } from "zustand"
 
-export type Workspace = "home" | "prepare" | "present" | "production" | "library" | "design" | "team" | "archive" | "settings" | "more"
+export type Workspace = "home" | "prepare" | "present" | "production" | "library" | "design" | "connections" | "team" | "archive" | "settings" | "more"
 /**
  * The Design page's sections: every design edit lives there. "outputs" was the old Output looks
  * table (#299 UX15-4 retired it); it is kept so old links still work and opens "used-on".
  */
-export type DesignTab = "themes" | "library" | "lower-thirds" | "ticker" | "stage" | "brand" | "used-on" | "outputs"
+export type DesignTab = "themes" | "library" | "lower-thirds" | "ticker" | "stage" | "countdown" | "brand" | "used-on" | "outputs"
 
 /** The section a Design link really opens: the old Output looks table is now Used on… */
 export function designTabOf(tab: DesignTab): DesignTab {
   return tab === "outputs" ? "used-on" : tab
 }
 export type PresentView = "standard" | "production"
+export type LibrarySection = "songs" | "hymns" | "slides" | "media" | "files"
 
 export interface ShellPrefs {
   workspace: Workspace
@@ -26,7 +27,7 @@ export const SHELL_PREFS_KEY = "rhema-studio.shell"
 const DEFAULT_PREFS: ShellPrefs = { workspace: "home", presentView: "standard", sidebarCollapsed: false }
 
 // "more" has no way in since the sidebar dropped it (#218), so it is not restored.
-const WORKSPACES: readonly Workspace[] = ["home", "prepare", "present", "production", "library", "design", "team", "archive", "settings"]
+const WORKSPACES: readonly Workspace[] = ["home", "prepare", "present", "production", "library", "design", "connections", "team", "archive", "settings"]
 const VIEWS: readonly PresentView[] = ["standard", "production"]
 
 /** Minimal Storage surface so tests can pass a Map-backed fake. */
@@ -86,6 +87,9 @@ interface ShellState extends ShellPrefs {
   pendingFind: string | null
   findInPresent: (query: string) => void
   setWorkspace: (workspace: Workspace) => void
+  librarySection: LibrarySection
+  setLibrarySection: (section: LibrarySection) => void
+  openLibrarySection: (section: LibrarySection) => void
   setPresentView: (view: PresentView) => void
   /** Fold the sidebar to icons or open it out again (the sidebar's button, Cmd/Ctrl+B). */
   setSidebarCollapsed: (collapsed: boolean) => void
@@ -132,6 +136,9 @@ export const useShellStore = create<ShellState>((set) => ({
   pendingFind: null,
   findInPresent: (pendingFind) => set({ pendingFind, goRequest: "present" }),
   setWorkspace: (workspace) => set({ workspace }),
+  librarySection: "songs",
+  setLibrarySection: (librarySection) => set({ librarySection }),
+  openLibrarySection: (librarySection) => set({ workspace: "library", librarySection }),
   setPresentView: (presentView) => set({ presentView }),
   setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),

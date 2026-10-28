@@ -138,7 +138,7 @@ describe("the service timer as a live source", () => {
 describe("cameras as live sources", () => {
   const sceneWithCameras = () => {
     const scene = newScene("Sermon")
-    scene.layers = [newLayer("camera", { name: "Pulpit camera", cameraUrl: PULPIT, cameraFallback: "Camera back shortly" }), newLayer("camera", { name: "Choir camera", cameraUrl: CHOIR })]
+    scene.layers = [newLayer("camera", { name: "Pulpit camera", cameraUrl: PULPIT, cameraFallback: "Camera back shortly", noSignal: "words" }), newLayer("camera", { name: "Choir camera", cameraUrl: CHOIR })]
     return scene
   }
 
@@ -159,6 +159,34 @@ describe("cameras as live sources", () => {
     b.restoreSource("camera:pulpit")
     expect(last("main")?.scene?.layers.map((l) => l.cameraUrl)).toEqual([PULPIT, CHOIR])
     expect(labels()).toEqual(["Pulpit camera hidden from scenes · by Tolu", "Pulpit camera back in scenes · by Tolu"])
+  })
+
+  it("Retry, backup and Freeze are logged as those controls with who, never as back in scenes (#213)", () => {
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "0123456789abcdef0123", backup: "choir" }, { name: "choir", label: "Choir", token: "0123456789abcdef0124" }] })
+    const b = useBroadcastStore.getState()
+    b.cameraControl("pulpit", "retry")
+    b.cameraControl("pulpit", "backup")
+    b.cameraControl("pulpit", "unbackup")
+    b.cameraControl("pulpit", "freeze")
+    b.cameraControl("pulpit", "unfreeze")
+    b.cameraControl("pulpit", "retry")
+    expect(labels()).toEqual([
+      "Pulpit camera: retried · by Tolu",
+      "Pulpit camera: switched to backup Choir camera · by Tolu",
+      "Pulpit camera: back on its own camera · by Tolu",
+      "Pulpit camera: frozen · by Tolu",
+      "Pulpit camera: unfrozen · by Tolu",
+      "Pulpit camera: retried · by Tolu",
+    ])
+    expect(useBroadcastStore.getState().stateSources["camera:pulpit"]?.on).toBe(true)
+    // A hidden camera stays hidden when frozen, and the log says frozen; showing it again is "back in scenes".
+    useJournalStore.setState({ entries: [] })
+    b.clearSource("camera:pulpit")
+    b.cameraControl("pulpit", "freeze")
+    expect(useBroadcastStore.getState().stateSources["camera:pulpit"]?.on).toBe(false)
+    b.restoreSource("camera:pulpit")
+    expect(labels()).toEqual(["Pulpit camera hidden from scenes · by Tolu", "Pulpit camera: frozen · by Tolu", "Pulpit camera back in scenes · by Tolu"])
+    expect(labels().filter((l) => l.includes("back in scenes"))).toHaveLength(1)
   })
 
   it("Black still covers a scene with cameras", () => {

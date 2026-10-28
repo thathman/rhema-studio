@@ -1,6 +1,6 @@
 name: CI
 
-# Runs on every pull request and on pushes to feature branches. Release
+# Runs on every pull request and on pushes to main. Release
 # packaging stays in build-release.yml (tags) and build-windows-installer.yml
 # (manual); this workflow never produces artifacts and never signs anything.
 on:
@@ -8,8 +8,6 @@ on:
   push:
     branches:
       - main
-      - "feature/**"
-      - "pr/**"
   workflow_dispatch:
 
 permissions:
@@ -37,8 +35,10 @@ jobs:
         run: bunx vitest run
       - name: Dependency licences (npm production tree)
         run: bun scripts/check-licenses.ts --js
-      - name: Production build (tsc -b && vite build)
-        run: bun run build
+      - name: Production build (Vite; typecheck passed above)
+        run: bun run vite build
+      - name: Rhema Studio Companion page build (its own Vite entry, #209; typecheck passed above)
+        run: bun run vite build --config companion-app/vite.config.ts
 
   lint:
     # The whole repository lints clean (ST-010); any new error fails the job.
@@ -74,10 +74,20 @@ jobs:
         run: |
           # IPv4 only: the runner's mirror has hung on IPv6 several times (PRs #224, #229, #233, #238, #244).
           APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true"
+          APT_UPDATE_START_SECONDS=$(date +%s)
+          echo "APT_UPDATE_STARTED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           sudo apt-get $APT update
-          sudo apt-get $APT install -y \
+          APT_UPDATE_ELAPSED_SECONDS=$(($(date +%s) - APT_UPDATE_START_SECONDS))
+          echo "APT_UPDATE_FINISHED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ') elapsed_seconds=$APT_UPDATE_ELAPSED_SECONDS"
+          # CI compiles/tests these apps but never runs their WebKit windows; skip
+          # optional multimedia/runtime recommendations to keep mirror downloads bounded.
+          APT_INSTALL_START_SECONDS=$(date +%s)
+          echo "APT_INSTALL_STARTED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          sudo apt-get $APT install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libssl-dev \
             libasound2-dev libudev-dev patchelf cmake clang libclang-dev
+          APT_INSTALL_ELAPSED_SECONDS=$(($(date +%s) - APT_INSTALL_START_SECONDS))
+          echo "APT_INSTALL_FINISHED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ') elapsed_seconds=$APT_INSTALL_ELAPSED_SECONDS"
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: ./src-tauri
@@ -105,6 +115,88 @@ jobs:
       - name: App crate clippy (pre-existing warnings allowed, errors not)
         working-directory: src-tauri
         run: cargo clippy -p rhema
+
+  companion:
+    # Rhema Studio Companion (#209): the small app for an OBS computer, and the crate it shares with the
+    # studio. Checked and tested here on Linux; nothing is bundled or published. There is no
+    # Windows runner in CI: its Windows-only code (tray, start with the computer) is compile-checked
+    # only by building it on a Windows computer (companion-app/README.md).
+    name: Rhema Studio Companion (shared crate tests, app tests, clippy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Install Linux dependencies
+        timeout-minutes: 20
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true"
+          APT_UPDATE_START_SECONDS=$(date +%s)
+          echo "APT_UPDATE_STARTED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          sudo apt-get $APT update
+          APT_UPDATE_ELAPSED_SECONDS=$(($(date +%s) - APT_UPDATE_START_SECONDS))
+          echo "APT_UPDATE_FINISHED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ') elapsed_seconds=$APT_UPDATE_ELAPSED_SECONDS"
+          # CI compiles/tests the companion but never launches its WebKit window.
+          APT_INSTALL_START_SECONDS=$(date +%s)
+          echo "APT_INSTALL_STARTED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          sudo apt-get $APT install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libssl-dev libayatana-appindicator3-dev libdbus-1-dev
+          APT_INSTALL_ELAPSED_SECONDS=$(($(date +%s) - APT_INSTALL_START_SECONDS))
+          echo "APT_INSTALL_FINISHED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ') elapsed_seconds=$APT_INSTALL_ELAPSED_SECONDS"
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            ./src-tauri
+            ./companion-app/src-tauri
+      - name: Shared crate tests (rhema-join, with the companion's pinning and keychain)
+        working-directory: src-tauri
+        run: cargo test -p rhema-join --features pinned,keychain
+      - name: Shared crate clippy (strict; its tests use rhema-api, which has warnings of its own)
+        working-directory: src-tauri
+        run: cargo clippy -p rhema-join --features pinned,keychain -- -D warnings
+      - name: Companion page placeholder (tauri-build checks the folder exists; CI never packages)
+        run: mkdir -p companion-app/build
+      - name: Companion app tests
+        working-directory: companion-app/src-tauri
+        run: cargo test
+      - name: Companion app clippy (strict)
+        working-directory: companion-app/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+  companion-packaging:
+    name: Companion package (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macOS Apple Silicon
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            platform: Windows x64
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./companion-app/src-tauri
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build the native Companion bundle
+        run: bun run companion:build -- --target ${{ matrix.target }}
 
   # Windows packaging is a full Tauri bundle with whisper.cpp and LLVM, which
   # takes far longer than a PR check should. It stays manual:

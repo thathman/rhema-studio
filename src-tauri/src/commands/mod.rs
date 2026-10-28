@@ -4,6 +4,7 @@ pub mod audio;
 pub mod bible;
 pub mod camera_router;
 pub mod cameras;
+pub mod companion;
 pub mod broadcast;
 pub mod content;
 pub mod detection;

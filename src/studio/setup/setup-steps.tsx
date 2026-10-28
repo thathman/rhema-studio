@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { openSettings } from "@/lib/settings-dialog"
+import { openConnectionsHub } from "@/studio/connections/navigation"
 import { backupWhen, systemTimeZone, timeZones, type EquipmentItem } from "@/lib/setup-readiness"
 import { dataPaths, showDataFolder, testFolderWritable, type DataPaths } from "@/lib/data-folder"
 import { backupDatabaseToFile } from "@/lib/song-files"
@@ -70,7 +71,7 @@ export function ChurchStep({ error }: { error: string | null }) {
         />
       </Field>
       <div className="rounded-lg border border-dashed border-border bg-muted/40 px-4 py-3">
-        <p className="text-[0.625rem] font-semibold text-muted-foreground">Home will read</p>
+        <p className="text-[0.6875rem] font-semibold text-muted-foreground">Home will read</p>
         <p className="mt-1 truncate text-[0.6875rem] font-extrabold tracking-[0.16em] uppercase" title={shown ? `${shown} workspace` : "Set up your church"}>{shown ? `${shown} workspace` : "Set up your church"}</p>
       </div>
       <Field id="setup-campus" label="Campus or ministry (optional)" hint="Only on this computer.">
@@ -169,7 +170,7 @@ export function BibleStep({ onLeave, onSample }: { onLeave: Leave; onSample?: ()
       {translations.length === 0 ? (
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="flex items-center gap-2 text-sm font-semibold"><TriangleAlertIcon className="size-4 text-confidence-mid" />No Bible edition was found on this computer</p>
-          <p className="mt-1 text-xs text-muted-foreground">Reinstalling Rhema puts the bundled Bible library back. Settings → Bible shows what is installed.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Reinstalling Rhema Studio puts the bundled Bible library back. Settings → Bible shows what is installed.</p>
         </div>
       ) : (
         <>
@@ -198,7 +199,7 @@ export function BibleStep({ onLeave, onSample }: { onLeave: Leave; onSample?: ()
       </Field>
       <div className="rounded-lg border border-border bg-card p-4">
         <p className="text-sm font-semibold">Songs, hymns and media</p>
-        <p className="mt-1 text-xs text-muted-foreground">Rhema does not come with song words. Import the church's own songs, hymns and pictures in Library, now or any time.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Rhema Studio does not come with song words. Import the church's own songs, hymns and pictures in Library, now or any time.</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => onLeave(() => useShellStore.getState().goTo("library"))}>Open Library</Button>
           <Button variant="ghost" size="sm" onClick={() => onLeave(() => openSettings("bible"))}>Bible settings</Button>
@@ -235,7 +236,7 @@ export function ScreensStep({ onLeave }: { onLeave?: Leave }) {
             {outputs.map((o) => <ScreenTestRow key={o.id} output={o} item={items.find((i) => i.id === `output-${o.id}`)} />)}
           </ul>
         )}
-        <p className="text-xs text-muted-foreground">Test this screen shows a test pattern on that one output, after you confirm, until you end the test. It works on outputs that are on.</p>
+        <p className="text-xs text-muted-foreground">Test this screen shows a test pattern on that one output, after you confirm, until you end the test. It works on outputs that are on. Measure camera lag shows a running clock there instead, for a camera to film: Rhema Studio saves how far that camera runs behind.</p>
       </section>
       <div className="rounded-lg border border-border bg-card p-4">
         <p className="text-xs text-muted-foreground">
@@ -310,11 +311,11 @@ export function ConnectionsStep({ onLeave, onJoin }: { onLeave: Leave; onJoin: (
       <ChurchFolderBlock />
       <ul className="divide-y divide-border rounded-lg border border-border bg-card px-4">
         <StatusRow label="Phones and other computers" detail={remote.detail} state={remote.state}>
-          <Button size="sm" variant="outline" onClick={() => onLeave(() => openSettings("remote"))}>Remote Control</Button>
+          <Button size="sm" variant="outline" onClick={() => onLeave(openConnectionsHub)}>Connections</Button>
           <Button size="sm" variant="ghost" onClick={onJoin}>Join a host</Button>
         </StatusRow>
         <StatusRow label="OBS" detail={obs.detail} state={obs.state}>
-          <Button size="sm" variant="outline" onClick={() => onLeave(() => openSettings("remote"))}>OBS settings</Button>
+          <Button size="sm" variant="outline" onClick={() => onLeave(openConnectionsHub)}>Connect OBS</Button>
         </StatusRow>
         <StatusRow label="Speech recognition" detail={speech.detail} state={speech.state}>
           <Button size="sm" variant="outline" onClick={() => onLeave(() => openSettings("speech"))}>Speech settings</Button>
@@ -442,7 +443,7 @@ function SafetySection() {
             {churchFolder ? (
               <>
                 <code className="block truncate text-xs text-muted-foreground" title={churchFolder}>{churchFolder}</code>
-                {test?.state === "ok" && <span role="status" className="flex items-center gap-1 text-xs font-medium text-confidence-high"><CheckIcon className="size-3.5" /> Rhema can write there. The test file was deleted again.</span>}
+                {test?.state === "ok" && <span role="status" className="flex items-center gap-1 text-xs font-medium text-confidence-high"><CheckIcon className="size-3.5" /> Rhema Studio can write there. The test file was deleted again.</span>}
                 {test?.state === "failed" && <span role="alert" className="flex items-center gap-1 text-xs font-medium text-confidence-mid"><TriangleAlertIcon className="size-3.5" /> {test.text}</span>}
               </>
             ) : (

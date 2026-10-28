@@ -2,9 +2,11 @@ import { AboutNotices } from "@/components/about-notices"
 import { CAPACITY_KINDS, NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, defaultLimits, physicalCores, suits60fps, useMachineInfo } from "@/lib/capacity"
 import { autoModeOf, useBroadcastStore, type AutoMode } from "@/stores/broadcast-store"
 import { AssistantsSection } from "@/components/settings/assistants-section"
+import { ObsSettingsBlock } from "@/components/settings/obs-settings-block"
+import { RemoteAuthSetting } from "@/components/settings/remote-auth-setting"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { transcriptionActions } from "@/hooks/use-transcription"
-import { useState, useEffect, useRef } from "react"
+import { Fragment, useState, useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
 
 import { Button } from "@/components/ui/button"
@@ -33,21 +35,24 @@ import {
   BrainCircuitIcon,
 } from "lucide-react"
 import { LevelMeter } from "@/components/ui/level-meter"
-import { TalkDevices } from "@/studio/talk"
+import { TalkDevices, TalkRulesSettings } from "@/studio/talk"
 import { useAudioTest } from "@/hooks/use-audio-test"
 import { useBibleStore, useSettingsStore } from "@/stores"
 import { useTranscriptStore } from "@/stores/transcript-store"
+import { retentionWords } from "@/lib/journal-transcript"
+import { TRANSCRIPT_RETENTION_DAYS } from "@/stores/settings-store"
 import { useTutorialStore } from "@/stores/tutorial-store"
 import { useSettingsDialogStore, type SettingsSection } from "@/lib/settings-dialog"
 import { markSearchHits, searchElsewhere, searchSettings, searchWords, type ElsewhereId } from "@/lib/settings-search"
-import { openProductionTab } from "@/studio/production/production-tab"
-import { useObsStore } from "@/stores/obs-store"
+import { openConnectionsHub } from "@/studio/connections/navigation"
+import { PairDeviceDialog } from "@/studio/connections/pair-device-dialog"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
-import { qrDataUrl } from "@/lib/qr-bulletin"
 import { setDeskControl } from "@/lib/desk-control"
+import { asRemoteRole, REMOTE_ROLES } from "@/lib/remote-roles"
 import { ArrowUpRightIcon, EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SearchIcon, SparklesIcon } from "lucide-react"
 import { useShellStore } from "@/studio/shell-store"
 import type { DeviceInfo } from "@/types/audio"
+import { certificateWords } from "@/lib/host-certificate"
 
 /* -------------------------------------------------------------------------- */
 /*  Nav definition                                                            */
@@ -238,6 +243,17 @@ function AudioSection() {
           The microphone you talk to the crew with and where you hear them, on this computer only. It never feeds listening, the outputs, OBS or the sound player.
         </p>
       </div>
+
+      {/* The church's talk channels (Rhema Comms): who may use each, and how quiet priority makes the others. */}
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Talk channels
+        </label>
+        <TalkRulesSettings />
+        <p className="text-xs text-muted-foreground">
+          Set on the main desk for every joined desk and phone. Everyone is always in All crew; a role left out neither hears nor talks on that channel.
+        </p>
+      </div>
     </div>
   )
 }
@@ -250,7 +266,7 @@ function AudioSection() {
 function ListeningNote() {
   return (
     <p role="status" className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-      Rhema is listening now. Changes here apply when you stop and start listening again.
+      Rhema Studio is listening now. Changes here apply when you stop and start listening again.
     </p>
   )
 }
@@ -260,18 +276,31 @@ function SpeechSection() {
   const {
     sttProvider,
     setSttProvider,
+    speechLanguage,
+    setSpeechLanguage,
     deepgramApiKey,
     setDeepgramApiKey,
+    openaiApiKey,
+    setOpenaiApiKey,
   } = useSettingsStore()
 
   const [keyValue, setKeyValue] = useState(deepgramApiKey ?? "")
   const [saved, setSaved] = useState(false)
   const [showKey, setShowKey] = useState(false)
+  const [openaiKeyValue, setOpenaiKeyValue] = useState(openaiApiKey ?? "")
+  const [openaiSaved, setOpenaiSaved] = useState(false)
+  const [showOpenAiKey, setShowOpenAiKey] = useState(false)
 
   const handleSaveKey = () => {
     setDeepgramApiKey(keyValue || null)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleSaveOpenAiKey = () => {
+    setOpenaiApiKey(openaiKeyValue || null)
+    setOpenaiSaved(true)
+    setTimeout(() => setOpenaiSaved(false), 2000)
   }
 
   return (
@@ -285,7 +314,7 @@ function SpeechSection() {
 
         <RadioGroup
           value={sttProvider}
-          onValueChange={(v) => setSttProvider(v as "deepgram" | "whisper")}
+          onValueChange={(v) => setSttProvider(v as "deepgram" | "whisper" | "openai")}
           className="gap-3"
         >
           {/* Deepgram (cloud) */}
@@ -303,7 +332,7 @@ function SpeechSection() {
                 Uses Deepgram Nova-3 for real-time streaming transcription.
                 Requires an API key and internet connection. Best accuracy with
                 keyword boosting for Bible terms. While listening, the microphone
-                sound is sent to Deepgram (USA); you are asked once before it first starts.
+                sound is sent to Deepgram (USA); consent is requested separately for each cloud provider.
               </p>
               <CloudConsentLine />
             </div>
@@ -326,7 +355,41 @@ function SpeechSection() {
               </p>
             </div>
           </label>
+
+          {/* OpenAI transcription (cloud) */}
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-1 has-data-[state=checked]:ring-primary/20 ${
+              sttProvider !== "openai" ? "hover:border-muted-foreground/25" : ""
+            }`}
+          >
+            <RadioGroupItem value="openai" className="mt-0.5" />
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-foreground">Cloud (OpenAI)</span>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Sends spoken audio segments to OpenAI&apos;s transcription API and returns a result after each segment instead of live interim words. Yorùbá is left to automatic language detection.
+              </p>
+              <CloudConsentLine provider="openai" />
+            </div>
+          </label>
         </RadioGroup>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label htmlFor="speech-language" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Speech language
+        </label>
+        <Select value={speechLanguage} onValueChange={(v) => setSpeechLanguage(v === "yo" ? "yo" : "en")}>
+          <SelectTrigger id="speech-language" aria-label="Speech language" className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="en">English</SelectItem>
+            <SelectItem value="yo">Yorùbá</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Select the spoken language. Deepgram does not support Yorùbá, so selecting it switches Deepgram to local Whisper; OpenAI transcription remains available.
+        </p>
       </div>
 
       {/* Deepgram settings — show when deepgram is selected */}
@@ -377,6 +440,69 @@ function SpeechSection() {
           </p>
         </div>
       )}
+      {sttProvider === "openai" && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <label htmlFor="openai-api-key" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              OpenAI API key
+            </label>
+            {openaiApiKey && <Badge variant="outline" className="text-[0.6875rem]">Key configured</Badge>}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              id="openai-api-key"
+              type={showOpenAiKey ? "text" : "password"}
+              aria-label="OpenAI API key"
+              autoComplete="off"
+              placeholder="Enter your OpenAI API key..."
+              value={openaiKeyValue}
+              onChange={(e) => setOpenaiKeyValue(e.target.value)}
+              className="flex-1 text-xs"
+            />
+            <Button size="sm" variant="outline" aria-pressed={showOpenAiKey} aria-label={showOpenAiKey ? "Hide the key" : "Show the key"} title={showOpenAiKey ? "Hide the key" : "Show the key"} onClick={() => setShowOpenAiKey(!showOpenAiKey)}>
+              {showOpenAiKey ? <EyeOffIcon className="size-3" /> : <EyeIcon className="size-3" />}
+            </Button>
+            {openaiApiKey && (
+              <Button size="sm" variant="outline" onClick={() => { setOpenaiApiKey(null); setOpenaiKeyValue(""); setShowOpenAiKey(false) }}>
+                Clear
+              </Button>
+            )}
+            <Button size="sm" onClick={handleSaveOpenAiKey}>
+              {openaiSaved ? <><CheckIcon className="size-3" />Saved</> : "Save"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Required for OpenAI transcription. The key is kept in the system keychain where available; otherwise it remains in local app settings. It is excluded from settings backups.
+          </p>
+        </div>
+      )}
+      <TranscriptRetention />
+    </div>
+  )
+}
+
+/** How long a transcript kept with a service log stays (#246 C17): the church's choice, applied to every kept log. */
+function TranscriptRetention() {
+  const days = useSettingsStore((s) => s.transcriptRetentionDays)
+  const setDays = useSettingsStore((s) => s.setTranscriptRetentionDays)
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor="transcript-retention" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        Transcripts in kept logs
+      </label>
+      <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
+        <SelectTrigger id="transcript-retention" aria-label="Keep transcripts in kept logs" className="h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {TRANSCRIPT_RETENTION_DAYS.map((d) => (
+            <SelectItem key={d} value={String(d)}>Keep {retentionWords(d)}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        What was said goes into a service log only when you tick it for that log. Older transcripts are taken out of their logs (the log stays) when Rhema starts and when you change this. Current builds log transcript lengths only; diagnostics from earlier builds may contain short fragments, so review them before sharing.
+      </p>
     </div>
   )
 }
@@ -386,7 +512,7 @@ function SpeechSection() {
 /* -------------------------------------------------------------------------- */
 
 function DisplayModeSection() {
-  // The same switch as Auto on the Live panel in Present → Advanced (FR-01: off until turned on).
+  // The same switch as Auto on Present's Program panel (FR-01: off until turned on).
   const mode = useBroadcastStore(autoModeOf)
   const setAutoMode = useBroadcastStore((s) => s.setAutoMode)
 
@@ -440,7 +566,7 @@ function DisplayModeSection() {
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-foreground">Auto</span>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                While the output is on air, the most confident verse heard (at least 80% sure, or the level a remote control set) replaces what is on screen without Take live. Present shows "Auto-live on" while it is listening. Same as Auto on the Live panel in Present → Advanced view.
+                While the output is on air, the most confident verse heard (at least 80% sure, or the level a remote control set) replaces what is on screen without Take live. Present shows "Auto-live on" while it is listening. Same as Auto on the Program panel.
               </p>
             </div>
           </label>
@@ -612,6 +738,8 @@ interface RemoteStatus {
   lan?: boolean
   /** HTTP only: the https port for phone pages, when https is on. */
   tls_port?: number | null
+  /** HTTP only: this computer's certificate (its local CA's fingerprint) while https runs, as Rhema Studio Companion shows it (#209). */
+  tls_certificate?: string | null
 }
 
 interface CommandLogEntry {
@@ -639,51 +767,6 @@ function RemoteControlSection() {
   const remoteAuthRequired = useSettingsStore((s) => s.remoteAuthRequired)
   const setRemoteAuthRequired = useSettingsStore((s) => s.setRemoteAuthRequired)
   const anyKey = remoteSecret.trim().length > 0 || remoteDevices.length > 0
-  const [pairCode, setPairCode] = useState<string | null>(null)
-  const [pairStartedAt, setPairStartedAt] = useState("")
-  // The backend closes the window when a device pairs; hide the code once a device newer than the window appears.
-  const showPairCode = pairCode !== null && !remoteDevices.some((d) => d.paired_at > pairStartedAt)
-  const pairTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [pairQr, setPairQr] = useState<{ host: string; url: string; image: string } | null>(null)
-  /** Rebuild the code for another address (a VPN or second network card can make the guess wrong). */
-  const showPairQr = async (host: string, code: string, port: number, tlsPort?: number | null) => {
-    // With https on, the phone opens the secure page, so it can talk too.
-    const url = tlsPort ? `https://${host}:${tlsPort}/remote#code=${code}` : `http://${host}:${port}/remote#code=${code}`
-    setPairQr({ host, url, image: await qrDataUrl(url) })
-  }
-  const startPairing = async () => {
-    try {
-      const code = await invoke<string>("remote_pair_start")
-      setPairStartedAt(new Date().toISOString())
-      setPairCode(code)
-      setPairQr(null)
-      // A phone scans this to open the remote page with the code filled in (in the
-      // fragment, so it never reaches a server log). Only offered when the running
-      // server accepts other devices (asked from the server; the tickbox may have changed since).
-      const status = await invoke<RemoteStatus>("get_http_status").catch(() => null)
-      const ip = status?.lan ? await invoke<string | null>("remote_lan_address").catch(() => null) : null
-      if (status?.lan && status.port) await showPairQr(ip ?? "", code, status.port, status.tls_port)
-      if (pairTimer.current) clearTimeout(pairTimer.current)
-      pairTimer.current = setTimeout(() => setPairCode(null), 120_000)
-    } catch (e) {
-      setHttpError(String(e))
-    }
-  }
-  const cancelPairing = async () => {
-    setPairCode(null)
-    if (pairTimer.current) clearTimeout(pairTimer.current)
-    await invoke("remote_pair_cancel").catch(() => {})
-  }
-  useEffect(() => {
-    // The backend closes the window on pairing, expiry or three wrong codes; closing Settings closes it too.
-    const closed = () => setPairCode(null)
-    window.addEventListener("rhema:pair-closed", closed)
-    return () => {
-      window.removeEventListener("rhema:pair-closed", closed)
-      if (pairTimer.current) clearTimeout(pairTimer.current)
-      void invoke("remote_pair_cancel").catch(() => {})
-    }
-  }, [])
 
   const [oscStatus, setOscStatus] = useState<RemoteStatus>({ running: false, port: null })
   const [httpStatus, setHttpStatus] = useState<RemoteStatus>({ running: false, port: null })
@@ -785,7 +868,7 @@ function RemoteControlSection() {
         <span>
           Accept commands from other devices on this network
           <span className="block text-xs text-muted-foreground">
-            Anyone on the network can then send commands, unless a key is set or devices are paired below. Untick to accept only from this computer (127.0.0.1). Takes effect when a listener is started.
+            Other devices still need a key or pairing below while "Require a key or a paired device" is on (the setting on new installs). Web pages open in a browser on the network can never send commands. Untick to accept only from this computer (127.0.0.1). Takes effect when a listener is started.
           </span>
         </span>
       </label>
@@ -796,17 +879,15 @@ function RemoteControlSection() {
           <span className="block text-xs text-muted-foreground">
             A phone can talk in the crew's talk channel only from a secure page. With this on, the phone page is also served over https on the next port ({(Number(httpPort) || 8080) + 1}), with a certificate this computer makes for itself. Each phone either accepts its browser's warning once, or installs this computer's certificate (the link appears below once the listener runs) to trust it. Nothing goes outside the church network. Takes effect when the HTTP listener is started.
           </span>
+          {httpStatus.running && httpStatus.tls_certificate && (
+            <span className="mt-1 block">
+              This computer's certificate <code className="rounded bg-muted px-1.5 py-0.5 font-mono tracking-wide">{certificateWords(httpStatus.tls_certificate)}</code>
+              <span className="block text-muted-foreground">Rhema Studio Companion on an OBS computer shows the same before it pairs. If it shows another, do not pair it.</span>
+            </span>
+          )}
         </span>
       </label>
-      <label className="flex items-start gap-2 text-xs">
-        <input type="checkbox" className="mt-0.5" checked={remoteAuthRequired || anyKey} disabled={anyKey} onChange={(e) => setRemoteAuthRequired(e.target.checked)} />
-        <span>
-          Require a key or a paired device
-          <span className="block text-xs text-muted-foreground">
-            {anyKey ? "On while a key is set or a device is paired. Removing the last one keeps it on: nothing is accepted until you untick this." : remoteAuthRequired ? "On with no key and no device: every command is refused. Set a key or pair a device, or untick to accept anything." : "Off: anything on the network is accepted (as the app shipped)."}
-          </span>
-        </span>
-      </label>
+      <RemoteAuthSetting required={remoteAuthRequired} locked={anyKey} onRequiredChange={setRemoteAuthRequired} />
       <label className="flex flex-col gap-1 text-xs">
         <span>Key the controller must send (optional)</span>
         <Input
@@ -824,40 +905,8 @@ function RemoteControlSection() {
       <div className="flex flex-col gap-2 text-xs">
         <div className="flex items-center justify-between">
           <span>Paired devices</span>
-          {showPairCode ? (
-            <Button size="sm" variant="outline" className="text-xs" onClick={() => void cancelPairing()}>Cancel pairing</Button>
-          ) : (
-            <Button size="sm" variant="outline" className="text-xs" disabled={!httpStatus.running} title={httpStatus.running ? undefined : "Start the HTTP API first; devices pair over it"} onClick={() => void startPairing()}>Pair a device</Button>
-          )}
+          <PairDeviceDialog />
         </div>
-        {showPairCode && (
-          <div className="rounded-md border border-border bg-muted/40 p-3">
-            {pairQr && (
-              <div className="mb-2 flex items-center gap-3">
-                {pairQr.host ? <img src={pairQr.image} alt="Pairing code for a phone" className="size-32 rounded bg-white p-1" /> : null}
-                <div className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">
-                  <p>{pairQr.host ? <>Scan with the phone's camera (same Wi-Fi) and press Pair. Or open <code className="break-all">{pairQr.url.split("#")[0]}</code> and type the code.</> : "This computer's network address could not be found. Type it below (Wi-Fi settings show it) to get a code to scan."}</p>
-                  <label className="flex items-center gap-1">
-                    This computer's address
-                    <Input
-                      aria-label="This computer's address for the phone"
-                      defaultValue={pairQr.host}
-                      placeholder="192.168.1.20"
-                      className="h-6 w-32 text-[0.6875rem]"
-                      onBlur={(e) => { const h = e.target.value.trim(); if (pairCode && httpStatus.port && /^[\w.:-]+$/.test(h) && h !== pairQr.host) void showPairQr(h, pairCode, httpStatus.port) }}
-                    />
-                  </label>
-                  <span>Wrong address (VPN, cable and Wi-Fi on different networks)? Change it to the one the phone's Wi-Fi can reach.</span>
-                </div>
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">On the device, within two minutes, send this code once:</p>
-            <p className="my-1 font-mono text-2xl tracking-[0.3em]">{pairCode}</p>
-            <p className="text-xs text-muted-foreground">
-              <code>POST http://&lt;this laptop&gt;:{httpStatus.port ?? httpPort}/api/v1/pair</code> with <code>{`{"code":"${pairCode}","name":"Tolu's phone"}`}</code>. The reply holds the device's token; it is shown once. Three wrong codes close the window.
-            </p>
-          </div>
-        )}
         {remoteDevices.length === 0 ? (
           <p className="text-xs text-muted-foreground">None yet. A paired device sends its own token instead of the shared key, can be revoked on its own, and starts as "Present only" (next, previous, show, hide, macros; not theme, opacity, confidence or the on-air switch).</p>
         ) : (
@@ -868,14 +917,11 @@ function RemoteControlSection() {
                 <select
                   aria-label={`What ${d.name} may do`}
                   value={d.role ?? "configure"}
-                  onChange={(e) => setRemoteDeviceRole(d.hash, (["present", "timekeeper", "bible", "screens"] as const).find((r) => r === e.target.value) ?? "configure")}
-                  className="h-6 rounded border border-border bg-background px-1 text-[0.6875rem]"
+                  title={REMOTE_ROLES.find((r) => r.id === (d.role ?? "configure"))?.may}
+                  onChange={(e) => setRemoteDeviceRole(d.hash, asRemoteRole(e.target.value) ?? "configure")}
+                  className="h-6 max-w-44 rounded border border-border bg-background px-1 text-[0.6875rem]"
                 >
-                  <option value="timekeeper">Timekeeper (the event clock only)</option>
-                  <option value="bible">Bible (activates and steps the Bible only)</option>
-                  <option value="screens">Screens (congregation scenes only)</option>
-                  <option value="present">Present only</option>
-                  <option value="configure">Present and change settings</option>
+                  {REMOTE_ROLES.map((r) => <option key={r.id} value={r.id} title={r.may}>{r.name}</option>)}
                 </select>
                 <span className="shrink-0 text-[0.6875rem] text-muted-foreground">{d.paused === true ? "paused" : `paired ${new Date(d.paired_at).toLocaleDateString()}`}</span>
                 <Button size="sm" variant="outline" className="text-xs" aria-pressed={d.paused === true} aria-label={d.paused === true ? `Give control back to ${d.name}` : `Take back control from ${d.name}`} onClick={() => setDeskControl(d.hash, d.paused !== true)}>
@@ -886,6 +932,7 @@ function RemoteControlSection() {
             ))}
           </ul>
         )}
+        {remoteDevices.length > 0 && <RoleGuide />}
       </div>
       <ObsSettingsBlock />
       {/* OSC */}
@@ -977,7 +1024,7 @@ function RemoteControlSection() {
       <div className="rounded-lg border border-border bg-muted/30 p-3">
         <p className="text-xs font-medium text-muted-foreground mb-1">Firewall Note</p>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Your OS may block incoming connections. On macOS, allow Rhema through
+          Your OS may block incoming connections. On macOS, allow Rhema Studio (Rhema.app) through
           System Settings → Network → Firewall. On Windows, allow through
           Windows Security → Firewall → Allow an app.
         </p>
@@ -1037,7 +1084,7 @@ function HelpSection() {
     <div className="space-y-6">
       <div className="space-y-1">
         <p className="text-sm text-muted-foreground">
-          Resources to help you get the most out of Rhema.
+          Resources to help you get the most out of Rhema Studio.
         </p>
       </div>
 
@@ -1135,8 +1182,8 @@ const SEARCHABLE = navItems.map((n) => ({ id: n.id, name: n.name, title: section
 const ELSEWHERE: Record<ElsewhereId, () => void> = {
   church: () => useShellStore.getState().openDesign("brand"),
   appearance: () => useShellStore.getState().openDeskMenu(),
-  cameras: () => openProductionTab("cameras"),
-  hosting: () => openProductionTab("operators"),
+  cameras: openConnectionsHub,
+  hosting: openConnectionsHub,
   "service-defaults": () => useShellStore.getState().goTo("team"),
   backups: () => useShellStore.getState().goTo("archive"),
 }
@@ -1229,8 +1276,8 @@ export function SettingsPage() {
           ))}
           {elsewhere.length > 0 && (
             // What has its own page elsewhere: a row that goes there (Settings keeps no copy of it).
-            <div role="group" aria-label="Elsewhere in Rhema" className="mb-3">
-              <p className="px-3 pt-1.5 pb-1 text-[0.6875rem] font-semibold text-muted-foreground">Elsewhere in Rhema</p>
+            <div role="group" aria-label="Elsewhere in Rhema Studio" className="mb-3">
+              <p className="px-3 pt-1.5 pb-1 text-[0.6875rem] font-semibold text-muted-foreground">Elsewhere in Rhema Studio</p>
               {elsewhere.map((e) => (
                 <button key={e.id} type="button" onClick={ELSEWHERE[e.id]} className="flex w-full items-center gap-2.5 rounded-md px-[13px] py-2.5 text-left text-xs font-bold text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4">
                   <ArrowUpRightIcon aria-hidden />
@@ -1281,7 +1328,7 @@ function CapacityLimitsBlock() {
     <section aria-label="How much this computer runs" className="flex flex-col gap-2 rounded-md border border-border p-3 text-xs">
       <h3 className="text-sm font-semibold">How much this computer runs</h3>
       <p className="text-muted-foreground">
-        Rhema warns before going past these (&ldquo;this computer may drop frames&rdquo;) but never stops you. {machine.known ? `Worked out from this computer: ${physicalCores(machine)} cores, ${Math.round(machine.memoryTotalMb / 1024)} GB.` : ""} Leave a box empty to use that figure.
+        Rhema Studio warns before going past these (&ldquo;this computer may drop frames&rdquo;) but never stops you. {machine.known ? `Worked out from this computer: ${physicalCores(machine)} cores, ${Math.round(machine.memoryTotalMb / 1024)} GB.` : ""} Leave a box empty to use that figure.
       </p>
       {CAPACITY_KINDS.map(({ kind, label, hint }) => (
         <label key={kind} className="flex items-center gap-2">
@@ -1303,54 +1350,15 @@ function CapacityLimitsBlock() {
         </label>
       ))}
       <p className="text-muted-foreground">
-        60 fps NDI: {suits60fps(machine) ? "suits this computer." : `this computer is below what it needs (${NDI_60_MIN_CORES} cores and ${NDI_60_MIN_MEMORY_GB} GB), so Rhema asks before starting a sender at 60 fps.`}
+        60 fps NDI: {suits60fps(machine) ? "suits this computer." : `this computer is below what it needs (${NDI_60_MIN_CORES} cores and ${NDI_60_MIN_MEMORY_GB} GB), so Rhema Studio asks before starting a sender at 60 fps.`}
       </p>
     </section>
   )
 }
 
-/** OBS connection (obs-websocket v5, OBS → Tools → WebSocket Server Settings). Optional: nothing needs OBS to present. */
-function ObsSettingsBlock() {
-  const obs = useSettingsStore((s) => s.obs)
-  const setObs = useSettingsStore((s) => s.setObs)
-  const status = useObsStore((s) => s.status)
-  const error = useObsStore((s) => s.error)
-  // Edited locally and applied with "Save", so a half-typed address or password is never tried.
-  const [draft, setDraft] = useState({ host: obs.host, port: String(obs.port), password: obs.password })
-  // The saved password arriving later (keychain read again) fills an untouched box, so Save never blanks it.
-  const savedPassword = useRef(obs.password)
-  useEffect(() => {
-    if (obs.password !== savedPassword.current) {
-      const before = savedPassword.current
-      setDraft((d) => (d.password === before ? { ...d, password: obs.password } : d))
-      savedPassword.current = obs.password
-    }
-  }, [obs.password])
-  const port = Number(draft.port)
-  const portOk = Number.isInteger(port) && port > 0 && port < 65536
-  const changed = draft.host !== obs.host || draft.port !== String(obs.port) || draft.password !== obs.password
-  return (
-    <div className="flex flex-col gap-2 rounded-md border border-border p-3 text-xs">
-      <label className="flex items-center gap-2 font-medium">
-        <input type="checkbox" checked={obs.enabled} onChange={(e) => setObs({ enabled: e.target.checked })} />
-        Connect to OBS (recording status, marks and OBS's scenes)
-      </label>
-      <div className="flex flex-wrap items-center gap-2">
-        <Input aria-label="OBS address" value={draft.host} onChange={(e) => setDraft({ ...draft, host: e.target.value })} placeholder="127.0.0.1" className="h-7 w-40 text-xs" />
-        <Input aria-label="OBS port" inputMode="numeric" value={draft.port} onChange={(e) => setDraft({ ...draft, port: e.target.value.replace(/[^0-9]/g, "") })} placeholder="4455" className="h-7 w-24 text-xs" />
-        <Input aria-label="OBS WebSocket password" type="password" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} placeholder="password (if set in OBS)" className="h-7 w-48 text-xs" autoComplete="off" />
-        <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!changed || !portOk || !draft.host.trim()} onClick={() => setObs({ host: draft.host.trim(), port, password: draft.password })}>Save</Button>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {obs.enabled ? (status === "connected" ? "Connected." : status === "connecting" ? "Connecting…" : `Not connected${error ? `: ${error}` : ""}. Retrying every 15 seconds.`) : "Off. In OBS: Tools → WebSocket Server Settings → Enable, then copy the port and password here."} The password is kept in the system keychain (or this computer's settings file where there is none). Use a staff-only network: the login answer travels unencrypted.
-      </p>
-    </div>
-  )
-}
-
 /** Whether this computer agreed to send microphone audio to the cloud provider, with a way to take it back. */
-function CloudConsentLine() {
-  const at = useSettingsStore((s) => s.cloudSpeechConsentAt)
+function CloudConsentLine({ provider = "deepgram" }: { provider?: "deepgram" | "openai" }) {
+  const at = useSettingsStore((s) => s.cloudSpeechConsents[provider] ?? (provider === "deepgram" ? s.cloudSpeechConsentAt : ""))
   if (!at) return <p className="text-xs text-muted-foreground">Not agreed yet on this computer.</p>
   return (
     <p className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1359,14 +1367,32 @@ function CloudConsentLine() {
         type="button"
         className="underline"
         onClick={() => {
-          useSettingsStore.getState().setCloudSpeechConsent(false)
+          useSettingsStore.getState().setCloudSpeechConsent(provider, false)
           // Withdrawing stops a cloud session that is running now, not only the next one.
-          if (useCloudConsentStore.getState().runningProvider === "deepgram") void transcriptionActions.stop()
+          if (useCloudConsentStore.getState().runningProvider === provider) void transcriptionActions.stop()
         }}
       >
         Withdraw
       </button>
       (stops cloud listening now; asks again next time)
     </p>
+  )
+}
+
+/** What each role may do, in plain words, under the paired devices (#215 G10). */
+function RoleGuide() {
+  return (
+    <details className="text-xs">
+      <summary className="cursor-pointer text-muted-foreground">What each role may do</summary>
+      <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
+        {REMOTE_ROLES.map((r) => (
+          <Fragment key={r.id}>
+            <dt className="font-semibold">{r.name}</dt>
+            <dd className="text-muted-foreground">{r.may}</dd>
+          </Fragment>
+        ))}
+      </dl>
+      <p className="mt-1 text-muted-foreground">The main desk can always do everything. A change from a desk to a scene that is on a screen, or any scene change while Approvals is on, waits in the main desk's notices for Accept or Decline.</p>
+    </details>
   )
 }

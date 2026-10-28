@@ -1,6 +1,8 @@
 import { create } from "zustand"
+import type { OffsetMode } from "@/lib/timing-engine"
 import { useJournalStore } from "@/stores/journal-store"
 import { useServiceStore } from "@/stores/service-store"
+import { useTimeChange } from "@/stores/time-change-store"
 
 /**
  * Running late or early (#196 R2.9 / R3): one shared offset for the whole service, in minutes,
@@ -11,6 +13,13 @@ import { useServiceStore } from "@/stores/service-store"
 interface OffsetState {
   minutes: number
   by: string | null
+  /**
+   * How it reaches what is still to come (#196 R3.4): taken up by pauses, with fixed starts keeping
+   * their time ("absorb", as before), or pushed through everything ("push"). A choice for the
+   * running service, kept when another service opens.
+   */
+  mode: OffsetMode
+  setMode: (mode: OffsetMode, by?: string) => void
   /** Move the offset by `delta` minutes (−120 … +240 in all). */
   adjust: (delta: number, by?: string) => void
   reset: (by?: string) => void
@@ -22,20 +31,33 @@ const words = (m: number) => (m === 0 ? "on schedule" : m > 0 ? `running ${m} mi
 export const useServiceOffset = create<OffsetState>((set, get) => ({
   minutes: 0,
   by: null,
+  mode: "absorb",
+  setMode: (mode, by) => {
+    if (mode === get().mode) return
+    set({ mode })
+    useTimeChange.getState().note(mode === "push" ? "lateness pushes everything still to come" : "pauses take up lateness", by)
+    useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}${mode === "push" ? "lateness now pushes everything still to come, pauses and fixed starts too" : "pauses take up lateness again, and fixed starts keep their time"}` })
+  },
   adjust: (delta, by) => {
     const minutes = clamp(get().minutes + delta)
     if (minutes === get().minutes) return
     set({ minutes, by: by ?? null })
+    useTimeChange.getState().note(`${delta > 0 ? "+" : "−"}${Math.abs(delta)} min (${words(minutes)})`, by)
     useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}${words(minutes)} (${delta > 0 ? "+" : "−"}${Math.abs(delta)} min)` })
   },
   reset: (by) => {
     if (get().minutes === 0) return
     set({ minutes: 0, by: by ?? null })
+    useTimeChange.getState().note("back on schedule", by)
     useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}back on schedule` })
   },
 }))
 
 // Another service opened: its own timing, not the last one's lateness.
-useServiceStore.subscribe((s, p) => { if (s.current?.id !== p.current?.id) useServiceOffset.setState({ minutes: 0, by: null }) })
+useServiceStore.subscribe((s, p) => {
+  if (s.current?.id === p.current?.id) return
+  useServiceOffset.setState({ minutes: 0, by: null })
+  useTimeChange.getState().clear()
+})
 
 export { words as offsetWords }

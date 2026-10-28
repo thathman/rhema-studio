@@ -1,5 +1,6 @@
 import { entranceProgress } from "@/lib/lower-third-style"
 import { sceneMoving } from "@/lib/scene-renderer"
+import { NOISE_FPS, sceneStatic } from "@/lib/no-signal"
 import type { LowerThird, SceneBox, SceneFrame, SceneLayerFrame, Ticker } from "@/types"
 
 /**
@@ -51,16 +52,40 @@ export interface FeedMotionState {
   cameraInCanvas: boolean
   /** The scene's ticker layers on strips of their own (see `tickerStrips`). */
   strips: ReadonlySet<string>
+  /** That camera layer's camera has a picture (one that has none shows its bars, static or words). */
+  playing?: (layerId: string) => boolean
+  /** A countdown display pulses or blends to a new step (otherwise it redraws once a second by itself). */
+  countdown?: boolean
+}
+
+export interface FeedMotion {
+  picture: boolean
+  crawl: boolean
+  /** A camera that is not sending shows static: the picture changes NOISE_FPS times a second. */
+  noise: boolean
 }
 
 /**
  * picture: the main canvas changes every frame (a fade, a camera drawn into it, a lower third
- * coming in, a ticker layer that has to stay in the canvas); crawl: only a ticker strip moves.
- * Neither: the page draws nothing until the next frame from the host.
+ * coming in, a ticker layer that has to stay in the canvas); crawl: only a ticker strip moves;
+ * noise: a camera's static moves, a few times a second. None: the page draws nothing until the
+ * next frame from the host.
  */
-export function feedMotion(f: FeedMotionFrame | null, s: FeedMotionState): { picture: boolean; crawl: boolean } {
-  if (!f || f.off) return { picture: false, crawl: false }
-  const picture = s.fading || s.cameraInCanvas || (!!f.overlay && entranceProgress(f.overlay, s.now) < 1) || sceneMoving(f.scene, s.hostNow, (id) => s.strips.has(id))
+export function feedMotion(f: FeedMotionFrame | null, s: FeedMotionState): FeedMotion {
+  if (!f || f.off) return { picture: false, crawl: false, noise: false }
+  const picture = !!s.countdown || s.fading || s.cameraInCanvas || (!!f.overlay && entranceProgress(f.overlay, s.now) < 1) || sceneMoving(f.scene, s.hostNow, (id) => s.strips.has(id))
   const crawl = (!!f.ticker && !f.ticker.pausedAt) || !!f.scene?.layers.some((l) => s.strips.has(l.id) && l.opacity > 0 && !!l.ticker && !l.ticker.pausedAt)
-  return { picture, crawl }
+  const noise = sceneStatic(f.scene, s.playing ?? (() => false))
+  return { picture, crawl, noise }
+}
+
+/**
+ * When the page draws next: on the next display frame ("frame"), in this many ms (only static
+ * moves: at its next change, so a TV is not woken every display frame), or not at all (null).
+ */
+export function feedNext(m: FeedMotion, now: number): "frame" | number | null {
+  if (m.picture || m.crawl) return "frame"
+  if (!m.noise) return null
+  const period = 1000 / NOISE_FPS
+  return Math.max(1, Math.ceil(period - (now % period)))
 }

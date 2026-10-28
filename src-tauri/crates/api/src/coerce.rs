@@ -114,7 +114,7 @@ pub fn parse_osc(address: &str, args: &[OscType]) -> Result<RemoteCommand, Comma
             let arg = args.first().ok_or_else(|| CommandError::MissingArgument { address: address.into() })?;
             let v = coerce_string(arg)?;
             Ok(match address {
-                "/rhema/bible_activate" => RemoteCommand::BibleActivate(v),
+                "/rhema/bible_activate" => RemoteCommand::BibleActivate(v.into()),
                 "/rhema/clear_source" => RemoteCommand::ClearSource(v),
                 "/rhema/restore_source" => RemoteCommand::RestoreSource(v),
                 _ => RemoteCommand::ReleaseScene(v),

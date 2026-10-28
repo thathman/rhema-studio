@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
+const invoke = vi.fn<(...a: unknown[]) => Promise<unknown>>(async () => null)
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
 
-import { buildInstallationExport, installationChanges, parseInstallationExport, restoreInstallation, type InstallationExport } from "@/lib/installation-export"
+import { buildInstallationExport, installationChanges, installationForBackup, parseInstallationExport, restoreInstallation, type InstallationExport } from "@/lib/installation-export"
+import type { AiDraft } from "@/lib/ai-drafts"
 import { applyBrandKit, defaultBrandKit } from "@/lib/brand-kit"
 import { BUILTIN_THEMES, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { defaultSetup } from "@/lib/setup-readiness"
@@ -91,5 +93,32 @@ describe("the installation in a backup file (#298 E6)", () => {
     restoreInstallation({ ...backup, looks: { ...backup.looks, outputs: "nope" as never, customThemes: [{ junk: true }] as never } })
     expect(useBroadcastStore.getState().outputs).toEqual(before)
     expect(useBroadcastStore.getState().themes).toHaveLength(BUILTIN_THEMES.length)
+  })
+
+  it("carries the AI drafts in Prepare and puts back only the ones not here (#252)", async () => {
+    const waiting: AiDraft = { v: 1, id: "11111111-1111-1111-1111-111111111111", title: "Ìsìn Ọpẹ́", created_at: "2026-10-23T05:00:00Z", revision: 2, client: { name: "Claude" }, warnings: ["a warning"], phases: [{ name: "Main", items: [{ kind: "slide", status: "found", title: "Ẹ káàbọ̀" }] }] }
+    const opened: AiDraft = { ...waiting, id: "22222222-2222-2222-2222-222222222222", status: "opened", opened_at: "2026-10-23T09:00:00Z" }
+    invoke.mockImplementation(async (cmd: unknown) => (cmd === "ai_drafts_list" ? [waiting, opened] : cmd === "ai_drafts_restore" ? 1 : null))
+    const backup = await installationForBackup(new Date("2026-10-24T10:00:00Z"))
+    expect(backup.aiDrafts).toEqual([waiting, opened])
+    // Through the backup file and back, byte for byte (Yorùbá marks included), still with no secret.
+    const read = parseInstallationExport(JSON.stringify(backup))!
+    expect(read.aiDrafts).toEqual([waiting, opened])
+    for (const secret of ["dg-secret-123456", "remote-secret-1", "join-secret-12", "obs-secret-99", "k".repeat(32), "f".repeat(32)]) expect(JSON.stringify(read), secret).not.toContain(secret)
+    // Here only one of them: the other is added, none removed.
+    const here = buildInstallationExport(new Date(), [waiting])
+    expect(installationChanges(here, read).find((c) => c.what === "AI drafts")).toEqual({ what: "AI drafts", here: "1 draft", incoming: "1 draft added from the backup; the ones here stay" })
+    expect(installationChanges(read, read).some((c) => c.what === "AI drafts")).toBe(false)
+    await expect(restoreInstallation(read)).resolves.toBe(1)
+    expect(invoke).toHaveBeenCalledWith("ai_drafts_restore", { drafts: [waiting, opened] })
+    // A backup without drafts (or from before them) asks for nothing; drafts of the wrong shape are left out.
+    invoke.mockClear()
+    await expect(restoreInstallation(buildInstallationExport())).resolves.toBe(0)
+    expect(invoke).not.toHaveBeenCalled()
+    expect(buildInstallationExport().aiDrafts).toBeUndefined()
+    expect(parseInstallationExport(JSON.stringify({ ...read, aiDrafts: "nope" }))?.aiDrafts).toBeUndefined()
+    // Drafts that cannot be read leave the backup without them.
+    invoke.mockImplementation(async () => { throw new Error("no folder") })
+    expect((await installationForBackup()).aiDrafts).toBeUndefined()
   })
 })

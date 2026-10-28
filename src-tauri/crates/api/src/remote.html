@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<title>Rhema remote</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%0A%3Crect x=%224%22 y=%224%22 width=%2256%22 height=%2256%22 rx=%2216%22 fill=%22%23000000%22/%3E%3Cpath fill=%22%23FFFFFF%22 d=%22M21 15H34.2C42.63 15 48 19.73 48 27.06C48 32.79 44.9 36.9 39.36 38.5L48.8 49H39L31.2 39.68H29V49H21V15ZM29 22V32.22H34.06C37.61 32.22 39.9 30.28 39.9 27.11C39.9 23.83 37.61 22 34.06 22H29Z%22/%3E%3Cpath fill=%22%23FFFFFF%22 transform=%22translate%288 8.3%29 scale%280.54%29%22 d=%22M5.53672 15.7561C4.11705 15.7561 2.83934 15.1861 1.70361 14.0461C0.567869 12.8654 0 11.1351 0 8.85517C0 6.24951 0.689555 4.13241 2.06866 2.50388C3.48834 0.834626 5.49616 0 8.09213 0C9.02505 0 9.75517 0.0610694 10.2825 0.183208V2.99244C9.71461 2.91101 8.98449 2.8703 8.09213 2.8703C6.71302 2.8703 5.59756 3.3385 4.74576 4.27491C3.93452 5.08918 3.46805 6.16808 3.34637 7.51163C3.87367 6.86021 4.72548 6.53451 5.90178 6.53451C7.11864 6.53451 8.15297 6.962 9.00477 7.81698C9.85657 8.63125 10.2825 9.71015 10.2825 11.0537C10.2825 12.438 9.83629 13.5779 8.94393 14.4736C8.05156 15.3286 6.91583 15.7561 5.53672 15.7561ZM17.6445 15.7561C16.2248 15.7561 14.9471 15.1861 13.8114 14.0461C12.6756 12.8654 12.1078 11.1351 12.1078 8.85517C12.1078 6.24951 12.7973 4.13241 14.1764 2.50388C15.5961 0.834626 17.6039 0 20.1999 0C21.0923 0 21.8224 0.0610694 22.3902 0.183208V2.99244C21.8224 2.91101 21.0923 2.8703 20.1999 2.8703C18.8208 2.8703 17.7053 3.3385 16.8535 4.27491C16.0423 5.08918 15.5758 6.16808 15.4541 7.51163C15.9814 6.86021 16.8332 6.53451 18.0095 6.53451C19.2264 6.53451 20.2607 6.962 21.1125 7.81698C21.9643 8.63125 22.3902 9.71015 22.3902 11.0537C22.3902 12.438 21.9441 13.5779 21.0517 14.4736C20.1593 15.3286 19.0236 15.7561 17.6445 15.7561Z%22/%3E%0A%3C/svg%3E">
+<title>Rhema Studio remote</title>
 <style>
   :root { color-scheme: dark; --bg:#111; --card:#1c1c1c; --fg:#f2f2f2; --muted:#9a9a9a; --live:#d93636; --line:#333; }
   * { box-sizing: border-box; }
   body { margin:0; font:16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); padding:16px; padding-bottom:max(16px, env(safe-area-inset-bottom)); }
-  h1 { font-size:18px; margin:0 0 12px; }
+  h1 { font-size:18px; margin:0 0 12px; display:flex; align-items:center; gap:10px; }
+  h1 svg { width:30px; height:30px; flex:none; }
   p { margin:0 0 12px; color:var(--muted); font-size:14px; }
   .status { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:16px; min-height:64px; }
   .status b { display:block; color:var(--fg); font-size:17px; margin-top:2px; overflow-wrap:anywhere; }
@@ -40,9 +42,27 @@
   .answers { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
   .answers button { min-height:44px; padding:0 14px; font-size:14px; }
   .answers button.on { border-color:var(--fg); }
-  #noticeForm { display:flex; gap:8px; margin-bottom:12px; }
-  #noticeForm input { flex:1; min-width:0; }
+  #noticeForm { margin-bottom:12px; }
+  .row { display:flex; gap:8px; margin-bottom:8px; }
+  .row input, .row select { flex:1; min-width:0; }
   #noticeForm button { min-height:48px; padding:0 16px; }
+  select { font:inherit; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--fg); max-width:100%; }
+  .note { color:#ff8a8a; font-size:13px; margin-top:6px; }
+  #talkOpts { margin-top:10px; }
+  #talkOpts label { margin:8px 0 4px; }
+  #talkOpts select, #talkOpts input[type=range] { width:100%; }
+  .hear { display:flex; flex-wrap:wrap; gap:14px; font-size:14px; color:var(--fg); }
+  .hear label { display:flex; align-items:center; gap:6px; margin:0; color:var(--fg); }
+  .hear input { width:auto; }
+  #crew { list-style:none; padding:0; margin:10px 0 0; display:flex; flex-direction:column; gap:6px; }
+  #crew li { display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:6px 6px 6px 12px; font-size:14px; }
+  #crew li span { flex:1; min-width:0; overflow-wrap:anywhere; }
+  #crew li i { font-style:normal; color:var(--muted); }
+  #crew li.speaking { border-color:#2da78a; }
+  #crew li.held { border-color:var(--live); }
+  #crew button { min-height:40px; padding:0 12px; font-size:13px; }
+  #crew button.on { border-color:var(--live); color:#ff8a8a; }
+  #crew li input[type=range] { width:96px; flex:none; padding:0; }
   #talkHold { width:100%; min-height:110px; font-size:22px; touch-action:none; user-select:none; -webkit-user-select:none; }
   #talkHold.on { background:var(--live); border-color:var(--live); color:#fff; }
   #talkJoin { width:100%; min-height:52px; margin-bottom:10px; }
@@ -51,9 +71,18 @@
 </head>
 <body>
 <main>
-  <h1>Rhema remote</h1>
+  <!-- The approved Rhema Studio mark (brand/01_Master_Mark/Rhema-Studio-Mark-Light.svg, as is). -->
+  <h1><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g transform="translate(0 0) scale(1)">
+      <rect x="4" y="4" width="56" height="56" rx="16" fill="#F6F4EF"/>
+      <path d="M21 15H34.2C42.63 15 48 19.73 48 27.06C48 32.79 44.9 36.9 39.36 38.5L48.8 49H39L31.2 39.68H29V49H21V15ZM29 22V32.22H34.06C37.61 32.22 39.9 30.28 39.9 27.11C39.9 23.83 37.61 22 34.06 22H29Z" fill="#000000"/>
+      <path d="M17 20.2C17 16.78 19.78 14 23.2 14H24.3V20.4H23.56C22.37 20.4 21.4 21.37 21.4 22.56V23.3H17V20.2Z" fill="#000000"/>
+      <g fill="none" stroke="#F6F4EF" stroke-width="0.9" stroke-linecap="round">
+  <path d="M18.35 20.5 C18.55 18.7 19.82 17.3 21.75 16.9"/>
+  <path d="M20.4 20.6 C20.65 19.6 21.3 19.1 22.15 18.95"/>
+</g>
+    </g></svg>Rhema Studio remote</h1>
   <section id="pair" hidden>
-    <p>Pair this phone with the presentation computer. In Rhema: Settings → Remote → Pair a device, then scan its code or type the six digits here.</p>
+    <p>Pair this phone with the presentation computer. In Rhema Studio: Settings → Remote → Pair a device, then scan its code or type the six digits here.</p>
     <form id="pairForm">
       <label for="code">Pairing code</label>
       <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required>
@@ -75,8 +104,30 @@
     <p id="talkNote"></p>
     <button id="talkJoin" type="button">Join the talk channel</button>
     <button id="talkHold" type="button" hidden aria-pressed="false">Hold to talk</button>
+    <div id="talkOpts" hidden>
+      <label for="talkTo">Talk to</label>
+      <select id="talkTo" aria-label="Talk to"></select>
+      <label>Hear, besides All crew</label>
+      <div class="hear" id="talkHear" role="group" aria-label="Channels you hear"></div>
+      <label for="talkVol">Crew volume on this phone (each person's is beside their name)</label>
+      <input id="talkVol" type="range" min="0" max="1" step="0.05" value="1">
+      <ul id="crew" aria-label="Talk channel" aria-live="polite"></ul>
+    </div>
     <h2>Notices</h2>
-    <form id="noticeForm"><input id="noticeText" maxlength="280" placeholder="Message to the main desk" aria-label="Message to the main desk"><button type="submit">Send</button></form>
+    <form id="noticeForm">
+      <div class="row"><select id="noticeTo" aria-label="Send to"></select></div>
+      <div class="row">
+        <select id="noticeAsk" aria-label="Ask them to">
+          <option value="">Just a message</option>
+          <option value="bible">Ask to show a verse</option>
+          <option value="song">Ask to show a song or hymn</option>
+          <option value="camera">Ask if a camera is ready</option>
+          <option value="wrap">Ask for a wrap-up warning on the stage</option>
+        </select>
+      </div>
+      <div class="row" id="noticeValueRow" hidden><input id="noticeValue" maxlength="120" aria-label="What to ask for"></div>
+      <div class="row"><input id="noticeText" maxlength="280" placeholder="Message" aria-label="Message"><button type="submit">Send</button></div>
+    </form>
     <div id="notices" aria-live="polite"></div>
     <button class="forget" id="forget" type="button">Unpair this phone</button>
   </section>
@@ -109,11 +160,11 @@
   // One id per press: if the answer is lost on Wi-Fi the phone asks again with the same id, and
   // the computer, having already done it, does not do it twice. (No crypto.randomUUID on plain http.)
   const pressId = () => Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10)
-  async function post(cmd, id, value) {
+  async function post(cmd, id, value, extra) {
     let lastError
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        return await fetch("/api/v1/command", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + get() }, body: JSON.stringify(value === undefined ? { command: cmd, id } : { command: cmd, value, id }) })
+        return await fetch("/api/v1/command", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + get() }, body: JSON.stringify(Object.assign(value === undefined ? { command: cmd, id } : { command: cmd, value, id }, extra || {})) })
       } catch (e) {
         lastError = e
         if (attempt < 2) { say("Sending…"); await new Promise((r) => setTimeout(r, 700)) }
@@ -134,6 +185,16 @@
       else { say(""); poll() }
     } catch { say("No answer from the presentation computer. Check the screen before pressing again.", true) }
     finally { btn.disabled = false }
+  }
+  // One command for an action request: null when the computer did it, else its reason.
+  async function attempt(cmd, value, extra) {
+    try {
+      const r = await post(cmd, pressId(), value, extra)
+      if (r.ok) return null
+      const j = await r.json().catch(() => ({}))
+      if (r.status === 401) { set(null); show() }
+      return j.error || "refused (" + r.status + ")"
+    } catch { return "no answer from the presentation computer" }
   }
   document.querySelectorAll("[data-cmd]").forEach((b) => b.addEventListener("click", () => send(b.dataset.cmd, b)))
   $("forget").addEventListener("click", () => { set(null); show(); say("Unpaired here. Revoke it in Settings → Remote too.") })
@@ -166,7 +227,10 @@
     const box = $("sources")
     const r = await fetch("/api/v1/live", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
     const live = r && r.status === 200 ? await r.json().catch(() => null) : null
-    notices(live)
+    lastLive = live
+    await notices(live)
+    composer(live)
+    talkView(live)
     box.replaceChildren()
     for (const s of (live && live.sources) || []) {
       const row = document.createElement("div")
@@ -187,8 +251,46 @@
   }
   // Production notices (Rhema Comms): those for this phone's role, everyone's, and its own; answer
   // Seen / Ready / Unable. Private: never on a screen.
-  let me = null
+  let me = null, lastLive = null
   const ANSWERS = { seen: "Seen", ready: "Ready", unable: "Unable" }
+  // Why a request this phone tried could not be done, by notice id (shown on its card).
+  const failed = {}
+  // What a request asks, in words; the outputs a scene request takes (those showing a scene, else the main one).
+  const actionName = (a, live) => a.kind === "bible" || a.kind === "song" ? "Show " + a.value
+    : a.kind === "wrap" ? "Put \u201c" + a.value + "\u201d on the stage"
+      : a.kind === "scene" ? "Take " + ((((live && live.scenes) || []).find((x) => x.id === a.value) || {}).name || "the scene")
+        : a.kind === "event" ? "Start " + ((((live && live.rundown) || []).find((x) => x.id === a.value) || {}).reference || "the item")
+          : a.kind === "camera" ? "Is " + a.value + " framed?" : a.value
+  const sceneTargets = (outputs) => {
+    const showing = outputs.filter((o) => o.sceneId).map((o) => o.id)
+    if (showing.length) return showing
+    const main = outputs.find((o) => o.id === "main") || outputs[0]
+    return main ? [main.id] : []
+  }
+  // Do what a request asks, from this phone (the computer checks its role), then answer Ready, or
+  // Unable with the reason for whoever sent it. Preview puts a verse or song in the main desk's Preview only.
+  async function doRequest(n, mode, btn) {
+    const a = n.action, live = lastLive || {}
+    btn.disabled = true
+    let why = null
+    if (mode === "queue") {
+      // Into the run of show for later, nothing shown; acting on the run of show this phone saw.
+      why = await attempt("queue_request", { kind: a.kind, value: a.value }, live.revisions && live.revisions.queue !== undefined ? { seen: { queue: live.revisions.queue } } : undefined)
+    } else if (a.kind === "scene") {
+      const targets = sceneTargets(live.outputs || [])
+      if (!targets.length) why = "the host has no congregation output"
+      else why = (await Promise.all(targets.map((o) => attempt("take_scene", { output: o, scene: a.value })))).find(Boolean) || null
+    } else {
+      const cmd = { bible: mode === "preview" ? "bible_preview" : "bible_activate", song: mode === "preview" ? "song_preview" : "song_show", event: "event_start", wrap: "stage_message" }[a.kind]
+      why = cmd ? await attempt(cmd, a.kind === "wrap" ? a.value.slice(0, 120) : a.value) : "this phone cannot do that"
+    }
+    const what = "\u201c" + (mode === "preview" ? "Preview " + a.value : mode === "queue" ? "Queue " + a.value : actionName(a, live)) + "\u201d"
+    failed[n.id] = why ? what + " was not done: " + why + ". Answered Unable." : ""
+    await post("notice_ack", pressId(), { id: n.id, state: why ? "unable" : "ready" }, why ? { why: what + ": " + why } : undefined).catch(() => {})
+    btn.disabled = false
+    poll()
+  }
+  const QUEUE_ROLES = ["present", "configure", "editor"]
   const isFor = (n, role) => n.to === "all" || n.to === role || (role === "configure" && n.to === "present") || (!!n.to && typeof n.to === "object" && String(n.to.name).toLowerCase() === String(me.name).toLowerCase())
   async function notices(live) {
     if (!me) {
@@ -211,6 +313,24 @@
         const ask = document.createElement("small")
         ask.textContent = "Asks: is " + n.action.value + " framed? Answer Ready when it is, or Unable."
         card.append(ask)
+      } else if (n.action && n.from === me.name) {
+        const ask = document.createElement("small")
+        ask.textContent = "Asks: " + actionName(n.action, live)
+        card.append(ask)
+      }
+      if (failed[n.id]) {
+        const note = document.createElement("div")
+        note.className = "note"
+        note.setAttribute("role", "alert")
+        note.textContent = failed[n.id]
+        card.append(note)
+      }
+      // Whoever sent it sees why each Unable could not be done.
+      if (n.from === me.name) for (const x of n.answers.filter((x) => x.state === "unable" && x.why)) {
+        const note = document.createElement("div")
+        note.className = "note"
+        note.textContent = x.by + " could not do it: " + x.why
+        card.append(note)
       }
       if (n.answers.length) {
         const a = document.createElement("small")
@@ -221,6 +341,31 @@
         const mine = n.answers.find((x) => x.by === me.name)
         const row = document.createElement("div")
         row.className = "answers"
+        // A request's own buttons first (Show, Preview), as the desks have them; nothing runs until pressed.
+        if (n.action && n.action.kind !== "camera" && n.action.kind !== "sceneEdit") {
+          const go = document.createElement("button")
+          go.type = "button"
+          go.textContent = actionName(n.action, live)
+          go.addEventListener("click", () => doRequest(n, "show", go))
+          row.append(go)
+          if (n.action.kind === "bible" || n.action.kind === "song") {
+            const pv = document.createElement("button")
+            pv.type = "button"
+            pv.textContent = "Preview"
+            pv.setAttribute("aria-label", "Preview " + n.action.value)
+            pv.addEventListener("click", () => doRequest(n, "preview", pv))
+            row.append(pv)
+            // Queue: into the run of show for later (the phones and desks that may add to the queue).
+            if (QUEUE_ROLES.includes(me.role)) {
+              const qb = document.createElement("button")
+              qb.type = "button"
+              qb.textContent = "Queue"
+              qb.setAttribute("aria-label", "Queue " + n.action.value)
+              qb.addEventListener("click", () => doRequest(n, "queue", qb))
+              row.append(qb)
+            }
+          }
+        }
         for (const state of ["seen", "ready", "unable"]) {
           const b = document.createElement("button")
           b.type = "button"
@@ -234,17 +379,162 @@
       box.append(card)
     }
   }
+  // Writing a notice (Comms): to the main desk (the default), everyone, a role or one person, with
+  // a request if wanted. The groups are the desks'; people are the paired desks and phones.
+  const GROUPS = [["host", "The main desk"], ["all", "Everyone"], ["timekeeper", "Timekeeper"], ["bible", "Bible"], ["worship", "Worship"], ["screens", "Screens"], ["stage", "Stage"], ["camera", "Camera"], ["obs", "OBS director"], ["present", "Present desks"]]
+  const ASK_HINTS = { bible: "Romans 8:28", song: "Song or hymn title, from the library", camera: "Camera 2", wrap: "Please start wrapping up" }
+  let toKey = ""
+  function composer(live) {
+    const people = ((live && live.crew) || []).filter((n) => !me || n !== me.name)
+    const key = people.join("\n")
+    if (key === toKey && $("noticeTo").options.length) return
+    toKey = key
+    const sel = $("noticeTo"), was = sel.value || "host"
+    sel.replaceChildren()
+    for (const [v, name] of GROUPS) sel.append(new Option(name, v))
+    if (people.length) {
+      const g = document.createElement("optgroup")
+      g.label = "One person"
+      for (const n of people) g.append(new Option(n, "name:" + n))
+      sel.append(g)
+    }
+    sel.value = [...sel.options].some((o) => o.value === was) ? was : "host"
+  }
+  $("noticeAsk").addEventListener("change", () => {
+    const kind = $("noticeAsk").value
+    $("noticeValueRow").hidden = !kind
+    $("noticeValue").placeholder = ASK_HINTS[kind] || ""
+    $("noticeValue").value = kind === "wrap" ? ASK_HINTS.wrap : ""
+  })
   $("noticeForm").addEventListener("submit", async (e) => {
     e.preventDefault()
     const text = $("noticeText").value.trim()
     if (!text) return
-    await send("notice_send", e.submitter || $("noticeForm").querySelector("button"), { text, to: "host" })
+    const t = $("noticeTo").value || "host"
+    const kind = $("noticeAsk").value, value = $("noticeValue").value.trim()
+    if (kind && !value) { say("Say what to ask for first.", true); return }
+    const body = { text, to: t.startsWith("name:") ? { name: t.slice(5) } : t }
+    if (kind) body.action = { kind, value }
+    await send("notice_send", e.submitter || $("noticeForm").querySelector("button[type=submit]"), body)
     $("noticeText").value = ""
+    $("noticeAsk").value = ""
+    $("noticeValueRow").hidden = true
   })
   // Talk (Rhema Comms): this phone in the crew's talk channel. Browsers give the microphone only to
   // a secure page (https, or this computer itself); elsewhere the button says so. Talk is held, never
   // latched: letting go, leaving the page or locking the phone stops it.
   let pc = null, mic = null, player = null
+  // After a dropped connection the phone joins again by itself, waiting longer each time (1 s, 2 s,
+  // 4 s… at most 30 s), until it is back or the person leaves. The microphone stays off until they
+  // press Talk again.
+  let wantTalk = false, rejoin = null, rejoinWait = 0
+  const REJOIN_MAX = 30000
+  // Whom this phone talks to, the channels it hears, and each person's level (by name; "to:host" for
+  // the main desk). The computer mixes what the phone hears, so the levels go to it.
+  const CHANNELS = [["production", "Production"], ["stage", "Stage & worship"]]
+  const HOST_KEY = "to:host"
+  const ROLE_NAMES = { timekeeper: "Timekeeper", bible: "Bible", worship: "Worship", screens: "Screens", stage: "Stage", camera: "Camera", obs: "OBS director", present: "Present only", configure: "Present and change settings", editor: "Editor", viewer: "View only" }
+  // vol: each person's level here in percent (100 = full); muted wins over it.
+  let talkTo = "all", listen = CHANNELS.map((c) => c[0]), muted = {}, vol = {}
+  const isHostName = (n) => /\(main desk\)$|^Main desk$/.test(n)
+  const allowedChannels = (live) => CHANNELS.filter(([id]) => { const r = live && live.talkRights && live.talkRights[id]; return !r || !me || r.includes(me.role) })
+  function sendChannels() {
+    if (!pc) return
+    const levels = {}
+    for (const k of Object.keys(vol)) if (vol[k] < 100) levels[k] = vol[k]
+    for (const k of Object.keys(muted)) if (muted[k]) levels[k] = 0
+    post("voice_channels", pressId(), Object.keys(levels).length ? { listen, talk: talkTo, levels } : { listen, talk: talkTo }).catch(() => {})
+  }
+  let talkKey = ""
+  function talkView(live) {
+    if (!pc) return
+    const people = ((live && live.voice) || []).filter((p) => !me || p.name !== me.name)
+    const chans = allowedChannels(live)
+    // A channel the main desk no longer lets this phone use is left.
+    const ids = chans.map((c) => c[0])
+    const keptListen = listen.filter((c) => ids.includes(c))
+    let changed = keptListen.length !== listen.length
+    listen = keptListen
+    if (CHANNELS.some((c) => c[0] === talkTo) && !ids.includes(talkTo)) { talkTo = "all"; changed = true }
+    const others = people.filter((p) => !isHostName(p.name)).map((p) => p.name)
+    const key = JSON.stringify([ids, others, talkTo])
+    if (key !== talkKey) {
+      talkKey = key
+      const sel = $("talkTo")
+      sel.replaceChildren(new Option("All crew", "all"))
+      for (const [id, name] of chans) sel.append(new Option(name, id))
+      const g = document.createElement("optgroup")
+      g.label = "Only\u2026"
+      g.append(new Option("The main desk", "to:host"))
+      for (const n of others) g.append(new Option(n, "to:" + n))
+      sel.append(g)
+      if (![...sel.options].some((o) => o.value === talkTo)) { talkTo = "all"; changed = true }
+      sel.value = talkTo
+      const hear = $("talkHear")
+      hear.replaceChildren()
+      for (const [id, name] of chans) {
+        const l = document.createElement("label")
+        const box = document.createElement("input")
+        box.type = "checkbox"
+        box.checked = listen.includes(id)
+        box.addEventListener("change", () => { listen = box.checked ? [...new Set([...listen, id])] : listen.filter((c) => c !== id); sendChannels() })
+        l.append(box, " " + name)
+        hear.append(l)
+      }
+    }
+    if (changed) sendChannels()
+    // Who is in the channel: talking (heard now), Talk held, or listening; each with a volume and
+    // Mute here. Each person keeps one row, changed in place, so a slider being moved is never redrawn.
+    const crew = $("crew")
+    const rows = [{ key: HOST_KEY, name: "The main desk", p: people.find((p) => isHostName(p.name)) }, ...people.filter((p) => !isHostName(p.name)).map((p) => ({ key: p.name, name: p.name, p }))]
+    const keep = new Set(rows.map((r) => r.key))
+    for (const [k, el] of crewRows) if (!keep.has(k)) { el.li.remove(); crewRows.delete(k) }
+    rows.forEach((r, i) => {
+      let el = crewRows.get(r.key)
+      if (!el) el = crewRow(r.key)
+      const p = r.p || {}
+      el.li.className = p.speaking ? "speaking" : p.talking ? "held" : ""
+      el.name.textContent = r.name
+      el.state.textContent = (p.role ? " \u00b7 " + (ROLE_NAMES[p.role] || p.role) : "") + (p.speaking ? " \u00b7 speaking" : p.talking ? " \u00b7 holding Talk" : "")
+      el.mute.textContent = muted[r.key] ? "Unmute" : "Mute"
+      el.mute.className = muted[r.key] ? "on" : ""
+      el.mute.setAttribute("aria-pressed", String(!!muted[r.key]))
+      el.mute.setAttribute("aria-label", (muted[r.key] ? "Unmute " : "Mute ") + r.name)
+      el.level.setAttribute("aria-label", "Volume for " + r.name)
+      el.level.disabled = !!muted[r.key]
+      if (document.activeElement !== el.level) el.level.value = String(vol[r.key] === undefined ? 100 : vol[r.key])
+      if (crew.children[i] !== el.li) crew.insertBefore(el.li, crew.children[i] || null)
+    })
+  }
+  // One row per person in the talk channel, by key, made once.
+  const crewRows = new Map()
+  let levelSend = null
+  function crewRow(key) {
+    const li = document.createElement("li")
+    const label = document.createElement("span")
+    const name = document.createTextNode("")
+    const state = document.createElement("i")
+    label.append(name, state)
+    const level = document.createElement("input")
+    level.type = "range"
+    level.min = "0"
+    level.max = "100"
+    level.step = "5"
+    level.addEventListener("input", () => {
+      vol[key] = Number(level.value)
+      clearTimeout(levelSend)
+      levelSend = setTimeout(sendChannels, 250)
+    })
+    const mute = document.createElement("button")
+    mute.type = "button"
+    mute.addEventListener("click", () => { muted[key] = !muted[key]; sendChannels(); talkView(lastLive) })
+    li.append(label, level, mute)
+    const el = { li, name, state, level, mute }
+    crewRows.set(key, el)
+    return el
+  }
+  $("talkTo").addEventListener("change", () => { talkTo = $("talkTo").value; sendChannels() })
+  $("talkVol").addEventListener("input", () => { if (player) player.volume = Number($("talkVol").value) })
   const canTalk = window.isSecureContext && navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function" && typeof RTCPeerConnection === "function"
   if (!canTalk) {
     $("talkNote").textContent = "Talking from this phone needs a secure page (https). Notices and the other buttons work as usual."
@@ -263,39 +553,71 @@
     $("talkHold").textContent = on ? "Talking…" : "Hold to talk"
     post("voice_talk", pressId(), on).catch(() => {})
   }
-  function leaveTalk() {
-    talk(false)
-    if (pc) post("voice_leave", pressId()).catch(() => {})
+  // Close the connection; `keepMic` keeps the microphone (off) for joining again by itself.
+  function closeTalk(keepMic) {
+    // After a drop the computer is not there to tell: the microphone just goes off here.
+    if (keepMic) {
+      if (mic) mic.enabled = false
+      $("talkHold").classList.remove("on")
+      $("talkHold").setAttribute("aria-pressed", "false")
+      $("talkHold").textContent = "Hold to talk"
+    } else {
+      talk(false)
+      if (pc) post("voice_leave", pressId()).catch(() => {})
+    }
     if (player) player.pause()
-    if (mic) mic.stop()
+    if (mic && !keepMic) mic.stop()
     if (pc) pc.close()
-    pc = mic = player = null
-    $("talkJoin").textContent = "Join the talk channel"
+    pc = player = null
+    if (!keepMic) mic = null
     $("talkHold").hidden = true
+    $("talkOpts").hidden = true
+    talkKey = ""
+    for (const el of crewRows.values()) el.li.remove()
+    crewRows.clear()
     $("talkHold").disabled = false
   }
-  async function joinTalk() {
+  function leaveTalk() {
+    wantTalk = false
+    clearTimeout(rejoin)
+    rejoin = null
+    rejoinWait = 0
+    closeTalk(false)
+    $("talkJoin").textContent = "Join the talk channel"
+  }
+  // Join again after a drop, a little later each time.
+  function rejoinLater(why) {
+    closeTalk(true)
+    rejoinWait = rejoinWait ? Math.min(REJOIN_MAX, rejoinWait * 2) : 1000
+    $("talkJoin").textContent = "Stop joining again"
+    say(why + " Joining again in " + Math.round(rejoinWait / 1000) + " s; your microphone stays off until you press Talk.", true)
+    clearTimeout(rejoin)
+    rejoin = setTimeout(() => { rejoin = null; if (wantTalk) joinTalk(true) }, rejoinWait)
+  }
+  async function joinTalk(again) {
     const btn = $("talkJoin")
+    wantTalk = true
     btn.disabled = true
-    say("Joining the talk channel…")
+    say(again ? "Joining the talk channel again…" : "Joining the talk channel…")
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+      const s = mic && mic.readyState === "live" ? new MediaStream([mic]) : await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
       mic = s.getAudioTracks()[0]
       mic.enabled = false
       pc = new RTCPeerConnection({ iceServers: [] })
       pc.addTransceiver(mic, { direction: "sendrecv", streams: [s] })
       // The computer went quiet on the network: stop talking at once (never back on by itself).
-      // A blip that passes says so; a lost connection leaves, and Join brings the phone back.
+      // A blip that passes says so; a lost connection joins again by itself, with the mic off.
       const own = pc
       own.onconnectionstatechange = () => {
         if (pc !== own) return
         const st = own.connectionState
         if (st === "disconnected") { talk(false); $("talkHold").disabled = true; say("Talk dropped — reconnecting…") }
         else if (st === "connected" && $("talkHold").disabled) { $("talkHold").disabled = false; say("Back in the talk channel") }
-        else if (st === "failed") { leaveTalk(); say("Talk dropped: the computer could not be reached. Press Join the talk channel to come back.", true) }
+        else if (st === "failed") rejoinLater("Talk dropped: the computer could not be reached.")
       }
       pc.ontrack = (e) => {
         player = new Audio()
+        player.volume = Number($("talkVol").value)
         player.srcObject = e.streams[0] || new MediaStream([e.track])
         player.play().catch(() => {})
       }
@@ -307,15 +629,24 @@
       await pc.setRemoteDescription({ type: "answer", sdp: j.sdp })
       btn.textContent = "Leave the talk channel"
       $("talkHold").hidden = false
-      say("")
+      $("talkOpts").hidden = false
+      say(again ? "Back in the talk channel. Press Talk to speak." : "")
+      rejoinWait = 0
+      talkView(lastLive)
+      sendChannels()
     } catch (e) {
-      leaveTalk()
-      say(e && e.name === "NotAllowedError" ? "The microphone was not allowed. Allow it for this page to talk." : (e && e.message) || "Could not join the talk channel.", true)
+      const denied = e && e.name === "NotAllowedError"
+      // Joining again after a drop keeps trying (unless the microphone was refused); a first Join says why it failed.
+      if (again && wantTalk && !denied) rejoinLater("Could not join the talk channel again.")
+      else {
+        leaveTalk()
+        say(denied ? "The microphone was not allowed. Allow it for this page to talk." : (e && e.message) || "Could not join the talk channel.", true)
+      }
     } finally {
       btn.disabled = false
     }
   }
-  $("talkJoin").addEventListener("click", () => (pc ? leaveTalk() : joinTalk()))
+  $("talkJoin").addEventListener("click", () => (pc || wantTalk ? leaveTalk() : joinTalk(false)))
   const hold = $("talkHold")
   hold.addEventListener("pointerdown", (e) => { if (hold.setPointerCapture) hold.setPointerCapture(e.pointerId); talk(true) })
   for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => talk(false))

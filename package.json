@@ -1,7 +1,7 @@
 {
   "name": "rhema",
   "private": true,
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -29,7 +29,12 @@
     "web:dev": "cd web && bun run dev",
     "web:build": "cd web && bun run build",
     "web:start": "cd web && bun run start",
-    "web:lint": "cd web && bun run lint"
+    "web:lint": "cd web && bun run lint",
+    "companion:vite": "vite --config companion-app/vite.config.ts",
+    "companion:web": "tsc -b && vite build --config companion-app/vite.config.ts",
+    "companion:dev": "cd companion-app && tauri dev",
+    "companion:build": "cd companion-app && tauri build",
+    "companion:test": "vitest run src/studio/companion src/lib/host-certificate.test.ts"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.8",

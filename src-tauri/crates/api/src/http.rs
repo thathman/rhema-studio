@@ -13,12 +13,13 @@ use axum::{
 use axum::response::sse::{Event, KeepAlive, Sse};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, watch};
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::command::RemoteCommand;
 use crate::dispatch::{CommandDispatcher, CommandSink};
 use crate::error::CommandError;
-use crate::keys::{check_key, new_key_set, new_pairing_window, try_pair, KeySet, PairOutcome, PairingWindow};
+use crate::keys::{check_key, new_key_set, new_pairing_window, try_pair_as, KeySet, PairOutcome, PairingWindow};
+use crate::peer::{check_remote_key, is_local_network_ip, OPEN_REMOTE_OUTSIDE_LOCAL_NETWORK};
 
 /// Configuration for the HTTP API server.
 #[derive(Debug, Clone)]
@@ -26,7 +27,8 @@ pub struct HttpConfig {
     pub port: u16,
     pub host: String,
     /// Paired devices and the shared key; empty means open. `/command` requires
-    /// `X-Rhema-Key: <token>` (or `Authorization: Bearer <token>`) otherwise.
+    /// `X-Rhema-Key: <token>` (or `Authorization: Bearer <token>`) otherwise; with auth off,
+    /// unpaired commands are accepted only from local/private source addresses.
     pub keys: KeySet,
     /// The pairing window `/pair` checks against.
     pub pairing: PairingWindow,
@@ -40,6 +42,8 @@ pub struct HttpConfig {
     pub tls: Option<TlsListener>,
     /// Phone cameras and the camera router their page publishes to (#209).
     pub cameras: crate::cameras::SharedCameras,
+    /// Who is connected now and when each paired desk was last seen (Production → Operators).
+    pub presence: crate::presence::SharedPresence,
 }
 
 /// The https listener: its port, this computer's certificate and the local CA that signed it.
@@ -62,6 +66,7 @@ impl Default for HttpConfig {
             voice: new_voice_hub(),
             tls: None,
             cameras: crate::cameras::new_camera_hub(),
+            presence: crate::presence::new_presence(),
         }
     }
 }
@@ -72,11 +77,56 @@ impl Default for HttpConfig {
 #[derive(Debug, Default)]
 pub struct FeedHub {
     feeds: std::sync::RwLock<std::collections::HashMap<String, Feed>>,
+    /// Told whenever the keys change, so a page whose key was withdrawn (a revoked TV, a new link)
+    /// is cut at once instead of following until it reconnects.
+    changed: tokio::sync::Notify,
+}
+
+/// A feed's keys as the app keeps them (#198): the feed's own link key, and each paired TV's own
+/// key with the TV's id (its address), so one TV can be revoked without a new link for everyone.
+#[derive(Debug, Clone, Default)]
+pub struct FeedKeys {
+    pub id: String,
+    pub token: String,
+    pub tvs: Vec<(String, String)>,
+}
+
+/// A paired TV's own key on a feed, and how many of its pages follow the feed now.
+#[derive(Debug)]
+struct TvKey {
+    id: String,
+    token: String,
+    watching: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+/// Counts a TV's page while its stream is open; dropping it (the stream ended) counts it out.
+struct Watching(Arc<std::sync::atomic::AtomicUsize>);
+
+impl Watching {
+    fn new(n: &Arc<std::sync::atomic::AtomicUsize>) -> Self {
+        n.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Self(n.clone())
+    }
+}
+
+impl Drop for Watching {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// A paired TV's pages following its feed now, by the TV's id (never its key).
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct TvWatching {
+    pub id: String,
+    pub watching: usize,
 }
 
 #[derive(Debug)]
 struct Feed {
     token: String,
+    /// Each paired TV's own key (#198, Rhema Studio Receiver sent from 1.5 on).
+    tvs: Vec<TvKey>,
     /// The frame shown now, with its number.
     current: Option<(u64, String)>,
     seq: u64,
@@ -84,6 +134,13 @@ struct Feed {
     /// The newest frame a page said it drew, and when (receiver trust, #246 item 9).
     acked: u64,
     acked_at: Option<std::time::Instant>,
+    /// When the newest frame was published, for how long it took a page to draw it (#246 C17).
+    published_at: Option<std::time::Instant>,
+    /// What its pages last said about the cameras they play (#213).
+    video: crate::feed_video::FeedVideo,
+    /// The page's clock minus the host's (ms), the largest a page said lately, and when (#196: a TV
+    /// whose clock is off by more than 2 s is worth a warning, though its timers follow the host).
+    clock: Option<(i64, std::time::Instant)>,
 }
 
 /// A browser feed's health for the operator: pages following it, and whether one drew the latest frame.
@@ -94,16 +151,57 @@ pub struct FeedStatus {
     pub acked: u64,
     /// Milliseconds since a page last said it drew a frame; None if none has.
     pub acked_ago_ms: Option<u64>,
+    /// Each page that reported lately: the cameras it plays, frames shown and dropped (#213).
+    pub video: Vec<crate::feed_video::PageVideo>,
+    /// A page's clock minus the host's (ms), when one said so in the last half minute (#196).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clock_skew_ms: Option<i64>,
+    /// Each paired TV with its own key: how many of its pages follow the feed now (#198).
+    pub tvs: Vec<TvWatching>,
+}
+
+impl Feed {
+    fn new(token: String) -> Self {
+        Self { token, tvs: Vec::new(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None, published_at: None, video: crate::feed_video::FeedVideo::default(), clock: None }
+    }
+
+    /// Whether a key opens this feed: the feed's own (`Some(None)`) or a paired TV's (`Some(Some(tv))`).
+    fn admits(&self, token: &str) -> Option<Option<&TvKey>> {
+        if crate::command::same_key(token, &self.token) {
+            return Some(None);
+        }
+        self.tvs.iter().find(|t| crate::command::same_key(token, &t.token)).map(Some)
+    }
 }
 
 impl FeedHub {
-    /// Replace the list of feeds (id, secret); frames of feeds that stay are kept.
+    /// Replace the list of feeds (id, secret) with no TV keys; frames of feeds that stay are kept.
     pub fn set(&self, list: &[(String, String)]) {
-        let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
-        feeds.retain(|id, f| list.iter().any(|(i, t)| i == id && *t == f.token));
-        for (id, token) in list {
-            feeds.entry(id.clone()).or_insert_with(|| Feed { token: token.clone(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None });
+        self.set_keys(&list.iter().map(|(id, token)| FeedKeys { id: id.clone(), token: token.clone(), tvs: Vec::new() }).collect::<Vec<_>>());
+    }
+
+    /// Replace the list of feeds with their keys (#198): the feed's own and each paired TV's. Frames
+    /// of feeds that stay are kept; a page whose key is no longer listed (a new link, a revoked TV)
+    /// is cut at once, the others carry on.
+    pub fn set_keys(&self, list: &[FeedKeys]) {
+        {
+            let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
+            feeds.retain(|id, _| list.iter().any(|k| k.id == *id));
+            for k in list {
+                let f = feeds.entry(k.id.clone()).or_insert_with(|| Feed::new(k.token.clone()));
+                f.token.clone_from(&k.token);
+                let tvs = k
+                    .tvs
+                    .iter()
+                    .map(|(id, token)| {
+                        let watching = f.tvs.iter().find(|t| t.token == *token).map(|t| t.watching.clone()).unwrap_or_default();
+                        TvKey { id: id.clone(), token: token.clone(), watching }
+                    })
+                    .collect();
+                f.tvs = tvs;
+            }
         }
+        self.changed.notify_waiters();
     }
 
     /// The frame a feed shows now; unknown feeds are ignored.
@@ -111,22 +209,35 @@ impl FeedHub {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(f) = feeds.get_mut(id) {
             f.seq += 1;
+            f.published_at = Some(std::time::Instant::now());
             f.current = Some((f.seq, json.clone()));
             let _ = f.tx.send((f.seq, json));
         }
     }
 
-    /// A page drew frame `seq` (only with the feed's secret; never ahead of what was sent).
-    fn ack(&self, id: &str, token: &str, seq: u64) -> bool {
+    /// A page drew frame `seq` (only with the feed's secret; never ahead of what was sent). Err: refused.
+    /// `Ok(Some(ms))`: the first page to draw the newest frame, `ms` after it was published (#246 C17).
+    fn ack(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>, clock: Option<i64>) -> Result<Option<u64>, ()> {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let Some(f) = feeds.get_mut(id).filter(|f| crate::command::same_key(token, &f.token)) else {
-            return false;
-        };
+        let f = feeds.get_mut(id).filter(|f| f.admits(token).is_some()).ok_or(())?;
+        let mut first = None;
         if seq <= f.seq && seq >= f.acked {
+            if seq == f.seq && seq > f.acked {
+                first = f.published_at.map(|t| u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX));
+            }
             f.acked = seq;
             f.acked_at = Some(std::time::Instant::now());
         }
-        true
+        if let Some((from, cameras)) = video {
+            f.video.report(from, cameras, std::time::Instant::now());
+        }
+        if let Some(skew) = clock {
+            // Several pages on one feed: the one furthest off is the one to warn about, until it reports again.
+            let now = std::time::Instant::now();
+            let keep = f.clock.filter(|(old, at)| now.duration_since(*at) < CLOCK_REPORT_FOR && old.abs() > skew.abs());
+            f.clock = Some(keep.unwrap_or((skew, now)));
+        }
+        Ok(first)
     }
 
     /// How the feed is doing, for the output card.
@@ -139,29 +250,53 @@ impl FeedHub {
             seq: f.seq,
             acked: f.acked,
             acked_ago_ms: f.acked_at.map(|t| u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX)),
+            video: f.video.pages(std::time::Instant::now()),
+            clock_skew_ms: f.clock.filter(|(_, at)| at.elapsed() < CLOCK_REPORT_FOR).map(|(ms, _)| ms),
+            tvs: f.tvs.iter().map(|t| TvWatching { id: t.id.clone(), watching: t.watching.load(std::sync::atomic::Ordering::Relaxed) }).collect(),
         })
     }
 
-    /// The feed's current frame and a receiver for the next ones, if the secret matches.
-    fn follow(&self, id: &str, token: &str) -> Option<(Option<(u64, String)>, broadcast::Receiver<(u64, String)>)> {
+    /// The feed's current frame and a receiver for the next ones, if the key opens it; a paired
+    /// TV's page is counted as that TV's while the stream lasts.
+    fn follow(&self, id: &str, token: &str) -> Option<(Option<(u64, String)>, broadcast::Receiver<(u64, String)>, Option<Watching>)> {
         let feeds = self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner);
         let f = feeds.get(id)?;
-        crate::command::same_key(token, &f.token).then(|| (f.current.clone(), f.tx.subscribe()))
+        let tv = f.admits(token)?;
+        Some((f.current.clone(), f.tx.subscribe(), tv.map(|t| Watching::new(&t.watching))))
     }
 
     fn knows(&self, id: &str, token: &str) -> bool {
-        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).is_some_and(|f| crate::command::same_key(token, &f.token))
+        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).is_some_and(|f| f.admits(token).is_some())
+    }
+
+    /// Ends once this key no longer opens the feed (a revoked TV, a new link, the feed removed).
+    async fn until_withdrawn(self: Arc<Self>, id: String, token: String) {
+        loop {
+            let changed = self.changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            if !self.knows(&id, &token) {
+                return;
+            }
+            changed.await;
+        }
     }
 
     /// The feed's frame shown now names this media file (a scene's video layer): only then may its page fetch it.
     fn shows_file(&self, id: &str, token: &str, file: &str) -> bool {
         let feeds = self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner);
         let needle = format!("\"mediaFile\":\"{file}\"");
-        feeds.get(id).is_some_and(|f| crate::command::same_key(token, &f.token) && f.current.as_ref().is_some_and(|(_, json)| json.contains(&needle)))
+        feeds.get(id).is_some_and(|f| f.admits(token).is_some() && f.current.as_ref().is_some_and(|(_, json)| json.contains(&needle)))
     }
 }
 
 pub type SharedFeeds = Arc<FeedHub>;
+
+/// How long a page's clock report counts (pages send one every few seconds).
+const CLOCK_REPORT_FOR: std::time::Duration = std::time::Duration::from_secs(30);
+/// How often a feed page hears from the host when nothing changes (#196): a "beat" with the host's
+/// clock, so the page can tell a quiet host from a lost one and count by the host's time.
+pub const FEED_BEAT: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// Rhema Comms voice (C3, ADR 0002): a desk's WebRTC offer waits here for the host window's answer.
 #[derive(Debug, Default)]
@@ -230,7 +365,24 @@ impl Revisions {
             ("offset".to_string(), serde_json::json!([v["timing"]["offsetMinutes"], v["timing"]["offsetBy"]]).to_string()),
             ("timer".to_string(), serde_json::json!([v["timer"]["running"], v["timer"]["durationMs"], v["timer"]["revision"]]).to_string()),
             ("hold".to_string(), v["hold"].to_string()),
+            // The song or hymn on the screens and where in it (desk consoles): a section step from a
+            // Worship desk acts on the section it saw.
+            ("lyrics".to_string(), serde_json::json!([v["lyrics"]["itemId"], v["lyrics"]["index"]]).to_string()),
+            // The run of show's items (Comms C2): queueing a request acts on the list it saw, so two
+            // desks answering the same request do not queue it twice. Times are not a change.
+            ("queue".to_string(), serde_json::Value::Array(v["rundown"].as_array().into_iter().flatten().map(|i| i["id"].clone()).collect()).to_string()),
+            // OBS's recording on or off, and its transition (#197): an OBS desk acts on what it saw.
+            ("obs:record".to_string(), v["obs"]["recording"].to_string()),
+            ("obs:transition".to_string(), v["obs"]["transition"].to_string()),
         ];
+        // Each extra timer (#196 R2.5): started, paused, reset or changed. A running one's time
+        // moves on by itself, so only a stopped one's time counts.
+        for t in v["auxTimers"].as_array().into_iter().flatten() {
+            if let Some(id) = t["id"].as_str() {
+                let stopped_at = if t["running"].as_bool() == Some(true) { serde_json::Value::Null } else { t["elapsedMs"].clone() };
+                out.push((format!("aux:{id}"), serde_json::json!([t["running"], t["durationMs"], stopped_at]).to_string()));
+            }
+        }
         for s in v["sources"].as_array().into_iter().flatten() {
             if let Some(id) = s["id"].as_str() {
                 out.push((format!("source:{id}"), serde_json::json!([s["on"], s["revision"]]).to_string()));
@@ -241,12 +393,29 @@ impl Revisions {
                 out.push((format!("output:{id}"), serde_json::json!([o["sceneId"], o["sceneRevision"]]).to_string()));
             }
         }
+        // Each scene's arrangement (#243 SC.16): whether it is on a screen is not a change to it.
+        for sc in v["scenes"].as_array().into_iter().flatten() {
+            if let Some(id) = sc["id"].as_str() {
+                out.push((format!("scene:{id}"), serde_json::json!([sc["name"], sc["background"], sc["fadeMs"], sc["layers"]]).to_string()));
+            }
+        }
         out
     }
 
-    /// A new Live State: each part that looks different from the last one goes up by one.
+    /// A new Live State: each part that looks different from the last one goes up by one. A scene
+    /// that is no longer there has changed too (it was deleted), so a desk's change to it is refused.
     fn observe(&mut self, v: &serde_json::Value) {
-        for (part, fp) in Self::fingerprints(v) {
+        let now = Self::fingerprints(v);
+        let gone: Vec<String> = self.parts.keys().filter(|k| k.starts_with("scene:") && !now.iter().any(|(p, _)| p == *k)).cloned().collect();
+        for part in gone {
+            if let Some((n, old)) = self.parts.get_mut(&part) {
+                if old != "gone" {
+                    *n += 1;
+                    *old = "gone".into();
+                }
+            }
+        }
+        for (part, fp) in now {
             match self.parts.get_mut(&part) {
                 Some((n, old)) if *old != fp => {
                     *n += 1;
@@ -288,6 +457,13 @@ fn revision_part(cmd: &RemoteCommand) -> Option<String> {
         RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => format!("source:{id}"),
         RemoteCommand::TakeScene(t) => format!("output:{}", t.output),
         RemoteCommand::ReleaseScene(output) => format!("output:{output}"),
+        RemoteCommand::SaveScene(sc) => format!("scene:{}", sc.id()),
+        RemoteCommand::DeleteScene(d) => format!("scene:{}", d.id),
+        RemoteCommand::SongSection(_) => "lyrics".into(),
+        RemoteCommand::AuxTimer(t) => format!("aux:{}", t.id),
+        RemoteCommand::QueueRequest(_) => "queue".into(),
+        RemoteCommand::ObsRecord(_) => "obs:record".into(),
+        RemoteCommand::ObsTransition(_) => "obs:transition".into(),
         _ => return None,
     })
 }
@@ -379,6 +555,81 @@ pub fn notices_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String
     v.to_string()
 }
 
+/// The Live State as one paired desk gets it: only its notices (`notices_for`), and the scenes'
+/// full definitions only for a desk that may change scenes (#243 SC.16); the others get each
+/// scene's name and id, as before, which keeps a phone's copy small.
+/// The desk consoles' parts of it go only to the desks they are for: the readiness board and who is
+/// connected (`readiness`, `presence`) to the Present and settings desks (the director); the verses
+/// heard by Auto Bible (`heard`) to them, the Bible desk and the editor.
+#[must_use]
+pub fn live_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String {
+    let filtered = notices_for(json, reader);
+    let Some(reader) = reader else { return filtered };
+    let scenes = !reader.role.edits_scenes() && filtered.contains("\"layers\"");
+    let hidden: Vec<&str> = hidden_from(reader.role).iter().copied().filter(|k| filtered.contains(&format!("\"{k}\""))).collect();
+    if !scenes && hidden.is_empty() {
+        return filtered;
+    }
+    let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&filtered) else { return filtered };
+    if let Some(o) = v.as_object_mut() {
+        for k in hidden {
+            o.remove(k);
+        }
+    }
+    if scenes {
+        for scene in v.get_mut("scenes").and_then(serde_json::Value::as_array_mut).into_iter().flatten() {
+            if let Some(o) = scene.as_object_mut() {
+                o.retain(|k, _| matches!(k.as_str(), "id" | "name" | "onScreen"));
+            }
+        }
+    }
+    v.to_string()
+}
+
+/// What of the Live State a desk with this role does not get (see `live_for`).
+fn hidden_from(role: crate::keys::Role) -> &'static [&'static str] {
+    use crate::keys::Role;
+    match role {
+        Role::Present | Role::Configure => &[],
+        Role::Bible | Role::Editor => &["readiness", "presence"],
+        _ => &["readiness", "presence", "heard"],
+    }
+}
+
+/// Whether a reader gets who is connected (`presence`): this computer itself, and the director.
+fn sees_crew(reader: Option<&crate::keys::KeyEntry>) -> bool {
+    reader.is_none_or(|r| matches!(r.role, crate::keys::Role::Present | crate::keys::Role::Configure))
+}
+
+/// Who is on the team now, for a director's board (desk consoles, #197): each paired desk's name and
+/// role, whether it follows the service now and when it was last seen (null: not since hosting
+/// began). Never its address or key.
+fn crew_rows(keys: &KeySet, presence: &crate::presence::Presence) -> serde_json::Value {
+    let seen = presence.list();
+    let keys = keys.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+    serde_json::Value::Array(
+        keys.entries
+            .iter()
+            .take(64)
+            .map(|e| {
+                let s = seen.iter().find(|d| d.hash == e.hash);
+                serde_json::json!({ "name": e.name, "role": e.role.as_str(), "connected": s.is_some_and(|d| d.connected), "lastSeenMs": s.map(|d| d.last_seen_ms), "paused": e.paused })
+            })
+            .collect(),
+    )
+}
+
+/// The Live State with who is connected added, for a reader that sees it (`sees_crew`).
+fn with_crew(json: String, crew: serde_json::Value) -> String {
+    match serde_json::from_str::<serde_json::Value>(&json) {
+        Ok(serde_json::Value::Object(mut o)) => {
+            o.insert("presence".into(), crew);
+            serde_json::Value::Object(o).to_string()
+        }
+        _ => json,
+    }
+}
+
 /// The same rule as the desks' own (src/stores/notices-store.ts `isFor`): a Present-and-settings
 /// desk also gets what is sent to the Present desks. A notice without ids (from before them) is
 /// only for its group.
@@ -439,6 +690,11 @@ struct AppState<S: CommandSink> {
     feeds: SharedFeeds,
     voice: SharedVoice,
     cameras: crate::cameras::SharedCameras,
+    presence: crate::presence::SharedPresence,
+    /// The https port once it listens: `/api/v1/health` says it, so a joining computer pairs over it.
+    tls_port: std::sync::OnceLock<u16>,
+    /// True once the listener is stopping: open streams end with it (stopping hosting cuts every desk).
+    stopping: watch::Receiver<bool>,
     sink: Arc<S>,
     status: Arc<tokio::sync::RwLock<StatusSnapshot>>,
     keys: KeySet,
@@ -494,11 +750,16 @@ where
         .parse()
         .map_err(|e| CommandError::DispatchFailed(format!("Invalid bind address: {e}")))?;
 
+    let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
+    let ports = Arc::new(ListenPorts::default());
     let state = Arc::new(AppState {
+        stopping: shutdown_rx.clone(),
         live: config.live.clone(),
         feeds: config.feeds.clone(),
         voice: config.voice.clone(),
         cameras: config.cameras.clone(),
+        presence: config.presence.clone(),
+        tls_port: std::sync::OnceLock::new(),
         sink,
         status,
         keys: config.keys.clone(),
@@ -509,13 +770,14 @@ where
     });
 
     let app = Router::new()
-        .route("/api/v1/health", get(health_handler))
+        .route("/api/v1/health", get(health_handler::<S>))
         .route("/api/v1/status", get(status_handler::<S>))
         .route("/api/v1/command", post(command_handler::<S>))
         .route("/api/v1/pair", post(pair_handler::<S>))
         .route("/api/v1/me", get(me_handler::<S>))
         .route("/api/v1/live", get(live_handler::<S>))
         .route("/api/v1/live/events", get(live_events_handler::<S>))
+        .route("/api/v1/lookup", post(lookup_handler::<S>))
         .route("/feed/{id}", get(feed_page_handler::<S>))
         .route("/api/v1/feed/{id}/events", get(feed_events_handler::<S>))
         .route("/api/v1/voice", post(voice_handler::<S>))
@@ -526,10 +788,16 @@ where
         .route("/camera", get(camera_page_handler::<S>))
         .route("/api/v1/camera/{name}/whip", post(camera_whip_handler::<S>))
         .route("/api/v1/camera/{name}/whip/{session}", axum::routing::patch(camera_session_handler::<S>).delete(camera_session_handler::<S>))
+        .route("/api/v1/camera/{name}/status", post(camera_status_handler::<S>))
+        .route("/api/v1/cameras/watch", get(companion_cameras_handler::<S>))
+        .route("/api/v1/cameras/tally", post(companion_tally_handler::<S>))
         // Undocumented alias for the path the code shipped with before #146.
         .route("/api/v1/control", post(command_handler::<S>))
-        .layer(CorsLayer::permissive())
-        .with_state(state);
+        // Rhema's own pages are served from here (same origin) and its windows call through Rust, so
+        // no other web page may use this API from a browser on the network (see `same_origin_only`).
+        .layer(app_cors())
+        .layer(axum::middleware::from_fn_with_state(ports.clone(), same_origin_only))
+        .with_state(state.clone());
     // The local CA's certificate (public): a phone installs it to trust the https page.
     let app = match config.tls.as_ref() {
         Some(t) => {
@@ -544,12 +812,16 @@ where
     })?;
 
     let bound_port = listener.local_addr().map(|a| a.port()).unwrap_or(config.port);
+    let _ = ports.http.set(bound_port);
 
-    let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
     let tls_port = match config.tls.as_ref() {
         Some(t) => Some(serve_tls(t, &config.host, app.clone(), shutdown_tx.subscribe()).await?),
         None => None,
     };
+    if let Some(p) = tls_port {
+        let _ = ports.https.set(p);
+        let _ = state.tls_port.set(p);
+    }
 
     tokio::spawn(async move {
         log::info!("HTTP API server started on {bind_addr} (port {bound_port})");
@@ -621,6 +893,10 @@ struct HealthResponse {
     status: &'static str,
     service: &'static str,
     version: String,
+    /// The https port when this host runs it: a joining computer pairs and works over it, with this
+    /// host's certificate pinned (absent: http only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tls_port: Option<u16>,
 }
 
 static APP_VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -630,12 +906,125 @@ pub fn set_app_version(version: &str) {
     let _ = APP_VERSION.set(version.to_string());
 }
 
-async fn health_handler() -> impl IntoResponse {
+/// The local-network health answer; public-source requests are refused.
+async fn health_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+) -> axum::response::Response {
+    if !is_local_network_ip(peer.ip()) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     Json(HealthResponse {
         status: "ok",
         service: "rhema",
         version: APP_VERSION.get().cloned().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string()),
+        tls_port: state.tls_port.get().copied(),
     })
+    .into_response()
+}
+
+/// The origins of Rhema's own windows (Tauri's web view on macOS/Linux and on Windows).
+const APP_ORIGINS: [&str; 3] = ["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"];
+
+/// Whether a browser request from `origin` may use this API: Rhema's own windows, or a page this
+/// listener served itself (the phone remote, camera and feed pages, a TV's feed), whose origin is
+/// the address it was asked for (`host`). Any other web page open in a browser on the network is not.
+fn origin_allowed(origin: &str, host: Option<&str>) -> bool {
+    if APP_ORIGINS.iter().any(|o| o.eq_ignore_ascii_case(origin)) {
+        return true;
+    }
+    let origin = origin.to_ascii_lowercase();
+    let authority = origin.strip_prefix("http://").or_else(|| origin.strip_prefix("https://"));
+    match (authority, host) {
+        (Some(a), Some(h)) => !a.is_empty() && !a.contains('/') && a.eq_ignore_ascii_case(h.trim()),
+        _ => false,
+    }
+}
+
+/// CORS for Rhema's own windows only; a page this listener served needs none (same origin).
+fn app_cors() -> CorsLayer {
+    use axum::http::{header, HeaderName, HeaderValue, Method};
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::list(APP_ORIGINS.iter().map(|o| HeaderValue::from_static(o))))
+        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, HeaderName::from_static("x-rhema-key")])
+}
+
+/// The ports this server listens on, once bound: a `Host` must name one of them.
+#[derive(Debug, Default)]
+struct ListenPorts {
+    http: std::sync::OnceLock<u16>,
+    https: std::sync::OnceLock<u16>,
+}
+
+/// Whether a request's `Host` names this computer the way a page of ours can be reached: an IP
+/// address (v4, or v6 in brackets), `localhost`, or a `.local` name (this computer's mDNS name), on
+/// one of this server's ports. Any other name is refused: DNS rebinding points an attacker's own
+/// name (evil.example) at this computer's address, and then its page's origin and the `Host` match.
+/// A missing port is the scheme's default (80 / 443), which this server never listens on.
+fn host_trusted(host: &str, ports: &[u16]) -> bool {
+    let host = host.trim();
+    let (name, port) = if let Some(rest) = host.strip_prefix('[') {
+        let Some((v6, after)) = rest.split_once(']') else { return false };
+        if v6.parse::<std::net::Ipv6Addr>().is_err() {
+            return false;
+        }
+        (None, after.strip_prefix(':'))
+    } else {
+        match host.rsplit_once(':') {
+            Some((n, p)) => (Some(n), Some(p)),
+            None => (Some(host), None),
+        }
+    };
+    let port: Option<u16> = match port {
+        Some(p) => match p.parse() {
+            Ok(p) => Some(p),
+            Err(_) => return false,
+        },
+        None => None,
+    };
+    let name_ok = match name {
+        None => true,
+        Some(n) => {
+            let n = n.to_ascii_lowercase();
+            n.parse::<std::net::Ipv4Addr>().is_ok()
+                || n == "localhost"
+                || (n.len() > ".local".len() && n.ends_with(".local") && n.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.'))
+        }
+    };
+    name_ok && port.is_some_and(|p| ports.contains(&p))
+}
+
+/// The pages a browser opens from this server (phone remote, camera, feeds) and what they load,
+/// and the two answers that need no key (status: what is on air; health): their `Host` is checked
+/// even without an `Origin`, since a rebound page's same-origin read sends none.
+fn browser_page(path: &str) -> bool {
+    matches!(path, "/remote" | "/camera" | "/api/v1/status" | "/api/v1/health") || ["/feed/", "/assets/", "/api/v1/feed/", "/api/v1/camera/"].iter().any(|p| path.starts_with(p))
+}
+
+/// Refuse a request a browser sent for another web page: its `Origin` is neither this listener's
+/// own address nor Rhema Studio's window, or it reached us under a name that is not ours (DNS
+/// rebinding, `host_trusted`). A browser always says the origin of a cross-site request that could
+/// change something, so this also stops the ones CORS would let through unasked (a form's plain
+/// POST). The pages a browser opens from here are checked by name always. Controllers that are not
+/// browsers (Companion, Stream Deck, OSC bridges) send no origin and are checked by their key.
+async fn same_origin_only(AxumState(ports): AxumState<Arc<ListenPorts>>, req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
+    let origin = req.headers().get(axum::http::header::ORIGIN).cloned();
+    let host = req.headers().get(axum::http::header::HOST).and_then(|h| h.to_str().ok()).map(str::to_string).or_else(|| req.uri().authority().map(|a| a.as_str().to_string()));
+    if origin.is_some() || browser_page(req.uri().path()) {
+        let listening: Vec<u16> = [ports.http.get(), ports.https.get()].into_iter().flatten().copied().collect();
+        if !host.as_deref().is_some_and(|h| host_trusted(h, &listening)) {
+            log::warn!("HTTP request refused: asked for under another name ({host:?})");
+            return (StatusCode::MISDIRECTED_REQUEST, "Rhema Studio answers only at this computer's own address").into_response();
+        }
+    }
+    if let Some(origin) = origin {
+        if !origin.to_str().is_ok_and(|o| origin_allowed(o, host.as_deref())) {
+            log::warn!("HTTP request refused: from another web page ({origin:?})");
+            return (StatusCode::FORBIDDEN, "Rhema Studio answers only its own pages and windows").into_response();
+        }
+    }
+    next.run(req).await
 }
 
 /// The phone remote: one self-contained page (pair, then Next/Previous/
@@ -646,17 +1035,22 @@ async fn remote_page() -> impl IntoResponse {
         [
             (axum::http::header::CACHE_CONTROL, "no-store"),
             (axum::http::header::X_FRAME_OPTIONS, "DENY"),
-            (axum::http::header::CONTENT_SECURITY_POLICY, "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; frame-ancestors 'none'"),
+            (axum::http::header::CONTENT_SECURITY_POLICY, "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; form-action 'none'; frame-ancestors 'none'"),
         ],
         axum::response::Html(include_str!("remote.html")),
     )
 }
 
+/// The current display status for local-network pages; public-source requests are refused.
 async fn status_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
-) -> impl IntoResponse {
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+) -> axum::response::Response {
+    if !is_local_network_ip(peer.ip()) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let snapshot = state.status.read().await;
-    Json(snapshot.clone())
+    Json(snapshot.clone()).into_response()
 }
 
 #[derive(Deserialize)]
@@ -718,21 +1112,49 @@ impl RecentIds {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 struct CommandResponse {
     success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
-    /// Which refusal a 409 is, for a desk to act on: "stale" (look again) or "other-service" (refresh).
+    /// Which refusal it is, for a desk to act on: "stale" (someone changed it first: look again),
+    /// "other-service" (refresh), and for a scene change "role" or "bad-scene".
     #[serde(skip_serializing_if = "Option::is_none")]
     code: Option<&'static str>,
+    /// A note on a command that was taken (a scene change sent to the main desk to accept).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
 }
+
+impl CommandResponse {
+    fn refused(error: impl Into<String>) -> Json<Self> {
+        Json(Self { success: false, error: Some(error.into()), ..Default::default() })
+    }
+}
+
+/// Whether the host is in rehearsal, from its Live State (false before it has said).
+fn in_rehearsal(live: Option<&str>) -> bool {
+    live.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()).and_then(|v| v.get("program")?.get("rehearsal")?.as_bool()) == Some(true)
+}
+
+/// Whether a song or hymn is on the screens (the host's Live State says which, desk consoles).
+fn lyrics_up(live: Option<&str>) -> bool {
+    live.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()).is_some_and(|v| v.get("lyrics").is_some_and(|l| l.is_object()))
+}
+
+const NO_LYRICS_MESSAGE: &str = "No song or hymn is on the screens";
+
+/// What an OBS director is told in rehearsal: OBS is the online stream (the host's own wording).
+const OBS_REHEARSAL_MESSAGE: &str = "Rehearsal is on: OBS is the live stream, so Rhema Studio doesn't change it while you practise";
 
 #[derive(Deserialize)]
 struct PairRequest {
     code: String,
     #[serde(default)]
     name: String,
+    /// A role that can do less than Present ("obs-companion", #209); anything else pairs as Present.
+    #[serde(default)]
+    role: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -746,17 +1168,20 @@ struct PairResponse {
     error: Option<String>,
 }
 
-/// `POST /api/v1/pair {"code":"123456","name":"Tolu's phone"}` while the
-/// operator has the pairing window open. The token comes back exactly once.
+/// `POST /api/v1/pair {"code":"123456","name":"Tolu's phone"}` on the local network while
+/// the operator has the pairing window open. The token comes back exactly once.
 async fn pair_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(req): Json<PairRequest>,
 ) -> impl IntoResponse {
+    if !is_local_network_ip(peer.ip()) {
+        return (StatusCode::FORBIDDEN, Json(PairResponse { success: false, token: None, name: None, error: Some("pairing is available only on the local network".into()) }));
+    }
     if !state.rate.allow(peer.ip()) {
         return (StatusCode::TOO_MANY_REQUESTS, Json(PairResponse { success: false, token: None, name: None, error: Some("too many requests; slow down".into()) }));
     }
-    match try_pair(&state.pairing, &state.keys, &req.code, &req.name) {
+    match try_pair_as(&state.pairing, &state.keys, &req.code, &req.name, req.role.as_deref()) {
         PairOutcome::Paired { token, entry } => {
             let payload = serde_json::json!({ "name": entry.name, "hash": entry.hash, "role": entry.role }).to_string();
             if let Err(e) = state.sink.emit_event("remote:paired", &payload) {
@@ -786,7 +1211,10 @@ fn live_reader<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers: &
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
     match check_key(&state.keys, presented_key(headers)) {
-        Ok(Some(entry)) => Ok(entry),
+        Ok(Some(entry)) => {
+            state.presence.saw(&entry, peer.ip());
+            Ok(entry)
+        }
         Ok(None) if peer.ip().is_loopback() => Ok(crate::keys::KeyEntry { hash: String::new(), name: "This computer".into(), role: crate::keys::Role::Configure, paused: false }),
         Ok(None) => Err(StatusCode::FORBIDDEN),
         Err(_) => Err(StatusCode::UNAUTHORIZED),
@@ -823,45 +1251,188 @@ async fn live_handler<S: CommandSink + 'static>(
         Err(code) => return code.into_response(),
     };
     match state.live.current() {
-        Some(json) => ([(axum::http::header::CONTENT_TYPE, "application/json"), (axum::http::header::CACHE_CONTROL, "no-store")], notices_for(&json, reader.as_ref())).into_response(),
+        Some(json) => {
+            let mut data = live_for(&json, reader.as_ref());
+            if sees_crew(reader.as_ref()) {
+                data = with_crew(data, crew_rows(&state.keys, &state.presence));
+            }
+            ([(axum::http::header::CONTENT_TYPE, "application/json"), (axum::http::header::CACHE_CONTROL, "no-store")], data).into_response()
+        }
         None => StatusCode::NO_CONTENT.into_response(),
     }
 }
 
+/// Whether the key a stream was opened with still reads the Live State exactly as then: still
+/// listed with the same name, role and control (this computer itself: keys still off). Revoking,
+/// pausing or changing a desk's role ends its stream at once; a desk that may still read connects
+/// again and is served by what it is now.
+fn still_reads(keys: &KeySet, entry: &crate::keys::KeyEntry) -> bool {
+    let keys = keys.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if entry.hash.is_empty() {
+        return !keys.require_auth;
+    }
+    keys.require_auth && keys.entries.iter().any(|e| e == entry)
+}
+
+/// Resolves once the listener is stopping: a stream that would otherwise never end ends with it.
+fn until_stopped(mut stopping: watch::Receiver<bool>) -> impl std::future::Future<Output = ()> {
+    async move {
+        while !*stopping.borrow_and_update() {
+            if stopping.changed().await.is_err() {
+                break;
+            }
+        }
+    }
+}
+
+/// How often an open stream looks whether its key changed (revoked, paused, another role).
+const KEY_CHECK: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// One open Live State stream: what it follows and who it is for.
+struct LiveStream {
+    rx: broadcast::Receiver<String>,
+    first: Option<String>,
+    entry: crate::keys::KeyEntry,
+    keys: KeySet,
+    /// Who is connected, for a director's board (`sees_crew`).
+    presence: crate::presence::SharedPresence,
+    tick: tokio::time::Interval,
+    /// Counts the desk as connected (Production → Operators) until the stream ends.
+    _connected: Option<crate::presence::StreamGuard>,
+}
+
 /// `GET /api/v1/live/events`: the Live State as server-sent events, the current one first, then
-/// each change; a comment every 15 s keeps the connection open through idle routers.
+/// each change; a comment every 15 s keeps the connection open through idle routers. When the
+/// desk's key changes (revoked, paused, given another role) the stream says `rejoin` and ends.
 async fn live_events_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> axum::response::Response {
-    let reader = match live_reader(&state, peer, &headers) {
-        Ok(entry) => notice_reader(entry),
+    let entry = match live_reader(&state, peer, &headers) {
+        Ok(entry) => entry,
         Err(code) => return code.into_response(),
     };
-    let rx = state.live.tx.subscribe();
-    let first = state.live.current();
-    let stream = futures_util::stream::unfold((rx, first, reader), |(mut rx, first, reader)| async move {
-        if let Some(json) = first {
-            let data = notices_for(&json, reader.as_ref());
-            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("live").data(data)), (rx, None, reader)));
+    // Production → Cameras names a desk that watches a camera from this address (#209).
+    if !entry.hash.is_empty() {
+        state.cameras.saw_desk(peer.ip(), &entry.name);
+    }
+    let mut tick = tokio::time::interval(KEY_CHECK);
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let open = LiveStream { rx: state.live.tx.subscribe(), first: state.live.current(), _connected: state.presence.stream_opened(&entry, peer.ip()), entry, keys: state.keys.clone(), presence: state.presence.clone(), tick };
+    let stream = futures_util::stream::unfold(Some(open), |open| async move {
+        let mut s = open?;
+        let reader = notice_reader(s.entry.clone());
+        let crew = sees_crew(reader.as_ref());
+        let shape = |json: &str, keys: &KeySet, presence: &crate::presence::Presence| {
+            let data = live_for(json, reader.as_ref());
+            if crew { with_crew(data, crew_rows(keys, presence)) } else { data }
+        };
+        if let Some(json) = s.first.take() {
+            let data = shape(&json, &s.keys, &s.presence);
+            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("live").data(data)), Some(s)));
         }
         loop {
-            match rx.recv().await {
-                Ok(json) => {
-                    let data = notices_for(&json, reader.as_ref());
-                    return Some((Ok(Event::default().event("live").data(data)), (rx, None, reader)));
+            tokio::select! {
+                r = s.rx.recv() => match r {
+                    Ok(json) => {
+                        let data = shape(&json, &s.keys, &s.presence);
+                        return Some((Ok(Event::default().event("live").data(data)), Some(s)));
+                    }
+                    // Slow reader: skip to the newest; the next message is the whole state anyway.
+                    Err(broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(broadcast::error::RecvError::Closed) => return None,
+                },
+                _ = s.tick.tick() => {
+                    if !still_reads(&s.keys, &s.entry) {
+                        log::info!("Live State stream for {} ended: its key changed", s.entry.name);
+                        // The last message; the stream (and the desk's place in Operators) ends with it.
+                        return Some((Ok(Event::default().event("rejoin").data("the host changed this desk")), None));
+                    }
                 }
-                // Slow reader: skip to the newest; the next message is the whole state anyway.
-                Err(broadcast::error::RecvError::Lagged(_)) => {}
-                Err(broadcast::error::RecvError::Closed) => return None,
             }
         }
     });
+    let stream = futures_util::StreamExt::take_until(stream, until_stopped(state.stopping.clone()));
     Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(15))).into_response()
 }
 
+/// `POST /api/v1/lookup {"what": …}`: a joined desk looks something up in this computer's library
+/// (desk consoles, #197): Bible translations, a chapter, a words search, songs and hymns. A paired
+/// key whose role works with that content (`crate::lookup`); read only, so a paused desk may too.
+async fn lookup_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(asked): Json<crate::lookup::Lookup>,
+) -> axum::response::Response {
+    let entry = match live_reader(&state, peer, &headers) {
+        Ok(entry) => entry,
+        Err(code) => return code.into_response(),
+    };
+    if !asked.allowed(entry.role) {
+        log::info!("Lookup from {} refused: its role", entry.name);
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": crate::lookup::refusal(&asked) }))).into_response();
+    }
+    let Some(asked) = asked.checked() else {
+        return (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!({ "error": "Type a little more to look up" }))).into_response();
+    };
+    let sink = state.sink.clone();
+    match tokio::task::spawn_blocking(move || sink.lookup(&asked)).await {
+        Ok(Ok(v)) => ([(axum::http::header::CACHE_CONTROL, "no-store")], Json(v)).into_response(),
+        Ok(Err(why)) => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": why }))).into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 type Query = axum::extract::Query<std::collections::HashMap<String, String>>;
+
+/// An OBS companion's key (#209): paired as one, and not paused. A paused companion is told so
+/// (423), as a paused desk is; any other desk is refused.
+fn companion_key<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers: &HeaderMap) -> Result<crate::keys::KeyEntry, (StatusCode, &'static str)> {
+    if !state.rate.allow(peer.ip()) {
+        return Err((StatusCode::TOO_MANY_REQUESTS, "too many requests; slow down"));
+    }
+    let key = check_key(&state.keys, presented_key(headers));
+    if let Ok(Some(e)) = &key {
+        state.presence.saw(e, peer.ip());
+    }
+    match key {
+        Ok(Some(e)) if e.role != crate::keys::Role::ObsCompanion => Err((StatusCode::FORBIDDEN, "This computer is not an OBS companion of this host. On the host: Settings → Remote control, set its role to OBS companion.")),
+        Ok(Some(e)) if e.paused => Err((StatusCode::LOCKED, crate::keys::PAUSED_MESSAGE)),
+        Ok(Some(e)) => Ok(e),
+        Ok(None) | Err(_) => Err((StatusCode::UNAUTHORIZED, "The host no longer knows this computer: pair again")),
+    }
+}
+
+/// `GET /api/v1/cameras/watch`: the church's cameras for an OBS companion (#209), and its own way
+/// to read them while the camera router runs.
+async fn companion_cameras_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    match companion_key(&state, peer, &headers) {
+        Ok(e) => ([(axum::http::header::CACHE_CONTROL, "no-store")], Json(state.cameras.companion_view(&e.hash))).into_response(),
+        Err((code, why)) => (code, Json(serde_json::json!({ "error": why }))).into_response(),
+    }
+}
+
+/// `POST /api/v1/cameras/tally {"program":[…],"preview":[…],"receiving":[…]}`: which cameras are on
+/// an OBS companion's program and preview, and which its OBS plays, for Production → Cameras.
+async fn companion_tally_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(tally): Json<crate::cameras::Tally>,
+) -> axum::response::Response {
+    match companion_key(&state, peer, &headers) {
+        Ok(e) if state.cameras.set_tally(&e.hash, tally) => StatusCode::NO_CONTENT.into_response(),
+        // Paired a moment ago: the app has not made its reader yet.
+        Ok(_) => (StatusCode::CONFLICT, Json(serde_json::json!({ "error": "The host is still setting this computer up; try again in a moment" }))).into_response(),
+        Err((code, why)) => (code, Json(serde_json::json!({ "error": why }))).into_response(),
+    }
+}
 
 /// `GET /feed/{id}?k=<secret>`: the browser feed page (the app's own `feed.html`).
 async fn feed_page_handler<S: CommandSink + 'static>(
@@ -874,7 +1445,7 @@ async fn feed_page_handler<S: CommandSink + 'static>(
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
     if !state.feeds.knows(&id, q.get("k").map_or("", String::as_str)) {
-        return (StatusCode::FORBIDDEN, "This feed's link is not valid (copy it again from Rhema → Outputs).").into_response();
+        return (StatusCode::FORBIDDEN, "This feed's link is not valid (copy it again from Rhema Studio → Outputs).").into_response();
     }
     match state.sink.asset("feed.html") {
         Some((bytes, _)) => ([(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8"), (axum::http::header::CACHE_CONTROL, "no-store")], bytes).into_response(),
@@ -1002,13 +1573,13 @@ async fn camera_page_handler<S: CommandSink + 'static>(
     }
     let (name, k) = (q.get("name").map_or("", String::as_str), q.get("k").map_or("", String::as_str));
     if !state.cameras.knows(name, k) {
-        return (StatusCode::FORBIDDEN, "This camera link is not valid. Scan it again from Rhema: Production, Cameras.").into_response();
+        return (StatusCode::FORBIDDEN, "This camera link is not valid. Scan it again from Rhema Studio: Production, Cameras.").into_response();
     }
     (
         [
             (axum::http::header::CACHE_CONTROL, "no-store"),
             (axum::http::header::X_FRAME_OPTIONS, "DENY"),
-            (axum::http::header::CONTENT_SECURITY_POLICY, "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; media-src 'self' blob: mediastream:; form-action 'none'; frame-ancestors 'none'"),
+            (axum::http::header::CONTENT_SECURITY_POLICY, "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; media-src 'self' blob: mediastream:; form-action 'none'; frame-ancestors 'none'"),
             (axum::http::header::HeaderName::from_static("permissions-policy"), "camera=(self), microphone=(self)"),
         ],
         axum::response::Html(include_str!("camera.html")),
@@ -1037,6 +1608,29 @@ async fn camera_whip_handler<S: CommandSink + 'static>(
         return code.into_response();
     }
     state.cameras.forward(axum::http::Method::POST, &name, None, &headers, body).await
+}
+
+/// `POST /api/v1/camera/{name}/status` with `Authorization: Bearer <the camera's secret>`: Rhema
+/// Studio Cam's battery and heat, every 30 s while it sends (#213). The secret goes in a header,
+/// never in the address (addresses end up in logs).
+async fn camera_status_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> axum::response::Response {
+    if !state.rate.allow(peer.ip()) {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    let token = headers.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).unwrap_or("").trim();
+    if body.len() > 4096 {
+        return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+    }
+    let Ok(status) = serde_json::from_slice::<crate::cameras::PhoneStatus>(&body) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    if state.cameras.set_phone(&name, token, status) { StatusCode::NO_CONTENT.into_response() } else { StatusCode::FORBIDDEN.into_response() }
 }
 
 /// `PATCH` (more ICE candidates) and `DELETE` (hang up) on a camera's WHIP session.
@@ -1091,7 +1685,7 @@ async fn voice_handler<S: CommandSink + 'static>(
         Ok(Ok(sdp)) => Json(serde_json::json!({ "sdp": sdp })).into_response(),
         _ => {
             state.voice.forget(&id);
-            (StatusCode::GATEWAY_TIMEOUT, Json(serde_json::json!({ "error": "The host did not answer. Is Rhema open there?" }))).into_response()
+            (StatusCode::GATEWAY_TIMEOUT, Json(serde_json::json!({ "error": "The host did not answer. Is Rhema Studio open there?" }))).into_response()
         }
     }
 }
@@ -1099,6 +1693,12 @@ async fn voice_handler<S: CommandSink + 'static>(
 #[derive(Deserialize)]
 struct FeedAck {
     seq: u64,
+    /// The cameras the page plays, sent every few seconds while it plays any (#213); absent from older pages.
+    #[serde(default)]
+    video: Option<Vec<crate::feed_video::CameraPlayback>>,
+    /// The page's clock minus the host's (ms), from the host's beats (#196); absent from older pages.
+    #[serde(default)]
+    clock: Option<i64>,
 }
 
 /// `POST /api/v1/feed/{id}/ack?k=<secret>`: the page drew frame `seq` (receiver trust).
@@ -1112,7 +1712,17 @@ async fn feed_ack_handler<S: CommandSink + 'static>(
     if !state.rate.allow(peer.ip()) {
         return StatusCode::TOO_MANY_REQUESTS;
     }
-    if state.feeds.ack(&id, q.get("k").map_or("", String::as_str), ack.seq) { StatusCode::NO_CONTENT } else { StatusCode::FORBIDDEN }
+    match state.feeds.ack(&id, q.get("k").map_or("", String::as_str), ack.seq, ack.video.map(|v| (peer.ip(), v)), ack.clock.map(|c| c.clamp(-86_400_000, 86_400_000))) {
+        Err(()) => StatusCode::FORBIDDEN,
+        Ok(first) => {
+            // The first page to draw a new frame: the app logs which screen showed what, and how soon
+            // (#246 C17). Once per frame; the app keeps only content changes.
+            if let Some(after_ms) = first {
+                let _ = state.sink.emit_event("feed:acked", &serde_json::json!({ "id": id, "seq": ack.seq, "afterMs": after_ms }).to_string());
+            }
+            StatusCode::NO_CONTENT
+        }
+    }
 }
 
 /// `GET /api/v1/feed/{id}/events?k=<secret>`: the feed's frames as server-sent events.
@@ -1125,23 +1735,43 @@ async fn feed_events_handler<S: CommandSink + 'static>(
     if !state.rate.allow(peer.ip()) {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
-    let Some((first, rx)) = state.feeds.follow(&id, q.get("k").map_or("", String::as_str)) else {
+    let key = q.get("k").cloned().unwrap_or_default();
+    let Some((first, rx, watching)) = state.feeds.follow(&id, &key) else {
         return StatusCode::FORBIDDEN.into_response();
     };
-    let stream = futures_util::stream::unfold((rx, first), |(mut rx, first)| async move {
+    // Frames as they change, and a beat with the host's clock every few seconds between them (#196):
+    // a page that hears neither knows it is out of date. An older page ignores the beats.
+    let beat = tokio::time::interval_at(tokio::time::Instant::now() + FEED_BEAT, FEED_BEAT);
+    let stream = futures_util::stream::unfold((rx, first, beat), |(mut rx, first, mut beat)| async move {
         // The frame's number is the event id: the page acknowledges it once drawn.
         if let Some((seq, json)) = first {
-            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("frame").id(seq.to_string()).data(json)), (rx, None)));
+            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("frame").id(seq.to_string()).data(json)), (rx, None, beat)));
         }
         loop {
-            match rx.recv().await {
-                Ok((seq, json)) => return Some((Ok(Event::default().event("frame").id(seq.to_string()).data(json)), (rx, None))),
-                Err(broadcast::error::RecvError::Lagged(_)) => {}
-                Err(broadcast::error::RecvError::Closed) => return None,
+            tokio::select! {
+                r = rx.recv() => match r {
+                    Ok((seq, json)) => return Some((Ok(Event::default().event("frame").id(seq.to_string()).data(json)), (rx, None, beat))),
+                    Err(broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(broadcast::error::RecvError::Closed) => return None,
+                },
+                _ = beat.tick() => return Some((Ok(Event::default().event("beat").data(host_now_ms().to_string())), (rx, None, beat))),
             }
         }
     });
+    let stream = futures_util::StreamExt::take_until(stream, until_stopped(state.stopping.clone()));
+    // A revoked TV (or a new link) is cut at once; its page then finds its link no longer works.
+    let stream = futures_util::StreamExt::take_until(stream, state.feeds.clone().until_withdrawn(id, key));
+    // A paired TV's page counts as watching while this stream is open.
+    let stream = futures_util::StreamExt::map(stream, move |e| {
+        let _ = &watching;
+        e
+    });
     Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(15))).into_response()
+}
+
+/// The host's wall clock in ms since 1970, as a feed page's beat carries it.
+fn host_now_ms() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
 /// The key a request carries, from `X-Rhema-Key` or `Authorization: Bearer`.
@@ -1156,6 +1786,29 @@ fn presented_key(headers: &HeaderMap) -> Option<&str> {
         .map(str::trim)
 }
 
+fn check_http_command_key(
+    keys: &KeySet,
+    headers: &HeaderMap,
+    peer: SocketAddr,
+) -> Result<Option<crate::keys::KeyEntry>, (StatusCode, &'static str)> {
+    match check_remote_key(keys, presented_key(headers), peer.ip()) {
+        Err(reason) if reason == OPEN_REMOTE_OUTSIDE_LOCAL_NETWORK => {
+            log::warn!("HTTP command refused: unauthenticated request from {}", peer.ip());
+            Err((StatusCode::FORBIDDEN, reason))
+        }
+        Err(reason) => {
+            log::warn!("HTTP command refused: {reason}");
+            Err((StatusCode::UNAUTHORIZED, reason))
+        }
+        Ok(entry) => Ok(entry),
+    }
+}
+
+fn command_key_refusal(status: StatusCode, reason: &'static str) -> (StatusCode, Json<CommandResponse>) {
+    let message = if status == StatusCode::FORBIDDEN { reason.to_string() } else { format!("{reason} (X-Rhema-Key)") };
+    (status, CommandResponse::refused(message))
+}
+
 async fn command_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
@@ -1164,78 +1817,114 @@ async fn command_handler<S: CommandSink + 'static>(
 ) -> impl IntoResponse {
     if !state.rate.allow(peer.ip()) {
         log::warn!("HTTP command refused: too many from {}", peer.ip());
-        return (StatusCode::TOO_MANY_REQUESTS, Json(CommandResponse { success: false, error: Some("too many commands; slow down".into()), code: None }));
+        return (StatusCode::TOO_MANY_REQUESTS, CommandResponse::refused("too many commands; slow down"));
     }
-    let by = match check_key(&state.keys, presented_key(&headers)) {
-        Err(reason) => {
-            log::warn!("HTTP command refused: {reason}");
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(CommandResponse { success: false, error: Some(format!("{reason} (X-Rhema-Key)")), code: None }),
-            );
-        }
-        Ok(Some(entry)) if entry.paused_for(&request.command) => {
-            log::info!("HTTP command refused for {}: the main desk has taken back control", entry.name);
-            return (StatusCode::LOCKED, Json(CommandResponse { success: false, error: Some(crate::keys::PAUSED_MESSAGE.into()), code: None }));
-        }
-        Ok(Some(entry)) if !entry.role.allows(&request.command) => {
-            let why = match entry.role {
-                crate::keys::Role::Timekeeper => "this device keeps time: it may move the event clock, not the screens",
-                crate::keys::Role::Bible => "this device runs the Bible: it may activate, step and clear the Bible only",
-                crate::keys::Role::Screens => "this device runs the congregation screens: it may take and release scenes only",
-                _ => "this device may present but not change settings",
-            };
-            log::warn!("HTTP command refused for {}: {why}", entry.name);
-            return (
-                StatusCode::FORBIDDEN,
-                Json(CommandResponse { success: false, error: Some(why.into()), code: None }),
-            );
-        }
-        Ok(Some(entry)) => (entry.name, Some(entry.hash)),
-        Ok(None) => ("an open remote".to_string(), None),
+    let entry = match check_http_command_key(&state.keys, &headers, peer) {
+        Err((status, reason)) => return command_key_refusal(status, reason),
+        Ok(entry) => entry,
     };
-    let (by, by_id) = by;
+    let by = match entry {
+        Some(entry) if entry.paused_for(&request.command) => {
+            log::info!("HTTP command refused for {}: the main desk has taken back control", entry.name);
+            return (StatusCode::LOCKED, CommandResponse::refused(crate::keys::PAUSED_MESSAGE));
+        }
+        Some(entry) if !entry.role.allows(&request.command) => {
+            let why = refusal_for(entry.role, &request.command);
+            log::warn!("HTTP command refused for {}: {why}", entry.name);
+            return (StatusCode::FORBIDDEN, CommandResponse::refused(why));
+        }
+        Some(entry) => {
+            state.presence.saw(&entry, peer.ip());
+            (entry.name, Some(entry.hash), entry.role)
+        }
+        // An open remote (no keys) may do everything, as before.
+        None => ("an open remote".to_string(), None, crate::keys::Role::Configure),
+    };
+    let (by, by_id, role) = by;
+    let mut command = request.command;
     // Several services must never share state (#246 C16): a desk still showing the 9 AM service
     // cannot move the 11 AM one. Crew talk is not about a service.
-    if !request.command.is_comms() {
+    if !command.is_comms() {
         if let (Some(sent), Some(host)) = (request.service.as_deref(), state.live.service()) {
             if sent != host {
                 log::info!("HTTP command from {by} refused: it is for another service");
-                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(OTHER_SERVICE_MESSAGE.into()), code: Some("other-service") }));
+                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(OTHER_SERVICE_MESSAGE.into()), code: Some("other-service"), note: None }));
             }
         }
+    }
+    // OBS is the online stream: never switched from a desk in rehearsal (the host refuses it too).
+    // Nor its recording or transition (#197 Story I: rehearsal records nothing).
+    if matches!(command, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsRecord(_) | RemoteCommand::ObsTransition(_)) && in_rehearsal(state.live.current().as_deref()) {
+        return (StatusCode::FORBIDDEN, CommandResponse::refused(OBS_REHEARSAL_MESSAGE));
+    }
+    // An extra timer belongs to a role (#196 R2.5): only the timekeeping desks and that role may run it.
+    if let RemoteCommand::AuxTimer(t) = &command {
+        if let Err(why) = crate::aux_timers::judge(state.live.current().as_deref(), role, t) {
+            log::info!("HTTP extra timer command from {by} refused: {why}");
+            return (StatusCode::FORBIDDEN, CommandResponse::refused(why));
+        }
+    }
+    if matches!(command, RemoteCommand::SongSection(_)) && !lyrics_up(state.live.current().as_deref()) {
+        return (StatusCode::UNPROCESSABLE_ENTITY, CommandResponse::refused(NO_LYRICS_MESSAGE));
     }
     // From here one command at a time, so two desks pressing at once are checked one after the other.
     let _turn = state.gate.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if request.id.as_deref().is_some_and(|id| state.recent.seen(id)) {
-        log::info!("HTTP command {:?} already carried out (a retry); not repeated", request.command);
-        return (StatusCode::OK, Json(CommandResponse { success: true, error: None, code: None }));
+        log::info!("HTTP command {command:?} already carried out (a retry); not repeated");
+        return (StatusCode::OK, Json(CommandResponse { success: true, ..Default::default() }));
     }
     // Acting on what it saw (#196 R7): if someone changed that part of the service since, the desk
-    // looks again rather than undo or repeat their change.
-    let part = revision_part(&request.command);
+    // looks again rather than undo or repeat their change. A scene a desk edits is one such part.
+    let part = revision_part(&command);
     if let (Some(part), Some(seen)) = (part.as_deref(), request.seen.as_ref()) {
         if let (Some(sent), Some(now)) = (seen.get(part), state.live.revision(part)) {
             if *sent != now {
-                log::info!("HTTP command {:?} from {by} refused: {part} changed since (revision {sent}, now {now})", request.command);
-                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(STALE_MESSAGE.into()), code: Some("stale") }));
+                log::info!("HTTP command {command:?} from {by} refused: {part} changed since (revision {sent}, now {now})");
+                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(STALE_MESSAGE.into()), code: Some("stale"), note: None }));
             }
         }
+    }
+    // A scene from a desk (#243 SC.16, SC.17): what its role may change, and the approval rule,
+    // against the host's scenes as it last published them.
+    // Only the fields a desk may send for a scene go on to the checks and the app.
+    if let RemoteCommand::SaveScene(sc) = &mut command {
+        crate::scene_edits::strip(&mut sc.scene);
+    }
+    let mut note = None;
+    let mut waits = false;
+    match crate::scene_edits::judge(state.live.current().as_deref(), role, &command) {
+        Err(r) => {
+            log::info!("HTTP scene change from {by} refused: {}", r.message);
+            let status = StatusCode::from_u16(r.status).unwrap_or(StatusCode::BAD_REQUEST);
+            let message = if r.code == "stale" { STALE_MESSAGE.to_string() } else { r.message };
+            return (status, Json(CommandResponse { success: false, error: Some(message), code: Some(r.code), note: None }));
+        }
+        Ok(Some(crate::scene_edits::Verdict::Request(why))) => {
+            match &mut command {
+                RemoteCommand::SaveScene(s) => s.request = true,
+                RemoteCommand::DeleteScene(d) => d.request = true,
+                _ => {}
+            }
+            waits = true;
+            note = Some(format!("Sent to the main desk to accept, because {why}"));
+        }
+        Ok(_) => {}
     }
     if let Some(id) = request.id.as_deref() {
         state.recent.first_time(id);
     }
-    if let Some(part) = part.as_deref() {
+    // A change that waits for the main desk has not changed the scene yet: another desk may still act on it.
+    if let Some(part) = part.as_deref().filter(|_| !waits) {
         state.live.bump(part);
     }
     let why = request.why.as_deref().map(|w| w.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(200).collect::<String>()).filter(|w| !w.is_empty());
-    let done = match (&request.command, why) {
-        (RemoteCommand::NoticeAck(_), Some(why)) => CommandDispatcher::dispatch_from(&request.command, &WithWhy { inner: &*state.sink, why: &why }, &by, by_id.as_deref()),
-        _ => CommandDispatcher::dispatch_from(&request.command, &*state.sink, &by, by_id.as_deref()),
+    let done = match (&command, why) {
+        (RemoteCommand::NoticeAck(_), Some(why)) => CommandDispatcher::dispatch_from(&command, &WithWhy { inner: &*state.sink, why: &why }, &by, by_id.as_deref()),
+        _ => CommandDispatcher::dispatch_from(&command, &*state.sink, &by, by_id.as_deref()),
     };
     match done {
-        Ok(()) => (StatusCode::OK, Json(CommandResponse { success: true, error: None, code: None })),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(CommandResponse { success: false, error: Some(e.to_string()), code: None })),
+        Ok(()) => (StatusCode::OK, Json(CommandResponse { success: true, note, ..Default::default() })),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, CommandResponse::refused(e.to_string())),
     }
 }
 
@@ -1260,6 +1949,27 @@ impl CommandSink for WithWhy<'_> {
     }
 }
 
+/// Why a desk's role does not allow a command, in words for the person at that desk.
+fn refusal_for(role: crate::keys::Role, cmd: &RemoteCommand) -> &'static str {
+    use crate::keys::Role;
+    match role {
+        Role::Timekeeper => "this device keeps time: it may move the event clock, not the screens",
+        Role::Bible => "this device runs the Bible: it may activate, step and clear the Bible only",
+        Role::Screens => "this device runs the congregation screens: it may take, release, make and change scenes and take the ticker and lower third off and back only",
+        Role::Worship => "this device runs worship: it may show songs and hymns, step through their sections and take the lyrics off and back only",
+        Role::Stage => "this device runs the stage: it may change the stage message only",
+        Role::Camera => "this device runs the cameras: it may hide or show a camera and change the camera boxes in scenes only",
+        Role::Obs => "this device is the OBS director: it may switch OBS scenes, choose the transition and start, stop and mark the recording only",
+        Role::ObsCompanion => "this computer is an OBS companion: it reads the church's cameras into its own OBS and sends no commands",
+        Role::Editor => "this device prepares: it may put a verse or a song in the main desk's Preview, add to the queue and make or change scenes, never what is live",
+        Role::Viewer => "this device is view only: it follows the service and may use Talk and notices, nothing else",
+        _ if matches!(cmd, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsTransition(_)) => "only a desk the main desk made OBS director may switch OBS",
+        _ if matches!(cmd, RemoteCommand::ObsRecord(_)) => "only a desk the main desk made OBS director may start or stop OBS's recording",
+        _ if matches!(cmd, RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_)) => "this device may present but not make or change scenes",
+        _ => "this device may present but not change settings",
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -1271,12 +1981,39 @@ mod tests {
         assert!(recent.first_time("press-2"), "a new press");
     }
     use super::*;
+    use crate::keys::{hash_key, key_set_from};
     use std::sync::Mutex;
+
+    #[test]
+    fn http_command_key_check_limits_open_access_and_refuses_bad_or_revoked_keys() {
+        let open = new_key_set();
+        let no_key = HeaderMap::new();
+        let public_peer = "8.8.8.8:45000".parse().unwrap();
+        let lan_peer = "192.168.1.20:45000".parse().unwrap();
+
+        assert_eq!(check_http_command_key(&open, &no_key, public_peer).unwrap_err().0, StatusCode::FORBIDDEN);
+        assert!(check_http_command_key(&open, &no_key, lan_peer).unwrap().is_none());
+
+        let paired = key_set_from(&[("token", "Desk")]);
+        let mut wrong_key = HeaderMap::new();
+        wrong_key.insert("x-rhema-key", "tampered".parse().unwrap());
+        assert_eq!(check_http_command_key(&paired, &wrong_key, public_peer).unwrap_err().0, StatusCode::UNAUTHORIZED);
+
+        let mut valid_key = HeaderMap::new();
+        valid_key.insert("x-rhema-key", "token".parse().unwrap());
+        assert_eq!(check_http_command_key(&paired, &valid_key, public_peer).unwrap().unwrap().name, "Desk");
+
+        let revoked = new_key_set();
+        revoked.write().unwrap().require_auth = true;
+        assert_eq!(check_http_command_key(&revoked, &valid_key, public_peer).unwrap_err().0, StatusCode::UNAUTHORIZED);
+    }
 
     struct MockSink {
         commands: Mutex<Vec<String>>,
         /// The last production notice's event, as the app would receive it.
         notice: Mutex<Option<String>>,
+        /// The last scene change's event payload.
+        scene: Mutex<Option<String>>,
     }
 
     impl MockSink {
@@ -1284,6 +2021,7 @@ mod tests {
             Self {
                 commands: Mutex::new(Vec::new()),
                 notice: Mutex::new(None),
+                scene: Mutex::new(None),
             }
         }
 
@@ -1292,10 +2030,54 @@ mod tests {
         }
     }
 
+    fn app_state_for_network_tests() -> Arc<AppState<MockSink>> {
+        let (_shutdown, stopping) = watch::channel(false);
+        Arc::new(AppState {
+            live: new_live_hub(),
+            feeds: new_feed_hub(),
+            voice: new_voice_hub(),
+            cameras: crate::cameras::new_camera_hub(),
+            presence: crate::presence::new_presence(),
+            tls_port: std::sync::OnceLock::new(),
+            stopping,
+            sink: Arc::new(MockSink::new()),
+            status: new_shared_status(),
+            keys: new_key_set(),
+            pairing: new_pairing_window(),
+            rate: crate::rate::RateLimiter::default(),
+            recent: RecentIds::default(),
+            gate: std::sync::Mutex::new(()),
+        })
+    }
+
+    #[tokio::test]
+    async fn public_sources_cannot_read_status_health_or_open_pairing() {
+        let state = app_state_for_network_tests();
+        let public_peer: SocketAddr = "8.8.8.8:45000".parse().unwrap();
+
+        let health = health_handler(AxumState(state.clone()), ConnectInfo(public_peer)).await;
+        assert_eq!(health.status(), StatusCode::FORBIDDEN);
+
+        let status = status_handler(AxumState(state.clone()), ConnectInfo(public_peer)).await;
+        assert_eq!(status.status(), StatusCode::FORBIDDEN);
+
+        let pair = pair_handler(
+            AxumState(state),
+            ConnectInfo(public_peer),
+            Json(PairRequest { code: "unused".into(), name: "Desk".into(), role: None }),
+        )
+        .await
+        .into_response();
+        assert_eq!(pair.status(), StatusCode::FORBIDDEN);
+    }
+
     impl CommandSink for MockSink {
         fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
             if event == "remote:notice_send" {
                 *self.notice.lock().unwrap() = Some(payload.to_string());
+            }
+            if event == "remote:save_scene" || event == "remote:delete_scene" {
+                *self.scene.lock().unwrap() = Some(payload.to_string());
             }
             // Commands only: the service log's record of each (remote:audit) is not a command.
             if event != "remote:audit" {
@@ -1307,6 +2089,13 @@ mod tests {
         fn invoke_backend(&self, action: &str, _args: &str) -> Result<(), CommandError> {
             self.commands.lock().unwrap().push(action.to_string());
             Ok(())
+        }
+
+        fn lookup(&self, q: &crate::lookup::Lookup) -> Result<serde_json::Value, String> {
+            match q {
+                crate::lookup::Lookup::Songs { query } if query == "broken" => Err("Songs are unavailable on the host".into()),
+                _ => Ok(serde_json::json!({ "asked": format!("{q:?}") })),
+            }
         }
     }
 
@@ -1364,14 +2153,16 @@ mod tests {
     async fn get_with(port: u16, path: &str, headers: &str, read_bytes: Option<usize>) -> String {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")).await.expect("connect");
-        stream.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n{headers}Connection: close\r\n\r\n").as_bytes()).await.expect("write");
+        stream.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{headers}Connection: close\r\n\r\n").as_bytes()).await.expect("write");
         let mut out = Vec::new();
         match read_bytes {
             None => { stream.read_to_end(&mut out).await.expect("read"); }
             Some(n) => {
                 let mut buf = [0u8; 1024];
+                // Up to n bytes, or what came within 2 s of the last (the headers' length varies).
                 while out.len() < n {
-                    let r = tokio::time::timeout(std::time::Duration::from_secs(2), stream.read(&mut buf)).await.expect("in time").expect("read");
+                    let Ok(r) = tokio::time::timeout(std::time::Duration::from_secs(2), stream.read(&mut buf)).await else { break };
+                    let r = r.expect("read");
                     if r == 0 { break; }
                     out.extend_from_slice(&buf[..r]);
                 }
@@ -1574,7 +2365,7 @@ mod tests {
         let tcp = tokio::net::TcpStream::connect(("127.0.0.1", tls_port)).await.unwrap();
         let name = rustls::pki_types::ServerName::try_from("127.0.0.1").unwrap();
         let mut tls = tokio_rustls::TlsConnector::from(Arc::new(client)).connect(name, tcp).await.expect("the chain checks");
-        tls.write_all(b"GET /api/v1/health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").await.unwrap();
+        tls.write_all(format!("GET /api/v1/health HTTP/1.1\r\nHost: 127.0.0.1:{tls_port}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
         let mut out = Vec::new();
         let _ = tls.read_to_end(&mut out).await;
         let text = String::from_utf8_lossy(&out);
@@ -1614,7 +2405,7 @@ mod tests {
                 use sha2::Digest;
                 let shown = tls.get_ref().1.peer_certificates().unwrap()[0].clone();
                 let seen: String = sha2::Sha256::digest(shown.as_ref()).iter().map(|b| format!("{b:02x}")).collect();
-                tls.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+                tls.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{tls_port}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
                 let mut out = Vec::new();
                 let _ = tls.read_to_end(&mut out).await;
                 (seen, String::from_utf8_lossy(&out).to_string())
@@ -1712,6 +2503,63 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// Per-target acks (#246 C17): the first page to draw a new frame is reported once, with how soon.
+    #[test]
+    fn the_first_draw_of_a_new_frame_is_reported_once() {
+        let feeds = new_feed_hub();
+        feeds.set(&[("tv".into(), "s3cret".into())]);
+        assert_eq!(feeds.ack("tv", "s3cret", 0, None, None), Ok(None), "nothing published yet");
+        feeds.publish("tv", "{}".into());
+        assert_eq!(feeds.ack("tv", "wrong", 1, None, None), Err(()), "refused without the secret");
+        assert!(matches!(feeds.ack("tv", "s3cret", 1, None, None), Ok(Some(ms)) if ms < 5_000), "first draw of frame 1");
+        assert_eq!(feeds.ack("tv", "s3cret", 1, None, None), Ok(None), "a page re-acking the same frame is not news");
+        feeds.publish("tv", "{}".into());
+        feeds.publish("tv", "{}".into());
+        assert_eq!(feeds.ack("tv", "s3cret", 2, None, None), Ok(None), "an older frame than the newest");
+        assert!(matches!(feeds.ack("tv", "s3cret", 3, None, None), Ok(Some(_))), "the newest frame, first drawn");
+        assert_eq!(feeds.ack("tv", "s3cret", 3, None, None), Ok(None));
+        // A paired TV acks with its own key (#198): its first draw counts the same.
+        feeds.set_keys(&[FeedKeys { id: "tv".into(), token: "s3cret".into(), tvs: vec![("192.168.1.40:8095".into(), "tv-own-key".into())] }]);
+        feeds.publish("tv", "{}".into());
+        assert!(matches!(feeds.ack("tv", "tv-own-key", 4, None, None), Ok(Some(_))), "a TV's own key opens the ack too");
+        assert_eq!(feeds.ack("tv", "s3cret", 4, None, None), Ok(None), "the second page on the same frame is not news");
+    }
+
+    async fn ack_clock(port: u16, clock: i64) -> String {
+        raw_http_request_with(port, "POST", "/api/v1/feed/l3/ack?k=s3cret", Some(&format!(r#"{{"seq":2,"clock":{clock}}}"#)), "").await
+    }
+
+    #[tokio::test]
+    async fn a_feed_page_hears_a_beat_with_the_host_clock_between_frames() {
+        let feeds = new_feed_hub();
+        feeds.set(&[("tv".into(), "s3cret".into())]);
+        feeds.publish("tv", "{}".into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds: feeds.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(PageSink), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let before = host_now_ms();
+        // The first frame, then nothing changes: a beat arrives within FEED_BEAT.
+        let stream = {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+            s.write_all(format!("GET /api/v1/feed/tv/events?k=s3cret HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+            let mut out = Vec::new();
+            let mut buf = [0u8; 1024];
+            while !String::from_utf8_lossy(&out).contains("event: beat\ndata: ") || !String::from_utf8_lossy(&out).split("event: beat\ndata: ").nth(1).is_some_and(|r| r.contains('\n')) {
+                let n = tokio::time::timeout(FEED_BEAT * 2, s.read(&mut buf)).await.expect("a beat in time").unwrap();
+                if n == 0 { break; }
+                out.extend_from_slice(&buf[..n]);
+            }
+            String::from_utf8_lossy(&out).into_owned()
+        };
+        assert!(stream.contains("event: frame"), "{stream}");
+        let beat = stream.split("event: beat\ndata: ").nth(1).and_then(|r| r.lines().next()).and_then(|n| n.trim().parse::<i64>().ok());
+        assert!(beat.is_some_and(|ms| ms >= before && ms - before < 10_000), "a beat with the host's clock: {stream}");
+        let mut h = result.handle;
+        h.stop();
+    }
+
     #[tokio::test]
     async fn a_browser_feed_needs_its_own_secret_and_streams_its_frames() {
         let feeds = new_feed_hub();
@@ -1743,9 +2591,74 @@ mod tests {
         let st = feeds.status("l3").unwrap();
         assert_eq!((st.seq, st.acked), (2, 2), "a frame never sent is not acknowledged");
         assert!(st.acked_ago_ms.is_some());
+        assert!(st.video.is_empty(), "no page said what it plays yet");
+        // A page playing a camera says how it plays (#213), with its acknowledgement.
+        let report = r#"{"seq":2,"video":[{"camera":"pulpit","playing":true,"fps":29.8,"decoded":900,"dropped":2,"droppedPct":0.2,"frameAgeMs":40,"width":1920,"height":1080,"jitterMs":4.5,"lossPct":0.1,"rttMs":2.0,"recvFps":60.0,"decodeFps":59.8,"firstFrameMs":640}]}"#;
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/l3/ack?k=s3cret", Some(report), "").await.contains("204"));
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/l3/ack?k=wrong", Some(report), "").await.contains("403"));
+        let st = feeds.status("l3").unwrap();
+        assert_eq!(st.video.len(), 1);
+        assert_eq!(st.video[0].from, "127.0.0.1");
+        assert_eq!((st.video[0].cameras[0].camera.as_str(), st.video[0].cameras[0].fps, st.video[0].cameras[0].dropped_pct), ("pulpit", Some(29.8), Some(0.2)));
+        assert_eq!((st.video[0].cameras[0].jitter_ms, st.video[0].cameras[0].loss_pct, st.video[0].cameras[0].decode_fps, st.video[0].cameras[0].first_frame_ms), (Some(4.5), Some(0.1), Some(59.8), Some(640.0)));
+        // A page says how far its clock is from the host's beats (#196): the one furthest off is kept.
+        assert_eq!(st.clock_skew_ms, None, "no page said yet");
+        assert!(ack_clock(port, -4200).await.contains("204"));
+        assert!(ack_clock(port, 300).await.contains("204"));
+        assert_eq!(feeds.status("l3").unwrap().clock_skew_ms, Some(-4200));
         // A new secret (the link was renewed) closes the old link.
         feeds.set(&[("l3".into(), "n3w".into())]);
         assert!(get_with(port, "/feed/l3?k=s3cret", "", None).await.contains("403"));
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn each_paired_tv_has_its_own_key_and_one_can_be_revoked_alone() {
+        // #198: a TV sent the feed gets its own key; the feed's link key keeps working (OBS, a TV
+        // paired before 1.5) and revoking one TV cuts only that TV, at once.
+        let feeds = new_feed_hub();
+        let keys = |tvs: &[(&str, &str)]| [FeedKeys { id: "hall".into(), token: "feed-key".into(), tvs: tvs.iter().map(|(a, b)| ((*a).to_string(), (*b).to_string())).collect() }];
+        feeds.set_keys(&keys(&[("192.168.1.40:8095", "tv-one-key"), ("192.168.1.41:8095", "tv-two-key")]));
+        feeds.publish("hall", r#"{"verse":"Psalm 23:1"}"#.into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds: feeds.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(PageSink), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        for k in ["feed-key", "tv-one-key", "tv-two-key"] {
+            assert!(get_with(port, &format!("/feed/hall?k={k}"), "", None).await.contains("feed page"), "{k}");
+        }
+        assert!(get_with(port, "/feed/hall?k=tv-three-key", "", None).await.contains("403"));
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/hall/ack?k=tv-two-key", Some(r#"{"seq":1}"#), "").await.contains("204"));
+        let follow = |k: &'static str| tokio::spawn(async move { get_with(port, &format!("/api/v1/feed/hall/events?k={k}"), "", Some(100_000)).await });
+        let (one, two, link) = (follow("tv-one-key"), follow("tv-two-key"), follow("feed-key"));
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        let st = feeds.status("hall").unwrap();
+        assert_eq!(st.watching, 3);
+        assert_eq!(st.tvs, [TvWatching { id: "192.168.1.40:8095".into(), watching: 1 }, TvWatching { id: "192.168.1.41:8095".into(), watching: 1 }], "each TV's page, by its address");
+        // Revoke TV one: its stream ends at once; the other TV and the link carry on.
+        let started = std::time::Instant::now();
+        feeds.set_keys(&keys(&[("192.168.1.41:8095", "tv-two-key")]));
+        let cut = tokio::time::timeout(std::time::Duration::from_secs(1), one).await.expect("the revoked TV is cut at once").unwrap();
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        assert!(cut.contains("Psalm 23:1"), "{cut}");
+        assert!(get_with(port, "/feed/hall?k=tv-one-key", "", None).await.contains("403"), "its link no longer works");
+        assert!(get_with(port, "/api/v1/feed/hall/events?k=tv-one-key", "", None).await.contains("403"));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let st = feeds.status("hall").unwrap();
+        assert_eq!(st.watching, 2);
+        assert_eq!(st.tvs, [TvWatching { id: "192.168.1.41:8095".into(), watching: 1 }]);
+        feeds.publish("hall", r#"{"verse":"Psalm 23:2"}"#.into());
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        // A new link for the feed: pages on the old link key are cut, the paired TV keeps its own key.
+        feeds.set_keys(&[FeedKeys { id: "hall".into(), token: "new-feed-key".into(), tvs: vec![("192.168.1.41:8095".into(), "tv-two-key".into())] }]);
+        let old_link = tokio::time::timeout(std::time::Duration::from_secs(1), link).await.expect("the old link is cut").unwrap();
+        assert!(old_link.contains("Psalm 23:2"));
+        assert!(get_with(port, "/feed/hall?k=tv-two-key", "", None).await.contains("feed page"));
+        assert!(!two.is_finished(), "the other TV still follows");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(feeds.status("hall").unwrap().tvs[0].watching, 1);
+        two.abort();
         let mut h = result.handle;
         h.stop();
     }
@@ -1783,7 +2696,7 @@ mod tests {
         let send = |method: &'static str, path: &'static str, body: &'static str, extra: &'static str| async move {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
             let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-            s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: x\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+            s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
             let mut out = String::new();
             s.read_to_string(&mut out).await.unwrap();
             out
@@ -1799,7 +2712,7 @@ mod tests {
         assert!(off.contains("503"), "{off}");
 
         let (router, seen) = fake_router().await;
-        cameras.set_router(Some(crate::cameras::RouterTarget { base: format!("http://127.0.0.1:{router}") }));
+        cameras.set_router(Some(crate::cameras::RouterTarget { base: format!("http://127.0.0.1:{router}"), srt_port: 8890, srt_passphrase: "Passphrase0123456789".into() }));
         // Without the secret nothing reaches the router.
         assert!(send("POST", "/api/v1/camera/pulpit/whip", "v=0 offer", "Content-Type: application/sdp\r\n").await.contains("403"));
         assert!(send("POST", "/api/v1/camera/pulpit/whip?k=wrong", "v=0 offer", "Content-Type: application/sdp\r\n").await.contains("403"));
@@ -1825,6 +2738,13 @@ mod tests {
             format!("DELETE /pulpit/whip/5e55-10n auth={basic} type=- if-match=- body="),
         ]);
 
+        // The Cam app's battery and heat: with the camera's secret in a header only.
+        let report = r#"{"battery":54,"charging":true,"temperature":33.5,"thermal":0,"cooling":false}"#;
+        assert!(send("POST", "/api/v1/camera/pulpit/status", report, "Content-Type: application/json\r\nAuthorization: Bearer wrong\r\n").await.contains("403"));
+        assert!(send("POST", "/api/v1/camera/pulpit/status?k=0123456789abcdef", report, "Content-Type: application/json\r\n").await.contains("403"), "never the secret in the address");
+        assert!(send("POST", "/api/v1/camera/pulpit/status", "not json", "Authorization: Bearer 0123456789abcdef\r\n").await.contains("400"));
+        assert!(send("POST", "/api/v1/camera/pulpit/status", report, "Content-Type: application/json\r\nAuthorization: Bearer 0123456789abcdef\r\n").await.contains("204"));
+        assert_eq!(cameras.phone("pulpit").map(|p| (p.status.battery, p.status.charging)), Some((Some(54.0), true)));
         // A removed camera's link stops at once.
         cameras.set(&[]);
         assert!(send("POST", "/api/v1/camera/pulpit/whip?k=0123456789abcdef", "v=0 offer", "Content-Type: application/sdp\r\n").await.contains("403"));
@@ -1930,6 +2850,63 @@ mod tests {
         handle.stop();
     }
 
+    /// An OBS companion (#209): pairs as one, reads the cameras with its own sign-in, reports its
+    /// tally; a paused companion and any other desk are refused.
+    #[tokio::test]
+    async fn an_obs_companion_reads_the_cameras_with_its_own_sign_in() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        let sink = Arc::new(MockSink::new());
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("comp", "Media desk", Role::ObsCompanion), entry("pres", "Phone", Role::Present)] }));
+        let cameras = crate::cameras::new_camera_hub();
+        cameras.set(&[("pulpit".into(), "0123456789abcdef0123".into())]);
+        cameras.sync_readers(&[(hash_key("comp"), "Media desk".into())]);
+        cameras.set_router(Some(crate::cameras::RouterTarget { base: "http://127.0.0.1:8889".into(), srt_port: 8890, srt_passphrase: "Passphrase0123456789".into() }));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), cameras: cameras.clone(), ..Default::default() };
+        let result = start_http_server(config, sink, new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let comp = "X-Rhema-Key: comp\r\n";
+        let watch = get_with(port, "/api/v1/cameras/watch", comp, None).await;
+        assert!(watch.contains("200 OK") && watch.contains(r#""user":"read-"#) && watch.contains(r#""name":"pulpit""#), "{watch}");
+        assert!(!watch.contains("0123456789abcdef0123"), "never the camera's publishing secret: {watch}");
+        let phone = get_with(port, "/api/v1/cameras/watch", "X-Rhema-Key: pres\r\n", None).await;
+        assert!(phone.contains("403") && phone.contains("OBS companion"), "{phone}");
+        assert!(get_with(port, "/api/v1/cameras/watch", "X-Rhema-Key: nope\r\n", None).await.contains("401"));
+        let tally = raw_http_request_with(port, "POST", "/api/v1/cameras/tally", Some(r#"{"program":["pulpit"],"preview":[],"receiving":["pulpit"]}"#), comp).await;
+        assert!(tally.contains("204"), "{tally}");
+        cameras.set_watch(vec![crate::cameras::CameraWatch { name: "pulpit".into(), live: true, ..Default::default() }]);
+        assert_eq!(cameras.watch()[0].obs[0].desk, "Media desk");
+        assert!(cameras.watch()[0].obs[0].program);
+        keys.write().unwrap().entries[0].paused = true;
+        let paused = get_with(port, "/api/v1/cameras/watch", comp, None).await;
+        assert!(paused.contains("423") && paused.contains("taken back control"), "{paused}");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    /// Pairing as an OBS companion gives that role (less than Present); asking for more gives Present.
+    #[tokio::test]
+    async fn a_device_pairs_as_an_obs_companion_or_as_present() {
+        let sink = Arc::new(MockSink::new());
+        let keys = crate::keys::new_key_set();
+        let pairing = crate::keys::new_pairing_window();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), pairing: pairing.clone(), ..Default::default() };
+        let result = start_http_server(config, sink, new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let code = crate::keys::open_pairing(&pairing);
+        let r = raw_http_request_with(port, "POST", "/api/v1/pair", Some(&format!(r#"{{"code":"{code}","name":"OBS computer","role":"obs-companion"}}"#)), "").await;
+        assert!(r.contains("200 OK"), "{r}");
+        let code = crate::keys::open_pairing(&pairing);
+        let r = raw_http_request_with(port, "POST", "/api/v1/pair", Some(&format!(r#"{{"code":"{code}","name":"Sneaky","role":"configure"}}"#)), "").await;
+        assert!(r.contains("200 OK"), "{r}");
+        let roles: Vec<crate::keys::Role> = keys.read().unwrap().entries.iter().map(|e| e.role).collect();
+        assert_eq!(roles, vec![crate::keys::Role::ObsCompanion, crate::keys::Role::Present]);
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
     /// Host authority (#243): the main desk takes back control of Desk C without unpairing it.
     #[tokio::test]
     async fn a_paused_desk_is_refused_commands_but_still_reads_and_talks() {
@@ -1960,6 +2937,69 @@ mod tests {
         assert!(raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"event_next"}"#), key).await.contains("200 OK"), "control given back");
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         assert_eq!(sink.command_count(), 4, "next, talk, notice, then event_next once given back");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    /// Scenes from a joined desk (#243 SC.16, SC.17): saved at once, sent to the main desk to accept,
+    /// or refused when made from an older copy; full scenes only for desks that change them.
+    #[tokio::test]
+    async fn a_desk_saves_scenes_through_the_host_with_its_revision() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        let sink = Arc::new(MockSink::new());
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("scr", "Screens desk", Role::Screens), entry("bib", "Bible desk", Role::Bible), entry("obs", "OBS desk", Role::Obs)] }));
+        let live = new_live_hub();
+        let state = |welcome: &str| format!(r#"{{"v":1,"program":{{"onAir":true,"rehearsal":false}},"scenes":[{{"id":"off","name":"{welcome}","onScreen":false,"layers":[]}},{{"id":"on","name":"Sermon","onScreen":true,"layers":[{{"id":"b","kind":"feed"}}]}}]}}"#);
+        live.publish(state("Welcome"));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let send = |body: String, key: &'static str| async move { raw_http_request_with(port, "POST", "/api/v1/command", Some(&body), key).await };
+        let scr = "X-Rhema-Key: scr\r\n";
+        let (off, on) = (live.revision("scene:off").unwrap(), live.revision("scene:on").unwrap());
+
+        let direct = send(format!(r#"{{"command":"save_scene","value":{{"scene":{{"id":"off","name":"Welcome 2","layers":[]}}}},"seen":{{"scene:off":{off}}}}}"#), scr).await;
+        assert!(direct.contains("200 OK") && !direct.contains("note"), "{direct}");
+        let sent: serde_json::Value = serde_json::from_str(sink.scene.lock().unwrap().as_deref().unwrap()).unwrap();
+        assert_eq!((sent["request"].as_bool(), sent["by"].as_str(), sent["byId"].as_str()), (Some(false), Some("Screens desk"), Some(hash_key("scr").as_str())));
+        // A second desk still on the old copy is refused, as for any other command.
+        let stale = send(format!(r#"{{"command":"save_scene","value":{{"scene":{{"id":"off","layers":[]}}}},"seen":{{"scene:off":{off}}}}}"#), scr).await;
+        assert!(stale.contains("409") && stale.contains(r#""code":"stale""#) && stale.contains("Someone changed this first"), "{stale}");
+        // The main desk saving the scene moves its revision too.
+        live.publish(state("Welcome 3"));
+        let now = live.revision("scene:off").unwrap();
+        assert!(now > off + 1, "the server's accept and the host's change");
+
+        let waits = send(format!(r#"{{"command":"save_scene","value":{{"scene":{{"id":"on","name":"Sermon","layers":[]}},"request":false}},"seen":{{"scene:on":{on}}}}}"#), scr).await;
+        assert!(waits.contains("200 OK") && waits.contains("Sent to the main desk to accept, because that scene is on a screen"), "{waits}");
+        let sent: serde_json::Value = serde_json::from_str(sink.scene.lock().unwrap().as_deref().unwrap()).unwrap();
+        assert_eq!(sent["request"].as_bool(), Some(true), "a desk cannot say it needs no approval");
+        assert_eq!(live.revision("scene:on"), Some(on), "a change that waits has not changed the scene");
+
+        // A scene deleted on the main desk: a change from before is refused.
+        live.publish(r#"{"v":1,"program":{"onAir":true,"rehearsal":false},"scenes":[]}"#.into());
+        let gone = send(format!(r#"{{"command":"save_scene","value":{{"scene":{{"id":"on","layers":[]}}}},"seen":{{"scene:on":{on}}}}}"#), scr).await;
+        assert!(gone.contains("409") && gone.contains(r#""code":"stale""#), "{gone}");
+        live.publish(state("Welcome"));
+        let bible = send(r#"{"command":"save_scene","value":{"scene":{"id":"n","layers":[]}}}"#.into(), "X-Rhema-Key: bib\r\n").await;
+        assert!(bible.contains("403") && bible.contains("activate, step and clear the Bible only"), "{bible}");
+
+        // The Bible desk gets each scene's name; the screens desk gets the whole scene to edit.
+        let read = |key: &'static str| async move { get_with(port, "/api/v1/live", key, None).await };
+        let b = read("X-Rhema-Key: bib\r\n").await;
+        assert!(b.contains("Sermon") && !b.contains("layers"), "{b}");
+        assert!(read(scr).await.contains(r#""layers""#));
+
+        // OBS through the host, never in rehearsal; and only for the OBS director.
+        assert!(send(r#"{"command":"obs_take"}"#.into(), "X-Rhema-Key: obs\r\n").await.contains("200 OK"));
+        assert!(send(r#"{"command":"obs_take"}"#.into(), scr).await.contains("403"));
+        live.publish(r#"{"v":1,"program":{"onAir":true,"rehearsal":true},"scenes":[]}"#.into());
+        let rehearsal = send(r#"{"command":"obs_program","value":"Wide"}"#.into(), "X-Rhema-Key: obs\r\n").await;
+        assert!(rehearsal.contains("403") && rehearsal.contains("Rehearsal is on"), "{rehearsal}");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(sink.command_count(), 3, "two scene saves and one OBS take reached the app");
         let mut handle = result.handle;
         handle.stop();
     }
@@ -2503,5 +3543,466 @@ mod tests {
         assert!(events.iter().all(|(_, p)| !p.contains(r#""why":"x""#)), "{events:?}");
         let mut handle = result.handle;
         handle.stop();
+    }
+
+    /// Send exactly this request (with `{port}` filled in) and read the whole answer.
+    async fn raw(port: u16, request: &str) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")).await.expect("connect");
+        stream.write_all(request.replace("{port}", &port.to_string()).as_bytes()).await.expect("write");
+        let mut out = Vec::new();
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), stream.read_to_end(&mut out)).await;
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
+    #[test]
+    fn the_origins_a_browser_may_call_from() {
+        assert!(origin_allowed("http://192.168.1.20:8080", Some("192.168.1.20:8080")), "a page this listener served");
+        assert!(origin_allowed("https://192.168.1.20:8081", Some("192.168.1.20:8081")), "the same over https (a TV's feed)");
+        assert!(origin_allowed("HTTP://Studio.local:8080", Some("studio.local:8080")));
+        for app in ["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"] {
+            assert!(origin_allowed(app, None), "{app}");
+        }
+        for (o, h) in [
+            ("http://evil.example", Some("192.168.1.20:8080")),
+            ("http://192.168.1.20:9999", Some("192.168.1.20:8080")),
+            ("http://192.168.1.20:8080.evil.example", Some("192.168.1.20:8080")),
+            ("http://192.168.1.20:8080/x", Some("192.168.1.20:8080")),
+            ("null", Some("192.168.1.20:8080")),
+            ("http://192.168.1.20:8080", None),
+            ("file://", Some("x")),
+            ("http://", Some("")),
+            ("tauri://localhost.evil", None),
+        ] {
+            assert!(!origin_allowed(o, h), "{o} for {h:?}");
+        }
+    }
+
+    #[test]
+    fn only_this_computers_own_names_on_its_ports_are_trusted() {
+        let ports = [8080, 8081];
+        for ok in ["192.168.1.20:8080", "192.168.1.20:8081", "127.0.0.1:8080", "[::1]:8080", "[fe80::1]:8081", "localhost:8080", "Studio-Mac.local:8080", "LOCALHOST:8081"] {
+            assert!(host_trusted(ok, &ports), "{ok}");
+        }
+        for bad in ["evil.example:8080", "evil.example", "192.168.1.20", "192.168.1.20:9090", "192.168.1.20:x", "[::1]", "[nonsense]:8080", "local:8080", ".local:8080", "evil.local.example:8080", "localhost.evil:8080", "", "1.2.3.4.5:8080"] {
+            assert!(!host_trusted(bad, &ports), "{bad}");
+        }
+        assert!(browser_page("/feed/l3") && browser_page("/remote") && browser_page("/camera") && browser_page("/assets/feed.js") && browser_page("/api/v1/feed/l3/events") && browser_page("/api/v1/camera/pulpit/whip"));
+        assert!(browser_page("/api/v1/status") && browser_page("/api/v1/health"));
+        assert!(!browser_page("/api/v1/command") && !browser_page("/api/v1/live") && !browser_page("/remotes"));
+    }
+
+    #[tokio::test]
+    async fn a_rebound_name_is_refused_and_the_address_works() {
+        let sink = Arc::new(MockSink::new());
+        let feeds = new_feed_hub();
+        feeds.set(&[("l3".into(), "s3cret".into())]);
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: key_set_from(&[("tok", "Laptop")]), feeds, ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let post = |host: &str, origin: &str| format!("POST /api/v1/command HTTP/1.1\r\nHost: {host}\r\nOrigin: {origin}\r\nX-Rhema-Key: tok\r\nContent-Type: application/json\r\nContent-Length: 18\r\nConnection: close\r\n\r\n{{\"command\":\"next\"}}");
+        // DNS rebinding: the attacker's name points at this computer; origin and host agree.
+        let rebound = raw(port, &post("evil.example:{port}", "http://evil.example:{port}")).await;
+        assert!(rebound.starts_with("HTTP/1.1 421"), "{rebound}");
+        assert_eq!(sink.command_count(), 0);
+        // This computer's address with its own page's origin: works.
+        assert!(raw(port, &post("127.0.0.1:{port}", "http://127.0.0.1:{port}")).await.starts_with("HTTP/1.1 200"));
+        assert_eq!(sink.command_count(), 1);
+        // The phone and feed pages by address work; by another name they are refused, origin or not.
+        assert!(raw(port, "GET /remote HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await.starts_with("HTTP/1.1 200"));
+        // What is on air and the health answer need no key: by address yes, by a rebound name no.
+        for path in ["/api/v1/status", "/api/v1/health"] {
+            assert!(raw(port, &format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{{port}}\r\nConnection: close\r\n\r\n")).await.starts_with("HTTP/1.1 200"), "{path}");
+        }
+        for path in ["/remote", "/feed/l3?k=s3cret", "/api/v1/feed/l3/events?k=s3cret", "/camera?name=pulpit&k=x", "/api/v1/status", "/api/v1/health"] {
+            let r = raw(port, &format!("GET {path} HTTP/1.1\r\nHost: evil.example:{{port}}\r\nConnection: close\r\n\r\n")).await;
+            assert!(r.starts_with("HTTP/1.1 421"), "{path}: {r}");
+        }
+        // A controller that is not a browser (no origin) keeps working by key, whatever name it used.
+        assert!(raw(port, &post("studio.lan:{port}", "").replace("Origin: \r\n", "")).await.starts_with("HTTP/1.1 200"));
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn another_web_page_on_the_network_cannot_send_commands_through_a_browser() {
+        let sink = Arc::new(MockSink::new());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: key_set_from(&[("tok", "Laptop")]), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let post = |origin: &str| format!("POST /api/v1/command HTTP/1.1\r\nHost: 127.0.0.1:{{port}}\r\n{origin}X-Rhema-Key: tok\r\nContent-Type: application/json\r\nContent-Length: 18\r\nConnection: close\r\n\r\n{{\"command\":\"next\"}}");
+        // A page from somewhere else, even with a key it got hold of: refused, nothing done.
+        for origin in ["Origin: http://evil.example\r\n", "Origin: null\r\n", "Origin: http://127.0.0.1:1\r\n"] {
+            let r = raw(port, &post(origin)).await;
+            assert!(r.starts_with("HTTP/1.1 403"), "{origin}: {r}");
+        }
+        // Its plain form post (no preflight) is refused the same way.
+        let form = raw(port, "POST /api/v1/command HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://evil.example\r\nContent-Type: text/plain\r\nContent-Length: 18\r\nConnection: close\r\n\r\n{\"command\":\"next\"}").await;
+        assert!(form.starts_with("HTTP/1.1 403"), "{form}");
+        assert_eq!(sink.command_count(), 0);
+        // Reading the Live State or the feed stream from another page: refused too.
+        let read = raw(port, "GET /api/v1/live HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://evil.example\r\nX-Rhema-Key: tok\r\nConnection: close\r\n\r\n").await;
+        assert!(read.starts_with("HTTP/1.1 403"), "{read}");
+        // A browser's preflight for another page gets no permission.
+        let pre = raw(port, "OPTIONS /api/v1/command HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://evil.example\r\nAccess-Control-Request-Method: POST\r\nAccess-Control-Request-Headers: content-type, x-rhema-key\r\nConnection: close\r\n\r\n").await;
+        assert!(pre.starts_with("HTTP/1.1 403") && !pre.to_lowercase().contains("access-control-allow-origin"), "{pre}");
+        // The phone page this listener served (same origin), Rhema's own window, and a controller
+        // that is not a browser (no origin) all work.
+        assert!(raw(port, &post("Origin: http://127.0.0.1:{port}\r\n")).await.starts_with("HTTP/1.1 200"));
+        let app = raw(port, &post("Origin: tauri://localhost\r\n")).await;
+        assert!(app.starts_with("HTTP/1.1 200") && app.to_lowercase().contains("access-control-allow-origin: tauri://localhost"), "{app}");
+        assert!(raw(port, &post("")).await.starts_with("HTTP/1.1 200"));
+        let pre = raw(port, "OPTIONS /api/v1/command HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://tauri.localhost\r\nAccess-Control-Request-Method: POST\r\nAccess-Control-Request-Headers: content-type, x-rhema-key\r\nConnection: close\r\n\r\n").await;
+        assert!(pre.starts_with("HTTP/1.1 200") && pre.to_lowercase().contains("access-control-allow-origin: http://tauri.localhost"), "{pre}");
+        assert_eq!(sink.command_count(), 3);
+        // Rhema's pages themselves load without an origin, as a browser asks for a page.
+        assert!(raw(port, "GET /remote HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await.starts_with("HTTP/1.1 200"));
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn the_pages_rhema_serves_still_reach_it_from_their_own_origin() {
+        // The feed page (OBS, a TV), its frames, acks and media, all from the page's own address.
+        let feeds = new_feed_hub();
+        feeds.set(&[("l3".into(), "s3cret".into())]);
+        feeds.publish("l3", r#"{"verse":null}"#.into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds, ..Default::default() };
+        let result = start_http_server(config, Arc::new(PageSink), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let page = raw(port, "GET /feed/l3?k=s3cret HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await;
+        assert!(page.starts_with("HTTP/1.1 200"), "{page}");
+        let script = raw(port, "GET /assets/feed.js HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await;
+        assert!(script.starts_with("HTTP/1.1 200"), "{script}");
+        let ack = raw(port, "POST /api/v1/feed/l3/ack?k=s3cret HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: 9\r\nConnection: close\r\n\r\n{\"seq\":1}").await;
+        assert!(!ack.starts_with("HTTP/1.1 403"), "{ack}");
+        let events = get_with(port, "/api/v1/feed/l3/events?k=s3cret", &format!("Origin: http://127.0.0.1:{port}\r\n"), Some(200)).await;
+        assert!(events.contains("text/event-stream"), "same origin: {events}");
+        let foreign = raw(port, "GET /api/v1/feed/l3/events?k=s3cret HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://evil.example\r\nConnection: close\r\n\r\n").await;
+        assert!(foreign.starts_with("HTTP/1.1 403"), "{foreign}");
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn pausing_revoking_or_changing_a_desk_ends_its_live_stream_at_once() {
+        use crate::keys::{KeyEntry, Keys, Role};
+        let desk = KeyEntry { hash: hash_key("tok"), name: "Desk C".into(), role: Role::Present, paused: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![desk.clone()] }));
+        let live = new_live_hub();
+        live.publish(r#"{"v":1,"now":"Sermon"}"#.into());
+        let presence = crate::presence::new_presence();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), live, presence: presence.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let follow = || tokio::spawn(async move { get_with(port, "/api/v1/live/events", "X-Rhema-Key: tok\r\n", None).await });
+        let ended = |h: tokio::task::JoinHandle<String>| async move { tokio::time::timeout(std::time::Duration::from_secs(3), h).await.expect("the stream ended at once").unwrap() };
+
+        // Connected: listed as connected on the host card.
+        let stream = follow();
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert_eq!(presence.list().iter().map(|d| (d.name.as_str(), d.connected, d.address.as_str())).collect::<Vec<_>>(), [("Desk C", true, "127.0.0.1")]);
+        // Paused: the stream ends with "rejoin"; the desk may connect again and still reads (paused).
+        keys.write().unwrap().entries[0].paused = true;
+        let out = ended(stream).await;
+        assert!(out.contains("Sermon") && out.contains("event: rejoin"), "{out}");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(!presence.list()[0].connected, "no longer connected once its stream ended");
+        assert!(get_with(port, "/api/v1/live", "X-Rhema-Key: tok\r\n", None).await.contains("200 OK"), "a paused desk still sees the service");
+        // Another role: ends too (it is served by its new role when it comes back).
+        let stream = follow();
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        keys.write().unwrap().entries[0].role = Role::Viewer;
+        assert!(ended(stream).await.contains("event: rejoin"));
+        // Nothing changed for this desk (the list pushed again as it was): the stream stays open.
+        let stream = follow();
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        let same = keys.read().unwrap().entries.clone();
+        keys.write().unwrap().entries = same;
+        tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        assert!(!stream.is_finished(), "an unchanged key keeps its stream");
+        // Revoked: ends, and it cannot come back.
+        keys.write().unwrap().entries.clear();
+        assert!(ended(stream).await.contains("event: rejoin"));
+        assert!(get_with(port, "/api/v1/live/events", "X-Rhema-Key: tok\r\n", None).await.contains("401"));
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn stopping_hosting_ends_every_open_stream() {
+        let live = new_live_hub();
+        live.publish(r#"{"v":1}"#.into());
+        let feeds = new_feed_hub();
+        feeds.set(&[("l3".into(), "s3cret".into())]);
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: key_set_from(&[("tok", "Laptop")]), live, feeds, ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let desk = tokio::spawn(async move { get_with(port, "/api/v1/live/events", "X-Rhema-Key: tok\r\n", None).await });
+        let tv = tokio::spawn(async move { get_with(port, "/api/v1/feed/l3/events?k=s3cret", "", None).await });
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let mut h = result.handle;
+        h.stop();
+        for s in [desk, tv] {
+            let out = tokio::time::timeout(std::time::Duration::from_secs(3), s).await.expect("ended with the listener").unwrap();
+            assert!(out.contains("text/event-stream"), "{out}");
+        }
+    }
+
+    #[tokio::test]
+    async fn health_says_the_https_port_so_a_joining_computer_pairs_over_it() {
+        let ca = crate::tls::make_ca().unwrap();
+        let server = crate::tls::make_server(&ca, &["127.0.0.1".into()]).unwrap();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), tls: Some(TlsListener { port: 0, server, ca_cert: ca.cert.clone() }), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let tls_port = result.tls_port.expect("https port");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let health = raw_http_request(result.bound_port, "GET", "/api/v1/health", None).await;
+        assert!(health.contains(&format!("\"tls_port\":{tls_port}")), "{health}");
+        let mut h = result.handle;
+        h.stop();
+        let plain = start_http_server(HttpConfig { port: 0, host: "127.0.0.1".into(), ..Default::default() }, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(!raw_http_request(plain.bound_port, "GET", "/api/v1/health", None).await.contains("tls_port"), "no https: not said");
+        let mut h = plain.handle;
+        h.stop();
+    }
+
+    fn console_keys() -> KeySet {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        Arc::new(std::sync::RwLock::new(Keys {
+            require_auth: true,
+            entries: vec![entry("dir", "Director", Role::Present), entry("bib", "Bible desk", Role::Bible), entry("wor", "Worship desk", Role::Worship), entry("stg", "Stage desk", Role::Stage), entry("vie", "Pastor's phone", Role::Viewer)],
+        }))
+    }
+
+    #[test]
+    fn the_console_parts_go_only_to_their_desks() {
+        use crate::keys::Role;
+        let json = r#"{"v":1,"readiness":{"ready":false,"checks":[]},"heard":[{"reference":"John 3:16"}],"auxTimers":[],"outputMap":[],"lyrics":null,"notices":[]}"#;
+        let get = |role: Role| -> serde_json::Value { serde_json::from_str(&live_for(json, Some(&desk("Desk", role)))).unwrap() };
+        for role in [Role::Present, Role::Configure] {
+            let v = get(role);
+            assert!(v.get("readiness").is_some() && v.get("heard").is_some(), "{role:?}");
+        }
+        for role in [Role::Bible, Role::Editor] {
+            let v = get(role);
+            assert!(v.get("readiness").is_none() && v.get("heard").is_some(), "{role:?}");
+        }
+        for role in [Role::Worship, Role::Stage, Role::Screens, Role::Timekeeper, Role::Camera, Role::Obs, Role::Viewer] {
+            let v = get(role);
+            assert!(v.get("readiness").is_none() && v.get("heard").is_none() && v.get("presence").is_none(), "{role:?}");
+            assert!(v.get("auxTimers").is_some() && v.get("outputMap").is_some(), "{role:?} still gets the timers and the output map");
+        }
+        // A presence list a host's app sent itself never reaches a desk that may not see it.
+        let spoofed = r#"{"v":1,"presence":[{"name":"x"}],"notices":[]}"#;
+        assert!(!live_for(spoofed, Some(&desk("Desk", Role::Stage))).contains("presence"));
+        assert_eq!(live_for(json, None), json, "this computer itself gets all of it");
+        assert!(sees_crew(None) && sees_crew(Some(&desk("D", Role::Present))) && sees_crew(Some(&desk("D", Role::Configure))));
+        assert!(!sees_crew(Some(&desk("D", Role::Bible))) && !sees_crew(Some(&desk("D", Role::Viewer))));
+    }
+
+    #[test]
+    fn the_crew_list_names_desks_and_roles_but_never_addresses_or_keys() {
+        let keys = console_keys();
+        let presence = crate::presence::new_presence();
+        let bible = keys.read().unwrap().entries[1].clone();
+        let _open = presence.stream_opened(&bible, "192.168.1.40".parse().unwrap());
+        let crew = crew_rows(&keys, &presence);
+        let text = crew.to_string();
+        assert!(!text.contains("192.168") && !text.contains(&bible.hash), "{text}");
+        let rows = crew.as_array().unwrap();
+        assert_eq!(rows.len(), 5);
+        assert_eq!((rows[1]["name"].as_str(), rows[1]["role"].as_str(), rows[1]["connected"].as_bool()), (Some("Bible desk"), Some("bible"), Some(true)));
+        assert_eq!((rows[0]["connected"].as_bool(), rows[0]["lastSeenMs"].is_null()), (Some(false), true), "never seen since hosting began");
+        let with = with_crew(r#"{"v":1}"#.into(), crew);
+        assert!(with.contains(r#""presence":[{"#));
+        assert_eq!(with_crew("not json".into(), serde_json::json!([])), "not json");
+    }
+
+    #[test]
+    fn a_section_step_acts_on_the_section_it_saw() {
+        let mut r = Revisions::default();
+        let state = |index: u32| serde_json::json!({ "lyrics": { "itemId": "s1", "index": index, "title": "Amazing Grace" } });
+        r.observe(&state(0));
+        let lyrics = r.get("lyrics").unwrap();
+        r.observe(&state(0));
+        assert_eq!(r.get("lyrics"), Some(lyrics), "the same section is not a change");
+        r.observe(&state(2));
+        assert_eq!(r.get("lyrics"), Some(lyrics + 1));
+        assert_eq!(revision_part(&RemoteCommand::SongSection(1.into())).as_deref(), Some("lyrics"));
+    }
+
+    #[test]
+    fn an_extra_timer_command_acts_on_the_timer_it_saw() {
+        let mut r = Revisions::default();
+        let timer = |running: bool, elapsed: u64| serde_json::json!({ "auxTimers": [{ "id": "t1", "label": "Communion", "durationMs": 300000, "elapsedMs": elapsed, "running": running }] });
+        r.observe(&timer(true, 1000));
+        let n = r.get("aux:t1").unwrap();
+        r.observe(&timer(true, 5000));
+        assert_eq!(r.get("aux:t1"), Some(n), "a running timer counting on is not a change");
+        r.observe(&timer(false, 6000));
+        assert_eq!(r.get("aux:t1"), Some(n + 1), "paused");
+        r.observe(&timer(false, 0));
+        assert_eq!(r.get("aux:t1"), Some(n + 2), "reset");
+        assert_eq!(revision_part(&RemoteCommand::AuxTimer(crate::command::AuxTimerIn { id: "t1".into(), action: "start".into() })).as_deref(), Some("aux:t1"));
+    }
+
+    #[tokio::test]
+    async fn section_steps_are_checked_for_role_and_staleness() {
+        let sink = Arc::new(MockSink::new());
+        let live = new_live_hub();
+        let state = |lyrics: &str| format!(r#"{{"v":1,"program":{{"onAir":true,"rehearsal":false}},"lyrics":{lyrics}}}"#);
+        live.publish(state(r#"{"itemId":"s1","index":0}"#));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: console_keys(), live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let send = |body: String, key: &'static str| async move { raw_http_request_with(port, "POST", "/api/v1/command", Some(&body), key).await };
+        let (wor, stg, bib, dir) = ("X-Rhema-Key: wor\r\n", "X-Rhema-Key: stg\r\n", "X-Rhema-Key: bib\r\n", "X-Rhema-Key: dir\r\n");
+        // Two desks on the same section: only the first step is carried out.
+        let seen = live.revision("lyrics").unwrap();
+        let step = format!(r#"{{"command":"song_section","value":1,"seen":{{"lyrics":{seen}}}}}"#);
+        assert!(send(step.clone(), wor).await.contains("200 OK"));
+        let again = send(step, dir).await;
+        assert!(again.contains("409") && again.contains(r#""code":"stale""#), "{again}");
+        assert!(send(r#"{"command":"song_section","value":1}"#.into(), bib).await.contains("403"), "the Bible desk does not step songs");
+        assert!(send(r#"{"command":"song_section","value":1}"#.into(), stg).await.contains("403"));
+        assert!(send(r#"{"command":"song_section","value":-1}"#.into(), "X-Rhema-Key: vie\r\n").await.contains("403"));
+        // With no song up there is nothing to step.
+        live.publish(state("null"));
+        let none = send(r#"{"command":"song_section","value":-1}"#.into(), wor).await;
+        assert!(none.contains("422") && none.contains("No song or hymn"), "{none}");
+        assert_eq!(sink.commands.lock().unwrap().clone(), ["remote:song_section"]);
+    }
+
+    #[test]
+    fn the_queue_and_obs_parts_move_only_when_they_change() {
+        let mut r = Revisions::default();
+        let state = |ids: &[&str], recording: serde_json::Value, transition: &str| serde_json::json!({
+            "rundown": ids.iter().map(|id| serde_json::json!({ "id": id, "reference": id, "time": { "plan": [1, 2] } })).collect::<Vec<_>>(),
+            "obs": { "connected": true, "recording": recording, "transition": transition },
+        });
+        r.observe(&state(&["a", "b"], serde_json::json!(false), "Fade"));
+        let (q, rec, tr) = (r.get("queue").unwrap(), r.get("obs:record").unwrap(), r.get("obs:transition").unwrap());
+        let mut moved = state(&["a", "b"], serde_json::json!(false), "Fade");
+        moved["rundown"][0]["time"] = serde_json::json!({ "plan": [5, 9] });
+        r.observe(&moved);
+        assert_eq!((r.get("queue"), r.get("obs:record"), r.get("obs:transition")), (Some(q), Some(rec), Some(tr)), "times moving on are not a change");
+        r.observe(&state(&["new", "a", "b"], serde_json::json!(true), "Cut"));
+        assert_eq!((r.get("queue"), r.get("obs:record"), r.get("obs:transition")), (Some(q + 1), Some(rec + 1), Some(tr + 1)));
+        use crate::command::{ObsRecordIn, QueueIn, QueueKind, RecordAction};
+        assert_eq!(revision_part(&RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Song, value: "x".into() })).as_deref(), Some("queue"));
+        assert_eq!(revision_part(&RemoteCommand::ObsRecord(ObsRecordIn { action: RecordAction::Marker, label: None })).as_deref(), Some("obs:record"));
+        assert_eq!(revision_part(&RemoteCommand::ObsTransition("Cut".into())).as_deref(), Some("obs:transition"));
+    }
+
+    #[tokio::test]
+    async fn round_two_commands_are_checked_for_role_staleness_and_rehearsal() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        let sink = Arc::new(MockSink::new());
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![
+            entry("dir", "Director", Role::Present), entry("phn", "Ade's phone", Role::Present), entry("edt", "Editor", Role::Editor), entry("wor", "Worship desk", Role::Worship),
+            entry("obs", "OBS desk", Role::Obs), entry("scr", "Screens desk", Role::Screens), entry("vie", "Pastor's phone", Role::Viewer),
+        ] }));
+        let live = new_live_hub();
+        let state = |rehearsal: bool, recording: bool| format!(r#"{{"v":1,"program":{{"onAir":true,"rehearsal":{rehearsal}}},"rundown":[{{"id":"a","reference":"Welcome"}}],"obs":{{"connected":true,"recording":{recording},"transition":"Fade"}},"sources":[{{"id":"ticker","on":true,"revision":1}},{{"id":"lowerThird","on":true,"revision":1}}]}}"#);
+        live.publish(state(false, false));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let send = |body: String, tok: &'static str| async move { raw_http_request_with(port, "POST", "/api/v1/command", Some(&body), &format!("X-Rhema-Key: {tok}\r\n")).await };
+
+        // Queue a request: the desks that add to the queue, once for the list they saw.
+        let q = live.revision("queue").unwrap();
+        let queue = format!(r#"{{"command":"queue_request","value":{{"kind":"song","value":"Amazing Grace"}},"seen":{{"queue":{q}}}}}"#);
+        assert!(send(queue.clone(), "phn").await.contains("200 OK"), "a phone queues the song it was asked for");
+        let twice = send(queue, "dir").await;
+        assert!(twice.contains("409") && twice.contains(r#""code":"stale""#), "a second desk answering the same request looks again: {twice}");
+        let q = live.revision("queue").unwrap();
+        assert!(send(format!(r#"{{"command":"queue_request","value":{{"kind":"bible","value":"Romans 8:28"}},"seen":{{"queue":{q}}}}}"#), "edt").await.contains("200 OK"), "the editor queues");
+        for tok in ["wor", "obs", "scr", "vie"] {
+            assert!(send(r#"{"command":"queue_request","value":{"kind":"bible","value":"John 3:16"}}"#.into(), tok).await.contains("403"), "{tok}");
+        }
+        assert!(send(r#"{"command":"queue_request","value":{"kind":"scene","value":"s1"}}"#.into(), "dir").await.contains("422"), "only a verse or a song");
+
+        // OBS's recording and transition: the OBS director only, on what it saw, never in rehearsal.
+        let rec = live.revision("obs:record").unwrap();
+        let start = format!(r#"{{"command":"obs_record","value":{{"action":"start"}},"seen":{{"obs:record":{rec}}}}}"#);
+        assert!(send(start.clone(), "obs").await.contains("200 OK"));
+        let again = send(start, "obs").await;
+        assert!(again.contains("409") && again.contains(r#""code":"stale""#), "{again}");
+        let refused = send(r#"{"command":"obs_record","value":{"action":"stop"}}"#.into(), "dir").await;
+        assert!(refused.contains("403") && refused.contains("OBS director"), "{refused}");
+        let tr = live.revision("obs:transition").unwrap();
+        assert!(send(format!(r#"{{"command":"obs_transition","value":"Cut","seen":{{"obs:transition":{tr}}}}}"#), "obs").await.contains("200 OK"));
+        assert!(send(r#"{"command":"obs_transition","value":"Cut"}"#.into(), "scr").await.contains("403"));
+        live.publish(state(true, true));
+        for body in [r#"{"command":"obs_record","value":{"action":"stop"}}"#, r#"{"command":"obs_record","value":{"action":"marker","label":"Sermon"}}"#, r#"{"command":"obs_transition","value":"Fade"}"#] {
+            let r = send(body.into(), "obs").await;
+            assert!(r.contains("403") && r.contains("Rehearsal is on"), "{body}: {r}");
+        }
+
+        // The screens desk takes the ticker and the lower third off and back; not the Bible.
+        live.publish(state(false, true));
+        let t = live.revision("source:ticker").unwrap();
+        assert!(send(format!(r#"{{"command":"clear_source","value":"ticker","seen":{{"source:ticker":{t}}}}}"#), "scr").await.contains("200 OK"));
+        let late = send(format!(r#"{{"command":"restore_source","value":"ticker","seen":{{"source:ticker":{t}}}}}"#), "dir").await;
+        assert!(late.contains("409"), "{late}");
+        assert!(send(r#"{"command":"restore_source","value":"lowerThird"}"#.into(), "scr").await.contains("200 OK"));
+        assert!(send(r#"{"command":"clear_source","value":"bible"}"#.into(), "scr").await.contains("403"));
+        // Repeat chorus: a section step for the worship desk, refused with no song up.
+        let none = send(r#"{"command":"song_section","value":"chorus"}"#.into(), "wor").await;
+        assert!(none.contains("422") && none.contains("No song or hymn"), "{none}");
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(sink.commands.lock().unwrap().clone(), ["remote:queue_request", "remote:queue_request", "remote:obs_record", "remote:obs_transition", "remote:clear_source", "remote:restore_source"]);
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[tokio::test]
+    async fn a_desk_looks_in_the_host_library_only_as_its_role_allows() {
+        let sink = Arc::new(MockSink::new());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: console_keys(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let ask = |body: &'static str, key: &'static str| async move { raw_http_request_with(port, "POST", "/api/v1/lookup", Some(body), key).await };
+        let search = r#"{"what":"search","query":"so loved","translation":1}"#;
+        let ok = ask(search, "X-Rhema-Key: bib\r\n").await;
+        assert!(ok.contains("200 OK") && ok.contains("so loved"), "{ok}");
+        assert!(ask(search, "X-Rhema-Key: wor\r\n").await.contains("403"), "the worship desk does not search the Bible");
+        assert!(ask(search, "X-Rhema-Key: vie\r\n").await.contains("403"), "view only looks nothing up");
+        assert!(ask(search, "").await.contains("401"), "never without a key");
+        assert!(ask(search, "X-Rhema-Key: nope\r\n").await.contains("401"));
+        assert!(ask(r#"{"what":"songs","query":"CAC 245"}"#, "X-Rhema-Key: wor\r\n").await.contains("CAC 245"));
+        assert!(ask(r#"{"what":"songs","query":"x"}"#, "X-Rhema-Key: bib\r\n").await.contains("403"));
+        assert!(ask(r#"{"what":"search","query":"a","translation":1}"#, "X-Rhema-Key: bib\r\n").await.contains("422"));
+        let down = ask(r#"{"what":"songs","query":"broken"}"#, "X-Rhema-Key: dir\r\n").await;
+        assert!(down.contains("503") && down.contains("Songs are unavailable"), "{down}");
+        assert!(sink.commands.lock().unwrap().is_empty(), "a lookup is never a command");
+    }
+
+    #[tokio::test]
+    async fn the_director_reads_who_is_connected_and_others_do_not() {
+        let live = new_live_hub();
+        live.publish(r#"{"v":1,"readiness":{"ready":true,"checks":[]},"notices":[]}"#.into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: console_keys(), live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let dir = get_with(port, "/api/v1/live", "X-Rhema-Key: dir\r\n", None).await;
+        assert!(dir.contains(r#""presence":["#) && dir.contains("Stage desk") && dir.contains(r#""readiness""#), "{dir}");
+        let stage = get_with(port, "/api/v1/live", "X-Rhema-Key: stg\r\n", None).await;
+        assert!(!stage.contains("presence") && !stage.contains("readiness"), "{stage}");
     }
 }

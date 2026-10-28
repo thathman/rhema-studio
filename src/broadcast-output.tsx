@@ -10,7 +10,7 @@ import { useRef, useEffect, useCallback } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { onThemeFontsLoaded, renderVerse, drawLowerThird } from "@/lib/verse-renderer"
-import { syncCameras, WhepPlayer } from "@/lib/whep"
+import { cameraReports, syncCameras, WhepPlayer } from "@/lib/whep"
 import { paintFrame } from "@/lib/output-paint"
 import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -24,11 +24,17 @@ import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { StageView } from "@/components/stage-view"
-import { drawStage } from "@/lib/stage-canvas"
+import { drawStage, stageOnCanvas, stageSurface } from "@/lib/stage-canvas"
+import { sceneStatic } from "@/lib/no-signal"
+import { outputPace } from "@/lib/output-pace"
+import { CountdownFade } from "@/lib/countdown-display"
+import { latencyClock } from "@/lib/latency-clock"
 
 
 /** Read output ID from URL query param (?output=main or ?output=alt). Defaults to "main". */
 const OUTPUT_ID = new URLSearchParams(window.location.search).get("output") ?? "main"
+/** The screen test's camera-lag clock (#213), over everything while the test frame asks for it. */
+const lagClock = latencyClock()
 
 // Tell the main window when the NDI stream dies on the network (a few pushes
 // failing in a row) and when it comes back, so the operator sees it and the
@@ -99,6 +105,8 @@ interface BroadcastPayload {
    * scene with its own ticker or lower-third layer arrives without `ticker` / `overlay` (it owns them).
    */
   scene?: SceneFrame
+  /** The screen test's camera-lag clock is up (#213). */
+  latencyClock?: boolean
 }
 
 // A canvas per scene layer, where its look is drawn whole before it is placed.
@@ -118,6 +126,9 @@ function BroadcastCanvas() {
   const [stage, setStage] = useState<StagePayload | null>(null)
   // The stage, also drawn on the canvas so a stage output can go out over NDI.
   const stageRef = useRef<StagePayload | null>(null)
+  // A countdown display's blend between its colour steps, and whether it moves (a pulse or a blend).
+  const countdownFade = useRef(new CountdownFade())
+  const countdownMoving = useRef(false)
   const ndiConfigRef = useRef<NdiConfigEventPayload>({
     active: false,
     fps: 24,
@@ -150,7 +161,9 @@ function BroadcastCanvas() {
 
     if (stageRef.current) {
       const s = stageRef.current
-      paintFrame(canvas, scratchCanvas, 1920, 1080, (fctx) => drawStage(fctx, 1920, 1080, s))
+      // A screen on its side set to portrait in the computer's settings gets a tall picture (#196 R6).
+      const { width: sw, height: sh } = stageSurface(s, window.innerWidth, window.innerHeight)
+      paintFrame(canvas, scratchCanvas, sw, sh, (fctx) => { countdownMoving.current = drawStage(fctx, sw, sh, s, { now: Date.now(), fade: countdownFade.current }).moving })
       return
     }
     const data = latestData.current
@@ -365,6 +378,11 @@ function BroadcastCanvas() {
         draw()
         pushNdiBurst()
       },
+      // Paused from Present: the held frame on the screen and on NDI (the frame loop has stopped).
+      onPaused: () => {
+        draw()
+        pushNdiBurst()
+      },
       onError: (name) => {
         console.warn("[broadcast-output] video failed to play:", name)
         void currentWindow.emitTo("main", "broadcast:media-error", { outputId: OUTPUT_ID, name }).catch(() => {})
@@ -396,11 +414,13 @@ function BroadcastCanvas() {
       fps: () => (ndiConfigRef.current.active ? ndiConfigRef.current.fps : 30),
     })
     tickerPlayer = tickerVideo
+    // A camera in the scene that is not sending shows moving static (when the scene says so).
+    const staticShown = () => !stageRef.current && sceneStatic(latestData.current?.scene, (id) => !!cameras.get(id)?.ready)
     // What is moving: only the ticker (its band is all that changes), or more (an entrance, a video).
     const motion = (): "ticker" | "full" | null => {
       const d = latestData.current
       if (!d || stageRef.current) return null
-      if (fadeFrom || fader.busy() || cameraPlaying() || sceneMoving(d.scene, Date.now()) || (d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
+      if (fadeFrom || fader.busy() || cameraPlaying() || staticShown() || sceneMoving(d.scene, Date.now()) || (d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
       return d.ticker && !d.ticker.pausedAt ? "ticker" : null
     }
     // An NDI window is hidden, and WebKit runs a hidden page's timers about once a second: while
@@ -408,10 +428,19 @@ function BroadcastCanvas() {
     // A running clock layer needs one frame a second, on a screen too (a covered or locked screen's
     // timers are held back for many seconds).
     const clockRunning = () => !stageRef.current && !!latestData.current?.scene?.layers.some((l) => l.kind === "clock" && l.clock && l.clock.mode !== "still")
+    // A countdown display: smooth while it pulses or blends to a new step, else twice a second while
+    // it counts (it is drawn on the canvas, on screens too); held still, nothing.
+    const countdownFps = () => {
+      const c = stageRef.current?.countdown
+      if (!c) return 0
+      if (countdownMoving.current) return ndiConfigRef.current.active ? Math.max(15, ndiConfigRef.current.fps || 30) : 30
+      return c.endsAt !== null || c.look.showClock ? 2 : 0
+    }
     const syncPace = () => {
       // A camera moves with every frame: the pacer draws it on screens too (a covered or locked
       // window gets no animation frames). A running clock needs one a second.
-      const fps = ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : cameraPlaying() || fader.busy() ? 30 : clockRunning() ? 1 : 0
+      // A camera showing static moves NOISE_FPS times a second, and only while it shows; a countdown display paces itself.
+      const fps = stageRef.current?.countdown ? countdownFps() : outputPace({ ndi: ndiConfigRef.current.active, ndiFps: ndiConfigRef.current.fps, moving: !!motion(), cameraPlaying: cameraPlaying(), fading: fader.busy(), staticShown: staticShown(), clockRunning: clockRunning() })
       if (fps === paceFps) return
       paceFps = fps
       void logInfoLine(`[pace] output ${OUTPUT_ID}: ${fps ? `${fps} frames a second` : "stopped"}`).catch(() => {})
@@ -466,12 +495,14 @@ function BroadcastCanvas() {
       if (fadeFrom) requestAnimationFrame(animateFade)
     }
     const unlisten = currentWindow.listen<BroadcastPayload>("broadcast:verse-update", (event) => {
+      lagClock.show(event.payload.latencyClock === true)
       if (event.payload.role === "stage") {
         videoPlayer?.sync(undefined)
         stageRef.current = event.payload.stage ?? { current: null, next: null, note: null, timer: null, message: null, band: null }
         setStage(stageRef.current)
         draw()
         pushNdiBurst()
+        syncPace()
         return
       }
       stageRef.current = null
@@ -589,6 +620,11 @@ function BroadcastCanvas() {
       pushNdiBurst()
     })
 
+    // How this screen really plays its scene's cameras (#213), every 2 s while it plays any: for Show health.
+    const cameraTimer = setInterval(() => {
+      if (cameras.size > 0) void currentWindow.emitTo("main", "broadcast:camera-playback", { outputId: OUTPUT_ID, cameras: cameraReports(cameras) }).catch(() => {})
+    }, 2000)
+
     void currentWindow.emitTo("main", "broadcast:output-ready", { outputId: OUTPUT_ID }).then(() => {
       logDebug("Sent broadcast:output-ready")
     }).catch(() => {
@@ -607,6 +643,7 @@ function BroadcastCanvas() {
       paceFps = 0
       unlistenPace.then((fn) => fn())
       unsubscribeFonts()
+      clearInterval(cameraTimer)
       for (const p of cameras.values()) p.close()
       cameras.clear()
       for (const v of sceneVideos.values()) stopVideo(v)
@@ -629,13 +666,15 @@ function BroadcastCanvas() {
   return (
     <>
       {/* A stage payload that fails to draw must not take the window's listeners with it. */}
-      {stage && <ErrorBoundary name="the stage display" quiet><StageView stage={stage} /></ErrorBoundary>}
+      {/* A countdown display is drawn on the canvas, as it goes out over NDI. */}
+      {/* So are a role's layout, a screen on its side, night colours and the clock (#196 R6). */}
+      {stage && !stageOnCanvas(stage) && <ErrorBoundary name="the stage display" quiet><StageView stage={stage} /></ErrorBoundary>}
       <canvas
         ref={canvasRef}
         style={{
           width: "100vw",
           height: "100vh",
-          display: stage ? "none" : "block",
+          display: stage && !stageOnCanvas(stage) ? "none" : "block",
           objectFit: "contain",
         }}
       />

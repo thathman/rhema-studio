@@ -1,6 +1,7 @@
 //! Service drafts an AI assistant proposed through Rhema MCP (#252), waiting in the data folder's
-//! `ai-drafts` for people to review in Prepare. Listing and removing only: a draft becomes a
-//! service when someone opens it and saves it, through the ordinary service commands.
+//! `ai-drafts` for people to review in Prepare. Listing, marking opened, putting back from a backup
+//! and removing only: a draft becomes a service when someone opens it and saves it, through the
+//! ordinary service commands.
 
 use tauri::{AppHandle, Manager};
 
@@ -23,6 +24,21 @@ pub fn ai_drafts_list(app: AppHandle) -> Result<Vec<serde_json::Value>, String> 
         .collect();
     out.sort_by(|a, b| b["created_at"].as_str().unwrap_or("").cmp(a["created_at"].as_str().unwrap_or("")));
     Ok(out)
+}
+
+/// A draft people opened in Prepare (#252 UI4): it stops waiting and the assistant can no longer
+/// revise it. `by`: the operator's name, when set. Returns the draft as now saved.
+#[tauri::command]
+pub fn ai_draft_mark_opened(app: AppHandle, id: String, by: Option<String>) -> Result<serde_json::Value, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::mcp_drafts::mark_opened(&dir, &id, by.as_deref())
+}
+
+/// Drafts from a backup's installation part (#252 AccF), put back when not here already. Returns how many.
+#[tauri::command]
+pub fn ai_drafts_restore(app: AppHandle, drafts: Vec<serde_json::Value>) -> Result<usize, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(crate::mcp_drafts::restore(&dir, &drafts))
 }
 
 /// Remove a draft (after it was opened, or when it is not wanted).

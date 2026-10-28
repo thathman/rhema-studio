@@ -50,7 +50,14 @@ Everyone is in All crew; Production and Stage & worship are heard unless a desk 
 main desk hears every channel. A speaker talks to All crew, one channel, or one person
 (`to:<name>`, `to:host`). The host keeps one gain node per speaker → listener pair and sets each to
 1 or 0 by that rule (`rewire`), so joining, leaving or changing channels never renegotiates WebRTC.
-Desks send their choice with `voice_channels {listen, talk}`.
+Desks send their choice with `voice_channels {listen, talk, levels}`.
+
+**Rights and levels (2026-10-24).** The main desk's Settings → Audio → Talk channels (`talkRules`, a
+church setting) limits Production and Stage & worship to chosen desk roles; open to every role by
+default. A role left out is neither routed from nor to that channel (gain 0 both ways); All crew and
+private calls are never limited. Each listener's per-person level multiplies its own routes only: the
+main desk's by key id, a desk's or phone's by the name it sees (`levels`, percent; `to:host` for the
+main desk). Priority turns the others down to the setting's level (0.2 by default, never silent).
 
 Verified in the app (2026-10-23, tones over the real listener): A to Production was heard by B
 (listening) and not C; A privately to C was heard by C only; B to All crew by A and C.

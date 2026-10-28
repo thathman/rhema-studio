@@ -51,7 +51,7 @@ pub fn check_writable(dir: &Path, stamp: u128) -> Result<(), String> {
     }
     let probe = dir.join(format!(".rhema-write-test-{}-{stamp}.tmp", std::process::id()));
     // A file already under that name is someone else's: refused, and never touched.
-    let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(&probe).map_err(|e| format!("Rhema could not write there: {e}"))?;
+    let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(&probe).map_err(|e| format!("Rhema Studio could not write there: {e}"))?;
     let written = (|| -> std::io::Result<()> {
         f.write_all(b"Rhema checks this folder can be written to. Safe to delete.\n")?;
         f.sync_all()?;
@@ -63,8 +63,8 @@ pub fn check_writable(dir: &Path, stamp: u128) -> Result<(), String> {
     drop(f);
     // Our own file goes again, even when writing it failed half-way.
     let removed = std::fs::remove_file(&probe);
-    written.map_err(|e| format!("Rhema could not write there: {e}"))?;
-    removed.map_err(|e| format!("Rhema wrote a test file but could not delete it ({}): {e}", probe.display()))
+    written.map_err(|e| format!("Rhema Studio could not write there: {e}"))?;
+    removed.map_err(|e| format!("Rhema Studio wrote a test file but could not delete it ({}): {e}", probe.display()))
 }
 
 /// The Finish step's "Test the church folder". Off the main thread: a network share can be slow.

@@ -6,7 +6,7 @@ import { CAC_TAG } from "@/lib/cac-hymnbook"
 import { parseOpenLyrics, toOpenLyrics } from "@/lib/openlyrics"
 import { songToMarkdown } from "@/lib/lyrics"
 import { useSettingsStore } from "@/stores/settings-store"
-import { buildInstallationExport } from "@/lib/installation-export"
+import { installationForBackup } from "@/lib/installation-export"
 
 export interface ImportOutcome {
   /** Files that were read. */
@@ -25,7 +25,7 @@ export async function exportSongsToFile(ids?: string[]): Promise<string | null> 
   const data = await invoke<SongExport>("content_export_songs", { ids: library })
   const path = await save({
     defaultPath: `rhema-songs-${new Date().toISOString().slice(0, 10)}.json`,
-    filters: [{ name: "Rhema songs", extensions: ["json"] }],
+    filters: [{ name: "Rhema Studio songs", extensions: ["json"] }],
   })
   if (!path) return null
   await writeTextFile(path, JSON.stringify(data, null, 2))
@@ -118,7 +118,7 @@ export async function exportServicePackageToFile(programId: string, title: strin
   const pkg = await invoke<ServicePackage>("content_export_service_package", { programId })
   const path = await save({
     defaultPath: `${title.replace(/[\\/:*?"<>|]+/g, " ").trim() || "service"}.rhema-service.json`,
-    filters: [{ name: "Rhema service package", extensions: ["json"] }],
+    filters: [{ name: "Rhema Studio service package", extensions: ["json"] }],
   })
   if (!path) return null
   await writeTextFile(path, JSON.stringify(pkg))
@@ -133,11 +133,11 @@ function isServicePackage(x: unknown): x is ServicePackage {
 
 /** Open a package as a new service. The backend checks the checksum before writing anything. Null when cancelled. */
 export async function importServicePackageFromFile(): Promise<PackageReport | null> {
-  const selected = await open({ multiple: false, filters: [{ name: "Rhema service package", extensions: ["json"] }] })
+  const selected = await open({ multiple: false, filters: [{ name: "Rhema Studio service package", extensions: ["json"] }] })
   if (!selected) return null
   const path = Array.isArray(selected) ? selected[0] : selected
   const parsed: unknown = JSON.parse(new TextDecoder().decode(await readFile(path)))
-  if (!isServicePackage(parsed)) throw new Error("This is not a Rhema service package.")
+  if (!isServicePackage(parsed)) throw new Error("This is not a Rhema Studio service package.")
   return invoke<PackageReport>("content_import_service_package", { package: parsed })
 }
 
@@ -155,7 +155,7 @@ export async function backupDatabaseToFile(): Promise<string | null> {
     filters: [{ name: "Rhema Studio database", extensions: ["db"] }],
   })
   if (!path) return null
-  await invoke("content_backup", { path, installation: JSON.stringify(buildInstallationExport()) })
+  await invoke("content_backup", { path, installation: JSON.stringify(await installationForBackup()) })
   // The setup's Finish step shows when the last backup was made.
   useSettingsStore.getState().setSetup({ lastBackupAt: new Date().toISOString() })
   return path
@@ -185,4 +185,4 @@ export const inspectBackup = (path: string) => invoke<BackupSummary>("content_in
  * above). This computer's settings and looks go into the snapshot with them, so restoring the
  * snapshot undoes it; the backup's own settings and looks come back in the report for the caller.
  */
-export const restoreDatabaseFrom = (path: string) => invoke<RestoreReport>("content_restore", { path, current: JSON.stringify(buildInstallationExport()) })
+export const restoreDatabaseFrom = async (path: string) => invoke<RestoreReport>("content_restore", { path, current: JSON.stringify(await installationForBackup()) })

@@ -1,61 +1,59 @@
 <p align="center">
-  <img src="public/rhema.svg" alt="Rhema logo" width="160" height="160" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/02_Product_Logos/Rhema-Studio-Light-Text.png" />
+    <img src="brand/02_Product_Logos/Rhema-Studio-Dark-Text.png" alt="Rhema Studio" width="420" />
+  </picture>
 </p>
 
-<h1 align="center">Rhema</h1>
+<h1 align="center">Rhema Studio</h1>
 
-> **Rhema Studio** — this fork is evolving Rhema into a church production platform
-> (service preparation, volunteer-friendly presenting, production tools). The new
-> application shell lives under `src/studio/`; the original Rhema dashboard remains
-> available as the **Production** view. Design and architecture documents are in
-> [`docs/rhema-studio/`](docs/rhema-studio/). Upstream: [openbezal/rhema](https://github.com/openbezal/rhema) (MIT).
+**Rhema Studio** is a local-first church production platform: service preparation, live Scripture,
+songs and hymns, volunteer-friendly presenting, screens and feeds (NDI, browser feeds, OBS) and a crew
+on the church network. It is one family of apps:
 
-<p align="center">Real-time AI-powered Bible verse detection for live sermons and broadcasts. A Tauri v2 desktop app with a React frontend and Rust backend.</p>
+| App | What it is |
+|---|---|
+| **Rhema Studio** | the desktop app every operator uses (this repository) |
+| **Rhema Studio Receiver** | the Google TV app that shows a feed full screen (`android-tv/`) |
+| **Rhema Studio Cam** | the Android app that sends a phone's camera to the studio (`android-camera/`) |
+| **Rhema Studio Companion** | the companion / remote control app (`companion-app/`, in progress) |
 
-Rhema listens to a live sermon audio feed, transcribes speech in real time, detects Bible verse references (both explicit citations and quoted passages), and renders them as broadcast-ready overlays via NDI for live production.
+The logo files and how to use them are in [`brand/`](brand/README.md); a preview of the whole family is
+[`docs/brand/preview.html`](docs/brand/preview.html).
 
-## Download
+**Developed and maintained by Rhema Studio contributors.** Built on the original
+[Rhema](https://github.com/openbezal/rhema) by OpenBezal (MIT licence). The original
+**Copyright (c) 2025 OpenBezal** notice stays in [LICENSE](LICENSE) and in the installer's notices, and
+the About panel credits it. Bible texts, NDI, fonts and other dependencies keep their own licences; see
+[docs/LICENSES.md](docs/LICENSES.md) and [BRANDING_AND_ATTRIBUTION.md](BRANDING_AND_ATTRIBUTION.md).
 
-| Platform | | Requires |
-|---|---|---|
-| **Windows** | [**Rhema-windows-x64-setup.exe**](https://github.com/openbezal/rhema/releases/latest/download/Rhema-windows-x64-setup.exe) | Windows 10/11 x64 |
-| **macOS** | [**Rhema-macos-arm64.dmg**](https://github.com/openbezal/rhema/releases/latest/download/Rhema-macos-arm64.dmg) | macOS 11 Big Sur or newer, **Apple Silicon** |
-| **Linux** | [**Rhema-linux-x86_64.AppImage**](https://github.com/openbezal/rhema/releases/latest/download/Rhema-linux-x86_64.AppImage) | x86_64; `.deb` and `.rpm` on the [release page](https://github.com/openbezal/rhema/releases/latest) |
+The new application shell lives under `src/studio/`; design and architecture documents are in
+[`docs/rhema-studio/`](docs/rhema-studio/). Start with [docs/QUICK-START.md](docs/QUICK-START.md).
 
-There is no Intel Mac build — on an Intel Mac,
-[build from source](#getting-started).
+## Builds
+
+Rhema Studio builds are published on [this repository's releases](https://github.com/thathman/rhema-studio/releases)
+when there are any. Do not use the original OpenBezal installers as if they were Rhema Studio. Every
+build is **unsigned**, so each OS warns on first run:
+
+- **macOS:** the app is still called `Rhema.app` on disk (so settings, the AI-assistant link and updates
+  keep working); its menus say Rhema Studio. Drag it to Applications, then **System Settings → Privacy &
+  Security → Open Anyway**, or clear the quarantine flag: `xattr -cr /Applications/Rhema.app`.
+- **Windows:** SmartScreen warns — *More info → Run anyway*.
+
+Builds do **not** bundle the embedding model or the Whisper model (together over a gigabyte). The Bible
+database ships inside the app, so reference detection and keyword search work out of the box; embedding
+re-ranking and local speech-to-text stay off until you build from source and run `bun run setup:all`.
 For `cargo check`/`clippy` on an Intel Mac, install `onnxruntime` with Homebrew and set
 `ORT_LIB_LOCATION=$(brew --prefix onnxruntime) ORT_PREFER_DYNAMIC_LINK=1`.
 
-Every build is **unsigned** — there is no Apple Developer or Windows code
-signing certificate behind this project — so each OS warns on first run.
-
-**Windows:** SmartScreen warns — *More info → Run anyway*.
-
-**macOS:** drag `Rhema.app` to Applications first, then open it. Gatekeeper
-blocks unsigned apps that carry the browser's quarantine flag; on macOS 15 and
-newer the right-click → Open trick no longer works, so use:
-
-- **System Settings → Privacy & Security**, scroll to the blocked-app notice,
-  then **Open Anyway**, or
-- clear the quarantine flag yourself:
-
-  ```sh
-  xattr -cr /Applications/Rhema.app
-  ```
-
-Releases do **not** bundle the embedding model or the Whisper model — together
-they exceed a gigabyte. The Bible database ships inside the app, so reference
-detection and keyword search work out of the box; embedding re-ranking and local
-speech-to-text stay inactive until you build from source and run
-`bun run setup:all`. All releases are listed at
-[github.com/openbezal/rhema/releases](https://github.com/openbezal/rhema/releases).
-
 ## Features
 
-- **Real-time speech-to-text** via local Whisper or cloud Deepgram (WebSocket streaming + REST fallback)
-  - Whisper runs locally with no API costs; Deepgram streams via WebSocket with REST fallback
+- **Speech-to-text** via local Whisper, cloud Deepgram, or OpenAI Transcribe
+  - Deepgram streams via WebSocket with REST fallback; OpenAI uploads bounded utterances and returns a final transcript
+  - Speech language selection includes English and Yorùbá; OpenAI leaves Yorùbá to automatic language detection
 - **Voice-controlled translation switching** — say "read in NIV" or "switch to ESV" to change translations instantly during a sermon
+- **Dual-translation live output** — choose a primary and optional secondary translation (for example, English KJV + Yoruba OYCB); both texts stay synchronized to the same detected reference
 - **Multi-strategy verse detection**
   - Direct reference parsing (Aho-Corasick automaton + fuzzy matching)
   - Semantic search — Qwen3-0.6B ONNX embeddings, brute-force cosine similarity over ~31k verse vectors (the `hnsw_index.rs` file is named after a future plan; today it scans linearly)
@@ -63,7 +61,7 @@ speech-to-text stay inactive until you build from source and run
   - Reading mode — locks to book/chapter as soon as it's mentioned, with voice navigation ("next chapter", "chapter 5")
   - Sermon context tracking and sentence buffering
 - **SQLite Bible database** with FTS5 full-text search (BM25 ranking by default)
-- **10 bundled translations** — KJV, NIV, ESV, NASB, NKJV, NLT, AMP, plus SpaRV (Spanish), FreJND (French), and PorBLivre (Portuguese)
+- **Bundled translations** — KJV, NIV, ESV, NASB, NKJV, NLT, AMP, plus the Open Yoruba Contemporary Bible (OYCB); the source pipeline can also include SpaRV, FreJND, and PorBLivre
 - **Cross-reference lookup** (340k+ refs from openbible.info; the bundled file ships with 344,800 entries)
 - **NDI broadcast output** for live production integration — configurable resolution, 24/30/60 fps, and three alpha modes (none, straight, premultiplied)
 - **Theme designer** — visual canvas editor for verse overlays with backgrounds (solid, gradient, image, transparent), text styling, positioning, shadows, and outlines
@@ -87,7 +85,7 @@ speech-to-text stay inactive until you build from source and run
 | **AI/ML** | ONNX Runtime (Qwen3-0.6B embeddings), Aho-Corasick, Fuse.js |
 | **Database** | SQLite via rusqlite (bundled) with FTS5 |
 | **Broadcast** | NDI 6 SDK via dynamic loading (libloading FFI) |
-| **STT** | Local Whisper via `whisper-rs`; Deepgram WebSocket + REST (`tokio-tungstenite`) |
+| **STT** | Local Whisper via `whisper-rs`; Deepgram WebSocket + REST; OpenAI transcription API |
 
 ### Rust Crates
 
@@ -108,7 +106,7 @@ speech-to-text stay inactive until you build from source and run
 - [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/) (platform-specific system dependencies)
 - [Python 3](https://www.python.org/) (only for the optional `--with-embedding` setup and downloading copyrighted translations)
 - CMake + LLVM/libclang (required for local Whisper STT) — see [Platform-specific setup](#platform-specific-setup) below
-- [Deepgram API key](https://deepgram.com/) (optional, for cloud speech-to-text instead of Whisper)
+- [Deepgram API key](https://deepgram.com/) or [OpenAI API key](https://platform.openai.com/api-keys) (optional, for cloud speech-to-text)
 
 ### Platform-specific setup
 
@@ -167,7 +165,7 @@ bun run setup:all
 This runs the required phases idempotently, skipping any whose output artifacts already exist (pass `--force` to re-run all):
 
 1. ~~Python environment~~ — skipped by default (only needed for `--with-embedding` below)
-2. Download Bible source data — single bundled archive containing all 10 translations plus the openbible.info cross-references zip
+2. Download Bible source data — the bundled archive, the official eBible OYCB Yoruba source, plus the openbible.info cross-references zip
 3. Build SQLite Bible database (`data/rhema.db` with FTS5 + cross-references)
 4. –6. ~~ONNX model + verse embeddings~~ — skipped by default (see below)
 7. Download Whisper model (`ggml-large-v3-turbo-q8_0.bin`) into `models/whisper/`
@@ -199,12 +197,12 @@ The delete matters: setup skips any artifact that already exists, so a stale ind
 
 #### Speech-to-Text Options
 
-Rhema supports two speech-to-text engines:
+Rhema supports three speech-to-text engines:
 
 **Option 1: Whisper (Local, Free)**
 Whisper runs locally on your machine with no API costs or per-minute billing.
 - Requires CMake + libclang — see [Platform-specific setup](#platform-specific-setup) above
-- The model (`ggml-large-v3-turbo-q8_0.bin`) is fetched as phase 7 of `setup:all`. Run `bun run download:whisper` to grab it on its own.
+- The multilingual model (`ggml-large-v3-turbo-q8_0.bin`) is fetched as phase 7 of `setup:all`. Run `bun run download:whisper` to grab it on its own.
 
 **Option 2: Deepgram (Cloud, Paid)**
 Create a `.env` file in the project root:
@@ -214,6 +212,9 @@ DEEPGRAM_API_KEY=your_key_here
 ```
 
 Get your API key at [deepgram.com](https://deepgram.com/)
+
+**Option 3: OpenAI Transcribe (Cloud, Paid)**
+Enter an OpenAI API key in Settings → Speech Recognition and select Cloud (OpenAI). If Settings has no key, Rhema may use `OPENAI_API_KEY` from the environment that launched the app. Choose English or Yorùbá; Yorùbá is left to automatic language detection. OpenAI returns a final result after each utterance rather than interim live words.
 
 ### NDI SDK (optional)
 
@@ -228,7 +229,7 @@ bun run download:ndi-sdk
 Each phase can also be run independently:
 
 ```bash
-bun run download:bible-data          # Bundled translations + cross-refs
+bun run download:bible-data          # Bundled translations, OYCB Yoruba Bible + cross-refs
 bun run build:bible                  # Build SQLite database
 bun run download:whisper             # Whisper STT model
 
@@ -330,4 +331,5 @@ Create a `.env` file in the project root (optional):
 
 | Variable | Required | Description |
 |---|---|---|
-| `DEEPGRAM_API_KEY` | Optional | API key for Deepgram speech-to-text (not needed if using Whisper) |
+| `DEEPGRAM_API_KEY` | Optional | API key for Deepgram speech-to-text |
+| `OPENAI_API_KEY` | Optional | API key for OpenAI speech-to-text |

@@ -48,7 +48,42 @@ beforeEach(() => {
   useBroadcastStore.setState({ scenes: [] })
 })
 
+const FP = "ab".repeat(32)
+
 describe("Cameras panel (#209)", () => {
+  it("a sending camera's card: its live picture, Test camera, the phone's battery and heat (#213), the report port in the Cam link", async () => {
+    answers.camera_router_status = router({ ports: { ...PORTS, rtsps: 8322 }, rtspsFingerprint: FP, paths: [{ name: "pulpit", live: true, source: "rtspSession", readers: 1, tracks: ["H264"], phone: { battery: 14, charging: false, temperature: 41, thermal: 2, cooling: true, agoMs: 3000 } }] })
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit cam", token: "c".repeat(32) }], cameraLatency: [{ camera: "pulpit", outputId: "main", ms: 240, at: Date.now() }] })
+    useBroadcastStore.setState({ outputs: [{ id: "main", name: "Main Display" } as never] })
+    const el = await mount()
+    const text = el.textContent ?? ""
+    expect(el.querySelector('[aria-label="Pulpit cam live picture"]'), "a muted video from the router").toBeTruthy()
+    expect((el.querySelector('[aria-label="Pulpit cam live picture"]') as HTMLVideoElement).muted).toBe(true)
+    expect(text).toContain("QR code for the phone")
+    expect(text).toContain("Phone: Battery 14% · 41 °C · heat: hot")
+    expect(text).toContain("Battery low (14%) and not charging: plug the phone in")
+    expect(text).toContain("The phone is hot")
+    expect(text).toContain("Pulpit cam → Main Display ≈ 240 ms (measured")
+    expect(button(el, "Test camera")?.disabled).toBe(false)
+    expect(text).toContain("&api=8081")
+  })
+
+  it("offers the Rhema Studio Cam app's pairing link while the router serves RTSPS", async () => {
+    answers.camera_router_status = router({ ports: { ...PORTS, rtsps: 8322 }, rtspsFingerprint: FP })
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit cam", token: "c".repeat(32) }] })
+    const el = await mount()
+    const text = el.textContent ?? ""
+    expect(text).toContain(`rhema-camera://pair?host=192.168.1.20&port=8322&name=pulpit&user=cam-pulpit&token=${"c".repeat(32)}&fp=${FP}&label=Pulpit%20cam`)
+    expect(el.querySelector('img[alt="QR code of the Pulpit cam Rhema Studio Cam link"]')).toBeTruthy()
+  })
+
+  it("explains what the app needs when the router has no RTSPS (no certificate yet, or an older build)", async () => {
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "c".repeat(32) }] })
+    const el = await mount()
+    expect(el.textContent).toContain("The app needs the router's secure connection")
+    expect(el.textContent).not.toContain("rhema-camera://")
+  })
+
   it("adds a camera: its phone page QR and link, the scene address and the OBS address", async () => {
     answers.camera_router_status = router({ paths: [{ name: "pulpit", live: true, source: "webRTCSession", readers: 2, tracks: ["H264"] }] })
     const el = await mount()
@@ -68,6 +103,32 @@ describe("Cameras panel (#209)", () => {
     // A camera app signs in as this camera only, with its own secret.
     expect(text).toContain(`rtmp://192.168.1.20:1935/pulpit?user=cam-pulpit&pass=${cam.token}`)
     expect(text).toContain(`srt://192.168.1.20:8890?streamid=publish:pulpit:cam-pulpit:${cam.token}&pkt_size=1316`)
+  })
+
+  it("names who reads each camera, which OBS companion has it on program, and warns when the network load is high for Wi-Fi", async () => {
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "a".repeat(32) }, { name: "choir", label: "Choir", token: "b".repeat(32) }] })
+    const watchers = [
+      { kind: "screen", name: "Rhema Studio screens on this computer", remote: false },
+      { kind: "screen", name: "A screen or TV at 192.168.1.40", remote: true },
+      { kind: "companion", name: "Media desk (OBS companion)", remote: true },
+    ]
+    answers.camera_router_status = router({ paths: [
+      { name: "pulpit", live: true, source: "webRTCSession", readers: 3, tracks: ["H264"], width: 1280, height: 720, kbps: 4000, watchers, obs: [{ desk: "Media desk", program: true, preview: false, receiving: true }] },
+      { name: "choir", live: true, source: "webRTCSession", readers: 1, tracks: ["H264"], kbps: 4000, watchers: [watchers[2]], obs: [{ desk: "Media desk", program: false, preview: true, receiving: false }] },
+    ] })
+    const el = await mount()
+    const text = el.textContent ?? ""
+    expect(text).toContain("H264 · 1280×720 · 4.0 Mbit/s")
+    expect(text).toContain("Read by: Rhema Studio screens on this computer, A screen or TV at 192.168.1.40, Media desk (OBS companion)")
+    expect(text).toContain("On the program of Media desk's OBS")
+    expect(text).toContain("In the preview of Media desk's OBS (its OBS is not receiving it)")
+    // 4 Mbit/s × 2 network readers + 4 × 1 = 12 Mbit/s: fine for Wi-Fi.
+    expect(text).toContain("about 12.0 Mbit/s (3 readers on other computers and TVs)")
+    expect(el.querySelector('[role="alert"]')?.textContent ?? "").not.toContain("a lot for Wi-Fi")
+    answers.camera_router_status = router({ paths: [{ name: "pulpit", live: true, readers: 8, tracks: ["H264"], kbps: 4000, watchers: Array.from({ length: 8 }, (_, i) => ({ kind: "screen", name: `TV ${i}`, remote: true })), obs: [] }] })
+    const busy = await mount()
+    expect(busy.textContent).toContain("about 32.0 Mbit/s")
+    expect(busy.textContent).toContain("That is a lot for Wi-Fi")
   })
 
   it("New link gives the camera a new secret, which the router and listener are told", async () => {

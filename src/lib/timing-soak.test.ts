@@ -19,7 +19,7 @@ vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clear
 vi.setSystemTime(new Date(2026, 9, 25, 9, 30, 0))
 
 const { presentQueueItem } = await import("@/lib/remote-actions")
-const { eventStarts, eventTimes } = await import("@/lib/journal")
+const { eventTimes } = await import("@/lib/journal")
 const { serviceTiming } = await import("@/lib/timing-engine")
 const { useQueueStore } = await import("@/stores/queue-store")
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
@@ -30,6 +30,8 @@ const { elapsedMs } = await import("@/lib/timer")
 const { useHold } = await import("@/stores/hold-store")
 const { useTimedAdvance } = await import("@/stores/timed-advance-store")
 const { useServiceOffset } = await import("@/stores/service-offset-store")
+const { useSettingsStore } = await import("@/stores/settings-store")
+const { runStateNow, timingInputNow } = await import("@/stores/timing-input")
 
 afterAll(() => vi.useRealTimers())
 
@@ -45,23 +47,34 @@ const SEC = 1000
  * +5 minutes running late, an item moved, the computer's clock corrected by 45 s mid-service, and
  * a verse stepped every 4 s the whole time (so the service log fills past its 2000-entry cap).
  * Every minute the engine's times are checked against what really happened, and the timers
- * running are counted: nothing drifts and nothing piles up.
+ * running are counted: nothing drifts and nothing piles up. From #196 R1–R3: the church's time
+ * zone is set (this computer's own, by name, so the zone arithmetic must agree with the computer's
+ * clock to the millisecond, clock step and all), a milestone sits before the sermon, the songs
+ * have a soft end, the hold feeds the sermon's expected end, the delay is pushed through
+ * everything for a while, the service is finished at 11:16, and the run state is checked each
+ * minute (idle, running, held, finished).
  */
 describe("a three-hour service on the timing engine and event clock (soak)", () => {
   it("keeps every time true to what happened and never piles up timers", async () => {
     const headers: OutlineHeader[] = [{ id: "main", type: "phase", name: "Service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }]
     useQueueStore.setState({
       items: [
-        item("welcome", 5), item("song1", 4, { auto_advance: true }), item("song2", 4, { auto_advance: true }), item("song3", 4), item("prayer", 3),
+        item("welcome", 5), item("song1", 4, { auto_advance: true }), item("song2", 4, { auto_advance: true }), item("song3", 4, { timing: { soft_end_minutes: 6 } } as Partial<QueueItem>), item("prayer", 3),
+        item("stream", 0, { timing: { milestone: true } } as Partial<QueueItem>),
         item("notices", 4), item("sermon", 35, { end_by: "11:00" } as Partial<QueueItem>), item("offering", 5), item("benediction", 3),
       ],
       headers,
     })
     useBroadcastStore.setState({ isLive: false, liveItemId: null, liveVerse: null, rehearsal: false, stageMessage: "" })
-    useEventClock.setState({ mode: "screens", currentId: null })
+    useEventClock.setState({ mode: "screens", currentId: null, currentMomentId: null })
     useJournalStore.setState({ entries: [] })
     useTimerStore.getState().reset()
     useTimerStore.getState().setDurationMinutes(35)
+    useHold.setState({ hold: null, past: [] })
+    useServiceOffset.setState({ minutes: 0, by: null, mode: "absorb" })
+    // The church's zone by name: this computer's, so the plan is the same 10:00.
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    useSettingsStore.getState().setSetup({ timeZone: zone })
     const baselineTimers = vi.getTimerCount()
 
     // What really happened, kept apart from the app: when each item went up (wall and monotonic).
@@ -104,11 +117,18 @@ describe("a three-hour service on the timing engine and event clock (soak)", () 
       // The computer's clock is corrected by 45 s (NTP) in the middle of the sermon.
       [at(10, 50), () => { clockStep = 45 * SEC; vi.setSystemTime(Date.now() + clockStep) }],
       [at(10, 55), () => timer.plusOne()],
+      // Push the delay through everything for a few minutes, then back.
+      [at(10, 58), () => useServiceOffset.getState().setMode("push", "Femi")],
+      [at(11, 4), () => useServiceOffset.getState().setMode("absorb", "Femi")],
       [at(11, 2), async () => { timer.pause(); await show("offering") }],
       [at(11, 8), () => show("notices")],
       [at(11, 12), () => show("benediction")],
-      [at(11, 16), () => useBroadcastStore.setState({ isLive: false })],
+      [at(11, 16), () => { useBroadcastStore.setState({ isLive: false }); expect(useEventClock.getState().finish("Femi")).toBeNull() }],
     ]
+    const holdFrom = at(10, 40)
+    const holdTo = at(10, 42, 30)
+    const finishAt = at(11, 16)
+    let finishedEnd: number | null = null
 
     let plannedEnd: number | null = null
     let peakTimers = 0
@@ -129,8 +149,25 @@ describe("a three-hour service on the timing engine and event clock (soak)", () 
       expect(Math.abs(elapsedMs(useTimerStore.getState().timer, monotonicNow()) - expectedRan)).toBeLessThanOrEqual(1)
       // The engine, as Prepare, Present and the Live State run it.
       const nowMono = Math.max(monotonicNow(), entries.at(-1)?.mono ?? 0)
-      const timing = serviceTiming({ items: useQueueStore.getState().items, headers, firstOnAir: eventStarts(entries), onAirMs: eventTimes(entries, nowMono), liveItemId: useEventClock.getState().currentId, now: Date.now(), adjustMinutes: useServiceOffset.getState().minutes })!
+      const input = timingInputNow()
+      expect(input.timeZone).toBe(zone)
+      const timing = serviceTiming(input)!
       expect(timing).not.toBeNull()
+      // The zone arithmetic agrees with the computer's own clock, to the millisecond.
+      expect(serviceTiming({ ...input, timeZone: "" })).toEqual(timing)
+      // The run state, from what happened.
+      expect(runStateNow()).toBe(ms < at(10, 3) ? "idle" : ms >= holdFrom && ms < holdTo ? "held" : ms >= finishAt ? "finished" : "running")
+      const sermon = timing.events.find((e) => e.id === "sermon")!
+      // While held, the sermon's time does not run out: held time counts, to the second.
+      if (sermon.state === "live") expect(Math.abs(sermon.heldMs - Math.max(0, Math.min(ms, holdTo) - holdFrom))).toBeLessThanOrEqual(SEC)
+      // The milestone is reached, never skipped, once the sermon has begun.
+      if (truth.has("sermon")) expect(timing.events.find((e) => e.id === "stream")!.state).toBe("done")
+      // Finished: nothing is to come, and the end stays where it was.
+      if (ms >= finishAt) {
+        expect(timing.events.every((e) => e.state === "done" || e.state === "skipped")).toBe(true)
+        finishedEnd ??= timing.expectedEnd
+        expect(timing.expectedEnd).toBe(finishedEnd)
+      }
       // The plan is never rewritten.
       plannedEnd ??= timing.plannedEnd
       expect(timing.plannedEnd).toBe(plannedEnd)
@@ -140,7 +177,7 @@ describe("a three-hour service on the timing engine and event clock (soak)", () 
         // When it really went up, within a second; never "skipped" for being early in a long log.
         expect(e.actualStart, `${id} at ${new Date(Date.now()).toTimeString()}`).not.toBeNull()
         expect(Math.abs(e.actualStart! - real.at)).toBeLessThanOrEqual(SEC)
-        expect(e.state).toBe(k === order.length - 1 ? "live" : "done")
+        expect(e.state).toBe(k === order.length - 1 && ms < finishAt ? "live" : "done")
         // How long it ran, on the monotonic clock, within a second.
         const next = order[k + 1]
         if (next) expect(Math.abs((eventTimes(entries, nowMono).get(id) ?? 0) - (truth.get(next)!.mono - real.mono))).toBeLessThanOrEqual(SEC)
@@ -155,6 +192,13 @@ describe("a three-hour service on the timing engine and event clock (soak)", () 
     expect(truth.get("song3")!.mono - truth.get("song2")!.mono).toBe(4 * MIN)
     expect(useJournalStore.getState().entries.map((e) => e.label)).toEqual(expect.arrayContaining(["hold: Pulpit mic", "resumed after 2:30"]))
     expect(clockStep).toBe(45 * SEC)
+    // The sermon ran past its 35 minutes; song 3 ran 5 of its soft 6 and is not over.
+    const last = serviceTiming(timingInputNow())!
+    expect(last.events.find((e) => e.id === "sermon")!.overrun).toBe(true)
+    expect(last.events.find((e) => e.id === "song3")!.overrun).toBe(false)
+    expect(useHold.getState().start("too late")).toBe("The service has finished.")
+    expect(useJournalStore.getState().entries.map((e) => e.label)).toEqual(expect.arrayContaining(["Femi: Service finished"]))
+    useSettingsStore.getState().setSetup({ timeZone: "" })
     // A handful at most at any time (the timer's ticker, a pending timed move), and none left over.
     expect(peakTimers).toBeLessThanOrEqual(baselineTimers + 3)
     useTimedAdvance.getState().setOn(false)

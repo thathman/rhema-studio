@@ -19,10 +19,13 @@ export function bibleScope(): { sourceOnly?: boolean } {
 }
 
 /** A typed reference ("Romans 8:28", "jn 3 16") activated on the Bible source; null when it is not a reference. */
-export async function activateBibleReference(reference: string): Promise<PresentOutcome | null> {
+export async function activateBibleReference(reference: string, translation?: string): Promise<PresentOutcome | null> {
   const ref = parseTypedReference(reference, useBibleStore.getState().books)
   if (!ref) return null
-  const verse = { id: 0, translation_id: useBibleStore.getState().activeTranslationId ?? 1, book_number: ref.book.book_number, book_name: ref.book.name, book_abbreviation: ref.book.abbreviation ?? "", chapter: ref.chapter, verse: ref.verse, text: "" }
+  // The translation a Bible desk chose, by its abbreviation (desk consoles): one this computer has, else its own.
+  const want = translation?.trim().toLowerCase()
+  const chosen = want ? useBibleStore.getState().translations.find((t) => t.abbreviation.toLowerCase() === want)?.id : undefined
+  const verse = { id: 0, translation_id: chosen ?? useBibleStore.getState().activeTranslationId ?? 1, book_number: ref.book.book_number, book_name: ref.book.name, book_abbreviation: ref.book.abbreviation ?? "", chapter: ref.chapter, verse: ref.verse, text: "" }
   const scope = bibleScope()
   return presentVerse(verse, scope.sourceOnly ? scope : { goLive: true })
 }

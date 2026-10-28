@@ -7,8 +7,13 @@
  */
 
 const OP = { Hello: 0, Identify: 1, Identified: 2, Event: 5, Request: 6, RequestResponse: 7 } as const
-/** EventSubscription: Config (1 << 1: profile changes, for its video settings), Scenes (1 << 2: program, preview, scene list), Outputs (1 << 6: record/stream state), Ui (1 << 10: studio mode on/off). */
-export const OBS_SUBSCRIPTIONS = (1 << 1) | (1 << 2) | (1 << 6) | (1 << 10)
+/**
+ * EventSubscription: Config (1 << 1: profile changes, for its video settings), Scenes (1 << 2: program,
+ * preview, scene list), Inputs (1 << 3: inputs added, renamed, muted), Transitions (1 << 4: the
+ * chosen transition), Outputs (1 << 6: record/stream state), Ui (1 << 10: studio mode on/off) and
+ * InputVolumeMeters (1 << 16: audio levels, about 20 a second; shown, never acted on).
+ */
+export const OBS_SUBSCRIPTIONS = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 6) | (1 << 10) | (1 << 16)
 
 async function sha256Base64(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))
@@ -130,5 +135,20 @@ export class ObsClient {
   close(): void {
     this.ws?.close()
     this.ws = null
+  }
+}
+
+/**
+ * Try an OBS address once (Settings → OBS connection profiles, "Test"): connect, ask its version,
+ * close. Asks nothing that changes OBS. Resolves with OBS's own version words, or rejects with why.
+ */
+export async function testObsConnection(o: { host: string; port: number; password: string }, socket?: (url: string) => WebSocket): Promise<string> {
+  const c = new ObsClient({ url: `ws://${o.host.trim() || "127.0.0.1"}:${o.port}`, password: o.password, socket, timeoutMs: 4000 })
+  try {
+    await c.connect()
+    const v = await c.request<{ obsVersion?: string; obsWebSocketVersion?: string }>("GetVersion")
+    return `OBS ${v.obsVersion ?? "?"}${v.obsWebSocketVersion ? ` (WebSocket ${v.obsWebSocketVersion})` : ""}`
+  } finally {
+    c.close()
   }
 }

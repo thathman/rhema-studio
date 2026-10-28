@@ -2,16 +2,21 @@ import "./broadcast-fonts.css"
 import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
 import { drawScene, drawTickerLayer, LayerFader, sceneOverlay } from "@/lib/scene-renderer"
 import { syncSceneVideos, videoReady } from "@/lib/scene-videos"
-import { feedMotion, tickerStrips } from "@/lib/feed-motion"
-import { drawStage } from "@/lib/stage-canvas"
+import { feedMotion, feedNext, tickerStrips } from "@/lib/feed-motion"
+import { noiseFrame } from "@/lib/no-signal"
+import { drawStage, stageSurface } from "@/lib/stage-canvas"
+import { CountdownFade, nextChangeIn } from "@/lib/countdown-display"
+import { feedStale, pageClockSkew } from "@/lib/feed-freshness"
+import { insetArea, lostView, overscanPct, type FeedLost } from "@/lib/feed-receivers"
 import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { normalizeTheme } from "@/lib/theme-migrations"
-import { syncCameras, WhepPlayer } from "@/lib/whep"
+import { cameraReports, syncCameras, WhepPlayer } from "@/lib/whep"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
 import type { LowerThird, SceneFrame, StagePayload, Ticker } from "@/types"
+import { latencyClock } from "@/lib/latency-clock"
 
 /**
  * A browser feed (ARCH-002): an output drawn by a web page on the church network, for OBS Browser
@@ -31,6 +36,12 @@ interface Frame {
   scene?: SceneFrame
   role?: "congregation" | "stage"
   stage?: StagePayload
+  /** What to show when the host is lost (#198); absent: keep the last frame. */
+  lost?: FeedLost
+  /** Percent of each edge kept clear for a TV that crops (#198); absent: none. */
+  overscan?: number
+  /** The screen test's camera-lag clock is up (#213). */
+  latencyClock?: boolean
 }
 
 const canvas = document.getElementById("feed") as HTMLCanvasElement
@@ -61,10 +72,25 @@ const shownBelow = (id: string) => {
 }
 /** The element the page shows under the canvas for a layer: its camera's or its video's. */
 const belowElement = (id: string) => videos.get(id) ?? cameras.get(id)?.video
-/** Where the canvas's picture is on screen (object-fit: contain). */
+/** The part of the window the feed draws in: all of it, less the output's overscan at each edge (#198). */
+function area() {
+  return insetArea(innerWidth, innerHeight, overscanPct(frame?.overscan))
+}
+/** The canvas fills that part (its picture letterboxed in it, object-fit: contain). */
+function placeCanvas() {
+  const a = area()
+  const place = { position: "fixed", left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` }
+  const key = Object.values(place).join(" ")
+  if (canvas.dataset.place !== key) {
+    Object.assign(canvas.style, place)
+    canvas.dataset.place = key
+  }
+}
+/** Where the canvas's picture is on screen. */
 function onScreen(width: number, height: number) {
-  const scale = Math.min(innerWidth / width, innerHeight / height)
-  return { scale, ox: (innerWidth - width * scale) / 2, oy: (innerHeight - height * scale) / 2 }
+  const a = area()
+  const scale = Math.min(a.w / width, a.h / height)
+  return { scale, ox: a.x + (a.w - width * scale) / 2, oy: a.y + (a.h - height * scale) / 2 }
 }
 function placeCameras() {
   const f = frame
@@ -169,11 +195,32 @@ function drawStrips() {
 }
 const redraw = () => { draw(); drawStrips() }
 
-addEventListener("resize", () => { placeCameras(); redraw() })
+addEventListener("resize", () => { placeCanvas(); placeCameras(); redraw() })
 
 /** Host time minus this machine's, from the latest frame (clock layers count by the host). */
 let offset = 0
+/** The screen test's camera-lag clock (#213), counting by the host's clock. */
+const lagClock = latencyClock(() => Date.now() + offset)
 let ticking = false
+
+/** A countdown display (Design → Countdown): its blend between steps, and whether it moves now. */
+const countdownFade = new CountdownFade()
+let countdownMoving = false
+let countdownTimer: ReturnType<typeof setTimeout> | null = null
+/** Redraw a counting countdown display as its time changes: once a second, on the second (no animation frames). */
+function scheduleCountdown() {
+  if (countdownTimer) clearTimeout(countdownTimer)
+  countdownTimer = null
+  const c = frame && !frame.off && frame.role === "stage" ? frame.stage?.countdown : undefined
+  if (!c) return
+  const wait = Math.min(nextChangeIn(c, Date.now() + offset), c.look.showClock ? 1000 : Infinity)
+  if (!Number.isFinite(wait)) return
+  countdownTimer = setTimeout(() => {
+    draw()
+    scheduleCountdown()
+    if (countdownMoving && !ticking) { ticking = true; requestAnimationFrame(animate) }
+  }, wait + 5)
+}
 
 function draw() {
   const f = frame
@@ -185,11 +232,18 @@ function draw() {
     return
   }
   if (f.role === "stage" && f.stage) {
-    canvas.width = 1920
-    canvas.height = 1080
-    drawStage(ctx, 1920, 1080, f.stage)
+    // A browser on a tall screen (a TV app or tablet set to portrait) gets a tall picture (#196 R6).
+    const a = area()
+    const { width: sw, height: sh } = stageSurface(f.stage, a.w, a.h)
+    if (canvas.width !== sw || canvas.height !== sh) {
+      canvas.width = sw
+      canvas.height = sh
+    }
+    // A countdown display counts by the host's clock, blending between its colour steps.
+    countdownMoving = drawStage(ctx, sw, sh, f.stage, { now: Date.now() + offset, fade: countdownFade }).moving
     return
   }
+  countdownMoving = false
   const { width, height } = f.theme.resolution
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width
@@ -234,18 +288,28 @@ function draw() {
   }
 }
 
+/** The static picture last drawn (a camera not sending that shows static). */
+let lastNoise = -1
+
 /**
  * Keep drawing while something moves: the whole picture only while it changes (a fade, a camera in
- * the canvas, a lower third coming in, a ticker that has to stay in the canvas); the strips every
- * frame. A ticker on a strip leaves the main canvas still.
+ * the canvas, a lower third coming in, a ticker that has to stay in the canvas, a camera's static
+ * a few times a second); the strips every frame. A ticker on a strip leaves the main canvas still.
  */
 function animate() {
   const f = frame
   const inCanvas = [...cameras.entries()].some(([id, p]) => p.ready && !shownBelow(id)) || [...videos.entries()].some(([id, v]) => videoReady(v) && !v.paused && !shownBelow(id))
-  const { picture, crawl } = feedMotion(f, { now: Date.now(), hostNow: Date.now() + offset, fading: !!fade || fader.busy(), cameraInCanvas: inCanvas, strips: onStrips() })
-  if (picture) draw()
+  const hostNow = Date.now() + offset
+  const motion = feedMotion(f, { now: Date.now(), hostNow, fading: !!fade || fader.busy(), cameraInCanvas: inCanvas, strips: onStrips(), playing: (id) => !!cameras.get(id)?.ready, countdown: countdownMoving })
+  const n = noiseFrame(hostNow)
+  if (motion.picture || (motion.noise && n !== lastNoise)) {
+    draw()
+    lastNoise = n
+  }
   drawStrips()
-  if (picture || crawl) requestAnimationFrame(animate)
+  const next = feedNext(motion, hostNow)
+  if (next === "frame") requestAnimationFrame(animate)
+  else if (next !== null) setTimeout(() => requestAnimationFrame(animate), next)
   else ticking = false
 }
 
@@ -255,6 +319,7 @@ let lastFade = 0
 
 function show(next: Frame) {
   if (typeof next.hostNow === "number") offset = next.hostNow - Date.now()
+  lagClock.show(next.latencyClock === true && !next.off)
   // A Take or release fades when the scene says so; Black and Logo always cut.
   const key = next.off ? "off" : next.scene?.sceneId ?? (next.verse?.screen ? "screen" : "own")
   const ms = next.scene?.fadeMs ?? lastFade
@@ -281,6 +346,7 @@ function show(next: Frame) {
   lastFade = next.scene?.fadeMs ?? 0
   frame = next.theme ? { ...next, theme: normalizeTheme(next.theme), scene: next.scene ? { ...next.scene, layers: next.scene.layers.map((l) => (l.theme ? { ...l, theme: normalizeTheme(l.theme) } : l)) } : undefined } : next
   stripped = tickerStrips(frame.scene, !!frame.overlay && frame.verse?.screen !== "black")
+  placeCanvas()
   if (frame.theme) preloadThemeImages(frame.theme, draw)
   const moved = () => { placeCameras(); draw(); if (!ticking) { ticking = true; requestAnimationFrame(animate) } }
   syncCameras(cameras, frame.off ? [] : (frame.scene?.layers ?? []), whep, moved)
@@ -293,6 +359,7 @@ function show(next: Frame) {
   for (const b of backings) if (b?.kind === "picture") void loadThemeImage(b.url).then(redraw)
   draw()
   drawStrips()
+  scheduleCountdown()
   if (!ticking) {
     ticking = true
     requestAnimationFrame(animate)
@@ -306,21 +373,119 @@ setInterval(() => {
 }, 1000)
 const id = decodeURIComponent(location.pathname.split("/").pop() ?? "")
 const key = new URLSearchParams(location.search).get("k") ?? ""
-// EventSource reconnects by itself; the host sends the current frame first.
-const events = new EventSource(`/api/v1/feed/${encodeURIComponent(id)}/events?k=${encodeURIComponent(key)}`)
-events.addEventListener("frame", (e) => {
-  const ev = e as MessageEvent<string>
-  try {
-    show(JSON.parse(ev.data) as Frame)
-  } catch {
-    // A frame this page cannot read: keep the last one (and do not say it was drawn).
+/** The newest frame this page drew (what it acknowledged). */
+let drawnSeq = 0
+const ack = (body: object) => fetch(`/api/v1/feed/${encodeURIComponent(id)}/ack?k=${encodeURIComponent(key)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {})
+/**
+ * While the scene plays cameras, tell the host every 2 s how they really play here (#213): frames a
+ * second, decoded and dropped, the last new frame's age. Measured on this screen, sent with the
+ * acknowledgement of the frame drawn last.
+ */
+setInterval(() => {
+  if (drawnSeq > 0 && cameras.size > 0) void ack({ seq: drawnSeq, video: cameraReports(cameras) })
+}, 2000)
+// EventSource reconnects by itself after a dropped connection; the host sends the current frame first.
+let events = new EventSource(`/api/v1/feed/${encodeURIComponent(id)}/events?k=${encodeURIComponent(key)}`)
+
+/**
+ * Out of date (#196): when the host has not been heard (no frame, no beat) for a while, a small
+ * "Not updating" mark in a corner, so a still picture or a stopped timer is not taken for live.
+ */
+let lastHeard = performance.now()
+let beats = false
+let beatCount = 0
+const staleMark = document.createElement("div")
+staleMark.setAttribute("role", "status")
+staleMark.textContent = "Not updating"
+Object.assign(staleMark.style, { position: "fixed", top: "1.2vh", right: "1.2vw", padding: "0.4vh 0.8vw", borderRadius: "0.6vh", background: "rgba(0,0,0,0.6)", color: "#ffc547", font: "600 1.6vh system-ui, sans-serif", zIndex: "10", display: "none", pointerEvents: "none" })
+document.body.appendChild(staleMark)
+/**
+ * The output's rule for a lost host (#198): over the last frame, a picture from the library or a
+ * countdown to the service start (by the host's clock as last heard), until the host is heard again.
+ */
+const lostCover = document.createElement("div")
+Object.assign(lostCover.style, { position: "fixed", inset: "0", background: "#000", zIndex: "9", display: "none", alignItems: "center", justifyContent: "center", flexDirection: "column", color: "#fff", font: "600 5vh system-ui, sans-serif", textAlign: "center", pointerEvents: "none" })
+const lostPicture = document.createElement("img")
+lostPicture.alt = ""
+Object.assign(lostPicture.style, { position: "absolute", inset: "0", width: "100%", height: "100%", objectFit: "contain" })
+const lostTitle = document.createElement("div")
+const lostTime = document.createElement("div")
+Object.assign(lostTime.style, { font: "700 16vh system-ui, sans-serif", fontVariantNumeric: "tabular-nums", marginTop: "2vh" })
+lostCover.append(lostPicture, lostTitle, lostTime)
+document.body.appendChild(lostCover)
+function showLost(stale: boolean) {
+  const v = stale ? lostView(frame?.lost, Date.now() + offset) : null
+  if (!v) {
+    if (lostCover.style.display !== "none") lostCover.style.display = "none"
     return
   }
-  // Tell the host this frame is on this screen (receiver trust), after it is drawn.
-  const seq = Number(ev.lastEventId)
-  if (Number.isFinite(seq) && seq > 0) {
-    requestAnimationFrame(() => {
-      void fetch(`/api/v1/feed/${encodeURIComponent(id)}/ack?k=${encodeURIComponent(key)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seq }) }).catch(() => {})
-    })
+  // Drawn inside the overscan too, so a cropping TV shows all of it.
+  const a = area()
+  Object.assign(lostCover.style, { display: "flex", inset: "auto", left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` })
+  if (v.kind === "picture") {
+    if (lostPicture.src !== v.url) lostPicture.src = v.url
+    lostPicture.hidden = false
+    lostTitle.textContent = ""
+    lostTime.textContent = ""
+  } else {
+    lostPicture.hidden = true
+    lostTitle.textContent = v.title
+    lostTime.textContent = v.time
   }
-})
+}
+const heard = () => { lastHeard = performance.now(); checkStale() }
+function checkStale() {
+  const stale = feedStale({ now: performance.now(), lastHeard, beats, connected: events.readyState === EventSource.OPEN })
+  const show = stale ? "block" : "none"
+  if (staleMark.style.display !== show) staleMark.style.display = show
+  showLost(stale)
+}
+setInterval(checkStale, 1000)
+/**
+ * An answer that is not the stream (403, 429…) stops an EventSource for good. A 403 means this
+ * screen's key was withdrawn (a revoked TV, a new link, #198): the page reloads, so a browser shows
+ * that the link is not valid and Rhema Studio Receiver goes back to its code screen. Anything
+ * else: try again shortly, keeping the last picture (and the rule for a lost host) meanwhile.
+ */
+async function streamStopped() {
+  const r = await fetch(`/feed/${encodeURIComponent(id)}?k=${encodeURIComponent(key)}`, { cache: "no-store" }).catch(() => null)
+  if (r?.status === 403) return location.reload()
+  setTimeout(() => {
+    events = new EventSource(`/api/v1/feed/${encodeURIComponent(id)}/events?k=${encodeURIComponent(key)}`)
+    listen(events)
+  }, 5000)
+}
+function listen(events: EventSource) {
+  events.addEventListener("error", () => {
+    checkStale()
+    if (events.readyState === EventSource.CLOSED) void streamStopped()
+  })
+  // The host's clock, between frames: count by it, and tell the host how far this screen's clock is off (it warns over 2 s).
+  events.addEventListener("beat", (e) => {
+    const hostNow = Number((e as MessageEvent<string>).data)
+    if (!Number.isFinite(hostNow)) return
+    beats = true
+    heard()
+    offset = hostNow - Date.now()
+    if (drawnSeq > 0 && beatCount++ % 2 === 0) void ack({ seq: drawnSeq, clock: pageClockSkew(hostNow, Date.now()) })
+  })
+  events.addEventListener("frame", (e) => {
+    heard()
+    const ev = e as MessageEvent<string>
+    try {
+      show(JSON.parse(ev.data) as Frame)
+    } catch {
+      // A frame this page cannot read: keep the last one (and do not say it was drawn).
+      return
+    }
+    // Tell the host this frame is on this screen (receiver trust), after it is drawn.
+    const seq = Number(ev.lastEventId)
+    if (Number.isFinite(seq) && seq > 0) {
+      requestAnimationFrame(() => {
+        drawnSeq = seq
+        void ack({ seq })
+      })
+    }
+  })
+}
+listen(events)

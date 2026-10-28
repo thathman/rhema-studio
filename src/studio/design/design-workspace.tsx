@@ -10,6 +10,7 @@ import { PropertiesPanel } from "@/components/broadcast/properties-panel"
 import { LowerThirdDesigner } from "@/studio/design/lower-third-designer"
 import { TickerDesigner } from "@/studio/design/ticker-designer"
 import { StageDesigner } from "@/studio/design/stage-designer"
+import { CountdownDesigner } from "@/studio/design/countdown-designer"
 import { BrandDesigner } from "@/studio/design/brand-designer"
 import { LookLibraryView } from "@/studio/design/look-library-view"
 import { CONTENT_NAMES } from "@/lib/content-names"
@@ -18,10 +19,11 @@ import { cn } from "@/lib/utils"
 
 const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["themes", "Themes", "How Bible, songs, hymns, slides and pictures look"],
-  ["library", "Library", "Ready-made looks to start from"],
+  ["library", "Templates", "Ready-made looks and layouts to start from"],
   ["lower-thirds", "Lower thirds", "Names, scripture and lyrics strips"],
   ["ticker", "News ticker", "The crawl along the screen"],
   ["stage", "Stage", "What the team on the platform sees"],
+  ["countdown", "Countdown", "One big time that turns amber, then red, as time runs out"],
   ["brand", "Brand kit", "Logo, colours and fonts once"],
   ["used-on", "Used on…", "Which outputs show each look"],
 ]
@@ -34,7 +36,7 @@ const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
 export function DesignWorkspace() {
   const tab = useShellStore((s) => s.designTab)
   const setTab = useShellStore((s) => s.setDesignTab)
-  // A lower-third style just added from the Library opens selected.
+  // A lower-third style just added from Templates opens selected.
   const [styleId, setStyleId] = useState<string>()
 
   // Editing starts on the first theme, as the designer always did (leaving the page settles it: see the shell).
@@ -101,6 +103,7 @@ export function DesignWorkspace() {
             {tab === "lower-thirds" && <LowerThirdDesigner initialId={styleId} />}
             {tab === "ticker" && <TickerDesigner />}
             {tab === "stage" && <StageDesigner />}
+            {tab === "countdown" && <CountdownDesigner />}
             {tab === "brand" && <BrandDesigner />}
             {(tab === "used-on" || tab === "outputs") && <UsedOn />}
           </div>

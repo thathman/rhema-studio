@@ -1,4 +1,4 @@
-import { transcriptSection } from "@/lib/journal-transcript"
+import { retentionWords, transcriptSection } from "@/lib/journal-transcript"
 import { useTranscriptStore } from "@/stores/transcript-store"
 import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import { useEffect, useState } from "react"
@@ -73,7 +73,7 @@ export function SongFiles() {
       </div>
       <div className="rounded-lg border border-border p-3">
         <p className="mb-2 font-medium">Import</p>
-        <p className="mb-2 text-xs text-muted-foreground">A Rhema songs file, or OpenLyrics .xml files from OpenLP (one song each). Nothing changes until the files read correctly.</p>
+        <p className="mb-2 text-xs text-muted-foreground">A Rhema Studio songs file, or OpenLyrics .xml files from OpenLP (one song each). Nothing changes until the files read correctly.</p>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={mode} onValueChange={(v) => setMode(v as ImportMode)}>
             <SelectTrigger className="h-8 w-80 text-xs" aria-label="If a song is already here"><SelectValue /></SelectTrigger>
@@ -136,7 +136,7 @@ export function DatabaseBlock() {
     <div className="text-sm">
       {busy === "restore" && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/95" role="alert" aria-busy="true">
-          <p className="rounded-lg border border-border bg-card px-5 py-4 text-sm font-medium shadow-modal">Restoring the backup… keep Rhema open.</p>
+          <p className="rounded-lg border border-border bg-card px-5 py-4 text-sm font-medium shadow-modal">Restoring the backup… keep Rhema Studio open.</p>
         </div>
       )}
       <p className="mb-2 text-xs text-muted-foreground">
@@ -253,7 +253,12 @@ export function JournalBlock() {
   const finalCount = segments.filter((s) => s.is_final && s.text.trim()).length
   // AR-004: the transcript goes into a log only when ticked for that log; never by default.
   const [withTranscript, setWithTranscript] = useState(false)
-  const provider = useSettingsStore((s) => (s.sttProvider === "deepgram" ? "Deepgram (cloud)" : "Whisper (on this computer)"))
+  const provider = useSettingsStore((s) => {
+    if (s.sttProvider === "deepgram") return "Deepgram (cloud)"
+    if (s.sttProvider === "openai") return "OpenAI (cloud)"
+    return "Whisper (on this computer)"
+  })
+  const retention = useSettingsStore((s) => s.transcriptRetentionDays)
   const keepLog = async () => {
     setBusy(true)
     try {
@@ -291,7 +296,7 @@ export function JournalBlock() {
           <span>
             Include what was said ({finalCount} recognised passage{finalCount === 1 ? "" : "s"})
             <span className="block text-[0.6875rem] text-muted-foreground">
-              Machine-recognised speech, not checked. It then stays in the kept log (searchable under Earlier logs) until the log is deleted. Keep it only if the people speaking know it is recorded.
+              Machine-recognised speech, not checked. It then stays in the kept log (searchable under Earlier logs) {retentionWords(retention)} (Settings → Speech). Keep it only if the people speaking know it is recorded.
             </span>
           </span>
         </label>

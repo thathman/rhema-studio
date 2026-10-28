@@ -14,6 +14,8 @@ export interface RouterPorts {
   webrtc: number
   webrtcUdp: number
   rtsp: number
+  /** RTSP over TLS for the Rhema Studio Cam app (absent from builds before it). */
+  rtsps?: number
   rtmp: number
   srt: number
   api: number
@@ -25,6 +27,54 @@ export interface RouterPath {
   source: string | null
   readers: number
   tracks: string[]
+  /** Its picture size and what it sends (kbit/s), when the router knows (#209). Absent from an older build. */
+  width?: number | null
+  height?: number | null
+  kbps?: number | null
+  /** The same in bytes a second; how long ago the router last received anything from it (ms); and
+   * Frozen: connected but nothing arriving for over 3 s (#213). Absent from an older build. */
+  bytesPerSec?: number | null
+  dataAgeMs?: number | null
+  frozen?: boolean
+  /** Who reads it: Rhema screens, TVs, OBS here, OBS companions, by name; `remote` = over the network. */
+  watchers?: { kind: string; name: string; remote: boolean }[]
+  /** What each OBS companion said: on its program, in its preview, receiving it. */
+  obs?: { desk: string; program: boolean; preview: boolean; receiving: boolean }[]
+  /** The phone's battery and heat, as Rhema Studio Cam last reported them (#213); absent when it has not lately. */
+  phone?: PhoneReport
+}
+
+/** Rhema Studio Cam's report of its phone, every 30 s while it sends (#213). */
+export interface PhoneReport {
+  /** 0–100, or null when the phone does not say. */
+  battery: number | null
+  charging: boolean
+  /** Battery temperature (°C). */
+  temperature: number | null
+  /** Android's thermal status: 0 none … 6 shutdown; null before Android 10. */
+  thermal: number | null
+  /** The app sends a smaller or slower picture to cool the phone. */
+  cooling: boolean
+  agoMs: number
+}
+
+const THERMAL = ["normal", "warm", "hot", "very hot", "critical", "emergency", "shutting down"]
+
+/**
+ * A phone's battery and heat in words, and what to warn about: a battery under 20% that is not
+ * charging, and a phone hot enough that Android (or the app) slows it down.
+ */
+export function phoneWords(p: PhoneReport): { text: string; warnings: string[] } {
+  const parts: string[] = []
+  if (p.battery !== null) parts.push(`Battery ${Math.round(p.battery)}%${p.charging ? ", charging" : ""}`)
+  else if (p.charging) parts.push("Charging")
+  if (p.temperature !== null) parts.push(`${Math.round(p.temperature * 10) / 10} °C`)
+  if (p.thermal !== null) parts.push(`heat: ${THERMAL[p.thermal] ?? "unknown"}`)
+  const warnings: string[] = []
+  if (p.battery !== null && p.battery < 20 && !p.charging) warnings.push(`Battery low (${Math.round(p.battery)}%) and not charging: plug the phone in`)
+  if ((p.thermal ?? 0) >= 4) warnings.push("The phone is critically hot and may stop sending: give it air or shade now")
+  else if ((p.thermal ?? 0) >= 2 || p.cooling) warnings.push("The phone is hot: Rhema Studio Cam sends a smaller or slower picture to cool it. Give it air or shade, or take it off its charger")
+  return { text: parts.join(" · ") || "Reporting", warnings }
 }
 
 export interface RouterStatus {
@@ -33,6 +83,8 @@ export interface RouterStatus {
   wanted: boolean
   lanAddress: string | null
   ports: RouterPorts
+  /** SHA-256 of the certificate the router serves for RTSPS, while it does; the Rhema Studio Cam app trusts only that one. */
+  rtspsFingerprint?: string | null
   restarts: number
   error: string | null
   paths: RouterPath[]
@@ -72,6 +124,12 @@ export function cameraOfUrl(url: string | undefined, cameras: Pick<CameraSource,
   return cameras.find((c) => c.name === name)?.name ?? null
 }
 
+/** The name the church gave the camera a WHEP address plays (e.g. "Pulpit"), or undefined. */
+export function cameraLabelOf(url: string, cameras: Pick<CameraSource, "name" | "label">[]): string | undefined {
+  const name = cameraOfUrl(url, cameras)
+  return cameras.find((c) => c.name === name)?.label
+}
+
 /** What OBS reads (Media Source, not a local file). */
 export function rtspUrl(host: string, ports: RouterPorts, name: string): string {
   return `rtsp://${host}:${ports.rtsp}/${name}`
@@ -85,6 +143,20 @@ export function publishUser(name: string): string {
 /** For a camera app or encoder instead of the camera page (Moblin, StreamCaster, OBS itself). */
 export function rtmpUrl(host: string, ports: RouterPorts, cam: CameraSource): string {
   return `rtmp://${host}:${ports.rtmp}/${cam.name}?user=${publishUser(cam.name)}&pass=${cam.token}`
+}
+
+/**
+ * The Rhema Studio Cam app's pairing link (Android): where the router's RTSPS is, which camera the phone
+ * is, its publish password (the same secret as its page link, so New link closes this too) and the
+ * fingerprint of the only certificate the app will send to, and the secure listener's port it
+ * reports its battery and heat to. Null while the router has no RTSPS.
+ */
+export function cameraAppLink(host: string, ports: RouterPorts, cam: CameraSource, fingerprint: string | null | undefined, apiPort?: number | null): string | null {
+  if (!ports.rtsps || !fingerprint || !/^[0-9a-f]{64}$/.test(fingerprint)) return null
+  const q = new URLSearchParams({ host, port: String(ports.rtsps), name: cam.name, user: publishUser(cam.name), token: cam.token, fp: fingerprint, label: cam.label })
+  // Rhema's secure listener (same certificate): where the app reports its battery and heat (#213).
+  if (apiPort && Number.isInteger(apiPort) && apiPort > 0 && apiPort < 65536) q.set("api", String(apiPort))
+  return `rhema-camera://pair?${q.toString().replace(/\+/g, "%20")}`
 }
 
 export function srtUrl(host: string, ports: RouterPorts, cam: CameraSource): string {
@@ -106,22 +178,36 @@ export function routerStatus(): Promise<RouterStatus | null> {
 /** The router as Show health and Home last saw it (#213); `checked` false until the first answer. */
 export const useRouterHealth = create<{ status: RouterStatus | null; checked: boolean }>(() => ({ status: null, checked: false }))
 
-/** Whether a camera is sending, from what the router last said; null before the first answer. */
-export function cameraSending(health: { status: RouterStatus | null; checked: boolean }, name: string): "sending" | "not-sending" | "router-off" | null {
+/** Whether a camera is sending, from what the router last said (frozen: connected, nothing arriving); null before the first answer. */
+export function cameraSending(health: { status: RouterStatus | null; checked: boolean }, name: string): "sending" | "frozen" | "not-sending" | "router-off" | null {
   if (!health.checked) return null
   if (!health.status?.running) return "router-off"
-  return health.status.paths.some((p) => p.name === name && p.live) ? "sending" : "not-sending"
+  const p = health.status.paths.find((x) => x.name === name && x.live)
+  return !p ? "not-sending" : p.frozen ? "frozen" : "sending"
+}
+
+/**
+ * A camera that cannot be shown now, as the router last said (#213): not sending, frozen (connected,
+ * nothing arriving) or the router is off. Undefined while sending, before the first answer, or for
+ * a camera that is not one of Rhema's (`known`: the cameras in Production → Cameras).
+ */
+export function cameraDownState(health: { status: RouterStatus | null; checked: boolean }, name: string, known: readonly { name: string }[]): "not-sending" | "frozen" | "router-off" | undefined {
+  if (!health.checked || !known.some((c) => c.name === name)) return undefined
+  if (!health.status?.running) return "router-off"
+  const p = health.status.paths.find((x) => x.name === name)
+  if (!p?.live) return "not-sending"
+  return p.frozen ? "frozen" : undefined
 }
 
 let routerUsers = 0
 let routerTimer: ReturnType<typeof setInterval> | undefined
 
-/** Ask the router how its cameras are doing every 5 s while anything watches it; returns the stop. */
+/** Ask the router how its cameras are doing every 2 s (it looks every 2 s) while anything watches it; returns the stop. */
 export function watchRouter(): () => void {
   if (routerUsers++ === 0) {
     const look = () => void routerStatus().then((status) => { if (routerUsers > 0) useRouterHealth.setState({ status, checked: true }) })
     look()
-    routerTimer = setInterval(look, 5000)
+    routerTimer = setInterval(look, 2000)
   }
   let done = false
   return () => {

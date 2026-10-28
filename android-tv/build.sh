@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds Rhema Receiver (the Google TV / Android TV app, #198) with the Android SDK's own tools, no
+# Builds Rhema Studio Receiver (the Google TV / Android TV app, #198) with the Android SDK's own tools, no
 # Gradle. Needs a JDK 17 (JAVA_HOME or on PATH) and ANDROID_HOME with platforms;android-34 and
 # build-tools;34.0.0. Out: android-tv/build/rhema-receiver.apk, signed with a local debug key
 # (~/.android/rhema-receiver-debug.jks, made once). Install: adb install -r build/rhema-receiver.apk

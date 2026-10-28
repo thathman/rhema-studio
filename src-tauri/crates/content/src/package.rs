@@ -12,13 +12,20 @@ use sha2::{Digest, Sha256};
 use crate::{ContentDb, ContentError, ImportMode, ItemInput, MediaInput, ProgramWithItems, Result, SongExport, SongWithSections};
 use std::collections::HashSet;
 
-/// The newest service-file version this app reads (and writes when a service has phases or groups).
-/// Version 1 files (no headers) are still written for plain services so older apps can open them.
-pub const PACKAGE_VERSION: u32 = 2;
+/// The newest service-file version this app reads (and writes when a service has cue items).
+/// Older versions are still written when a service needs no more, so older apps can open them:
+/// 1 for a plain service, 2 with phase or group headers, 3 with cue-only items (#193).
+pub const PACKAGE_VERSION: u32 = 3;
 
-/// The version a service file is written as: 2 only when it has phase or group headers.
+/// The version a service file is written as: the oldest that holds everything in it.
 pub fn package_version_for(items: &[ItemInput]) -> u32 {
-    if items.iter().any(|i| crate::HEADER_KINDS.contains(&i.kind.trim())) { 2 } else { 1 }
+    if items.iter().any(|i| i.kind.trim() == crate::CUE_KIND) {
+        3
+    } else if items.iter().any(|i| crate::HEADER_KINDS.contains(&i.kind.trim())) {
+        2
+    } else {
+        1
+    }
 }
 
 /// The file on disk. `payload` is the JSON of [`PackagePayload`] as a string
@@ -336,7 +343,7 @@ impl ContentDb {
             })
             .collect();
         let program = self.create_program(&payload.title, payload.service_date.as_deref())?;
-        let program = match self.replace_items(&program.id, program.revision, &items) {
+        let program = match self.replace_items_with_history(&program.id, program.revision, &items) {
             Ok(p) => p,
             Err(e) => {
                 // Never leave an empty service behind.
@@ -384,11 +391,11 @@ mod tests {
             .unwrap();
         let p = home.create_program("Sunday", Some("2026-10-25")).unwrap();
         let items = vec![
-            ItemInput { kind: "verse".into(), reference: "John 3:16".into(), book_number: Some(43), chapter: Some(3), verse: Some(16), translation: Some("KJV".into()), payload: Some(serde_json::json!({ "scene_id": "scene-1", "look_id": "classic-dark", "camera": "pulpit", "on_take": ["source.only", "obs.scene:Sermon"] }).to_string()), ..Default::default() },
+            ItemInput { kind: "verse".into(), reference: "John 3:16".into(), book_number: Some(43), chapter: Some(3), verse: Some(16), translation: Some("KJV".into()), payload: Some(serde_json::json!({ "scene_id": "scene-1", "look_id": "classic-dark", "camera": "pulpit", "on_take": ["source.only", "obs.scene:Sermon"], "comments": [{ "id": "comment-1", "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": "Read slowly", "deleted_by": "Ade", "deleted_at": "2026-10-21T11:00:00Z" }] }).to_string()), ..Default::default() },
             ItemInput { kind: "song".into(), reference: "Amazing Grace".into(), payload: Some(serde_json::json!({ "song_id": s.song.id, "arrangement_id": s.arrangements[0].id, "languages": ["en"], "background_media_id": pic.id }).to_string()), ..Default::default() },
             ItemInput { kind: "image".into(), reference: "Welcome.png".into(), payload: Some(serde_json::json!({ "media_id": pic.id, "fit": "cover" }).to_string()), ..Default::default() },
         ];
-        home.replace_items(&p.id, p.revision, &items).unwrap();
+        home.replace_items_with_history(&p.id, p.revision, &items).unwrap();
         let pkg = home.export_service_package(&p.id, &home_media).unwrap();
         assert_eq!(pkg.version, 1);
         assert_eq!(pkg.sha256, sha256_hex(pkg.payload.as_bytes()));
@@ -406,7 +413,7 @@ mod tests {
         assert_eq!(image_payload["media_id"], new_pic.id);
         // #243 RS.3/RS.4: the item's scene, look, camera and Take steps travel unchanged.
         let verse_payload: serde_json::Value = serde_json::from_str(r.program.items[0].payload.as_deref().unwrap()).unwrap();
-        assert_eq!(verse_payload, serde_json::json!({ "scene_id": "scene-1", "look_id": "classic-dark", "camera": "pulpit", "on_take": ["source.only", "obs.scene:Sermon"] }));
+        assert_eq!(verse_payload, serde_json::json!({ "scene_id": "scene-1", "look_id": "classic-dark", "camera": "pulpit", "on_take": ["source.only", "obs.scene:Sermon"], "comments": [{ "id": "comment-1", "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": "Read slowly", "deleted_by": "Ade", "deleted_at": "2026-10-21T11:00:00Z" }] }));
         let song_payload: serde_json::Value = serde_json::from_str(r.program.items[1].payload.as_deref().unwrap()).unwrap();
         assert_eq!(song_payload["background_media_id"], new_pic.id);
         assert_eq!(song_payload["song_id"], s.song.id);
@@ -449,6 +456,24 @@ mod tests {
         assert!(matches!(db.import_service_package(&bad_pic, &media), Err(ContentError::Invalid(m)) if m.contains("damaged")));
         assert_eq!(db.list_programs().unwrap().len(), 1);
         assert_eq!(db.list_media().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn a_service_with_cue_items_goes_as_version_3() {
+        let home = ContentDb::open_in_memory().unwrap();
+        let media = temp_dir("cues");
+        let p = home.create_program("Sunday", None).unwrap();
+        let rows = vec![
+            ItemInput { kind: "phase".into(), reference: "Main service".into(), ..Default::default() },
+            ItemInput { kind: "cue".into(), reference: "Sermon begins".into(), payload: Some(r#"{"cues":[{"on":"live","do":"obs.mark","text":"Sermon"}]}"#.into()), ..Default::default() },
+        ];
+        home.replace_items(&p.id, p.revision, &rows).unwrap();
+        let pkg = home.export_service_package(&p.id, &media).unwrap();
+        assert_eq!(pkg.version, 3);
+        let away = ContentDb::open_in_memory().unwrap();
+        let report = away.import_service_package(&pkg, &temp_dir("cues-away")).unwrap();
+        let opened = away.get_program(&report.program.program.id).unwrap().unwrap();
+        assert_eq!(opened.items.iter().map(|i| i.kind.as_str()).collect::<Vec<_>>(), vec!["phase", "cue"]);
     }
 
     #[test]

@@ -12,8 +12,28 @@ import { Toaster, toast } from "sonner"
 import { useEffect } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { UnsavedCloseDialog } from "@/components/unsaved-close-dialog"
+import { useSettingsStore } from "@/stores/settings-store"
+import { CompanionScreen } from "@/studio/companion/companion-screen"
+import { FullStudioSwitch } from "@/studio/companion/full-studio-switch"
 
+/**
+ * The whole window: the studio, or on a computer that runs OBS only, the OBS companion screen
+ * (#209), which starts none of the studio's listeners, screens, speech or detection.
+ */
 export function App() {
+  const companion = useSettingsStore((s) => s.companionMode)
+  if (companion) {
+    return (
+      <>
+        <ErrorBoundary name="the OBS companion"><CompanionScreen aside={<FullStudioSwitch />} /></ErrorBoundary>
+        <Toaster position="bottom-right" />
+      </>
+    )
+  }
+  return <Studio />
+}
+
+function Studio() {
   useRemoteControl()
   useBroadcastOutputs()
   useDetectionEvents()
@@ -25,7 +45,7 @@ export function App() {
       .then((files) => {
         for (const [name, aside, recovered] of files ?? []) {
           const what = name === "settings.json" ? "Settings (paired phones, remote key, cues, your name)" : "Custom themes and outputs"
-          toast.warning(recovered ? `${what} could not be read; they were put back as they were when Rhema last started` : `${what} could not be read and were reset`, {
+          toast.warning(recovered ? `${what} could not be read; they were put back as they were when Rhema Studio last started` : `${what} could not be read and were reset`, {
             description: `${recovered ? "Changes made since then need making again. " : "Set them again, or send the damaged file to whoever supports you. "}The damaged file was kept as ${aside} in the app folder (Diagnostics shows where).`,
             duration: 30_000,
           })

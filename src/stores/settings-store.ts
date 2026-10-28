@@ -2,9 +2,26 @@ import type { OpenedFrom } from "@/lib/church-folder"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
 import { validLimit, type CapacityKind, type CapacityOverrides } from "@/lib/capacity"
+import { isLatencyMeasure, isSixtyFlag, type LatencyMeasure, type SixtyFlag } from "@/lib/glass-latency"
 
-/** present: move through the service; configure: settings too; timekeeper: only the event clock; bible: only the Bible source; screens: only congregation scenes (Host/Join). */
-export type RemoteRole = "present" | "configure" | "timekeeper" | "bible" | "screens"
+/**
+ * present: move through the service; configure: settings too; timekeeper: only the event clock; bible: only the Bible source; screens: only congregation scenes (Host/Join).
+ * worship: songs and hymns; stage: the stage message; camera: cameras in scenes; obs: OBS through the host (#215 G10);
+ * obs-companion: a computer that runs OBS only and reads the church's cameras into it (#209).
+ * editor: prepares (Preview, queue, scenes) and never goes live; viewer: follows and changes nothing. See src/lib/remote-roles.ts.
+ */
+export type RemoteRole = "present" | "configure" | "timekeeper" | "bible" | "screens" | "worship" | "stage" | "camera" | "obs" | "obs-companion" | "editor" | "viewer"
+
+/**
+ * The talk channels' rules (Rhema Comms, #251), set on the main desk: which desk roles may hear and
+ * talk on each channel (a channel not listed is open to every role; All crew always is), and how
+ * loud the others stay while the main desk talks with priority (0–1; never silent).
+ */
+export interface TalkRules {
+  channels: Partial<Record<string, RemoteRole[]>>
+  duck: number
+}
+export const DEFAULT_TALK_RULES: TalkRules = { channels: {}, duck: 0.2 }
 
 export interface RemoteDevice {
   hash: string
@@ -14,6 +31,17 @@ export interface RemoteDevice {
   role?: RemoteRole
   /** The main desk has taken back control (#243): its commands wait; it still sees the service and talks. Absent = not paused. */
   paused?: boolean
+}
+
+/** A host's https link, kept at pairing (see `joinSecure`). */
+export interface JoinSecure {
+  port: number
+  fingerprint: string
+}
+
+export function isJoinSecure(v: unknown): v is JoinSecure {
+  const j = v as JoinSecure
+  return typeof v === "object" && v !== null && typeof j.port === "number" && Number.isInteger(j.port) && j.port > 0 && j.port < 65536 && typeof j.fingerprint === "string" && /^[0-9a-f]{64}$/.test(j.fingerprint)
 }
 
 let remoteKeysPush: Promise<void> = Promise.resolve()
@@ -30,6 +58,23 @@ export interface ObsSettings {
   port: number
   /** obs-websocket password; kept in the system keychain when available (see SECRET_NAMES). */
   password: string
+}
+
+/**
+ * A saved OBS to connect to (#197): "Main stream PC", "Backup laptop". Using one copies it into
+ * the connection above. Each password is kept in the system keychain with the other secrets.
+ */
+export interface ObsProfile {
+  id: string
+  label: string
+  host: string
+  port: number
+  password: string
+}
+
+export function isObsProfile(v: unknown): v is ObsProfile {
+  const o = v as Partial<ObsProfile> | null
+  return typeof o === "object" && o !== null && typeof o.id === "string" && !!o.id && typeof o.label === "string" && typeof o.host === "string" && typeof o.port === "number" && Number.isInteger(o.port) && o.port > 0 && o.port < 65536 && typeof o.password === "string"
 }
 
 export function pushRemoteKeys(): Promise<void> {
@@ -54,6 +99,8 @@ export interface CameraSource {
   label: string
   /** The secret in its camera-page link, and its password in the camera router; a new one closes the old link. */
   token: string
+  /** Its backup camera's name (#213): Switch to backup puts that one in its scenes' camera places. */
+  backup?: string
 }
 
 function isCameraSource(c: unknown): c is CameraSource {
@@ -68,6 +115,23 @@ export interface TimekeeperCountdown {
   chime: boolean
   /** 0: only at zero. */
   chimeMinutes: number
+  /** A chime here as the service timer runs out (#196 R2.8); absent: off. */
+  overtimeChime?: boolean
+}
+
+/** An extra timer as a service keeps it (#196 R2.5): its name, length, owner and whether it shows on the stage. */
+export interface ServiceTimerPlan {
+  id: string
+  label: string
+  minutes: number
+  /** The desk role that runs it besides the timekeeping desks ("worship"); "" or absent: none. */
+  owner?: string
+  onStage?: boolean
+}
+
+export function isServiceTimerPlan(p: unknown): p is ServiceTimerPlan {
+  const x = p as ServiceTimerPlan
+  return typeof p === "object" && p !== null && typeof x.id === "string" && x.id.length > 0 && x.id.length <= 100 && typeof x.label === "string" && typeof x.minutes === "number" && Number.isFinite(x.minutes) && x.minutes > 0 && x.minutes <= 600
 }
 
 export interface CustomMacro {
@@ -88,7 +152,9 @@ import { isCountdownTo } from "@/lib/countdown"
 import { newFeedToken } from "@/lib/output-on-air"
 import type { CountdownTo } from "@/types"
 
-type SttProvider = "deepgram" | "whisper"
+type SttProvider = "deepgram" | "whisper" | "openai"
+type SpeechLanguage = "en" | "yo"
+export type CloudSpeechProvider = "deepgram" | "openai"
 
 export interface SettingsState {
   deepgramApiKey: string | null
@@ -101,6 +167,7 @@ export interface SettingsState {
   cooldownMs: number
   onboardingComplete: boolean
   sttProvider: SttProvider
+  speechLanguage: SpeechLanguage
   brandKit: BrandKit
   /** Who is at the desk; goes on audit rows and the service log. */
   operatorName: string
@@ -108,13 +175,18 @@ export interface SettingsState {
   hymnFirstLanguage: "en" | "yo"
   /**
    * When this computer agreed that microphone audio may be sent to the cloud
-   * speech provider (ISO time); "" = not agreed (RG-08, NFR-09).
+   * Deepgram before provider-specific consent was tracked (ISO time).
    */
   cloudSpeechConsentAt: string
-  setCloudSpeechConsent: (agreed: boolean) => void
+  /** Per-provider cloud microphone consent on this computer (RG-08, NFR-09). */
+  cloudSpeechConsents: Partial<Record<CloudSpeechProvider, string>>
+  setCloudSpeechConsent: (provider: CloudSpeechProvider, agreed: boolean) => void
   /** CL-002: hold the first go-live of a service that is not approved as it stands (off by default). */
   requireApproval: boolean
   setRequireApproval: (on: boolean) => void
+  /** How long a transcript kept with a service log stays (#246 C17), in days; 0: until the log is deleted. */
+  transcriptRetentionDays: number
+  setTranscriptRetentionDays: (days: number) => void
   /** The church folder (NAS or synced) where services are published and opened; "" = not set (#72). */
   churchFolder: string
   setChurchFolder: (folder: string) => void
@@ -139,17 +211,29 @@ export interface SettingsState {
   joinAddress: string
   joinName: string
   joinToken: string
-  setJoin: (patch: { joinAddress?: string; joinName?: string; joinToken?: string }) => void
+  /**
+   * The host's https link as kept at pairing: its port and the SHA-256 fingerprint of its
+   * certificate authority (as Rhema Studio Companion pins it, #209). From then on this computer talks
+   * to that host only over https and only with that authority. Null: paired over plain http.
+   */
+  joinSecure: JoinSecure | null
+  setJoin: (patch: { joinAddress?: string; joinName?: string; joinToken?: string; joinSecure?: JoinSecure | null }) => void
   /** The talk channel's headset on this computer (Rhema Comms): microphone and where the crew is heard, by device id; "" = the system's. */
   talkInputId: string
   talkOutputId: string
   setTalkDevices: (patch: { talkInputId?: string; talkOutputId?: string }) => void
+  /** Who may use each talk channel, and how quiet priority makes the others (the church's rules). */
+  talkRules: TalkRules
+  setTalkRules: (patch: Partial<TalkRules>) => void
   /** Production → Timekeeper's countdown on this computer (#196 R2): what it counts to, and its chime (off unless turned on). */
   timekeeperCountdown: TimekeeperCountdown
   setTimekeeperCountdown: (patch: Partial<TimekeeperCountdown>) => void
+  /** Each saved service's extra timers, by service id (#196 R2.5), kept on this computer with its services. */
+  serviceTimers: Record<string, ServiceTimerPlan[]>
+  setServiceTimers: (serviceId: string, plans: ServiceTimerPlan[]) => void
   /** Paired controllers: SHA-256 of each token, never the token. */
   remoteDevices: RemoteDevice[]
-  /** Once any key or device exists this stays on; with it on and no keys, every command is refused. */
+  /** Once any key or device exists this stays on; with it on and no keys, every command is refused. On for new installs; a saved value is kept. */
   remoteAuthRequired: boolean
   setRemoteAuthRequired: (on: boolean) => void
   /**
@@ -163,6 +247,14 @@ export interface SettingsState {
   /** Optional OBS connection (obs-websocket v5). */
   obs: ObsSettings
   setObs: (patch: Partial<ObsSettings>) => void
+  /** Saved OBS connections, this computer's only (never in a backup). */
+  obsProfiles: ObsProfile[]
+  setObsProfiles: (profiles: ObsProfile[]) => void
+  /**
+   * This computer's network address when the last service went live (#213 preflight), to notice
+   * a changed address (phones, TVs, OBS and desks that saved the old one cannot find it). Null until then.
+   */
+  lanAddressAtService: string | null
   /** First-install setup (#298): where it was left, this computer's name, and Home's reminder. */
   setup: SetupProfile
   setSetup: (patch: Partial<SetupProfile>) => void
@@ -180,6 +272,21 @@ export interface SettingsState {
   /** Start the camera router with Rhema while any camera is added (never when none is). */
   cameraRouterAuto: boolean
   setCameraRouterAuto: (on: boolean) => void
+  /** Camera lag measured with the screen test's clock (#213), the newest per camera and output. */
+  cameraLatency: LatencyMeasure[]
+  setCameraLatency: (list: LatencyMeasure[]) => void
+  /** What each screen last showed with a 60 fps camera (#213 1080p60 capability), by screen. */
+  screenSixty: Record<string, SixtyFlag>
+  setScreenSixty: (flags: Record<string, SixtyFlag>) => void
+  /**
+   * This computer runs OBS only (#209): Rhema shows the OBS companion screen (join the host, the
+   * church's cameras, add them to this OBS) and none of the studio, and loads no Bible models.
+   */
+  companionMode: boolean
+  setCompanionMode: (on: boolean) => void
+  /** The companion's network delay buffer for each camera in OBS (SRT latency, ms): more rides out Wi-Fi hiccups, less is quicker. */
+  companionLatencyMs: number
+  setCompanionLatencyMs: (ms: number) => void
   /** How much this computer runs before Rhema warns (#243 G13); a kind not set is worked out from the computer. */
   capacityLimits: CapacityOverrides
   /** null: back to the computer's own figure. */
@@ -204,6 +311,7 @@ export interface SettingsState {
   setCooldownMs: (ms: number) => void
   setOnboardingComplete: (complete: boolean) => void
   setSttProvider: (provider: SttProvider) => void
+  setSpeechLanguage: (language: SpeechLanguage) => void
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -217,13 +325,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   cooldownMs: 2500,
   onboardingComplete: false,
   sttProvider: "deepgram",
+  speechLanguage: "en",
   brandKit: defaultBrandKit(),
   operatorName: "",
   hymnFirstLanguage: "en",
   customMacros: [],
   churchFolder: "",
   requireApproval: false,
+  transcriptRetentionDays: 0,
   cloudSpeechConsentAt: "",
+  cloudSpeechConsents: {},
   openedPackages: [],
   openedFrom: {},
   commentsSeen: [],
@@ -233,17 +344,36 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   joinAddress: "",
   joinName: "",
   joinToken: "",
+  joinSecure: null,
   setJoin: (patch) => set(patch),
   talkInputId: "",
   talkOutputId: "",
   setTalkDevices: (patch) => set(patch),
+  talkRules: DEFAULT_TALK_RULES,
+  setTalkRules: (patch) => set((s) => ({ talkRules: { ...s.talkRules, ...patch, duck: Math.min(0.8, Math.max(0.05, patch.duck ?? s.talkRules.duck)) } })),
   timekeeperCountdown: { to: "next", chime: false, chimeMinutes: 2 },
   setTimekeeperCountdown: (patch) => set((s) => ({ timekeeperCountdown: { ...s.timekeeperCountdown, ...patch } })),
+  serviceTimers: {},
+  setServiceTimers: (serviceId, plans) =>
+    set((s) => {
+      const next = { ...s.serviceTimers }
+      delete next[serviceId]
+      if (plans.length) next[serviceId] = plans
+      // The newest last; only the most recent services' timers are kept.
+      const ids = Object.keys(next)
+      for (const id of ids.slice(0, Math.max(0, ids.length - MAX_SERVICES_WITH_TIMERS))) delete next[id]
+      return { serviceTimers: next }
+    }),
   remoteDevices: [],
-  remoteAuthRequired: false,
+  // New installs need a key or a paired device before anything on the network is accepted. A saved
+  // value is kept (settings are read one by one), so an existing church's setup does not change.
+  remoteAuthRequired: true,
   remoteListeners: { osc: false, http: false, oscPort: 8000, httpPort: 8080, lan: true },
   obs: { enabled: false, host: "127.0.0.1", port: 4455, password: "" },
   setObs: (patch) => set((s) => ({ obs: { ...s.obs, ...patch } })),
+  obsProfiles: [],
+  setObsProfiles: (obsProfiles) => set({ obsProfiles }),
+  lanAddressAtService: null,
   setup: defaultSetup(),
   setSetup: (patch) => set((s) => ({ setup: { ...s.setup, ...patch } })),
   hostLookSeen: "",
@@ -253,6 +383,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setCameras: (cameras) => set({ cameras }),
   cameraRouterAuto: true,
   setCameraRouterAuto: (cameraRouterAuto) => set({ cameraRouterAuto }),
+  cameraLatency: [],
+  setCameraLatency: (cameraLatency) => set({ cameraLatency }),
+  screenSixty: {},
+  setScreenSixty: (screenSixty) => set({ screenSixty }),
+  companionMode: false,
+  setCompanionMode: (companionMode) => set({ companionMode }),
+  companionLatencyMs: 200,
+  setCompanionLatencyMs: (ms) => set({ companionLatencyMs: validCompanionLatency(ms) ? ms : 200 }),
   capacityLimits: {},
   setCapacityLimit: (kind, n) =>
     set((s) => {
@@ -264,11 +402,17 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
   setRemoteListeners: (patch) => set((s) => ({ remoteListeners: { ...s.remoteListeners, ...patch } })),
   setRemoteAuthRequired: (remoteAuthRequired) => {
-    set({ remoteAuthRequired })
+    // A configured key or paired device always keeps the server's auth gate on. The loader still
+    // preserves an explicitly saved legacy `false`; this guard applies when a user changes it.
+    set((s) => ({ remoteAuthRequired: remoteAuthRequired || s.remoteSecret.trim().length > 0 || s.remoteDevices.length > 0 }))
     void pushRemoteKeys()
   },
   setRemoteSecret: (remoteSecret) => {
-    set((s) => ({ remoteSecret, remoteAuthRequired: s.remoteAuthRequired || remoteSecret.trim().length > 0 }))
+    set((s) => ({
+      remoteSecret,
+      // Clearing the last legacy credential must not silently undo the server's forced-on state.
+      remoteAuthRequired: s.remoteAuthRequired || remoteSecret.trim().length > 0 || s.remoteSecret.trim().length > 0 || s.remoteDevices.length > 0,
+    }))
     void pushRemoteKeys()
   },
   addRemoteDevice: (d) => {
@@ -276,7 +420,15 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     void pushRemoteKeys()
   },
   revokeRemoteDevice: (hash) => {
-    set((s) => ({ remoteDevices: s.remoteDevices.filter((x) => x.hash !== hash) }))
+    set((s) => {
+      const remoteDevices = s.remoteDevices.filter((x) => x.hash !== hash)
+      return {
+        remoteDevices,
+        // The backend requires auth while any credential exists; removing the last one keeps the
+        // effective setting on until the operator explicitly accepts the risk in Remote settings.
+        remoteAuthRequired: s.remoteAuthRequired || remoteDevices.length !== s.remoteDevices.length,
+      }
+    })
     void pushRemoteKeys()
   },
   setRemoteDeviceRole: (hash, role) => {
@@ -296,8 +448,18 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     void pushRemoteKeys()
   },
   setCustomMacros: (customMacros) => set({ customMacros }),
-  setCloudSpeechConsent: (agreed) => set({ cloudSpeechConsentAt: agreed ? new Date().toISOString() : "" }),
+  setCloudSpeechConsent: (provider, agreed) => set((state) => {
+    const at = agreed ? new Date().toISOString() : ""
+    const consents = { ...state.cloudSpeechConsents }
+    if (agreed) consents[provider] = at
+    else delete consents[provider]
+    return {
+      cloudSpeechConsents: consents,
+      ...(provider === "deepgram" ? { cloudSpeechConsentAt: at } : {}),
+    }
+  }),
   setRequireApproval: (requireApproval) => set({ requireApproval }),
+  setTranscriptRetentionDays: (days) => set({ transcriptRetentionDays: validRetentionDays(days) ? days : 0 }),
   setChurchFolder: (churchFolder) => set({ churchFolder: churchFolder.trim() }),
   noteOpenedFrom: (programId, from) => set((s) => ({ openedFrom: Object.fromEntries([...Object.entries(s.openedFrom).filter(([k]) => k !== programId), [programId, from]].slice(-1000)) })),
   // ponytail: newest 2000 read comments; a very long-lived template could see old ones as new again. Raise the cap if that happens.
@@ -318,8 +480,26 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setConfidenceThreshold: (confidenceThreshold) => set({ confidenceThreshold }),
   setCooldownMs: (cooldownMs) => set({ cooldownMs }),
   setOnboardingComplete: (onboardingComplete) => set({ onboardingComplete }),
-  setSttProvider: (sttProvider) => set({ sttProvider }),
+  setSttProvider: (sttProvider) => set((state) => ({
+    sttProvider: state.speechLanguage === "yo" && sttProvider === "deepgram" ? "whisper" : sttProvider,
+  })),
+  setSpeechLanguage: (speechLanguage) => set((state) => ({
+    speechLanguage,
+    ...(speechLanguage === "yo" && state.sttProvider === "deepgram" ? { sttProvider: "whisper" } : {}),
+  })),
 }))
+
+/** The companion's delay buffer choices (ms); a saved value must be a whole number in this range. */
+/** The choices for how long kept transcripts stay (0: until the log is deleted). */
+export const TRANSCRIPT_RETENTION_DAYS = [0, 30, 90, 365] as const
+export function validRetentionDays(days: unknown): days is number {
+  return typeof days === "number" && (TRANSCRIPT_RETENTION_DAYS as readonly number[]).includes(days)
+}
+
+export const COMPANION_LATENCY_MS = { min: 80, max: 1000 }
+export function validCompanionLatency(ms: unknown): ms is number {
+  return typeof ms === "number" && Number.isInteger(ms) && ms >= COMPANION_LATENCY_MS.min && ms <= COMPANION_LATENCY_MS.max
+}
 
 /**
  * A settings file written by an older or newer build may hold a shape this
@@ -331,6 +511,10 @@ function acceptable(key: string, value: unknown): boolean {
   switch (key) {
     case "hymnFirstLanguage":
       return value === "en" || value === "yo"
+    case "speechLanguage":
+      return value === "en" || value === "yo"
+    case "sttProvider":
+      return value === "deepgram" || value === "whisper" || value === "openai"
     case "operatorName":
     case "remoteSecret":
     case "joinAddress":
@@ -342,12 +526,23 @@ function acceptable(key: string, value: unknown): boolean {
     case "cloudSpeechConsentAt":
     case "hostLookSeen":
       return typeof value === "string"
+    case "cloudSpeechConsents":
+      return typeof value === "object" && value !== null && !Array.isArray(value) && Object.entries(value).every(([provider, at]) => (provider === "deepgram" || provider === "openai") && typeof at === "string")
     case "obs": {
       const o = value as Partial<ObsSettings>
       return typeof value === "object" && value !== null && typeof o.enabled === "boolean" && typeof o.host === "string" && typeof o.port === "number" && Number.isInteger(o.port) && o.port > 0 && o.port < 65536 && typeof o.password === "string"
     }
+    case "companionLatencyMs":
+      return validCompanionLatency(value)
+    case "transcriptRetentionDays":
+      return validRetentionDays(value)
+    case "obsProfiles":
+      return Array.isArray(value)
+    case "lanAddressAtService":
+      return typeof value === "string"
     case "remoteAuthRequired":
     case "cameraRouterAuto":
+    case "companionMode":
     case "mcpEnabled":
     case "requireApproval":
     case "autoMode":
@@ -359,8 +554,10 @@ function acceptable(key: string, value: unknown): boolean {
       return typeof value === "number" && Number.isFinite(value)
     case "timekeeperCountdown": {
       const t = value as Partial<TimekeeperCountdown>
-      return typeof value === "object" && value !== null && isCountdownTo(t.to) && typeof t.chime === "boolean" && typeof t.chimeMinutes === "number" && Number.isInteger(t.chimeMinutes) && t.chimeMinutes >= 0 && t.chimeMinutes <= 30
+      return typeof value === "object" && value !== null && isCountdownTo(t.to) && typeof t.chime === "boolean" && typeof t.chimeMinutes === "number" && Number.isInteger(t.chimeMinutes) && t.chimeMinutes >= 0 && t.chimeMinutes <= 30 && (t.overtimeChime === undefined || typeof t.overtimeChime === "boolean")
     }
+    case "joinSecure":
+      return isJoinSecure(value)
     case "remoteDevices":
       return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
     case "openedFrom":
@@ -377,9 +574,17 @@ function acceptable(key: string, value: unknown): boolean {
       return Array.isArray(value) && value.every((x) => typeof x === "string")
     case "customMacros":
     case "cameras":
+    case "cameraLatency":
       return Array.isArray(value) // entries are checked one by one in hydrateSettings
+    case "serviceTimers":
+    case "screenSixty":
+      return typeof value === "object" && value !== null && !Array.isArray(value) // entries are checked one by one in readSetting
     case "brandKit":
       return typeof value === "object" && !Array.isArray(value)
+    case "talkRules": {
+      const t = value as Partial<TalkRules>
+      return typeof value === "object" && value !== null && typeof t.duck === "number" && Number.isFinite(t.duck) && t.duck > 0 && t.duck <= 1 && typeof t.channels === "object" && t.channels !== null && !Array.isArray(t.channels) && Object.values(t.channels).every((r) => Array.isArray(r) && r.every((x) => typeof x === "string"))
+    }
     case "setup":
       return typeof value === "object" && !Array.isArray(value) // fields are checked one by one in hydrateSettings
     default:
@@ -395,7 +600,7 @@ function acceptable(key: string, value: unknown): boolean {
  * Every saved setting is in exactly one part (settings-sections.test.ts checks it).
  */
 export const SETTINGS_SECTIONS = {
-  church: ["brandKit", "customMacros", "requireApproval", "hymnFirstLanguage"],
+  church: ["brandKit", "customMacros", "requireApproval", "hymnFirstLanguage", "talkRules", "transcriptRetentionDays"],
   machine: [
     "setup",
     "churchFolder",
@@ -406,6 +611,7 @@ export const SETTINGS_SECTIONS = {
     "joinAddress",
     "joinName",
     "joinToken",
+    "joinSecure",
     "hostLookSeen",
     "talkInputId",
     "talkOutputId",
@@ -413,8 +619,14 @@ export const SETTINGS_SECTIONS = {
     "remoteAuthRequired",
     "remoteListeners",
     "obs",
+    "obsProfiles",
+    "lanAddressAtService",
     "cameras",
     "cameraRouterAuto",
+    "cameraLatency",
+    "screenSixty",
+    "companionMode",
+    "companionLatencyMs",
     "capacityLimits",
     "deepgramApiKey",
     "openaiApiKey",
@@ -422,7 +634,10 @@ export const SETTINGS_SECTIONS = {
     "audioDeviceId",
     "gain",
     "sttProvider",
+    "speechLanguage",
     "cloudSpeechConsentAt",
+    "cloudSpeechConsents",
+    "serviceTimers",
   ],
   operator: ["operatorName", "onboardingComplete", "commentsSeen", "timekeeperCountdown", "autoMode", "confidenceThreshold", "cooldownMs"],
 } as const satisfies Record<string, readonly (keyof SettingsState)[]>
@@ -433,6 +648,9 @@ export type ChurchSettings = Pick<SettingsState, (typeof SETTINGS_SECTIONS.churc
 export type MachineSettings = Pick<SettingsState, (typeof SETTINGS_SECTIONS.machine)[number]>
 export type OperatorSettings = Pick<SettingsState, (typeof SETTINGS_SECTIONS.operator)[number]>
 type PersistedKey = (typeof SETTINGS_SECTIONS)[SettingsSection][number]
+
+/** How many services' extra timers are kept (the newest). */
+const MAX_SERVICES_WITH_TIMERS = 200
 
 /** In the store but never saved: worked out while Rhema runs. */
 export const RUNTIME_ONLY_SETTINGS = ["settingsSaveFailed"] as const satisfies readonly (keyof SettingsState)[]
@@ -459,12 +677,14 @@ export function settingsSection(state: SettingsState, section: SettingsSection):
 
 /**
  * Never in a backup: the saved keys and passwords; the phones and desks paired with this computer
- * and the host it joins; and what lets others in (the remote listeners, the remote key rule, the
- * AI assistant switch, cloud speech consent), which each computer's operator turns on there (#298 M9).
+ * and the host it joins; what lets others in (the remote listeners, the remote key rule, the
+ * AI assistant switch, cloud speech consent), which each computer's operator turns on there (#298 M9);
+ * and whether this computer is an OBS companion (#209), which is this computer's job, not the church's.
  */
 export const NOT_IN_BACKUP = [
   "deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "joinToken",
-  "remoteDevices", "remoteAuthRequired", "remoteListeners", "joinAddress", "joinName", "mcpEnabled", "cloudSpeechConsentAt",
+  "remoteDevices", "remoteAuthRequired", "remoteListeners", "joinAddress", "joinName", "joinSecure", "mcpEnabled", "cloudSpeechConsentAt", "cloudSpeechConsents",
+  "companionMode", "obsProfiles", "lanAddressAtService",
 ] as const satisfies readonly PersistedKey[]
 const notInBackup = (key: string) => (NOT_IN_BACKUP as readonly string[]).includes(key)
 
@@ -529,23 +749,39 @@ export function restoreSettingsFromBackup(parts: unknown): string[] {
 // file's copies are blanked; `secretsInKeychain: true` in the file says so.
 // Without a keychain the file keeps the values, as before.
 
-type SecretName = "deepgramApiKey" | "openaiApiKey" | "claudeApiKey" | "remoteSecret" | "obsPassword" | "joinToken"
-const SECRET_NAMES: SecretName[] = ["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "obsPassword", "joinToken"]
+type SecretName = "deepgramApiKey" | "openaiApiKey" | "claudeApiKey" | "remoteSecret" | "obsPassword" | "joinToken" | "obsProfilePasswords"
+const SECRET_NAMES: SecretName[] = ["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "obsPassword", "joinToken", "obsProfilePasswords"]
 const KEYCHAIN_TIMEOUT_MS = 5000
 
 function readSecret(s: SettingsState, name: SecretName): string {
+  if (name === "obsProfilePasswords") {
+    // The saved OBS connections' passwords, as one JSON value by profile id ("" when none has one).
+    const map = Object.fromEntries((s.obsProfiles ?? []).filter((p) => p.password).map((p) => [p.id, p.password]))
+    return Object.keys(map).length ? JSON.stringify(map) : ""
+  }
   return (name === "obsPassword" ? s.obs.password : (s[name] as string | null)) ?? ""
 }
 
 function withSecret(s: Partial<SettingsState>, name: SecretName, value: string, base: SettingsState): Partial<SettingsState> {
   if (name === "obsPassword") return { ...s, obs: { ...(s.obs ?? base.obs), password: value } }
+  if (name === "obsProfilePasswords") {
+    let map: Record<string, unknown> = {}
+    try {
+      map = value ? (JSON.parse(value) as Record<string, unknown>) : {}
+    } catch {
+      map = {}
+    }
+    const profiles = s.obsProfiles ?? base.obsProfiles ?? []
+    return { ...s, obsProfiles: profiles.map((p) => ({ ...p, password: typeof map[p.id] === "string" ? (map[p.id] as string) : value ? p.password : "" })) }
+  }
   return { ...s, [name]: value }
 }
 
 /** The current secrets, for the diagnostics export to redact. */
 export function currentSecrets(): string[] {
   const s = useSettingsStore.getState()
-  return SECRET_NAMES.map((n) => readSecret(s, n)).filter(Boolean)
+  // Each saved OBS connection's password on its own, as it could appear in a log.
+  return [...SECRET_NAMES.filter((n) => n !== "obsProfilePasswords").map((n) => readSecret(s, n)), ...s.obsProfiles.map((p) => p.password)].filter(Boolean)
 }
 
 /** The keychain holds our entry but it could not be read this session: never overwrite it. */
@@ -569,6 +805,10 @@ function readSetting(key: string, value: unknown): unknown {
   if (key === "customMacros") return (value as unknown[]).filter(isCustomMacro)
   if (key === "setup") return normalizeSetup(value)
   if (key === "cameras") return (value as unknown[]).filter(isCameraSource)
+  if (key === "cameraLatency") return (value as unknown[]).filter(isLatencyMeasure).slice(0, 64)
+  if (key === "screenSixty") return Object.fromEntries(Object.entries(value as Record<string, unknown>).filter(([, f]) => isSixtyFlag(f)).slice(0, 32))
+  if (key === "obsProfiles") return (value as unknown[]).filter(isObsProfile)
+  if (key === "serviceTimers") return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([id, plans]) => (Array.isArray(plans) ? [[id, plans.filter(isServiceTimerPlan).slice(0, 8)]] : [])))
   return value
 }
 
@@ -600,7 +840,7 @@ export async function retryKeychain(): Promise<boolean> {
     toast.success("Saved keys read from the keychain")
     return true
   } catch {
-    toast.error("The keychain still could not be read", { description: "Rhema keeps working; enter the keys again in Settings if this continues." })
+    toast.error("The keychain still could not be read", { description: "Rhema Studio keeps working; enter the keys again in Settings if this continues." })
     return false
   }
 }
@@ -629,6 +869,11 @@ export function hydrateSettings(): Promise<void> {
         const read = readSetting(key, value)
         if (read !== undefined) (patch as Record<string, unknown>)[key] = read
       }
+      const currentSettings = useSettingsStore.getState()
+      const language = patch.speechLanguage ?? currentSettings.speechLanguage
+      const provider = patch.sttProvider ?? currentSettings.sttProvider
+      const repairedSpeechProvider = language === "yo" && provider === "deepgram"
+      if (repairedSpeechProvider) patch.sttProvider = "whisper"
       // Secrets the file says are in the keychain come from there (a value still in the file wins); any in the file move there on the next save.
       const merged = () => ({ ...useSettingsStore.getState(), ...patch }) as SettingsState
       const migrate = SECRET_NAMES.some((n) => readSecret(merged(), n))
@@ -647,7 +892,7 @@ export function hydrateSettings(): Promise<void> {
           console.warn("[settings] the saved keys are in the system keychain but could not be read")
           // Said once, with a way back: without the keys, speech, OBS and the remote fail with misleading errors.
           toast.warning("Saved keys could not be read from the system keychain", {
-            description: "Cloud speech, OBS and phone remotes need them. Allow Rhema when the system asks, then Retry.",
+            description: "Cloud speech, OBS and phone remotes need them. Allow Rhema Studio when the system asks, then Retry.",
             duration: Infinity,
             action: { label: "Retry", onClick: () => void retryKeychain() },
           })
@@ -656,7 +901,7 @@ export function hydrateSettings(): Promise<void> {
       if (Object.keys(patch).length > 0) {
         useSettingsStore.setState(patch)
       }
-      if (migrate && !keychainUnreadable) pendingSave = pendingSave.then(() => persistAll(useSettingsStore.getState()))
+      if ((migrate || repairedSpeechProvider) && !keychainUnreadable) pendingSave = pendingSave.then(() => persistAll(useSettingsStore.getState()))
       const name = useSettingsStore.getState().operatorName.trim()
       if (name) void invoke("content_set_actor", { name }).catch(() => {})
       void pushRemoteKeys()

@@ -51,12 +51,14 @@ export function SongUsageBlock() {
         ) : (
           <table className="mt-2 w-full text-xs">
             <thead className="text-left text-muted-foreground">
-              <tr><th className="font-normal">Song</th><th className="font-normal">CCLI</th><th className="text-right font-normal">Services</th><th className="text-right font-normal">Last</th></tr>
+              <tr><th className="font-normal">Type</th><th className="font-normal">Song</th><th className="font-normal">Hymn numbers</th><th className="font-normal">CCLI</th><th className="text-right font-normal">Services</th><th className="text-right font-normal">Last</th></tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.song_id} className="border-t border-border">
+                  <td className="py-1 pr-2">{r.hymn ? "Hymn" : "Song"}</td>
                   <td className="truncate py-1 pr-2">{r.title}</td>
+                  <td className="py-1 pr-2">{r.hymn_numbers.join(", ") || "—"}</td>
                   <td className="tabular-nums">{r.ccli_number ?? (r.licence === "public_domain" ? "public domain" : "—")}</td>
                   <td className="text-right tabular-nums">{r.services}</td>
                   <td className="text-right tabular-nums">{r.last_date}</td>

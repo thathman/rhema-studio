@@ -4,8 +4,12 @@ import { Button } from "@/components/ui/button"
 import { useServiceStore } from "@/stores/service-store"
 import { useShellStore } from "@/studio/shell-store"
 import { approvalState } from "@/lib/approval"
+import { archiveMonthAt, formatServiceCalendarDate, serviceCalendarDate, serviceDateInMonth } from "@/lib/archive-calendar"
+import { validTimeZone } from "@/lib/church-time"
+import { systemTimeZone } from "@/lib/setup-readiness"
 import { SongUsageBlock } from "@/studio/more/song-usage-block"
 import { ChurchFolderBlock, DatabaseBlock, JournalBlock, PackageBlock } from "@/studio/library/library-blocks"
+import { useSettingsStore } from "@/stores/settings-store"
 
 function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
@@ -22,11 +26,16 @@ export function ArchiveWorkspace() {
   const programs = useServiceStore((s) => s.programs)
   const current = useServiceStore((s) => s.current)
   const dirty = useServiceStore((s) => s.dirty)
+  const configuredTimeZone = useSettingsStore((s) => s.setup.timeZone)
   const services = programs.filter((p) => !p.is_template).sort((a, b) => (b.service_date ?? "").localeCompare(a.service_date ?? ""))
-  const now = new Date()
-  const monthName = now.toLocaleDateString(undefined, { month: "long" })
-  const year = now.getFullYear()
-  const thisMonth = services.filter((p) => p.service_date?.startsWith(`${year}-${String(now.getMonth() + 1).padStart(2, "0")}`))
+  const timeZone = validTimeZone(configuredTimeZone)
+  const month = archiveMonthAt(new Date().getTime(), timeZone)
+  const monthName = month.monthName
+  const year = month.year
+  const thisMonth = services.filter((p) => serviceDateInMonth(p.service_date, month))
+  const timeZoneDescription = timeZone
+    ? `Month uses ${timeZone} church time. Saved service dates stay on their calendar day.`
+    : `Month uses this computer's time${systemTimeZone() ? ` (${systemTimeZone()})` : ""}. Saved service dates stay on their calendar day.`
   const stats: Array<[string, string, string]> = [
     ["Services this month", String(thisMonth.length), thisMonth.length ? `${thisMonth.reduce((n, p) => n + p.item_count, 0)} items in all` : "None dated this month yet"],
     ["Saved services", String(services.length), "On this computer"],
@@ -52,7 +61,7 @@ export function ArchiveWorkspace() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold">{monthName} at a glance</h2>
-              <p className="text-xs text-muted-foreground">From the services saved on this computer.</p>
+              <p className="text-xs text-muted-foreground">{timeZoneDescription}</p>
             </div>
             <span className="rounded-[5px] bg-tone-green px-2 py-1 text-[0.6875rem] font-bold text-tone-green-foreground">{monthName} {year}</span>
           </div>
@@ -75,15 +84,17 @@ export function ArchiveWorkspace() {
           {services.length === 0 && <p className="rounded-lg border border-border bg-card px-5 py-6 text-center text-xs text-muted-foreground">None yet. Create one in Prepare.</p>}
           <ul className="flex flex-col gap-2.5">
             {services.map((p) => {
-              const d = p.service_date ? new Date(`${p.service_date}T12:00:00`) : null
+              const d = serviceCalendarDate(p.service_date)
+              const shortDate = formatServiceCalendarDate(p.service_date, { month: "short" })
+              const fullDate = formatServiceCalendarDate(p.service_date, { day: "numeric", month: "short", year: "numeric" })
               return (
                 <li key={p.id} className="flex flex-wrap items-center gap-4 rounded-[14px] border border-border bg-card px-[18px] py-4">
                   <span className="flex w-[53px] shrink-0 flex-col items-center rounded-lg bg-accent py-1.5 text-accent-foreground tabular-nums">
-                    {d ? <><span className="text-[1.4375rem] leading-none font-bold">{d.getDate()}</span><span className="mt-0.5 text-[0.625rem] font-semibold uppercase">{d.toLocaleDateString(undefined, { month: "short" })}</span></> : <span className="py-2 text-[0.625rem]">undated</span>}
+                    {d && shortDate ? <><span className="text-[1.4375rem] leading-none font-bold">{d.day}</span><span className="mt-0.5 text-[0.625rem] font-semibold uppercase">{shortDate}</span></> : <span className="py-2 text-[0.625rem]">undated</span>}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-bold">{p.title}</span>
-                    <span className="block text-xs text-muted-foreground">{[d?.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }), `${p.item_count} item${p.item_count === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}</span>
+                    <span className="block text-xs text-muted-foreground">{[fullDate, `${p.item_count} item${p.item_count === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}</span>
                   </span>
                   {p.archived_at ? <Badge variant="neutral">Archived</Badge> : approvalState(p) === "approved" ? <Badge variant="green">Approved</Badge> : approvalState(p) === "changed" ? <Badge variant="amber">Changed since approval</Badge> : <Badge variant="neutral">Not approved</Badge>}
                   {current?.id === p.id ? <span className="text-xs text-muted-foreground">open</span> : <Button size="sm" variant="outline" disabled={dirty} onClick={() => open(p.id)}>Open</Button>}
@@ -106,7 +117,7 @@ export function ArchiveWorkspace() {
               <PackageBlock onClose={() => useShellStore.getState().goTo("prepare")} />
             </div>
           </Card>
-          <Card title="Backups" sub="Everything (services and songs) in one file, and back again.">
+          <Card title="Backups" sub="Services, songs, settings, outputs and looks in one file (no saved keys or passwords), and back again.">
             <DatabaseBlock />
           </Card>
         </div>

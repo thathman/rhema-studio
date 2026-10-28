@@ -2,7 +2,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 
 const GROUPS: ReadonlyArray<readonly [string, ReadonlyArray<readonly [string, string]>]> = [
   ["Anywhere", [["⌘K / Ctrl+K", "Find anything"], ["⌘1 to ⌘8", "Home, Prepare, Present, Library, Design, Team, Archive, Production"], ["⌘, / Ctrl+,", "Settings"], ["⌘B / Ctrl+B", "Fold the sidebar to icons, or open it out again"]]],
-  ["Present", [["→ or Page Down", "Next (a song's next slide, then the next item)"], ["← or Page Up", "Previous"], ["Shift+→ / Shift+←", "The next or previous verse of the live passage"], ["Esc", "Clear (takes it off the screens; Restore brings it back)"], ["Shift+Esc", "Restore"]]],
+  ["Present", [["→ or Page Down", "Next (a song's next slide, then the next item)"], ["← or Page Up", "Previous"], ["Shift+→ / Shift+←", "The next or previous verse of the live passage"], ["Esc", "Clear (takes it off the screens; Restore brings it back)"], ["Shift+Esc", "Restore"], ["Shift+T", "Take the news ticker, or Stop it when it runs"]]],
 ]
 
 /** The keyboard shortcuts (top bar ⓘ, Desk menu). Present's keys never act while typing or with a dialog open. */

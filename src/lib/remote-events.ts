@@ -40,12 +40,23 @@ export const REMOTE_EVENTS = {
   bible_preview: "remote:bible_preview",
   song_show: "remote:song_show",
   song_preview: "remote:song_preview",
+  song_section: "remote:song_section",
   clear_source: "remote:clear_source",
   restore_source: "remote:restore_source",
   take_scene: "remote:take_scene",
   release_scene: "remote:release_scene",
+  save_scene: "remote:save_scene",
+  delete_scene: "remote:delete_scene",
+  stage_message: "remote:stage_message",
+  obs_preview: "remote:obs_preview",
+  obs_take: "remote:obs_take",
+  obs_program: "remote:obs_program",
   notice_send: "remote:notice_send",
   notice_ack: "remote:notice_ack",
+  aux_timer: "remote:aux_timer",
+  queue_request: "remote:queue_request",
+  obs_record: "remote:obs_record",
+  obs_transition: "remote:obs_transition",
 } as const
 
 /** Emitted by the backend when a device completes pairing: `{ name, hash }`. Not a command. */

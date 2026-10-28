@@ -1,13 +1,35 @@
+import { dayAt } from "@/lib/church-time"
+
 /**
- * The run of show's structure (issue #193): phases (pre-service loop, warm-up,
- * main service, post-service loop, or named ones) and groups inside them, kept
- * as headers between the rundown's items. `items` stays the plain ordered list
- * everything else uses (Next, Previous, the remote, the stage); a header only
- * says where it sits: before the item at index `at` (at = items.length: after
- * the last). Saved as `phase` / `group` rows in the service.
+ * The run of show's structure: phases and groups are headers between the rundown's
+ * items. A group may carry a versioned event plan; the following items are its moments.
+ * `items` stays the ordered list used by Next, Previous, remotes and the stage. Headers
+ * save as existing `phase` / `group` rows so older builds can keep unknown event data.
  */
 export type PhaseRule = "loop" | "auto_once" | "manual"
 export type PhaseRole = "pre" | "warmup" | "main" | "post" | "custom"
+
+/** A saved event cue is a snapshot of a manual action sequence; it never runs from elapsed time. */
+export interface RunOfShowEventCue {
+  id: string
+  name: string
+  trigger: "manual"
+  /** Kept as strings so a newer build's actions survive a save by this build. */
+  steps: string[]
+}
+
+/** Versioned plan metadata on a service event. The event's title/id/notes are its header fields. */
+export interface RunOfShowEventPlan {
+  schema_version: 1
+  role?: string
+  duration_minutes?: number
+  ownership?: string
+  cues?: RunOfShowEventCue[]
+  /** Deprecated v1 payload key; the parser ignores it because service approval is authoritative. */
+  approval?: "draft" | "approved"
+  /** Event metadata written by a later build; retained on the next save. */
+  payload_extra?: Record<string, unknown>
+}
 
 export interface OutlineHeader {
   id: string
@@ -23,8 +45,181 @@ export interface OutlineHeader {
   starts_at?: string
   /** Loop phases: seconds each item stays up while the phase runs by itself (3–3600). */
   advance_seconds?: number
+  /** Phases: skipped for this service (#193). Its items stay, but Present passes over them like hidden ones. */
+  disabled?: boolean
   /** Keys this build does not edit, kept as they were. */
   payload_extra?: Record<string, unknown>
+  /** Present on an event header. Its following rundown items are the event's moments. */
+  event?: RunOfShowEventPlan
+}
+
+export interface RunOfShowEvent<T> {
+  id: string
+  title: string
+  role?: string
+  duration_minutes?: number
+  ownership?: string
+  notes?: string | null
+  moments: T[]
+}
+
+/** A safe point to insert a new event while keeping it inside the chosen phase or event. */
+export interface EventInsertionPoint {
+  at: number
+  /** Insert before this boundary when several headers share the same item index. */
+  beforeHeaderId?: string
+}
+
+const EVENT_FIELDS = new Set(["schema_version", "role", "duration_minutes", "ownership", "cues", "approval"])
+
+/** Read only this schema version; an unknown or malformed marker remains opaque payload data. */
+export function parseRunOfShowEvent(value: unknown): RunOfShowEventPlan | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  if (raw.schema_version !== 1) return null
+  // eslint-disable-next-line no-control-regex
+  const text = (v: unknown) => typeof v === "string" && v.trim().length > 0 && v.trim().length <= 60 && !/[\u0000-\u001f\u007f-\u009f]/.test(v) ? v.trim() : undefined
+  const role = text(raw.role)
+  const ownership = text(raw.ownership)
+  if (raw.role !== undefined && !role || raw.ownership !== undefined && !ownership) return null
+  const duration = raw.duration_minutes
+  if (duration !== undefined && (typeof duration !== "number" || !Number.isFinite(duration) || duration <= 0 || duration > 600)) return null
+  let cues: RunOfShowEventCue[] | undefined
+  if (raw.cues !== undefined) {
+    if (!Array.isArray(raw.cues) || raw.cues.length > 12) return null
+    const seen = new Set<string>()
+    cues = []
+    for (const value of raw.cues) {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) return null
+      const cue = value as Record<string, unknown>
+      const id = cue.id
+      const name = text(cue.name)
+      if (typeof id !== "string" || !/^[a-zA-Z0-9._-]{1,80}$/.test(id) || seen.has(id) || !name || cue.trigger !== "manual") return null
+      if (!Array.isArray(cue.steps) || cue.steps.length === 0 || cue.steps.length > 12 || cue.steps.some((step) => typeof step !== "string" || step.length === 0 || step.length > 60)) return null
+      seen.add(id)
+      cues.push({ id, name, trigger: "manual", steps: [...cue.steps] as string[] })
+    }
+  }
+  return {
+    schema_version: 1,
+    ...(role ? { role } : {}),
+    ...(duration !== undefined ? { duration_minutes: duration } : {}),
+    ...(ownership ? { ownership } : {}),
+    ...(cues !== undefined ? { cues } : {}),
+    ...(Object.keys(raw).some((key) => !EVENT_FIELDS.has(key)) ? { payload_extra: Object.fromEntries(Object.entries(raw).filter(([key]) => !EVENT_FIELDS.has(key))) } : {}),
+  }
+}
+
+/** A section boundary: an event may contain ordinary groups; a group ends at the next header. */
+function sectionEndAt(headers: OutlineHeader[], sortedIndex: number, itemCount: number): number {
+  const h = headers[sortedIndex]
+  const boundary = headers.slice(sortedIndex + 1).find((next) =>
+    h.type === "phase" ? next.type === "phase" : h.event ? next.type === "phase" || !!next.event : true,
+  )
+  return boundary?.at ?? itemCount
+}
+
+/** Project legacy ordered rows into the event → moments model without rewriting their item ids. */
+export function projectRunOfShowEvents<T>(items: T[], headers: OutlineHeader[]): RunOfShowEvent<T>[] {
+  const sorted = sortHeaders(headers)
+  return sorted.flatMap((h, index) => {
+    if (!h.event) return []
+    const end = sectionEndAt(sorted, index, items.length)
+    return [{
+      id: h.id,
+      title: h.name,
+      ...(h.event.role ? { role: h.event.role } : {}),
+      ...(h.event.duration_minutes !== undefined ? { duration_minutes: h.event.duration_minutes } : {}),
+      ...(h.event.ownership ? { ownership: h.event.ownership } : {}),
+      notes: h.notes,
+      moments: items.slice(h.at, end),
+    }]
+  })
+}
+
+export interface RunOfShowClockRow<T> {
+  id: string
+  reference: string
+  kind: "event" | "item"
+  /** The event's approved estimate, or the sum of its moments when no event estimate is set. */
+  planned_minutes: number | null
+  starts_at?: string | null
+  end_by?: string | null
+  gap_minutes?: number | null
+  timing?: { milestone?: boolean; soft_end_minutes?: number; warn_minutes?: number } | null
+  hidden?: boolean | null
+  /** Original moment records; an ordinary legacy row contains itself. */
+  moments: T[]
+  /** The first queue index represented by this clock row. */
+  sourceAt: number
+}
+
+type ClockItem = {
+  id: string
+  reference: string
+  planned_minutes?: number | null
+  starts_at?: string | null
+  end_by?: string | null
+  gap_minutes?: number | null
+  timing?: RunOfShowClockRow<unknown>["timing"]
+  hidden?: boolean | null
+}
+
+/**
+ * Project the ordered content rows into the events a Timekeeper starts. A versioned event owns its
+ * moments and its planned length; services without event headers retain one clock row per item.
+ * Phase and ordinary group boundaries are projected onto the resulting event order for timing.
+ */
+export function runOfShowClockRows<T extends ClockItem>(items: T[], headers: OutlineHeader[]): { rows: RunOfShowClockRow<T>[]; headers: OutlineHeader[] } {
+  const sorted = sortHeaders(headers)
+  const eventHeaders = sorted.filter((h) => h.event)
+  const ranges = eventHeaders.map((header) => ({ header, start: header.at, end: sectionEndAt(sorted, sorted.indexOf(header), items.length) }))
+  const candidates: Array<{ row: RunOfShowClockRow<T>; order: number }> = []
+
+  for (const range of ranges) {
+    const moments = items.slice(range.start, range.end)
+    const total = moments.reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0)
+    candidates.push({
+      order: headers.indexOf(range.header),
+      row: {
+        id: range.header.id,
+        reference: range.header.name,
+        kind: "event",
+        planned_minutes: range.header.event!.duration_minutes ?? (total > 0 ? total : null),
+        moments,
+        sourceAt: range.start,
+      },
+    })
+  }
+
+  items.forEach((item, index) => {
+    if (ranges.some((range) => index >= range.start && index < range.end)) return
+    candidates.push({
+      order: headers.length + index,
+      row: {
+        id: item.id,
+        reference: item.reference,
+        kind: "item",
+        planned_minutes: item.planned_minutes ?? null,
+        ...(item.starts_at !== undefined ? { starts_at: item.starts_at } : {}),
+        ...(item.end_by !== undefined ? { end_by: item.end_by } : {}),
+        ...(item.gap_minutes !== undefined ? { gap_minutes: item.gap_minutes } : {}),
+        ...(item.timing !== undefined ? { timing: item.timing } : {}),
+        ...(item.hidden !== undefined ? { hidden: item.hidden } : {}),
+        moments: [item],
+        sourceAt: index,
+      },
+    })
+  })
+
+  candidates.sort((a, b) => a.row.sourceAt - b.row.sourceAt || a.order - b.order)
+  const rows = candidates.map(({ row }) => row)
+  const projectedHeaders = headers.flatMap((header, order) => {
+    if (header.event || (header.type === "group" && ranges.some((range) => header.id !== range.header.id && header.at >= range.start && header.at < range.end))) return []
+    const at = candidates.filter((candidate) => candidate.row.sourceAt < header.at || (candidate.row.sourceAt === header.at && candidate.order < order)).length
+    return [{ ...header, at }]
+  })
+  return { rows, headers: projectedHeaders }
 }
 
 const shift = (headers: OutlineHeader[], from: number, by: 1 | -1): OutlineHeader[] =>
@@ -35,13 +230,21 @@ export function headersAfterInsert(headers: OutlineHeader[], index: number): Out
   return shift(headers, index, 1)
 }
 
-/** Where an item appended to a section goes: the end of that phase or group. */
+/** Where an item appended to a section goes: the end of that phase, event or group. */
 export function sectionEnd(itemCount: number, headers: OutlineHeader[], headerId: string): number {
+  return sectionInsertionPoint(itemCount, headers, headerId).at
+}
+
+/** Where a new event belongs at the end of a phase/event/group, including same-index header order. */
+export function sectionInsertionPoint(itemCount: number, headers: OutlineHeader[], headerId: string): EventInsertionPoint {
   const sorted = sortHeaders(headers)
   const k = sorted.findIndex((h) => h.id === headerId)
-  if (k === -1) return 0
-  const h = sorted[k]
-  return sorted.slice(k + 1).find((n) => (h.type === "phase" ? n.type === "phase" : true))?.at ?? itemCount
+  if (k === -1) return { at: 0 }
+  const target = sorted[k]
+  const boundary = sorted.slice(k + 1).find((next) =>
+    target.type === "phase" ? next.type === "phase" : target.event ? next.type === "phase" || !!next.event : true,
+  )
+  return { at: boundary?.at ?? itemCount, ...(boundary ? { beforeHeaderId: boundary.id } : {}) }
 }
 
 /**
@@ -52,7 +255,8 @@ export function sectionEnd(itemCount: number, headers: OutlineHeader[], headerId
 export function headersAfterAppend(headers: OutlineHeader[], index: number, headerId: string): OutlineHeader[] {
   const sorted = sortHeaders(headers)
   const k = sorted.findIndex((h) => h.id === headerId)
-  const after = new Set(sorted.slice(k + 1).filter((h) => h.at === index).map((h) => h.id))
+  const target = sorted[k]
+  const after = new Set(sorted.slice(k + 1).filter((h) => h.at === index && (target?.event ? h.type === "phase" || !!h.event : true)).map((h) => h.id))
   return headers.map((h) => (h.at > index || after.has(h.id) ? { ...h, at: h.at + 1 } : h))
 }
 
@@ -85,23 +289,129 @@ export function interleave<T>(items: T[], headers: OutlineHeader[]): OutlineRow<
 }
 
 export interface SectionSummary {
-  /** Items under the header (for a phase: down to the next phase; a group: to the next header). */
+  /** Items under the header: phases to next phase, events to next event/phase, groups to next header. */
   count: number
   /** Their planned minutes. */
   minutes: number
+  /** Phase-only breakdown when the phase contains event headers. */
+  eventCount?: number
+  /** Queue items owned by those events. */
+  momentCount?: number
+  /** Queue items in the phase but outside its events. */
+  looseItemCount?: number
 }
 
-/** Each header's item count and planned minutes, by header id. */
-export function sectionSummaries(items: Array<{ planned_minutes?: number | null }>, headers: OutlineHeader[]): Record<string, SectionSummary> {
+/**
+ * Whether Present passes over the item at `index` (#193): it is hidden, or its phase is skipped for
+ * this service. It stays in the service (and in Prepare); Next, Previous, timed moves and phase
+ * runs step over it, Present's running order leaves it out, and it takes no planned time.
+ */
+export function isSkipped(items: ReadonlyArray<{ hidden?: boolean | null }>, headers: OutlineHeader[], index: number): boolean {
+  return !!items[index]?.hidden || !!phaseAt(headers, index)?.disabled
+}
+
+export interface VisibleRunItem<T> {
+  item: T
+  index: number
+  kind: "item" | "moment"
+  label: string
+}
+
+/** The first item Present can reach from an index, in either direction. */
+export function visibleRunItemFrom<T extends { hidden?: boolean | null; kind?: string; reference: string }>(
+  items: ReadonlyArray<T>, headers: OutlineHeader[], startIndex: number, direction: 1 | -1,
+): VisibleRunItem<T> | null {
+  for (let index = startIndex; index >= 0 && index < items.length; index += direction) {
+    if (isSkipped(items, headers, index)) continue
+    const item = items[index]
+    const kind = item.kind === "cue" ? "moment" : "item"
+    return { item, index, kind, label: kind === "moment" ? `Moment · ${item.reference}` : item.reference }
+  }
+  return null
+}
+
+/** The next visible rundown entry after the active index, or the first when nothing is active. */
+export function nextVisibleItem<T extends { hidden?: boolean | null; kind?: string; reference: string }>(
+  items: ReadonlyArray<T>, headers: OutlineHeader[], afterIndex: number | null,
+): VisibleRunItem<T> | null {
+  return visibleRunItemFrom(items, headers, (afterIndex ?? -1) + 1, 1)
+}
+
+/** The previous visible rundown entry before the active index. */
+export function previousVisibleItem<T extends { hidden?: boolean | null; kind?: string; reference: string }>(
+  items: ReadonlyArray<T>, headers: OutlineHeader[], beforeIndex: number,
+): VisibleRunItem<T> | null {
+  return visibleRunItemFrom(items, headers, beforeIndex - 1, -1)
+}
+
+/** The items as the plan counts them: a skipped one keeps its place but takes no time and has no fixed start. */
+export function timedItems<T extends { hidden?: boolean | null; planned_minutes?: number | null; starts_at?: string | null; gap_minutes?: number | null }>(items: T[], headers: OutlineHeader[]): T[] {
+  if (!items.some((_, i) => isSkipped(items, headers, i))) return items
+  return items.map((it, i) => (isSkipped(items, headers, i) ? { ...it, planned_minutes: null, starts_at: null, gap_minutes: null } : it))
+}
+
+/** Mark skipped entries as hidden for consumers that only receive items, without the phase headers. */
+export function markSkipped<T extends { hidden?: boolean | null }>(items: T[], headers: OutlineHeader[]): T[] {
+  if (!headers.some((h) => h.disabled)) return items
+  return items.map((it, i) => (!it.hidden && isSkipped(items, headers, i) ? { ...it, hidden: true } : it))
+}
+
+/** A church-named phase (#193) before the item at `at`: run by hand until its rule is changed. */
+export function newPhase(at: number, name = "New phase", newId: () => string = () => crypto.randomUUID()): OutlineHeader {
+  return { id: newId(), type: "phase", name, at, rule: "manual", role: "custom" }
+}
+
+/** Each header's item count and planned minutes, by header id. Skipped items count, but take no minutes. */
+export function sectionSummaries(rawItems: Array<{ planned_minutes?: number | null; hidden?: boolean | null }>, headers: OutlineHeader[]): Record<string, SectionSummary> {
   const sorted = [...headers].map((h, order) => ({ h, order })).sort((a, b) => a.h.at - b.h.at || a.order - b.order).map((x) => x.h)
+  const clock = runOfShowClockRows(rawItems.map((item, index) => ({ ...item, id: String(index), reference: "" })), headers)
+  const clockItems = timedItems(clock.rows, clock.headers)
   const out: Record<string, SectionSummary> = {}
   sorted.forEach((h, k) => {
-    // A phase runs to the next phase; a group to the next header of either kind.
-    const end = sorted.slice(k + 1).find((n) => (h.type === "phase" ? n.type === "phase" : true))?.at ?? items.length
-    const slice = items.slice(h.at, end)
-    out[h.id] = { count: slice.length, minutes: slice.reduce((m, i) => m + (i.planned_minutes ?? 0), 0) }
+    const end = sectionEndAt(sorted, k, rawItems.length)
+    const slice = rawItems.slice(h.at, end)
+    const nextPhaseIndex = h.type === "phase" ? sorted.findIndex((candidate, index) => index > k && candidate.type === "phase") : -1
+    const phaseEvents = h.type === "phase"
+      ? sorted.slice(k + 1, nextPhaseIndex === -1 ? sorted.length : nextPhaseIndex)
+        .map((candidate, index) => ({ candidate, index: k + 1 + index }))
+        .filter(({ candidate }) => !!candidate.event)
+      : []
+    const momentCount = phaseEvents.reduce((sum, { candidate, index }) => {
+      const eventEnd = sectionEndAt(sorted, index, rawItems.length)
+      return sum + Math.max(0, Math.min(end, eventEnd) - Math.max(h.at, candidate.at))
+    }, 0)
+    const nestedMomentGroup = h.type === "group" && sorted.some((event) => event.event && h.at >= event.at && h.at < sectionEndAt(sorted, sorted.indexOf(event), rawItems.length))
+    const minutes = h.event
+      ? phaseAt(headers, h.at)?.disabled ? 0 : h.event.duration_minutes ?? slice.reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0)
+      : nestedMomentGroup
+        ? slice.reduce((sum, item, offset) => sum + (isSkipped(rawItems, headers, h.at + offset) ? 0 : item.planned_minutes ?? 0), 0)
+        : clockItems.filter((item) => item.sourceAt >= h.at && item.sourceAt < end).reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0)
+    out[h.id] = {
+      count: slice.length,
+      minutes,
+      ...(phaseEvents.length > 0 ? {
+        eventCount: phaseEvents.length,
+        momentCount,
+        looseItemCount: Math.max(0, slice.length - momentCount),
+      } : {}),
+    }
   })
   return out
+}
+
+/** A new event begins as a draft plan; taking one of its moments never approves the service. */
+export function newRunOfShowEvent(
+  at: number,
+  newId: () => string = () => crypto.randomUUID(),
+  details: { title?: string; role?: string } = {},
+): OutlineHeader {
+  return {
+    id: newId(),
+    type: "group",
+    name: details.title?.trim() || "New event",
+    at,
+    event: { schema_version: 1, ...(details.role?.trim() ? { role: details.role.trim() } : {}) },
+  }
 }
 
 /** The four phases of a church event, the main service holding what is there. */
@@ -112,6 +422,15 @@ export function defaultPhases(itemCount: number, newId: () => string = () => cry
     { id: newId(), type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
     { id: newId(), type: "phase", name: "Post-service loop", at: itemCount, rule: "loop", role: "post" },
   ]
+}
+
+/** Keep existing event/group headers inside Main service when adding phases. */
+export function organiseHeadersIntoDefaultPhases(headers: OutlineHeader[], itemCount: number, newId?: () => string): OutlineHeader[] {
+  const phases = defaultPhases(itemCount, newId)
+  const postIndex = phases.findIndex((phase) => phase.role === "post")
+  return postIndex < 0
+    ? [...phases, ...headers]
+    : [...phases.slice(0, postIndex), ...headers, ...phases.slice(postIndex)]
 }
 
 /** How a phase runs, for its chip and strip. */
@@ -130,15 +449,14 @@ export function clockMinutes(t: string | undefined | null): number | null {
 /**
  * The instant (wall ms) of a clock time nearest `ref`: yesterday's, today's or tomorrow's, so a
  * service around midnight keeps its times on the right day. Calendar days, not 24 h, so the
- * 23- and 25-hour days of a clock change land on the right local time.
+ * 23- and 25-hour days of a clock change land on the right local time. `zone`: the church's time
+ * zone (#196 R1.1); "" is this computer's clock.
  */
-export function clockInstant(minutes: number, ref: number): number {
+export function clockInstant(minutes: number, ref: number, zone = ""): number {
   let best = NaN
   for (const days of [-1, 0, 1]) {
-    const d = new Date(ref)
-    d.setDate(d.getDate() + days)
-    d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0)
-    if (Number.isNaN(best) || Math.abs(d.getTime() - ref) < Math.abs(best - ref)) best = d.getTime()
+    const t = dayAt(ref, days, minutes, zone)
+    if (Number.isNaN(best) || Math.abs(t - ref) < Math.abs(best - ref)) best = t
   }
   return best
 }
@@ -196,7 +514,7 @@ export interface Timeline {
   rows: TimelineRow[]
 }
 
-type Timed = { reference: string; planned_minutes?: number | null; starts_at?: string | null; gap_minutes?: number | null }
+type Timed = { reference: string; planned_minutes?: number | null; starts_at?: string | null; gap_minutes?: number | null; hidden?: boolean | null }
 
 /**
  * When an item is planned to start, in minutes from the first day's midnight, after an item planned
@@ -214,7 +532,8 @@ export function plannedStartMinutes(after: number, item: { starts_at?: string | 
  * start), each main-service item's planned time, and the projected finish, `delay` minutes later
  * than planned when running late (the plan itself does not change). Null without a start time.
  */
-export function planTimeline(items: Timed[], headers: OutlineHeader[], delay = 0): Timeline | null {
+export function planTimeline(rawItems: Timed[], headers: OutlineHeader[], delay = 0): Timeline | null {
+  const items = timedItems(rawItems, headers)
   const main = headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual")
   const start = clockMinutes(main?.starts_at)
   if (!main || start === null) return null
@@ -228,6 +547,7 @@ export function planTimeline(items: Timed[], headers: OutlineHeader[], delay = 0
   rows.push({ kind: "milestone", label: `${main.name} begins`, time: clockText(start) })
   let t = start
   for (let i = main.at; i < end; i++) {
+    if (isSkipped(items, headers, i)) continue
     const minutes = items[i].planned_minutes ?? 0
     const from = plannedStartMinutes(t, items[i])
     rows.push({ kind: "item", label: items[i].reference, time: clockText(from), minutes, index: i, ...(from > t ? { pause: from - t } : {}), ...(clockMinutes(items[i].starts_at) !== null ? { fixed: true } : {}) })
@@ -246,6 +566,7 @@ export function plannedTimes(items: Timed[], headers: OutlineHeader[]): Map<numb
   let t = clockMinutes(plan?.warmupStart)
   if (range && t !== null) {
     for (let i = range.start; i < range.end; i++) {
+      if (isSkipped(items, headers, i)) continue
       at.set(i, clockText(t))
       t += items[i].planned_minutes ?? 0
     }
@@ -273,12 +594,26 @@ export function dwellSeconds(header: OutlineHeader, plannedMinutes: number | nul
     : planned ?? header.advance_seconds ?? DEFAULT_ADVANCE_SECONDS
 }
 
-/** The item after `current` in a running phase: a loop wraps to its first item, a run-once phase ends (null). */
-export function nextInPhase(rule: PhaseRule, start: number, end: number, current: number): number | null {
-  if (end <= start) return null
-  if (current < start || current >= end) return start
-  if (current + 1 < end) return current + 1
-  return rule === "loop" ? start : null
+/**
+ * The item after `current` in a running phase: a loop wraps to its first item, a run-once phase
+ * ends (null). Items `skip` says no to (hidden ones, cue-only moments) are passed over.
+ */
+export function nextInPhase(rule: PhaseRule, start: number, end: number, current: number, skip: (index: number) => boolean = () => false): number | null {
+  const plain = (c: number): number | null => {
+    if (end <= start) return null
+    if (c < start || c >= end) return start
+    if (c + 1 < end) return c + 1
+    return rule === "loop" ? start : null
+  }
+  let at = current
+  for (let n = 0; n <= end - start; n++) {
+    const next = plain(at)
+    if (next === null || !skip(next)) return next
+    // Wrapped round to where it began: nothing in the phase may run.
+    if (next === current) return null
+    at = next
+  }
+  return null
 }
 
 /** The phase an item sits in: the last phase header at or above it (null outside any phase). */

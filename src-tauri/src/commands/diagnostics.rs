@@ -138,8 +138,8 @@ fn header(
          files read  : {files_scanned}\n\
          first entry : {}\n\
          last entry  : {}\n\
-         timestamps are UTC. this file contains short fragments of speech\n\
-         picked up by transcription.\n\
+         timestamps are UTC. current builds do not write transcript text to logs.\n\
+         logs from earlier builds may contain short fragments of speech; review before sharing.\n\
          ==============================\n\n",
         std::env::consts::OS,
         std::env::consts::ARCH,
@@ -293,25 +293,49 @@ mod tests {
 
     #[test]
     fn configured_secrets_and_credential_shapes_are_redacted() {
-        let settings = r#"{"deepgramApiKey":"dg-123456789","remoteSecret":"s3cret-key","obs":{"enabled":true,"password":"obs-pass-99"},"openaiApiKey":"","gain":1}"#;
+        let settings = r#"{"deepgramApiKey":"dg-123456789","remoteSecret":"s3cret-key","obs":{"enabled":true,"password":"obs-pass-99"},"openaiApiKey":"sk-openai-123456","gain":1}"#;
         let secrets = configured_secrets(settings);
-        assert_eq!(secrets, vec!["dg-123456789", "s3cret-key", "obs-pass-99"]);
+        assert_eq!(
+            secrets,
+            vec![
+                "dg-123456789",
+                "sk-openai-123456",
+                "s3cret-key",
+                "obs-pass-99"
+            ]
+        );
         let log = "[2026-10-21][10:00:00.000][rhema][INFO] using dg-123456789 for speech\n\
                    [2026-10-21][10:00:01.000][rhema][WARN] request X-Rhema-Key: s3cret-key refused\n\
                    [2026-10-21][10:00:02.000][rhema][INFO] GET /x?token=abcdef&next=1 Authorization: Bearer zzz999\n\
-                   [2026-10-21][10:00:03.000][rhema][INFO] obs password obs-pass-99 rejected\n";
+                   [2026-10-21][10:00:03.000][rhema][INFO] obs password obs-pass-99 rejected\n\
+                   [2026-10-21][10:00:04.000][rhema][INFO] OpenAI key sk-openai-123456\n";
         let out = redact(log, &secrets);
-        for s in ["dg-123456789", "s3cret-key", "abcdef", "zzz999", "obs-pass-99"] {
+        for s in [
+            "dg-123456789",
+            "s3cret-key",
+            "abcdef",
+            "zzz999",
+            "obs-pass-99",
+            "sk-openai-123456",
+        ] {
             assert!(!out.contains(s), "{s} leaked: {out}");
         }
         assert!(out.contains("token=[redacted]&next=1"));
         assert!(out.contains("X-Rhema-Key: [redacted] refused"));
-        assert_eq!(out.lines().count(), 4);
+        assert_eq!(out.lines().count(), 5);
         // Short values are not treated as secrets; a bad settings file yields none.
         assert!(configured_secrets(r#"{"remoteSecret":"abc"}"#).is_empty());
         // A file with the three parts (#298 M11): the keys are in "machine".
-        let parts = r#"{"settingsLayout":2,"machine":{"deepgramApiKey":"dg-987654321","obs":{"password":"obs-pass-77"},"joinToken":"join-token-55"},"church":{"brandKit":{}}}"#;
-        assert_eq!(configured_secrets(parts), vec!["dg-987654321", "join-token-55", "obs-pass-77"]);
+        let parts = r#"{"settingsLayout":2,"machine":{"deepgramApiKey":"dg-987654321","openaiApiKey":"sk-openai-987654","obs":{"password":"obs-pass-77"},"joinToken":"join-token-55"},"church":{"brandKit":{}}}"#;
+        assert_eq!(
+            configured_secrets(parts),
+            vec![
+                "dg-987654321",
+                "sk-openai-987654",
+                "join-token-55",
+                "obs-pass-77"
+            ]
+        );
         assert!(configured_secrets("not json").is_empty());
         // A marker with no value next to multi-byte text must not panic.
         assert_eq!(redact_line("token=&é ẹ́ token=,ọ́"), "token=&é ẹ́ token=,ọ́");
@@ -387,9 +411,10 @@ mod tests {
         assert!(head.contains("last 60 minutes"));
         assert!(head.contains("UTC"));
         assert!(
-            head.contains("fragments of speech"),
-            "users must be told the file carries speech content"
+            head.contains("earlier builds may contain short fragments of speech"),
+            "users must be told older logs may carry speech content"
         );
+        assert!(head.contains("current builds do not write transcript text to logs"));
     }
 
     #[test]

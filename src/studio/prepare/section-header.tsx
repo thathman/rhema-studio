@@ -1,13 +1,21 @@
-import { useState } from "react"
-import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon, PlusIcon } from "lucide-react"
+import { useCallback, useState } from "react"
+import { useDraggable, useDroppable } from "@dnd-kit/react"
+import { pointerIntersection } from "@dnd-kit/collision"
+import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon, GripVerticalIcon, PlusIcon } from "lucide-react"
 import { useAddDialog } from "@/studio/prepare/add-target"
+import { AddEventPalette } from "@/studio/prepare/add-event-palette"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useQueueStore } from "@/stores"
 import { DEFAULT_ADVANCE_SECONDS, RULE_LABEL, type OutlineHeader, type PhaseRole, type PhaseRule, type SectionSummary } from "@/lib/run-of-show"
+import type { RundownDropPlacement } from "./drop-placement"
 import { cn } from "@/lib/utils"
+import { eventPlanApprovalState } from "@/lib/approval"
+import { useServiceStore } from "@/stores/service-store"
+import { toast } from "sonner"
 
 const ADVANCE_CHOICES = [5, 8, 10, 15, 20, 30, 60]
 
@@ -22,9 +30,10 @@ const TONE: Record<PhaseRole, string> = {
 /** In Present's running order: where the phase or group starts and how it runs (nothing to change here). */
 export function SectionLabel({ header, summary, action }: { header: OutlineHeader; summary?: SectionSummary; action?: React.ReactNode }) {
   const phase = header.type === "phase"
+  const kind = phase ? "Phase" : header.event ? "Event" : "Group"
   return (
     <li
-      aria-label={`${phase ? "Phase" : "Group"}: ${header.name}`}
+      aria-label={`${kind}: ${header.name}`}
       className={cn("flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.625rem] font-bold tracking-[0.1em] uppercase", phase ? "mt-2 border-t border-[#334056] bg-[#1d3335] px-3 py-2 text-[#d6e8e1] first:mt-0" : "mt-1.5 px-2 pl-4 text-muted-foreground")}
     >
       <span className="min-w-0 max-w-full truncate">{header.name}</span>
@@ -36,10 +45,39 @@ export function SectionLabel({ header, summary, action }: { header: OutlineHeade
 }
 
 /** A phase or group in the order of service: name, how it runs, its items and minutes; collapsible. */
-export function SectionHeader({ header, summary, collapsed, onToggle }: { header: OutlineHeader; summary?: SectionSummary; collapsed: boolean; onToggle: () => void }) {
+export function SectionHeader({ header, summary, collapsed, selected = false, dropPlacement, onSelect, onToggle, onEventCreated, eventsDisabled = false }: { header: OutlineHeader; summary?: SectionSummary; collapsed: boolean; selected?: boolean; dropPlacement?: RundownDropPlacement; onSelect?: () => void; onToggle: () => void; onEventCreated?: (id: string) => void; eventsDisabled?: boolean }) {
+  const headers = useQueueStore((state) => state.headers)
+  const orderedEvents = headers.map((candidate, order) => ({ candidate, order }))
+    .filter(({ candidate }) => !!candidate.event)
+    .sort((a, b) => a.candidate.at - b.candidate.at || a.order - b.order)
+  const eventOrder = orderedEvents.findIndex(({ candidate }) => candidate.id === header.id)
+  const { ref: dropRef, isDropTarget } = useDroppable({
+    id: `section:${header.id}`,
+    data: { kind: "section", headerId: header.id, headerType: header.type, isEvent: !!header.event, eventOrder },
+    collisionPriority: 4,
+    collisionDetector: pointerIntersection,
+  })
+  const { ref: draggableRef, handleRef, isDragging } = useDraggable({
+    id: `event:${header.id}`,
+    data: { kind: "event", headerId: header.id, eventOrder },
+    disabled: !header.event,
+  })
+  const setHeaderRef = useCallback((element: Element | null) => {
+    dropRef(element)
+    // Phase and group rows are drop targets only. Do not register their DOM
+    // element as a disabled draggable: the accessibility plugin exposes that
+    // disabled draggable as a button and can make the row's child controls
+    // appear unavailable to assistive technology.
+    draggableRef(header.event ? element : null)
+  }, [dropRef, draggableRef, header.event])
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(header.name)
+  const [removePhaseOpen, setRemovePhaseOpen] = useState(false)
+  const service = useServiceStore((state) => state.current)
+  const serviceDirty = useServiceStore((state) => state.dirty)
+  const approval = eventPlanApprovalState(service, serviceDirty)
   const phase = header.type === "phase"
+  const kind = phase ? "phase" : header.event ? "event" : "group"
   const finish = () => {
     const n = name.trim()
     if (n && n !== header.name) useQueueStore.getState().updateHeader(header.id, { name: n.slice(0, 120) })
@@ -48,23 +86,44 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
   }
   const count = summary?.count ?? 0
   const minutes = summary?.minutes ?? 0
+  const countLabel = phase && summary?.eventCount !== undefined
+    ? [
+        `${summary.eventCount} event${summary.eventCount === 1 ? "" : "s"}`,
+        ...(summary.momentCount ? [`${summary.momentCount} moment${summary.momentCount === 1 ? "" : "s"}`] : []),
+        ...(summary.looseItemCount ? [`${summary.looseItemCount} item${summary.looseItemCount === 1 ? "" : "s"}`] : []),
+      ].join(" · ")
+    : `${count} ${header.event ? count === 1 ? "moment" : "moments" : count === 1 ? "item" : "items"}`
   return (
+    <>
     <li
-      aria-label={`${phase ? "Phase" : "Group"}: ${header.name}`}
+      ref={setHeaderRef}
+      data-phase-id={phase ? header.id : undefined}
+      aria-label={`${kind[0].toUpperCase()}${kind.slice(1)}: ${header.name}`}
       className={cn(
-        "flex items-center gap-1.5 rounded-lg",
-        phase ? cn("mt-2 px-2 py-1.5 first:mt-0", TONE[header.role ?? "custom"]) : "mt-1 ml-3 px-1.5 py-1 text-muted-foreground",
+        "relative flex items-center gap-1.5 rounded-lg",
+        phase ? cn("mt-2 px-2 py-1.5 first:mt-0", TONE[header.role ?? "custom"]) : header.event ? cn("mt-1 ml-1 rounded-md border bg-card px-2 py-1.5", selected ? "border-primary/50 bg-primary/5" : "border-border") : "mt-1 ml-3 px-1.5 py-1 text-muted-foreground",
+        header.disabled && "opacity-60",
+        isDragging && "opacity-60",
+        isDropTarget && "ring-2 ring-inset ring-primary",
       )}
     >
+      {dropPlacement && <span aria-hidden="true" className={cn("pointer-events-none absolute inset-x-3 z-10 h-0.5 rounded-full bg-primary shadow-[0_0_0_2px_hsl(var(--background))]", dropPlacement === "before" ? "-top-1" : "-bottom-1")} />}
       <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={`${collapsed ? "Show" : "Hide"} ${header.name}`} className="flex size-6 shrink-0 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&_svg]:size-3.5">
         {collapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
       </button>
+      {header.event && <button
+        ref={handleRef}
+        type="button"
+        aria-label={`Drag event ${header.name} with its moments`}
+        title="Drag this event and its moments to another event or phase"
+        className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:text-foreground active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring/50"
+      ><GripVerticalIcon className="size-3.5" /></button>}
       {/* On a narrow column how it runs and its counts wrap under the name rather than cutting both short. */}
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
         {renaming ? (
           <Input
             autoFocus
-            aria-label={`Name of the ${phase ? "phase" : "group"}`}
+            aria-label={`Name of the ${kind}`}
             value={name}
             maxLength={120}
             onChange={(e) => setName(e.target.value)}
@@ -73,22 +132,55 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
             className="h-7 min-w-0 flex-1 basis-32 text-sm"
           />
         ) : (
-          <span className={cn("min-w-0 max-w-full truncate", phase ? "text-sm font-bold" : "text-xs font-semibold")} onDoubleClick={() => setRenaming(true)}>{header.name}</span>
+          header.event ? (
+            <button
+              type="button"
+              aria-label={`Edit event: ${header.name}`}
+              aria-pressed={selected}
+              onClick={onSelect}
+              onDoubleClick={() => setRenaming(true)}
+              className="min-w-0 max-w-full truncate rounded text-left text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              title="Open event details"
+            >
+              {header.name}
+            </button>
+          ) : (
+            <span className={cn("min-w-0 max-w-full truncate", phase ? "text-sm font-bold" : "text-xs font-semibold")} onDoubleClick={() => setRenaming(true)}>{header.name}</span>
+          )
         )}
         <span className="flex shrink-0 items-center gap-1.5">
           {phase && header.rule && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title={RULE_LABEL[header.rule].says}>{RULE_LABEL[header.rule].chip}</Badge>}
-          <span className="text-[0.6875rem] whitespace-nowrap tabular-nums">{count} {count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
+          {phase && header.disabled && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title="Its items stay in the service; Present passes over them">Skipped</Badge>}
+          {header.event && <Badge variant="outline" className="h-5 text-[0.625rem] font-bold tracking-wide uppercase" title="Event status follows approval of the saved service revision. It does not authorize a live Take.">{approval === "changed" ? "Changed" : approval === "approved" ? "Approved" : "Draft"}</Badge>}
+          <span className="text-[0.6875rem] whitespace-nowrap tabular-nums">{countLabel}{minutes ? ` · ${minutes} min` : ""}</span>
         </span>
       </span>
-      <Button variant="ghost" size="icon-xs" aria-label={`Add to ${header.name}`} title={`Add to ${header.name}`} className="shrink-0 hover:bg-black/5" onClick={() => useAddDialog.getState().openFor(header.id)}><PlusIcon /></Button>
+      <Button variant="ghost" size="icon-xs" aria-label={`Add to ${header.name}`} title={`Add to ${header.name}`} className="shrink-0 hover:bg-black/5" onClick={(event) => useAddDialog.getState().openFor(header.id, event.currentTarget)}><PlusIcon /></Button>
+      <AddEventPalette
+        target={{ kind: "section", headerId: header.id }}
+        onCreated={onEventCreated}
+        disabled={eventsDisabled}
+        compact
+        label={`Add event after ${header.name}`}
+        ariaLabel={`Add event after ${header.name}`}
+      />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon-xs" aria-label={`${header.name}: options`} className="shrink-0 hover:bg-black/5"><EllipsisIcon /></Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuItem onSelect={() => setRenaming(true)}>Rename</DropdownMenuItem>
+          {header.event && <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled={eventOrder <= 0} onSelect={() => useQueueStore.getState().moveEvent(header.id, -1)}>Move event up</DropdownMenuItem>
+            <DropdownMenuItem disabled={eventOrder < 0 || eventOrder === orderedEvents.length - 1} onSelect={() => useQueueStore.getState().moveEvent(header.id, 1)}>Move event down</DropdownMenuItem>
+          </>}
           {phase && (
             <>
+              {/* #193: a phase this service does without (no pre-service loop this week), kept for next time. */}
+              <DropdownMenuItem onSelect={() => useQueueStore.getState().updateHeader(header.id, { disabled: header.disabled ? undefined : true })}>
+                {header.disabled ? "Use this phase in this service" : "Skip this phase in this service"}
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs text-muted-foreground">How it runs</DropdownMenuLabel>
               <DropdownMenuRadioGroup value={header.rule ?? "manual"} onValueChange={(v) => useQueueStore.getState().updateHeader(header.id, { rule: v as PhaseRule })}>
@@ -115,11 +207,38 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
             </>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onSelect={() => useQueueStore.getState().removeHeader(header.id)}>
-            Remove the {phase ? "phase" : "group"} (its items stay)
-          </DropdownMenuItem>
+          {phase ? (
+            <DropdownMenuItem variant="destructive" onSelect={() => setRemovePhaseOpen(true)}>
+              Remove phase…
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem variant="destructive" onSelect={() => useQueueStore.getState().removeHeader(header.id)}>
+              Remove the {kind} (its items stay)
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </li>
+    {phase && (
+      <Dialog open={removePhaseOpen} onOpenChange={setRemovePhaseOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove “{header.name}”?</DialogTitle>
+            <DialogDescription>
+              This removes the phase, its timing, running rule and phase-level assignments. Events, groups and content stay in their current order. Use Undo in the rundown toolbar to restore the exact phase; nothing goes live.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemovePhaseOpen(false)}>Keep phase</Button>
+            <Button variant="destructive" onClick={() => {
+              useQueueStore.getState().removeHeader(header.id)
+              setRemovePhaseOpen(false)
+              toast.success("Phase removed", { description: "Events and content remain in the rundown. Use Undo to restore the phase." })
+            }}>Remove phase</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )}
+    </>
   )
 }

@@ -20,7 +20,7 @@ export interface Program {
 }
 
 /** Kinds this build can show in the rundown. Anything else is preserved, not edited. */
-export const SUPPORTED_ITEM_KINDS = ["verse", "song", "slide", "image", "phase", "group"] as const
+export const SUPPORTED_ITEM_KINDS = ["verse", "song", "slide", "image", "audio", "phase", "group", "cue"] as const
 export type ProgramItemKind = (typeof SUPPORTED_ITEM_KINDS)[number]
 
 export interface ProgramItem {
@@ -84,6 +84,28 @@ export interface ContentStatus {
   error?: string | null
 }
 
+// ── Reusable slides and announcements (migration 0015) ──────────────────
+
+export interface ReusableSlide {
+  id: string
+  kind: "slide" | "announcement"
+  title: string
+  body: string
+  link: string | null
+  background_media_id: string | null
+  revision: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ReusableSlideInput {
+  kind: "slide" | "announcement"
+  title: string
+  body: string
+  link: string | null
+  background_media_id: string | null
+}
+
 // ── Media (migration 0004) ───────────────────────────────────────────────
 
 export interface MediaAsset {
@@ -119,6 +141,16 @@ export interface ImageItemPayload {
   fit?: "cover" | "contain" | "stretch" | null
   loop?: boolean
   sound?: boolean
+}
+
+/** `payload` of a `kind = "audio"` program item. Device ids are local to the host computer. */
+export interface AudioItemPayload {
+  media_id: string
+  output_device_id?: string
+  volume?: number
+  loop?: boolean
+  fade_in_ms?: number
+  fade_out_ms?: number
 }
 
 export interface RevisionSummary {
@@ -341,11 +373,19 @@ export interface SlideItemPayload {
   title: string
   body: string
   link?: string
+  /** Reusable source attribution. Text stays copied into this service item. */
+  source_asset_id?: string
+  source_revision?: number
 }
 
 /** `payload` of a `kind = "song"` program item. */
 export interface SongItemPayload {
   song_id: string
+  /** Saved identity and number snapshot; absent on legacy services. */
+  hymn?: boolean
+  hymn_numbers?: string[]
   arrangement_id?: string | null
   languages?: string[]
+  /** A title slide before the words (#193). */
+  title_slide?: boolean
 }
