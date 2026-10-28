@@ -71,13 +71,34 @@ import { useAddDialog } from "@/studio/prepare/add-target"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useShellStore } from "@/studio/shell-store"
 import { presentActions } from "@/studio/present-actions"
-import type { QueueItem } from "@/types"
+import type { BroadcastOutput, QueueItem } from "@/types"
 import { projectRunOfShowEvents } from "@/lib/run-of-show"
 import { toItemInputs } from "@/stores/service-store"
+import { newScene } from "@/lib/scenes"
 
 const slide = (id: string): QueueItem =>
   ({ id, kind: "slide", slide: { title: id, body: "words" }, reference: id, confidence: 1, source: "manual", added_at: 0, planned_minutes: 3 }) as unknown as QueueItem
 
+const preferenceStorage = new Map<string, string>()
+const localStorageMock = {
+  getItem: (key: string) => preferenceStorage.get(key) ?? null,
+  setItem: (key: string, value: string) => { preferenceStorage.set(key, String(value)) },
+  removeItem: (key: string) => { preferenceStorage.delete(key) },
+  clear: () => preferenceStorage.clear(),
+}
+Object.defineProperty(globalThis, "localStorage", { configurable: true, value: localStorageMock })
+Object.defineProperty(window, "localStorage", { configurable: true, value: localStorageMock })
+
+const display = (id: string, name: string, sceneId: string): BroadcastOutput => ({
+  id,
+  name,
+  type: "display",
+  role: "congregation",
+  sceneId,
+  themeId: "default",
+  monitorIndex: 0,
+  ndi: { sourceName: name, resolution: "r1080p", frameRate: "fps30", alphaMode: "noneOpaque" },
+})
 let root: Root | null = null
 afterEach(() => {
   act(() => root?.unmount())
@@ -88,7 +109,7 @@ afterEach(() => {
   mockService.program = null
   mockService.items = []
   document.body.replaceChildren()
-  useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false })
+  useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false, unsupportedItems: [], corruptItems: [] })
 })
 
 async function renderPrepare(withLiveControls = false) {
@@ -473,6 +494,72 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
     expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
     expect(el.textContent).toContain("Draft")
+
+    const signalsTab = el.querySelector<HTMLButtonElement>('button[role="tab"][aria-label="Event signals"]')
+    expect(signalsTab).not.toBeNull()
+    await act(async () => { signalsTab!.focus(); signalsTab!.click() })
+    expect(el.textContent).toContain("Manual only.")
+    expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
+    expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
+  })
+
+  it("edits per-output scene intent from an event without changing the live program", async () => {
+    const liveScene = newScene("Current program")
+    const prayerScene = newScene("Prayer camera and name")
+    const overflowScene = newScene("Overflow sermon layout")
+    useQueueStore.setState({
+      items: [slide("Camera and speaker"), slide("John 3:16")],
+      headers: [{ id: "prayer", type: "group", name: "Opening Prayer", at: 0, event: { schema_version: 1, duration_minutes: 15 } }],
+      activeIndex: null,
+    })
+    useBroadcastStore.setState({
+      isLive: true,
+      liveItemId: "on-air-item",
+      scenes: [liveScene, prayerScene, overflowScene],
+      outputs: [
+        display("sanctuary", "Sanctuary", liveScene.id),
+        display("overflow", "Overflow", liveScene.id),
+      ],
+    })
+    const before = useBroadcastStore.getState()
+    const beforeOutputs = structuredClone(before.outputs)
+    const el = await renderPrepare()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Opening Prayer"]')!.click())
+    const scenesTab = el.querySelector<HTMLButtonElement>('button[role="tab"][aria-label="Event scenes"]')
+    expect(scenesTab).not.toBeNull()
+    await act(async () => { scenesTab!.focus(); scenesTab!.click() })
+    expect(el.textContent).toContain("Plan only")
+
+    const setSelectValue = (field: HTMLSelectElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(field, value)
+      field.dispatchEvent(new Event("change", { bubbles: true }))
+    }
+    const scene = el.querySelector<HTMLSelectElement>('select[aria-label="Scene for Camera and speaker"]')
+    expect(scene).not.toBeNull()
+    await act(async () => setSelectValue(scene!, prayerScene.id))
+    const addOverride = el.querySelector<HTMLButtonElement>('button[aria-label="Add screen override for Camera and speaker"]')
+    expect(addOverride).not.toBeNull()
+    await act(async () => addOverride!.click())
+    const screen = el.querySelector<HTMLSelectElement>('select[aria-label="Screen target for Camera and speaker 1"]')
+    expect(screen).not.toBeNull()
+    await act(async () => setSelectValue(screen!, "overflow"))
+    const overrideScene = el.querySelector<HTMLSelectElement>('select[aria-label="Scene override 1 for Camera and speaker"]')
+    expect(overrideScene).not.toBeNull()
+    await act(async () => setSelectValue(overrideScene!, overflowScene.id))
+
+    expect(useQueueStore.getState().items[0]).toMatchObject({
+      scene_id: prayerScene.id,
+      on_take: [`scene.take:${overflowScene.id}@overflow`],
+    })
+    const savedMoment = toItemInputs(useQueueStore.getState().items, undefined, undefined, useQueueStore.getState().headers).find((item) => item.reference === "Camera and speaker")!
+    expect(JSON.parse(savedMoment.payload ?? "{}")).toMatchObject({
+      scene_id: prayerScene.id,
+      on_take: [`scene.take:${overflowScene.id}@overflow`],
+    })
+    expect(useBroadcastStore.getState().outputs).toEqual(beforeOutputs)
+    expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
+    expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
   })
 
   it("shows an event's ordered moments and opens one in the editor without taking it live", async () => {
@@ -933,6 +1020,30 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(el.querySelector('[aria-label="Group: Scripture moments"]')).toBeNull()
     expect(el.querySelector('[aria-label="Event: Closing prayer"]')).not.toBeNull()
     expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(1)
+  })
+
+  it("distinguishes unreadable saved items from newer-version items and blocks unsafe service actions", async () => {
+    useServiceStore.setState({
+      current: { id: "service", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 2 },
+      dirty: true,
+      unsupportedItems: [{ id: "future", kind: "interactive_scene", reference: "Scene", payload: null } as never],
+      corruptItems: [{ id: "broken", kind: "slide", reference: "Welcome", payload: "{bad" } as never],
+    })
+    const el = await renderPrepare()
+    expect(el.textContent).toContain("1 saved item could not be read")
+    expect(el.textContent).toContain("1 item from a newer version")
+
+    const save = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save"))!
+    const approve = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Approve"))!
+    expect(save.disabled).toBe(true)
+    expect(save.title).toContain("Unreadable saved items")
+    expect(approve.disabled).toBe(true)
+    expect(approve.title).toContain("Recover or update saved items")
+
+    await act(async () => useServiceStore.setState({ dirty: false }))
+    expect(approve.disabled).toBe(true)
+    await act(async () => useServiceStore.setState({ unsupportedItems: [], corruptItems: [] }))
+    expect(approve.disabled).toBe(false)
   })
 
   it("says whether the service is saved, next to its name", async () => {
