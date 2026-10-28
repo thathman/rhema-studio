@@ -310,13 +310,47 @@ export function isSkipped(items: ReadonlyArray<{ hidden?: boolean | null }>, hea
   return !!items[index]?.hidden || !!phaseAt(headers, index)?.disabled
 }
 
+export interface VisibleRunItem<T> {
+  item: T
+  index: number
+  kind: "item" | "moment"
+  label: string
+}
+
+/** The first item Present can reach from an index, in either direction. */
+export function visibleRunItemFrom<T extends { hidden?: boolean | null; kind?: string; reference: string }>(
+  items: ReadonlyArray<T>, headers: OutlineHeader[], startIndex: number, direction: 1 | -1,
+): VisibleRunItem<T> | null {
+  for (let index = startIndex; index >= 0 && index < items.length; index += direction) {
+    if (isSkipped(items, headers, index)) continue
+    const item = items[index]
+    const kind = item.kind === "cue" ? "moment" : "item"
+    return { item, index, kind, label: kind === "moment" ? `Moment · ${item.reference}` : item.reference }
+  }
+  return null
+}
+
+/** The next visible rundown entry after the active index, or the first when nothing is active. */
+export function nextVisibleItem<T extends { hidden?: boolean | null; kind?: string; reference: string }>(
+  items: ReadonlyArray<T>, headers: OutlineHeader[], afterIndex: number | null,
+): VisibleRunItem<T> | null {
+  return visibleRunItemFrom(items, headers, (afterIndex ?? -1) + 1, 1)
+}
+
+/** The previous visible rundown entry before the active index. */
+export function previousVisibleItem<T extends { hidden?: boolean | null; kind?: string; reference: string }>(
+  items: ReadonlyArray<T>, headers: OutlineHeader[], beforeIndex: number,
+): VisibleRunItem<T> | null {
+  return visibleRunItemFrom(items, headers, beforeIndex - 1, -1)
+}
+
 /** The items as the plan counts them: a skipped one keeps its place but takes no time and has no fixed start. */
 export function timedItems<T extends { hidden?: boolean | null; planned_minutes?: number | null; starts_at?: string | null; gap_minutes?: number | null }>(items: T[], headers: OutlineHeader[]): T[] {
   if (!items.some((_, i) => isSkipped(items, headers, i))) return items
   return items.map((it, i) => (isSkipped(items, headers, i) ? { ...it, planned_minutes: null, starts_at: null, gap_minutes: null } : it))
 }
 
-/** The items with every one Present passes over marked hidden (a skipped phase's too), for views that know only items (the stage's Next). */
+/** Mark skipped entries as hidden for consumers that only receive items, without the phase headers. */
 export function markSkipped<T extends { hidden?: boolean | null }>(items: T[], headers: OutlineHeader[]): T[] {
   if (!headers.some((h) => h.disabled)) return items
   return items.map((it, i) => (!it.hidden && isSkipped(items, headers, i) ? { ...it, hidden: true } : it))

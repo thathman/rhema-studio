@@ -12,7 +12,7 @@ import { presentActions } from "@/studio/present-actions"
 import { presentQueueItem } from "@/lib/remote-actions"
 import { sectionShort, songSlides, TITLE_SLIDE } from "@/lib/lyrics"
 import { MediaKindIcon, MissingMediaMark } from "@/studio/prepare/item-editor-parts"
-import { interleave, isSkipped, sectionSummaries } from "@/lib/run-of-show"
+import { interleave, isSkipped, nextVisibleItem, sectionSummaries } from "@/lib/run-of-show"
 import { assigneesShort, itemAssignees } from "@/lib/assignees"
 import { SectionHeader, SectionLabel } from "@/studio/prepare/section-header"
 import { takeImpact } from "@/lib/cues"
@@ -72,7 +72,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
     if (!range && !toggle) preview(item)
   }
   // Present runs past these: the next item shown after the active one.
-  const nextShown = activeIndex === null ? -1 : items.findIndex((_, k) => k > activeIndex && !isSkipped(items, headers, k))
+  const nextShown = activeIndex === null ? -1 : nextVisibleItem(items, headers, activeIndex)?.index ?? -1
   const present = (_item: QueueItem, index: number) => presentActions.presentItem(index)
 
   if (items.length === 0 && headers.length === 0) {
@@ -185,7 +185,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
                 )}
                 {isNext && (
                   <span className="ml-auto shrink-0 text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase">
-                    Next
+                    {cue ? "Next moment" : "Next"}
                   </span>
                 )}
               </button>

@@ -16,6 +16,7 @@ import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useMediaStore } from "@/stores/media-store"
 import { songSlides, toLyricRenderData } from "@/lib/lyrics"
 import { applyStageStyle } from "@/lib/stage-style"
+import { nextVisibleItem } from "@/lib/run-of-show"
 import { warnMs } from "@/lib/item-timing"
 import { elapsedMs, formatMs, remainingMs, timerTone } from "@/lib/timer"
 import { PreviewPanel } from "@/components/panels/preview-panel"
@@ -125,7 +126,7 @@ function AiSuggestion({ item }: { item: QueueItem }) {
 
 /** The stage screen for this item, drawn as the stage output draws it. */
 export function StagePreview({ item, index }: { item: QueueItem; index: number }) {
-  const next = useQueueStore((s) => s.items[index + 1]?.reference ?? null)
+  const next = useQueueStore((s) => nextVisibleItem(s.items, s.headers, index)?.label ?? null)
   const songId = isSongItem(item) ? item.song.song_id : null
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
   const serviceSong = useServiceSong(songId)

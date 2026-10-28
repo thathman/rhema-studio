@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { emitTo } from "@tauri-apps/api/event"
 import { invoke } from "@tauri-apps/api/core"
 import { load, type Store } from "@tauri-apps/plugin-store"
+import type { QueueItem } from "@/types"
 import type {
   SongWithSections,
   BroadcastOutput,
@@ -20,7 +21,7 @@ import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import type { TimerState } from "@/lib/timer"
 import { useSongStore } from "@/stores/song-store"
-import { markSkipped } from "@/lib/run-of-show"
+import { nextVisibleItem, type OutlineHeader } from "@/lib/run-of-show"
 import { forOutputLanguage, isOutputLanguageFallback } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
@@ -983,9 +984,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (output.role === "stage") {
       recordFrame(outputId, { theme, verse: null, overlay: null, stage: true })
       const q = useQueueStore.getState()
-      // What comes next leaves out hidden items and a skipped phase (#193).
-      const items = markSkipped(q.items, q.headers)
-      const countdown = output.stageLayout === "countdown" ? stageCountdownFrame(s, items, q.activeIndex) : null
+      // Stage and countdown use the same run-of-show rule for next-up (#390).
+      const countdown = output.stageLayout === "countdown" ? stageCountdownFrame(s, q.items, q.headers, q.activeIndex) : null
       const stageVerse = shown ? forOutputLanguage(shown, output.language) : null
       deliver(outputId, {
         // The stage window draws no theme: send the built-in one (no pictures) rather than the
@@ -995,7 +995,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         role: "stage",
         // A stage that follows chosen sources shows their words; otherwise the program (ADR 0001).
         stage: applyStageStyle({ ...buildStagePayload({
-          isLive: shown !== null, liveVerse: stageVerse, items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
+          isLive: shown !== null, liveVerse: stageVerse, items: q.items, headers: q.headers, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
         }), ...(isOutputLanguageFallback(shown, output.language) ? { languageNotice: "Second language unavailable; showing available text." } : {}), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}), ...(s.stageClock ? { clock: s.stageClock } : {}),
           // This output's own layout, orientation and low-light colours (#196 R6); absent from older outputs.
@@ -1871,19 +1871,17 @@ function churchZone(): string {
 }
 
 /** A countdown display's frame: what its look counts now, the item on now and the next one. */
-function stageCountdownFrame(s: BroadcastState, items: QueueItemLike[], activeIndex: number | null) {
+function stageCountdownFrame(s: BroadcastState, items: QueueItem[], headers: OutlineHeader[], activeIndex: number | null) {
   const zone = churchZone()
   const counting = lookCounting(s.countdownLook, s.countdownSources, useTimerStore.getState().timer, monotonicNow(), Date.now(), zone, s.countdowns)
   const item = activeIndex === null ? null : items[activeIndex]?.reference ?? null
-  const next = items.find((it, k) => k > (activeIndex ?? -1) && !it.hidden)?.reference ?? null
+  const next = nextVisibleItem(items, headers, activeIndex)?.label ?? null
   // A browser feed's screen may be set to another zone: the time of day is the church's (or this computer's).
   const frame = countdownFrame(s.countdownLook, counting, { item, next, zone: zone || Intl.DateTimeFormat().resolvedOptions().timeZone || "" })
   // The stage design's clock choices (#196 R2.6) reach the countdown display's time of day too.
   const st = s.stageStyle
   return { ...frame, ...(st.clockHours ? { hours: st.clockHours } : st.showClock ? { hours: 24 as const } : {}), ...(st.showClock && st.secondZone ? { zone2: { label: st.secondZoneLabel?.trim() || zoneCity(st.secondZone), zone: st.secondZone } } : {}) }
 }
-type QueueItemLike = { reference: string; hidden?: boolean | null }
-
 /** Stage outputs that show the countdown display. */
 function syncCountdownOutputs(): void {
   const s = useBroadcastStore.getState()
@@ -1896,7 +1894,7 @@ function syncStageOutputs(): void {
   for (const o of s.outputs) if (o.role === "stage") s.syncBroadcastOutputFor(o.id)
 }
 useQueueStore.subscribe((state, prev) => {
-  if (state.items !== prev.items || state.activeIndex !== prev.activeIndex) syncStageOutputs()
+  if (state.items !== prev.items || state.headers !== prev.headers || state.activeIndex !== prev.activeIndex) syncStageOutputs()
 })
 useTimerStore.subscribe(syncStageOutputs)
 // Clock layers work out the time themselves: resend only when the timer starts, stops or changes.

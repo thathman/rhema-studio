@@ -5,7 +5,7 @@ import { useBibleStore } from "@/stores/bible-store"
 import { currentActor, useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type CueQueueItem, type QueueItem, type SongWithSections, type Verse } from "@/types"
-import { isSkipped } from "@/lib/run-of-show"
+import { previousVisibleItem, visibleRunItemFrom } from "@/lib/run-of-show"
 import { useMediaStore } from "@/stores/media-store"
 import { serviceSongNow } from "@/stores/song-pins-store"
 import { approvalHolds, useApprovalGateStore } from "@/stores/approval-gate-store"
@@ -262,9 +262,10 @@ async function takeCueItem(item: CueQueueItem, index: number): Promise<void> {
 /** From `index` on in direction `dir`, the first item Present runs (hidden ones and a skipped phase are passed over, #193). */
 function shownFrom(index: number, dir: 1 | -1): number {
   const { items, headers } = useQueueStore.getState()
-  let i = index
-  while (i >= 0 && i < items.length && isSkipped(items, headers, i)) i += dir
-  return i
+  const visible = dir > 0
+    ? visibleRunItemFrom(items, headers, index, dir)
+    : previousVisibleItem(items, headers, index + 1)
+  return visible?.index ?? (dir > 0 ? items.length : -1)
 }
 
 /**
