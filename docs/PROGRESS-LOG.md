@@ -5,6 +5,14 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-26 — Unified Connections hub (#401)
+
+- **Main / PR:** `fork/main` verified at `6eaa7dd`; PR [#437](https://github.com/thathman/rhema-studio/pull/437) is open and stacked on PR #436 (`fix/guided-output-editor`). The branch is not merged.
+- **Behaviour:** Added one Connections workspace for Nearby, Connected and Issues. It uses existing TV/host discovery and secure pairing flows, routes camera setup to the QR controls, and distinguishes saved device setup from reported health. Setup, Team, Home readiness, Settings search and the Desk menu lead to the shared page. Scanning, pairing and selecting a host or TV do not take content live. Updated the production guide.
+- **Verification:** Vitest passed (243 files, 1,769 tests); typecheck, full lint and production build passed. Browser checks used the local dev app with its Tauri shim: empty discovery, camera setup, listener-off pairing and refresh, host join, and dialog sizing. No physical device or OBS hardware was tested.
+- **Not done:** Physical TV, phone/camera, volunteer-host and OBS connection testing; owner acceptance; merge after PR #436 is integrated.
+- **Next:** Review PR #437 on top of #436, then repeat Connections on real church LAN devices before closing #401.
+
 ## 2026-10-25 — Small fixes from issue audit 3 (#299, #213, #243/#246 C17, #187, #215)
 
 - **Branch / PR:** `fix-065/audit3-small` (from `main` 1a68151). Acceptance 10fx.

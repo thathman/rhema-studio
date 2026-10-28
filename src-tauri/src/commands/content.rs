@@ -9,6 +9,7 @@ use tauri::State;
 use rhema_content::{
     ContentDb, ContentError, Hymnbook, HymnbookInput, ImportMode, ImportReport, ItemInput, Program, ProgramWithItems,
     Revision, RevisionSummary, SongExport, SongInput, SongSummary, SongWithSections, SongUsage, ServiceLog, ServiceLogSummary, MediaAsset,
+    ReusableSlide, ReusableSlideInput,
 };
 
 /// The content database is opened in `setup`; `None` means it failed to open
@@ -25,7 +26,7 @@ pub enum ContentCommandError {
     NotFound { message: String },
     Invalid { message: String },
     Conflict { message: String, expected: i64, actual: i64 },
-    /// A song a saved service still uses; `titles` names the services.
+    /// A reusable asset still in use; `titles` names the dependent services/assets.
     InUse { message: String, titles: Vec<String> },
     Database { message: String },
 }
@@ -129,6 +130,27 @@ pub fn content_approve_program(state: State<'_, ContentState>, id: String, expec
     with_db(&state, |db| db.approve_program(&id, expected_revision))
 }
 
+/// Approve a service and the scene/look revisions captured with that exact saved version.
+#[tauri::command]
+pub fn content_approve_program_with_designs(
+    state: State<'_, ContentState>,
+    id: String,
+    expected_revision: i64,
+    designs: rhema_content::ApprovedDesignSnapshot,
+) -> CmdResult<Program> {
+    with_db(&state, |db| db.approve_program_with_designs(&id, expected_revision, &designs))
+}
+
+/// Read the design manifest for an exact approved service revision; older approvals return none.
+#[tauri::command]
+pub fn content_approved_designs(
+    state: State<'_, ContentState>,
+    program_id: String,
+    revision: i64,
+) -> CmdResult<Option<rhema_content::ApprovedDesignSnapshot>> {
+    with_db(&state, |db| db.approved_designs(&program_id, revision))
+}
+
 /// The words of each song as the service was approved (#193), for Present to keep showing them.
 #[tauri::command]
 pub fn content_approved_songs(state: State<'_, ContentState>, program_id: String) -> CmdResult<Vec<rhema_content::SongWithSections>> {
@@ -171,6 +193,17 @@ pub fn content_replace_items(
     items: Vec<ItemInput>,
 ) -> CmdResult<ProgramWithItems> {
     with_db(&state, |db| db.replace_items(&program_id, expected_revision, &items))
+}
+
+/// Save a deliberate new-service copy that carries its original team-comment history.
+#[tauri::command]
+pub fn content_replace_items_with_history(
+    state: State<'_, ContentState>,
+    program_id: String,
+    expected_revision: i64,
+    items: Vec<ItemInput>,
+) -> CmdResult<ProgramWithItems> {
+    with_db(&state, |db| db.replace_items_with_history(&program_id, expected_revision, &items))
 }
 
 #[tauri::command]
@@ -231,6 +264,26 @@ pub fn content_update_song(
 #[tauri::command]
 pub fn content_delete_song(state: State<'_, ContentState>, id: String, expected_revision: i64) -> CmdResult<()> {
     with_db(&state, |db| db.delete_song(&id, expected_revision))
+}
+
+#[tauri::command]
+pub fn content_list_reusable_slides(state: State<'_, ContentState>, query: Option<String>, limit: Option<usize>) -> CmdResult<Vec<ReusableSlide>> {
+    with_db(&state, |db| db.list_reusable_slides(query.as_deref(), limit.unwrap_or(500).min(5000)))
+}
+
+#[tauri::command]
+pub fn content_create_reusable_slide(state: State<'_, ContentState>, input: ReusableSlideInput) -> CmdResult<ReusableSlide> {
+    with_db(&state, |db| db.create_reusable_slide(&input))
+}
+
+#[tauri::command]
+pub fn content_update_reusable_slide(state: State<'_, ContentState>, id: String, expected_revision: i64, input: ReusableSlideInput) -> CmdResult<ReusableSlide> {
+    with_db(&state, |db| db.update_reusable_slide(&id, expected_revision, &input))
+}
+
+#[tauri::command]
+pub fn content_delete_reusable_slide(state: State<'_, ContentState>, id: String, expected_revision: i64) -> CmdResult<()> {
+    with_db(&state, |db| db.delete_reusable_slide(&id, expected_revision))
 }
 
 #[tauri::command]

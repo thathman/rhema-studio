@@ -14,7 +14,7 @@ vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen:
 
 import source from "../../design-packs/rhema-worship-expressions.rhema-design.json?raw"
 import {
-  DESIGN_PACK_MAX_LOOKS, designPackFrom, hydrateDesignPacks, importDesignPack, libraryFamilies, libraryLooks, packFamilyId, parseDesignPack, readDesignPackDoc, removeDesignPack, resetDesignPacksForTests, useDesignPackStore,
+  DESIGN_PACK_MAX_LOOKS, designPackFrom, designPacksForBackup, hydrateDesignPacks, importDesignPack, libraryFamilies, libraryLooks, packFamilyId, parseDesignPack, readDesignPackDoc, removeDesignPack, resetDesignPacksForTests, restoreDesignPacksFromBackup, useDesignPackStore,
 } from "./design-packs"
 import { adoptLook, filterLooks, lookCopies, resetCopy, resetSceneCopy, type LibraryLook, type LookOf } from "./look-library"
 import { LIBRARY_LOOKS } from "./look-library-data"
@@ -25,6 +25,7 @@ const PACK = "rhema-worship-expressions"
 type Doc = { entries: Array<Record<string, unknown>> } & Record<string, unknown>
 const doc = (): Doc => JSON.parse(source) as Doc
 const withEntries = (entries: unknown[]) => JSON.stringify({ ...doc(), entries })
+const importedPack = () => parseDesignPack(JSON.stringify({ ...doc(), id: "local-worship-expressions" }))
 const theme = { id: "night", name: "Night", from: "look-clean-bible-full" }
 
 beforeEach(() => {
@@ -50,6 +51,52 @@ describe("design packs (#354)", () => {
     // Every scene layer's look is one of the pack's themes.
     const themes = new Set(pack.looks.filter((l) => l.kind === "theme").map((l) => l.id))
     for (const l of layers) if (l.lookId) expect(themes.has(l.lookId), l.lookId).toBe(true)
+  })
+
+  it("ships Worship Expressions in the offline library without manual import and keeps its IDs stable", () => {
+    const looks = libraryLooks([])
+    expect(looks).toHaveLength(LIBRARY_LOOKS.length + 120)
+    expect(looks.filter((look) => look.id.startsWith(`${PACK}/`))).toHaveLength(120)
+    expect(libraryFamilies([])).toContainEqual(expect.objectContaining({ id: `pack:${PACK}`, name: "Rhema Studio · Worship Expressions" }))
+    expect(designPacksForBackup()).toEqual([])
+  })
+
+  it("migrates a previous manual import once, while preserving a customized local version", async () => {
+    const original = parseDesignPack(source)
+    files.set("rhema-design-packs.json", new Map([["packs", [original.doc]]]))
+    await hydrateDesignPacks()
+    expect(useDesignPackStore.getState().packs).toEqual([])
+    expect(libraryLooks()).toHaveLength(LIBRARY_LOOKS.length + 120)
+    expect(files.get("rhema-design-packs.json")!.get("packs")).toEqual([])
+
+    resetDesignPacksForTests()
+    const customized = parseDesignPack(JSON.stringify({ ...doc(), name: "Church Worship Expressions" }))
+    files.get("rhema-design-packs.json")!.set("packs", [customized.doc, customized.doc])
+    await hydrateDesignPacks()
+    expect(useDesignPackStore.getState().packs).toHaveLength(1)
+    expect(libraryLooks()).toHaveLength(LIBRARY_LOOKS.length + 120)
+    expect(libraryFamilies().filter((family) => family.id === `pack:${PACK}`)).toHaveLength(1)
+    expect(libraryFamilies().find((family) => family.id === `pack:${PACK}`)?.name).toBe("Church Worship Expressions")
+
+    await removeDesignPack(PACK)
+    expect(libraryFamilies().find((family) => family.id === `pack:${PACK}`)?.name).toBe("Rhema Studio · Worship Expressions")
+    expect(libraryLooks()).toHaveLength(LIBRARY_LOOKS.length + 120)
+  })
+
+  it("does not let a first-time import replace the bundled pack", async () => {
+    await expect(importDesignPack(parseDesignPack(source))).rejects.toThrow(/included with Rhema Studio/)
+    expect(useDesignPackStore.getState().packs).toEqual([])
+    expect(libraryLooks()).toHaveLength(LIBRARY_LOOKS.length + 120)
+  })
+
+  it("restores older backups without duplicating bundled recipes or repeated pack IDs", async () => {
+    const bundled = parseDesignPack(source)
+    const custom = importedPack()
+    await restoreDesignPacksFromBackup([bundled.doc, bundled.doc, custom.doc, custom.doc])
+    expect(useDesignPackStore.getState().packs.map((pack) => pack.doc.id)).toEqual(["local-worship-expressions"])
+    expect(files.get("rhema-design-packs.json")!.get("packs")).toMatchObject([{ id: "local-worship-expressions" }])
+    expect(libraryFamilies().filter((family) => family.id === `pack:${PACK}`)).toHaveLength(1)
+    expect(libraryLooks()).toHaveLength(LIBRARY_LOOKS.length + 240)
   })
 
   it("has nothing in it but recipes: no address, picture, lyric or logo", () => {
@@ -122,12 +169,12 @@ describe("design packs (#354)", () => {
 
   it("import adds to the library only, is kept, and comes back after a restart; removing leaves the copies", async () => {
     const before = useBroadcastStore.getState()
-    const pack = parseDesignPack(source)
+    const pack = importedPack()
     await importDesignPack(pack)
     const after = useBroadcastStore.getState()
     for (const k of ["outputs", "scenes", "themes", "liveVerse", "isLive", "lowerThird", "ticker", "tickerStyle", "stageStyle"] as const) expect(after[k], k).toBe(before[k])
-    expect(libraryLooks()).toHaveLength(LIBRARY_LOOKS.length + 120)
-    expect(libraryFamilies().at(-1)?.id).toBe(`pack:${PACK}`)
+    expect(libraryLooks()).toHaveLength(LIBRARY_LOOKS.length + 240)
+    expect(libraryFamilies().at(-1)?.id).toBe("pack:local-worship-expressions")
     // Imported again: replaced, not doubled.
     await importDesignPack(pack)
     expect(useDesignPackStore.getState().packs).toHaveLength(1)
@@ -135,22 +182,22 @@ describe("design packs (#354)", () => {
     resetDesignPacksForTests()
     files.get("rhema-design-packs.json")!.set("packs", [pack.doc, { format: "rhema.design-pack", version: 1, id: "broken", entries: [] }])
     await hydrateDesignPacks()
-    expect(useDesignPackStore.getState().packs.map((p) => p.doc.id)).toEqual([PACK])
+    expect(useDesignPackStore.getState().packs.map((p) => p.doc.id)).toEqual(["local-worship-expressions"])
 
-    await removeDesignPack(PACK)
-    expect(libraryLooks()).toHaveLength(LIBRARY_LOOKS.length)
+    await removeDesignPack("local-worship-expressions")
+    expect(libraryLooks()).toHaveLength(LIBRARY_LOOKS.length + 120)
   })
 
   it("goes into a backup, shows as a change, and comes back checked again", async () => {
     expect(buildInstallationExport().designPacks).toBeUndefined()
-    const pack = parseDesignPack(source)
+    const pack = importedPack()
     await importDesignPack(pack)
     const exp = buildInstallationExport()
-    expect(exp.designPacks?.map((d) => d.id)).toEqual([PACK])
+    expect(exp.designPacks?.map((d) => d.id)).toEqual(["local-worship-expressions"])
     const read = parseInstallationExport(JSON.stringify(exp))!
     expect(read.designPacks).toHaveLength(1)
 
-    await removeDesignPack(PACK)
+    await removeDesignPack("local-worship-expressions")
     const here = buildInstallationExport()
     expect(installationChanges(here, read)).toContainEqual({ what: "Design packs in the library", here: "0 packs: none", incoming: "1 pack: Rhema Studio · Worship Expressions" })
     // A backup from before packs says nothing about them.
@@ -158,7 +205,7 @@ describe("design packs (#354)", () => {
 
     const outputs = useBroadcastStore.getState().outputs
     await restoreInstallation({ ...read, designPacks: [...read.designPacks!, { format: "rhema.design-pack", version: 1, id: "bad", name: "Bad", author: "x", license: "x", entries: [{ id: "x", name: "X", from: "look-nowhere" }] }] })
-    expect(useDesignPackStore.getState().packs.map((p) => p.doc.id)).toEqual([PACK])
+    expect(useDesignPackStore.getState().packs.map((p) => p.doc.id)).toEqual(["local-worship-expressions"])
     expect(useBroadcastStore.getState().outputs.map((o) => o.id)).toEqual(outputs.map((o) => o.id))
     expect(files.get("rhema-design-packs.json")!.get("packs")).toHaveLength(1)
   })

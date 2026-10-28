@@ -1,5 +1,5 @@
 import { keepFocusInList } from "@/lib/keep-focus"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { DragDropProvider } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
 import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, MessageSquareIcon, MusicIcon, PresentationIcon, StickyNoteIcon, XIcon, BellRingIcon, TimerIcon, EyeIcon, EyeOffIcon, ZapIcon } from "lucide-react"
@@ -16,11 +16,16 @@ import { interleave, isSkipped, sectionSummaries } from "@/lib/run-of-show"
 import { assigneesShort, itemAssignees } from "@/lib/assignees"
 import { SectionHeader, SectionLabel } from "@/studio/prepare/section-header"
 import { takeImpact } from "@/lib/cues"
+import { commentDeleted } from "@/lib/comments"
 import { cuesFor, cueText } from "@/lib/item-cues"
 import { CUE_TRIGGERS } from "@/types"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { BulkBar } from "@/studio/prepare/bulk-bar"
-import { isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
+import { AddEventPalette } from "@/studio/prepare/add-event-palette"
+import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
+import { nearestPlacementTarget, placementAtPointer, type RundownDropCandidate, type RundownDropPlacement } from "@/studio/prepare/drop-placement"
+
+type DropCue = { targetId: string; placement: RundownDropPlacement | "inside" }
 /**
  * The service rundown, built on the existing queue store.
  *
@@ -33,7 +38,7 @@ import { isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type S
  * In `prepare` mode rows can be dragged by their handle to reorder; the
  * arrow buttons do the same from the keyboard.
  */
-export function RundownList({ mode }: { mode: "prepare" | "present" }) {
+export function RundownList({ mode, selectedEventId = null, onSelectEvent, groupedByPhase = true, onEventCreated, eventsDisabled = false, collapsedIds, onToggleSection }: { mode: "prepare" | "present"; selectedEventId?: string | null; onSelectEvent?: (id: string | null) => void; groupedByPhase?: boolean; onEventCreated?: (id: string) => void; eventsDisabled?: boolean; collapsedIds?: Set<string>; onToggleSection?: (id: string) => void }) {
   const items = useQueueStore((s) => s.items)
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const selected = useBibleStore((s) => s.selectedVerse)
@@ -46,12 +51,19 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
   const headers = useQueueStore((s) => s.headers)
   const picked = useRundownSelection((s) => s.ids)
   const summaries = sectionSummaries(items, headers)
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
-  const toggle = (id: string) => setCollapsed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const [localCollapsed, setLocalCollapsed] = useState<Set<string>>(() => new Set())
+  const collapsed = collapsedIds ?? localCollapsed
+  const [dropCue, setDropCue] = useState<DropCue | null>(null)
+  const dragOrigin = useRef<{ id: string; top: number; bottom: number } | null>(null)
+  const toggle = (id: string) => {
+    if (onToggleSection) onToggleSection(id)
+    else setLocalCollapsed((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next })
+  }
 
   const preview = (item: QueueItem) => presentActions.previewItem(item)
   // Prepare: Shift-click picks a range, Cmd/Ctrl-click one more (#193); a plain click picks and previews one.
   const pick = (item: QueueItem, e: React.MouseEvent) => {
+    onSelectEvent?.(null)
     const range = e.shiftKey
     const toggle = e.metaKey || e.ctrlKey
     useRundownSelection.getState().click(item.id, items.map((i) => i.id), { range, toggle })
@@ -61,11 +73,11 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
   const nextShown = activeIndex === null ? -1 : items.findIndex((_, k) => k > activeIndex && !isSkipped(items, headers, k))
   const present = (_item: QueueItem, index: number) => presentActions.presentItem(index)
 
-  if (items.length === 0) {
+  if (items.length === 0 && headers.length === 0) {
     return (
       <p className="p-4 text-center text-xs text-muted-foreground">
         {mode === "prepare"
-          ? "Nothing in the service yet. Add item puts passages, songs, hymns, slides and pictures here."
+          ? "Nothing in the service yet. Add item puts passages, songs, hymns, slides, media and audio cues here."
           : "Nothing in the service yet. Use Quick find below, or open Prepare."}
       </p>
     )
@@ -75,22 +87,24 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
         const song = isSongItem(item)
         const custom = isSlideItem(item)
         const picture = isImageItem(item)
+        const audio = isAudioItem(item)
         const cue = isCueItem(item)
         const skipped = isSkipped(items, headers, index)
         const inPick = mode === "prepare" && picked.length > 1 && picked.includes(item.id)
         const isSelected = selectedQueueItemId
           ? selectedQueueItemId === item.id
-          : song || custom || picture || cue
+          : song || custom || picture || audio || cue
             ? selectedSlide?.item.id === item.id
             : !!selected && !selectedSlide &&
               selected.book_number === item.verse.book_number &&
               selected.chapter === item.verse.chapter &&
               selected.verse === item.verse.verse
-        const onAir = isLive && (liveItemId ? liveItemId === item.id : liveSlide === null && liveRef !== null && !song && !custom && !picture && liveRef.startsWith(item.reference) && !/^[\d:]/.test(liveRef.slice(item.reference.length)))
+        const onAir = !audio && isLive && (liveItemId ? liveItemId === item.id : liveSlide === null && liveRef !== null && !song && !custom && !picture && liveRef.startsWith(item.reference) && !/^[\d:]/.test(liveRef.slice(item.reference.length)))
         const isNext = mode === "present" && !onAir && activeIndex !== null && index === nextShown
         const expanded = song && (isSelected || liveSlide?.itemId === item.id)
+        const activeCommentCount = item.comments?.filter((c) => !commentDeleted(c)).length ?? 0
         return (
-          <Row key={item.id} id={item.id} index={index} sortable={mode === "prepare"}>
+          <Row key={item.id} id={item.id} index={index} sortable={mode === "prepare"} dropPlacement={dropCue?.targetId === item.id && dropCue.placement !== "inside" ? dropCue.placement : undefined}>
             <div
               className={cn(
                 "group relative flex items-center gap-2 rounded-md border px-2 transition-colors",
@@ -110,13 +124,15 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 aria-selected={mode === "prepare" && picked.length > 1 ? inPick : undefined}
                 onClick={(e) => (mode === "prepare" ? pick(item, e) : preview(item))}
                 onDoubleClick={mode === "present" ? () => present(item, index) : undefined}
-                title={mode === "present" ? (cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to preview"}
+                title={mode === "present" ? (audio ? "Click to preview, double-click to play audio on this computer; screens stay unchanged" : cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to preview"}
               >
                 <span className="w-5 shrink-0 text-right text-xs text-muted-foreground">{index + 1}</span>
                 {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Song" />}
                 {custom && <PresentationIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Slide" />}
                 {picture && <MediaKindIcon mediaId={item.image.media_id} />}
                 {picture && <MissingMediaMark mediaId={item.image.media_id} />}
+                {audio && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Audio cue" />}
+                {audio && <MissingMediaMark mediaId={item.audio.media_id} />}
                 {cue && <ZapIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Cue only" />}
                 {/* The title keeps its room: on a narrow row the details below wrap under it instead of squeezing it. */}
                 <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -126,6 +142,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 {item.ai_suggestion && <span className="shrink-0 rounded-[5px] bg-tone-amber px-1.5 py-0.5 text-[0.6875rem] font-semibold text-tone-amber-foreground" title={`Written by ${item.ai_suggestion}: check the words and accept them in Prepare`}>AI suggestion</span>}
                 {song && <SongBadges item={item} />}
                 {cue && <span className="shrink-0 text-[0.6875rem] text-muted-foreground">Cue only · nothing on screen</span>}
+                {audio && <span className="shrink-0 text-[0.6875rem] text-muted-foreground">Audio cue · local output; screens unchanged</span>}
                 {skipped && (
                   <span className="inline-flex shrink-0 items-center gap-0.5 text-[0.6875rem] font-semibold text-muted-foreground" title={item.hidden ? "Kept in the service; Present skips it" : "Its phase is skipped for this service"}>
                     <EyeOffIcon className="size-3" aria-hidden />{item.hidden ? "Hidden" : "Skipped"}
@@ -147,10 +164,10 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 {item.auto_advance && <TimerIcon className="size-3 shrink-0 text-muted-foreground" role="img" aria-label={`Moves on by itself after ${item.planned_minutes ?? 0} min while timed moves are on`} />}
                 {item.end_by ? <span className="shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums" title="Finish by">by {item.end_by}</span> : null}
                 <PeopleMark item={item} />
-                {item.comments?.length ? (
-                  <span className="inline-flex shrink-0 items-center gap-0.5 text-[0.6875rem] text-muted-foreground" title={`${item.comments.length} team comment${item.comments.length === 1 ? "" : "s"}`}>
+                {activeCommentCount > 0 ? (
+                  <span className="inline-flex shrink-0 items-center gap-0.5 text-[0.6875rem] text-muted-foreground" title={`${activeCommentCount} team comment${activeCommentCount === 1 ? "" : "s"}`}>
                     <MessageSquareIcon className="size-3" aria-hidden />
-                    {item.comments.length}
+                    {activeCommentCount}
                     <span className="sr-only"> comments</span>
                   </span>
                 ) : null}
@@ -172,11 +189,19 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 // the title's room; until then they let clicks through to the row.
                 <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center rounded-r-md bg-card/95 pl-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
                   <Button variant="ghost" size="icon-xs" className="size-11" aria-label="Move up" disabled={index === 0}
-                    onClick={() => useQueueStore.getState().reorderItems(index, index - 1)}>
+                    onClick={() => { const before = items[index - 1]; if (before) useQueueStore.getState().moveItemsToTarget([item.id], { kind: "before", itemId: before.id }) }}>
                     <ArrowUpIcon />
                   </Button>
+                  <AddEventPalette
+                    target={{ kind: "row", itemId: item.id }}
+                    onCreated={onEventCreated}
+                    disabled={eventsDisabled}
+                    compact
+                    label={`Add event before ${item.reference}`}
+                    ariaLabel={`Add event before ${item.reference}`}
+                  />
                   <Button variant="ghost" size="icon-xs" className="size-11" aria-label="Move down" disabled={index === items.length - 1}
-                    onClick={() => useQueueStore.getState().reorderItems(index, index + 1)}>
+                    onClick={() => { const after = items[index + 1]; if (after) useQueueStore.getState().moveItemsToTarget([item.id], { kind: "after", itemId: after.id }) }}>
                     <ArrowDownIcon />
                   </Button>
                   <Button variant="ghost" size="icon-xs" className="size-11" aria-label={item.hidden ? `Show ${item.reference} in Present` : `Hide ${item.reference} in Present`} title={item.hidden ? "Show it in Present again" : "Hide: kept in the service, skipped in Present"}
@@ -201,20 +226,26 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
           </Row>
         )
   }
-  // Prepare shows the run of show's phases and groups between the items; a collapsed one hides its items.
+  // Prepare shows phases, events and their moments; a collapsed parent hides nested groups too.
   const rows = interleave(items, headers)
-  // Which rows show: a collapsed phase hides its groups and items; a collapsed group its items.
+  // Which rows show: phases contain events; events may contain moment groups; ordinary groups stay shallow.
   const visible: typeof rows = []
   let phaseId: string | null = null
+  let eventId: string | null = null
   let groupId: string | null = null
   let phaseOff = false
   for (const r of rows) {
     if ("header" in r) {
-      if (r.header.type === "phase") { phaseId = r.header.id; groupId = null; phaseOff = !!r.header.disabled } else groupId = r.header.id
+      if (r.header.type === "phase") { phaseId = r.header.id; eventId = null; groupId = null; phaseOff = !!r.header.disabled }
+      else if (r.header.event) { eventId = r.header.id; groupId = null }
+      else groupId = r.header.id
       // Present leaves out a phase skipped for this service, with its groups (#193).
       if (mode === "present" && phaseOff) continue
-      if (r.header.type === "group" && phaseId && collapsed.has(phaseId)) continue
-    } else if ((phaseId && collapsed.has(phaseId)) || (groupId && collapsed.has(groupId))) continue
+      if (r.header.type === "group" && groupedByPhase && phaseId && collapsed.has(phaseId)) continue
+      // The event's own header remains visible so it can be expanded again.
+      if (r.header.type === "group" && eventId && r.header.id !== eventId && collapsed.has(eventId)) continue
+      if (mode === "prepare" && !groupedByPhase && r.header.type === "phase") continue
+    } else if ((groupedByPhase && phaseId && collapsed.has(phaseId)) || (eventId && collapsed.has(eventId)) || (groupId && collapsed.has(groupId))) continue
     // …and hidden items: they stay in the service, and Next passes over them.
     else if (mode === "present" && isSkipped(items, headers, r.index)) continue
     visible.push(r)
@@ -224,7 +255,18 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
       {visible.map((r) =>
         "header" in r
           ? mode === "prepare"
-            ? <SectionHeader key={r.header.id} header={r.header} summary={summaries[r.header.id]} collapsed={collapsed.has(r.header.id)} onToggle={() => toggle(r.header.id)} />
+            ? <SectionHeader
+              key={r.header.id}
+              header={r.header}
+              summary={summaries[r.header.id]}
+              collapsed={collapsed.has(r.header.id)}
+              selected={selectedEventId === r.header.id}
+              dropPlacement={dropCue?.targetId === `section:${r.header.id}` && dropCue.placement !== "inside" ? dropCue.placement : undefined}
+              onSelect={r.header.event ? () => onSelectEvent?.(r.header.id) : undefined}
+              onToggle={() => toggle(r.header.id)}
+              onEventCreated={onEventCreated}
+              eventsDisabled={eventsDisabled}
+            />
             : <SectionLabel key={r.header.id} header={r.header} summary={summaries[r.header.id]} />
           : renderItem(r.item, r.index),
       )}
@@ -235,10 +277,106 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
     <>
     <BulkBar />
     <DragDropProvider
+      onDragStart={(event) => {
+        const source = event.operation.source
+        const bounds = source?.element?.getBoundingClientRect()
+        dragOrigin.current = source && bounds
+          ? { id: String(source.id), top: bounds.top, bottom: bounds.bottom }
+          : null
+      }}
+      onDragMove={(event) => {
+        const { source, target, position } = event.operation
+        if (!source || !target) {
+          setDropCue((current) => current === null ? current : null)
+          return
+        }
+        const sourceData = source.data as { kind?: string; headerId?: string }
+        const targetData = target.data as { kind?: string; headerId?: string; headerType?: string; isEvent?: boolean }
+        const targetId = String(target.id)
+        let next: DropCue | null = null
+        if (targetData.kind === "section") {
+          if (sourceData.kind === "event") {
+            if (targetData.headerType === "phase") next = { targetId, placement: "inside" }
+            else if (targetData.isEvent && sourceData.headerId !== targetData.headerId) {
+              const bounds = target.shape?.boundingRectangle ?? target.element?.getBoundingClientRect()
+              if (bounds) next = { targetId, placement: placementAtPointer(position.current.y, bounds) }
+            }
+          } else {
+            next = { targetId, placement: "inside" }
+          }
+        } else if (sourceData.kind !== "event") {
+          const sourceId = String(source.id)
+          if (isSortable(target) && sourceId !== targetId) {
+            const bounds = target.shape?.boundingRectangle ?? target.element?.getBoundingClientRect()
+            if (bounds) next = { targetId, placement: placementAtPointer(position.current.y, bounds) }
+          } else if (sourceId === targetId) {
+            const origin = dragOrigin.current
+            const isBackAtOrigin = origin?.id === sourceId && position.current.y >= origin.top && position.current.y <= origin.bottom
+            if (!isBackAtOrigin) {
+              const candidates = Array.from(document.querySelectorAll<HTMLElement>("[data-rundown-item-id]"))
+                .map((element): RundownDropCandidate => {
+                  const bounds = element.getBoundingClientRect()
+                  return { id: element.dataset.rundownItemId ?? "", top: bounds.top, bottom: bounds.bottom }
+                })
+              const nearest = nearestPlacementTarget(position.current.y, candidates, sourceId)
+              if (nearest) next = nearest
+            }
+          }
+        }
+        setDropCue((current) => current?.targetId === next?.targetId && current?.placement === next?.placement ? current : next)
+      }}
       onDragEnd={(event) => {
+        setDropCue(null)
+        const origin = dragOrigin.current
+        dragOrigin.current = null
         if (event.canceled) return
-        const { source } = event.operation
-        if (isSortable(source) && source.initialIndex !== source.index) useQueueStore.getState().reorderItems(source.initialIndex, source.index)
+        const { source, target } = event.operation
+        if (!source || !target) return
+        const sourceData = source.data as { kind?: string; headerId?: string; eventOrder?: number }
+        const sourceId = String(source.id)
+        const targetData = target.data as { kind?: string; headerId?: string }
+        const queue = useQueueStore.getState()
+        if (sourceData.kind === "event" && sourceData.headerId) {
+          if (targetData.kind === "section" && targetData.headerId && (targetData as { headerType?: string }).headerType === "phase") {
+            queue.moveEventToTarget(sourceData.headerId, { kind: "phase", phaseId: targetData.headerId })
+            return
+          }
+          const eventTarget = targetData as { kind?: string; headerId?: string; isEvent?: boolean }
+          if (eventTarget.kind === "section" && eventTarget.isEvent && eventTarget.headerId && eventTarget.headerId !== sourceData.headerId) {
+            const bounds = target.shape?.boundingRectangle ?? target.element?.getBoundingClientRect()
+            if (!bounds) return
+            const placement = placementAtPointer(event.operation.position.current.y, bounds)
+            queue.moveEventToTarget(sourceData.headerId, { kind: "event", eventId: eventTarget.headerId, placement })
+          }
+          return
+        }
+        if (!isSortable(source)) return
+        if (targetData.kind === "section" && targetData.headerId) {
+          queue.moveItemsToTarget([sourceId], { kind: "section", headerId: targetData.headerId })
+          return
+        }
+        let targetId = String(target.id)
+        let placement: RundownDropPlacement
+        if (sourceId === targetId) {
+          const pointerY = event.operation.position.current.y
+          const isBackAtOrigin = origin?.id === sourceId && pointerY >= origin.top && pointerY <= origin.bottom
+          if (isBackAtOrigin) return
+          const candidates = Array.from(document.querySelectorAll<HTMLElement>("[data-rundown-item-id]"))
+            .map((element): RundownDropCandidate => {
+              const bounds = element.getBoundingClientRect()
+              return { id: element.dataset.rundownItemId ?? "", top: bounds.top, bottom: bounds.bottom }
+            })
+          const nearest = nearestPlacementTarget(pointerY, candidates, sourceId)
+          if (!nearest) return
+          targetId = nearest.targetId
+          placement = nearest.placement
+        } else {
+          const bounds = target.shape?.boundingRectangle ?? target.element?.getBoundingClientRect()
+          if (!bounds) return
+          placement = placementAtPointer(event.operation.position.current.y, bounds)
+        }
+        if (!queue.items.some((item) => item.id === targetId)) return
+        queue.moveItemsToTarget([sourceId], { kind: placement, itemId: targetId })
       }}
     >
       {list}
@@ -248,10 +386,11 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
 }
 
 /** A rundown row; sortable (with a grip handle) only in prepare mode. */
-function Row({ id, index, sortable, children }: { id: string; index: number; sortable: boolean; children: React.ReactNode }) {
-  const { ref, handleRef, isDragging } = useSortable({ id, index, disabled: !sortable })
+function Row({ id, index, sortable, dropPlacement, children }: { id: string; index: number; sortable: boolean; dropPlacement?: RundownDropPlacement; children: React.ReactNode }) {
+  const { ref, handleRef, isDragging, isDropTarget } = useSortable({ id, index, disabled: !sortable })
   return (
-    <li ref={sortable ? ref : undefined} className={cn("flex flex-col", isDragging && "opacity-60")}>
+    <li ref={sortable ? ref : undefined} data-rundown-item-id={sortable ? id : undefined} tabIndex={sortable ? -1 : undefined} className={cn("relative flex flex-col rounded-md", isDragging && "opacity-60", isDropTarget && "ring-2 ring-inset ring-primary")}>
+      {dropPlacement && <span aria-hidden="true" className={cn("pointer-events-none absolute inset-x-2 z-10 h-0.5 rounded-full bg-primary shadow-[0_0_0_2px_hsl(var(--background))]", dropPlacement === "before" ? "-top-0.5" : "-bottom-0.5")} />}
       {sortable ? (
         <div className="flex items-stretch">
           <button

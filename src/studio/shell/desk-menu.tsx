@@ -6,9 +6,9 @@ import { useTheme } from "@/components/theme-provider"
 import { openSettings } from "@/lib/settings-dialog"
 import { cn } from "@/lib/utils"
 import { setupStatusLabel, shortDeviceId } from "@/lib/setup-readiness"
-import { putBack, useRecovery } from "@/lib/live-recovery"
+import { acceptPartialRecovery, putBack, useRecovery } from "@/lib/live-recovery"
 import { Button } from "@/components/ui/button"
-import { openProductionTab } from "@/studio/production/production-tab"
+import { openConnectionsHub } from "@/studio/connections/navigation"
 import { useJoin, type JoinStatus } from "@/stores/join-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
@@ -51,6 +51,7 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
   const deviceName = useSettingsStore((s) => s.setup.deviceName.trim())
   const deviceId = useSettingsStore((s) => s.setup.deviceId)
   const recovery = useRecovery((s) => s.offer)
+  const restoreError = useRecovery((s) => s.restoreError)
   const { theme, setTheme } = useTheme()
   const [open, setOpen] = useState(false)
   const [shortcuts, setShortcuts] = useState(false)
@@ -218,12 +219,12 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
               {joined || status !== "off" ? (
                 <>
                   <Button size="xs" variant="outline" onClick={() => run(() => void useJoin.getState().leave())}>Leave this host</Button>
-                  <Button size="xs" variant="ghost" onClick={() => run(() => openProductionTab("operators"))}><UsersRoundIcon /> Operators</Button>
+                  <Button size="xs" variant="ghost" onClick={() => run(openConnectionsHub)}><UsersRoundIcon /> Connections</Button>
                 </>
               ) : (
                 <>
-                  <Button size="xs" variant="outline" onClick={() => run(() => openProductionTab("operators"))}><UsersRoundIcon /> See joined desks</Button>
-                  <Button size="xs" variant="ghost" onClick={() => run(() => openProductionTab("operators"))}>Join another host</Button>
+                  <Button size="xs" variant="outline" onClick={() => run(openConnectionsHub)}><UsersRoundIcon /> See joined desks</Button>
+                  <Button size="xs" variant="ghost" onClick={() => run(openConnectionsHub)}>Join another host</Button>
                 </>
               )}
             </div>
@@ -256,8 +257,10 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
               confirmPutBack ? (
                 <div role="group" aria-label="Put back the last session's screens" className="mx-1 mb-1 rounded-md border border-on-air/40 bg-on-air/10 px-2 py-1.5 text-xs">
                   <p className="font-medium">Put back what was on the screens at {new Date(recovery.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}? It replaces what is on them now.</p>
+                  {restoreError && <p role="alert" className="mt-1 text-destructive">{restoreError}</p>}
                   <div className="mt-1.5 flex gap-1.5">
                     <Button size="xs" onClick={() => run(() => void putBack(recovery))}>Put back</Button>
+                    {restoreError && <Button size="xs" variant="outline" onClick={() => run(acceptPartialRecovery)}>Continue with available state</Button>}
                     <Button size="xs" variant="ghost" onClick={() => setConfirmPutBack(false)}>Cancel</Button>
                   </div>
                 </div>

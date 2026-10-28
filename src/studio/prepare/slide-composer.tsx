@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ImageIcon, PlusIcon, UploadIcon } from "lucide-react"
+import { BookOpenIcon, ImageIcon, PlusIcon, UploadIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useMediaStore } from "@/stores/media-store"
@@ -13,6 +13,7 @@ import { safeLink } from "@/lib/qr-bulletin"
 import { slidePages } from "@/lib/slide-pages"
 import { slideLabel } from "@/stores/service-store"
 import { hasReadingMarks, readingPages } from "@/lib/responsive-reading"
+import { useShellStore } from "@/studio/shell-store"
 
 const EXAMPLES = [
   { title: "Welcome", body: "We're glad you're here.\nPlease silence your phone." },
@@ -21,10 +22,11 @@ const EXAMPLES = [
   { title: "", body: "Please stand" },
 ]
 
+const DRAFT_SLIDE_ID = "draft-slide"
+
 /**
- * Prepare → Slides: write an announcement or any free-text screen and add
- * it to the service. The preview follows as you type; nothing presents.
- * Each slide lives in the service it was made for (no library yet).
+ * Prepare → Slides: write a service-specific screen or open the reusable
+ * library. The preview follows as you type; nothing presents.
  */
 export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = {}) {
   const [title, setTitle] = useState("")
@@ -41,7 +43,7 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
   const composedBody = mode === "announcement" ? announcementBody(when, where, body) : body
 
   const draft = (): SlideQueueItem => ({
-    id: "draft-slide",
+    id: DRAFT_SLIDE_ID,
     kind: "slide",
     slide: { title, body: composedBody, ...(mode === "qr" && safeLink(link) ? { link: safeLink(link)! } : {}) },
     reference: slideLabel({ title, body: composedBody, ...(mode === "qr" && safeLink(link) ? { link: safeLink(link)! } : {}) }),
@@ -53,7 +55,10 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
   const preview = (t = title, b = body, w = when, p = where, m = mode, l = link) => {
     const full = m === "announcement" ? announcementBody(w, p, b) : m === "reading" ? (readingPages(b)[0] ?? "") : b
     const safe = m === "qr" ? safeLink(l) : null
-    if (!t.trim() && !full.trim() && !safe) return
+    if (!t.trim() && !full.trim() && !safe) {
+      useBibleStore.getState().clearSlidePreview(DRAFT_SLIDE_ID)
+      return
+    }
     useBibleStore.getState().selectSlide({ item: { ...draft(), slide: { title: t, body: full, ...(safe ? { link: safe } : {}) } }, index: 0 })
   }
   // A responsive reading is always one slide per exchange (leader, then people).
@@ -63,6 +68,9 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
     return queue.addItem(item, "end")
   }
   const reset = () => {
+    // AddItems may already have selected the saved slide. Clear only our
+    // temporary draft so resetting cannot erase that or a newer selection.
+    useBibleStore.getState().clearSlidePreview(DRAFT_SLIDE_ID)
     setTitle("")
     setBody("")
     setWhen("")
@@ -101,6 +109,10 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">This slide is for the open service.</p>
+        <Button size="xs" variant="outline" onClick={() => useShellStore.getState().openLibrarySection("slides")}><BookOpenIcon /> Browse reusable slides</Button>
+      </div>
       <div role="group" aria-label="Slide kind" className="flex w-fit rounded-md border border-border p-0.5">
         {(["free", "announcement", "qr", "reading"] as const).map((m) => (
           <button

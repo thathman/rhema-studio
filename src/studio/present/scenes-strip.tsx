@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { ChevronDownIcon, LayersIcon, RotateCcwIcon, UndoIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { drawScene } from "@/lib/scene-renderer"
-import { sceneForOutput, sceneFrame } from "@/lib/scenes"
+import { sceneForOutput, sceneFrame, sceneNeedsRefresh } from "@/lib/scenes"
 import { sceneRevisionLabel, sceneTakeDetails } from "@/lib/scene-take-details"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { useBroadcastStore } from "@/stores/broadcast-store"
@@ -95,7 +95,11 @@ function usePlannedScene(scenes: Scene[]): Scene | null {
  */
 function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; scenes: Scene[]; planned: Scene | null }) {
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
+  const themes = useBroadcastStore((s) => s.themes)
+  const logoUrl = useSettingsStore((s) => s.brandKit.logoUrl)
+  const [refreshed, setRefreshed] = useState(false)
   const operatorName = useSettingsStore((s) => s.operatorName)
+  const taken = useBroadcastStore((s) => s.sceneTakes[output.id])
   const back = useBroadcastStore((s) => s.sceneReturn[output.id])
   const covered = useBroadcastStore((s) => (s.isLive ? s.liveVerse?.screen : undefined))
   // The operator's own pick (null: none); undefined follows the plan.
@@ -115,7 +119,7 @@ function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; sce
   const restorable = back ? scenes.find((s) => s.id === back) : undefined
   const b = useBroadcastStore.getState
 
-  const takeReason = !picked ? "Pick a scene above first" : picked.id === showing?.id && picked.updatedAt === showing.updatedAt ? `${output.name} already shows ${picked.name}` : null
+  const takeReason = !picked ? "Pick a scene above first" : picked.id === showing?.id && picked.updatedAt === showing.updatedAt && !sceneNeedsRefresh(output, scenes, themes, logoUrl) ? `${output.name} already shows ${picked.name}` : null
   const ownReason = !showing ? `${output.name} already shows its own feed` : null
   const restoreReason = showing ? `${output.name} shows ${showing.name}: Restore is for after Back to its own feed` : !restorable ? `${output.name} has not shown a scene yet` : null
   // In rehearsal the scene on a screen is the rehearsal's, never called on air.
@@ -139,7 +143,7 @@ function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; sce
               type="button"
               aria-pressed={s.id === pickedId}
               aria-label={`${s.name}${onAir ? `, ${onAirWord.toLowerCase()}` : s.id === planned?.id ? ", planned for the item in Preview" : ""}`}
-              onClick={() => setOwn(s.id === pickedId ? null : s.id)}
+              onClick={() => { setOwn(s.id === pickedId ? null : s.id); setRefreshed(false) }}
               title={onAir ? `${s.name} is on ${output.name}${rehearsal ? " in rehearsal" : ""}` : `Pick ${s.name}, then Take scene${s.id === planned?.id ? " (the scene planned for the item in Preview)" : ""}`}
               className={cn(
                 "flex min-h-11 shrink-0 items-center gap-1.5 rounded-md border p-1 pr-2 text-left text-[0.6875rem] outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
@@ -157,6 +161,18 @@ function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; sce
         })}
       </div>
       {details && <p id={takeDetailsId} role="note" aria-label="Take details" className="text-xs text-muted-foreground">{details}</p>}
+      {showing && sceneNeedsRefresh(output, scenes, themes, logoUrl) && scenes.some((s) => s.id === showing.id) && (
+        <button type="button" aria-label={`Refresh saved preview for ${output.name}`} className="min-h-11 self-start rounded-md border px-3 text-xs" onClick={() => { setOwn(showing.id); setRefreshed(true) }}>
+          Refresh saved preview
+        </button>
+      )}
+      {refreshed && <p role="status" className="text-xs text-muted-foreground">Preview refreshed for {output.name}. Take scene to apply it.</p>}
+      {showing && <p className="text-xs text-muted-foreground">
+        {rehearsal ? "Rehearsal" : "Taken"} design: {sceneRevisionLabel(showing)} · Saved by {showing.updatedBy || "unknown operator"}.
+        {!rehearsal && taken && <> Taken by {taken.by || "unknown operator"} at {new Date(taken.at).toLocaleString()}.</>}
+        {scenes.find((s) => s.id === showing.id) && <> Saved design: {sceneRevisionLabel(scenes.find((s) => s.id === showing.id)!)}.</>}
+        {output.sceneAppearanceSnapshot?.approved && <> Approved service {output.sceneAppearanceSnapshot.approved.programId} revision {output.sceneAppearanceSnapshot.approved.revision} · {output.sceneAppearanceSnapshot.approved.approvedBy || "unknown operator"} · {output.sceneAppearanceSnapshot.approved.approvedAt || "time unavailable"}.</>}
+      </p>}
       <div className="flex flex-wrap items-center gap-1.5">
         <SceneAction
           icon={<LayersIcon />}
@@ -170,6 +186,7 @@ function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; sce
             b().takeScene(output.id, picked.id)
             // Nothing stays picked after a Take, so a second click never takes another scene.
             setOwn(null)
+            setRefreshed(false)
           }}
           primary
         />
@@ -239,6 +256,7 @@ function SceneThumb({ scene, output }: { scene: Scene; output: BroadcastOutput }
   const liveVerse = useBroadcastStore((s) => s.liveVerse)
   const sources = useBroadcastStore((s) => s.sources)
   const themes = useBroadcastStore((s) => s.themes)
+  const logoUrl = useSettingsStore((s) => s.brandKit.logoUrl)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const layers = useRef(new Map<string, HTMLCanvasElement>())
   const [loaded, redraw] = useState(0)
@@ -246,7 +264,7 @@ function SceneThumb({ scene, output }: { scene: Scene; output: BroadcastOutput }
   useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d")
     if (!ctx) return
-    drawScene(ctx, THUMB_W, THUMB_H, sceneFrame({ isLive, liveVerse, sources, themes }, output, scene), {
+    drawScene(ctx, THUMB_W, THUMB_H, sceneFrame({ isLive, liveVerse, sources, themes, logoUrl }, { ...output, sceneAppearanceSnapshot: undefined }, scene), {
       imageCache: themeImageCache(),
       layerCanvas: (id) => {
         let c = layers.current.get(id)
@@ -260,7 +278,7 @@ function SceneThumb({ scene, output }: { scene: Scene; output: BroadcastOutput }
         return img ?? null
       },
     })
-  }, [scene, output, isLive, liveVerse, sources, themes, loaded])
+  }, [scene, output, isLive, liveVerse, sources, themes, logoUrl, loaded])
 
   return (
     <canvas

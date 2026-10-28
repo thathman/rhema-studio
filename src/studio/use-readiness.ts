@@ -20,7 +20,7 @@ import { useServiceStore } from "@/stores/service-store"
 import { computeReadiness, overscanReminder, planCheck, serviceStartsSoon } from "@/studio/readiness"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useSongStore } from "@/stores/song-store"
-import { isImageItem, isSongItem } from "@/types"
+import { isAudioItem, isImageItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { fontAvailable, missingThemeFonts } from "@/lib/brand-kit"
 import { themeIdsOf } from "@/lib/output-themes"
@@ -57,6 +57,7 @@ export function useReadiness() {
   const missingTranslations = useServiceStore((s) => s.missingTranslations)
   const overrideTranslations = useBibleStore((s) => s.overrideServiceTranslations)
   const unsupportedItems = useServiceStore((s) => s.unsupportedItems)
+  const corruptItems = useServiceStore((s) => s.corruptItems)
   const suggested = todaysService(programs, localDate())
   const monitorCount = useMonitorStore((s) => s.count)
   const monitorNames = useMonitorStore((s) => s.names)
@@ -133,7 +134,7 @@ export function useReadiness() {
   const gateAcknowledged = useApprovalGateStore((s) => (current ? s.acknowledged.includes(current.id) : false))
   const requireApproval = useSettingsStore((s) => s.requireApproval) && !gateAcknowledged
   // Pictures, videos and sounds, and every item's background picture (FR-08: all assets local before Ready).
-  const mediaIds = [...new Set(items.flatMap((i) => [isImageItem(i) ? i.image.media_id : null, i.background?.media_id ?? null]).filter((x): x is string => x !== null))]
+  const mediaIds = [...new Set(items.flatMap((i) => [isImageItem(i) ? i.image.media_id : isAudioItem(i) ? i.audio.media_id : null, i.background?.media_id ?? null]).filter((x): x is string => x !== null))]
   const hasSignage = outputs.some((o) => o.role === "signage")
   const missingMedia = mediaIds.filter((id) => !mediaAssets.find((a) => a.id === id)?.present).length
   // Load the media list once, and again when the service names a file it does not know yet
@@ -206,6 +207,7 @@ export function useReadiness() {
     // With "Use my translation" on, those verses show in the operator's translation.
     missingTranslations: overrideTranslations ? [] : missingTranslations,
     unsupportedItems: unsupportedItems.length,
+    corruptItems: corruptItems.length,
     timing: planCheck(items, headers, zone),
     camerasWithoutAddress: scenes.filter((sc) => sc.layers.some((l) => l.kind === "camera" && !l.cameraUrl)).map((sc) => sc.name),
     camerasNotSending: cameraHealth(cameras, scenes, outputs, outputStatus, router.checked ? router.status : undefined)

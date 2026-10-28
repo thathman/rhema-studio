@@ -44,7 +44,7 @@ beforeEach(() => {
   calls.length = 0
   useQueueStore.setState({ items: [slide("Welcome", 5), slide("Sermon", 30)], headers: [] })
   useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "Romans 8:28", segments: [], content: "bible" }, rehearsal: false, stageMessage: "Wrap up", sources: { bible: { value: { reference: "Romans 8:28", segments: [], content: "bible" }, itemId: null, revision: 3, activatedAt: 0, on: true } } })
-  useEventClock.setState({ mode: "screens", currentId: "Welcome" })
+  useEventClock.setState({ mode: "screens", currentId: "Welcome", currentMomentId: "Welcome" })
   useSettingsStore.setState({ joinAddress: "", joinToken: "", joinName: "", remoteSecret: "shh", deepgramApiKey: "dg-secret" })
   useJoin.setState({ status: "off", error: null, me: null, live: null, paused: false, note: null })
   useServiceStore.setState({ current: null })
@@ -62,11 +62,36 @@ describe("the host's Live State", () => {
     for (const secret of ["shh", "dg-secret", "token"]) expect(text).not.toContain(secret)
   })
 
+  it("publishes planned events and lengths as Timekeeper targets while keeping moments separate", () => {
+    useQueueStore.setState({
+      items: [slide("prayer-words", 2), slide("prayer-reading", 3), slide("sermon-reading", 4)],
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, role: "main", starts_at: "10:00" },
+        { id: "prayer", type: "group", name: "Opening Prayer", at: 0, event: { schema_version: 1, duration_minutes: 15, approval: "approved" } },
+        { id: "sermon", type: "group", name: "Sermon", at: 2, event: { schema_version: 1, duration_minutes: 40, approval: "approved" } },
+        { id: "post", type: "phase", name: "Post-service", at: 3, role: "post" },
+      ],
+    })
+    useEventClock.setState({ mode: "screens", currentId: null, currentMomentId: null })
+    useEventClock.getState().start("prayer-reading")
+
+    const live = buildLiveState()
+    expect(live.event).toMatchObject({
+      currentId: "prayer",
+      currentMomentId: "prayer-reading",
+      targets: [
+        { id: "prayer", reference: "Opening Prayer", plannedMinutes: 15, kind: "event" },
+        { id: "sermon", reference: "Sermon", plannedMinutes: 40, kind: "event" },
+      ],
+    })
+    expect(live.rundown.map((row) => row.id)).toEqual(["prayer-words", "prayer-reading", "sermon-reading"])
+  })
+
   it("is published only when it changed", () => {
     publishLiveState()
     publishLiveState()
     expect(calls.filter((c) => c.cmd === "publish_live_state")).toHaveLength(1)
-    useEventClock.setState({ currentId: "Sermon" })
+    useEventClock.setState({ currentId: "Sermon", currentMomentId: "Sermon" })
     publishLiveState()
     expect(calls.filter((c) => c.cmd === "publish_live_state")).toHaveLength(2)
   })
@@ -90,12 +115,12 @@ describe("publishing without timers (a hidden window holds them back)", () => {
     const stop = startLiveStatePublisher()
     await Promise.resolve()
     calls.length = 0
-    useEventClock.setState({ currentId: "Sermon" })
+    useEventClock.setState({ currentId: "Sermon", currentMomentId: "Sermon" })
     useEventClock.setState({ mode: "own" })
     await Promise.resolve()
     const sent = calls.filter((c) => c.cmd === "publish_live_state")
     expect(sent).toHaveLength(1)
-    expect(JSON.parse(sent[0].args.json as string).event).toEqual({ mode: "own", currentId: "Sermon" })
+    expect(JSON.parse(sent[0].args.json as string).event).toMatchObject({ mode: "own", currentId: "Sermon", currentMomentId: "Sermon", targets: [{ id: "Welcome" }, { id: "Sermon" }] })
     stop()
   })
 })

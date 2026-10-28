@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { QueueItem } from "@/types"
+import type { OutlineHeader } from "@/lib/run-of-show"
 
 const emitTo = vi.fn().mockResolvedValue(undefined)
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
@@ -23,13 +24,13 @@ const slide = (id: string, on_live?: QueueItem["on_live"]): QueueItem =>
   ({ id, kind: "slide", slide: { title: id, body: "" }, reference: id, confidence: 1, source: "manual", added_at: 0, on_live }) as unknown as QueueItem
 const show = (id: string | null, extra: Record<string, unknown> = {}) =>
   useBroadcastStore.getState().setLiveVerse({ kind: "slide", content: "slide", reference: id ?? "x", segments: [], lines: [id ?? "x"], ...extra }, null, { goLive: true, itemId: id })
-const events = () => useJournalStore.getState().entries.filter((e) => e.kind === "event").map((e) => e.itemId)
+const events = () => useJournalStore.getState().entries.filter((e) => e.kind === "event").map((e) => e.eventId ?? e.itemId)
 
 beforeEach(() => {
   fresh.mockClear()
   useBroadcastStore.setState({ isLive: false, liveVerse: null, liveItemId: null, heldLive: null, rehearsal: false, rehearsalReturn: null, stageMessage: "", sources: {} })
   useQueueStore.setState({ items: [slide("welcome"), slide("hymn"), slide("sermon", { cue: "timer.fresh" }), slide("blessing")], headers: [], activeIndex: null })
-  useEventClock.setState({ mode: "screens", currentId: null })
+  useEventClock.setState({ mode: "screens", currentId: null, currentMomentId: null })
   useJournalStore.setState({ entries: [] })
 })
 
@@ -68,6 +69,38 @@ describe("the event clock (ARCH-003, C03)", () => {
     expect(fresh).toHaveBeenCalledTimes(1) // the sermon's cue runs as its event starts
     show("blessing")
     expect(useEventClock.getState().currentId).toBe("sermon")
+  })
+
+  it("one planned event covers its moments and Timekeeper navigation skips to the next event", () => {
+    const items = [slide("prayer-words"), slide("prayer-bible"), slide("sermon-scripture"), slide("sermon-slides"), slide("closing")]
+    const headers: OutlineHeader[] = [
+      { id: "prayer", type: "group", name: "Opening Prayer", at: 0, event: { schema_version: 1, duration_minutes: 15, approval: "approved" } },
+      { id: "sermon", type: "group", name: "Sermon", at: 2, event: { schema_version: 1, duration_minutes: 40, approval: "approved" } },
+    ]
+    useQueueStore.setState({ items, headers })
+    useEventClock.getState().setMode("own")
+
+    useEventClock.getState().start("prayer")
+    expect(useEventClock.getState()).toMatchObject({ currentId: "prayer", currentMomentId: null })
+    expect(useBroadcastStore.getState().liveItemId).toBeNull()
+    useEventClock.getState().next()
+    expect(useEventClock.getState()).toMatchObject({ currentId: "sermon", currentMomentId: null })
+    expect(events()).toEqual(["prayer", "sermon"])
+    expect(useBroadcastStore.getState().liveItemId).toBeNull()
+  })
+
+  it("screen changes update the current moment without restarting its parent event", () => {
+    const items = [slide("prayer-words"), slide("prayer-bible"), slide("sermon")]
+    const headers: OutlineHeader[] = [
+      { id: "prayer", type: "group", name: "Opening Prayer", at: 0, event: { schema_version: 1, duration_minutes: 15, approval: "approved" } },
+      { id: "sermon", type: "group", name: "Sermon", at: 2, event: { schema_version: 1, duration_minutes: 40, approval: "approved" } },
+    ]
+    useQueueStore.setState({ items, headers })
+    show("prayer-words")
+    show("prayer-bible")
+
+    expect(useEventClock.getState()).toMatchObject({ currentId: "prayer", currentMomentId: "prayer-bible" })
+    expect(events()).toEqual(["prayer"])
   })
 
   it("timing reads the events: when each started and how long it ran, apart from what was on screen", () => {

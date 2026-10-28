@@ -1,12 +1,14 @@
 import { invoke } from "@tauri-apps/api/core"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import { serviceTiming, type EventState, type OffsetMode, type ServiceTiming } from "@/lib/timing-engine"
+import { runOfShowClockRows } from "@/lib/run-of-show"
+import { eventTimes } from "@/lib/journal"
 import type { RunState } from "@/lib/timing-state"
 import { runStateNow, timingInputNow } from "@/stores/timing-input"
 import { useTimingTrust } from "@/stores/timing-trust-store"
 import { tickerForScreens, timerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { cameraSourceId, lowerThirdWords, tickerWords, timerWords } from "@/lib/live-sources"
-import { sceneForOutput } from "@/lib/scenes"
+import { sceneForOutput, sceneNeedsRefresh } from "@/lib/scenes"
 import { cameraSending, useRouterHealth, whepUrl } from "@/lib/cameras"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useJournalStore } from "@/stores/journal-store"
@@ -26,6 +28,7 @@ import { useAuxTimers } from "@/stores/aux-timers-store"
 import { useTimeChange } from "@/stores/time-change-store"
 import { deskConsoleState, watchDeskConsoles, type HeardVerse, type LiveLyrics, type OutputMapRow, type SharedReadiness, type WorshipSetItem } from "@/lib/desk-consoles"
 import { recordWords, streamWords, type ObsLine } from "@/lib/obs-status"
+import { useTakeAttemptStore, type TakeAttempt } from "@/stores/take-attempt-store"
 
 /**
  * The host's Live State for joined computers (Host/Join, ARCH-004; ADR 0001): what is on the
@@ -40,6 +43,8 @@ export interface LiveStateV1 {
   /** The service open on the host (#246 C16): a desk tags each command with its id, so the host refuses one meant for another service. id and revision are absent from older hosts. */
   service: { id?: string; title: string; revision?: number } | null
   program: { onAir: boolean; reference: string | null; rehearsal: boolean }
+  /** The host's latest Take attempts. Optional on older hosts; separate from on-air content and event time. */
+  takeAttempts?: Omit<TakeAttempt, "error">[]
   /**
    * Each live source; `activatedAt` and `by` (who activated it) are absent from older hosts. After the
    * content sources: "ticker", "timer", "lowerThird", "stage" and each "camera:<name>" (reference: the
@@ -49,7 +54,16 @@ export interface LiveStateV1 {
    * "lowerThird" and "stage" are absent from older hosts.
    */
   sources: { id: string; reference: string; on: boolean; revision: number; activatedAt?: number; by?: string; state?: string }[]
-  event: { mode: "screens" | "own"; currentId: string | null }
+  event: {
+    mode: "screens" | "own"
+    currentId: string | null
+    /** The content moment currently associated with the event; absent from older hosts. */
+    currentMomentId?: string | null
+    /** The current planned event's elapsed monotonic time. */
+    currentElapsedMs?: number
+    /** Event-level Timekeeper targets; older hosts expose only queue items in `rundown`. */
+    targets?: { id: string; reference: string; plannedMinutes: number | null; kind: "event" | "item"; time?: RundownTime }[]
+  }
   /** Each item; `time` for those in the main service once it has a start time (#196 R4; absent from older hosts). */
   rundown: { id: string; reference: string; plannedMinutes: number | null; time?: RundownTime }[]
   /**
@@ -72,7 +86,7 @@ export interface LiveStateV1 {
    * `revisions` ("scene:<id>"). Both absent from older hosts.
    */
   scenes: ({ id: string; name: string } & Partial<Omit<DeskScene, "id" | "name">>)[]
-  outputs: { id: string; name: string; sceneId: string | null; sceneName?: string; sceneNeedsUpdate?: boolean; sceneRevision?: number; sceneBy?: string }[]
+  outputs: { id: string; name: string; sceneId: string | null; sceneName?: string; sceneNeedsUpdate?: boolean; sceneRevision?: number; sceneBy?: string; sceneAt?: number; sceneLiveDesignRevision?: number; sceneLiveDesignBy?: string | null; sceneSavedRevision?: number; sceneSavedBy?: string | null; sceneApprovedServiceId?: string; sceneApprovedRevision?: number; sceneApprovedAppearanceComplete?: boolean; sceneApprovedAt?: string | null; sceneApprovedBy?: string | null }[]
   /**
    * Production notices (Rhema Comms), newest first. The host's server passes each paired desk only
    * those for it (everyone, its role, its name, or sent by it); the main desk has them all.
@@ -210,12 +224,22 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
   const timing = serviceTiming(input)
   const times = rundownTimes(timing, onAirMs)
   const current = useServiceStore.getState().current
+  const untrusted = useTimingTrust.getState().untrusted
+  const currentElapsedMs = clock.currentId && (!untrusted || (untrusted.eventId ?? untrusted.itemId) !== clock.currentId)
+    ? eventTimes(useJournalStore.getState().entries, Math.max(monotonicNow(), useJournalStore.getState().entries.at(-1)?.mono ?? 0)).get(clock.currentId) ?? 0
+    : undefined
   return {
     v: 1,
     at: now,
     church: useSettingsStore.getState().brandKit.churchName.trim(),
     service: current ? { id: current.id, title: current.title, revision: current.revision } : null,
     program: { onAir: b.isLive, reference: b.isLive ? (b.liveVerse?.reference || null) : null, rehearsal: b.rehearsal },
+    takeAttempts: useTakeAttemptStore.getState().attempts.slice(-10).map(({ id, itemId, reference, status, startedAt, finishedAt, outcome, by }) => ({
+      id, itemId, reference, status, startedAt,
+      ...(finishedAt !== undefined ? { finishedAt } : {}),
+      ...(outcome ? { outcome } : {}),
+      ...(by ? { by } : {}),
+    })),
     sources: [
       ...[...CONTENT_TYPES, "quick" as const].flatMap((id) => {
         const s = b.sources[id]
@@ -223,13 +247,22 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
       }),
       ...stateSourceRows(),
     ],
-    event: { mode: clock.mode, currentId: clock.currentId },
+    event: {
+      mode: clock.mode,
+      currentId: clock.currentId,
+      currentMomentId: clock.currentMomentId,
+      ...(currentElapsedMs !== undefined ? { currentElapsedMs } : {}),
+      targets: runOfShowClockRows(q.items, q.headers).rows.map((row) => {
+        const time = times.get(row.id)
+        return { id: row.id, reference: row.reference, plannedMinutes: row.planned_minutes, kind: row.kind, ...(time ? { time } : {}) }
+      }),
+    },
     rundown: q.items.map((i) => { const time = times.get(i.id); return { id: i.id, reference: i.reference, plannedMinutes: i.planned_minutes ?? null, ...(time ? { time } : {}) } }),
     timing: timing
       ? {
           plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd, lateMs: timing.lateMs, offsetMinutes: useServiceOffset.getState().minutes, offsetBy: useServiceOffset.getState().by,
           offsetMode: useServiceOffset.getState().mode, state: runStateNow(), ...(input.timeZone ? { timeZone: input.timeZone } : {}),
-          ...(useTimingTrust.getState().untrusted ? { untrusted: useTimingTrust.getState().untrusted!.itemId } : {}),
+          ...(untrusted ? { untrusted: untrusted.eventId ?? untrusted.itemId } : {}),
         }
       : null,
     stageMessage: b.stageMessage,
@@ -237,9 +270,20 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     scenes: (() => { const on = scenesOnScreen(b); return b.scenes.map((s) => sceneForDesk(s, on.has(s.id))) })(),
     outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => {
       const take = b.sceneTakes[o.id]
-      const saved = b.scenes.find((s) => s.id === o.sceneId)
+      const saved = b.scenes.find((scene) => scene.id === o.sceneId)
       const showing = sceneForOutput(o, b.scenes)
-      return { id: o.id, name: o.name, sceneId: o.sceneId ?? null, ...(showing ? { sceneName: showing.name } : {}), ...(o.sceneSnapshot && saved && o.sceneSnapshot.id === saved.id && o.sceneSnapshot.updatedAt !== saved.updatedAt ? { sceneNeedsUpdate: true } : {}), ...(take ? { sceneRevision: take.revision, ...(take.by ? { sceneBy: take.by } : {}) } : {}) }
+      const changed = sceneNeedsRefresh(o, b.scenes, b.themes, useSettingsStore.getState().brandKit.logoUrl)
+      return {
+        id: o.id,
+        name: o.name,
+        sceneId: o.sceneId ?? null,
+        ...(showing ? { sceneName: showing.name } : {}),
+        ...(changed ? { sceneNeedsUpdate: true } : {}),
+        ...(take ? { sceneRevision: take.revision, sceneAt: take.at, ...(take.by ? { sceneBy: take.by } : {}) } : {}),
+        ...(showing ? { sceneLiveDesignRevision: showing.updatedAt, sceneLiveDesignBy: showing.updatedBy } : {}),
+        ...(saved ? { sceneSavedRevision: saved.updatedAt, sceneSavedBy: saved.updatedBy } : {}),
+        ...(o.sceneAppearanceSnapshot?.approved ? { sceneApprovedServiceId: o.sceneAppearanceSnapshot.approved.programId, sceneApprovedRevision: o.sceneAppearanceSnapshot.approved.revision, sceneApprovedAppearanceComplete: o.sceneAppearanceSnapshot.approved.appearanceComplete !== false, sceneApprovedAt: o.sceneAppearanceSnapshot.approved.approvedAt, sceneApprovedBy: o.sceneAppearanceSnapshot.approved.approvedBy } : {}),
+      }
     }),
     notices: useNotices.getState().notices.slice(0, 50),
     crew: useSettingsStore.getState().remoteDevices.map((d) => d.name),

@@ -3,14 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => []) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
-vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn(async () => "0.3.2") }))
+vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn(async () => "0.3.3") }))
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { SettingsPage } from "@/components/settings-dialog"
 import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { markSearchHits, searchElsewhere, searchSettings, searchWords, SETTINGS_ELSEWHERE, SETTINGS_SEARCH_INDEX } from "@/lib/settings-search"
-import { useProductionTab } from "@/studio/production/production-tab"
 import { useShellStore } from "@/studio/shell-store"
 import { useSettingsStore } from "@/stores/settings-store"
 
@@ -107,15 +106,13 @@ describe("Settings page search", () => {
 
   it("shows what lives elsewhere as rows that go there, and Enter opens the first when no section matches", async () => {
     useShellStore.setState({ goRequest: null, designRequest: null })
-    useProductionTab.setState({ requested: null })
     await type("camera")
     const group = host.querySelector('[role="group"][aria-label="Elsewhere in Rhema Studio"]')!
     expect(group.textContent).toContain("Cameras and the camera router")
-    expect(group.textContent).toContain("Production → Cameras")
+    expect(group.textContent).toContain("Connections")
     expect(host.querySelector('[role="status"]')!.textContent).toContain("Not in Settings")
     await press("Enter")
-    expect(useProductionTab.getState().requested).toBe("cameras")
-    expect(useShellStore.getState().goRequest).toBe("production")
+    expect(useShellStore.getState().goRequest).toBe("connections")
 
     await type("church name")
     await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Elsewhere in Rhema Studio"] button')!.click())

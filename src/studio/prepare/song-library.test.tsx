@@ -315,14 +315,14 @@ describe("Add item workflow (#386)", () => {
 
     await act(async () => root!.render(<AddItems />))
     await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Add item"))!.click())
-    const mediaTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent?.trim() === "Pictures")!
+    const mediaTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent?.trim() === "Media")!
     await act(async () => { mediaTab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); mediaTab.click() })
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
     const add = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add")!
     await act(async () => add.click())
 
     const inserted = useQueueStore.getState().items[0]
-    expect(inserted).toMatchObject({ kind: "image", image: { media_id: audioAsset.id } })
+    expect(inserted).toMatchObject({ kind: "audio", audio: { media_id: audioAsset.id } })
     expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })

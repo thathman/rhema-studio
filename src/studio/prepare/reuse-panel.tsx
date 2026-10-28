@@ -5,11 +5,11 @@ import { PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useBibleStore, useQueueStore } from "@/stores"
-import { useServiceStore, toQueueItems } from "@/stores/service-store"
+import { loadMediaKinds, useServiceStore, toQueueItems } from "@/stores/service-store"
 import { copyForReuse } from "@/lib/reuse"
 import { isVerseItem, type ProgramWithItems, type QueueItem, type Verse } from "@/types"
 
-const KIND: Record<string, string> = { verse: "Scripture", song: "Song", slide: "Slide", image: "Picture or video" }
+const KIND: Record<string, string> = { verse: "Scripture", song: "Song", slide: "Slide", image: "Picture or video", audio: "Audio cue" }
 
 /**
  * Prepare → Reuse: pick an earlier service, tick what you need (the usual
@@ -39,7 +39,8 @@ export function ReusePanel({ onAdded }: { onAdded?: (id: string) => void } = {})
         const data = await invoke<ProgramWithItems | null>("content_get_program", { id: sourceId })
         if (cancelled) return
         const bible = useBibleStore.getState()
-        setItems(data ? toQueueItems(data, bible.activeTranslationId, bible.translations).items : [])
+        const mediaKinds = data ? await loadMediaKinds(data) : new Map()
+        setItems(data ? toQueueItems(data, bible.activeTranslationId, bible.translations, mediaKinds).items : [])
         setChosen(new Set())
       } catch (e) {
         if (!cancelled) toast.error(e instanceof Error ? e.message : String(e))

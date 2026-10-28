@@ -4,7 +4,7 @@ import { bibleActions } from "@/hooks/use-bible"
 import { isMissing, resolveTranslations } from "@/lib/translation-policy"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
-import { isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem, type SongWithSections } from "@/types"
+import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem, type SongWithSections } from "@/types"
 import { presentQuickScreen, type QuickScreen } from "@/hooks/use-broadcast"
 import { useSongStore } from "@/stores/song-store"
 import { lowerThirdBacking } from "@/lib/lower-third-backing"
@@ -32,7 +32,7 @@ export const presentActions = {
    */
   previewItem: (item: QueueItem) => {
     // A cue-only moment previews as what it will do (#193): nothing on the screens.
-    if (isSlideItem(item) || isImageItem(item) || isCueItem(item)) {
+    if (isSlideItem(item) || isImageItem(item) || isAudioItem(item) || isCueItem(item)) {
       useBibleStore.getState().selectSlide({ item, index: 0 })
       useBibleStore.getState().setSelectedQueueItemId(item.id)
       return

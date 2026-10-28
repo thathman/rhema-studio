@@ -14,7 +14,7 @@ const { useTimingTrust } = await import("@/stores/timing-trust-store")
 const { useServiceOffset } = await import("@/stores/service-offset-store")
 const { useSettingsStore } = await import("@/stores/settings-store")
 const { restoreJournal, putBack } = await import("@/lib/live-recovery")
-const { eventTimes, serviceFinishedAt } = await import("@/lib/journal")
+const { eventPlanStarts, eventTimes, serviceFinishedAt } = await import("@/lib/journal")
 const { runStateNow, timingInputNow, churchTimeZone } = await import("@/stores/timing-input")
 const { serviceTiming } = await import("@/lib/timing-engine")
 const { monotonicNow } = await import("@/stores/timer-store")
@@ -29,7 +29,7 @@ describe("the run state, holds, finishing and trust after a restart (#196 R2.10,
     vi.setSystemTime(new Date(2026, 9, 25, 9, 55))
     useQueueStore.setState({ items: [item("a", 5), item("b", 20), item("c", 30)], headers: [{ id: "main", type: "phase", name: "Service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }] })
     useBroadcastStore.setState({ isLive: false, liveItemId: null, rehearsal: false, stageMessage: "" })
-    useEventClock.setState({ mode: "own", currentId: null })
+    useEventClock.setState({ mode: "own", currentId: null, currentMomentId: null })
     useJournalStore.setState({ entries: [], startItemIds: null, added: 0, keptAt: 0 })
     useHold.setState({ hold: null, past: [] })
     useTimingTrust.setState({ untrusted: null })
@@ -80,6 +80,35 @@ describe("the run state, holds, finishing and trust after a restart (#196 R2.10,
     const t = serviceTiming(timingInputNow())!
     expect(t.events[1]).toMatchObject({ heldMs: 4 * MIN, expectedEnd: new Date(2026, 9, 25, 10, 24).getTime() })
     expect(t.held).toBe(true)
+  })
+
+  it("event duration owns the service schedule while moments inside it change", () => {
+    useQueueStore.setState({
+      items: [item("sermon-scripture", 3), item("sermon-slides", 7), item("closing", 5)],
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, role: "main", starts_at: "10:00" },
+        { id: "sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1, duration_minutes: 40, approval: "approved" } },
+        { id: "post", type: "phase", name: "Post-service", at: 2, role: "post" },
+      ],
+    })
+    vi.setSystemTime(new Date(2026, 9, 25, 10, 0))
+    useEventClock.getState().start("sermon-scripture")
+    vi.advanceTimersByTime(5 * MIN)
+    useEventClock.getState().start("sermon-slides")
+
+    const input = timingInputNow()
+    expect(input.items.map((row) => [row.id, row.reference, row.planned_minutes])).toEqual([
+      ["sermon", "Sermon", 40],
+      ["closing", "closing", 5],
+    ])
+    expect(input.liveItemId).toBe("sermon")
+    const timing = serviceTiming(input)!
+    expect(timing.events[0]).toMatchObject({ id: "sermon", plannedEnd: new Date(2026, 9, 25, 10, 40).getTime(), state: "live" })
+    expect(timing.sections.find((section) => section.id === "post")?.plannedStart).toBe(new Date(2026, 9, 25, 10, 40).getTime())
+    expect(useEventClock.getState()).toMatchObject({ currentId: "sermon", currentMomentId: "sermon-slides" })
+    expect(eventPlanStarts(useJournalStore.getState().entries).get("sermon")).toBe(new Date(2026, 9, 25, 10, 0).getTime())
+    expect(eventTimes(useJournalStore.getState().entries, monotonicNow()).get("sermon")).toBe(5 * MIN)
+    expect(useJournalStore.getState().entries.filter((entry) => entry.kind === "event")).toHaveLength(1)
   })
 
   it("uses the church's time zone from Setup when one is set", () => {

@@ -343,7 +343,7 @@ impl ContentDb {
             })
             .collect();
         let program = self.create_program(&payload.title, payload.service_date.as_deref())?;
-        let program = match self.replace_items(&program.id, program.revision, &items) {
+        let program = match self.replace_items_with_history(&program.id, program.revision, &items) {
             Ok(p) => p,
             Err(e) => {
                 // Never leave an empty service behind.
@@ -391,11 +391,11 @@ mod tests {
             .unwrap();
         let p = home.create_program("Sunday", Some("2026-10-25")).unwrap();
         let items = vec![
-            ItemInput { kind: "verse".into(), reference: "John 3:16".into(), book_number: Some(43), chapter: Some(3), verse: Some(16), translation: Some("KJV".into()), payload: Some(serde_json::json!({ "scene_id": "scene-1", "look_id": "classic-dark", "camera": "pulpit", "on_take": ["source.only", "obs.scene:Sermon"] }).to_string()), ..Default::default() },
+            ItemInput { kind: "verse".into(), reference: "John 3:16".into(), book_number: Some(43), chapter: Some(3), verse: Some(16), translation: Some("KJV".into()), payload: Some(serde_json::json!({ "scene_id": "scene-1", "look_id": "classic-dark", "camera": "pulpit", "on_take": ["source.only", "obs.scene:Sermon"], "comments": [{ "id": "comment-1", "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": "Read slowly", "deleted_by": "Ade", "deleted_at": "2026-10-21T11:00:00Z" }] }).to_string()), ..Default::default() },
             ItemInput { kind: "song".into(), reference: "Amazing Grace".into(), payload: Some(serde_json::json!({ "song_id": s.song.id, "arrangement_id": s.arrangements[0].id, "languages": ["en"], "background_media_id": pic.id }).to_string()), ..Default::default() },
             ItemInput { kind: "image".into(), reference: "Welcome.png".into(), payload: Some(serde_json::json!({ "media_id": pic.id, "fit": "cover" }).to_string()), ..Default::default() },
         ];
-        home.replace_items(&p.id, p.revision, &items).unwrap();
+        home.replace_items_with_history(&p.id, p.revision, &items).unwrap();
         let pkg = home.export_service_package(&p.id, &home_media).unwrap();
         assert_eq!(pkg.version, 1);
         assert_eq!(pkg.sha256, sha256_hex(pkg.payload.as_bytes()));
@@ -413,7 +413,7 @@ mod tests {
         assert_eq!(image_payload["media_id"], new_pic.id);
         // #243 RS.3/RS.4: the item's scene, look, camera and Take steps travel unchanged.
         let verse_payload: serde_json::Value = serde_json::from_str(r.program.items[0].payload.as_deref().unwrap()).unwrap();
-        assert_eq!(verse_payload, serde_json::json!({ "scene_id": "scene-1", "look_id": "classic-dark", "camera": "pulpit", "on_take": ["source.only", "obs.scene:Sermon"] }));
+        assert_eq!(verse_payload, serde_json::json!({ "scene_id": "scene-1", "look_id": "classic-dark", "camera": "pulpit", "on_take": ["source.only", "obs.scene:Sermon"], "comments": [{ "id": "comment-1", "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": "Read slowly", "deleted_by": "Ade", "deleted_at": "2026-10-21T11:00:00Z" }] }));
         let song_payload: serde_json::Value = serde_json::from_str(r.program.items[1].payload.as_deref().unwrap()).unwrap();
         assert_eq!(song_payload["background_media_id"], new_pic.id);
         assert_eq!(song_payload["song_id"], s.song.id);
