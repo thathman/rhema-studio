@@ -1,15 +1,25 @@
 # Rhema Studio — Development Status
 
-> **Snapshot warning (2026-10-26):** This page was last reconciled 2026-10-22 and is not a live representation of current main/open PRs. Start with the [Codex Unified Handover](CODEX-UNIFIED-HANDOFF.md), inspect GitHub head/PRs/CI, and record verified deltas before asserting implementation or acceptance. This warning does not update the historical snapshot below.
+> **Snapshot (2026-10-27, 10:49 UTC):** This records the pre-#484 integration state at main `c9b6432` and 40 open PRs. Check GitHub for subsequent changes; do not infer device acceptance from CI.
 
 Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requirements: [PRD.md](PRD.md). Release gates: [RELEASE-PLAN.md](RELEASE-PLAN.md).
 
-**Updated:** 2026-10-22
+**Updated:** 2026-10-27
+
+## Current takeover snapshot
+
+- Target repository: `thathman/rhema-studio`; current `main` at snapshot time is `c9b64323f37ac99fa06224a00fe6dfa2992532e9`. PRs #414, #424, #430, #451, #474, #475, #476, #477, #482 and #485 are merged. #484 is open for APT timing instrumentation. Post-#485 main run [40491159114](https://github.com/thathman/rhema-studio/actions/runs/40491159114) passed all four required jobs in 2:07 wall time; Frontend took 2:02.
+- #414 delivered P0 fixes #383/#384: saving a reusable scene leaves the on-air snapshot unchanged until Take, and Add uses stable insertion IDs. Local regressions cover rehearsal, backup restore, NDI/browser/TV snapshots, and queue insertion. No physical output acceptance is claimed.
+- Prepare foundation #430 and Hymn/Add #476 are merged; #477 completes event creation → Add/edit → save/reopen → Preview. A current-main automated path is **New service → create event → add and edit a moment → save → close/reopen → Preview**, while checking that Live stays unchanged. This is component automation, not a native-desktop or hardware test. Follow-ons #455, #456, #458, #460, #462, #467, #470 and #471 remain open and stacked; reconcile each against current main before integration.
+- P0 #398 is merged in [PR #482](https://github.com/thathman/rhema-studio/pull/482) as `aeaf4dafbb5a9f9eafd869b14fd2172d6ff48ab2`; issue #398 is closed. It pins approved and active scene/look/media revisions and rejects unsafe late retries after concurrent draft edits. The final PR head passed all four required checks in [run 40487035768](https://github.com/thathman/rhema-studio/actions/runs/40487035768). PR #420 was closed as superseded after #482 integrated; its parent #419 remains open. This is CI evidence only, not physical output acceptance.
+- [PR #484](https://github.com/thathman/rhema-studio/pull/484) adds UTC timestamps and elapsed seconds around APT update/install without changing packages or gates. Its initial run [40485173632](https://github.com/thathman/rhema-studio/actions/runs/40485173632) passed all four required jobs in 2m11s and measured 4s/43s for Rust update/install and 6s/21s for Companion. These samples do not justify changing package setup; a prior install outlier exceeded 20 minutes. The #475 Vite change reduced its two build steps from 37–44s combined to 13–14s, but full Frontend job time remains variable, so no end-to-end speedup is claimed.
+- #457 remains the next live-design safety issue after #398; #428 remains open for failed-Take rundown state. #438's hosted native Intel Mac hymn journey passed with Live off. Real TV/projector, OBS/NDI, cameras, Windows and offline church-system acceptance remain unverified; #411 is not complete.
+- Owner-ratified architecture and cross-feature failure contracts are [#243](https://github.com/thathman/rhema-studio/issues/243) and [#246](https://github.com/thathman/rhema-studio/issues/246); ADR 0001 is the implementation contract. #352 and #367 remain publishing-gated and were not merged.
 
 ## Integrated `main`
 
-- Head: see `git log fork/main` (2026-10-22 17:45 WAT; every PR through #216 merged)
-- Contents: see CHANGELOG.md. `studio.db` is at migration 0012 (services, item identity, songs, media, revisions, key/tempo, approval, service logs, attachments, archive/templates/approver, who saved each version).
+- Head at snapshot time: `c9b64323f37ac99fa06224a00fe6dfa2992532e9` (2026-10-27)
+- Contents: see CHANGELOG.md. `studio.db` is at migration 0014, including the additive approved-design snapshot migration for #398.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
 ## Issues
@@ -18,9 +28,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Open PRs
 
-- The owner's redesign continues: UX-03, UX-04 and UX-07 to UX-12 in TASKS.md (UX-01, 02, 05, 06 merged).
-
-- PR #4 `feature/speech-language-openai` (retargeted to `main`): Yoruba speech language and OpenAI Whisper provider. Kept independent until provider/bundling decisions are made (ST-004).
+- There are 40 open PRs in the full `gh pr list --state open --limit 100` result checked 2026-10-27 10:49 UTC; #484 is open. The #474 follow-up baseline was 46. #352 and #367 remain open and publishing-gated.
 
 ## Active milestone
 
@@ -28,10 +36,10 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- Frontend: 669 vitest tests pass (two render-heavy tests can time out on a heavily loaded machine; given 30 s, #176, #180); `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 0 errors (was 68 before #81, 7 before the lint-debt PR) and blocking in CI.
-- Rust: `rhema-content` 62 tests pass; `rhema-api` 122; app `cargo check` and clippy in CI.
-- Dependency licences: `scripts/check-licenses.ts` (npm production tree, 544 packages; Rust crate graph) runs in CI and passes. A test fails if code names an unlisted internet host (`src/lib/network-hosts.test.ts`).
-- CI on `main`: green on the current head (every merge since PR #46 was followed by a run checked before the next merge).
+- For #482, `cargo test -p rhema-content` passed 78 tests and strict content-crate Clippy passed after the late-retry guard. Focused frontend suites passed 60/60 across the broadcast store, scene strip and touch-target files, including persisted-output reload coverage after reusable scene/theme/logo edits. Final hosted run [40487035768](https://github.com/thathman/rhema-studio/actions/runs/40487035768) passed all four required jobs on the final PR head; the merged main run [40487821238](https://github.com/thathman/rhema-studio/actions/runs/40487821238) also passed all four. The Prepare menu test flake was fixed separately in #485 by waiting for expected forms to mount; its PR run [40490120781](https://github.com/thathman/rhema-studio/actions/runs/40490120781) passed all four checks and #485 is merged. PR #484 is rebased onto the resulting main; its refreshed checks are pending. No device/hardware acceptance is claimed.
+- The post-#485 main run [40491159114](https://github.com/thathman/rhema-studio/actions/runs/40491159114) passed Frontend, Rust, Companion and Lint in 2:07 wall time; Frontend took 2:02. #475 shortened the main/Companion Vite build steps, but the complete Frontend job has not shown a consistent end-to-end reduction.
+- #430, #476 and #477 passed their hosted checks before merging. Their previous run details remain in GitHub; #485 is the latest main change at snapshot time.
+- PR #438's hosted native macOS journey passed with Live off, but it does not verify physical output hardware or offline cold start. Build warnings and unverified hardware gates remain recorded below.
 
 ## Unverified (release-acceptance blockers, not development blockers)
 

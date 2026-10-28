@@ -73,9 +73,11 @@ describe("congregation scenes (ARCH-002)", () => {
     b.setLiveVerse(romans, null, { goLive: true })
     const held = { ...scene, layers: scene.layers.map((l, i) => (i === 1 ? { ...l, held: romans } : l)) }
     b.saveScene(held)
+    b.takeScene(MAIN_OUTPUT_ID, scene.id)
     b.setLiveVerse({ ...romans, reference: "Romans 8:29 (KJV)" }, null, { goLive: true })
     expect(sent("broadcast-main")?.scene?.layers[1].verse?.reference).toBe("Romans 8:28 (KJV)")
     b.saveScene({ ...held, layers: held.layers.map((l, i) => (i === 1 ? { ...l, held: null } : l)) })
+    b.takeScene(MAIN_OUTPUT_ID, scene.id)
     expect(sent("broadcast-main")?.scene?.layers[1].verse?.reference).toBe("Romans 8:29 (KJV)")
   })
 
@@ -146,6 +148,8 @@ describe("congregation scenes (ARCH-002)", () => {
     useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
     expect(sent("broadcast-main")!.scene!.fadeMs).toBe(500)
     useBroadcastStore.getState().saveScene({ ...scene, fadeMs: undefined })
+    expect(sent("broadcast-main")!.scene!.fadeMs).toBe(500)
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
     expect(sent("broadcast-main")!.scene!.fadeMs).toBeUndefined()
   })
 

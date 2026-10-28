@@ -61,15 +61,14 @@ export function TutorialOverlay() {
     }
   }, [isHydrated, onboardingComplete, tourMayStart])
 
-  // Each step opens its workspace first (and the Present view it shows), then the tour
-  // moves on; when it ends, what was on screen before comes back.
+  // Each step opens its workspace first, then the tour moves on; when it ends,
+  // the workspace that was on screen before comes back.
   const [stepIndex, setStepIndex] = useState(0)
-  const before = useRef<{ workspace: ReturnType<typeof useShellStore.getState>["workspace"]; view: ReturnType<typeof useShellStore.getState>["presentView"] } | null>(null)
+  const before = useRef<ReturnType<typeof useShellStore.getState>["workspace"] | null>(null)
   const goTo = useCallback((index: number) => {
     const place = TUTORIAL_STEPS[index]?.data as TourPlace | undefined
     const shell = useShellStore.getState()
     if (place) {
-      if (place.presentView) shell.setPresentView(place.presentView)
       shell.setWorkspace(place.workspace)
     }
     // The workspace renders first, so the step finds its target.
@@ -78,11 +77,10 @@ export function TutorialOverlay() {
   useEffect(() => {
     const shell = useShellStore.getState()
     if (isRunning) {
-      before.current ??= { workspace: shell.workspace, view: shell.presentView }
+      before.current ??= shell.workspace
       goTo(0)
     } else if (before.current) {
-      shell.setPresentView(before.current.view)
-      shell.setWorkspace(before.current.workspace)
+      shell.setWorkspace(before.current)
       before.current = null
     }
   }, [isRunning, goTo])

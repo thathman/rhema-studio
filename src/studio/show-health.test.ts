@@ -29,6 +29,8 @@ describe("show health", () => {
     expect(showing(out("main", "display"), { theme, verse: { reference: "Romans 8:28", segments: [] }, overlay: null }, [], true)).toBe("Romans 8:28")
     expect(showing(out("main", "display"), { theme, verse: { reference: "", segments: [], screen: "black" }, overlay: null }, [], true)).toBe("Black")
     expect(showing(out("main", "display"), { theme, verse: null, overlay: null, scene: { sceneId: "s1", background: "#000", layers: [] } }, [{ id: "s1", name: "Sermon split" } as never], true)).toBe("Scene: Sermon split")
+    const taken = { id: "s1", name: "Taken scene", layers: [] }
+    expect(showing(out("main", "display", { sceneId: "s1", sceneSnapshot: taken }), { theme, verse: null, overlay: null, scene: { sceneId: "s1", background: "#000", layers: [] } }, [{ id: "s1", name: "Saved edit", layers: [] } as never], true)).toBe("Scene: Taken scene")
   })
 
   const PORTS = { webrtc: 8889, webrtcUdp: 8189, rtsp: 8554, rtmp: 1935, srt: 8890, api: 9997 }
@@ -65,6 +67,17 @@ describe("show health", () => {
     expect(cameraHealth(cameras, [], [], {}, router([], false)).map((r) => r.state)).toEqual(["router-off", "router-off"])
     expect(cameraHealth(cameras, [], [], {}, null).map((r) => r.state)).toEqual(["router-off", "router-off"])
     expect(cameraHealth(cameras, [], [], {}, undefined).map((r) => r.state)).toEqual(["checking", "checking"])
+  })
+
+  it("checks the camera in the taken scene revision, not the newer saved edit", () => {
+    const taken = { id: "s1", name: "Taken layout", layers: [cam("old", "http://192.168.1.20:8889/pulpit/whep")] } as never
+    const saved = { id: "s1", name: "Saved layout", layers: [cam("new", "http://192.168.1.20:8889/choir/whep")] } as never
+    const outputs = [out("main", "display", { name: "Main", sceneId: "s1", sceneSnapshot: taken })]
+    const status = { main: { previewOpen: true, ndiActive: false } }
+    const health = cameraHealth(cameras, [saved], outputs, status, router([{ name: "pulpit", live: false }, { name: "choir", live: true }]))
+    expect(attention(outputs, status, {}, { cameras: health, scenes: [saved] })).toEqual([
+      { level: "high", outputId: "main", text: 'Pulpit camera is not sending; "Taken layout" on Main shows colour bars there' },
+    ])
   })
 
   it("a scene on air whose camera is not sending needs attention: what the screen shows instead", () => {

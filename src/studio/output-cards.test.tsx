@@ -91,6 +91,7 @@ describe("an output's card in Production → Screens", () => {
     expect(outputFollows(stream)).toBe("Bible")
     expect(outputFollows(main)).toBe("Everything put on air")
     expect(outputPresentation(stream, scenes, l3)).toBe("Scene: Camera + Bible")
+    expect(outputPresentation({ ...stream, sceneId: "scene-1", sceneSnapshot: { id: "scene-1", name: "Taken layout", layers: [] } as never }, [{ id: "scene-1", name: "Saved edit" } as never], l3)).toBe("Scene: Taken layout")
     expect(outputPresentation({ ...stream, sceneId: undefined, lowerThirds: true }, scenes, { ...l3, background: { ...l3.background, type: "transparent" } })).toBe("Full screen · lower thirds · transparent, for keying")
     expect(outputPresentation({ ...main, role: "stage" }, scenes)).toMatch(/^Stage display/)
     expect(outputPresentation({ ...main, role: "signage", ticker: true }, scenes)).toBe("Signage loop · ticker")

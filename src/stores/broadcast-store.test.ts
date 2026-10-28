@@ -48,6 +48,38 @@ describe("broadcast store sync", () => {
     )
   })
 
+  it("keeps saved design drafts separate from live looks and carries them through backup restore", async () => {
+    const { looksForBackup, restoreLooksFromBackup, useBroadcastStore } = await import("./broadcast-store")
+    const before = useBroadcastStore.getState()
+    const draft = {
+      id: "stage:default",
+      kind: "stage" as const,
+      sourceId: "default",
+      value: { ...before.stageStyle, background: "#112233" },
+      updatedAt: 123,
+    }
+    const liveBefore = {
+      stageStyle: before.stageStyle,
+      lowerThird: before.lowerThird,
+      ticker: before.ticker,
+      countdownLook: before.countdownLook,
+      outputFrames: before.outputFrames,
+    }
+
+    before.saveDesignDraft(draft)
+
+    expect(useBroadcastStore.getState().designDrafts).toEqual([draft])
+    expect(useBroadcastStore.getState()).toMatchObject(liveBefore)
+    expect(emitToMock).not.toHaveBeenCalled()
+    const backup = looksForBackup()
+    expect(backup.designDrafts).toEqual([draft])
+
+    useBroadcastStore.getState().deleteDesignDraft(draft.id)
+    restoreLooksFromBackup({ designDrafts: [...(backup.designDrafts ?? []), { ...draft, id: "ticker:forged", kind: "stage" }] })
+    expect(useBroadcastStore.getState().designDrafts).toEqual([draft])
+    expect(useBroadcastStore.getState().stageStyle).toEqual(liveBefore.stageStyle)
+  })
+
   it("syncBroadcastOutput fans out to every output with its own theme", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const state = useBroadcastStore.getState()
@@ -117,6 +149,261 @@ describe("broadcast store sync", () => {
       "broadcast:verse-update",
       expect.anything(),
     )
+  })
+
+  it("saving a scene keeps its taken program revision until an explicit Take", async () => {
+    const [{ useBroadcastStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const scene = newScene("On air", SCENE_PRESETS[0])
+    useBroadcastStore.getState().saveScene(scene)
+    useBroadcastStore.getState().takeScene("main", scene.id)
+
+    emitToMock.mockClear()
+    const edited = { ...scene, background: "#123456" }
+    useBroadcastStore.getState().saveScene(edited)
+    expect(emitToMock).not.toHaveBeenCalled()
+
+    useBroadcastStore.getState().syncBroadcastOutputFor("main")
+    expect(useBroadcastStore.getState().outputFrames.main.scene?.background).toBe(scene.background)
+    expect(emitToMock).toHaveBeenLastCalledWith(
+      "broadcast-main",
+      "broadcast:verse-update",
+      expect.objectContaining({ scene: expect.objectContaining({ background: scene.background }) }),
+    )
+
+    useBroadcastStore.getState().takeScene("main", scene.id)
+    expect(useBroadcastStore.getState().outputFrames.main.scene?.background).toBe(edited.background)
+  })
+
+  it("lets rehearsal preview an edited scene while the public screen keeps its pinned revision", async () => {
+    const [{ useBroadcastStore, outputsForScreens }, { newScene, SCENE_PRESETS, sceneForOutput }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const b = useBroadcastStore.getState()
+    const original = { ...newScene("On air", SCENE_PRESETS[0]), background: "#000000" }
+    b.saveScene(original)
+    b.takeScene("main", original.id)
+    b.saveScene({ ...original, background: "#123456" })
+
+    b.setRehearsal(true)
+    useBroadcastStore.getState().takeScene("main", original.id)
+    const rehearsed = useBroadcastStore.getState()
+    const rehearsalOutput = rehearsed.outputs.find((output) => output.id === "main")!
+    expect(sceneForOutput(rehearsalOutput, rehearsed.scenes)?.background).toBe("#123456")
+    expect(sceneForOutput(outputsForScreens(rehearsed).find((output) => output.id === "main")!, rehearsed.scenes)?.background).toBe("#000000")
+
+    useBroadcastStore.getState().setRehearsal(false)
+    const returned = useBroadcastStore.getState().outputs.find((output) => output.id === "main")!
+    expect(returned.sceneSnapshot?.background).toBe("#000000")
+    expect(useBroadcastStore.getState().outputFrames.main.scene?.background).toBe("#000000")
+  })
+
+  it("restoring a backup keeps the on-air scene snapshot when the saved scene is newer", async () => {
+    const [{ useBroadcastStore, looksForBackup, restoreLooksFromBackup }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const scene = { ...newScene("On air", SCENE_PRESETS[0]), background: "#000000" }
+    const b = useBroadcastStore.getState()
+    b.saveScene(scene)
+    b.takeScene("main", scene.id)
+    b.saveScene({ ...scene, background: "#123456" })
+
+    restoreLooksFromBackup(looksForBackup())
+
+    const restored = useBroadcastStore.getState()
+    expect(restored.scenes.find((candidate) => candidate.id === scene.id)?.background).toBe("#123456")
+    expect(restored.outputs.find((output) => output.id === "main")?.sceneSnapshot?.background).toBe("#000000")
+    restored.syncBroadcastOutputFor("main")
+    expect(restored.outputFrames.main.scene?.background).toBe("#000000")
+  })
+
+  it("sends the pinned scene revision to an NDI output after the library scene is saved", async () => {
+    const [{ useBroadcastStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const state = useBroadcastStore.getState()
+    const scene = { ...newScene("NDI program", SCENE_PRESETS[0]), background: "#000000" }
+    state.saveScene(scene)
+    state.addOutput({
+      id: "ndi-program",
+      name: "Sanctuary NDI",
+      type: "ndi",
+      role: "congregation",
+      themeId: state.themes[0].id,
+      monitorIndex: 0,
+      ndi: ndiDefaults,
+    })
+    useBroadcastStore.getState().takeScene("ndi-program", scene.id)
+
+    emitToMock.mockClear()
+    useBroadcastStore.getState().saveScene({ ...scene, background: "#123456" })
+    useBroadcastStore.getState().syncBroadcastOutputFor("ndi-program")
+
+    expect(useBroadcastStore.getState().outputFrames["ndi-program"].scene?.background).toBe("#000000")
+    expect(emitToMock).toHaveBeenLastCalledWith(
+      "broadcast-ndi-program",
+      "broadcast:verse-update",
+      expect.objectContaining({ scene: expect.objectContaining({ background: "#000000" }) }),
+    )
+  })
+
+  it("records who saved the reusable scene revision", async () => {
+    const [{ useBroadcastStore }, { useSettingsStore }, { newScene }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/stores/settings-store"),
+      import("@/lib/scenes"),
+    ])
+    useSettingsStore.setState({ operatorName: "Tolu" })
+    const scene = newScene("Welcome")
+    useBroadcastStore.getState().saveScene(scene)
+
+    expect(useBroadcastStore.getState().scenes.find((saved) => saved.id === scene.id)).toMatchObject({ updatedBy: "Tolu" })
+  })
+
+  it("keeps the look revision taken with a scene until an explicit Take", async () => {
+    const [{ useBroadcastStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const state = useBroadcastStore.getState()
+    const theme = state.themes[0]
+    const scene = newScene("On air with a look", SCENE_PRESETS[0])
+    scene.layers[0] = { ...scene.layers[0], themeId: theme.id }
+    state.saveScene(scene)
+    state.takeScene("main", scene.id)
+
+    const expectedColor = theme.verseText.color
+    const editedTheme = { ...theme, verseText: { ...theme.verseText, color: "#ff00aa" } }
+    useBroadcastStore.getState().saveTheme(editedTheme)
+    useBroadcastStore.getState().syncBroadcastOutputFor("main")
+
+    expect(useBroadcastStore.getState().outputFrames.main.scene?.layers[0]).toMatchObject({
+      theme: { verseText: { color: expectedColor } },
+    })
+  })
+
+  it("keeps the church logo taken with a scene until an explicit Take", async () => {
+    const [{ useBroadcastStore }, { useSettingsStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/stores/settings-store"),
+      import("@/lib/scenes"),
+    ])
+    const scene = newScene("Welcome", SCENE_PRESETS.find((preset) => preset.id === "welcome")!)
+    useBroadcastStore.getState().saveScene(scene)
+    useSettingsStore.getState().setBrandKit({ ...useSettingsStore.getState().brandKit, logoUrl: "data:image/png;base64,first" })
+    useBroadcastStore.getState().takeScene("main", scene.id)
+
+    useSettingsStore.getState().setBrandKit({ ...useSettingsStore.getState().brandKit, logoUrl: "data:image/png;base64,second" })
+    useBroadcastStore.getState().syncBroadcastOutputFor("main")
+
+    expect(useBroadcastStore.getState().outputFrames.main.scene?.layers.find((layer) => layer.kind === "logo")?.imageUrl).toBe("data:image/png;base64,first")
+  })
+
+  it("can Take the scene and look revisions stored with an approved service", async () => {
+    const [{ useBroadcastStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const state = useBroadcastStore.getState()
+    const theme = state.themes[0]
+    const draft = newScene("Sermon", SCENE_PRESETS[0])
+    draft.layers[0] = { ...draft.layers[0], themeId: theme.id }
+    state.saveScene(draft)
+    const approved = { ...draft, background: "#001122", updatedAt: draft.updatedAt - 1 }
+
+    useBroadcastStore.getState().takeSceneRevision("main", approved, { themes: { [theme.id]: theme }, logoUrl: null }, "service-1", 7)
+    useBroadcastStore.getState().saveTheme({ ...theme, verseText: { ...theme.verseText, color: "#ff00aa" } })
+    useBroadcastStore.getState().syncBroadcastOutputFor("main")
+
+    expect(useBroadcastStore.getState().outputFrames.main.scene).toMatchObject({
+      background: "#001122",
+      layers: [{ theme: { verseText: { color: theme.verseText.color } } }],
+    })
+    expect(useBroadcastStore.getState().outputs[0].sceneAppearanceSnapshot).toMatchObject({ approved: { programId: "service-1", revision: 7 } })
+  })
+
+  it("keeps an approved scene, look, and logo pinned after output settings are reloaded", async () => {
+    const saved = new Map<string, unknown>()
+    const store = {
+      get: vi.fn(async (key: string) => structuredClone(saved.get(key))),
+      set: vi.fn(async (key: string, value: unknown) => { saved.set(key, structuredClone(value)) }),
+      save: vi.fn(async () => {}),
+    }
+    vi.doMock("@tauri-apps/plugin-store", () => ({ load: async () => store }))
+
+    try {
+      const initial = await import("./broadcast-store")
+      await initial.hydrateBroadcastThemes()
+      const { newScene, SCENE_PRESETS } = await import("@/lib/scenes")
+      const { useSettingsStore } = await import("@/stores/settings-store")
+      const state = initial.useBroadcastStore.getState()
+      const theme = state.themes[0]
+      const approvedColor = "#445566"
+      const approvedLogo = "data:image/png;base64,approved-logo"
+      const approvedTheme = { ...theme, verseText: { ...theme.verseText, color: approvedColor } }
+      const scene = newScene("Approved service", SCENE_PRESETS.find((preset) => preset.id === "welcome")!)
+      scene.background = "#001122"
+      scene.layers.push({ ...newScene("Feed").layers[0], name: "Scripture", themeId: theme.id })
+      useSettingsStore.getState().setBrandKit({ ...useSettingsStore.getState().brandKit, logoUrl: approvedLogo })
+      state.saveScene(scene)
+      initial.useBroadcastStore.getState().takeSceneRevision(
+        "main", scene, { themes: { [theme.id]: approvedTheme }, logoUrl: approvedLogo }, "service-1", 7,
+      )
+      await initial.flushThemeSave()
+
+      vi.resetModules()
+      const restarted = await import("./broadcast-store")
+      await restarted.hydrateBroadcastThemes()
+      const { useSettingsStore: restartedSettings } = await import("@/stores/settings-store")
+      restartedSettings.getState().setBrandKit({ ...restartedSettings.getState().brandKit, logoUrl: "data:image/png;base64,new-logo" })
+      const afterRestart = restarted.useBroadcastStore.getState()
+      const savedScene = afterRestart.scenes.find((candidate) => candidate.id === scene.id)!
+      afterRestart.saveScene({ ...savedScene, background: "#abcdef" })
+      const savedTheme = afterRestart.themes.find((candidate) => candidate.id === theme.id)!
+      afterRestart.saveTheme({ ...savedTheme, verseText: { ...savedTheme.verseText, color: "#aabbcc" } })
+      afterRestart.syncBroadcastOutputFor("main")
+
+      const output = restarted.useBroadcastStore.getState().outputs.find((candidate) => candidate.id === "main")!
+      expect(output.sceneSnapshot?.background).toBe("#001122")
+      expect(output.sceneAppearanceSnapshot).toMatchObject({
+        logoUrl: approvedLogo,
+        themes: { [theme.id]: { verseText: { color: approvedColor } } },
+        approved: { programId: "service-1", revision: 7 },
+      })
+      expect(restarted.useBroadcastStore.getState().outputFrames.main.scene).toMatchObject({
+        background: "#001122",
+        layers: expect.arrayContaining([
+          expect.objectContaining({ kind: "feed", theme: expect.objectContaining({ verseText: expect.objectContaining({ color: approvedColor }) }) }),
+          expect.objectContaining({ kind: "logo", imageUrl: approvedLogo }),
+        ]),
+      })
+    } finally {
+      vi.doUnmock("@tauri-apps/plugin-store")
+    }
+  })
+
+  it("restores the taken scene AND appearance after rehearsal with a newer reusable look", async () => {
+    const { useBroadcastStore, outputsForScreens } = await import("./broadcast-store")
+    const { newScene } = await import("@/lib/scenes")
+    const b = useBroadcastStore.getState()
+    const scene = newScene("Synthetic rehearsal")
+    b.saveScene(scene)
+    b.takeScene("main", scene.id)
+    const taken = structuredClone(useBroadcastStore.getState().outputs[0])
+    b.setRehearsal(true)
+    const theme = b.themes[0]
+    b.saveTheme({ ...theme, updatedAt: theme.updatedAt + 1, verseText: { ...theme.verseText, color: "#123456" } })
+    b.saveScene({ ...scene, background: "#abcdef" })
+    b.takeScene("main", scene.id)
+    expect(outputsForScreens(useBroadcastStore.getState())[0]).toEqual(taken)
+    expect(useBroadcastStore.getState().outputs[0].sceneSnapshot?.background).toBe("#abcdef")
+    b.setRehearsal(false)
+    expect(useBroadcastStore.getState().outputs[0]).toEqual(taken)
   })
 
   it("duplicateOutput copies config with fresh id, unique name and NDI source name", async () => {
