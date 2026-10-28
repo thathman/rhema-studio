@@ -6,7 +6,7 @@ computer's OBS as Media Sources. OBS then cuts between them on its own; the scre
 never changed from here. Rhema shows, in Production → Cameras, which cameras this OBS has on
 program and preview.
 
-Version 1.0.0.0 (the build tools take three parts, so files say 1.0.0).
+Version 1.1.0.0 (the build tools take three parts, so files say 1.1.0).
 
 ## App or mode?
 
@@ -71,7 +71,6 @@ Build from a fresh clone (no `models/` or `data/rhema.db` needed):
 ```powershell
 git clone https://github.com/thathman/rhema-studio.git
 cd rhema-studio
-git checkout comp-051/companion-app   # until it is merged
 bun install
 bun run companion:build
 ```
@@ -79,7 +78,7 @@ bun run companion:build
 The results:
 
 - `companion-app\src-tauri\target\release\Rhema Studio Companion.exe` — runs as it is.
-- `companion-app\src-tauri\target\release\bundle\nsis\Rhema Studio Companion_1.0.0_x64-setup.exe` — the
+- `companion-app\src-tauri\target\release\bundle\nsis\Rhema Studio Companion_1.1.0_x64-setup.exe` — the
   installer (per-user, no administrator needed).
 
 First build on the Windows workstation (2026-10-24): about 6 minutes; `Rhema Studio Companion.exe` 10.3 MB,
@@ -120,5 +119,5 @@ signed; the first open needs right-click → Open). On an Intel Mac building for
   the pinned https link, its own files, the tray and starting with the computer. No NDI, speech,
   models, Bible, content database or camera router.
 - `companion-app/src-tauri/icons`: the owner's approved Rhema Studio icon from the brand pack
-  (`04_Launcher_Assets`): `icon.ico`, `icon.icns` and `512x512.png` (Companion-Launcher-512) byte for
+  (`04_Launcher_Icons`): `icon.ico`, `icon.icns` and `512x512.png` byte for
   byte; the 32, 128 and 256 pixel PNGs are scaled down from that 512 PNG, never redrawn.

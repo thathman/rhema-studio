@@ -133,6 +133,19 @@ describe("computeReadiness", () => {
     const newer = computeReadiness({ ...good, unsupportedItems: 2 })
     expect(newer.ready).toBe(false)
     expect(newer.checks.find((c) => c.id === "unsupported-items")?.label).toContain("2 items")
+    expect(newer.checks.find((c) => c.id === "unsupported-items")?.label).toContain("newer version")
+  })
+
+  it("describes unreadable saved items as data problems rather than version skew", () => {
+    const r = computeReadiness({ ...good, corruptItems: 1, unsupportedItems: 1 })
+    expect(r.ready).toBe(false)
+    expect(r.checks.find((c) => c.id === "corrupt-items")).toMatchObject({
+      status: "warn",
+      label: "1 saved item could not be read",
+      detail: expect.stringContaining("backup"),
+      fix: "prepare",
+    })
+    expect(r.checks.find((c) => c.id === "unsupported-items")?.label).toContain("newer version")
   })
 
   it("an unapproved service is a warning when 'Ask before showing' is on (the first go-live will ask)", () => {

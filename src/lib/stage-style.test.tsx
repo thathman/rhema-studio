@@ -37,4 +37,12 @@ describe("stage display design (DS-004)", () => {
     expect(el.textContent).not.toContain("NEXT")
     expect(el.textContent).not.toContain("End of service")
   })
+
+  it("shows a missing-language notice even when operator notes are hidden", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const el = document.createElement("div")
+    const fallback = { ...stage, languageNotice: "Second language unavailable; showing available text." }
+    await act(async () => createRoot(el).render(<StageView stage={applyStageStyle(fallback, { ...DEFAULT_STAGE_STYLE, showNote: false })} />))
+    expect(el.querySelector('[role="status"]')?.textContent).toBe("Second language unavailable; showing available text.")
+  })
 })

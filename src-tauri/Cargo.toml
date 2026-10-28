@@ -31,7 +31,8 @@ missing_panics_doc = "allow"
 
 [package]
 name = "rhema"
-version = "0.3.2"
+# App version 0.3.3.0 (A.B.C.D); Cargo and Tauri use the first three parts.
+version = "0.3.3"
 description = "Rhema Studio - church service planning, live Scripture and production (built on Rhema by OpenBezal)"
 authors = ["Rhema Studio contributors", "OpenBezal (original Rhema)"]
 license = "MIT"

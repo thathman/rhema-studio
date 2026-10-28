@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { useQueueStore } from "./queue-store"
-import type { VerseQueueItem } from "@/types"
-import type { Verse } from "@/types"
+import type { QueueItem, VerseQueueItem, Verse } from "@/types"
 
 function makeVerse(overrides: Partial<Verse> = {}): Verse {
   return {
@@ -30,8 +29,10 @@ function makeItem(overrides: Partial<VerseQueueItem> = {}, verse: Partial<Verse>
 }
 
 beforeEach(() => {
-  useQueueStore.setState({ items: [], activeIndex: null, highlightedId: null })
+  useQueueStore.setState({ items: [], headers: [], activeIndex: null, highlightedId: null, addTarget: null })
 })
+
+const slide = (id: string): QueueItem => ({ id, kind: "slide", slide: { title: id, body: "" }, reference: id, confidence: 1, source: "manual", added_at: 0 })
 
 describe("addItem", () => {
   it("prepends a new item", () => {
@@ -42,20 +43,97 @@ describe("addItem", () => {
     expect(items.map((i) => i.id)).toEqual(["b", "a"])
   })
 
-  it("drops an exact duplicate that adds no text", () => {
-    useQueueStore.getState().addItem(makeItem({ id: "a" }))
-    useQueueStore.getState().addItem(makeItem({ id: "b" }))
+  it("allows an explicit repeat of a Scripture reading in a separate phase with its own settings", () => {
+    const prayer = makeItem({ id: "prayer-reading", translation: "KJV", notes: "Opening prayer", planned_minutes: 2, scene_id: "prayer-scene" })
+    const sermon = makeItem({ id: "sermon-reading", translation: "OYCB", notes: "Sermon", planned_minutes: 40, scene_id: "sermon-scene" }, { translation_id: 7 })
+    useQueueStore.setState({
+      items: [prayer],
+      headers: [
+        { id: "prayer", type: "phase", name: "Opening Prayer", at: 0 },
+        { id: "sermon", type: "phase", name: "Sermon", at: 1 },
+      ],
+      addTarget: "sermon",
+    })
+
+    expect(useQueueStore.getState().addItem(sermon, "end")).toBe("sermon-reading")
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["prayer-reading", "sermon-reading"])
+    expect(useQueueStore.getState().items[1]).toMatchObject({
+      id: "sermon-reading",
+      translation: "OYCB",
+      notes: "Sermon",
+      planned_minutes: 40,
+      scene_id: "sermon-scene",
+      verse: { translation_id: 7, book_number: 43, chapter: 3, verse: 16 },
+    })
+    expect(useQueueStore.getState().headers.map(({ id, at }) => [id, at])).toEqual([["prayer", 0], ["sermon", 1]])
+  })
+
+  it("returns the inserted id and places an item at the start by default", () => {
+    useQueueStore.setState({ items: [slide("existing")] })
+    expect(useQueueStore.getState().addItem(slide("new"))).toBe("new")
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["new", "existing"])
+  })
+
+  it("appends without moving existing items when no section is selected", () => {
+    useQueueStore.setState({ items: [slide("a"), slide("b")] })
+    expect(useQueueStore.getState().addItem(slide("new"), "end")).toBe("new")
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["a", "b", "new"])
+  })
+
+  it("inserts at the end of a selected middle phase by stable item id", () => {
+    useQueueStore.setState({
+      items: [slide("pre"), slide("main-a"), slide("main-b"), slide("post")],
+      headers: [
+        { id: "pre", type: "phase", name: "Before", at: 0 },
+        { id: "main", type: "phase", name: "Main", at: 1 },
+        { id: "post", type: "phase", name: "After", at: 3 },
+      ],
+      addTarget: "main",
+    })
+    const insertedId = useQueueStore.getState().addItem(slide("new"), "end")!
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["pre", "main-a", "main-b", insertedId, "post"])
+    expect(useQueueStore.getState().headers.map(({ id, at }) => [id, at])).toEqual([["pre", 0], ["main", 1], ["post", 4]])
+  })
+
+  it("inserts at the end of a nested group without crossing the next group", () => {
+    useQueueStore.setState({
+      items: [slide("phase-item"), slide("group-item"), slide("nested-item"), slide("next-group-item")],
+      headers: [
+        { id: "phase", type: "phase", name: "Main", at: 0 },
+        { id: "group", type: "group", name: "Worship", at: 1 },
+        { id: "nested", type: "group", name: "Songs", at: 2 },
+        { id: "next-group", type: "group", name: "Sermon", at: 3 },
+      ],
+      addTarget: "nested",
+    })
+    const insertedId = useQueueStore.getState().addItem(slide("new"), "end")!
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["phase-item", "group-item", "nested-item", insertedId, "next-group-item"])
+    expect(useQueueStore.getState().headers.map(({ id, at }) => [id, at])).toEqual([["phase", 0], ["group", 1], ["nested", 2], ["next-group", 4]])
+  })
+
+  it("deduplicates AI verse suggestions across source and translation", () => {
+    useQueueStore.getState().addItem(makeItem({ id: "a", source: "ai-direct" }))
+    useQueueStore.getState().addItem(makeItem({ id: "b", source: "ai-semantic" }, { translation_id: 7 }))
 
     const items = useQueueStore.getState().items as VerseQueueItem[]
     expect(items).toHaveLength(1)
     expect(items[0].id).toBe("a")
   })
 
+  it("finds the active occurrence when a Scripture reference appears more than once", () => {
+    useQueueStore.setState({
+      items: [makeItem({ id: "prayer", source: "manual" }), makeItem({ id: "sermon", source: "manual" })],
+      activeIndex: 1,
+    })
+
+    expect(useQueueStore.getState().findDuplicate(43, 3, 16)).toBe(1)
+  })
+
   it("backfills text on a duplicate when the existing item has no text", () => {
-    useQueueStore.getState().addItem(makeItem({ id: "a" }, { text: "" }))
+    useQueueStore.getState().addItem(makeItem({ id: "a", source: "ai-direct" }, { text: "" }))
     useQueueStore
       .getState()
-      .addItem(makeItem({ id: "b", added_at: 99 }, { text: "For God so loved the world" }))
+      .addItem(makeItem({ id: "b", source: "ai-semantic", added_at: 99 }, { text: "For God so loved the world" }))
 
     const items = useQueueStore.getState().items as VerseQueueItem[]
     expect(items).toHaveLength(1)
@@ -65,8 +143,8 @@ describe("addItem", () => {
   })
 
   it("does not overwrite existing text on a duplicate", () => {
-    useQueueStore.getState().addItem(makeItem({ id: "a" }, { text: "original text" }))
-    useQueueStore.getState().addItem(makeItem({ id: "b" }, { text: "different text" }))
+    useQueueStore.getState().addItem(makeItem({ id: "a", source: "ai-direct" }, { text: "original text" }))
+    useQueueStore.getState().addItem(makeItem({ id: "b", source: "ai-semantic" }, { text: "different text" }))
 
     expect((useQueueStore.getState().items[0] as VerseQueueItem).verse.text).toBe("original text")
   })

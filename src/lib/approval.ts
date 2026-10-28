@@ -3,6 +3,8 @@ import { isImageItem, isSongItem } from "@/types"
 
 export type ApprovalState = "approved" | "changed" | "none"
 
+export type EventPlanApprovalState = "draft" | "approved" | "changed"
+
 /**
  * Where a saved service stands against its approval: approved as it is,
  * changed since (saved again after approving), or never approved.
@@ -10,6 +12,16 @@ export type ApprovalState = "approved" | "changed" | "none"
 export function approvalState(p: Pick<Program, "revision" | "approved_revision"> | null): ApprovalState {
   if (!p || p.approved_revision === null || p.approved_revision === undefined) return "none"
   return p.approved_revision === p.revision ? "approved" : "changed"
+}
+
+/** An event shares its saved service's approval revision. Unsaved edits make it stale. */
+export function eventPlanApprovalState(
+  p: Pick<Program, "revision" | "approved_revision"> | null,
+  dirty: boolean,
+): EventPlanApprovalState {
+  if (!p || p.approved_revision === null || p.approved_revision === undefined) return "draft"
+  if (dirty || p.approved_revision !== p.revision) return "changed"
+  return "approved"
 }
 
 export function approvalLabel(p: Pick<Program, "revision" | "approved_revision" | "approved_at" | "approved_by"> | null): string {

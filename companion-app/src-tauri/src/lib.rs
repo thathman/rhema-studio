@@ -14,7 +14,7 @@ use tauri::Manager;
 pub const STARTED_HIDDEN: &str = "--hidden";
 
 /// The app's version as the church's other software counts it (A.B.C.D); Cargo and Tauri take three parts.
-pub const VERSION: &str = "1.0.0.0";
+pub const VERSION: &str = "1.1.0.0";
 
 /// Bring the window forward (from the tray, a second launch, or the Dock).
 pub fn show(app: &tauri::AppHandle) {

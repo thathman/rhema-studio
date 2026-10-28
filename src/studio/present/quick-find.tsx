@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { parseBookChapter } from "@/lib/quick-search"
 import { resolveQuickFind } from "@/lib/quick-find-resolver"
 import { songQueueItem } from "@/lib/lyrics"
+import { isHymnSong } from "@/lib/song-kind"
 import { fuzzySongs } from "@/lib/fuzzy"
 import { bibleActions } from "@/hooks/use-bible"
 import { useBibleStore, useBroadcastStore, useQueueStore } from "@/stores"
@@ -24,7 +25,7 @@ type Hit = { kind: "verse"; verse: Verse } | { kind: "song"; song: SongSummary }
  * presented — Show live is a separate action. In `prepare` mode each result
  * can be added to the service.
  */
-export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" | "present"; autoFocus?: boolean; scope?: "all" | "bible" }) {
+export function QuickFind({ mode, autoFocus, scope = "all", onAdded }: { mode: "prepare" | "present"; autoFocus?: boolean; scope?: "all" | "bible"; onAdded?: (id: string) => void }) {
   const bibleOnly = scope === "bible"
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<Hit[]>([])
@@ -135,8 +136,7 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
 
   const add = (hit: Hit) => {
     const queue = useQueueStore.getState()
-    const before = queue.items.length
-    queue.addItem(
+    const id = queue.addItem(
       hit.kind === "verse"
         ? {
             id: crypto.randomUUID(),
@@ -146,11 +146,10 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
             source: "manual",
             added_at: Date.now(),
           }
-        : songQueueItem(hit.song)
+        : songQueueItem(hit.song),
+      "end",
     )
-    // The queue store prepends (newest detection first); a service reads top-down.
-    const after = useQueueStore.getState().items.length
-    if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
+    if (id) onAdded?.(id)
   }
 
   return (
@@ -204,6 +203,7 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
         )}
         {results.map((hit) => {
           const key = hit.kind === "verse" ? `v-${hit.verse.book_number}-${hit.verse.chapter}-${hit.verse.verse}` : `s-${hit.song.id}`
+          const hymn = hit.kind === "song" && isHymnSong({ hymn_numbers: hit.song.numbers }, hit.song.tags)
           const isSel =
             hit.kind === "verse"
               ? !selectedSlide && !!selected && selected.book_number === hit.verse.book_number && selected.chapter === hit.verse.chapter && selected.verse === hit.verse.verse
@@ -229,7 +229,8 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
                 ) : (
                   <>
                     <span className="flex items-center gap-1.5 text-xs font-semibold">
-                      <MusicIcon className="size-3 text-muted-foreground" aria-label="Song" />
+                      <MusicIcon className="size-3 text-muted-foreground" aria-label={hymn ? "Hymn" : "Song"} />
+                      {hymn && <span className="rounded border border-border px-1 text-[0.6875rem] font-normal text-muted-foreground">Hymn</span>}
                       {hit.song.title}
                       {hit.song.numbers.map((n) => (
                         <span key={n} className="rounded border border-border px-1 text-[0.6875rem] font-normal text-muted-foreground">{n}</span>
@@ -270,7 +271,7 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
 /**
  * The Bible tab's own choice of version: the Bible verses are found and added
  * in, and the second language beside it. These are the operator's active
- * versions (the same as in Settings and the Advanced view); a verse already
+ * versions (the same as in Settings and Bible search); a verse already
  * saved in a service keeps the version it was saved with.
  */
 function BibleVersions() {

@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 import { PRODUCT_NAMES } from "@/lib/brand"
 import { BrandMark } from "@/components/brand-mark"
+import { ProductLockup } from "@/components/product-lockup"
 import { useShellStore, type Workspace } from "@/studio/shell-store"
 import { DeskMenu } from "@/studio/shell/desk-menu"
 import { WORKSPACE_ITEMS, type NavItem } from "@/studio/shell/nav-items"
@@ -107,10 +108,9 @@ export function Sidebar({
       data-collapsed={collapsed ? "true" : undefined}
       className="sticky top-0 flex h-full min-h-0 w-[194px] flex-col overflow-x-hidden overflow-y-auto bg-sidebar text-sidebar-foreground transition-[width] duration-150 ease-out compact:w-[72px]"
     >
-      {/* The approved mark (white square on the ink sidebar) and the name in the app's own font. */}
-      <div className="flex items-center gap-2.5 px-4 pt-[21px] pb-[22px] compact:justify-center compact:px-0" title={PRODUCT_NAMES.studio}>
-        <BrandMark tone="light" className="size-[38px]" />
-        <span className="text-[1.0625rem] leading-none font-bold tracking-[-0.03em] whitespace-nowrap text-[#f2f6f3] compact:sr-only">{PRODUCT_NAMES.studio}</span>
+      {/* Use the supplied Studio wordmark while expanded; keep the master mark legible when compact. */}
+      <div className="flex min-h-[82px] items-center gap-2.5 px-4 pt-[21px] pb-[22px] compact:justify-center compact:px-0" title={PRODUCT_NAMES.studio}>
+        {compact ? <><BrandMark tone="light" className="size-[38px]" /><span className="sr-only">{PRODUCT_NAMES.studio}</span></> : <ProductLockup product="studio" tone="onDark" className="h-[34px] max-w-full" />}
       </div>
       <Group label="Workspace" first>
         {WORKSPACE_ITEMS.map((item) => (

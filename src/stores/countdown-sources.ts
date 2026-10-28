@@ -16,7 +16,7 @@ let last = ""
 
 function push() {
   const timers = useAuxTimers.getState().timers
-  const current = useQueueStore.getState().items.find((i) => i.id === useEventClock.getState().currentId)
+  const current = useQueueStore.getState().items.find((i) => i.id === useEventClock.getState().currentMomentId)
   const warn = itemWarnMs(current)
   // The timers as they stand (not as counted now), so a resend happens only on a real change.
   const key = JSON.stringify([timers.map((t) => [t.label, t.timer]), timing, warn])
@@ -33,4 +33,4 @@ export function updateCountdownTiming(t: ServiceTiming | null): void {
 }
 
 useAuxTimers.subscribe((s, prev) => { if (s.timers !== prev.timers) push() })
-useEventClock.subscribe((s, prev) => { if (s.currentId !== prev.currentId) push() })
+useEventClock.subscribe((s, prev) => { if (s.currentId !== prev.currentId || s.currentMomentId !== prev.currentMomentId) push() })

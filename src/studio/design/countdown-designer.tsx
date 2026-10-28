@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button"
 import { useBroadcastStore } from "@/stores"
 import { useAuxTimers } from "@/stores/aux-timers-store"
 import { drawCountdown } from "@/lib/countdown-canvas"
-import { countdownText, CountdownFade, DEFAULT_COUNTDOWN_LOOK, MAX_STEPS, parseTimeLeft, stepThresholds, timeLeftText } from "@/lib/countdown-display"
+import { countdownText, CountdownFade, DEFAULT_COUNTDOWN_LOOK, MAX_STEPS, normalizeCountdownLook, parseTimeLeft, stepThresholds, timeLeftText } from "@/lib/countdown-display"
 import type { CountdownCounts, CountdownFrame, CountdownLook, CountdownStep } from "@/types"
 import { Colour, Row } from "@/studio/design/lower-third-designer"
+import { DesignDraftActions } from "@/studio/design/design-draft-actions"
+import { useDesignDraft } from "@/studio/design/use-design-draft"
 
 const COUNTS: ReadonlyArray<readonly [CountdownCounts, string]> = [
   ["timer", "The service timer (Present)"],
@@ -48,23 +50,27 @@ function TimeLeft({ seconds, onChange, label }: { seconds: number; onChange: (s:
 
 /**
  * The countdown display (Design → Countdown): one big time for the stage, a confidence monitor or
- * a TV at the back, whose whole screen changes colour in steps as time runs out. Changes apply at
- * once, on air too. The preview's slider walks the time from the start into overtime, so each step
+ * a TV at the back, whose whole screen changes colour in steps as time runs out. Edits stay in a
+ * draft until deliberately applied. The preview's slider walks the time from the start into overtime, so each step
  * can be seen before Sunday.
  */
 export function CountdownDesigner() {
-  const look = useBroadcastStore((s) => s.countdownLook)
+  const publishedLook = useBroadcastStore((s) => s.countdownLook)
   const message = useBroadcastStore((s) => s.stageMessage)
+  const outputs = useBroadcastStore((s) => s.outputs)
   const auxTimers = useAuxTimers((s) => s.timers)
   const targets = useBroadcastStore((s) => s.countdowns)
+  const draft = useDesignDraft("countdown", "default", publishedLook, normalizeCountdownLook)
+  const look = draft.value
   const targetChoices = Object.entries((look.counts === "groupEnd" ? targets?.groupEnds : targets?.starts) ?? {})
   const canvas = useRef<HTMLCanvasElement>(null)
   const fade = useRef(new CountdownFade())
   const [at, setAt] = useState(100)
   const [sampleMessage, setSampleMessage] = useState(false)
-  const save = (next: CountdownLook) => useBroadcastStore.getState().saveCountdownLook(next)
-  const patch = (p: Partial<CountdownLook>) => save({ ...look, ...p })
+  const patch = (p: Partial<CountdownLook>) => draft.update(normalizeCountdownLook({ ...look, ...p }))
   const patchStep = (i: number, p: Partial<CountdownStep>) => patch({ steps: look.steps.map((s, k) => (k === i ? { ...s, ...p } : s)) })
+  const liveOutputs = outputs.filter((output) => output.role === "stage" && output.stageLayout === "countdown").map((output) => output.name)
+  const apply = () => useBroadcastStore.getState().saveCountdownLook(normalizeCountdownLook(look))
 
   const total = sampleTotal(look)
   const leftMs = Math.round((total * at) / 100)
@@ -98,7 +104,17 @@ export function CountdownDesigner() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">One big countdown for the stage, a confidence monitor or a TV at the back of the hall. The whole screen changes colour as time runs out, with your messages under the time; over time it counts on in the last step's colours. Changes apply at once, on air too.</p>
+      <p className="text-sm text-muted-foreground">One big countdown for the stage, a confidence monitor or a TV at the back of the hall. The whole screen changes colour as time runs out, with your messages under the time; over time it counts on in the last step's colours. Preview and save a draft here; applying is deliberate.</p>
+      <DesignDraftActions
+        dirty={draft.dirty}
+        saved={draft.saved}
+        scope="Stage outputs configured to show the Countdown display"
+        outputs={liveOutputs}
+        onSave={draft.save}
+        onDiscard={draft.discard}
+        onApply={apply}
+        onApplied={draft.markApplied}
+      />
       <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
         <div className="flex min-w-0 flex-col gap-2 xl:sticky xl:top-0">
           <canvas ref={canvas} width={1280} height={720} className="aspect-video w-full rounded-lg border border-border" role="img" aria-label={`Countdown display preview at ${countdownText(total, leftMs)}`} />
@@ -224,7 +240,7 @@ export function CountdownDesigner() {
             ))}
           </fieldset>
           <div>
-            <Button size="xs" variant="outline" onClick={() => save(DEFAULT_COUNTDOWN_LOOK)}>Back to the built-in look</Button>
+            <Button size="xs" variant="outline" onClick={() => draft.update(normalizeCountdownLook(DEFAULT_COUNTDOWN_LOOK))}>Reset draft to the built-in look</Button>
           </div>
         </div>
       </div>

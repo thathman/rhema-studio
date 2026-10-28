@@ -108,6 +108,8 @@ export interface Scene {
   fadeMs?: number
   createdAt: number
   updatedAt: number
+  /** The operator who last saved this reusable design, when known. */
+  updatedBy?: string | null
   /** The Design → Library look this was copied from (Reset puts it back as that look has it). */
   libraryLookId?: string
 }

@@ -23,6 +23,7 @@ public final class CameraCoreCheck {
     static final String LINK = "rhema-camera://pair?host=192.168.1.20&port=8322&name=pulpit&user=cam-pulpit&token=" + TOKEN + "&fp=" + FP + "&label=Pulpit%20cam";
 
     public static void main(String[] args) throws Exception {
+        camActions();
         pairing();
         rtp();
         sdp();
@@ -40,6 +41,24 @@ public final class CameraCoreCheck {
             System.exit(1);
         }
         System.out.println("camera checks passed");
+    }
+
+    static void camActions() {
+        CamAction.State unpaired = CamAction.resolve(false, false, false);
+        check("cam action: unpaired idle says NOT SENDING and offers CONNECT",
+                unpaired.status.equals("NOT SENDING") && unpaired.action.equals("CONNECT"));
+
+        CamAction.State paired = CamAction.resolve(true, false, false);
+        check("cam action: paired idle says NOT SENDING and offers SEND",
+                paired.status.equals("NOT SENDING") && paired.action.equals("SEND"));
+
+        CamAction.State connecting = CamAction.resolve(true, true, false);
+        check("cam action: active sender without a live publisher says CONNECTING",
+                connecting.status.equals("CONNECTING") && connecting.action.isEmpty());
+
+        CamAction.State live = CamAction.resolve(true, true, true);
+        check("cam action: live publisher says LIVE",
+                live.status.equals("LIVE") && live.action.isEmpty());
     }
 
     static void pairing() {

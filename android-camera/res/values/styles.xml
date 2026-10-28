@@ -5,8 +5,6 @@
     <color name="card">#FF1A262E</color>
     <color name="teal">#FF256D68</color>
     <color name="teal_text">#FF5FB3A8</color>
-    <!-- Behind the launcher mark: white, so the black rounded square reads whole in any mask. -->
-    <color name="launcher_background">#FFFFFFFF</color>
     <style name="Viewfinder" parent="android:Theme.Material.NoActionBar.Fullscreen">
         <item name="android:windowBackground">@android:color/black</item>
         <item name="android:colorAccent">@color/teal_text</item>
