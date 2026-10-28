@@ -154,9 +154,9 @@ export function lowerThirdWords(lt: Pick<LowerThird, "line1" | "line2" | "follow
 }
 
 /** How many outputs follow a kind of content: on their own, or through the scene they show (a scene's feed layer). */
-export function followerCount(kind: ContentType, outputs: readonly { shows?: readonly FeedSourceKind[]; sceneId?: string; role?: string }[], scenes: readonly { id: string; layers: readonly { kind: string; shows?: readonly ContentType[] }[] }[]): number {
+export function followerCount(kind: ContentType, outputs: readonly { shows?: readonly FeedSourceKind[]; sceneId?: string; role?: string; sceneSnapshot?: { id: string; layers: readonly { kind: string; shows?: readonly ContentType[] }[] } }[], scenes: readonly { id: string; layers: readonly { kind: string; shows?: readonly ContentType[] }[] }[]): number {
   const sceneFollows = new Set(scenes.filter((sc) => sc.layers.some((l) => l.kind === "feed" && l.shows?.includes(kind))).map((sc) => sc.id))
-  return outputs.filter((o) => o.shows?.includes(kind) || (o.sceneId !== undefined && (o.role ?? "congregation") === "congregation" && sceneFollows.has(o.sceneId))).length
+  return outputs.filter((o) => o.shows?.includes(kind) || (o.sceneId !== undefined && (o.role ?? "congregation") === "congregation" && (o.sceneSnapshot?.id === o.sceneId ? o.sceneSnapshot.layers.some((l) => l.kind === "feed" && l.shows?.includes(kind)) : sceneFollows.has(o.sceneId)))).length
 }
 
 /** The ticker's first words, for the strip, the log and joined desks. */

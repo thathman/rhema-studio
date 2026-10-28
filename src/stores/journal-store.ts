@@ -10,6 +10,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { lowerThirdWords, tickerWords, type SourceId, type StateSource, type StateSourceId } from "@/lib/live-sources"
 import { cameraWords } from "@/lib/show-health"
+import { sceneForOutput } from "@/lib/scenes"
 import type { ContentType } from "@/types/broadcast"
 
 interface JournalState {
@@ -126,16 +127,17 @@ useBroadcastStore.subscribe((s, prev) => {
   if (s.outputs === prev.outputs) return
   for (const o of s.outputs) {
     const was = prev.outputs.find((x) => x.id === o.id)
-    if (!was || was.sceneId === o.sceneId) continue
-    const name = o.sceneId ? s.scenes.find((x) => x.id === o.sceneId)?.name ?? "a scene" : null
-    // The Take (or release) that made this change; none when a scene was deleted or rehearsal ended.
+    if (!was) continue
     const take = s.sceneTakes[o.id]
     const own = take && toldTakes.get(o.id) !== take.revision && take.sceneId === (o.sceneId ?? null) ? take : undefined
+    if (was.sceneId === o.sceneId && !own && was.sceneSnapshot?.updatedAt === o.sceneSnapshot?.updatedAt) continue
+    const name = o.sceneId ? sceneForOutput(o, s.scenes)?.name ?? "a scene" : null
+    // The Take (or release) that made this change; none when a scene was deleted or rehearsal ended.
     if (own) toldTakes.set(o.id, own.revision)
     const by = own?.by ? ` · by ${own.by}` : ""
     useJournalStore.getState().add({
       kind: "scene",
-      label: name ? `${o.name}: ${name}${by}` : `${o.name}: back to its own feed${by}`,
+      label: name ? `${o.name}: ${was.sceneId === o.sceneId ? `refreshed ${name}` : name}${by}` : `${o.name}: back to its own feed${by}`,
       outputId: o.id,
       ...(o.sceneId ? { sceneId: o.sceneId } : {}),
       ...(own ? { revision: own.revision, ...(own.by ? { by: own.by } : {}) } : {}),

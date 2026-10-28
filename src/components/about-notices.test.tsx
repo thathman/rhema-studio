@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client"
 import { describe, expect, it, vi } from "vitest"
 import { UPSTREAM_CREDIT } from "@/lib/brand"
 
-vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn(async () => "0.3.2") }))
+vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn(async () => "0.3.3") }))
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 describe("About (Settings → Help, More)", () => {
@@ -15,7 +15,7 @@ describe("About (Settings → Help, More)", () => {
     const root = createRoot(host)
     await act(async () => root.render(<AboutNotices />))
     const text = host.textContent!.replace(/\s+/g, " ")
-    expect(text).toContain("Rhema Studio v0.3.2")
+    expect(text).toContain("Rhema Studio v0.3.3")
     expect(text).toContain("Developed and maintained by Rhema Studio contributors.")
     expect(text).toContain(UPSTREAM_CREDIT)
     expect(text).toContain("Rhema Studio Receiver")
