@@ -188,6 +188,8 @@ interface BroadcastState {
    * rehearsal ends. `by`: who took it (default: see currentActor).
    */
   takeScene: (outputId: string, sceneId: string, by?: string) => void
+  /** Restore the exact scene/look snapshot previously taken to this output, independent of saved edits. */
+  restoreSceneSnapshot: (outputId: string, scene: Scene, appearance?: SceneAppearanceSnapshot, by?: string) => void
   /** Take an immutable scene/look revision stored with an approved service revision. */
   takeSceneRevision: (outputId: string, scene: Scene, appearance: SceneAppearanceSnapshot, programId: string, revision: number, by?: string, appearanceComplete?: boolean, approval?: { approvedAt?: string | null; approvedBy?: string | null }) => void
   /** Back to the output's own feed, full frame; Restore takes the scene again. */
@@ -1421,6 +1423,18 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const appearance = captureSceneAppearance(scene, output, s.themes, useSettingsStore.getState().brandKit.logoUrl)
     set({ sceneReturn: { ...s.sceneReturn, [outputId]: sceneId }, ...sceneTake(outputId, sceneId, by) })
     get().updateOutput(outputId, { sceneId, sceneSnapshot: structuredClone(normalizeScene(scene) ?? scene), sceneAppearanceSnapshot: appearance })
+  },
+  restoreSceneSnapshot: (outputId, scene, appearance, by = currentActor()) => {
+    const s = get()
+    const output = s.outputs.find((o) => o.id === outputId)
+    const snapshot = normalizeScene(scene)
+    if (!snapshot || !output || (output.role ?? "congregation") !== "congregation") return
+    set({ sceneReturn: { ...s.sceneReturn, [outputId]: snapshot.id }, ...sceneTake(outputId, snapshot.id, by) })
+    get().updateOutput(outputId, {
+      sceneId: snapshot.id,
+      sceneSnapshot: structuredClone(snapshot),
+      sceneAppearanceSnapshot: appearance ? structuredClone(appearance) : undefined,
+    })
   },
   takeSceneRevision: (outputId, scene, appearance, programId, revision, by = currentActor(), appearanceComplete = true, approval = {}) => {
     const output = get().outputs.find((o) => o.id === outputId)

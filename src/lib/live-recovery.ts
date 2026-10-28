@@ -2,18 +2,21 @@ import { invoke } from "@tauri-apps/api/core"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import { create } from "zustand"
 import { enableOutput } from "@/lib/broadcast-output-control"
+import { captureSceneAppearance, normalizeScene, sceneForOutput } from "@/lib/scenes"
+import { normalizeTheme } from "@/lib/theme-migrations"
 import type { LiveSources } from "@/lib/live-sources"
 import { outputOnAir } from "@/lib/output-on-air"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { capJournal, useJournalStore } from "@/stores/journal-store"
 import { useServiceStore } from "@/stores/service-store"
+import { useSettingsStore } from "@/stores/settings-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { elapsedMs } from "@/lib/timer"
 import type { JournalEntry } from "@/lib/journal"
 import { useNotices, type Notice } from "@/stores/notices-store"
 import { useTimingTrust, whilePuttingBack } from "@/stores/timing-trust-store"
-import type { VerseRenderData } from "@/types"
+import type { BroadcastTheme, Scene, SceneAppearanceSnapshot, VerseRenderData } from "@/types"
 
 /**
  * Recovery after Rhema closed unexpectedly mid-service (#246, live safety): what was on the
@@ -31,6 +34,8 @@ export interface LiveSnapshot {
   /** Outputs that were on, and the scene each showed. */
   outputsOn: string[]
   scenes: Record<string, string>
+  /** Immutable scene and look state captured with new v1 snapshots. Missing means a legacy v1 file. */
+  sceneSnapshots?: Record<string, { scene: Scene; appearance: SceneAppearanceSnapshot }>
   eventId: string | null
   /** The content moment in that event; older snapshots omit it. */
   eventMomentId?: string | null
@@ -49,6 +54,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false
   const prototype = Object.getPrototypeOf(value)
   return prototype === Object.prototype || prototype === null
+}
+
+function stableJSON(value: unknown): string {
+  const ordered = (current: unknown): unknown => {
+    if (Array.isArray(current)) return current.map(ordered)
+    if (!isRecord(current)) return current
+    return Object.fromEntries(Object.keys(current).sort().filter((key) => current[key] !== undefined).map((key) => [key, ordered(current[key])]))
+  }
+  return JSON.stringify(ordered(value)) ?? "undefined"
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -113,6 +127,73 @@ function parseVerseRenderData(value: unknown): VerseRenderData | null {
   return result
 }
 
+function parseScene(value: unknown, expectedId: string): Scene | null {
+  if (!isRecord(value) || value.id !== expectedId || typeof value.name !== "string" || typeof value.background !== "string" || !Array.isArray(value.layers) || !isFiniteNumber(value.createdAt) || !isFiniteNumber(value.updatedAt)) return null
+  const scene = normalizeScene(value)
+  // normalizeScene deliberately repairs ordinary imports. A recovery snapshot must not silently
+  // clamp geometry/opacity or sanitize fields into a different approved/on-air design.
+  if (!scene || scene.id !== expectedId || scene.layers.length !== value.layers.length || stableJSON(scene) !== stableJSON(value)) return null
+  return scene
+}
+
+function parseSceneAppearance(value: unknown, allowLegacyMissingMode = false): SceneAppearanceSnapshot | null {
+  if (!isRecord(value) || !isRecord(value.themes) || Object.keys(value.themes).length === 0 || (value.logoUrl !== null && typeof value.logoUrl !== "string")) return null
+  const themes: Record<string, BroadcastTheme> = {}
+  for (const [id, rawTheme] of Object.entries(value.themes)) {
+    if (!isRecord(rawTheme) || rawTheme.id !== id || typeof rawTheme.name !== "string" || !isRecord(rawTheme.background) || typeof rawTheme.background.color !== "string" || !isRecord(rawTheme.resolution) || !isFiniteNumber(rawTheme.resolution.width) || !isFiniteNumber(rawTheme.resolution.height) || !isRecord(rawTheme.layout) || !isRecord(rawTheme.verseText) || !isRecord(rawTheme.reference)) return null
+    const mode = rawTheme.layout.mode
+    let layout = rawTheme.layout
+    let themeValue = rawTheme
+    if (mode !== "stacked" && mode !== "free") {
+      if (!allowLegacyMissingMode || mode !== undefined) return null
+      layout = { ...rawTheme.layout, mode: "stacked" }
+      themeValue = { ...rawTheme, layout }
+    }
+    if (layout.mode === "free") {
+      for (const key of ["referenceBox", "verseBox"] as const) {
+        const box = layout[key]
+        if (!isRecord(box) || ![box.x, box.y, box.width, box.height].every(isFiniteNumber)) return null
+        const { x, y, width, height } = box as Record<"x" | "y" | "width" | "height", number>
+        // The designer contract stores each free-layout value as a percentage in 0..100.
+        if (x < 0 || x > 100 || y < 0 || y > 100 || width <= 0 || width > 100 || height <= 0 || height > 100) return null
+      }
+    }
+    const theme = normalizeTheme(themeValue as unknown as BroadcastTheme)
+    // New recovery snapshots must preserve the exact captured styling. The legacy output-record
+    // fallback remains tolerant because older persisted appearances may need their known defaults.
+    if (!allowLegacyMissingMode && stableJSON(theme) !== stableJSON(themeValue)) return null
+    themes[id] = theme
+  }
+  let approved: SceneAppearanceSnapshot["approved"]
+  if (value.approved !== undefined) {
+    const raw = value.approved
+    if (!isRecord(raw) || typeof raw.programId !== "string" || !Number.isSafeInteger(raw.revision) || (raw.revision as number) < 0 || (raw.appearanceComplete !== undefined && typeof raw.appearanceComplete !== "boolean") || (raw.approvedAt !== undefined && raw.approvedAt !== null && typeof raw.approvedAt !== "string") || (raw.approvedBy !== undefined && raw.approvedBy !== null && typeof raw.approvedBy !== "string")) return null
+    approved = { programId: raw.programId, revision: raw.revision as number, ...(raw.appearanceComplete === undefined ? {} : { appearanceComplete: raw.appearanceComplete }), ...(raw.approvedAt === undefined ? {} : { approvedAt: raw.approvedAt }), ...(raw.approvedBy === undefined ? {} : { approvedBy: raw.approvedBy }) }
+  }
+  return { themes, logoUrl: value.logoUrl, ...(approved === undefined ? {} : { approved }) }
+}
+
+/** Built-in themes from older app versions omitted the now-explicit stacked/free mode. */
+function canonicalCapturedAppearance(value: SceneAppearanceSnapshot): SceneAppearanceSnapshot | null {
+  if (!isRecord(value.themes)) return null
+  const themes: Record<string, unknown> = {}
+  for (const [id, rawTheme] of Object.entries(value.themes)) {
+    if (!isRecord(rawTheme) || !isRecord(rawTheme.layout)) return null
+    const mode = rawTheme.layout.mode
+    if (mode === undefined) themes[id] = { ...rawTheme, layout: { ...rawTheme.layout, mode: "stacked" } }
+    else themes[id] = rawTheme
+  }
+  return parseSceneAppearance({ ...value, themes })
+}
+
+function parseSceneSnapshot(value: unknown, expectedId: string): { scene: Scene; appearance: SceneAppearanceSnapshot } | null {
+  if (!isRecord(value)) return null
+  const scene = parseScene(value.scene, expectedId)
+  if (!scene) return null
+  const appearance = parseSceneAppearance(value.appearance)
+  return appearance ? { scene, appearance } : null
+}
+
 /** Validate and copy data read from recovery.json before any field reaches the live stores. */
 export function parseLiveSnapshot(value: unknown): LiveSnapshot | null {
   if (!isRecord(value) || value.v !== 1 || !isFiniteNumber(value.at) || typeof value.isLive !== "boolean") return null
@@ -143,6 +224,18 @@ export function parseLiveSnapshot(value: unknown): LiveSnapshot | null {
     if (typeof sceneId !== "string" || sceneId.length === 0) return null
     sceneEntries.push([outputId, sceneId])
   }
+  let sceneSnapshots: LiveSnapshot["sceneSnapshots"]
+  if (value.sceneSnapshots !== undefined) {
+    if (!isRecord(value.sceneSnapshots)) return null
+    sceneSnapshots = {}
+    for (const [outputId, rawSnapshot] of Object.entries(value.sceneSnapshots)) {
+      const sceneId = (value.scenes as Record<string, unknown>)[outputId]
+      if (typeof sceneId !== "string") return null
+      const snapshot = parseSceneSnapshot(rawSnapshot, sceneId)
+      if (!snapshot) return null
+      sceneSnapshots[outputId] = snapshot
+    }
+  }
   if (value.eventId !== null && typeof value.eventId !== "string") return null
   if (value.eventMomentId !== undefined && value.eventMomentId !== null && typeof value.eventMomentId !== "string") return null
   let timer: LiveSnapshot["timer"]
@@ -152,6 +245,7 @@ export function parseLiveSnapshot(value: unknown): LiveSnapshot | null {
     timer = { durationMs: savedTimer.durationMs, elapsedMs: savedTimer.elapsedMs, running: savedTimer.running }
   }
   if (value.trimmed !== undefined && typeof value.trimmed !== "boolean") return null
+  if (sceneSnapshots !== undefined && value.trimmed !== true && Object.keys(value.scenes).some((outputId) => !Object.hasOwn(sceneSnapshots, outputId))) return null
 
   return {
     v: 1,
@@ -163,6 +257,7 @@ export function parseLiveSnapshot(value: unknown): LiveSnapshot | null {
     sources,
     outputsOn: [...value.outputsOn],
     scenes: Object.fromEntries(sceneEntries),
+    ...(sceneSnapshots === undefined ? {} : { sceneSnapshots }),
     eventId: value.eventId,
     // Older v1 snapshots did not keep the selected moment separately.
     eventMomentId: value.eventMomentId ?? null,
@@ -250,6 +345,7 @@ export function restoreNotices(kept: KeptNotices | null | undefined, now = Date.
 export function takeSnapshot(now = Date.now()): LiveSnapshot {
   const b = useBroadcastStore.getState()
   const current = useServiceStore.getState().current
+  const sceneOutputs = b.outputs.filter((o) => o.sceneId && (o.role ?? "congregation") === "congregation")
   const snap: LiveSnapshot = {
     v: 1,
     at: now,
@@ -259,7 +355,15 @@ export function takeSnapshot(now = Date.now()): LiveSnapshot {
     liveItemId: b.liveItemId,
     sources: b.sources,
     outputsOn: b.outputs.filter((o) => outputOnAir(o, b.outputStatus[o.id])).map((o) => o.id),
-    scenes: Object.fromEntries(b.outputs.filter((o) => o.sceneId).map((o) => [o.id, o.sceneId!])),
+    scenes: Object.fromEntries(sceneOutputs.map((o) => [o.id, o.sceneId!])),
+    sceneSnapshots: Object.fromEntries(sceneOutputs.flatMap((o) => {
+      const scene = sceneForOutput(o, b.scenes)
+      if (!scene) return []
+      const rawAppearance = o.sceneAppearanceSnapshot ?? captureSceneAppearance(scene, o, b.themes, useSettingsStore.getState().brandKit.logoUrl)
+      const appearance = canonicalCapturedAppearance(rawAppearance)
+      if (!appearance) return []
+      return [[o.id, { scene: structuredClone(scene), appearance: structuredClone(appearance) }]]
+    })),
     eventId: useEventClock.getState().currentId,
     eventMomentId: useEventClock.getState().currentMomentId,
     timer: (() => {
@@ -267,7 +371,7 @@ export function takeSnapshot(now = Date.now()): LiveSnapshot {
       return t.durationMs || t.startedAt !== null || t.accumulatedMs ? { durationMs: t.durationMs, elapsedMs: Math.round(elapsedMs(t, monotonicNow())), running: t.startedAt !== null } : undefined
     })(),
   }
-  return JSON.stringify(snap).length > MAX_CHARS ? { ...snap, liveVerse: null, sources: {}, trimmed: true } : snap
+  return JSON.stringify(snap).length > MAX_CHARS ? { ...snap, liveVerse: null, sources: {}, sceneSnapshots: {}, trimmed: true } : snap
 }
 
 /** Whether a snapshot is worth offering: recent, and something was on the screens. */
@@ -284,13 +388,34 @@ export async function putBack(value: unknown): Promise<void> {
     return
   }
   const b = useBroadcastStore.getState()
-  // A trimmed snapshot has no sources: leave what is on now alone.
+  // A trimmed snapshot omits bulky sources; leave current sources alone.
   if (!s.trimmed) useBroadcastStore.setState({ sources: s.sources })
+  const sceneOmittedFromRecovery = new Set<string>()
   for (const [outputId, sceneId] of Object.entries(s.scenes)) {
-    if (b.scenes.some((x) => x.id === sceneId) && b.outputs.some((o) => o.id === outputId)) b.takeScene(outputId, sceneId)
+    const output = b.outputs.find((o) => o.id === outputId && (o.role ?? "congregation") === "congregation")
+    if (!output) {
+      sceneOmittedFromRecovery.add(outputId)
+      continue
+    }
+    const captured = s.sceneSnapshots?.[outputId]
+    if (captured?.scene.id === sceneId) {
+      b.restoreSceneSnapshot(outputId, captured.scene, captured.appearance)
+    } else if (s.sceneSnapshots === undefined && !s.trimmed && output.sceneSnapshot?.id === sceneId && output.sceneAppearanceSnapshot) {
+      // Legacy v1 snapshots contain only the ID. Use the immutable on-output snapshot persisted
+      // alongside the output, and its matching appearance capture; never resolve the ID against
+      // the mutable reusable-scene library or the current look values.
+      const scene = parseScene(output.sceneSnapshot, sceneId)
+      const appearance = parseSceneAppearance(output.sceneAppearanceSnapshot, true)
+      if (scene && appearance) b.restoreSceneSnapshot(outputId, scene, appearance)
+      else sceneOmittedFromRecovery.add(outputId)
+    } else {
+      sceneOmittedFromRecovery.add(outputId)
+    }
   }
   if (s.isLive && s.liveVerse) useBroadcastStore.getState().setLiveVerse(s.liveVerse, null, { goLive: true, itemId: s.liveItemId })
   for (const id of s.outputsOn) {
+    // Do not re-enable a screen with a scene we could not restore from the crash snapshot.
+    if (sceneOmittedFromRecovery.has(id)) continue
     const output = useBroadcastStore.getState().outputs.find((o) => o.id === id)
     if (output && !outputOnAir(output, useBroadcastStore.getState().outputStatus[id])) await enableOutput(output)
   }
