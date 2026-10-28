@@ -56,6 +56,7 @@ describe("use-transcription", () => {
         deviceId: "dev-42",
         gain: 1.5,
         provider: "whisper",
+        language: "en",
       })
     })
 
@@ -79,7 +80,70 @@ describe("use-transcription", () => {
           provider: "deepgram",
           deviceId: null,
           gain: 1.0,
+          language: "en",
         })
+      )
+    })
+
+    it("forwards the OpenAI key when provider is OpenAI transcription", async () => {
+      mockInvoke.mockResolvedValue(undefined)
+      const { useSettingsStore, transcriptionActions } = await loadModules()
+
+      useSettingsStore.setState({
+        sttProvider: "openai",
+        openaiApiKey: "sk-test-only",
+        speechLanguage: "yo",
+        cloudSpeechConsents: { openai: "2026-10-21T00:00:00.000Z" },
+      })
+
+      await transcriptionActions.start()
+
+      expect(mockInvoke).toHaveBeenCalledWith(
+        "start_transcription",
+        expect.objectContaining({
+          apiKey: "sk-test-only",
+          provider: "openai",
+          language: "yo",
+        }),
+      )
+    })
+
+    it("forwards Yoruba as the selected recognition language", async () => {
+      mockInvoke.mockResolvedValue(undefined)
+      const { useSettingsStore, transcriptionActions } = await loadModules()
+
+      useSettingsStore.setState({
+        sttProvider: "whisper",
+        speechLanguage: "yo",
+      })
+
+      await transcriptionActions.start()
+
+      expect(mockInvoke).toHaveBeenCalledWith(
+        "start_transcription",
+        expect.objectContaining({ provider: "whisper", language: "yo" }),
+      )
+    })
+
+    it("keeps Yoruba local even when an older saved provider is Deepgram", async () => {
+      mockInvoke.mockResolvedValue(undefined)
+      const { useSettingsStore, transcriptionActions } = await loadModules()
+
+      useSettingsStore.setState({
+        sttProvider: "deepgram",
+        speechLanguage: "yo",
+        deepgramApiKey: "must-not-be-used",
+      })
+
+      await transcriptionActions.start()
+
+      expect(mockInvoke).toHaveBeenCalledWith(
+        "start_transcription",
+        expect.objectContaining({
+          apiKey: "",
+          provider: "whisper",
+          language: "yo",
+        }),
       )
     })
 
@@ -230,7 +294,7 @@ describe("use-transcription", () => {
       expect(mockInvoke).not.toHaveBeenCalled()
       expect(useCloudConsentStore.getState().open).toBe(true)
 
-      useSettingsStore.getState().setCloudSpeechConsent(true)
+      useSettingsStore.getState().setCloudSpeechConsent("deepgram", true)
       useCloudConsentStore.getState().onAgree?.()
       await new Promise((r) => setTimeout(r, 0))
       expect(mockInvoke).toHaveBeenCalledWith("start_transcription", expect.objectContaining({ provider: "deepgram" }))
@@ -244,6 +308,37 @@ describe("use-transcription", () => {
       useSettingsStore.setState({ sttProvider: "whisper", cloudSpeechConsentAt: "" })
       await transcriptionActions.start()
       expect(mockInvoke).toHaveBeenCalledWith("start_transcription", expect.objectContaining({ provider: "whisper" }))
+    })
+
+    it("asks again when OpenAI has not been consented to, even if Deepgram was", async () => {
+      mockInvoke.mockResolvedValue(undefined)
+      const { useSettingsStore, transcriptionActions } = await loadModules()
+      const { useCloudConsentStore } = await import("@/stores/cloud-consent-store")
+      useSettingsStore.setState({
+        sttProvider: "openai",
+        openaiApiKey: "openai-test-key",
+        cloudSpeechConsentAt: "2026-10-21T00:00:00.000Z",
+        cloudSpeechConsents: { deepgram: "2026-10-21T00:00:00.000Z" },
+      })
+
+      await transcriptionActions.start()
+
+      expect(mockInvoke).not.toHaveBeenCalled()
+      expect(useCloudConsentStore.getState().pendingProvider).toBe("openai")
+
+      useSettingsStore.getState().setCloudSpeechConsent("openai", true)
+      useCloudConsentStore.getState().onAgree?.()
+      await new Promise((r) => setTimeout(r, 0))
+
+      expect(mockInvoke).toHaveBeenCalledWith("start_transcription", expect.objectContaining({
+        provider: "openai",
+        apiKey: "openai-test-key",
+      }))
+      expect(useCloudConsentStore.getState().runningProvider).toBe("openai")
+
+      useSettingsStore.getState().setCloudSpeechConsent("openai", false)
+      await transcriptionActions.stop()
+      expect(useCloudConsentStore.getState().runningProvider).toBeNull()
     })
   })
 })

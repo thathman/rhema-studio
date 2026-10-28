@@ -75,6 +75,10 @@ fn build_phrase_query(input: &str) -> String {
     format!("\"{trimmed}\"")
 }
 
+fn query_log_summary(tier: &str, query: &str) -> String {
+    format!("{tier} query chars={}", query.chars().count())
+}
+
 /// AND query with stop words removed — all significant words must be present.
 /// `"be doers of the word"` → `doers word` (finds James 1:22).
 /// Capped at 12 terms to prevent expensive queries on long text.
@@ -267,7 +271,7 @@ impl BibleDb {
 
         // Tier 1: Exact phrase match
         let phrase = build_phrase_query(query);
-        log::info!("[FTS5-BM25] Phrase: {phrase:?}");
+        log::info!("[FTS5-BM25] {}", query_log_summary("Phrase", &phrase));
         let mut all_results = run_fts_query(&conn, &phrase, fetch_limit)?;
         for r in &mut all_results {
             r.phrase_match = true;
@@ -279,7 +283,7 @@ impl BibleDb {
         if dedup_count(&all_results) < limit {
             let and_q = build_and_query(query);
             if !and_q.is_empty() {
-                log::info!("[FTS5-BM25] AND: {and_q:?}");
+                log::info!("[FTS5-BM25] {}", query_log_summary("AND", &and_q));
                 all_results.extend(run_fts_query(&conn, &and_q, fetch_limit)?);
             }
         }
@@ -288,7 +292,7 @@ impl BibleDb {
         if dedup_count(&all_results) < limit {
             let or_q = build_or_query(query);
             if !or_q.is_empty() {
-                log::info!("[FTS5-BM25] OR: {or_q:?}");
+                log::info!("[FTS5-BM25] {}", query_log_summary("OR", &or_q));
                 all_results.extend(run_fts_query(&conn, &or_q, fetch_limit)?);
             }
         }
@@ -344,6 +348,18 @@ mod tests {
     #[test]
     fn phrase_query_empty() {
         assert_eq!(build_phrase_query(""), String::new());
+    }
+
+    #[test]
+    fn query_log_summary_does_not_include_sermon_text() {
+        let query = "private sermon marker Romans chapter 8";
+        let summary = query_log_summary("Phrase", query);
+        assert_eq!(
+            summary,
+            format!("Phrase query chars={}", query.chars().count())
+        );
+        assert!(!summary.contains("private sermon marker"));
+        assert!(!summary.contains("Romans"));
     }
 
     #[test]

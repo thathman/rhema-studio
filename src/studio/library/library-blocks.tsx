@@ -253,7 +253,11 @@ export function JournalBlock() {
   const finalCount = segments.filter((s) => s.is_final && s.text.trim()).length
   // AR-004: the transcript goes into a log only when ticked for that log; never by default.
   const [withTranscript, setWithTranscript] = useState(false)
-  const provider = useSettingsStore((s) => (s.sttProvider === "deepgram" ? "Deepgram (cloud)" : "Whisper (on this computer)"))
+  const provider = useSettingsStore((s) => {
+    if (s.sttProvider === "deepgram") return "Deepgram (cloud)"
+    if (s.sttProvider === "openai") return "OpenAI (cloud)"
+    return "Whisper (on this computer)"
+  })
   const retention = useSettingsStore((s) => s.transcriptRetentionDays)
   const keepLog = async () => {
     setBusy(true)

@@ -71,7 +71,7 @@ export function useReadiness() {
   const obsStream = useObsStore((s) => s.stream)
   const obsRecord = useObsStore((s) => s.recordOutput)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
-  const cloudSpeech = useSettingsStore((s) => s.sttProvider === "deepgram")
+  const cloudSpeech = useSettingsStore((s) => s.sttProvider === "deepgram" || s.sttProvider === "openai")
   const lanAtService = useSettingsStore((s) => s.lanAddressAtService)
   const joinStatus = useJoin((s) => s.status)
   const clockSkewMs = useJoin((s) => s.clockSkewMs)

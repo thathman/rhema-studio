@@ -45,7 +45,7 @@ export function PresentWorkspace() {
   const outputStatus = useBroadcastStore((s) => s.outputStatus)
   const listening = useTranscriptStore((s) => s.isTranscribing)
   const autoLive = useBroadcastStore((s) => s.autoLive)
-  const cloudSpeech = useCloudConsentStore((s) => s.runningProvider === "deepgram")
+  const cloudSpeechProvider = useCloudConsentStore((s) => s.runningProvider === "deepgram" || s.runningProvider === "openai" ? s.runningProvider : null)
   const service = useServiceStore((s) => s.current)
   const warning = useBroadcastStore((s) => s.presentWarning)
   const takeAttempts = useTakeAttemptStore((s) => s.attempts)
@@ -130,7 +130,7 @@ export function PresentWorkspace() {
           >
             <BookOpenIcon /> Bible &amp; listening
           </Button>
-          <StatusChip tone={listening ? "ok" : "off"} label={listening ? (cloudSpeech ? "Listening (Deepgram)" : "Listening") : "Listening off"} title={listening && cloudSpeech ? "Microphone sound is being sent to Deepgram" : undefined} />
+          <StatusChip tone={listening ? "ok" : "off"} label={listening ? (cloudSpeechProvider ? `Listening (${cloudSpeechProvider === "openai" ? "OpenAI" : "Deepgram"})` : "Listening") : "Listening off"} title={listening && cloudSpeechProvider ? `Microphone sound is being sent to ${cloudSpeechProvider === "openai" ? "OpenAI" : "Deepgram"}` : undefined} />
           {listening && autoLive && (
             <StatusChip
               tone="warn"

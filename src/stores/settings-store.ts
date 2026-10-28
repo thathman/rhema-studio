@@ -152,7 +152,9 @@ import { isCountdownTo } from "@/lib/countdown"
 import { newFeedToken } from "@/lib/output-on-air"
 import type { CountdownTo } from "@/types"
 
-type SttProvider = "deepgram" | "whisper"
+type SttProvider = "deepgram" | "whisper" | "openai"
+type SpeechLanguage = "en" | "yo"
+export type CloudSpeechProvider = "deepgram" | "openai"
 
 export interface SettingsState {
   deepgramApiKey: string | null
@@ -165,6 +167,7 @@ export interface SettingsState {
   cooldownMs: number
   onboardingComplete: boolean
   sttProvider: SttProvider
+  speechLanguage: SpeechLanguage
   brandKit: BrandKit
   /** Who is at the desk; goes on audit rows and the service log. */
   operatorName: string
@@ -172,10 +175,12 @@ export interface SettingsState {
   hymnFirstLanguage: "en" | "yo"
   /**
    * When this computer agreed that microphone audio may be sent to the cloud
-   * speech provider (ISO time); "" = not agreed (RG-08, NFR-09).
+   * Deepgram before provider-specific consent was tracked (ISO time).
    */
   cloudSpeechConsentAt: string
-  setCloudSpeechConsent: (agreed: boolean) => void
+  /** Per-provider cloud microphone consent on this computer (RG-08, NFR-09). */
+  cloudSpeechConsents: Partial<Record<CloudSpeechProvider, string>>
+  setCloudSpeechConsent: (provider: CloudSpeechProvider, agreed: boolean) => void
   /** CL-002: hold the first go-live of a service that is not approved as it stands (off by default). */
   requireApproval: boolean
   setRequireApproval: (on: boolean) => void
@@ -306,6 +311,7 @@ export interface SettingsState {
   setCooldownMs: (ms: number) => void
   setOnboardingComplete: (complete: boolean) => void
   setSttProvider: (provider: SttProvider) => void
+  setSpeechLanguage: (language: SpeechLanguage) => void
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -319,6 +325,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   cooldownMs: 2500,
   onboardingComplete: false,
   sttProvider: "deepgram",
+  speechLanguage: "en",
   brandKit: defaultBrandKit(),
   operatorName: "",
   hymnFirstLanguage: "en",
@@ -327,6 +334,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   requireApproval: false,
   transcriptRetentionDays: 0,
   cloudSpeechConsentAt: "",
+  cloudSpeechConsents: {},
   openedPackages: [],
   openedFrom: {},
   commentsSeen: [],
@@ -440,7 +448,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     void pushRemoteKeys()
   },
   setCustomMacros: (customMacros) => set({ customMacros }),
-  setCloudSpeechConsent: (agreed) => set({ cloudSpeechConsentAt: agreed ? new Date().toISOString() : "" }),
+  setCloudSpeechConsent: (provider, agreed) => set((state) => {
+    const at = agreed ? new Date().toISOString() : ""
+    const consents = { ...state.cloudSpeechConsents }
+    if (agreed) consents[provider] = at
+    else delete consents[provider]
+    return {
+      cloudSpeechConsents: consents,
+      ...(provider === "deepgram" ? { cloudSpeechConsentAt: at } : {}),
+    }
+  }),
   setRequireApproval: (requireApproval) => set({ requireApproval }),
   setTranscriptRetentionDays: (days) => set({ transcriptRetentionDays: validRetentionDays(days) ? days : 0 }),
   setChurchFolder: (churchFolder) => set({ churchFolder: churchFolder.trim() }),
@@ -463,7 +480,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setConfidenceThreshold: (confidenceThreshold) => set({ confidenceThreshold }),
   setCooldownMs: (cooldownMs) => set({ cooldownMs }),
   setOnboardingComplete: (onboardingComplete) => set({ onboardingComplete }),
-  setSttProvider: (sttProvider) => set({ sttProvider }),
+  setSttProvider: (sttProvider) => set((state) => ({
+    sttProvider: state.speechLanguage === "yo" && sttProvider === "deepgram" ? "whisper" : sttProvider,
+  })),
+  setSpeechLanguage: (speechLanguage) => set((state) => ({
+    speechLanguage,
+    ...(speechLanguage === "yo" && state.sttProvider === "deepgram" ? { sttProvider: "whisper" } : {}),
+  })),
 }))
 
 /** The companion's delay buffer choices (ms); a saved value must be a whole number in this range. */
@@ -488,6 +511,10 @@ function acceptable(key: string, value: unknown): boolean {
   switch (key) {
     case "hymnFirstLanguage":
       return value === "en" || value === "yo"
+    case "speechLanguage":
+      return value === "en" || value === "yo"
+    case "sttProvider":
+      return value === "deepgram" || value === "whisper" || value === "openai"
     case "operatorName":
     case "remoteSecret":
     case "joinAddress":
@@ -499,6 +526,8 @@ function acceptable(key: string, value: unknown): boolean {
     case "cloudSpeechConsentAt":
     case "hostLookSeen":
       return typeof value === "string"
+    case "cloudSpeechConsents":
+      return typeof value === "object" && value !== null && !Array.isArray(value) && Object.entries(value).every(([provider, at]) => (provider === "deepgram" || provider === "openai") && typeof at === "string")
     case "obs": {
       const o = value as Partial<ObsSettings>
       return typeof value === "object" && value !== null && typeof o.enabled === "boolean" && typeof o.host === "string" && typeof o.port === "number" && Number.isInteger(o.port) && o.port > 0 && o.port < 65536 && typeof o.password === "string"
@@ -605,7 +634,9 @@ export const SETTINGS_SECTIONS = {
     "audioDeviceId",
     "gain",
     "sttProvider",
+    "speechLanguage",
     "cloudSpeechConsentAt",
+    "cloudSpeechConsents",
     "serviceTimers",
   ],
   operator: ["operatorName", "onboardingComplete", "commentsSeen", "timekeeperCountdown", "autoMode", "confidenceThreshold", "cooldownMs"],
@@ -652,7 +683,7 @@ export function settingsSection(state: SettingsState, section: SettingsSection):
  */
 export const NOT_IN_BACKUP = [
   "deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "joinToken",
-  "remoteDevices", "remoteAuthRequired", "remoteListeners", "joinAddress", "joinName", "joinSecure", "mcpEnabled", "cloudSpeechConsentAt",
+  "remoteDevices", "remoteAuthRequired", "remoteListeners", "joinAddress", "joinName", "joinSecure", "mcpEnabled", "cloudSpeechConsentAt", "cloudSpeechConsents",
   "companionMode", "obsProfiles", "lanAddressAtService",
 ] as const satisfies readonly PersistedKey[]
 const notInBackup = (key: string) => (NOT_IN_BACKUP as readonly string[]).includes(key)
@@ -838,6 +869,11 @@ export function hydrateSettings(): Promise<void> {
         const read = readSetting(key, value)
         if (read !== undefined) (patch as Record<string, unknown>)[key] = read
       }
+      const currentSettings = useSettingsStore.getState()
+      const language = patch.speechLanguage ?? currentSettings.speechLanguage
+      const provider = patch.sttProvider ?? currentSettings.sttProvider
+      const repairedSpeechProvider = language === "yo" && provider === "deepgram"
+      if (repairedSpeechProvider) patch.sttProvider = "whisper"
       // Secrets the file says are in the keychain come from there (a value still in the file wins); any in the file move there on the next save.
       const merged = () => ({ ...useSettingsStore.getState(), ...patch }) as SettingsState
       const migrate = SECRET_NAMES.some((n) => readSecret(merged(), n))
@@ -865,7 +901,7 @@ export function hydrateSettings(): Promise<void> {
       if (Object.keys(patch).length > 0) {
         useSettingsStore.setState(patch)
       }
-      if (migrate && !keychainUnreadable) pendingSave = pendingSave.then(() => persistAll(useSettingsStore.getState()))
+      if ((migrate || repairedSpeechProvider) && !keychainUnreadable) pendingSave = pendingSave.then(() => persistAll(useSettingsStore.getState()))
       const name = useSettingsStore.getState().operatorName.trim()
       if (name) void invoke("content_set_actor", { name }).catch(() => {})
       void pushRemoteKeys()

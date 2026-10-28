@@ -2,7 +2,128 @@
 /// for use as Deepgram keyword boosting.
 #[allow(clippy::too_many_lines)]
 pub fn bible_keyterms() -> Vec<String> {
+    bible_keyterms_for_language(Some("en"))
+}
+
+/// Returns language-specific Bible terms, with Yoruba terms first so they fit
+/// inside Deepgram's 100-keyterm limit when Yoruba recognition is selected.
+#[allow(clippy::too_many_lines)]
+pub fn bible_keyterms_for_language(language: Option<&str>) -> Vec<String> {
     let mut terms: Vec<String> = Vec::new();
+
+    if language == Some("yo") {
+        terms.extend(
+            [
+                // Book names used by the Open Yoruba Contemporary Bible.
+                "Gẹnẹsisi",
+                "Genẹsisi",
+                "Eksodu",
+                "Lefitiku",
+                "Numeri",
+                "Deuteronomi",
+                "Jẹṣua",
+                "Joshua",
+                "Onidajọ",
+                "Rutu",
+                "1 Samuẹli",
+                "2 Samuẹli",
+                "1 Samueli",
+                "2 Samueli",
+                "1 Ọba",
+                "2 Ọba",
+                "1 Oba",
+                "2 Oba",
+                "1 Kronika",
+                "2 Kronika",
+                "Esra",
+                "Nehemiah",
+                "Esteri",
+                "Jobu",
+                "Saamu",
+                "Orin",
+                "Òwe",
+                "Owe",
+                "Oniwaasu",
+                "Orin Solomoni",
+                "Ẹkún Jeremiah",
+                "Ekun Jeremiah",
+                "Esekiẹli",
+                "Esekieli",
+                "Daniẹli",
+                "Danieli",
+                "Joẹli",
+                "Joeli",
+                "Amosi",
+                "Obadiah",
+                "Jona",
+                "Mika",
+                "Nahumu",
+                "Habakuku",
+                "Sefaniah",
+                "Hagai",
+                "Sekariah",
+                "Malaki",
+                "Matiu",
+                "Marku",
+                "Luku",
+                "Johanu",
+                "Ìṣe àwọn Aposteli",
+                "Ise awon Aposteli",
+                "Romu",
+                "1 Kọrinti",
+                "2 Kọrinti",
+                "1 Korinti",
+                "2 Korinti",
+                "Galatia",
+                "Efesu",
+                "Filipi",
+                "Kolose",
+                "1 Tẹsalonika",
+                "2 Tẹsalonika",
+                "1 Tesalonika",
+                "2 Tesalonika",
+                "1 Timotiu",
+                "2 Timotiu",
+                "Titu",
+                "Filemoni",
+                "Heberu",
+                "Jakọbu",
+                "Jakobu",
+                "1 Peteru",
+                "2 Peteru",
+                "1 Johanu",
+                "2 Johanu",
+                "3 Johanu",
+                "Juda",
+                "Ìfihàn",
+                "Ifihan",
+                // Common reference words and Christian vocabulary.
+                "ori",
+                "ẹsẹ",
+                "ese",
+                "ìwé mímọ́",
+                "iwe mimo",
+                "ìwé",
+                "iwe",
+                "ìjọ",
+                "ijo",
+                "Ọlọ́run",
+                "Olorun",
+                "Olúwa",
+                "Oluwa",
+                "Jesu",
+                "Kristi",
+                "Ẹ̀mí Mímọ́",
+                "Emi Mimo",
+                "Bíbélì",
+                "Bibeli",
+                "ọrọ Ọlọ́run",
+                "oro Olorun",
+            ]
+            .iter()
+            .map(ToString::to_string),
+        );
+    }
 
     // 66 Bible book names
     let books = [

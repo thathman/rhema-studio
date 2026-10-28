@@ -9,6 +9,7 @@ Rhema Studio presents with no internet connection. There is no telemetry, no ana
 | Connection | When | What is sent | Off by default? |
 |---|---|---|---|
 | Deepgram speech recognition (`api.deepgram.com`, upstream feature) | Only when the speech provider is Deepgram (the upstream default), a key is entered, listening is started, **and someone on this computer has agreed** in the consent dialog shown before the first cloud session (withdrawable in Settings → Speech Recognition) | Microphone audio while listening | Yes: speech is optional and nothing is sent before consent; the Present chip reads "Listening (Deepgram)" while it is sent |
+| OpenAI Transcribe (`api.openai.com`) | Only when the speech provider is OpenAI, a key is saved in Settings or `OPENAI_API_KEY` is present in the app's launch environment, listening is started, **and someone on this computer has agreed separately for OpenAI** in the consent dialog (withdrawable in Settings → Speech Recognition) | Microphone audio in bounded WAV utterances; the transcript response is used for Bible-reference suggestions | Yes: speech is optional and nothing is sent before consent; the Present chip reads "Listening (OpenAI)" while it is sent |
 | OBS WebSocket (address the operator types, usually this computer) | Only after "Connect to OBS" is ticked | Recording start/stop, chapter marks; the password proof, never the password | Yes |
 | NDI (local network) | Only for outputs set to NDI | The output picture, to NDI receivers on the network | Yes |
 | Remote control (OSC and HTTP, incoming) | Only while the operator has started a listener; paired devices need their key; with authentication off, unpaired commands are accepted only from local/private source addresses | Nothing leaves; local-network devices send commands in | Yes |
@@ -29,13 +30,13 @@ Rhema Studio presents with no internet connection. There is no telemetry, no ana
 
 With authentication off, public-source HTTP and OSC commands are refused. The pairing endpoint and the unauthenticated status and health answers are also limited to local/private source addresses. These checks trust the immediate peer address and ignore forwarded-client headers; do not expose Rhema through an Internet-facing proxy or tunnel that forwards public clients from a local address. Rhema has no Internet relay. VPN peers are treated as local only when they use private or link-local source addresses; keep authentication on when those routed peers are not trusted.
 
-Keys the settings file can hold for later providers (`openaiApiKey`, `claudeApiKey`) are not used by any code on `main` (the OpenAI speech provider is parked in PR #4).
+The OpenAI speech provider uses the key saved in Settings, or `OPENAI_API_KEY` from the app's launch environment when no Settings key is saved. The `claudeApiKey` setting remains reserved for a later provider.
 
 ## Transcripts on this computer
 
-Recognised speech is kept in memory while the app runs. It is written to a kept service log only when "Include what was said" is ticked for that log (Archive → What went live; off every time), and then stays there, searchable, until the log is deleted. Short fragments can also appear in the app's own log files (see the consent text).
+Recognised speech is kept in memory while the app runs. It is written to a kept service log only when "Include what was said" is ticked for that log (Archive → What went live; off every time), and then stays there, searchable, until the log is deleted. Current builds log transcript lengths only. Diagnostic logs from older builds may contain short speech fragments, so review them before sharing.
 
 ## Not yet done
 
 - An offline network capture on a real desktop (PRD release evidence for NFR-09): run the app through a service with a packet capture (Wireshark or `tcpdump`) and confirm that only the rows above appear. Acceptance row 10an.
-- Consent before cloud transcription: done for Deepgram (asked once per computer before the first cloud session; says what is sent, to whom, and offers local recognition instead). Any provider added by PR #4 must go through the same gate.
+- Consent before cloud transcription: Deepgram and OpenAI require separate grants before sending microphone audio. Real provider requests and representative Yoruba-audio acceptance still need release testing.

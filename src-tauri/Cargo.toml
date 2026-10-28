@@ -96,7 +96,8 @@ getrandom = "0.2"
 ring = "0.17"
 
 [features]
-default = ["whisper"]
+default = ["whisper", "openai"]
+openai = ["rhema-stt/openai"]
 whisper = ["rhema-stt/whisper"]
 # Desktop acceptance runs only (src/qa_bridge.rs); never in a release build.
 qa-bridge = []

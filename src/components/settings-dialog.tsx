@@ -276,18 +276,31 @@ function SpeechSection() {
   const {
     sttProvider,
     setSttProvider,
+    speechLanguage,
+    setSpeechLanguage,
     deepgramApiKey,
     setDeepgramApiKey,
+    openaiApiKey,
+    setOpenaiApiKey,
   } = useSettingsStore()
 
   const [keyValue, setKeyValue] = useState(deepgramApiKey ?? "")
   const [saved, setSaved] = useState(false)
   const [showKey, setShowKey] = useState(false)
+  const [openaiKeyValue, setOpenaiKeyValue] = useState(openaiApiKey ?? "")
+  const [openaiSaved, setOpenaiSaved] = useState(false)
+  const [showOpenAiKey, setShowOpenAiKey] = useState(false)
 
   const handleSaveKey = () => {
     setDeepgramApiKey(keyValue || null)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleSaveOpenAiKey = () => {
+    setOpenaiApiKey(openaiKeyValue || null)
+    setOpenaiSaved(true)
+    setTimeout(() => setOpenaiSaved(false), 2000)
   }
 
   return (
@@ -301,7 +314,7 @@ function SpeechSection() {
 
         <RadioGroup
           value={sttProvider}
-          onValueChange={(v) => setSttProvider(v as "deepgram" | "whisper")}
+          onValueChange={(v) => setSttProvider(v as "deepgram" | "whisper" | "openai")}
           className="gap-3"
         >
           {/* Deepgram (cloud) */}
@@ -319,7 +332,7 @@ function SpeechSection() {
                 Uses Deepgram Nova-3 for real-time streaming transcription.
                 Requires an API key and internet connection. Best accuracy with
                 keyword boosting for Bible terms. While listening, the microphone
-                sound is sent to Deepgram (USA); you are asked once before it first starts.
+                sound is sent to Deepgram (USA); consent is requested separately for each cloud provider.
               </p>
               <CloudConsentLine />
             </div>
@@ -342,7 +355,41 @@ function SpeechSection() {
               </p>
             </div>
           </label>
+
+          {/* OpenAI transcription (cloud) */}
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-1 has-data-[state=checked]:ring-primary/20 ${
+              sttProvider !== "openai" ? "hover:border-muted-foreground/25" : ""
+            }`}
+          >
+            <RadioGroupItem value="openai" className="mt-0.5" />
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-foreground">Cloud (OpenAI)</span>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Sends spoken audio segments to OpenAI&apos;s transcription API and returns a result after each segment instead of live interim words. Yorùbá is left to automatic language detection.
+              </p>
+              <CloudConsentLine provider="openai" />
+            </div>
+          </label>
         </RadioGroup>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label htmlFor="speech-language" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Speech language
+        </label>
+        <Select value={speechLanguage} onValueChange={(v) => setSpeechLanguage(v === "yo" ? "yo" : "en")}>
+          <SelectTrigger id="speech-language" aria-label="Speech language" className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="en">English</SelectItem>
+            <SelectItem value="yo">Yorùbá</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Select the spoken language. Deepgram does not support Yorùbá, so selecting it switches Deepgram to local Whisper; OpenAI transcription remains available.
+        </p>
       </div>
 
       {/* Deepgram settings — show when deepgram is selected */}
@@ -393,6 +440,42 @@ function SpeechSection() {
           </p>
         </div>
       )}
+      {sttProvider === "openai" && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <label htmlFor="openai-api-key" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              OpenAI API key
+            </label>
+            {openaiApiKey && <Badge variant="outline" className="text-[0.6875rem]">Key configured</Badge>}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              id="openai-api-key"
+              type={showOpenAiKey ? "text" : "password"}
+              aria-label="OpenAI API key"
+              autoComplete="off"
+              placeholder="Enter your OpenAI API key..."
+              value={openaiKeyValue}
+              onChange={(e) => setOpenaiKeyValue(e.target.value)}
+              className="flex-1 text-xs"
+            />
+            <Button size="sm" variant="outline" aria-pressed={showOpenAiKey} aria-label={showOpenAiKey ? "Hide the key" : "Show the key"} title={showOpenAiKey ? "Hide the key" : "Show the key"} onClick={() => setShowOpenAiKey(!showOpenAiKey)}>
+              {showOpenAiKey ? <EyeOffIcon className="size-3" /> : <EyeIcon className="size-3" />}
+            </Button>
+            {openaiApiKey && (
+              <Button size="sm" variant="outline" onClick={() => { setOpenaiApiKey(null); setOpenaiKeyValue(""); setShowOpenAiKey(false) }}>
+                Clear
+              </Button>
+            )}
+            <Button size="sm" onClick={handleSaveOpenAiKey}>
+              {openaiSaved ? <><CheckIcon className="size-3" />Saved</> : "Save"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Required for OpenAI transcription. The key is kept in the system keychain where available; otherwise it remains in local app settings. It is excluded from settings backups.
+          </p>
+        </div>
+      )}
       <TranscriptRetention />
     </div>
   )
@@ -418,7 +501,7 @@ function TranscriptRetention() {
         </SelectContent>
       </Select>
       <p className="text-xs text-muted-foreground">
-        What was said goes into a service log only when you tick it for that log. Older transcripts are taken out of their logs (the log stays) when Rhema starts and when you change this. Live speech is never saved on its own.
+        What was said goes into a service log only when you tick it for that log. Older transcripts are taken out of their logs (the log stays) when Rhema starts and when you change this. Current builds log transcript lengths only; diagnostics from earlier builds may contain short fragments, so review them before sharing.
       </p>
     </div>
   )
@@ -1274,8 +1357,8 @@ function CapacityLimitsBlock() {
 }
 
 /** Whether this computer agreed to send microphone audio to the cloud provider, with a way to take it back. */
-function CloudConsentLine() {
-  const at = useSettingsStore((s) => s.cloudSpeechConsentAt)
+function CloudConsentLine({ provider = "deepgram" }: { provider?: "deepgram" | "openai" }) {
+  const at = useSettingsStore((s) => s.cloudSpeechConsents[provider] ?? (provider === "deepgram" ? s.cloudSpeechConsentAt : ""))
   if (!at) return <p className="text-xs text-muted-foreground">Not agreed yet on this computer.</p>
   return (
     <p className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1284,9 +1367,9 @@ function CloudConsentLine() {
         type="button"
         className="underline"
         onClick={() => {
-          useSettingsStore.getState().setCloudSpeechConsent(false)
+          useSettingsStore.getState().setCloudSpeechConsent(provider, false)
           // Withdrawing stops a cloud session that is running now, not only the next one.
-          if (useCloudConsentStore.getState().runningProvider === "deepgram") void transcriptionActions.stop()
+          if (useCloudConsentStore.getState().runningProvider === provider) void transcriptionActions.stop()
         }}
       >
         Withdraw

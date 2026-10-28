@@ -25,6 +25,16 @@ export function useSetupStatus(): { church: ChurchSetup; equipment: { items: Equ
   const obsError = useObsStore((o) => o.error)
   const joinStatus = useJoin((j) => j.status)
   const librarySongs = useLibrarySongs((l) => l.count)
+  const speechKeySaved = s.sttProvider === "deepgram"
+    ? !!s.deepgramApiKey?.trim()
+    : s.sttProvider === "openai"
+      ? !!s.openaiApiKey?.trim()
+      : false
+  const speechConsentGiven = s.sttProvider === "deepgram"
+    ? !!(s.cloudSpeechConsents.deepgram ?? s.cloudSpeechConsentAt)
+    : s.sttProvider === "openai"
+      ? !!s.cloudSpeechConsents.openai
+      : false
   useEffect(() => {
     let alive = true
     useSongStore.getState().lookup("", 1).then(
@@ -61,7 +71,7 @@ export function useSetupStatus(): { church: ChurchSetup; equipment: { items: Equ
       })),
       obs: { enabled: s.obs.enabled, status: obsStatus, error: obsError },
       // Only whether a key exists: the key itself never leaves the settings store.
-      speech: { provider: s.sttProvider, keySaved: !!s.deepgramApiKey?.trim(), consentGiven: !!s.cloudSpeechConsentAt },
+      speech: { provider: s.sttProvider, keySaved: speechKeySaved, consentGiven: speechConsentGiven },
       mcpEnabled: s.mcpEnabled,
       join: { address: s.joinAddress, status: joinStatus },
       pairedDevices: s.remoteDevices.length,
