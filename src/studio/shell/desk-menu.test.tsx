@@ -49,7 +49,7 @@ beforeEach(async () => {
   onSettings.mockReset()
   useSettingsStore.setState({ operatorName: "", joinAddress: "", setup: defaultSetup() })
   useJoin.setState({ status: "off", me: null, live: null })
-  useRecovery.setState({ offer: null, dismissed: false })
+  useRecovery.setState({ offer: null, dismissed: false, damaged: false })
   useProductionTab.setState({ requested: null })
   useShellStore.setState({ setupOpen: false, setupStatusOpen: false })
   await mount()

@@ -19,12 +19,14 @@ const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
 
 /** Recovery after an unexpected close (#246): offered, never automatic; puts back what was up. */
 beforeEach(() => {
+  kept.clear()
   const themeId = useBroadcastStore.getState().themes[0].id
   useBroadcastStore.setState({
     isLive: false, liveVerse: null, sources: {}, rehearsal: false, scenes: [], outputStatus: {},
     outputs: [{ id: MAIN_OUTPUT_ID, name: "Projector", type: "display", themeId, monitorIndex: 0, ndi: defaultNdiSettings() }],
   })
   useJournalStore.setState({ entries: [] })
+  useRecovery.setState({ offer: null, dismissed: false, damaged: false })
 })
 
 describe("live recovery", () => {
@@ -66,7 +68,7 @@ describe("live recovery", () => {
     dismissRecovery()
     expect(useRecovery.getState()).toMatchObject({ offer: snap, dismissed: true })
     await putBack(snap)
-    expect(useRecovery.getState()).toEqual({ offer: null, dismissed: false })
+    expect(useRecovery.getState()).toEqual({ offer: null, dismissed: false, damaged: false })
   })
 
   it("puts the timer back, counting the time Rhema was closed while it ran", async () => {
@@ -147,4 +149,31 @@ describe("live recovery", () => {
       vi.mocked(invoke).mockImplementation(async () => null)
     }
   })
+
+  it("does not offer or apply a malformed saved recovery snapshot", async () => {
+    const live = { reference: "Keep the current Program", segments: [{ text: "Still on air" }], content: "bible" as const }
+    useBroadcastStore.getState().setLiveVerse(live, null, { goLive: true })
+    const broadcastBefore = useBroadcastStore.getState()
+    const journalBefore = useJournalStore.getState()
+    const invalid = { ...takeSnapshot(), isLive: true, liveVerse: live, sources: "corrupt", outputsOn: "not-an-array" }
+    kept.set("snapshot", invalid)
+    kept.set("journal", { v: 1, at: Date.now() - 60_000, startItemIds: ["saved-event"], entries: [{ at: Date.now() - 60_000, mono: 1, kind: "event", label: "Must not be restored", itemId: "saved-event" }] })
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => (cmd === "last_exit_unclean" ? true : null))
+
+    expect(worthOffering(invalid)).toBe(false)
+    const stop = await startLiveRecovery()
+    expect(useRecovery.getState().offer).toBeNull()
+    expect(useRecovery.getState()).toMatchObject({ damaged: true })
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useJournalStore.getState()).toBe(journalBefore)
+
+    useRecovery.setState({ offer: invalid as never, damaged: false } as never)
+    await putBack(invalid as never)
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
+    expect(useJournalStore.getState().entries.some((entry) => entry.kind === "recovery")).toBe(false)
+    stop()
+    vi.mocked(invoke).mockImplementation(async () => null)
+  })
+
 })

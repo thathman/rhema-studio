@@ -40,6 +40,137 @@ export interface LiveSnapshot {
   trimmed?: boolean
 }
 
+const SOURCE_IDS = ["bible", "song", "hymn", "slide", "picture", "quick"] as const
+const CONTENT_TYPES = ["bible", "song", "hymn", "slide", "picture"] as const
+const RENDER_KINDS = ["verse", "lyric", "slide", "image"] as const
+const IMAGE_FITS = ["cover", "contain", "stretch"] as const
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value)
+}
+
+function isOneOf<T extends string>(value: unknown, choices: readonly T[]): value is T {
+  return typeof value === "string" && choices.includes(value as T)
+}
+
+function parseVerseRenderData(value: unknown): VerseRenderData | null {
+  if (!isRecord(value) || typeof value.reference !== "string" || !Array.isArray(value.segments)) return null
+  const segments: VerseRenderData["segments"] = []
+  for (const segment of value.segments) {
+    if (!isRecord(segment) || typeof segment.text !== "string") return null
+    if (segment.verseNumber !== undefined && !isFiniteNumber(segment.verseNumber)) return null
+    segments.push({ text: segment.text, ...(segment.verseNumber === undefined ? {} : { verseNumber: segment.verseNumber }) })
+  }
+
+  const result: VerseRenderData = { reference: value.reference, segments }
+  if (value.kind !== undefined) {
+    if (!isOneOf(value.kind, RENDER_KINDS)) return null
+    result.kind = value.kind
+  }
+  if (value.content !== undefined) {
+    if (!isOneOf(value.content, CONTENT_TYPES)) return null
+    result.content = value.content
+  }
+  for (const key of ["translationLines", "lines", "secondaryLines"] as const) {
+    const lines = value[key]
+    if (lines !== undefined) {
+      if (!Array.isArray(lines) || !lines.every((line) => typeof line === "string")) return null
+      result[key] = [...lines]
+    }
+  }
+  if (value.footer !== undefined) {
+    if (typeof value.footer !== "string") return null
+    result.footer = value.footer
+  }
+  if (value.image !== undefined) {
+    const image = value.image
+    if (!isRecord(image) || typeof image.url !== "string" || !isOneOf(image.fit, IMAGE_FITS) || !isFiniteNumber(image.blur) || !isFiniteNumber(image.brightness) || (image.tint !== null && typeof image.tint !== "string")) return null
+    result.image = { url: image.url, fit: image.fit, blur: image.blur, brightness: image.brightness, tint: image.tint }
+  }
+  if (value.screen !== undefined) {
+    if (value.screen !== "black" && value.screen !== "logo") return null
+    result.screen = value.screen
+  }
+  if (value.quick !== undefined) {
+    if (typeof value.quick !== "boolean") return null
+    result.quick = value.quick
+  }
+  if (value.quickScreen !== undefined) {
+    if (typeof value.quickScreen !== "string") return null
+    result.quickScreen = value.quickScreen
+  }
+  if (value.video !== undefined) {
+    const video = value.video
+    if (!isRecord(video) || typeof video.url !== "string" || !isOneOf(video.fit, IMAGE_FITS) || typeof video.loop !== "boolean" || typeof video.sound !== "boolean" || typeof video.name !== "string" || !isFiniteNumber(video.token) || (video.paused !== undefined && typeof video.paused !== "boolean")) return null
+    result.video = { url: video.url, fit: video.fit, loop: video.loop, sound: video.sound, name: video.name, token: video.token, ...(video.paused === undefined ? {} : { paused: video.paused }) }
+  }
+  return result
+}
+
+/** Validate and copy data read from recovery.json before any field reaches the live stores. */
+export function parseLiveSnapshot(value: unknown): LiveSnapshot | null {
+  if (!isRecord(value) || value.v !== 1 || !isFiniteNumber(value.at) || typeof value.isLive !== "boolean") return null
+  let service: LiveSnapshot["service"] = null
+  if (value.service !== null) {
+    if (!isRecord(value.service) || typeof value.service.id !== "string" || typeof value.service.title !== "string") return null
+    service = { id: value.service.id, title: value.service.title }
+  }
+  let liveVerse: VerseRenderData | null = null
+  if (value.liveVerse !== null) {
+    const parsed = parseVerseRenderData(value.liveVerse)
+    if (!parsed) return null
+    liveVerse = parsed
+  }
+  if (value.liveItemId !== null && typeof value.liveItemId !== "string") return null
+  if (!isRecord(value.sources)) return null
+  const sources: LiveSources = {}
+  for (const [id, source] of Object.entries(value.sources)) {
+    if (!isOneOf(id, SOURCE_IDS) || !isRecord(source)) return null
+    const parsedValue = parseVerseRenderData(source.value)
+    if (!parsedValue || (source.itemId !== null && typeof source.itemId !== "string") || !isFiniteNumber(source.revision) || !isFiniteNumber(source.activatedAt) || typeof source.on !== "boolean" || (source.by !== undefined && typeof source.by !== "string")) return null
+    sources[id] = { value: parsedValue, itemId: source.itemId, revision: source.revision, activatedAt: source.activatedAt, on: source.on, ...(source.by === undefined ? {} : { by: source.by }) }
+  }
+  if (!Array.isArray(value.outputsOn) || !value.outputsOn.every((id) => typeof id === "string" && id.length > 0) || new Set(value.outputsOn).size !== value.outputsOn.length) return null
+  if (!isRecord(value.scenes)) return null
+  const sceneEntries: [string, string][] = []
+  for (const [outputId, sceneId] of Object.entries(value.scenes)) {
+    if (typeof sceneId !== "string" || sceneId.length === 0) return null
+    sceneEntries.push([outputId, sceneId])
+  }
+  if (value.eventId !== null && typeof value.eventId !== "string") return null
+  if (value.eventMomentId !== undefined && value.eventMomentId !== null && typeof value.eventMomentId !== "string") return null
+  let timer: LiveSnapshot["timer"]
+  if (value.timer !== undefined) {
+    const savedTimer = value.timer
+    if (!isRecord(savedTimer) || !isFiniteNumber(savedTimer.durationMs) || savedTimer.durationMs < 0 || !isFiniteNumber(savedTimer.elapsedMs) || savedTimer.elapsedMs < 0 || typeof savedTimer.running !== "boolean") return null
+    timer = { durationMs: savedTimer.durationMs, elapsedMs: savedTimer.elapsedMs, running: savedTimer.running }
+  }
+  if (value.trimmed !== undefined && typeof value.trimmed !== "boolean") return null
+
+  return {
+    v: 1,
+    at: value.at,
+    service,
+    isLive: value.isLive,
+    liveVerse,
+    liveItemId: value.liveItemId,
+    sources,
+    outputsOn: [...value.outputsOn],
+    scenes: Object.fromEntries(sceneEntries),
+    eventId: value.eventId,
+    // Older v1 snapshots did not keep the selected moment separately.
+    eventMomentId: value.eventMomentId ?? null,
+    ...(timer === undefined ? {} : { timer }),
+    ...(value.trimmed === undefined ? {} : { trimmed: value.trimmed }),
+  }
+}
+
 /** Offered for this long after the crash; older is another service. */
 const FRESH_MS = 6 * 60 * 60 * 1000
 /** Pictures and videos as data can be megabytes: past this the snapshot keeps names, not content. */
@@ -50,11 +181,16 @@ const MAX_CHARS = 400_000
  * to put the screens back for the rest of this run, and saving starts again so a second crash is
  * covered by what is on the screens now.
  */
-export const useRecovery = create<{ offer: LiveSnapshot | null; dismissed: boolean }>(() => ({ offer: null, dismissed: false }))
+export const useRecovery = create<{ offer: LiveSnapshot | null; dismissed: boolean; damaged: boolean }>(() => ({ offer: null, dismissed: false, damaged: false }))
 
 /** "Not now" on the banner: hide it, keep the offer for the Desk menu. */
 export function dismissRecovery(): void {
   useRecovery.setState({ dismissed: true })
+}
+
+/** Dismiss the notice that a saved snapshot could not be trusted or restored. */
+export function dismissRecoveryDamage(): void {
+  useRecovery.setState({ damaged: false })
 }
 
 /** The service log as kept for recovery (#196 R3): what happened, and when, survives a crash. */
@@ -135,12 +271,18 @@ export function takeSnapshot(now = Date.now()): LiveSnapshot {
 }
 
 /** Whether a snapshot is worth offering: recent, and something was on the screens. */
-export function worthOffering(s: LiveSnapshot | null | undefined, now = Date.now()): s is LiveSnapshot {
-  return !!s && s.v === 1 && now - s.at < FRESH_MS && now >= s.at && (s.isLive || s.outputsOn.length > 0)
+export function worthOffering(value: unknown, now = Date.now()): boolean {
+  const s = parseLiveSnapshot(value)
+  return !!s && now - s.at < FRESH_MS && now >= s.at && (s.isLive || s.outputsOn.length > 0)
 }
 
 /** Put back what was on the screens: the sources, the program, each output and its scene, the event. */
-export async function putBack(s: LiveSnapshot): Promise<void> {
+export async function putBack(value: unknown): Promise<void> {
+  const s = parseLiveSnapshot(value)
+  if (!s) {
+    useRecovery.setState({ offer: null, dismissed: false, damaged: true })
+    return
+  }
   const b = useBroadcastStore.getState()
   // A trimmed snapshot has no sources: leave what is on now alone.
   if (!s.trimmed) useBroadcastStore.setState({ sources: s.sources })
@@ -164,7 +306,7 @@ export async function putBack(s: LiveSnapshot): Promise<void> {
     if (s.timer.running) useTimerStore.getState().start()
   }
   useJournalStore.getState().add({ kind: "recovery", label: `Put back after Rhema Studio closed unexpectedly at ${new Date(s.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
-  useRecovery.setState({ offer: null, dismissed: false })
+  useRecovery.setState({ offer: null, dismissed: false, damaged: false })
 }
 
 let store: Store | null = null
@@ -206,14 +348,35 @@ function saveNotices() {
 
 /** Read the last snapshot (offer it after an unclean exit), then keep it up to date. */
 export async function startLiveRecovery(): Promise<() => void> {
+  useRecovery.setState({ offer: null, dismissed: false, damaged: false })
+  let unclean = false
+  try {
+    unclean = await invoke<boolean>("last_exit_unclean")
+  } catch {
+    // Not under Tauri: there is no confirmed crash recovery to offer.
+  }
+  let recoveryReadable = true
   try {
     store = await load("recovery.json", { autoSave: false, defaults: {} })
-    const [unclean, snap, kept, notices] = await Promise.all([invoke<boolean>("last_exit_unclean"), store.get<LiveSnapshot>("snapshot"), store.get<KeptJournal>("journal"), store.get<KeptNotices>("notices")])
-    if (unclean && worthOffering(snap)) useRecovery.setState({ offer: snap })
-    if (unclean) restoreJournal(kept)
-    if (unclean) restoreNotices(notices)
+    if (unclean) {
+      const rawSnapshot = await store.get<unknown>("snapshot")
+      const snapshot = rawSnapshot == null ? null : parseLiveSnapshot(rawSnapshot)
+      if (rawSnapshot != null && !snapshot) {
+        recoveryReadable = false
+      } else if (snapshot && worthOffering(snapshot)) {
+        useRecovery.setState({ offer: snapshot })
+      }
+    }
   } catch {
-    // Not under Tauri, or the file is unreadable: nothing to offer.
+    recoveryReadable = false
+  }
+  if (unclean && !recoveryReadable) {
+    useRecovery.setState({ offer: null, dismissed: false, damaged: true })
+  } else if (unclean && store) {
+    // A malformed snapshot means none of this saved run is restored. With a valid or absent
+    // snapshot, the journal and notices retain their existing independent recovery behavior.
+    try { restoreJournal(await store.get<KeptJournal>("journal")) } catch { /* Keep startup available if the journal is damaged. */ }
+    try { restoreNotices(await store.get<KeptNotices>("notices")) } catch { /* Keep startup available if notices are damaged. */ }
   }
   const offs = [
     useBroadcastStore.subscribe((s, p) => {
