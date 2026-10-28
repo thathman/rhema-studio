@@ -90,6 +90,15 @@ describe("section summaries", () => {
     expect(parseRunOfShowEvent({ schema_version: 2 })).toBeNull()
     expect(parseRunOfShowEvent({ schema_version: 1, approval: "draft", duration_minutes: 601 })).toBeNull()
   })
+
+  it("keeps validated manual event cue snapshots and rejects malformed cue plans", () => {
+    const cue = { id: "cue-1", name: "Start prayer", trigger: "manual", steps: ["timer.fresh", "quick.pray"] }
+    expect(parseRunOfShowEvent({ schema_version: 1, cues: [cue] })).toEqual({ schema_version: 1, cues: [cue] })
+    expect(parseRunOfShowEvent({ schema_version: 1, cues: Array.from({ length: 13 }, (_, i) => ({ ...cue, id: `cue-${i}` })) })).toBeNull()
+    expect(parseRunOfShowEvent({ schema_version: 1, cues: [{ ...cue, trigger: "finish" }] })).toBeNull()
+    expect(parseRunOfShowEvent({ schema_version: 1, cues: [{ ...cue, steps: [] }] })).toBeNull()
+    expect(parseRunOfShowEvent({ schema_version: 1, cues: [{ ...cue, name: "  " }] })).toBeNull()
+  })
 })
 
 describe("adding to a section", () => {

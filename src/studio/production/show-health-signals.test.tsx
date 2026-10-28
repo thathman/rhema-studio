@@ -23,6 +23,7 @@ import { OutputEditorDialog } from "@/components/broadcast/output-editor-dialog"
 import { BUILTIN_THEMES } from "@/lib/builtin-themes"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { useShellStore } from "@/studio/shell-store"
 import { defaultNdiSettings, type BroadcastOutput, type Scene } from "@/types"
 
@@ -53,6 +54,9 @@ beforeEach(() => {
   for (const k of Object.keys(answers)) delete answers[k]
   answers.camera_router_status = router([{ name: "pulpit", live: false, source: null, readers: 0, tracks: [] }])
   answers.feed_status = { watching: 0, seq: 4, acked: 0 }
+  answers.get_http_status = { running: false, lan: false, port: null }
+  answers.get_osc_status = { running: false, lan: false, port: null }
+  answers.get_remote_auth_status = { required: true, credential_count: 0 }
   useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "p".repeat(32) }] })
   useBroadcastStore.setState({ themes: BUILTIN_THEMES, outputs: [main, foyer], scenes: [scene], outputStatus: { main: { previewOpen: true, ndiActive: false }, foyer: { previewOpen: false, ndiActive: false, feedActive: true } } })
   useShellStore.setState({ workspace: "production" })
@@ -64,6 +68,83 @@ afterEach(async () => {
 })
 
 describe("Show health: cameras and Google TVs (#213)", () => {
+  it("warns when a running LAN listener accepts commands without authentication and opens Remote settings", async () => {
+    answers.get_http_status = { running: true, lan: true, port: 8080, tls_port: null }
+    answers.get_osc_status = { running: false, lan: false, port: null }
+    answers.get_remote_auth_status = { required: false, credential_count: 0 }
+    useSettingsStore.setState({
+      remoteAuthRequired: false,
+      remoteSecret: "",
+      remoteDevices: [],
+      remoteListeners: { osc: false, http: true, oscPort: 8000, httpPort: 8080, lan: true },
+    })
+    const el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
+    const card = el.querySelector('[aria-label="Remote control access"]')!
+
+    expect(card.textContent).toContain("Unauthenticated LAN control is enabled")
+    expect(card.textContent).toContain("HTTP · LAN · port 8080")
+    expect(card.textContent).toContain("Any device on a local/private network that can reach this listener can send remote commands")
+    expect(card.textContent).toContain("Public-source commands are refused")
+    await act(async () => button(card, "Review Remote settings")!.click())
+    expect(useSettingsDialogStore.getState()).toMatchObject({ isOpen: true, activeSection: "remote" })
+  })
+
+  it("uses the listener's actual LAN scope and keeps local-only and stopped states calm", async () => {
+    answers.get_http_status = { running: false, lan: false, port: null }
+    answers.get_osc_status = { running: true, lan: true, port: 8000 }
+    answers.get_remote_auth_status = { required: false, credential_count: 0 }
+    useSettingsStore.setState({
+      remoteAuthRequired: false,
+      remoteSecret: "",
+      remoteDevices: [],
+      remoteListeners: { osc: true, http: false, oscPort: 8000, httpPort: 8080, lan: true },
+    })
+    const el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
+    const card = el.querySelector('[aria-label="Remote control access"]')!
+    expect(card.textContent).toContain("Unauthenticated LAN control is enabled")
+    expect(card.textContent).toContain("OSC · LAN · port 8000")
+
+    answers.get_osc_status = { running: false, lan: false, port: null }
+    answers.get_http_status = { running: true, lan: false, port: 8080 }
+    useSettingsStore.setState({ remoteListeners: { osc: false, http: true, oscPort: 8000, httpPort: 8080, lan: false } })
+    // The next status poll reflects a listener bound only to this computer.
+    await act(async () => { await new Promise((r) => setTimeout(r, 3200)) })
+    expect(card.textContent).toContain("No LAN listener is accepting remote commands")
+    expect(card.textContent).not.toContain("Unauthenticated LAN control is enabled")
+  })
+
+  it("reports an unknown listener state instead of assuming LAN control is safe", async () => {
+    answers.get_http_status = new Error("status unavailable")
+    answers.get_osc_status = new Error("status unavailable")
+    answers.get_remote_auth_status = new Error("status unavailable")
+    const el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
+    const card = el.querySelector('[aria-label="Remote control access"]')!
+    expect(card.textContent).toContain("Unable to verify remote listener state")
+    expect(card.textContent).not.toContain("No LAN listener is accepting remote commands")
+  })
+
+  it("says commands are refused when a LAN listener requires auth but no credential is configured", async () => {
+    answers.get_http_status = { running: true, lan: true, port: 8080 }
+    answers.get_osc_status = { running: false, lan: false, port: null }
+    answers.get_remote_auth_status = { required: true, credential_count: 0 }
+    useSettingsStore.setState({ remoteAuthRequired: true, remoteSecret: "", remoteDevices: [] })
+    const el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
+    const card = el.querySelector('[aria-label="Remote control access"]')!
+    expect(card.textContent).toContain("A key or paired device is required")
+    expect(card.textContent).toContain("remote commands are currently refused")
+    expect(card.textContent).not.toContain("Unauthenticated LAN control is enabled")
+  })
+
+  it("uses the backend's effective auth state when legacy settings still say off", async () => {
+    answers.get_http_status = { running: true, lan: true, port: 8080 }
+    answers.get_remote_auth_status = { required: true, credential_count: 1 }
+    useSettingsStore.setState({ remoteAuthRequired: false, remoteSecret: "legacy-key" })
+    const el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
+    const card = el.querySelector('[aria-label="Remote control access"]')!
+    expect(card.textContent).toContain("A key or paired device is required")
+    expect(card.textContent).not.toContain("Unauthenticated LAN control is enabled")
+  })
+
   it("a scene on air whose camera is not sending is an attention item; the feed says no screen is watching", async () => {
     const el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
     await flush()
