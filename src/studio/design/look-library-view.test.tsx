@@ -11,6 +11,7 @@ vi.mock("@tauri-apps/plugin-store", () => ({ load: vi.fn(async () => ({ get: asy
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { LookLibraryView } from "./look-library-view"
+import { DesignWorkspace } from "./design-workspace"
 import { BUILTIN_THEMES } from "@/lib/builtin-themes"
 import { DEFAULT_STAGE_STYLE } from "@/lib/stage-style"
 import { DEFAULT_TICKER_STYLE } from "@/lib/ticker"
@@ -41,6 +42,15 @@ async function render() {
   return el
 }
 
+async function renderDesignWorkspace() {
+  const el = document.createElement("div")
+  document.body.appendChild(el)
+  useShellStore.setState({ designTab: "library" })
+  root = createRoot(el)
+  await act(async () => root!.render(<DesignWorkspace />))
+  return el
+}
+
 afterEach(() => {
   act(() => root?.unmount())
   root = null
@@ -48,7 +58,15 @@ afterEach(() => {
 })
 const card = (el: HTMLElement, name: string) => [...el.querySelectorAll("li")].find((li) => li.querySelector("h4")?.textContent === name) as HTMLLIElement
 
-describe("Design → Library (#299)", () => {
+describe("Design → Templates (#299)", () => {
+  it("labels reusable looks Templates so the content Library stays distinct", async () => {
+    const el = await renderDesignWorkspace()
+    const tabs = [...el.querySelectorAll('[role="tab"]')] as HTMLButtonElement[]
+    const templates = tabs.find((tab) => tab.textContent?.trim() === "Templates")
+    expect(templates?.getAttribute("aria-selected")).toBe("true")
+    expect(tabs.some((tab) => tab.textContent?.trim() === "Library")).toBe(false)
+  })
+
   it("shows the bundled Worship Expressions gallery on a clean install; Use creates a copy without taking it live", async () => {
     const el = await render()
     const section = el.querySelector<HTMLElement>('section[aria-label="Rhema Studio · Worship Expressions"]')
