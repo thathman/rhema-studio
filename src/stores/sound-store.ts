@@ -8,6 +8,7 @@ import { useMediaStore } from "@/stores/media-store"
  * output. Screens are never touched. The element lives outside React.
  */
 let audio: HTMLAudioElement | null = null
+let pendingAudio: HTMLAudioElement | null = null
 let fade: ReturnType<typeof setInterval> | null = null
 // A newer play() supersedes a slower, older one still looking up its file.
 let ticket = 0
@@ -26,7 +27,7 @@ interface SoundState {
   volume: number
   fading: boolean
   error: string | null
-  play: (asset: { id: string; name: string }) => Promise<void>
+  play: (asset: { id: string; name: string }) => Promise<boolean>
   pause: () => void
   resume: () => void
   stop: () => void
@@ -38,6 +39,19 @@ interface SoundState {
 function clearFade() {
   if (fade) clearInterval(fade)
   fade = null
+}
+
+function discardAudio(el: HTMLAudioElement) {
+  el.pause()
+  el.removeAttribute("src")
+  el.load()
+}
+
+function cancelPendingAudio() {
+  const pending = pendingAudio
+  if (!pending) return
+  pendingAudio = null
+  discardAudio(pending)
 }
 
 /** A fade interrupted by Pause or Resume: back to the chosen volume. */
@@ -60,31 +74,55 @@ export const useSoundStore = create<SoundState>((set, get) => ({
 
   play: async ({ id, name }) => {
     const mine = ++ticket
+    cancelPendingAudio()
     const url = await useMediaStore.getState().fileUrl(id).catch(() => null)
-    if (mine !== ticket) return
+    if (mine !== ticket) return false
     if (!url) {
       set({ error: `${name} is missing from the media folder.` })
-      return
+      return false
     }
-    get().stop()
     const el = new Audio(url)
     el.loop = get().loop
-    el.volume = get().volume
+    // Keep the current track audible until the replacement confirms it can play.
+    // This also prevents the two tracks overlapping during the play() handshake.
+    el.volume = 0
     el.addEventListener("timeupdate", () => { if (audio === el) set({ position: el.currentTime }) })
     el.addEventListener("loadedmetadata", () => { if (audio === el) set({ duration: Number.isFinite(el.duration) ? el.duration : 0 }) })
     el.addEventListener("ended", () => { if (audio === el) set({ playing: false, position: 0 }) })
     el.addEventListener("error", () => { if (audio === el) set({ playing: false, error: `${name} could not play. Try an MP3 or M4A file.` }) })
-    audio = el
-    set({ assetId: id, name, playing: true, position: 0, duration: 0, error: null, fading: false })
-    useJournalStore.getState().add({ kind: "sound", label: name })
+    pendingAudio = el
     try {
       await el.play()
+      if (mine !== ticket || pendingAudio !== el || el.paused) {
+        if (pendingAudio === el) {
+          pendingAudio = null
+          discardAudio(el)
+        }
+        return false
+      }
+      pendingAudio = null
+      clearFade()
+      if (audio && audio !== el) discardAudio(audio)
+      audio = el
+      el.volume = get().volume
+      set({ assetId: id, name, playing: true, position: el.currentTime, duration: Number.isFinite(el.duration) ? el.duration : 0, error: null, fading: false })
+      useJournalStore.getState().add({ kind: "sound", label: name })
+      return true
     } catch (e) {
-      if (audio === el) set({ playing: false, error: `${name} could not play: ${e instanceof Error ? e.message : String(e)}` })
+      if (pendingAudio === el) {
+        pendingAudio = null
+        discardAudio(el)
+        set({ error: `${name} could not play: ${e instanceof Error ? e.message : String(e)}` })
+      }
+      return false
     }
   },
 
   pause: () => {
+    if (pendingAudio) {
+      ticket += 1
+      cancelPendingAudio()
+    }
     cancelFade(get().volume)
     audio?.pause()
     set({ playing: false, fading: false })
@@ -103,11 +141,8 @@ export const useSoundStore = create<SoundState>((set, get) => ({
   stop: () => {
     ticket += 1 // a play() still looking up its file must not start after Stop
     clearFade()
-    if (audio) {
-      audio.pause()
-      audio.removeAttribute("src")
-      audio.load()
-    }
+    cancelPendingAudio()
+    if (audio) discardAudio(audio)
     audio = null
     set({ assetId: null, name: "", playing: false, position: 0, duration: 0, fading: false, error: null })
   },

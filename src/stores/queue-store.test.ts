@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { useQueueStore } from "./queue-store"
-import type { VerseQueueItem } from "@/types"
-import type { Verse } from "@/types"
+import type { QueueItem, VerseQueueItem, Verse } from "@/types"
 
 function makeVerse(overrides: Partial<Verse> = {}): Verse {
   return {
@@ -30,8 +29,10 @@ function makeItem(overrides: Partial<VerseQueueItem> = {}, verse: Partial<Verse>
 }
 
 beforeEach(() => {
-  useQueueStore.setState({ items: [], activeIndex: null, highlightedId: null })
+  useQueueStore.setState({ items: [], headers: [], activeIndex: null, highlightedId: null, addTarget: null })
 })
+
+const slide = (id: string): QueueItem => ({ id, kind: "slide", slide: { title: id, body: "" }, reference: id, confidence: 1, source: "manual", added_at: 0 })
 
 describe("addItem", () => {
   it("prepends a new item", () => {
@@ -40,6 +41,49 @@ describe("addItem", () => {
 
     const items = useQueueStore.getState().items as VerseQueueItem[]
     expect(items.map((i) => i.id)).toEqual(["b", "a"])
+  })
+
+  it("returns the inserted id and places an item at the start by default", () => {
+    useQueueStore.setState({ items: [slide("existing")] })
+    expect(useQueueStore.getState().addItem(slide("new"))).toBe("new")
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["new", "existing"])
+  })
+
+  it("appends without moving existing items when no section is selected", () => {
+    useQueueStore.setState({ items: [slide("a"), slide("b")] })
+    expect(useQueueStore.getState().addItem(slide("new"), "end")).toBe("new")
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["a", "b", "new"])
+  })
+
+  it("inserts at the end of a selected middle phase by stable item id", () => {
+    useQueueStore.setState({
+      items: [slide("pre"), slide("main-a"), slide("main-b"), slide("post")],
+      headers: [
+        { id: "pre", type: "phase", name: "Before", at: 0 },
+        { id: "main", type: "phase", name: "Main", at: 1 },
+        { id: "post", type: "phase", name: "After", at: 3 },
+      ],
+      addTarget: "main",
+    })
+    const insertedId = useQueueStore.getState().addItem(slide("new"), "end")!
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["pre", "main-a", "main-b", insertedId, "post"])
+    expect(useQueueStore.getState().headers.map(({ id, at }) => [id, at])).toEqual([["pre", 0], ["main", 1], ["post", 4]])
+  })
+
+  it("inserts at the end of a nested group without crossing the next group", () => {
+    useQueueStore.setState({
+      items: [slide("phase-item"), slide("group-item"), slide("nested-item"), slide("next-group-item")],
+      headers: [
+        { id: "phase", type: "phase", name: "Main", at: 0 },
+        { id: "group", type: "group", name: "Worship", at: 1 },
+        { id: "nested", type: "group", name: "Songs", at: 2 },
+        { id: "next-group", type: "group", name: "Sermon", at: 3 },
+      ],
+      addTarget: "nested",
+    })
+    const insertedId = useQueueStore.getState().addItem(slide("new"), "end")!
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["phase-item", "group-item", "nested-item", insertedId, "next-group-item"])
+    expect(useQueueStore.getState().headers.map(({ id, at }) => [id, at])).toEqual([["phase", 0], ["group", 1], ["nested", 2], ["next-group", 4]])
   })
 
   it("drops an exact duplicate that adds no text", () => {

@@ -34,10 +34,12 @@ export const presentActions = {
     // A cue-only moment previews as what it will do (#193): nothing on the screens.
     if (isSlideItem(item) || isImageItem(item) || isCueItem(item)) {
       useBibleStore.getState().selectSlide({ item, index: 0 })
+      useBibleStore.getState().setSelectedQueueItemId(item.id)
       return
     }
     if (isSongItem(item)) {
       presentActions.previewSlide(item, 0)
+      useBibleStore.getState().setSelectedQueueItemId(item.id)
       return
     }
     const choice = resolveTranslations(item, useBibleStore.getState())
@@ -45,15 +47,18 @@ export const presentActions = {
     if (isMissing(choice) || choice.source !== "item") {
       bibleActions.selectVerse(item.verse)
       bibleActions.navigateToVerse(book_number, chapter, verse)
+      useBibleStore.getState().setSelectedQueueItemId(item.id)
       return
     }
     bibleActions.selectVerse({ ...item.verse, translation_id: choice.primary })
+    useBibleStore.getState().setSelectedQueueItemId(item.id)
     void bibleActions
       .fetchVerse(book_number, chapter, verse, choice.primary)
       .then((fresh) => {
         const still = useBibleStore.getState().selectedVerse
         if (fresh?.text && still && still.book_number === book_number && still.chapter === chapter && still.verse === verse) {
           bibleActions.selectVerse(fresh)
+          useBibleStore.getState().setSelectedQueueItemId(item.id)
         }
       })
       .catch(() => {})
