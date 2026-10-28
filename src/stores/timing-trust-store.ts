@@ -10,7 +10,10 @@ import { useServiceStore } from "@/stores/service-store"
  * made up for it meanwhile. Nothing goes on a screen either way.
  */
 export interface Untrusted {
+  /** Queue moment whose item timing is uncertain after a restart. */
   itemId: string
+  /** Event clock identity; older services used the item ID for both. */
+  eventId?: string
   label: string
   /** The last moment the closed run is known to have been working (wall ms). */
   lastSeen: number
@@ -51,7 +54,7 @@ useJournalStore.subscribe((s, p) => {
   const u = useTimingTrust.getState().untrusted
   if (!u || puttingBack || s.entries === p.entries) return
   const added = s.entries.slice(s.entries.length - Math.max(0, s.entries.length - p.entries.length))
-  if (added.some((e) => e.kind === "event" && e.itemId === u.itemId && e.at >= u.restartedAt)) useTimingTrust.setState({ untrusted: null })
+  if (added.some((e) => e.kind === "event" && (e.eventId === (u.eventId ?? u.itemId) || e.itemId === u.itemId) && e.at >= u.restartedAt)) useTimingTrust.setState({ untrusted: null })
 })
 
 // Another service opened: the flag was about the last one.

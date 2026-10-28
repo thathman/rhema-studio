@@ -2,9 +2,9 @@ import { create } from "zustand"
 import { invoke, convertFileSrc } from "@tauri-apps/api/core"
 import { open } from "@tauri-apps/plugin-dialog"
 import { readFile } from "@tauri-apps/plugin-fs"
-import { isImageItem, type MediaAssetStatus, type MediaImportResult, type QueueItem } from "@/types"
+import { isAudioItem, isImageItem, type MediaAssetStatus, type MediaImportResult, type QueueItem } from "@/types"
 import { useQueueStore } from "@/stores/queue-store"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { outputsForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 
 interface MediaState {
   assets: MediaAssetStatus[]
@@ -46,16 +46,22 @@ function measure(url: string): Promise<{ width: number; height: number } | null>
 
 /** Where a picture or video is used outside saved services: the rundown on screen, signage loops and scenes' video layers. */
 export function mediaUsedHere(id: string): string[] {
-  const uses = (i: QueueItem) => i.background?.media_id === id || (isImageItem(i) && i.image.media_id === id)
+  const uses = (i: QueueItem) => i.background?.media_id === id || (isImageItem(i) && i.image.media_id === id) || (isAudioItem(i) && i.audio.media_id === id)
   const where: string[] = []
   if (useQueueStore.getState().items.some(uses)) where.push("the service on screen")
   // A scene's video layer plays the file itself (a picture layer keeps its own copy).
   for (const sc of useBroadcastStore.getState().scenes) if (sc.layers.some((l) => l.kind === "video" && l.mediaId === id)) where.push(`the scene ${sc.name}`)
-  for (const o of useBroadcastStore.getState().outputs) {
+  const broadcast = useBroadcastStore.getState()
+  const takenOutputs = [...broadcast.outputs, ...outputsForScreens(broadcast)]
+  const file = useMediaStore.getState().assets.find((a) => a.id === id)?.file
+  for (const o of takenOutputs) {
+    if (o.sceneSnapshot?.layers.some((l) => l.mediaId === id || (!!file && l.mediaFile === file))) where.push(`the scene on ${o.name}`)
+  }
+  for (const o of broadcast.outputs) {
     const lists = [o.signage?.mediaIds ?? [], ...(o.signage?.playlists ?? []).map((p) => p.mediaIds)]
     if (lists.some((l) => l.includes(id))) where.push(`the picture loop on ${o.name}`)
   }
-  return where
+  return [...new Set(where)]
 }
 
 export const useMediaStore = create<MediaState>((set, get) => ({
@@ -69,6 +75,7 @@ export const useMediaStore = create<MediaState>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const assets = await invoke<MediaAssetStatus[]>("media_list")
+      if (!Array.isArray(assets)) throw new Error("The local media library returned an invalid list.")
       set({ assets, loading: false, loaded: true })
       return assets
     } catch (e) {

@@ -15,12 +15,14 @@ import { presentActions } from "@/studio/present-actions"
 /**
  * Add one item to the service; successful insertion selects it in Prepare.
  */
-export function AddItems({ className }: { className?: string }) {
+export function AddItems({ className, onSelectAddedItem }: { className?: string; onSelectAddedItem?: (id: string) => void }) {
   const open = useAddDialog((s) => s.open)
   const target = useQueueStore((s) => s.headers.find((h) => h.id === s.addTarget)?.name ?? null)
   const added = (id: string) => {
     const item = useQueueStore.getState().items.find((candidate) => candidate.id === id)
     if (!item) return
+    onSelectAddedItem?.(id)
+    useAddDialog.getState().focusAddedItem(id)
     presentActions.previewItem(item)
     useAddDialog.getState().close()
   }
@@ -33,15 +35,19 @@ export function AddItems({ className }: { className?: string }) {
         className="flex h-[min(46rem,88vh)] flex-col gap-3 sm:max-w-4xl"
         onCloseAutoFocus={(event) => {
           event.preventDefault()
-          const { opener, clearOpener } = useAddDialog.getState()
-          if (opener?.isConnected) opener.focus()
+          const { opener, focusItemId, clearOpener } = useAddDialog.getState()
+          const row = focusItemId
+            ? [...document.querySelectorAll<HTMLElement>("[data-rundown-item-id]")].find((element) => element.dataset.rundownItemId === focusItemId) ?? null
+            : null
+          if (row) row.focus()
+          else if (opener?.isConnected) opener.focus()
           clearOpener()
         }}
       >
         <DialogHeader>
           <DialogTitle>{target ? `Add to ${target}` : "Add to the service"}</DialogTitle>
           <DialogDescription>
-            Passages, songs, hymns, slides, pictures, videos and sound. {target ? `Added items go to the end of ${target}, in the order selected.` : "Added items go to the top of the order."} Adding one closes this picker and selects it in Prepare; nothing here goes live.
+            Passages, songs, hymns, slides, pictures, videos and audio cues. {target ? `Added items go to the end of ${target}, in the order selected.` : "Added items go to the top of the order."} Adding one closes this picker and selects it in Prepare; nothing here goes live.
           </DialogDescription>
         </DialogHeader>
         <Tabs defaultValue="bible" className="flex min-h-0 flex-1 flex-col">
@@ -50,7 +56,7 @@ export function AddItems({ className }: { className?: string }) {
             <TabsTrigger value="songs">Songs</TabsTrigger>
             <TabsTrigger value="hymns">Hymn book</TabsTrigger>
             <TabsTrigger value="slides">Slides</TabsTrigger>
-            <TabsTrigger value="media">Pictures</TabsTrigger>
+            <TabsTrigger value="media">Media</TabsTrigger>
             <TabsTrigger value="reuse">Reuse</TabsTrigger>
           </TabsList>
           <TabsContent value="bible" className="min-h-0 flex-1 overflow-hidden pt-3">

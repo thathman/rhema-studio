@@ -22,6 +22,15 @@ describe("song identity labels (#388)", () => {
     expect(songKindLabel(item)).toBe("Hymn · CAC 245")
   })
 
+  it("honors an explicit song identity when library metadata later marks it as a hymn", () => {
+    const item = {
+      kind: "song",
+      song: { song_id: "ordinary", title: "Ordinary Song", hymn: false, hymn_numbers: [], arrangement_id: null, languages: ["en"] },
+    } as unknown as SongQueueItem
+
+    expect(songKindLabel(item, ["CAC 245"], "cacghb")).toBe("Song")
+  })
+
   it("can label a legacy item from its loaded library numbers", () => {
     const item = {
       kind: "song",

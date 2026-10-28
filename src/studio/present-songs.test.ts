@@ -93,6 +93,26 @@ describe("presentSlide", () => {
     })
   })
 
+  it("does not add library hymn numbers to a saved song in Present", async () => {
+    useSongStore.setState({ songs: {
+      "song-1": {
+        ...amazing,
+        song: { ...amazing.song, tags: "cacghb" },
+        numbers: [{ hymnbook_id: "cac", hymnbook_code: "CAC", number: "245" }],
+      },
+    } })
+    const ordinary = {
+      ...songItem(),
+      song: { ...songItem().song, hymn: false, hymn_numbers: [] },
+    }
+
+    expect(await presentSlide(ordinary, 0, { goLive: true })).toBe("presented")
+    expect(useBroadcastStore.getState().liveVerse).toMatchObject({
+      content: "song",
+      reference: "Amazing Grace · Verse 1",
+    })
+  })
+
   it("renders both languages, reports a section missing one, and footers a CCLI song", async () => {
     await presentSlide(songItem(["en", "yo"]), 0, { goLive: true })
     expect(useBroadcastStore.getState().liveVerse?.secondaryLines).toEqual(["Oore-ọ̀fẹ́", "ìyanu"])

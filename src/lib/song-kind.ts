@@ -20,7 +20,8 @@ export function isHymnSong(
   libraryTags?: string,
   libraryNumbers: readonly string[] = [],
 ): boolean {
-  return song.hymn === true || !!song.hymn_numbers?.length || libraryNumbers.length > 0 || parts(libraryTags).some((tag) => tag.toLowerCase() === CAC_HYMN_TAG)
+  if (typeof song.hymn === "boolean") return song.hymn
+  return !!song.hymn_numbers?.length || libraryNumbers.length > 0 || parts(libraryTags).some((tag) => tag.toLowerCase() === CAC_HYMN_TAG)
 }
 
 /** Friendly hymnbook numbers from a loaded song; matches the library's displayed number. */
@@ -30,7 +31,7 @@ export function hymnNumbersFromLibrary(numbers: readonly { hymnbook_code: string
 
 /** Label used throughout Prepare, Present and Home for a song or numbered hymn. */
 export function songKindLabel(item: SongQueueItem, libraryNumbers: readonly string[] = [], libraryTags?: string): string {
-  const numbers = item.song.hymn_numbers?.length ? item.song.hymn_numbers : libraryNumbers
+  const numbers = item.song.hymn_numbers !== undefined ? item.song.hymn_numbers : libraryNumbers
   if (!isHymnSong(item.song, libraryTags, numbers)) return "Song"
   return numbers.length ? `Hymn · ${numbers.join(", ")}` : "Hymn"
 }

@@ -1,15 +1,35 @@
 import { dayAt } from "@/lib/church-time"
 
 /**
- * The run of show's structure (issue #193): phases (pre-service loop, warm-up,
- * main service, post-service loop, or named ones) and groups inside them, kept
- * as headers between the rundown's items. `items` stays the plain ordered list
- * everything else uses (Next, Previous, the remote, the stage); a header only
- * says where it sits: before the item at index `at` (at = items.length: after
- * the last). Saved as `phase` / `group` rows in the service.
+ * The run of show's structure: phases and groups are headers between the rundown's
+ * items. A group may carry a versioned event plan; the following items are its moments.
+ * `items` stays the ordered list used by Next, Previous, remotes and the stage. Headers
+ * save as existing `phase` / `group` rows so older builds can keep unknown event data.
  */
 export type PhaseRule = "loop" | "auto_once" | "manual"
 export type PhaseRole = "pre" | "warmup" | "main" | "post" | "custom"
+
+/** A saved event cue is a snapshot of a manual action sequence; it never runs from elapsed time. */
+export interface RunOfShowEventCue {
+  id: string
+  name: string
+  trigger: "manual"
+  /** Kept as strings so a newer build's actions survive a save by this build. */
+  steps: string[]
+}
+
+/** Versioned plan metadata on a service event. The event's title/id/notes are its header fields. */
+export interface RunOfShowEventPlan {
+  schema_version: 1
+  role?: string
+  duration_minutes?: number
+  ownership?: string
+  cues?: RunOfShowEventCue[]
+  /** Deprecated v1 payload key; the parser ignores it because service approval is authoritative. */
+  approval?: "draft" | "approved"
+  /** Event metadata written by a later build; retained on the next save. */
+  payload_extra?: Record<string, unknown>
+}
 
 export interface OutlineHeader {
   id: string
@@ -29,6 +49,177 @@ export interface OutlineHeader {
   disabled?: boolean
   /** Keys this build does not edit, kept as they were. */
   payload_extra?: Record<string, unknown>
+  /** Present on an event header. Its following rundown items are the event's moments. */
+  event?: RunOfShowEventPlan
+}
+
+export interface RunOfShowEvent<T> {
+  id: string
+  title: string
+  role?: string
+  duration_minutes?: number
+  ownership?: string
+  notes?: string | null
+  moments: T[]
+}
+
+/** A safe point to insert a new event while keeping it inside the chosen phase or event. */
+export interface EventInsertionPoint {
+  at: number
+  /** Insert before this boundary when several headers share the same item index. */
+  beforeHeaderId?: string
+}
+
+const EVENT_FIELDS = new Set(["schema_version", "role", "duration_minutes", "ownership", "cues", "approval"])
+
+/** Read only this schema version; an unknown or malformed marker remains opaque payload data. */
+export function parseRunOfShowEvent(value: unknown): RunOfShowEventPlan | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  if (raw.schema_version !== 1) return null
+  // eslint-disable-next-line no-control-regex
+  const text = (v: unknown) => typeof v === "string" && v.trim().length > 0 && v.trim().length <= 60 && !/[\u0000-\u001f\u007f-\u009f]/.test(v) ? v.trim() : undefined
+  const role = text(raw.role)
+  const ownership = text(raw.ownership)
+  if (raw.role !== undefined && !role || raw.ownership !== undefined && !ownership) return null
+  const duration = raw.duration_minutes
+  if (duration !== undefined && (typeof duration !== "number" || !Number.isFinite(duration) || duration <= 0 || duration > 600)) return null
+  let cues: RunOfShowEventCue[] | undefined
+  if (raw.cues !== undefined) {
+    if (!Array.isArray(raw.cues) || raw.cues.length > 12) return null
+    const seen = new Set<string>()
+    cues = []
+    for (const value of raw.cues) {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) return null
+      const cue = value as Record<string, unknown>
+      const id = cue.id
+      const name = text(cue.name)
+      if (typeof id !== "string" || !/^[a-zA-Z0-9._-]{1,80}$/.test(id) || seen.has(id) || !name || cue.trigger !== "manual") return null
+      if (!Array.isArray(cue.steps) || cue.steps.length === 0 || cue.steps.length > 12 || cue.steps.some((step) => typeof step !== "string" || step.length === 0 || step.length > 60)) return null
+      seen.add(id)
+      cues.push({ id, name, trigger: "manual", steps: [...cue.steps] as string[] })
+    }
+  }
+  return {
+    schema_version: 1,
+    ...(role ? { role } : {}),
+    ...(duration !== undefined ? { duration_minutes: duration } : {}),
+    ...(ownership ? { ownership } : {}),
+    ...(cues !== undefined ? { cues } : {}),
+    ...(Object.keys(raw).some((key) => !EVENT_FIELDS.has(key)) ? { payload_extra: Object.fromEntries(Object.entries(raw).filter(([key]) => !EVENT_FIELDS.has(key))) } : {}),
+  }
+}
+
+/** A section boundary: an event may contain ordinary groups; a group ends at the next header. */
+function sectionEndAt(headers: OutlineHeader[], sortedIndex: number, itemCount: number): number {
+  const h = headers[sortedIndex]
+  const boundary = headers.slice(sortedIndex + 1).find((next) =>
+    h.type === "phase" ? next.type === "phase" : h.event ? next.type === "phase" || !!next.event : true,
+  )
+  return boundary?.at ?? itemCount
+}
+
+/** Project legacy ordered rows into the event → moments model without rewriting their item ids. */
+export function projectRunOfShowEvents<T>(items: T[], headers: OutlineHeader[]): RunOfShowEvent<T>[] {
+  const sorted = sortHeaders(headers)
+  return sorted.flatMap((h, index) => {
+    if (!h.event) return []
+    const end = sectionEndAt(sorted, index, items.length)
+    return [{
+      id: h.id,
+      title: h.name,
+      ...(h.event.role ? { role: h.event.role } : {}),
+      ...(h.event.duration_minutes !== undefined ? { duration_minutes: h.event.duration_minutes } : {}),
+      ...(h.event.ownership ? { ownership: h.event.ownership } : {}),
+      notes: h.notes,
+      moments: items.slice(h.at, end),
+    }]
+  })
+}
+
+export interface RunOfShowClockRow<T> {
+  id: string
+  reference: string
+  kind: "event" | "item"
+  /** The event's approved estimate, or the sum of its moments when no event estimate is set. */
+  planned_minutes: number | null
+  starts_at?: string | null
+  end_by?: string | null
+  gap_minutes?: number | null
+  timing?: { milestone?: boolean; soft_end_minutes?: number; warn_minutes?: number } | null
+  hidden?: boolean | null
+  /** Original moment records; an ordinary legacy row contains itself. */
+  moments: T[]
+  /** The first queue index represented by this clock row. */
+  sourceAt: number
+}
+
+type ClockItem = {
+  id: string
+  reference: string
+  planned_minutes?: number | null
+  starts_at?: string | null
+  end_by?: string | null
+  gap_minutes?: number | null
+  timing?: RunOfShowClockRow<unknown>["timing"]
+  hidden?: boolean | null
+}
+
+/**
+ * Project the ordered content rows into the events a Timekeeper starts. A versioned event owns its
+ * moments and its planned length; services without event headers retain one clock row per item.
+ * Phase and ordinary group boundaries are projected onto the resulting event order for timing.
+ */
+export function runOfShowClockRows<T extends ClockItem>(items: T[], headers: OutlineHeader[]): { rows: RunOfShowClockRow<T>[]; headers: OutlineHeader[] } {
+  const sorted = sortHeaders(headers)
+  const eventHeaders = sorted.filter((h) => h.event)
+  const ranges = eventHeaders.map((header) => ({ header, start: header.at, end: sectionEndAt(sorted, sorted.indexOf(header), items.length) }))
+  const candidates: Array<{ row: RunOfShowClockRow<T>; order: number }> = []
+
+  for (const range of ranges) {
+    const moments = items.slice(range.start, range.end)
+    const total = moments.reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0)
+    candidates.push({
+      order: headers.indexOf(range.header),
+      row: {
+        id: range.header.id,
+        reference: range.header.name,
+        kind: "event",
+        planned_minutes: range.header.event!.duration_minutes ?? (total > 0 ? total : null),
+        moments,
+        sourceAt: range.start,
+      },
+    })
+  }
+
+  items.forEach((item, index) => {
+    if (ranges.some((range) => index >= range.start && index < range.end)) return
+    candidates.push({
+      order: headers.length + index,
+      row: {
+        id: item.id,
+        reference: item.reference,
+        kind: "item",
+        planned_minutes: item.planned_minutes ?? null,
+        ...(item.starts_at !== undefined ? { starts_at: item.starts_at } : {}),
+        ...(item.end_by !== undefined ? { end_by: item.end_by } : {}),
+        ...(item.gap_minutes !== undefined ? { gap_minutes: item.gap_minutes } : {}),
+        ...(item.timing !== undefined ? { timing: item.timing } : {}),
+        ...(item.hidden !== undefined ? { hidden: item.hidden } : {}),
+        moments: [item],
+        sourceAt: index,
+      },
+    })
+  })
+
+  candidates.sort((a, b) => a.row.sourceAt - b.row.sourceAt || a.order - b.order)
+  const rows = candidates.map(({ row }) => row)
+  const projectedHeaders = headers.flatMap((header, order) => {
+    if (header.event || (header.type === "group" && ranges.some((range) => header.id !== range.header.id && header.at >= range.start && header.at < range.end))) return []
+    const at = candidates.filter((candidate) => candidate.row.sourceAt < header.at || (candidate.row.sourceAt === header.at && candidate.order < order)).length
+    return [{ ...header, at }]
+  })
+  return { rows, headers: projectedHeaders }
 }
 
 const shift = (headers: OutlineHeader[], from: number, by: 1 | -1): OutlineHeader[] =>
@@ -39,13 +230,21 @@ export function headersAfterInsert(headers: OutlineHeader[], index: number): Out
   return shift(headers, index, 1)
 }
 
-/** Where an item appended to a section goes: the end of that phase or group. */
+/** Where an item appended to a section goes: the end of that phase, event or group. */
 export function sectionEnd(itemCount: number, headers: OutlineHeader[], headerId: string): number {
+  return sectionInsertionPoint(itemCount, headers, headerId).at
+}
+
+/** Where a new event belongs at the end of a phase/event/group, including same-index header order. */
+export function sectionInsertionPoint(itemCount: number, headers: OutlineHeader[], headerId: string): EventInsertionPoint {
   const sorted = sortHeaders(headers)
   const k = sorted.findIndex((h) => h.id === headerId)
-  if (k === -1) return 0
-  const h = sorted[k]
-  return sorted.slice(k + 1).find((n) => (h.type === "phase" ? n.type === "phase" : true))?.at ?? itemCount
+  if (k === -1) return { at: 0 }
+  const target = sorted[k]
+  const boundary = sorted.slice(k + 1).find((next) =>
+    target.type === "phase" ? next.type === "phase" : target.event ? next.type === "phase" || !!next.event : true,
+  )
+  return { at: boundary?.at ?? itemCount, ...(boundary ? { beforeHeaderId: boundary.id } : {}) }
 }
 
 /**
@@ -56,7 +255,8 @@ export function sectionEnd(itemCount: number, headers: OutlineHeader[], headerId
 export function headersAfterAppend(headers: OutlineHeader[], index: number, headerId: string): OutlineHeader[] {
   const sorted = sortHeaders(headers)
   const k = sorted.findIndex((h) => h.id === headerId)
-  const after = new Set(sorted.slice(k + 1).filter((h) => h.at === index).map((h) => h.id))
+  const target = sorted[k]
+  const after = new Set(sorted.slice(k + 1).filter((h) => h.at === index && (target?.event ? h.type === "phase" || !!h.event : true)).map((h) => h.id))
   return headers.map((h) => (h.at > index || after.has(h.id) ? { ...h, at: h.at + 1 } : h))
 }
 
@@ -89,10 +289,16 @@ export function interleave<T>(items: T[], headers: OutlineHeader[]): OutlineRow<
 }
 
 export interface SectionSummary {
-  /** Items under the header (for a phase: down to the next phase; a group: to the next header). */
+  /** Items under the header: phases to next phase, events to next event/phase, groups to next header. */
   count: number
   /** Their planned minutes. */
   minutes: number
+  /** Phase-only breakdown when the phase contains event headers. */
+  eventCount?: number
+  /** Queue items owned by those events. */
+  momentCount?: number
+  /** Queue items in the phase but outside its events. */
+  looseItemCount?: number
 }
 
 /**
@@ -123,16 +329,55 @@ export function newPhase(at: number, name = "New phase", newId: () => string = (
 
 /** Each header's item count and planned minutes, by header id. Skipped items count, but take no minutes. */
 export function sectionSummaries(rawItems: Array<{ planned_minutes?: number | null; hidden?: boolean | null }>, headers: OutlineHeader[]): Record<string, SectionSummary> {
-  const items = timedItems(rawItems, headers)
   const sorted = [...headers].map((h, order) => ({ h, order })).sort((a, b) => a.h.at - b.h.at || a.order - b.order).map((x) => x.h)
+  const clock = runOfShowClockRows(rawItems.map((item, index) => ({ ...item, id: String(index), reference: "" })), headers)
+  const clockItems = timedItems(clock.rows, clock.headers)
   const out: Record<string, SectionSummary> = {}
   sorted.forEach((h, k) => {
-    // A phase runs to the next phase; a group to the next header of either kind.
-    const end = sorted.slice(k + 1).find((n) => (h.type === "phase" ? n.type === "phase" : true))?.at ?? items.length
-    const slice = items.slice(h.at, end)
-    out[h.id] = { count: slice.length, minutes: slice.reduce((m, i) => m + (i.planned_minutes ?? 0), 0) }
+    const end = sectionEndAt(sorted, k, rawItems.length)
+    const slice = rawItems.slice(h.at, end)
+    const nextPhaseIndex = h.type === "phase" ? sorted.findIndex((candidate, index) => index > k && candidate.type === "phase") : -1
+    const phaseEvents = h.type === "phase"
+      ? sorted.slice(k + 1, nextPhaseIndex === -1 ? sorted.length : nextPhaseIndex)
+        .map((candidate, index) => ({ candidate, index: k + 1 + index }))
+        .filter(({ candidate }) => !!candidate.event)
+      : []
+    const momentCount = phaseEvents.reduce((sum, { candidate, index }) => {
+      const eventEnd = sectionEndAt(sorted, index, rawItems.length)
+      return sum + Math.max(0, Math.min(end, eventEnd) - Math.max(h.at, candidate.at))
+    }, 0)
+    const nestedMomentGroup = h.type === "group" && sorted.some((event) => event.event && h.at >= event.at && h.at < sectionEndAt(sorted, sorted.indexOf(event), rawItems.length))
+    const minutes = h.event
+      ? phaseAt(headers, h.at)?.disabled ? 0 : h.event.duration_minutes ?? slice.reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0)
+      : nestedMomentGroup
+        ? slice.reduce((sum, item, offset) => sum + (isSkipped(rawItems, headers, h.at + offset) ? 0 : item.planned_minutes ?? 0), 0)
+        : clockItems.filter((item) => item.sourceAt >= h.at && item.sourceAt < end).reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0)
+    out[h.id] = {
+      count: slice.length,
+      minutes,
+      ...(phaseEvents.length > 0 ? {
+        eventCount: phaseEvents.length,
+        momentCount,
+        looseItemCount: Math.max(0, slice.length - momentCount),
+      } : {}),
+    }
   })
   return out
+}
+
+/** A new event begins as a draft plan; taking one of its moments never approves the service. */
+export function newRunOfShowEvent(
+  at: number,
+  newId: () => string = () => crypto.randomUUID(),
+  details: { title?: string; role?: string } = {},
+): OutlineHeader {
+  return {
+    id: newId(),
+    type: "group",
+    name: details.title?.trim() || "New event",
+    at,
+    event: { schema_version: 1, ...(details.role?.trim() ? { role: details.role.trim() } : {}) },
+  }
 }
 
 /** The four phases of a church event, the main service holding what is there. */
@@ -143,6 +388,15 @@ export function defaultPhases(itemCount: number, newId: () => string = () => cry
     { id: newId(), type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
     { id: newId(), type: "phase", name: "Post-service loop", at: itemCount, rule: "loop", role: "post" },
   ]
+}
+
+/** Keep existing event/group headers inside Main service when adding phases. */
+export function organiseHeadersIntoDefaultPhases(headers: OutlineHeader[], itemCount: number, newId?: () => string): OutlineHeader[] {
+  const phases = defaultPhases(itemCount, newId)
+  const postIndex = phases.findIndex((phase) => phase.role === "post")
+  return postIndex < 0
+    ? [...phases, ...headers]
+    : [...phases.slice(0, postIndex), ...headers, ...phases.slice(postIndex)]
 }
 
 /** How a phase runs, for its chip and strip. */

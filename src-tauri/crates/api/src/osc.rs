@@ -10,14 +10,15 @@ use crate::command::RemoteCommand;
 use crate::dispatch::{CommandDispatcher, CommandSink};
 use crate::error::CommandError;
 use crate::keys::{check_key, new_key_set, KeyEntry, KeySet};
+use crate::peer::check_remote_key;
 
 /// Configuration for the OSC listener.
 #[derive(Debug, Clone)]
 pub struct OscConfig {
     pub port: u16,
     pub host: String,
-    /// Paired devices and the shared key; empty means open. Otherwise every
-    /// message must carry a token as its first string argument.
+    /// Paired devices and the shared key; empty means open to local/private peers only. Otherwise
+    /// every message must carry a token as its first string argument.
     pub keys: KeySet,
 }
 
@@ -178,7 +179,11 @@ fn handle_message_from(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet, 
         _ => None,
     };
     // One check: the set may change between two reads (a revoke on another thread).
-    let (args, entry): (&[rosc::OscType], Option<KeyEntry>) = match check_key(keys, presented) {
+    let checked = match limit {
+        Some((_, peer)) => check_remote_key(keys, presented, peer),
+        None => check_key(keys, presented),
+    };
+    let (args, entry): (&[rosc::OscType], Option<KeyEntry>) = match checked {
         Ok(None) => (&msg.args, None),
         Ok(Some(e)) => (&msg.args[1..], Some(e)),
         Err(reason) => {
@@ -300,6 +305,28 @@ mod tests {
         assert_eq!(sink.command_count(), 2);
         let mut handle = result.handle;
         handle.stop();
+    }
+
+    #[test]
+    fn unauthenticated_osc_is_limited_to_local_network_peers() {
+        let sink = Arc::new(MockSink::new());
+        let keys = new_key_set();
+        let rate = crate::rate::RateLimiter::default();
+        let message = OscMessage { addr: "/rhema/next".into(), args: vec![] };
+
+        handle_message_from(&message, &*sink, &keys, Some((&rate, "8.8.8.8".parse().unwrap())));
+        assert_eq!(sink.command_count(), 0, "an open listener refuses public-source commands");
+
+        handle_message_from(&message, &*sink, &keys, Some((&rate, "192.168.1.40".parse().unwrap())));
+        assert_eq!(sink.command_count(), 1, "legacy open control still works on a private LAN");
+
+        let paired = crate::keys::key_set_from(&[("s3cret", "Desk")]);
+        let keyed_message = OscMessage {
+            addr: "/rhema/next".into(),
+            args: vec![rosc::OscType::String("s3cret".into())],
+        };
+        handle_message_from(&keyed_message, &*sink, &paired, Some((&rate, "8.8.8.8".parse().unwrap())));
+        assert_eq!(sink.command_count(), 2, "a valid paired key preserves authenticated remote control");
     }
 
     fn keys_for_role_test(keys: &KeySet, token: &str) {

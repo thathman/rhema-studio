@@ -5,19 +5,23 @@ import { useQueueStore } from "@/stores"
 export const useAddDialog = create<{
   open: boolean
   opener: HTMLElement | null
+  focusItemId: string | null
   openFor: (headerId: string | null, opener?: HTMLElement | null) => void
+  focusAddedItem: (id: string) => void
   close: () => void
   clearOpener: () => void
 }>((set) => ({
   open: false,
   opener: null,
+  focusItemId: null,
   openFor: (headerId, opener = null) => {
     useQueueStore.getState().setAddTarget(headerId)
-    set({ open: true, opener })
+    set({ open: true, opener, focusItemId: null })
   },
+  focusAddedItem: (id) => set({ focusItemId: id }),
   close: () => {
     useQueueStore.getState().setAddTarget(null)
     set({ open: false })
   },
-  clearOpener: () => set({ opener: null }),
+  clearOpener: () => set({ opener: null, focusItemId: null }),
 }))

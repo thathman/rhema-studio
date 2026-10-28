@@ -25,7 +25,8 @@ describe("Present touch targets (#215 G9.3)", () => {
   it("the Scenes strip: its fold, screens, scenes and actions", () => {
     const src = read("./scenes-strip.tsx")
     const classes = classesOf(src, "<button")
-    expect(classes.length).toBe(4)
+    // The fifth button refreshes a saved preview without taking it live.
+    expect(classes.length).toBe(5)
     for (const c of classes) expect(c).toMatch(/\b(?:min-)?h-11\b/)
     expect(src).not.toMatch(/\bh-8\b/)
   })

@@ -12,8 +12,9 @@ vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), emit: v
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import type { QueueItem } from "@/types"
+import type { QueueItem, SongWithSections } from "@/types"
 import { useQueueStore } from "@/stores/queue-store"
+import { useSongStore } from "@/stores/song-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { AssigneesInput } from "./item-editor-parts"
 import { RundownList } from "@/studio/present/rundown-list"
@@ -76,6 +77,25 @@ describe("an item's people", () => {
     const el = await render(<RundownList mode="prepare" />)
     const mark = el.querySelector('[title="Prepared by Tolu, Ade, Bisi"]')!
     expect(mark.textContent).toBe("· Tolu+2")
+  })
+
+  it("announces a legacy numbered hymn as a hymn in the Prepare rundown", async () => {
+    const libraryHymn = {
+      song: { tags: "cacghb" },
+      sections: [],
+      arrangements: [],
+      numbers: [{ hymnbook_id: "cac", hymnbook_code: "CAC", number: "245" }],
+    } as unknown as SongWithSections
+    const legacyHymn = {
+      id: "legacy-hymn", kind: "song", song: { song_id: "legacy-hymn", title: "Grace", arrangement_id: null, languages: ["en"] },
+      reference: "Grace", confidence: 1, source: "manual", added_at: 0,
+    } as QueueItem
+    useSongStore.setState({ songs: { "legacy-hymn": libraryHymn } })
+    useQueueStore.setState({ items: [legacyHymn], headers: [], activeIndex: null })
+
+    const el = await render(<RundownList mode="prepare" />)
+    expect(el.textContent).toContain("Hymn · CAC 245")
+    expect(el.querySelector('[aria-label="Hymn"]')).not.toBeNull()
   })
 
   it("keeps a numbered hymn visibly distinct in the Prepare rundown", async () => {

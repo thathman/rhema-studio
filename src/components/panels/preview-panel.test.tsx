@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+const { canvasVerses } = vi.hoisted(() => ({ canvasVerses: [] as unknown[] }))
 vi.hoisted(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
 })
 
-vi.mock("@/components/ui/canvas-verse", () => ({ CanvasVerse: () => null }))
+vi.mock("@/components/ui/canvas-verse", () => ({ CanvasVerse: ({ verse }: { verse: unknown }) => { canvasVerses.push(verse); return null } }))
 vi.mock("@/components/ui/panel-header", () => ({ PanelHeader: ({ children }: { children: unknown }) => children }))
 vi.mock("@/studio/prepare/item-plan", () => ({ ItemPlan: () => null }))
 vi.mock("@/hooks/use-preview-label", () => ({ usePreviewLabel: () => null }))
@@ -17,8 +18,9 @@ import { presentActions } from "@/studio/present-actions"
 import { useBibleStore } from "@/stores/bible-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useSongStore } from "@/stores/song-store"
-import type { SongQueueItem, SongWithSections, Verse, VerseQueueItem } from "@/types"
+import type { AudioQueueItem, SongQueueItem, SongWithSections, Verse, VerseQueueItem } from "@/types"
 import { PreviewPanel } from "./preview-panel"
+import { useMediaStore } from "@/stores/media-store"
 
 const verse: Verse = {
   id: 1,
@@ -84,6 +86,7 @@ let root: Root | null = null
 
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  canvasVerses.length = 0
   useQueueStore.setState({ items: [opening, hymn], headers: [], activeIndex: null })
   useBibleStore.setState({
     selectedVerse: verse,
@@ -96,6 +99,7 @@ beforeEach(() => {
     ],
   })
   useSongStore.setState({ songs: { [hymnDetails.song.id]: hymnDetails } })
+  useMediaStore.setState({ assets: [], urls: {}, loaded: true, loading: false, error: null })
   const element = document.createElement("div")
   document.body.appendChild(element)
   root = createRoot(element)
@@ -127,5 +131,51 @@ describe("Preview translation refresh", () => {
 
     expect(useBibleStore.getState().selectedQueueItemId).toBe(hymn.id)
     expect(useBibleStore.getState().selectedSlide?.item.id).toBe(hymn.id)
+  })
+
+  it("shows local-only audio in Preview and names a missing file", async () => {
+    const audio: AudioQueueItem = {
+      id: "walk-in",
+      kind: "audio",
+      audio: { media_id: "walkin", name: "Walk-in" },
+      reference: "Walk-in",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+    }
+    useQueueStore.setState({ items: [audio], activeIndex: null })
+    useBibleStore.setState({ selectedVerse: null, selectedSlide: { item: audio, index: 0 }, selectedQueueItemId: audio.id })
+
+    await act(async () => root!.render(<PreviewPanel />))
+
+    expect(canvasVerses.at(-1)).toMatchObject({ lines: [
+      "♪ Walk-in",
+      'Audio file “Walk-in” is missing from this computer\'s media library.',
+      "Congregation and OBS screens stay unchanged",
+    ] })
+  })
+
+  it("does not imply audio is missing when the local media catalog could not be checked", async () => {
+    const audio: AudioQueueItem = {
+      id: "walk-in",
+      kind: "audio",
+      audio: { media_id: "walkin", name: "Walk-in" },
+      reference: "Walk-in",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+    }
+    useQueueStore.setState({ items: [audio], activeIndex: null })
+    useBibleStore.setState({ selectedVerse: null, selectedSlide: { item: audio, index: 0 }, selectedQueueItemId: audio.id })
+    useMediaStore.setState({ assets: [], loaded: true, loading: false, error: "Local media folder is unavailable" })
+
+    await act(async () => root!.render(<PreviewPanel />))
+
+    expect(canvasVerses.at(-1)).toMatchObject({ lines: [
+      "♪ Walk-in",
+      "The local media library couldn't be checked: Local media folder is unavailable",
+      "Congregation and OBS screens stay unchanged",
+    ] })
+    expect(canvasVerses.at(-1)).not.toMatchObject({ lines: expect.arrayContaining([expect.stringContaining("is missing from")]) })
   })
 })

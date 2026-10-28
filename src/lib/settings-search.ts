@@ -110,8 +110,8 @@ export interface ElsewhereEntry {
 export const SETTINGS_ELSEWHERE: readonly ElsewhereEntry[] = [
   { id: "church", name: "Church name, logo and colours", where: "Design → Brand kit", keywords: ["church", "church name", "identity", "logo", "brand", "brand kit", "colours", "colors", "fonts", "general"] },
   { id: "appearance", name: "Light, dark or system", where: "Desk menu, at the foot of the sidebar", keywords: ["appearance", "light", "dark", "dark mode", "light mode", "system", "theme", "night"] },
-  { id: "cameras", name: "Cameras and the camera router", where: "Production → Cameras", keywords: ["camera", "cameras", "camera router", "mediamtx", "whep", "video", "pulpit", "phone camera"] },
-  { id: "hosting", name: "Host or join, roles and the talk channel", where: "Production → Operators", keywords: ["host", "join", "hosting", "roles", "role", "operators", "volunteers", "desks", "another computer", "permissions", "crew"] },
+  { id: "cameras", name: "Cameras and the camera router", where: "Connections", keywords: ["camera", "cameras", "camera router", "mediamtx", "whep", "video", "pulpit", "phone camera"] },
+  { id: "hosting", name: "Host or join, roles and the talk channel", where: "Connections", keywords: ["host", "join", "hosting", "roles", "role", "operators", "volunteers", "desks", "another computer", "permissions", "crew"] },
   { id: "service-defaults", name: "Approvals before a service goes live", where: "Team → Approvals", keywords: ["service defaults", "approval", "approvals", "approve", "unapproved", "ask before", "defaults", "operator name", "your name"] },
   { id: "backups", name: "Backups and the church folder", where: "Archive", keywords: ["backup", "backups", "back up", "restore", "church folder", "archive", "export", "import", "data", "nas", "sync"] },
 ]
