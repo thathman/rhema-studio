@@ -459,7 +459,7 @@ async function runScenario() {
     await clickButton("Edit event: Media")
     await clickTab("Content")
     await clickButton("Add content to Media")
-    await clickButton("Pictures")
+    await clickButton("Media")
     const soundRow = await waitFor(
       () => [...document.querySelectorAll('ul[aria-label="Sounds"] li')].find((candidate) => normal(candidate.innerText).includes(audioAsset.name)),
       "isolated synthetic audio in the Media picker",
@@ -468,7 +468,7 @@ async function runScenario() {
     if (!addSound) throw new Error("The Media picker did not offer the synthetic audio to Add")
     await activateButton(addSound)
     const audioMoment = await waitFor(
-      () => qa.queue.getState().items.find((item) => item.kind === "image" && item.image?.media_id === audioAsset.id),
+      () => qa.queue.getState().items.find((item) => item.kind === "audio" && item.audio?.media_id === audioAsset.id),
       "audio moment in the service",
     )
     await clickTab("Timing")
@@ -498,7 +498,7 @@ async function runScenario() {
       [arrangementMoment.id]: "song",
       [bibleMoment.id]: bibleMoment.kind ?? "verse",
       [announcementMoment.id]: "slide",
-      [audioMoment.id]: "image",
+      [audioMoment.id]: "audio",
     }
     const expectedEventMoments = [
       [baseline.id, timerCue.id],
@@ -587,7 +587,7 @@ async function runScenario() {
     if (reopenedAnnouncement?.kind !== "slide" || reopenedAnnouncement.slide?.title !== "QA Announcements" || !reopenedAnnouncement.slide.body.includes("Synthetic announcements")) {
       throw new Error(`Announcement slide did not round-trip: ${JSON.stringify(reopenedAnnouncement)}`)
     }
-    if (reopenedAudio?.kind !== "image" || reopenedAudio.image?.media_id !== audioAsset.id || !qa.media.getState().assets.some((asset) => asset.id === audioAsset.id && asset.present)) {
+    if (reopenedAudio?.kind !== "audio" || reopenedAudio.audio?.media_id !== audioAsset.id || !qa.media.getState().assets.some((asset) => asset.id === audioAsset.id && asset.present)) {
       throw new Error(`Audio media reference did not round-trip: ${JSON.stringify(reopenedAudio)}`)
     }
     if (reopenedSlide?.scene_id !== qaScene.id || reopenedSlide.camera !== "qa-synthetic-camera" || !reopenedSlide.on_take?.includes(`scene.take:${qaScene.id}`)) {
