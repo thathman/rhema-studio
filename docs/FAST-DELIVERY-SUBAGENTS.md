@@ -1,6 +1,8 @@
 # Rhema Studio — Fast Delivery and Codex Subagent Playbook
 **Owner instruction:** 2026-10-27 | **Status:** execution policy / implementation plan, NOT evidence work has shipped
 
+> **ACTIVE SUPERSEDING OWNER GOAL (28 OCTOBER 2026):** Stop opening new PRs entirely and move to [Finish-first backlog closure and major-feature completion](OWNER-FINISH-FIRST-2026-10-28.md). Prior guidance below about opening small/parallel PRs is suspended wherever it conflicts. First reduce the existing 52-open-PR snapshot by safe reviewed integration and evidence-based supersession; do not start new feature waves until that queue is under control. Shift to risk-based focused development tests while preserving material Live/data/security, required merge, and milestone acceptance gates. Product scope and owner approval restrictions are unchanged.
+
 Read this after `docs/CODEX-UNIFIED-HANDOFF.md` and `docs/rhema-studio/32-feature-coverage-inventory.md`. Existing product, privacy, licensing, safety, output and owner-approval requirements remain authoritative. This playbook changes **how work gets delivered**, not **what Rhema Studio must do**.
 
 ## Objective and measurable result

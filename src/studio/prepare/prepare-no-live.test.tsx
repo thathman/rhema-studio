@@ -109,7 +109,7 @@ afterEach(() => {
   mockService.program = null
   mockService.items = []
   document.body.replaceChildren()
-  useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false })
+  useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false, unsupportedItems: [], corruptItems: [] })
 })
 
 async function renderPrepare(withLiveControls = false) {
@@ -1020,6 +1020,30 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(el.querySelector('[aria-label="Group: Scripture moments"]')).toBeNull()
     expect(el.querySelector('[aria-label="Event: Closing prayer"]')).not.toBeNull()
     expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(1)
+  })
+
+  it("distinguishes unreadable saved items from newer-version items and blocks unsafe service actions", async () => {
+    useServiceStore.setState({
+      current: { id: "service", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 2 },
+      dirty: true,
+      unsupportedItems: [{ id: "future", kind: "interactive_scene", reference: "Scene", payload: null } as never],
+      corruptItems: [{ id: "broken", kind: "slide", reference: "Welcome", payload: "{bad" } as never],
+    })
+    const el = await renderPrepare()
+    expect(el.textContent).toContain("1 saved item could not be read")
+    expect(el.textContent).toContain("1 item from a newer version")
+
+    const save = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save"))!
+    const approve = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Approve"))!
+    expect(save.disabled).toBe(true)
+    expect(save.title).toContain("Unreadable saved items")
+    expect(approve.disabled).toBe(true)
+    expect(approve.title).toContain("Recover or update saved items")
+
+    await act(async () => useServiceStore.setState({ dirty: false }))
+    expect(approve.disabled).toBe(true)
+    await act(async () => useServiceStore.setState({ unsupportedItems: [], corruptItems: [] }))
+    expect(approve.disabled).toBe(false)
   })
 
   it("says whether the service is saved, next to its name", async () => {
