@@ -13,6 +13,7 @@ import { useBibleStore } from "./bible-store"
 import { useBroadcastStore } from "./broadcast-store"
 import type { OutlineHeader } from "@/lib/run-of-show"
 import { useMediaStore } from "./media-store"
+import { ENGAGE_PAYLOAD_KEY, type EngageQuiz } from "@/lib/engage"
 
 const program = {
   id: "p1",
@@ -435,6 +436,67 @@ describe("audio cue service saves", () => {
       kind: "audio",
       audio: { media_id: "walkin", output_device_id: "usb-output", volume: 0.6, loop: true, fade_in_ms: 1500, fade_out_ms: 2500 },
       planned_minutes: 5,
+    })
+  })
+})
+
+describe("Engage quiz service saves", () => {
+  it("saves, closes and reopens the quiz payload, planned time and stable item id", async () => {
+    const current = { ...program, item_count: 1, approved_revision: null }
+    const quiz: EngageQuiz = {
+      version: 1,
+      title: "Sunday Recall",
+      lobbySeconds: 90,
+      questionSeconds: 20,
+      leaderboardMode: "final",
+      reviewed: true,
+      questions: [{ prompt: "Which book was read?", choices: ["Romans", "Mark", "Luke", "Acts"], correctIndex: 0, source: "service", reference: "Romans 8" }],
+    }
+    const cue: QueueItem = {
+      id: "engage-quiz-1",
+      kind: "cue",
+      reference: quiz.title,
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+      planned_minutes: 2,
+      payload_extra: { [ENGAGE_PAYLOAD_KEY]: quiz },
+    }
+    let persisted: ProgramWithItems | null = null
+    useServiceStore.setState({ current, dirty: true })
+    useQueueStore.setState({ items: [cue], headers: [], activeIndex: null })
+    mockInvoke.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === "content_replace_items" || command === "content_replace_items_with_history") {
+        const rows = args?.items as Array<Record<string, unknown>>
+        persisted = {
+          program: { ...current, revision: 2 },
+          items: rows.map((row, position) => item(String(row.id), String(row.reference), 0, 0, 0, {
+            position,
+            kind: String(row.kind),
+            book_number: null,
+            chapter: null,
+            verse: null,
+            translation: null,
+            secondary_translation: null,
+            notes: typeof row.notes === "string" ? row.notes : null,
+            payload: typeof row.payload === "string" ? row.payload : null,
+          })),
+        }
+        return structuredClone(persisted)
+      }
+      if (command === "content_get_program") return persisted ? structuredClone(persisted) : null
+      return null
+    })
+
+    expect(await useServiceStore.getState().saveCurrent()).toBe("saved")
+    expect(JSON.parse(String(sentItems()[0].payload))).toMatchObject({ planned_minutes: 2, [ENGAGE_PAYLOAD_KEY]: quiz })
+    expect(useServiceStore.getState().closeProgram()).toBe("closed")
+    expect(await useServiceStore.getState().openProgram(current.id)).toBe("ok")
+    expect(useQueueStore.getState().items[0]).toMatchObject({
+      id: cue.id,
+      kind: "cue",
+      planned_minutes: 2,
+      payload_extra: { [ENGAGE_PAYLOAD_KEY]: quiz },
     })
   })
 })

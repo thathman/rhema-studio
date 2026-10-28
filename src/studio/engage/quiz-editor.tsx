@@ -3,8 +3,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQueueStore } from "@/stores/queue-store";
-import { useAddDialog } from "@/studio/prepare/add-target";
-import { presentActions } from "@/studio/present-actions";
 import type { CueQueueItem } from "@/types";
 import {
   ENGAGE_PAYLOAD_KEY, blankQuestion, engageFromItem, estimatedEngageMinutes,
@@ -33,7 +31,7 @@ function QuizForm({ initial, onSave, saveLabel }: {
   };
   return (
     <div className="flex min-h-0 flex-col gap-3 overflow-y-auto p-3 text-sm">
-      <p className="text-xs text-muted-foreground">This quiz is prepared here but hosted on the internet when an operator launches it in Present. Nothing is published by saving.</p>
+      <p className="text-xs text-muted-foreground">This quiz is prepared here but hosted on the internet when an operator launches it in Live. Nothing is published by saving.</p>
       <label className="flex flex-col gap-1 font-medium">
         Quiz title
         <Input value={quiz.title} maxLength={120} onChange={e => change({ title: e.target.value })} />
@@ -101,17 +99,16 @@ function QuizForm({ initial, onSave, saveLabel }: {
   );
 }
 
-export function EngageAddPanel() {
+export function EngageAddPanel({ onAdded }: { onAdded?: (id: string) => void }) {
   return <QuizForm initial={newEngageQuiz()} saveLabel="Add quiz to service" onSave={(draft) => {
     const item: CueQueueItem = {
       id: crypto.randomUUID(), kind: "cue", reference: draft.title, confidence: 1,
       source: "manual", added_at: Date.now(), planned_minutes: estimatedEngageMinutes(draft),
       payload_extra: { [ENGAGE_PAYLOAD_KEY]: draft },
     };
-    useQueueStore.getState().addItem(item);
-    presentActions.previewItem(item);
-    useAddDialog.getState().close();
-    toast.success("Quiz added — launch it from Present when ready");
+    const id = useQueueStore.getState().addItem(item);
+    if (id) onAdded?.(id);
+    toast.success("Quiz added — launch it from Live when ready");
   }} />;
 }
 

@@ -5,12 +5,16 @@ const draft = () => ({title:"Sunday Recall",lobbySeconds:90,questionSeconds:20,r
   {prompt:"What book was read?",choices:["Romans","Mark","Luke","Acts"],correctIndex:0,source:"service",reference:"Romans 8"},
   {prompt:"Who preached?",choices:["Pastor","Deacon","Choir","Guest"],correctIndex:0,source:"sermon"}
 ]});
-const room = () => newRoom("123456", draft(), "hashed-host-secret", 1000);
+const room = () => newRoom("12345678", draft(), "hashed-host-secret", 1000);
 test("requires human-reviewed valid questions", () => {
   assert.equal(normalizeQuiz(draft()).questions.length,2);
   assert.throws(()=>normalizeQuiz({...draft(),reviewed:false}),/review/);
   assert.throws(()=>normalizeQuiz({...draft(),lobbySeconds:0}),/Lobby/);
   assert.throws(()=>normalizeQuiz({...draft(),questions:[{prompt:"bad",choices:["x"],correctIndex:0}]}),/four choices/);
+});
+test("room codes use eight digits to make online room discovery harder", () => {
+  assert.throws(() => newRoom("123456", draft(), "host", 1000), /room code/i);
+  assert.equal(room().code, "12345678");
 });
 test("lobby automatically starts first question, and question deadline closes submissions", () => {
   const r=room();join(r,"player-hash","Grace",2000);

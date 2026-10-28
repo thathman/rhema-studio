@@ -37,7 +37,8 @@ function endpointOf(input: string): string | null {
 }
 
 export function EngageHostControl() {
-  const quizzes = useQueueStore(s => s.items.filter(i => !!engageFromItem(i)));
+  const items = useQueueStore(s => s.items);
+  const quizzes = items.filter(i => !!engageFromItem(i));
   const session = useEngageHost(s => s.session);
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState("");
@@ -113,6 +114,18 @@ export function EngageHostControl() {
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setPending(false); }
   };
+  const deleteData = async () => {
+    if (!session || !window.confirm("Delete this quiz, every nickname and all answers from the online service now? This cannot be undone.")) return;
+    setPending(true); setError(null);
+    try {
+      await call(session.endpoint, "/api/rooms/" + session.code, "DELETE", session.hostToken);
+      useEngageHost.getState().setSession(null);
+      setState(null);
+      setOpen(false);
+      toast.success("Quiz and participant data deleted from the online service");
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setPending(false); }
+  };
   const remaining = state?.phase === "paused" ? state.remainingMs : state?.deadline ? Math.max(0, state.deadline - (clock + offsetMs)) : null;
   const time = remaining === null ? "—" : Math.floor(remaining / 60000).toString().padStart(2, "0") + ":" + Math.ceil(remaining / 1000 % 60).toString().padStart(2, "0");
 
@@ -120,7 +133,10 @@ export function EngageHostControl() {
   return (
     <>
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>Engage Quiz{session ? " · " + session.code : ""}</Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(next) => {
+        setOpen(next)
+        if (!next && !session) setKey("")
+      }}>
         <DialogContent className="flex max-h-[90vh] w-[min(680px,94vw)] flex-col overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Rhema Engage — Sermon & Service Recall</DialogTitle>
@@ -140,7 +156,7 @@ export function EngageHostControl() {
               <label className="flex flex-col gap-1">Host creation key
                 <Input type="password" autoComplete="off" placeholder="Private secret configured on cloud worker" value={key} onChange={e => setKey(e.target.value)} />
               </label>
-              <p className="text-xs text-muted-foreground">Never add the host key to a saved service, slide, public URL or shared event. The Cloudflare deployment and ADMIN_KEY must already exist.</p>
+              <p className="text-xs text-muted-foreground">Never add the host key to a saved service, slide, public URL or shared event. The Cloudflare service, ADMIN_KEY and Turnstile join protection must already be configured.</p>
               <Button disabled={pending || !quiz?.reviewed} onClick={() => void launch()}>Create internet quiz lobby</Button>
             </div>
           ) : (
@@ -172,7 +188,8 @@ export function EngageHostControl() {
                 {state?.phase === "reveal" && <Button size="sm" disabled={disabled} onClick={() => void command("next")}>Next / Finish</Button>}
                 {!["finished", "expired"].includes(state?.phase ?? "") && <Button size="sm" variant="outline" disabled={disabled} onClick={() => void command("finish")}>Finish game</Button>}
                 <Button size="sm" variant="outline" onClick={() => window.open(session.screenUrl, "_blank", "noopener,noreferrer")}>Open TV / OBS browser display</Button>
-                <Button size="sm" variant="ghost" onClick={() => { if (window.confirm("Forget this host token? You will not be able to control this session again.")) useEngageHost.getState().setSession(null); }}>Forget session</Button>
+                <Button size="sm" variant="outline" disabled={pending} onClick={() => void deleteData()}>Delete quiz data now</Button>
+                <Button size="sm" variant="ghost" onClick={() => { if (window.confirm("Forget host access on this computer? The online quiz and participant data remain stored for up to eight hours.")) useEngageHost.getState().setSession(null); }}>Forget access</Button>
               </div>
               <p className="text-xs text-muted-foreground">To put the quiz on the TV, open the screen URL on a designated display or add it as an OBS Browser Source. This V1 does not yet auto-Take a Rhema congregation scene.</p>
               {!!state?.leaderboard?.length && <div className="rounded-lg border border-border p-3"><p className="font-semibold">Leaderboard</p>

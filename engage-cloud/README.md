@@ -9,40 +9,44 @@ This directory implements the **public-internet game service**. It is intentiona
 - Reviewed 1–20 question games with four options, sermon/service source labels, optional Scripture references, configurable 5–120-second question clocks, manual reveal and next.
 - Server-side validation of correct answers; one answer per player per question; 100 points/correct; highest correct count wins, lower cumulative correct-answer response time breaks ties. Participants cannot see answer keys before Reveal.
 - Public leaderboard after every reveal *if enabled*, otherwise only at Finish. Host can always see the live board.
-- Room TTL 8 hours, maximum 500 participants, maximum 32 KB request, 6-digit codes allocated by single Durable Object directory, per-room Durable Object alarm-backed timing and serialized answer receipt.
-- Cloud creation authorized by Worker `ADMIN_KEY`; individual room controls authorized by separately generated bearer token. Client-creation key is not persisted in the local church service.
+- Room TTL 8 hours, maximum 500 participants, maximum 32 KB streamed request bodies, eight-digit codes allocated by a single Durable Object directory, per-room Durable Object alarm-backed timing and serialized answer receipt.
+- Cloud creation authorized by Worker `ADMIN_KEY`; failed host-key attempts are rate-limited. The Worker signs room-bound host, participant and display tokens with `SESSION_SIGNING_KEY`. Room state cannot be read with the eight-digit code alone. The client-creation key is not persisted in the local church service.
+- Cloudflare Turnstile protects participant joins; the Durable Object directory rate-limits room creation, host-key attempts, invalid-code probes and joins. Temporary rate-limit storage is capped and expires by alarm. A host can delete all quiz and participant data immediately from the Live Engage panel.
 
 ## Deploy (explicitly opt-in)
 
 From this directory on a Cloudflare account authorized to use **Workers + Durable Objects**:
 
 ```sh
-npm install
+npm ci
 npm test
 npx wrangler login
 npx wrangler secret put ADMIN_KEY
+npx wrangler secret put SESSION_SIGNING_KEY
+npx wrangler secret put TURNSTILE_SITE_KEY
+npx wrangler secret put TURNSTILE_SECRET
 npx wrangler deploy
 ```
 
-Use a **long random key** and a stable HTTPS hostname/custom domain. After deployment, open Rhema Studio → Prepare → Add item → Quiz; create/review quiz; save it. Open Present → Engage Quiz, enter the HTTPS origin and private Worker ADMIN_KEY once, click **Create internet quiz lobby**. Show the generated `/screen/123456` URL on a separate congregation display or in an **OBS Browser Source**; congregation members scan its QR or visit the public worker root and enter the code on mobile data. Room countdown starts on creation, not on TV Take.
+Use a **long random `ADMIN_KEY`**, a separate random `SESSION_SIGNING_KEY` of at least 32 bytes, a Cloudflare Turnstile site configured for the Worker hostname, and a stable HTTPS hostname/custom domain. Keep all four values in Worker secrets; do not commit them. After deployment, open Rhema Studio → Prepare → Add item → Quiz; create/review quiz; save it. Open Live → Engage Quiz, enter the HTTPS origin and private Worker ADMIN_KEY once, click **Create internet quiz lobby**. Open the generated secure screen link on a designated display or in an **OBS Browser Source**; congregation members scan its QR or visit the public worker root and enter the eight-digit code on mobile data. Room countdown starts on creation, not on TV Take.
 
 **No deployment has been carried out by creating this PR.** A public endpoint, Worker plan and key must be configured by an owner before real guests can participate.
 
 ## Security and privacy
 
-- Never put `ADMIN_KEY` or returned `hostToken` in public slides, shared service files, screenshot examples or URLs. Host credentials are held in desktop app memory for the session; leaving/restarting the desktop loses the token, not the room.
-- Only a **human-reviewed quiz** is transmitted to the cloud on room creation. No raw sermon recording, church member roster, full service, camera feed or local church database is sent.
-- Scores and nicknames are public **to those who know the six-digit room code**; avoid putting personal names in the nickname. No contact information is required.
-- This pilot does **not** provide strong anti-bot, anti-Sybil or individual identity verification. Cloudflare security rules/rate limiting and nickname moderation need an additional production-hardening slice before large public deployments.
-- Room expiration after eight hours is not an immediate guarantee of all infrastructure/log retention policies. Configure Cloudflare account analytics/logs in accordance with church policy.
+- Never put `ADMIN_KEY` or the host token in public slides, shared service files or screenshots. Host credentials are held in desktop app memory for the session; leaving/restarting the desktop loses the token, not the room. The screen URL is a read-only bearer link for the designated public display; its signed token is in the URL fragment, which browsers do not send to the Worker or as a referrer.
+- State requests require a signed host, participant or screen token bound to that room. Guessing the eight-digit code alone does not reveal its title, questions, participants or answers. Rotating `SESSION_SIGNING_KEY` invalidates active host, participant and screen sessions; delete or let active rooms expire before rotating it.
+- The desktop flow sends a quiz only after its human-review box is checked, and the Worker requires the `reviewed` flag. This is a workflow guard, not independent reviewer attestation: anyone holding `ADMIN_KEY` is trusted to submit approved content and can call the API directly. No raw sermon recording, church member roster, full service, camera feed or local church database is sent.
+- Scores and nicknames are visible to joined participants and anyone with the secure read-only screen link; avoid putting personal names in the nickname. The eight-digit room code alone does not grant access to state. No contact information is required. Turnstile and rate limits reduce automated joins and code probing, but do not prove individual identity or prevent a determined Sybil attack.
+- The host can delete quiz, nickname and answer data immediately. Otherwise, the room becomes inaccessible after eight hours and its Durable Object alarm deletes its stored data. The directory stores only keyed HMAC-derived, pseudonymous client identifiers for short rate-limit windows; it never stores raw client IPs or a reversible address hash. Storage caps are isolated by limiter category: active joins have a 4,096 address-room bucket global cap and a 600-bucket per-room cap; a full invalid-code bucket does not consume failed-host or active-join capacity. New keys in a full category fail closed until expired buckets are cleared. These controls do not change Cloudflare account analytics/log retention. Configure those policies in accordance with church policy.
 - Public state is polled approximately every 1.5–1.8 seconds; 500-participant sessions need load/cost tests before deployment at capacity.
 - **Fastest Finger is a tie-break**, but mobile-data latency makes millisecond-level fairness imperfect. Consider an accuracy-only result or a fresh tied-player tie-break question in a later release.
 - CSP is kept restrictive; public screens never evaluate participant-generated HTML or source content.
 
-## Known gaps / next PRs
+## Remaining release validation
 
 - Native Rhema Scene/Live Source integration, animated graphics from Design templates and authorized Take onto actual Rhema congregation/NDI feeds are not yet implemented. This V1 uses an explicitly opened web screen/OBS Browser Source; it never silently changes public presentation. Follow #409/#410.
-- Cloud account-level authentication, moderator tools, hosted keychain-backed secrets, per-IP anti-abuse, robust internet reconnect/host takeover, visual QA and physical phone/TV acceptance remain necessary.
+- Cloudflare account-level authentication, moderator tools, hosted keychain-backed secrets, robust internet reconnect/host takeover, load testing, visual QA and physical phone/TV acceptance remain necessary.
 - Built-in Scripture question bank, sermon transcript AI drafting, team challenges and historical leaderboards are **not included**. The current editor creates human-approved custom questions.
 - The Worker must be tested with a real public domain and phones on different mobile networks before claiming production readiness.
 

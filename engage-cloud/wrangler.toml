@@ -15,5 +15,5 @@ class_name = "QuizDirectory"
 tag = "v1"
 new_sqlite_classes = ["QuizRoom", "QuizDirectory"]
 
-# Set ADMIN_KEY with: npx wrangler secret put ADMIN_KEY
+# Set secrets with: npx wrangler secret put ADMIN_KEY, SESSION_SIGNING_KEY, TURNSTILE_SITE_KEY, and TURNSTILE_SECRET.
 # No deployment occurs merely by building the desktop application.

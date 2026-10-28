@@ -1,5 +1,7 @@
 // Rhema Engage v1: pure, server-authoritative quiz rules; no participant answers leave this module early.
 export const ROOM_TTL_MS = 8 * 60 * 60 * 1000;
+export const ROOM_CODE_LENGTH = 8;
+export const ROOM_CODE_PATTERN = new RegExp(`^\\d{${ROOM_CODE_LENGTH}}$`);
 export const MAX_PLAYERS = 500;
 export const MAX_QUESTIONS = 20;
 export const MAX_BODY_BYTES = 32_000;
@@ -30,8 +32,9 @@ export function normalizeQuiz(raw) {
     questions, leaderboardMode: raw.leaderboardMode === "each" ? "each" : "final" };
 }
 
-export function newRoom(code, draft, hostHash, now) {
-  return { code, ...normalizeQuiz(draft), hostHash, createdAt: now, expiresAt: now + ROOM_TTL_MS,
+export function newRoom(code, draft, hostHash, now, screenHash = null) {
+  if (!ROOM_CODE_PATTERN.test(code)) throw new Error("Invalid room code");
+  return { code, ...normalizeQuiz(draft), hostHash, screenHash, createdAt: now, expiresAt: now + ROOM_TTL_MS,
     phase: "lobby", deadline: now + draft.lobbySeconds * 1000, remainingMs: null, pausedFrom: null,
     index: -1, players: {}, answerCount: 0 };
 }
