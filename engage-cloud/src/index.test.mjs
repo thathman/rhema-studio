@@ -133,6 +133,7 @@ test("rate-limit caps are isolated and recover after expiry", async () => {
 test("active join buckets have both global and per-room capacity bounds", async () => {
   const now = Date.now();
   const activeRoom = "12345678";
+  const activeRooms = Array.from({ length: 7 }, (_, index) => String(12345678 + index));
   const otherRoom = "87654321";
   const clientKey = index => index.toString(16).padStart(4, "0") + "a".repeat(39);
   const requestJoin = (directory, code, key) => directory.fetch(new Request("https://internal/rate-limit", {
@@ -141,9 +142,9 @@ test("active join buckets have both global and per-room capacity bounds", async 
   }));
 
   const globalDirectory = new QuizDirectory({ storage: new MemoryStorage() });
-  await globalDirectory.state.storage.put("codes", { [activeRoom]: now + 60_000, [otherRoom]: now + 60_000 });
+  await globalDirectory.state.storage.put("codes", Object.fromEntries([...activeRooms, otherRoom].map(code => [code, now + 60_000])));
   const globalBuckets = Object.fromEntries(Array.from({ length: 4096 }, (_, index) => [
-    `active:${activeRoom}:${clientKey(index)}`, { count: 1, resetAt: now + 60_000 },
+    `active:${activeRooms[Math.floor(index / 600)]}:${clientKey(index)}`, { count: 1, resetAt: now + 60_000 },
   ]));
   await globalDirectory.state.storage.put("rateLimits", globalBuckets);
   assert.equal((await requestJoin(globalDirectory, activeRoom, clientKey(0))).status, 200, "existing keys remain usable at capacity");
@@ -155,6 +156,7 @@ test("active join buckets have both global and per-room capacity bounds", async 
     `active:${activeRoom}:${clientKey(index)}`, { count: 1, resetAt: now + 60_000 },
   ]));
   await roomDirectory.state.storage.put("rateLimits", roomBuckets);
+  assert.equal((await requestJoin(roomDirectory, activeRoom, clientKey(0))).status, 200, "existing keys remain usable at the per-room cap");
   assert.equal((await requestJoin(roomDirectory, activeRoom, clientKey(600))).status, 503, "a room cannot exceed its local limiter cap");
   assert.equal((await requestJoin(roomDirectory, otherRoom, clientKey(600))).status, 200, "one full room does not starve another under the global cap");
 });
@@ -170,23 +172,111 @@ test("expired room alarms delete quiz data and the scheduled alarm", async () =>
   assert.equal(room.state.storage.alarmAt, null);
 });
 
-test("invalid room-code probes are rate-limited per pseudonymous client address", async () => {
+test("pre-challenge join attempts are rate-limited separately from verified room joins", async () => {
   const env = environment();
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 20; i++) {
     const response = await request(env, "/api/rooms/99999999/join", { method: "POST", body: { nickname: "Grace" } });
     assert.equal(response.status, 403);
   }
   const limited = await request(env, "/api/rooms/88888888/join", { method: "POST", body: { nickname: "Grace" } });
-  assert.equal(limited.status, 429);
-  assert.ok(Number(limited.headers.get("Retry-After")) > 0);
+  assert.equal(limited.status, 403, "more than fifteen retries from a shared network address still reach challenge validation");
   const directory = env.DIRECTORY.objects.get("directory");
   const buckets = await directory.state.storage.get("rateLimits");
-  assert.ok(Object.keys(buckets).some((key) => key.startsWith("invalid:")));
+  assert.ok(Object.keys(buckets).some((key) => key.startsWith("probe:")));
+  assert.equal(Object.keys(buckets).some((key) => key.startsWith("active:")), false);
+  assert.equal(Object.keys(buckets).some((key) => key.startsWith("invalid:")), false, "unverified codes never consume the verified invalid-code category");
   assert.equal(JSON.stringify(buckets).includes("192.0.2.1"), false);
   const expired = Object.fromEntries(Object.entries(buckets).map(([key, bucket]) => [key, { ...bucket, resetAt: Date.now() - 1 }]));
   await directory.state.storage.put("rateLimits", expired);
   await directory.alarm();
   assert.equal(await directory.state.storage.get("rateLimits"), undefined);
+});
+
+test("the pre-challenge per-address ceiling allows 1,000 requests before throttling", async () => {
+  const directory = new QuizDirectory({ storage: new MemoryStorage() });
+  const requestProbe = () => directory.fetch(new Request("https://internal/rate-limit", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: "join-probe", clientKey: "p".repeat(43) }),
+  }));
+  for (let i = 0; i < 1000; i++) assert.equal((await requestProbe()).status, 200);
+  const limited = await requestProbe();
+  assert.equal(limited.status, 429);
+  assert.ok(Number(limited.headers.get("Retry-After")) > 0);
+});
+
+test("failed Turnstile attempts cannot consume active join capacity", async () => {
+  const env = environment();
+  const created = await createRoom(env);
+  const originalFetch = globalThis.fetch;
+  let challengePasses = false;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    success: challengePasses, action: "join", cdata: created.code, hostname: "quiz.example",
+  }), { headers: { "Content-Type": "application/json" } });
+  try {
+    for (let index = 0; index < 600; index++) {
+      const ip = `198.51.${Math.floor(index / 254)}.${index % 254 + 1}`;
+      const rejected = await request(env, `/api/rooms/${created.code}/join`, {
+        method: "POST", ip, body: { nickname: "Grace", turnstileToken: "failed-challenge" },
+      });
+      assert.equal(rejected.status, 403);
+    }
+    const directory = env.DIRECTORY.objects.get("directory");
+    const buckets = await directory.state.storage.get("rateLimits");
+    assert.equal(Object.keys(buckets).some(key => key.startsWith(`active:${created.code}:`)), false);
+
+    challengePasses = true;
+    const validJoin = await request(env, `/api/rooms/${created.code}/join`, {
+      method: "POST", ip: "203.0.113.70", body: { nickname: "Grace", turnstileToken: "valid-challenge" },
+    });
+    assert.equal(validJoin.status, 201);
+    assert.equal(Object.keys(await directory.state.storage.get("rateLimits")).filter(key => key.startsWith(`active:${created.code}:`)).length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("500 verified participants sharing one network address are not preflight-throttled", async () => {
+  const env = environment();
+  const created = await createRoom(env);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    success: true, action: "join", cdata: created.code, hostname: "quiz.example",
+  }), { headers: { "Content-Type": "application/json" } });
+  try {
+    for (let index = 0; index < 500; index++) {
+      const joined = await request(env, `/api/rooms/${created.code}/join`, {
+        method: "POST", ip: "198.51.100.42",
+        body: { nickname: `Guest ${index + 1}`, turnstileToken: `unique-challenge-${index}` },
+      });
+      assert.equal(joined.status, 201, `shared-address participant ${index + 1} can join`);
+    }
+    const full = await request(env, `/api/rooms/${created.code}/join`, {
+      method: "POST", ip: "198.51.100.42", body: { nickname: "Guest 501", turnstileToken: "one-more-challenge" },
+    });
+    assert.equal(full.status, 400);
+    assert.match((await full.json()).error, /player limit/i);
+    const directory = env.DIRECTORY.objects.get("directory");
+    const buckets = await directory.state.storage.get("rateLimits");
+    const probe = Object.entries(buckets).find(([key]) => key.startsWith("probe:"))?.[1];
+    assert.ok(probe);
+    assert.equal(probe.count, 501);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("verified invalid room codes use their own pseudonymous address bucket", async () => {
+  const directory = new QuizDirectory({ storage: new MemoryStorage() });
+  const clientKey = "q".repeat(43);
+  const attempt = code => directory.fetch(new Request("https://internal/rate-limit", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: "join", code, clientKey }),
+  }));
+  for (let i = 0; i < 15; i++) assert.equal((await attempt("99999999")).status, 200);
+  const limited = await attempt("88888888");
+  assert.equal(limited.status, 429);
+  assert.ok(Number(limited.headers.get("Retry-After")) > 0);
+  assert.ok(Object.keys(await directory.state.storage.get("rateLimits")).some(key => key.startsWith("invalid:")));
 });
 
 test("participant joins require a room-bound Turnstile result and host deletion removes data immediately", async () => {

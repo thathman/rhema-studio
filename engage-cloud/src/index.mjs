@@ -8,8 +8,9 @@ const rand = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b
 const hash = async token => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token))), b => b.toString(16).padStart(2, "0")).join("");
 const bearer = req => (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
 const roomCodeRoute = `\\d{${ROOM_CODE_LENGTH}}`;
-const RATE_LIMIT_BUCKET_CAPS = { auth: 512, create: 512, "join-active": 4096, "join-invalid": 2048 };
+const RATE_LIMIT_BUCKET_CAPS = { auth: 512, create: 512, "join-probe": 4096, "join-active": 4096, "join-invalid": 2048 };
 const ACTIVE_JOIN_BUCKETS_PER_ROOM_CAP = 600;
+const JOIN_PROBE_LIMIT_PER_ADDRESS = 1000;
 const SESSION_ROLES = new Set(["host", "participant", "screen"]);
 const encoder = new TextEncoder();
 const signingKeys = new WeakMap();
@@ -179,11 +180,14 @@ export default {
         if (action === "join" && req.method === "POST") {
           if (!signingKeyConfigured(env)) return cors(err("Secure quiz sessions are not configured", 503));
           const clientKey = await clientKeyFor(req, env);
-          const rate = await allowRequest(directory, "join", clientKey, code);
-          if (rate.status === 429) return limited(rate);
-          if (!rate.ok) return cors(err("Quiz service is temporarily unavailable", 503));
+          const probeRate = await allowRequest(directory, "join-probe", clientKey);
+          if (probeRate.status === 429) return limited(probeRate);
+          if (!probeRate.ok) return cors(err("Quiz service is temporarily unavailable", 503));
           const challenge = await body(req.clone());
           if (!await verifyTurnstile(req, challenge.turnstileToken, code, env)) return cors(err("Complete the human check before joining this quiz.", 403));
+          const joinRate = await allowRequest(directory, "join", clientKey, code);
+          if (joinRate.status === 429) return limited(joinRate);
+          if (!joinRate.ok) return cors(err("Quiz service is temporarily unavailable", 503));
           const participantToken = await issueSessionToken(code, "participant", env);
           const stub = env.ROOMS.get(env.ROOMS.idFromName(code));
           const joined = await stub.fetch(new Request("https://internal/join", {
@@ -245,14 +249,14 @@ export class QuizDirectory {
     const path = new URL(req.url).pathname;
     if (path === "/rate-limit" && req.method === "POST") {
       const { kind, clientKey, code } = await body(req);
-      if (typeof clientKey !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(clientKey) || !["auth", "create", "join"].includes(kind)) return err("Invalid rate-limit request", 400);
+      if (typeof clientKey !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(clientKey) || !["auth", "create", "join", "join-probe"].includes(kind)) return err("Invalid rate-limit request", 400);
       const now = Date.now();
       const codes = (await this.state.storage.get("codes")) || {};
       const activeCode = kind === "join" && typeof code === "string" && codes[code] > now;
       const windowMs = kind === "create" ? 60 * 60 * 1000 : 15 * 60 * 1000;
-      const limit = kind === "create" ? 10 : kind === "auth" ? 30 : activeCode ? 600 : 15;
-      const category = kind === "create" ? "create" : kind === "auth" ? "auth" : activeCode ? "join-active" : "join-invalid";
-      const prefix = category === "join-active" ? "active:" : category === "join-invalid" ? "invalid:" : category + ":";
+      const limit = kind === "create" ? 10 : kind === "auth" ? 30 : kind === "join-probe" ? JOIN_PROBE_LIMIT_PER_ADDRESS : activeCode ? 600 : 15;
+      const category = kind === "create" ? "create" : kind === "auth" ? "auth" : kind === "join-probe" ? "join-probe" : activeCode ? "join-active" : "join-invalid";
+      const prefix = category === "join-active" ? "active:" : category === "join-invalid" ? "invalid:" : category === "join-probe" ? "probe:" : category + ":";
       const buckets = (await this.state.storage.get("rateLimits")) || {};
       for (const [bucketKey, bucket] of Object.entries(buckets)) if (bucket.resetAt <= now) delete buckets[bucketKey];
       const categorySize = Object.keys(buckets).filter(bucketKey => bucketKey.startsWith(prefix)).length;

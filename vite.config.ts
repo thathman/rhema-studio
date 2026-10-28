@@ -1,4 +1,3 @@
-/// <reference types="vitest/config" />
 import path from "path"
 import { realpathSync } from "node:fs"
 import tailwindcss from "@tailwindcss/vite"
