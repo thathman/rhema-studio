@@ -41,6 +41,13 @@ const clickButton = async (name, { startsWith = false } = {}) => {
   )
   return activateButton(button)
 }
+const clickTab = async (name) => {
+  const tab = await waitFor(
+    () => [...document.querySelectorAll('[role="tab"]')].find((candidate) => normal(candidate.innerText) === name),
+    `tab “${name}”`,
+  )
+  return activateButton(tab)
+}
 const setInput = async (selector, value) => {
   const input = await waitFor(() => document.querySelector(selector), `input ${selector}`)
   input.focus()
@@ -331,7 +338,7 @@ async function runScenario() {
     await activateButton(currentSlideRow.querySelector('button[title="Click to preview"]'))
     await setNativeSelect(`select[aria-label="Scene for ${currentSlide.reference}"]`, qaScene.id)
     await setNativeSelect(`select[aria-label="Camera for ${currentSlide.reference}"]`, "qa-synthetic-camera")
-    await clickButton("Signals")
+    await clickTab("Signals")
     const takeSection = await waitFor(
       () => [...document.querySelectorAll("section")].find((section) => normal(section.querySelector("h3")?.innerText) === "When you Take it"),
       "scene Take intent controls",
@@ -376,10 +383,10 @@ async function runScenario() {
     })
     const timerRow = await waitFor(() => document.querySelector(`[data-rundown-item-id="${timerCue.id}"]`), "timer cue row")
     await activateButton(timerRow.querySelector('button[title="Click to preview"]'))
-    await clickButton("Timing")
+    await clickTab("Timing")
     await setInput('[aria-label="Planned time for Start prayer timer"]', "6")
     document.querySelector('[aria-label="Planned time for Start prayer timer"]')?.blur()
-    await clickButton("Signals")
+    await clickTab("Signals")
     await setNativeSelect('select[aria-label="Cue when Start prayer timer goes live"]', "timer.fresh")
     await waitFor(() => {
       const item = qa.queue.getState().items.find((candidate) => candidate.id === timerCue.id)
@@ -395,13 +402,13 @@ async function runScenario() {
     })
     const arrangementRow = await waitFor(() => document.querySelector(`[data-rundown-item-id="${arrangementMoment.id}"]`), "song arrangement moment row")
     await activateButton(arrangementRow.querySelector('button[title="Click to preview"]'))
-    await clickButton("Order")
+    await clickTab("Order")
     await chooseOption(alternateArrangement.name)
     await waitFor(
       () => qa.queue.getState().items.find((item) => item.id === arrangementMoment.id)?.song?.arrangement_id === alternateArrangement.id,
       "alternate arrangement selected through the song editor",
     )
-    await clickButton("Timing")
+    await clickTab("Timing")
     await setInput(`[aria-label="Planned time for ${arrangementMoment.reference}"]`, "8")
     document.querySelector(`[aria-label="Planned time for ${arrangementMoment.reference}"]`)?.blur()
     await waitFor(() => qa.queue.getState().items.find((item) => item.id === arrangementMoment.id)?.planned_minutes === 8, "song arrangement planned time")
@@ -422,7 +429,7 @@ async function runScenario() {
       () => qa.queue.getState().items.find((item) => item.verse?.book_number === 43 && item.verse?.chapter === 3 && item.verse?.verse === 16),
       "bilingual Scripture moment in the service",
     )
-    await clickButton("Timing")
+    await clickTab("Timing")
     await setInput(`[aria-label="Planned time for ${bibleMoment.reference}"]`, "7")
     document.querySelector(`[aria-label="Planned time for ${bibleMoment.reference}"]`)?.blur()
     await waitFor(() => qa.queue.getState().items.find((item) => item.id === bibleMoment.id)?.planned_minutes === 7, "Scripture planned time")
@@ -439,7 +446,7 @@ async function runScenario() {
       () => qa.queue.getState().items.find((item) => item.kind === "slide" && item.slide?.title === "QA Announcements"),
       "announcement slide in the service",
     )
-    await clickButton("Timing")
+    await clickTab("Timing")
     await setInput(`[aria-label="Planned time for ${announcementMoment.reference}"]`, "4")
     document.querySelector(`[aria-label="Planned time for ${announcementMoment.reference}"]`)?.blur()
     await waitFor(() => qa.queue.getState().items.find((item) => item.id === announcementMoment.id)?.planned_minutes === 4, "announcement planned time")
@@ -460,7 +467,7 @@ async function runScenario() {
       () => qa.queue.getState().items.find((item) => item.kind === "image" && item.image?.media_id === audioAsset.id),
       "audio moment in the service",
     )
-    await clickButton("Timing")
+    await clickTab("Timing")
     await setInput(`[aria-label="Planned time for ${audioMoment.reference}"]`, "5")
     document.querySelector(`[aria-label="Planned time for ${audioMoment.reference}"]`)?.blur()
     await waitFor(() => qa.queue.getState().items.find((item) => item.id === audioMoment.id)?.planned_minutes === 5, "audio moment planned time")
