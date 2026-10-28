@@ -896,6 +896,33 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(0)
   })
 
+  it("keeps phase and group controls accessible without exposing disabled drag semantics", async () => {
+    useQueueStore.setState({
+      items: [slide("Opening"), slide("Sermon")],
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+        { id: "worship", type: "group", name: "Worship", at: 0 },
+        { id: "sermon", type: "group", name: "Sermon", at: 1, event: { schema_version: 1, duration_minutes: 20 } },
+      ],
+      activeIndex: null,
+    })
+
+    const el = await renderPrepare()
+    for (const label of ["Phase: Main service", "Group: Worship"]) {
+      const row = el.querySelector<HTMLElement>(`[aria-label="${label}"]`)!
+      expect(row.getAttribute("role")).not.toBe("button")
+      expect(row.getAttribute("aria-disabled")).not.toBe("true")
+      for (const control of row.querySelectorAll<HTMLButtonElement>("button")) {
+        expect(control.disabled).toBe(false)
+        expect(control.getAttribute("aria-disabled")).not.toBe("true")
+      }
+    }
+
+    const eventHandle = el.querySelector<HTMLButtonElement>('button[aria-label="Drag event Sermon with its moments"]')!
+    expect(eventHandle.disabled).toBe(false)
+    expect(eventHandle.getAttribute("aria-disabled")).not.toBe("true")
+  })
+
   it("reveals and focuses a successful Add inside collapsed sections", async () => {
     useQueueStore.setState({
       items: [slide("Existing moment")],
