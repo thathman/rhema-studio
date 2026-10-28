@@ -368,7 +368,7 @@ export function toImageRenderData(item: ImageQueueItem, url: string): VerseRende
  * what it shows. The rundown position moves (the caller set it), so Next
  * continues after it, and Preview follows so Show live means this item.
  */
-function playSoundItem(item: ImageQueueItem, asset: { id: string; present: boolean }): PresentOutcome {
+async function playSoundItem(item: ImageQueueItem, asset: { id: string; present: boolean }): Promise<PresentOutcome> {
   useBibleStore.getState().selectSlide({ item, index: 0 })
   if (!asset.present) {
     useBroadcastStore.getState().setPresentWarning(`${item.image.name} not played: the sound file is missing from the media folder.`)
@@ -380,7 +380,14 @@ function playSoundItem(item: ImageQueueItem, asset: { id: string; present: boole
   }
   const sound = useSoundStore.getState()
   // Already playing (Show live again from Preview): leave it running.
-  if (sound.assetId !== asset.id || !sound.playing) void sound.play({ id: asset.id, name: item.image.name })
+  if (sound.assetId !== asset.id || !sound.playing) {
+    const started = await sound.play({ id: asset.id, name: item.image.name })
+    if (!started) {
+      const played = useSoundStore.getState()
+      useBroadcastStore.getState().setPresentWarning(`${item.image.name} not played: ${played.error ?? "playback did not start."}`)
+      return "empty"
+    }
+  }
   return "presented"
 }
 
@@ -399,7 +406,7 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
   const ticket = presentSeq
   const by = currentActor()
   const asset = cached ?? (await media.list()).find((a) => a.id === item.image.media_id)
-  if (asset?.kind === "audio") return ticket === presentSeq ? playSoundItem(item, asset) : "superseded"
+  if (asset?.kind === "audio") return ticket === presentSeq ? await playSoundItem(item, asset) : "superseded"
   // A video asset streams to the outputs; nothing is decoded here.
   if (asset?.kind === "video") {
     const videoUrl = asset.present ? await media.fileUrl(asset.id).catch(() => null) : null
