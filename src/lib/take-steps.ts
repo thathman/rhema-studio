@@ -4,6 +4,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useObsStore } from "@/stores/obs-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import type { BroadcastOutput, QueueItem } from "@/types"
+import { useServiceStore } from "@/stores/service-store"
 
 export { takesSourceOnly } from "@/lib/item-intent"
 
@@ -35,7 +36,26 @@ export async function runTakeSteps(item: QueueItem): Promise<void> {
 
 function takeItemScene(step: Extract<ParsedTakeStep, { kind: "scene" }>): void {
   const b = useBroadcastStore.getState()
-  const scene = b.scenes.find((s) => s.id === step.sceneId)
+  const service = useServiceStore.getState()
+  const approvedRevision = service.current?.approved_revision
+  const hasApprovedRevision = approvedRevision !== null && approvedRevision !== undefined
+  const manifest = hasApprovedRevision && service.approvedDesignRevision === approvedRevision
+    ? service.approvedDesigns
+    : null
+  if (hasApprovedRevision && !manifest) {
+    toast.warning("Approved scene not taken", {
+      description: service.approvedDesignsError ?? "The approved scene snapshot is unavailable. Reload the service or refresh its approval before taking this item.",
+    })
+    return
+  }
+  const approved = manifest?.scenes[step.sceneId]
+  if (hasApprovedRevision && !approved) {
+    toast.warning("Approved scene not taken", {
+      description: "This scene is not pinned in the approved service revision. Refresh the approval before taking this item.",
+    })
+    return
+  }
+  const scene = approved?.scene ?? b.scenes.find((s) => s.id === step.sceneId)
   if (!scene) {
     toast.warning("Scene not taken", { description: "This item's scene is not on this computer. Choose another in Prepare." })
     return
@@ -45,7 +65,24 @@ function takeItemScene(step: Extract<ParsedTakeStep, { kind: "scene" }>): void {
     toast.warning(`${scene.name} not taken`, { description: "The screen this item names is not here, or is not a congregation screen." })
     return
   }
-  for (const o of targets) if (o.sceneId !== scene.id) b.takeScene(o.id, scene.id)
+  for (const o of targets) {
+    const appearance = approved && service.current
+      ? approved.outputs[o.id] ?? null
+      : null
+    if (approved && !appearance) {
+      toast.warning("Scene not taken", { description: `${o.name} was not captured at approval. Refresh the service approval before taking its approved scene here.` })
+      continue
+    }
+    const alreadyShowing = o.sceneId === scene.id && o.sceneSnapshot?.updatedAt === scene.updatedAt
+    const takenApproval = o.sceneAppearanceSnapshot?.approved
+    const alreadyApproved = !!appearance && takenApproval?.appearanceComplete !== false && takenApproval?.programId === service.current?.id && takenApproval?.revision === service.current?.approved_revision
+    if (alreadyShowing && (!appearance || alreadyApproved)) continue
+    if (appearance && service.current?.approved_revision !== null && service.current?.approved_revision !== undefined) {
+      b.takeSceneRevision(o.id, scene, appearance, service.current.id, service.current.approved_revision, undefined, !!approved?.outputs[o.id], { approvedAt: service.current.approved_at, approvedBy: service.current.approved_by })
+    } else {
+      b.takeScene(o.id, scene.id)
+    }
+  }
 }
 
 async function switchObs(scene: string, reference: string): Promise<void> {

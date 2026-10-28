@@ -1,10 +1,9 @@
 import type { Step } from "react-joyride"
 import type { Workspace } from "@/studio/shell-store"
 
-/** Where a step lives: the tour opens that workspace (and Present view) before showing it. */
+/** Where a step lives: the tour opens that workspace before showing it. */
 export interface TourPlace {
   workspace: Workspace
-  presentView?: "standard" | "production"
 }
 
 const STEP_DEFAULTS = {
@@ -54,40 +53,40 @@ export const TUTORIAL_STEPS: Step[] = [
     content: "Drag to reorder. Select an item to edit it beside the list: what it shows, notes for the team and its planned minutes.",
     placement: "right",
   }),
-  at({ workspace: "present", presentView: "standard" }, {
+  at({ workspace: "present" }, {
     target: '[data-tour="present-rundown"]',
     title: "Run the service",
     content: "Click an item to preview it; double-click to show it live.",
     placement: "right",
   }),
-  at({ workspace: "present", presentView: "standard" }, {
+  at({ workspace: "present" }, {
     target: '[data-studio-live]',
     title: "What people see",
     content: "Live is exactly what is on the screens. The preview beside it is what comes next, for you only.",
     placement: "left",
   }),
-  at({ workspace: "present", presentView: "standard" }, {
+  at({ workspace: "present" }, {
     target: '[role="toolbar"][aria-label="Presentation controls"]',
     title: "Next, Take live, Clear",
     content: "Next and Previous step through slides and items (arrow keys or a clicker work too). Take live puts the preview on the screens; the words beside it say what and where. Clear (Esc) takes the screen off; Restore brings it back.",
     placement: "top",
   }),
-  at({ workspace: "present", presentView: "standard" }, {
+  at({ workspace: "present" }, {
     target: '[data-tour="quick-find"]',
     title: "Find anything",
     content: "Type a reference (\"John 3 16\", \"Johanu 3:16\"), a hymn number (\"245\") or a few words. Enter previews it; it is not live yet.",
     placement: "top",
   }),
-  at({ workspace: "present", presentView: "standard" }, {
+  at({ workspace: "present" }, {
     target: '[role="group"][aria-label="Quick screens"]',
     title: "Quick screens",
     content: "Welcome, Please stand, Let us pray, Black and more, at once. Back returns to what was live.",
     placement: "left",
   }),
-  at({ workspace: "present", presentView: "standard" }, {
-    target: '[role="group"][aria-label="Present view"]',
-    title: "Listening for verses",
-    content: "The Advanced view adds listening: Rhema Studio hears the preacher and proposes the verses mentioned. Standard is the simple view for running a service; the service itself is built in Prepare.",
+  at({ workspace: "present" }, {
+    target: '[data-tour="live-tools"]',
+    title: "Bible search and listening",
+    content: "Open Bible and listening tools to search passages, follow the sermon as text and review proposed verses. Search previews privately; choose what to queue or take live.",
     placement: "bottom",
   }),
   at({ workspace: "production" }, {

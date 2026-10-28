@@ -46,6 +46,7 @@ describe("capacity limits", () => {
     const outputs = [out("main", "display"), out("obs", "ndi", { sceneId: "pulpit" }), out("l3", "ndi"), out("tv", "browser", { sceneId: "words" }), out("off", "ndi")]
     const status = { main: { previewOpen: true, ndiActive: false }, obs: { previewOpen: false, ndiActive: true }, l3: { previewOpen: false, ndiActive: true }, tv: { previewOpen: false, ndiActive: false, feedActive: true } }
     expect(capacityUse(outputs, status, [camScene, words], 3)).toEqual({ outputs: 4, ndiSenders: 2, browserFeeds: 1, cameras: 3, videoScenes: 1 })
+    expect(capacityUse([out("obs", "ndi", { sceneId: "pulpit", sceneSnapshot: camScene })], { obs: { previewOpen: false, ndiActive: true } }, [{ ...camScene, layers: [] }], 0).videoScenes).toBe(1)
     expect(hasLiveVideo(camScene)).toBe(true)
     expect(hasLiveVideo(words)).toBe(false)
     expect(withOutputOn({ outputs: 0, ndiSenders: 0, browserFeeds: 0, cameras: 0, videoScenes: 0 }, out("x", "ndi", { sceneId: "pulpit" }), [camScene])).toEqual({ outputs: 1, ndiSenders: 1, browserFeeds: 0, cameras: 0, videoScenes: 1 })
