@@ -1,3 +1,5 @@
+import { mayLeaveThemeDraft } from "@/lib/theme-draft"
+import { toast } from "sonner"
 import { useState, useMemo } from "react"
 import { useBroadcastStore } from "@/stores"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
@@ -53,8 +55,6 @@ function ThemeCard({
 }) {
   return (
     <div
-      role="button"
-      tabIndex={0}
       onClick={() => {
         // Prevent rename exit when card is selected during rename
         if (isRenaming) return
@@ -65,13 +65,18 @@ function ThemeCard({
         isSelected && "ring-2 ring-primary"
       )}
     >
-      {/* Thumbnail */}
-      <div className="relative aspect-video w-full overflow-hidden rounded-lg">
+      {/* Thumbnail: the card's keyboard control (Enter/Space click bubbles to the card's onClick) */}
+      <button
+        type="button"
+        aria-label={`Select theme ${theme.name}`}
+        aria-pressed={isSelected}
+        className="relative aspect-video w-full overflow-hidden rounded-lg text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+      >
         <CanvasVerse theme={theme} verse={THUMBNAIL_VERSE} className="w-full" />
 
         {/* Active badge */}
         {isActive && (
-          <Badge className="absolute top-1.5 left-1.5 bg-emerald-600 text-[0.5rem] text-white hover:bg-emerald-600">
+          <Badge className="absolute top-1.5 left-1.5 bg-primary text-[0.6875rem] text-primary-foreground hover:bg-primary">
             Active
           </Badge>
         )}
@@ -79,10 +84,10 @@ function ThemeCard({
         {/* Pin icon */}
         {theme.pinned && (
           <div className="absolute top-1.5 right-1.5 flex size-5 items-center justify-center rounded-full bg-background/80">
-            <HeartIcon className="size-3 text-primary" strokeWidth={2} />
+            <HeartIcon className="size-3 text-primary-text" strokeWidth={2} />
           </div>
         )}
-      </div>
+      </button>
 
       {/* Info */}
       <div className="flex items-center gap-1.5 px-0.5">
@@ -120,14 +125,14 @@ function ThemeCard({
           )}
 
           {isActive && (
-            <p className="text-[0.5rem] text-muted-foreground">Default</p>
+            <p className="text-[0.6875rem] text-muted-foreground">Default</p>
           )}
         </div>
 
         {/* Tags */}
         <div className="flex shrink-0 items-center gap-1">
           {theme.builtin && (
-            <Badge variant="outline" className="text-[0.5rem]">
+            <Badge variant="outline" className="text-[0.6875rem]">
               Built-in
             </Badge>
           )}
@@ -139,7 +144,8 @@ function ThemeCard({
             <Button
               variant="ghost"
               size="icon-xs"
-              className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+              className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+              aria-label={`${theme.name} options`}
               onClick={(e) => e.stopPropagation()}
             >
               <MoreHorizontalIcon className="size-3" />
@@ -189,7 +195,10 @@ function ThemeCard({
                   className="text-destructive"
                   onClick={(e) => {
                     e.stopPropagation()
-                    useBroadcastStore.getState().deleteTheme(theme.id)
+                    const { inUse } = useBroadcastStore.getState().deleteTheme(theme.id)
+                    // The theme being edited is gone: close its draft (Save would bring it back).
+                    if (!inUse.length && useBroadcastStore.getState().editingThemeId === theme.id) useBroadcastStore.getState().stopEditing()
+                    if (inUse.length) toast.error(`${theme.name} is used by ${inUse.join(", ")}`, { description: "Choose another look for those outputs first: Design → Used on… opens each one." })
                   }}
                 >
                   <Trash2Icon className="mr-2 size-3.5" />
@@ -243,9 +252,10 @@ export function ThemeLibrary() {
       {/* Search */}
       <div className="px-3 pt-3 pb-4">
         <div className="relative">
-          <SearchIcon className="absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground" />
+          <SearchIcon aria-hidden className="absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search themes..."
+            aria-label="Search themes"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-7"
@@ -283,7 +293,7 @@ export function ThemeLibrary() {
                 const theme = await importTheme()
                 if (theme) {
                   useBroadcastStore.getState().saveTheme(theme)
-                  useBroadcastStore.getState().startEditing(theme.id)
+                  if (await mayLeaveThemeDraft()) useBroadcastStore.getState().startEditing(theme.id)
                 }
               } catch (err) {
                 console.error("[theme-library] import failed:", err)
@@ -324,7 +334,7 @@ export function ThemeLibrary() {
           {/* Built-in section */}
           {builtinThemes.length > 0 && (
             <>
-              <p className="px-1.5 pt-2 pb-1 text-[0.625rem] font-semibold tracking-widest text-muted-foreground uppercase">
+              <p className="px-1.5 pt-2 pb-1 text-[0.6875rem] font-semibold tracking-widest text-muted-foreground uppercase">
                 Built-in
               </p>
               {builtinThemes.map((theme) => (
@@ -334,9 +344,7 @@ export function ThemeLibrary() {
                   isActive={theme.id === activeThemeId}
                   isRenaming={theme.id === renamingThemeId}
                   isSelected={theme.id === editingThemeId}
-                  onSelect={() =>
-                    useBroadcastStore.getState().startEditing(theme.id)
-                  }
+                  onSelect={() => void mayLeaveThemeDraft().then((ok) => ok && useBroadcastStore.getState().startEditing(theme.id))}
                 />
               ))}
             </>
@@ -345,7 +353,7 @@ export function ThemeLibrary() {
           {/* Custom section */}
           {customThemes.length > 0 && (
             <>
-              <p className="px-1.5 pt-3 pb-1 text-[0.625rem] font-semibold tracking-widest text-muted-foreground uppercase">
+              <p className="px-1.5 pt-3 pb-1 text-[0.6875rem] font-semibold tracking-widest text-muted-foreground uppercase">
                 Custom
               </p>
               {customThemes.map((theme) => (
@@ -355,9 +363,7 @@ export function ThemeLibrary() {
                   isActive={theme.id === activeThemeId}
                   isRenaming={theme.id === renamingThemeId}
                   isSelected={theme.id === editingThemeId}
-                  onSelect={() =>
-                    useBroadcastStore.getState().startEditing(theme.id)
-                  }
+                  onSelect={() => void mayLeaveThemeDraft().then((ok) => ok && useBroadcastStore.getState().startEditing(theme.id))}
                 />
               ))}
             </>

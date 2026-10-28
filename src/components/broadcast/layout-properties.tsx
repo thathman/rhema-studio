@@ -51,7 +51,7 @@ function ElementBoxControls({
             <div key={field.key} className="flex flex-col gap-1">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-medium text-muted-foreground">{field.label}</label>
-                <span className="text-[10px] tabular-nums text-muted-foreground">{px}px</span>
+                <span className="text-[0.6875rem] tabular-nums text-muted-foreground">{px}px</span>
               </div>
               <Input
                 type="number"
@@ -84,6 +84,7 @@ export function LayoutProperties() {
   const layout = draftTheme.layout
   const resolution = draftTheme.resolution
   const referenceGap = layout.referenceGap ?? Math.max(16, Math.round(draftTheme.reference.fontSize * 0.5))
+  const languageGap = layout.languageGap ?? Math.round(draftTheme.verseText.fontSize * draftTheme.verseText.lineHeight)
   const freeMode = layout.mode === "free"
 
   const bgWidthPx = Math.round((layout.backgroundWidth / 100) * resolution.width)
@@ -279,6 +280,21 @@ export function LayoutProperties() {
               step={1}
               value={[referenceGap]}
               onValueChange={([v]) => update("layout.referenceGap", v)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground">Between languages</label>
+              <span className="text-xs tabular-nums text-muted-foreground">{languageGap}px</span>
+            </div>
+            <Slider
+              aria-label="Space between languages"
+              min={0}
+              max={300}
+              step={1}
+              value={[languageGap]}
+              onValueChange={([v]) => update("layout.languageGap", v)}
             />
           </div>
 

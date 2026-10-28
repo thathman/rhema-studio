@@ -83,6 +83,15 @@ describe("bible store persistence", () => {
       })
     })
 
+    it("a first run (nothing saved) starts in KJV, found by name", async () => {
+      mockGet.mockResolvedValue(undefined)
+      mockInvoke.mockImplementation(async (cmd: string) => (cmd === "list_translations" ? [{ id: 1, abbreviation: "AMP", is_downloaded: true }, { id: 4, abbreviation: "KJV", is_downloaded: true }] : undefined))
+      const { hydrateBibleStore, useBibleStore } = await import("./bible-store")
+      await hydrateBibleStore()
+      expect(useBibleStore.getState().activeTranslationId).toBe(4)
+      expect(mockInvoke).toHaveBeenCalledWith("set_active_translation", { translationId: 4 })
+    })
+
     it("leaves default (1) when stored value is undefined and still pushes to Rust", async () => {
       mockGet.mockResolvedValue(undefined)
       const { hydrateBibleStore, useBibleStore } = await import("./bible-store")
@@ -192,5 +201,15 @@ describe("requestVerseReveal", () => {
     useBibleStore.getState().requestVerseReveal("nearest")
 
     expect(useBibleStore.getState().revealRequest).toBe(2)
+  })
+})
+
+describe("first-run translation", () => {
+  it("is KJV by name (ids follow the library file: id 1 is AMP in the bundled one)", async () => {
+    const { defaultTranslationId } = await import("./bible-store")
+    const t = (id: number, abbreviation: string, is_downloaded = true) => ({ id, abbreviation, is_downloaded })
+    expect(defaultTranslationId([t(1, "AMP"), t(2, "OYCB"), t(4, "KJV")])).toBe(4)
+    expect(defaultTranslationId([t(1, "AMP", false), t(2, "OYCB")])).toBe(2)
+    expect(defaultTranslationId([])).toBeNull()
   })
 })

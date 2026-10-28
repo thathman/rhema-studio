@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rhema Studio Receiver (#198, formerly Rhema Receiver): a Google TV / Android TV shows a Rhema Studio
+     browser feed, full screen. The package name stays com.openbezal.rhema.receiver so installed TVs update in place. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.openbezal.rhema.receiver"
+    android:versionCode="6"
+    android:versionName="1.5.0.0">
+
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
+    <!-- Also all that telling the network about this TV (NSD, _rhema-tv._tcp) needs. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Start with the TV (1.5): only when turned on from the code screen (BootReceiver is off until then). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <application
+        android:label="Rhema Studio Receiver"
+        android:icon="@drawable/icon"
+        android:banner="@drawable/banner"
+        android:usesCleartextTraffic="true"
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- Off by default (enabled="false"): the code screen turns it on and off (← or → on the remote). -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

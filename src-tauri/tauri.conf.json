@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Rhema",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "identifier": "com.openbezal.rhema",
   "build": {
     "frontendDist": "../build",
@@ -12,28 +12,40 @@
   "app": {
     "windows": [
       {
-        "title": "Rhema",
+        "title": "Rhema Studio",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,
         "minHeight": 600,
         "resizable": true,
         "fullscreen": false,
-        "center": true
+        "center": true,
+        "backgroundThrottling": "disabled"
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; media-src 'self' blob:; worker-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: ipc: http://ipc.localhost; media-src 'self' blob: asset: http://asset.localhost; worker-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APPDATA/media/*"
+        ]
+      }
     }
   },
   "bundle": {
     "resources": {
       "../data/rhema.db": "rhema.db",
-      "../data/YORUBA-OYCB-LICENSE.md": "licenses/YORUBA-OYCB-LICENSE.md"
+      "../data/YORUBA-OYCB-LICENSE.md": "licenses/YORUBA-OYCB-LICENSE.md",
+      "../LICENSE": "licenses/LICENSE.txt",
+      "../data/THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-NOTICES.md",
+      "../data/MEDIAMTX-LICENSE.txt": "licenses/MEDIAMTX-LICENSE.txt"
     },
     "active": true,
     "targets": "all",
     "macOS": {
+      "bundleName": "Rhema Studio",
+      "minimumSystemVersion": "10.15",
       "signingIdentity": "-",
       "entitlements": "entitlements.plist",
       "infoPlist": "Info.plist"
@@ -44,6 +56,7 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "licenseFile": "../data/INSTALLER-LICENSE.txt"
   }
 }

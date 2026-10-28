@@ -1,13 +1,8 @@
+import { outputOnAir } from "@/lib/output-on-air"
+import { feedHealthLabel, useFeedHealth } from "@/lib/browser-feeds"
+import { allSignageIds } from "@/lib/signage"
 import { useState } from "react"
-import {
-  CopyIcon,
-  MonitorIcon,
-  MoreHorizontalIcon,
-  PencilIcon,
-  RadioIcon,
-  SettingsIcon,
-  Trash2Icon,
-} from "lucide-react"
+import { CopyIcon, GlobeIcon, MonitorIcon, MoreHorizontalIcon, PencilIcon, RadioIcon, SettingsIcon, Trash2Icon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
@@ -41,6 +36,7 @@ function transportLabel(output: BroadcastOutput, monitorLabel: string | undefine
   if (output.type === "display") {
     return monitorLabel ?? `Display ${output.monitorIndex + 1}`
   }
+  if (output.type === "browser") return "Browser feed · on the church network"
   const dims = ndiResolutionDimensions(output.ndi.resolution)
   const alpha = output.ndi.alphaMode === "noneOpaque" ? "opaque" : "alpha"
   return `NDI · ${output.ndi.sourceName} · ${dims.height}p${ndiFrameRateToNumber(output.ndi.frameRate)} · ${alpha}`
@@ -57,15 +53,19 @@ export function OutputCard({
   busy = false,
 }: OutputCardProps) {
   const themes = useBroadcastStore((s) => s.themes)
-  const isLive = useBroadcastStore((s) => s.isLive)
-  const liveVerse = useBroadcastStore((s) => s.liveVerse)
+  // Exactly what this output was last sent: its language, lower third, signage picture or stage role.
+  const frame = useBroadcastStore((s) => s.outputFrames[output.id])
   const renameOutput = useBroadcastStore((s) => s.renameOutput)
 
   const [renaming, setRenaming] = useState(false)
   const [draftName, setDraftName] = useState(output.name)
 
   const theme = themes.find((t) => t.id === output.themeId) ?? themes[0]
-  const onAir = output.type === "display" ? (status?.previewOpen ?? false) : (status?.ndiActive ?? false)
+  const stage = output.role === "stage"
+  const signage = output.role === "signage"
+  const onAir = outputOnAir(output, status)
+  const feedHealth = useFeedHealth(output.id, output.type === "browser" && onAir)
+  const feedLabel = feedHealthLabel(feedHealth)
   const isDefault = output.id === MAIN_OUTPUT_ID
 
   const commitRename = () => {
@@ -78,10 +78,17 @@ export function OutputCard({
   return (
     <div className="flex flex-col gap-2.5 rounded-lg border border-border bg-card p-2.5 transition-colors hover:border-foreground/20">
       <div className="relative overflow-hidden rounded-md border border-foreground/10">
-        {theme ? (
+        {frame?.stage && onAir ? (
+          <div className="flex aspect-video w-full items-center justify-center bg-black text-xs text-white/70">{output.stageLayout === "countdown" ? "Countdown display" : output.stageLayout === "pastor" ? "Stage display: pastor's confidence monitor" : output.stageLayout === "band" ? "Stage display: band" : output.stageLayout === "manager" ? "Stage display: stage manager" : "Stage display: words, next, note, timer"}</div>
+        ) : onAir && !frame ? (
+          // On, but nothing sent yet (for example turned on during rehearsal): the window is black too.
+          <div className="aspect-video w-full bg-black" />
+        ) : theme ? (
           <CanvasVerse
-            theme={theme}
-            verse={isLive && onAir ? liveVerse : null}
+            theme={onAir ? (frame?.theme ?? theme) : theme}
+            verse={onAir ? (frame?.verse ?? null) : null}
+            overlay={onAir ? (frame?.overlay ?? null) : null}
+            ticker={onAir ? (frame?.ticker ?? null) : null}
             className={cn("aspect-video w-full", !onAir && "opacity-45 saturate-50")}
           />
         ) : (
@@ -89,9 +96,9 @@ export function OutputCard({
         )}
         <span
           className={cn(
-            "absolute top-1.5 left-1.5 inline-flex items-center gap-1.5 rounded-4xl border px-2 py-0.5 text-[0.625rem] font-semibold tracking-wider uppercase backdrop-blur-sm",
+            "absolute top-1.5 left-1.5 inline-flex items-center gap-1.5 rounded-4xl border px-2 py-0.5 text-[0.6875rem] font-semibold tracking-wider uppercase backdrop-blur-sm",
             onAir && output.type === "display" && "border-destructive/40 bg-destructive/15 text-destructive",
-            onAir && output.type === "ndi" && "border-emerald-500/40 bg-emerald-500/15 text-emerald-400",
+            onAir && output.type !== "display" && "border-confidence-high/40 bg-confidence-high/15 text-confidence-high",
             !onAir && "border-border bg-background/70 text-muted-foreground"
           )}
         >
@@ -99,7 +106,7 @@ export function OutputCard({
             className={cn(
               "size-1.5 rounded-full",
               onAir && output.type === "display" && "animate-pulse bg-destructive",
-              onAir && output.type === "ndi" && "bg-emerald-400",
+              onAir && output.type !== "display" && "bg-confidence-high",
               !onAir && "bg-muted-foreground"
             )}
           />
@@ -128,7 +135,7 @@ export function OutputCard({
             <div className="flex items-center gap-1.5">
               <span className="truncate text-sm font-semibold">{output.name}</span>
               {isDefault && (
-                <Badge variant="outline" className="h-4 px-1.5 text-[0.5625rem] tracking-wider uppercase">
+                <Badge variant="outline" className="h-4 px-1.5 text-[0.6875rem] tracking-wider uppercase">
                   Default
                 </Badge>
               )}
@@ -137,10 +144,12 @@ export function OutputCard({
           <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
             {output.type === "display" ? (
               <MonitorIcon className="size-3 shrink-0" />
+            ) : output.type === "browser" ? (
+              <GlobeIcon className="size-3 shrink-0" />
             ) : (
               <RadioIcon className="size-3 shrink-0" />
             )}
-            <span className="truncate">{transportLabel(output, monitorLabel)}</span>
+            <span className={cn("truncate", feedHealth?.behind && "text-destructive")} role={feedHealth ? "status" : undefined}>{feedLabel ?? transportLabel(output, monitorLabel)}</span>
           </div>
         </div>
 
@@ -183,7 +192,7 @@ export function OutputCard({
       </div>
 
       <div className="flex items-center justify-between px-0.5 pb-0.5">
-        <span className="truncate text-[0.6875rem] text-muted-foreground">{theme?.name ?? "No theme"}</span>
+        <span className="truncate text-[0.6875rem] text-muted-foreground">{stage ? "Stage display" : signage ? `Signage loop · ${allSignageIds(output.signage).length} picture${allSignageIds(output.signage).length === 1 ? "" : "s"}${(output.signage?.playlists?.length ?? 0) > 1 ? ` · ${output.signage?.playlists?.length} playlists` : ""}` : (theme?.name ?? "No theme")}</span>
         <Switch
           checked={onAir}
           disabled={busy}

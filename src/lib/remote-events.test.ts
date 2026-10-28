@@ -17,11 +17,44 @@ const EXPECTED_EVENT_NAMES = [
   "remote:bible_next",
   "remote:bible_prev",
   "remote:add_to_queue",
+  "remote:verse_next",
+  "remote:verse_prev",
+  "remote:macro",
+  "remote:event_next",
+  "remote:event_prev",
+  "remote:event_start",
+  "remote:event_offset",
+  "remote:timer_start",
+  "remote:timer_pause",
+  "remote:timer_adjust",
+  "remote:hold",
+  "remote:resume",
+  "remote:bible_activate",
+  "remote:bible_preview",
+  "remote:song_show",
+  "remote:song_preview",
+  "remote:song_section",
+  "remote:clear_source",
+  "remote:restore_source",
+  "remote:take_scene",
+  "remote:release_scene",
+  "remote:save_scene",
+  "remote:delete_scene",
+  "remote:stage_message",
+  "remote:obs_preview",
+  "remote:obs_take",
+  "remote:obs_program",
+  "remote:notice_send",
+  "remote:notice_ack",
+  "remote:aux_timer",
+  "remote:queue_request",
+  "remote:obs_record",
+  "remote:obs_transition",
 ]
 
 describe("REMOTE_EVENTS", () => {
   it("has one entry per RemoteCommand variant", () => {
-    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(12)
+    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(45)
   })
 
   it("matches the event names the Rust dispatcher emits", () => {

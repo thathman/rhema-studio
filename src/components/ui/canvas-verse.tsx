@@ -1,18 +1,26 @@
 import { useRef, useEffect, useState, useCallback, memo } from "react"
-import { onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
-import { preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
-import type { BroadcastTheme, VerseRenderData } from "@/types"
+import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
+import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
+import type { BroadcastTheme, LowerThird, Ticker, VerseRenderData } from "@/types"
+import { drawTicker } from "@/lib/ticker-draw"
+import { tickerReserve } from "@/lib/ticker"
 import { cn } from "@/lib/utils"
 
 interface CanvasVerseProps {
   theme: BroadcastTheme
   verse: VerseRenderData | null
+  /** A lower third drawn over the frame, as the output window does. */
+  overlay?: LowerThird | null
+  /** The ticker, drawn where it is at this moment (previews do not animate it). */
+  ticker?: Ticker | null
   className?: string
 }
 
 export const CanvasVerse = memo(function CanvasVerse({
   theme,
   verse,
+  overlay,
+  ticker,
   className,
 }: CanvasVerseProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -50,16 +58,32 @@ export const CanvasVerse = memo(function CanvasVerse({
 
     ctx.scale(dpr, dpr)
     const scale = displayW / theme.resolution.width
-    renderVerse(ctx, theme, verse, {
-      scale,
-      imageCache: themeImageCache(),
-    })
-  }, [theme, verse, containerWidth])
+    // A preview that cannot draw (broken picture, damaged theme) stays blank
+    // rather than throwing out of the effect and taking the operator's screen with it.
+    try {
+      renderVerse(ctx, theme, verse, {
+        scale,
+        imageCache: themeImageCache(),
+      })
+      if (overlay && verse?.screen !== "black") drawLowerThird(ctx, displayW, displayH, overlay, theme.verseText?.fontFamily, { imageCache: themeImageCache(), reserveBottom: tickerReserve(ticker, displayH) })
+      // A preview shows the words well into the crawl (a fresh ticker's words are still off to the right).
+      if (ticker && verse?.screen !== "black") drawTicker(ctx, displayW, displayH, ticker, theme.verseText?.fontFamily, { imageCache: themeImageCache(), now: ticker.startedAt + 4000 })
+    } catch (e) {
+      console.error("[canvas-verse] preview failed to draw", e)
+    }
+  }, [theme, verse, overlay, ticker, containerWidth])
 
   // Preload every image the theme uses so the renderer finds them in the cache.
   useEffect(() => {
     preloadThemeImages(theme, draw)
   }, [theme, draw])
+  useEffect(() => {
+    if (verse?.image?.url) void loadThemeImage(verse.image.url).then(() => draw())
+  }, [verse?.image?.url, draw])
+  const backingPicture = overlay?.backing?.kind === "picture" ? overlay.backing.url : ticker?.backing?.kind === "picture" ? ticker.backing.url : null
+  useEffect(() => {
+    if (backingPicture) void loadThemeImage(backingPicture).then(() => draw())
+  }, [backingPicture, draw])
 
   // Redraw whenever theme, verse, or container size changes.
   useEffect(() => {
@@ -72,7 +96,15 @@ export const CanvasVerse = memo(function CanvasVerse({
 
   return (
     <div ref={containerRef} className={cn("w-full", className)}>
-      <canvas ref={canvasRef} className="w-full rounded-md" />
+      <canvas ref={canvasRef} className="w-full rounded-md" role="img" aria-label={describeVerse(verse)} />
     </div>
   )
 })
+
+/** What the canvas shows, in words, for screen readers. */
+function describeVerse(verse: VerseRenderData | null): string {
+  if (!verse) return "Nothing shown"
+  if (verse.screen) return verse.screen === "black" ? "Black screen" : "Logo"
+  const words = [verse.reference, ...(verse.lines ?? []), ...(verse.lines?.length ? [] : verse.segments.map((s) => s.text))].filter(Boolean).join(" ")
+  return [...words].slice(0, 300).join("") || "Slide"
+}

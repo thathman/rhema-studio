@@ -18,7 +18,14 @@ const badgeVariants = cva(
           "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
-        link: "text-primary underline-offset-4 hover:underline",
+        link: "text-primary-text underline-offset-4 hover:underline",
+        // Status chips in the redesign's tones.
+        neutral: "bg-tone-neutral text-tone-neutral-foreground",
+        accent: "bg-tone-accent text-tone-accent-foreground",
+        green: "bg-tone-green text-tone-green-foreground",
+        amber: "bg-tone-amber text-tone-amber-foreground",
+        rose: "bg-tone-rose text-tone-rose-foreground",
+        blue: "bg-tone-blue text-tone-blue-foreground",
       },
     },
     defaultVariants: {

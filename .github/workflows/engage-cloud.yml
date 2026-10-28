@@ -1,0 +1,31 @@
+name: Rhema Engage Cloud
+
+on:
+  pull_request:
+    paths:
+      - "engage-cloud/**"
+      - ".github/workflows/engage-cloud.yml"
+  push:
+    branches: [main]
+    paths:
+      - "engage-cloud/**"
+      - ".github/workflows/engage-cloud.yml"
+
+jobs:
+  cloud:
+    name: Internet game rules and Worker build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engage-cloud
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install quiz service dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Check server-authoritative rules
+        run: npm test
+      - name: Compile Worker without publishing
+        run: npx wrangler deploy --dry-run --outdir /tmp/rhema-engage-worker

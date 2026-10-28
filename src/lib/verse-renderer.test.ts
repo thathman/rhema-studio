@@ -259,6 +259,19 @@ describe("dual translation rendering", () => {
     expect(dual.height).toBe(single.height * 3)
   })
 
+  it("the space between languages is the theme's setting, for verses and song slides", () => {
+    const theme = BUILTIN_THEMES[0]
+    const single = measureVerseHeight(stubCtx(), theme, { reference: "John 3:16", segments: [{ text: "For God so loved" }] }, 1200).height
+    const dual: VerseRenderData = { reference: "John 3:16", segments: [{ text: "For God so loved" }], translationLines: ["For God so loved", "Nitori Ọlọrun fẹ́ràn ayé"] }
+    const at = (languageGap: number | undefined) => measureVerseHeight(stubCtx(), { ...theme, layout: { ...theme.layout, languageGap } }, dual, 1200).height
+    expect(at(undefined)).toBe(single * 3) // as before: one blank line
+    expect(at(0)).toBe(single * 2)
+    expect(at(100)).toBe(single * 2 + 100)
+    const song: VerseRenderData = { kind: "slide", reference: "Amazing Grace", segments: [], lines: ["Amazing grace"], secondaryLines: ["Oore ofe"] }
+    const songAt = (languageGap: number | undefined) => measureVerseHeight(stubCtx(), { ...theme, layout: { ...theme.layout, languageGap } }, song, 1200).height
+    expect(songAt(100) - songAt(0)).toBe(100)
+  })
+
   it("uses the secondary language style for the second translation line", () => {
     const theme = BUILTIN_THEMES[0]
     const dualVerse: VerseRenderData = {
@@ -610,5 +623,29 @@ describe("computeVerseLayoutMetrics — background region", () => {
     expect(fills.some((c) => c.args[2] === 1920 && c.args[3] === 1080)).toBe(
       false
     )
+  })
+})
+
+describe("computeVerseLayoutMetrics — a song's footer line", () => {
+  it("keeps a strip for the footer, so the words never run under it", () => {
+    const theme = BUILTIN_THEMES[0]
+    const plain = computeVerseLayoutMetrics(stubCtx(), theme, VERSE)
+    const withFooter = computeVerseLayoutMetrics(stubCtx(), theme, { ...VERSE, footer: "Come, O Thou all-victorious Lord" })
+    expect(withFooter.textRect.height).toBeLessThan(plain.textRect.height)
+    const bottom = withFooter.textRect.y + withFooter.textRect.height
+    expect(withFooter.verseRect!.y + withFooter.verseRect!.height).toBeLessThanOrEqual(bottom + 0.5)
+  })
+})
+
+describe("renderVerse — a video behind words", () => {
+  const video = { url: "asset://bg.mp4", fit: "cover" as const, loop: true, sound: false, name: "bg", token: 0 }
+  const plain = { ...BUILTIN_THEMES[0], background: { ...BUILTIN_THEMES[0].background, type: "solid" as const } }
+  it("draws the words over a video background (a video item alone still draws only the video)", () => {
+    const words = recordingCtx()
+    renderVerse(words.ctx, plain, { ...VERSE, video })
+    expect(words.calls.some((c) => c.method === "fillText")).toBe(true)
+    const alone = recordingCtx()
+    renderVerse(alone.ctx, plain, { reference: "", segments: [], video })
+    expect(alone.calls.filter((c) => c.method === "fillText").map((c) => c.args[0])).toEqual(["▶ bg"])
   })
 })

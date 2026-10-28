@@ -24,6 +24,44 @@ export const REMOTE_EVENTS = {
   bible_next: "remote:bible_next",
   bible_prev: "remote:bible_prev",
   add_to_queue: "remote:add_to_queue",
+  verse_next: "remote:verse_next",
+  verse_prev: "remote:verse_prev",
+  macro: "remote:macro",
+  event_next: "remote:event_next",
+  event_prev: "remote:event_prev",
+  event_start: "remote:event_start",
+  event_offset: "remote:event_offset",
+  timer_start: "remote:timer_start",
+  timer_pause: "remote:timer_pause",
+  timer_adjust: "remote:timer_adjust",
+  hold: "remote:hold",
+  resume: "remote:resume",
+  bible_activate: "remote:bible_activate",
+  bible_preview: "remote:bible_preview",
+  song_show: "remote:song_show",
+  song_preview: "remote:song_preview",
+  song_section: "remote:song_section",
+  clear_source: "remote:clear_source",
+  restore_source: "remote:restore_source",
+  take_scene: "remote:take_scene",
+  release_scene: "remote:release_scene",
+  save_scene: "remote:save_scene",
+  delete_scene: "remote:delete_scene",
+  stage_message: "remote:stage_message",
+  obs_preview: "remote:obs_preview",
+  obs_take: "remote:obs_take",
+  obs_program: "remote:obs_program",
+  notice_send: "remote:notice_send",
+  notice_ack: "remote:notice_ack",
+  aux_timer: "remote:aux_timer",
+  queue_request: "remote:queue_request",
+  obs_record: "remote:obs_record",
+  obs_transition: "remote:obs_transition",
 } as const
+
+/** Emitted by the backend when a device completes pairing: `{ name, hash }`. Not a command. */
+export const REMOTE_PAIRED_EVENT = "remote:paired"
+/** Emitted when the pairing window closes for any reason. */
+export const REMOTE_PAIR_CLOSED_EVENT = "remote:pair_closed"
 
 export type RemoteEventName = (typeof REMOTE_EVENTS)[keyof typeof REMOTE_EVENTS]

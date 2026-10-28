@@ -8,6 +8,8 @@ members = [
     "crates/broadcast",
     "crates/api",
     "crates/notes",
+    "crates/content",
+    "crates/join",
 ]
 resolver = "2"
 
@@ -29,11 +31,12 @@ missing_panics_doc = "allow"
 
 [package]
 name = "rhema"
-version = "0.3.2"
-description = "Rhema - Real-Time AI Bible Verse Detection"
-authors = ["Faithful"]
+# App version 0.3.3.0 (A.B.C.D); Cargo and Tauri use the first three parts.
+version = "0.3.3"
+description = "Rhema Studio - church service planning, live Scripture and production (built on Rhema by OpenBezal)"
+authors = ["Rhema Studio contributors", "OpenBezal (original Rhema)"]
 license = "MIT"
-repository = "https://github.com/openbezal/rhema"
+repository = "https://github.com/thathman/rhema-studio"
 edition = "2021"
 rust-version = "1.77.2"
 
@@ -53,7 +56,7 @@ serde_json.workspace = true
 serde.workspace = true
 log.workspace = true
 tokio.workspace = true
-tauri = { version = "2.10.3", features = [] }
+tauri = { version = "2.10.3", features = ["protocol-asset"] }
 tauri-plugin-log = "2"
 tauri-plugin-store = "2"
 rhema-audio = { path = "crates/audio" }
@@ -62,21 +65,52 @@ rhema-stt = { path = "crates/stt" }
 rhema-broadcast = { path = "crates/broadcast" }
 rhema-detection = { path = "crates/detection", features = ["onnx", "vector-search"] }
 rhema-api = { path = "crates/api" }
+rhema-content = { path = "crates/content" }
+# Find, pair with and follow a host; shared with Rhema Studio Companion (#209).
+# `pinned`: a joined desk talks to a host that runs https only over it, the host's CA pinned at
+# pairing, as Rhema Studio Companion does (#209).
+rhema-join = { path = "crates/join", features = ["keychain", "pinned"] }
 crossbeam-channel = "0.5"
 dotenvy = "0.15"
-base64 = "0.22"
+sha2 = "0.10"
 sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+tauri-plugin-opener = "2"
+# RG-08: secrets in the OS credential store (Credential Manager, Keychain, Secret Service).
+keyring = { version = "3.6", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 fontdb = "0.24.0"
+# Host/Join (ARCH-004): follow another Rhema on the LAN (plain HTTP, no TLS stack).
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream"] }
+futures-util = "0.3"
+uuid = { version = "1", features = ["v4"] }
+# #198: find Rhema Receiver TVs on the LAN (mDNS, pure Rust, MIT/Apache-2.0).
+mdns-sd = { version = "0.21", default-features = false }
+# This computer's addresses on each network, for the host card (already used by mdns-sd).
+if-addrs = "0.15"
+# #198: the code check with a TV before a feed link is sent (commands/tv_proof.rs).
+num-bigint = "0.4"
+hmac = "0.12"
+getrandom = "0.2"
+# #198: /show to a TV is AES-256-GCM; ring is already here for https (rustls), so no new crate.
+ring = "0.17"
 
 [features]
 default = ["whisper", "openai"]
 openai = ["rhema-stt/openai"]
 whisper = ["rhema-stt/whisper"]
+# Desktop acceptance runs only (src/qa_bridge.rs); never in a release build.
+qa-bridge = []
 
 [lints]
 workspace = true
 
+# Network links for Show health (getifaddrs).
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
+# FR-03: one running copy. A second launch would open the same database,
+# fight for the remote-control ports and drive the same projector outputs.
+tauri-plugin-single-instance = "2"

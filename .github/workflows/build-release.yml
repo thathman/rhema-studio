@@ -107,6 +107,11 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
         working-directory: src-tauri
 
+      # The camera router (MediaMTX, #209) ships beside the app; the script checks its pinned SHA-256.
+      - name: Fetch the camera router
+        shell: bash
+        run: scripts/fetch-mediamtx.sh ${{ matrix.target }}
+
       - name: Build Tauri application
         uses: tauri-apps/tauri-action@v0
         env:
@@ -128,7 +133,7 @@ jobs:
           # TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
         with:
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} --config src-tauri/tauri.camera-router.conf.json
 
       # ---------------------------------------------------------------
       # Collect the distributable files produced by Tauri.

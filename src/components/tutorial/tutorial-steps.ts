@@ -1,99 +1,104 @@
 import type { Step } from "react-joyride"
+import type { Workspace } from "@/studio/shell-store"
+
+/** Where a step lives: the tour opens that workspace before showing it. */
+export interface TourPlace {
+  workspace: Workspace
+}
 
 const STEP_DEFAULTS = {
   skipBeacon: true,
 } as const satisfies Partial<Step>
 
+const at = (place: TourPlace, step: Omit<Step, "data">): Step => ({ ...STEP_DEFAULTS, ...step, data: place })
+
+/**
+ * The first-run tour of Rhema Studio: the four workspaces in the order a
+ * volunteer uses them on a Sunday (check, prepare, present, adjust).
+ */
 export const TUTORIAL_STEPS: Step[] = [
-  {
-    ...STEP_DEFAULTS,
-    target: '[data-slot="transcript-panel"]',
-    title: "Live Transcript",
-    content:
-      "Start transcribing to convert speech to text in real time. Detected Bible verses are highlighted automatically.",
+  at({ workspace: "home" }, {
+    target: 'nav[aria-label="Workspaces"]',
+    title: "Your studio",
+    content: "Home checks you are ready. Prepare builds the service. Present runs it. Production keeps time and watches the screens. Under Your church: the library, the design of your screens, your team and past services. At the bottom is your desk: click your name for Light or dark, Settings and help.",
     placement: "right",
-  },
-  {
-    ...STEP_DEFAULTS,
-    target: '[data-slot="detections-panel"]',
-    title: "AI Detections",
-    content:
-      "Detected verses appear here. Press Present to display a verse on screen, or Queue to save it for later.",
+  }),
+  at({ workspace: "home" }, {
+    target: 'section[aria-labelledby="readiness"]',
+    title: "Ready to present?",
+    content: "Before the service, Home lists anything that needs attention (screens off, missing files, an unapproved service), each with a button that takes you to the fix.",
+    placement: "right",
+  }),
+  at({ workspace: "home" }, {
+    target: 'section[aria-labelledby="quick"]',
+    title: "Screens",
+    content: "Outputs turns on the projector, the stage screen and NDI streams. Nothing reaches them until you show it live.",
     placement: "left",
-  },
-  {
-    ...STEP_DEFAULTS,
-    target: '[data-tour="book-search"]',
-    title: "Book Search",
-    content:
-      "Look up any verse by book, chapter, and number. Switch translations from the dropdown.",
+  }),
+  at({ workspace: "prepare" }, {
+    target: '[data-tour="service-bar"]',
+    title: "Your service",
+    content: "Create, open and save a service here. Every save is kept, so you can go back to an earlier version.",
     placement: "bottom",
-    spotlightPadding: 2,
-  },
-  {
-    ...STEP_DEFAULTS,
-    target: '[data-tour="context-search"]',
-    title: "Context Search",
-    content:
-      "Search by phrase or topic. Rhema uses AI to find matching verses.",
+  }),
+  at({ workspace: "prepare" }, {
+    target: '[data-tour="prepare-add"]',
+    title: "Add to the service",
+    content: "Add item opens passages, songs (in one or two languages), hymns, slides, pictures, videos and sound. Nothing in Prepare goes live.",
     placement: "bottom",
-    spotlightPadding: 2,
-  },
-  {
-    ...STEP_DEFAULTS,
-    target: '[data-tour="quick-nav"]',
-    title: "Quick Navigation",
-    content:
-      "Type to instantly navigate: 'J' → 'Joshua' or '1 J' → '1 John', press Tab to advance stages, then type chapter and verse.",
-    placement: "bottom",
-    spotlightPadding: 2,
-  },
-  {
-    ...STEP_DEFAULTS,
-    target: '[data-slot="queue-panel"]',
-    title: "Verse Queue",
-    content:
-      "Your queued verses live here. Drag to reorder, click to present. Build your set list before going live.",
+  }),
+  at({ workspace: "prepare" }, {
+    target: '[data-tour="prepare-rundown"]',
+    title: "The running order",
+    content: "Drag to reorder. Select an item to edit it beside the list: what it shows, notes for the team and its planned minutes.",
+    placement: "right",
+  }),
+  at({ workspace: "present" }, {
+    target: '[data-tour="present-rundown"]',
+    title: "Run the service",
+    content: "Click an item to preview it; double-click to show it live.",
+    placement: "right",
+  }),
+  at({ workspace: "present" }, {
+    target: '[data-studio-live]',
+    title: "What people see",
+    content: "Live is exactly what is on the screens. The preview beside it is what comes next, for you only.",
     placement: "left",
-  },
-  {
-    ...STEP_DEFAULTS,
-    target: '[data-slot="preview-panel"]',
-    title: "Programme Preview",
-    content:
-      "Preview how verses will look before going live. What you see here is what your audience sees.",
+  }),
+  at({ workspace: "present" }, {
+    target: '[role="toolbar"][aria-label="Presentation controls"]',
+    title: "Next, Take live, Clear",
+    content: "Next and Previous step through slides and items (arrow keys or a clicker work too). Take live puts the preview on the screens; the words beside it say what and where. Clear (Esc) takes the screen off; Restore brings it back.",
+    placement: "top",
+  }),
+  at({ workspace: "present" }, {
+    target: '[data-tour="quick-find"]',
+    title: "Find anything",
+    content: "Type a reference (\"John 3 16\", \"Johanu 3:16\"), a hymn number (\"245\") or a few words. Enter previews it; it is not live yet.",
+    placement: "top",
+  }),
+  at({ workspace: "present" }, {
+    target: '[role="group"][aria-label="Quick screens"]',
+    title: "Quick screens",
+    content: "Welcome, Please stand, Let us pray, Black and more, at once. Back returns to what was live.",
+    placement: "left",
+  }),
+  at({ workspace: "present" }, {
+    target: '[data-tour="live-tools"]',
+    title: "Bible search and listening",
+    content: "Open Bible and listening tools to search passages, follow the sermon as text and review proposed verses. Search previews privately; choose what to queue or take live.",
     placement: "bottom",
-  },
-  {
-    ...STEP_DEFAULTS,
-    target: '[data-slot="live-output-panel"]',
-    title: "Live Display",
-    content:
-      "The live output. Presented verses appear here and on connected displays or NDI outputs.",
+  }),
+  at({ workspace: "production" }, {
+    target: '[role="tablist"][aria-label="Production"]',
+    title: "Production control",
+    content: "The service clock, holds and other timers; every screen and NDI sender and whether it is on; and the readiness checks before Sunday. Nothing here takes anything live.",
     placement: "bottom",
-  },
-  {
-    ...STEP_DEFAULTS,
-    target: '[data-tour="broadcast"]',
-    title: "Broadcast",
-    content:
-      "Configure NDI output, display windows, and resolution for your production setup.",
-    placement: "bottom",
-  },
-  {
-    ...STEP_DEFAULTS,
-    target: '[data-tour="theme"]',
-    title: "Themes",
-    content:
-      "Choose from built-in themes or design your own with the visual editor.",
-    placement: "bottom",
-  },
-  {
-    ...STEP_DEFAULTS,
-    target: '[data-tour="settings"]',
-    title: "Settings",
-    content:
-      "Configure audio input, Bible translations, display mode, remote control, and API keys.",
-    placement: "bottom",
-  },
+  }),
+  at({ workspace: "production" }, {
+    target: 'nav[aria-label="Workspaces"]',
+    title: "Library, Design, Team and Archive",
+    content: "Songs, pictures and backups live in the Library. Design sets how everything looks (each language of a bilingual screen can be styled on its own). Settings (in your desk menu at the bottom, or ⌘,) has Bible translations, audio and remotes, and can restart this tour.",
+    placement: "right",
+  }),
 ]

@@ -15,7 +15,8 @@ impl DeepgramRestClient {
     pub fn new(config: SttConfig) -> Self {
         Self {
             config,
-            client: reqwest::Client::new(),
+            // A hung request must not stall the transcript for the rest of the service.
+            client: reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build().unwrap_or_default(),
         }
     }
 

@@ -1,0 +1,321 @@
+import { serviceTiming } from "@/lib/timing-engine"
+import { clockAt } from "@/lib/church-time"
+import { clockMinutes, type OutlineHeader } from "@/lib/run-of-show"
+import type { QueueItem } from "@/types"
+import { recordWords, streamWords, type ObsOutputStatus } from "@/lib/obs-status"
+import { SKEW_WARN_MS, skewWords } from "@/lib/desk-freshness"
+
+export type ReadinessStatus = "ok" | "warn" | "info"
+export type ReadinessFix = "outputs" | "prepare" | "settings" | "cameras" | "obs"
+
+export interface ReadinessCheck {
+  id: string
+  status: ReadinessStatus
+  label: string
+  detail?: string
+  fix?: ReadinessFix
+  fixLabel?: string
+  /** A reminder the operator may put away (Got it): this key, kept for the service (#213 overscan). */
+  dismiss?: string
+}
+
+export interface OutputHealth {
+  name: string
+  role: "congregation" | "stage" | "signage"
+  kind: "display" | "ndi" | "browser"
+  on: boolean
+  /** Why the output is not really delivering (NDI frames failing), when known. */
+  error?: string | null
+  /** NDI receivers connected right now; null when unknown; only meaningful for an on-air NDI output. */
+  receivers?: number | null
+}
+
+export interface ReadinessInput {
+  translationsLoaded: number
+  activeThemeName: string | null
+  outputsConfigured: number
+  outputsOnAir: number
+  /** Per-output state, for the detail line. */
+  outputs?: OutputHealth[]
+  rundownCount: number
+  listening: boolean
+  /** Songs in the rundown whose licence is still "unknown". */
+  unknownLicenceSongs?: number
+  /** Song items in the rundown whose song is no longer in the library. */
+  missingSongs?: number
+  /** Picture items whose file is gone from the media folder (or whose asset was removed). */
+  missingMedia?: number
+  /** Fonts the themes in use ask for that this computer does not have. */
+  missingFonts?: Array<{ theme: string; font: string }>
+  /** Why services and songs are unavailable (the content database failed to open), if they are. */
+  contentError?: string | null
+  /** Display outputs whose monitor is not connected, and outputs sharing one monitor. */
+  monitors?: { missing: string[]; shared: string[][] }
+  /** Whether the open service was approved as it is (Prepare → Approve). Absent when no service is open. */
+  approval?: "approved" | "changed" | "none"
+  /** "Ask before showing" is on: an unapproved service is held at its first go-live. */
+  requireApproval?: boolean
+  /** Signage outputs whose loop has no pictures, or pictures whose files are gone. */
+  signage?: Array<{ name: string; total: number; missing: number }>
+  /** Translations the service's items were saved for that this computer does not have (they cannot show). */
+  missingTranslations?: string[]
+  /** Item kinds this build does not recognize because they came from a newer version. */
+  unsupportedItems?: number
+  /** Saved items this build recognizes but could not read. */
+  corruptItems?: number
+  /** The run of show's plan (#196, #213 preflight): absent when the service has no phases. */
+  timing?: { startSet: boolean; plannedEnd: string | null; overruns: Array<{ item: string; endsAt: string; endBy: string; minutes: number }> }
+  /** Scenes with a camera layer that has no stream address (it shows the scene's background). */
+  camerasWithoutAddress?: string[]
+  /** Cameras in a scene set on an output that the camera router says are not sending (#213). */
+  camerasNotSending?: Array<{ camera: string; outputs: string[]; onAir: boolean; routerOff: boolean }>
+  /** Browser feeds on air that no screen (TV, browser, OBS) is watching (#213). */
+  feedsUnwatched?: string[]
+  /**
+   * Whether the service is about to start or running (#298 H6): false = it is hours or days away,
+   * so nothing on a screen yet is only a note. Absent or null = not known, and it stays a warning.
+   */
+  serviceSoon?: boolean | null
+  /** OBS (#197, #213): optional, so off is only a note. Absent: not asked. */
+  obs?: { enabled: boolean; status: "off" | "connecting" | "connected" | "error"; error: string | null; label: string | null; stream: ObsOutputStatus | null; record: ObsOutputStatus | null; rehearsal: boolean }
+  /** Show the offline-first note (#213): Rhema needs no internet. `cloudSpeech`: cloud speech is chosen (it does). */
+  internet?: { cloudSpeech: boolean }
+  /** This computer's network address now and when the last service went live (#213: fixed or reserved address). */
+  lan?: { now: string; atLastService: string | null }
+  /** Each display output's monitor as the system reports it (#213: resolution; refresh is not reported). */
+  screens?: Array<{ name: string; role: "congregation" | "stage" | "signage"; monitor: string | null; width: number; height: number; onMain: boolean }>
+  /** Fonts the outputs' looks use, checked for Yorùbá letters (ẹ ọ ṣ with tone marks); null/absent: not measurable here. */
+  yorubaFonts?: { checked: string[]; missing: string[] } | null
+  /** Countdown displays (stage outputs on Countdown, ready-made countdown feeds) with nothing to count, and why (#213). */
+  countdownIdle?: Array<{ output: string; why: string }>
+  /** Extra timers that belong to a desk role with no desk of that role connected (#196 R2.5, #213). */
+  timersOwnerAway?: Array<{ timer: string; role: string }>
+  /** TVs (browser feeds) to look at for overscan, unless put away for this service (`dismiss` its key). */
+  overscan?: { outputs: string[]; dismiss: string }
+  /** This computer's clock: its year, and how far it is from a joined host's (null when there is nothing to compare). */
+  clock?: { year: number; skewMs: number | null; reference: string | null }
+}
+
+/**
+ * The overscan reminder (#213): on-air browser feeds (TVs, not signage) that have no Overscan set
+ * of their own (#198), unless Got it put it away for this service (`key`).
+ */
+export function overscanReminder(onAir: readonly { type: string; role?: string; name: string; overscan?: number }[], key: string, dismissed: readonly string[]): ReadinessInput["overscan"] {
+  const tvs = onAir.filter((o) => o.type === "browser" && (o.role ?? "congregation") !== "signage" && !o.overscan).map((o) => o.name)
+  return dismissed.includes(key) || tvs.length === 0 ? undefined : { outputs: tvs, dismiss: key }
+}
+
+/** A clock that says a year before this is plainly wrong (a flat clock battery, a reset). */
+export const EARLIEST_SANE_YEAR = 2025
+
+/** The preflight's own checks (#197, #213): OBS, the network address, screens, Yorùbá fonts, the clock, the internet. */
+export function preflightChecks(i: ReadinessInput): ReadinessCheck[] {
+  const out: ReadinessCheck[] = []
+  if (i.obs) {
+    const o = i.obs
+    if (!o.enabled) out.push({ id: "obs", status: "info", label: "OBS is not connected (optional)", detail: "Rhema Studio runs the service without OBS. Connect it in Settings → Remote control to see its scenes, stream and recording here.", fix: "obs", fixLabel: "Open OBS" })
+    else if (o.status === "connected") {
+      const on = `${o.label ? ` (${o.label})` : ""}`
+      const live = o.stream?.active === true
+      if (o.rehearsal && live) out.push({ id: "obs", status: "warn", label: `OBS${on} is streaming while you rehearse`, detail: "Rehearsal stays on this computer, but OBS is live: what its scenes show goes out. Stop the stream in OBS if this is only practice.", fix: "obs", fixLabel: "Open OBS" })
+      else out.push({ id: "obs", status: "ok", label: `OBS connected${on}`, detail: `Stream: ${streamWords(o.stream).text}. Recording: ${recordWords(o.record).text}.` })
+    } else if (o.status === "connecting") out.push({ id: "obs", status: "info", label: "Connecting to OBS…" })
+    else out.push({ id: "obs", status: "warn", label: `OBS${o.label ? ` (${o.label})` : ""} is not connected`, detail: `${o.error ? `${o.error}. ` : ""}Rhema Studio keeps trying every 15 seconds; OBS's own stream is not affected. Check OBS is open on that computer, or use another saved OBS in Settings.`, fix: "obs", fixLabel: "Open OBS" })
+  }
+  if (i.lan) {
+    const { now, atLastService: was } = i.lan
+    if (was && was !== now) out.push({ id: "lan-address", status: "warn", label: `This computer's network address changed since the last service (${was} → ${now})`, detail: "Phones, TVs, OBS and desks that saved the old address will not find it. Reserve this address for this computer in the church router (a DHCP reservation), or give it a fixed one." })
+    else if (was) out.push({ id: "lan-address", status: "ok", label: `Same network address as the last service (${now})` })
+    else out.push({ id: "lan-address", status: "ok", label: `Network address ${now}`, detail: "Compared at the next service. Reserve it for this computer in the church router so phones and TVs always find it." })
+  }
+  if (i.screens?.length) {
+    out.push({
+      id: "screens",
+      status: "ok",
+      label: `Screens: ${i.screens.map((s) => `${s.name} ${s.width}×${s.height}`).join(", ")}`,
+      detail: `${i.screens.map((s) => `${s.name} on ${s.monitor || "a monitor"}${s.onMain ? " (this computer's main screen)" : ""}`).join("; ")}. The refresh rate is not reported to Rhema Studio: check it in the system's display settings.`,
+    })
+    const swapped = i.screens.filter((s) => s.role === "stage" && s.onMain)
+    if (swapped.length) {
+      const room = i.screens.find((s) => s.role === "congregation" && !s.onMain)
+      out.push({ id: "screens-swapped", status: "warn", label: `${swapped.map((s) => s.name).join(", ")}: a stage output is on this computer's main screen`, detail: `The stage and congregation outputs may be swapped${room ? ` (${room.name} is on ${room.monitor || "another monitor"})` : ""}. Check each output's monitor in Outputs.`, fix: "outputs", fixLabel: "Open outputs" })
+    }
+  }
+  if (i.yorubaFonts?.checked.length) {
+    const m = i.yorubaFonts.missing
+    out.push(m.length
+      ? { id: "yoruba-fonts", status: "warn", label: `${m.length === 1 ? `${m[0]} cannot` : `${m.length} fonts cannot`} draw every Yorùbá letter`, detail: `${m.join(", ")}: ẹ, ọ, ṣ or their tone marks would show in a fallback font. Choose a look whose font has them.`, fix: "outputs", fixLabel: "Open outputs" }
+      : { id: "yoruba-fonts", status: "ok", label: "Fonts draw Yorùbá (ẹ ọ ṣ with tone marks)" })
+  }
+  if (i.clock) {
+    const c = i.clock
+    if (c.year < EARLIEST_SANE_YEAR) out.push({ id: "clock", status: "warn", label: "This computer's clock looks wrong", detail: `It says the year is ${c.year}. Timers and the event clock use it: set the date and time in the system settings.` })
+    else if (c.skewMs !== null && c.reference) {
+      out.push(Math.abs(c.skewMs) > SKEW_WARN_MS
+        ? { id: "clock", status: "warn", label: `This computer's clock is ${skewWords(c.skewMs)} ${c.reference}`, detail: "Times here may differ from the other screens. Set the clocks to the same time (both on automatic time when the network has it)." }
+        : { id: "clock", status: "ok", label: `Clock matches ${c.reference}` })
+    }
+  }
+  // Timers and the countdown display (#213): nothing to count, or a timer whose desk is not there.
+  const soon = i.serviceSoon === true ? ("warn" as const) : ("info" as const)
+  for (const c of i.countdownIdle ?? []) out.push({ id: `countdown-idle:${c.output}`, status: soon, label: `${c.output}: the countdown has nothing to count`, detail: `${c.why}. Until then it shows a dash. Or choose what it counts in Design → Countdown.`, fix: "outputs", fixLabel: "Open outputs" })
+  if (i.timersOwnerAway?.length) {
+    const t = i.timersOwnerAway
+    out.push({ id: "timers-owner-away", status: soon, label: t.length === 1 ? `Extra timer “${t[0].timer}”: no ${t[0].role} desk is connected` : `${t.length} extra timers have no desk connected to run them`, detail: `${t.map((x) => `“${x.timer}” belongs to the ${x.role} desk`).join("; ")}. The main desk and the Timekeeper desk can still run ${t.length === 1 ? "it" : "them"}, in Production → Timekeeper.` })
+  }
+  if (i.overscan?.outputs.length) out.push({ id: "overscan", status: "info", label: `${i.overscan.outputs.join(", ")}: if the TV cuts off the edges, set Overscan in this output's settings (Edit output → Overscan)`, fix: "outputs", fixLabel: "Open outputs", dismiss: i.overscan.dismiss })
+  if (i.internet) out.push({ id: "internet", status: "ok", label: "Works without the internet", detail: `The service runs on the church network alone: unplugging the router's internet is fine. Only OBS's stream to YouTube${i.internet.cloudSpeech ? " and cloud speech need" : " needs"} it.` })
+  return out
+}
+
+/** How close a service must be before "nothing is on a screen" needs doing. */
+export const SOON_MS = 2 * 60 * 60 * 1000
+
+/**
+ * Is the service about to start or happening (#298 H6)? Running (something live, the event clock
+ * started) is soon. Otherwise from its date and the main service's start time: within two hours
+ * before the start until six after; a date with no time is soon all that day. No date: not known.
+ */
+export function serviceStartsSoon(i: { serviceDate: string | null | undefined; startsAt?: string | null; running: boolean; now: number }): boolean | null {
+  if (i.running) return true
+  if (!i.serviceDate || !/^\d{4}-\d{2}-\d{2}$/.test(i.serviceDate)) return null
+  const [y, m, d] = i.serviceDate.split("-").map(Number)
+  const minutes = clockMinutes(i.startsAt)
+  if (minutes === null) {
+    const today = new Date(i.now)
+    return today.getFullYear() === y && today.getMonth() === m - 1 && today.getDate() === d
+  }
+  const start = new Date(y, m - 1, d, Math.floor(minutes / 60), minutes % 60).getTime()
+  return i.now >= start - SOON_MS && i.now <= start + 3 * SOON_MS
+}
+
+/** "Main Display · on · congregation, Stage · off · stage" (plus a nudge when only the stage is on). */
+export function outputDetail(outputs: OutputHealth[] | undefined): string | undefined {
+  if (!outputs?.length) return undefined
+  const parts = outputs.map((o) => `${o.name} · ${o.on ? "on" : "off"} · ${o.role === "stage" ? "stage" : o.kind === "ndi" ? "stream" : "congregation"}${o.error ? ` · not sending: ${o.error}` : o.kind === "ndi" && o.on && o.receivers === 0 ? " · nobody receiving yet (open the source in OBS)" : o.kind === "ndi" && o.on && typeof o.receivers === "number" ? ` · ${o.receivers} receiving` : ""}`)
+  const congregationOn = outputs.some((o) => o.role === "congregation" && o.on)
+  const anyOn = outputs.some((o) => o.on)
+  return parts.join(", ") + (anyOn && !congregationOn ? ". Only the stage is on; the congregation sees nothing." : "")
+}
+
+/**
+ * Service readiness computed from real state. `warn` means "fix before you
+ * start"; `info` is optional context. No network, no guessing.
+ */
+export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: ReadinessCheck[] } {
+  const checks: ReadinessCheck[] = [
+    i.translationsLoaded > 0
+      ? { id: "bible", status: "ok", label: `Bible library loaded (${i.translationsLoaded} translation${i.translationsLoaded === 1 ? "" : "s"})` }
+      : { id: "bible", status: "warn", label: "Bible library not loaded", detail: "Scripture search and verse lookup will not work. Reinstalling Rhema Studio puts the Bible library back; save a log for whoever supports you if it stays.", fix: "settings", fixLabel: "Save a log" },
+    i.activeThemeName
+      ? { id: "theme", status: "ok", label: `Theme: ${i.activeThemeName}` }
+      : { id: "theme", status: "warn", label: "No theme selected", fix: "outputs", fixLabel: "Open outputs" },
+    i.outputsOnAir > 0
+      ? {
+          id: "outputs",
+          status: i.outputs?.some((o) => o.role === "congregation" && o.on) === false || i.outputs?.some((o) => o.on && o.error) ? "warn" : "ok",
+          label: `${i.outputsOnAir} of ${i.outputsConfigured} output${i.outputsConfigured === 1 ? "" : "s"} on a screen`,
+          detail: outputDetail(i.outputs),
+          ...(i.outputs?.some((o) => o.role === "congregation" && o.on) === false || i.outputs?.some((o) => o.on && o.error) ? { fix: "outputs" as const, fixLabel: "Open outputs" } : {}),
+        }
+      : i.outputsConfigured === 0 || i.serviceSoon === false
+        ? // Planning only (#298 H6): no screens set up, or the service is hours away. A note, not "not ready".
+          { id: "outputs", status: "info", label: "No output is on a screen yet", detail: i.outputsConfigured === 0 ? "No outputs are set up. You can plan without any; add one in Outputs before the service." : `Turn the screens on before the service starts.${i.outputs?.length ? ` ${outputDetail(i.outputs)}` : ""}`, fix: "outputs", fixLabel: "Open outputs" }
+        : { id: "outputs", status: "warn", label: "No output is on a screen yet", detail: i.outputs?.length ? outputDetail(i.outputs) : "The congregation cannot see anything until an output is on air.", fix: "outputs", fixLabel: "Open outputs" },
+    i.rundownCount > 0
+      ? { id: "rundown", status: "ok", label: `${i.rundownCount} item${i.rundownCount === 1 ? "" : "s"} in the service` }
+      : { id: "rundown", status: "info", label: "Nothing in the service yet", detail: "You can still find and show passages live.", fix: "prepare", fixLabel: "Prepare service" },
+    i.listening
+      ? { id: "listening", status: "ok", label: "Listening for verse references" }
+      : { id: "listening", status: "info", label: "Listening is off", detail: "Optional. Turn it on in Present's Bible and listening tools to detect verses from the sermon." },
+    ...(i.missingSongs
+      ? [{ id: "missing-songs", status: "warn" as const, label: `${i.missingSongs} song${i.missingSongs === 1 ? "" : "s"} in the service ${i.missingSongs === 1 ? "is" : "are"} not in the library`, detail: "They cannot be shown. Remove them or import the songs again.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      : []),
+    ...(i.approval === "approved"
+      ? [{ id: "approval", status: "ok" as const, label: "Service approved as saved" }]
+      : i.approval === "changed"
+        ? [{ id: "approval", status: "warn" as const, label: "Service changed since it was approved", detail: "Approve it again, or restore the approved version from History.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+        : i.approval === "none" && i.requireApproval
+          ? [{ id: "approval", status: "warn" as const, label: "Service not approved yet", detail: "“Ask before showing” is on: the first go-live will stop and ask. Approve it in Prepare, or present anyway when asked.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+        : i.approval === "none"
+          ? [{ id: "approval", status: "info" as const, label: "Service not approved yet", detail: "Optional. Approve in Prepare so the version for today is kept whatever changes later.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+          : []),
+    ...(i.signage ?? []).flatMap((s) =>
+      s.total === 0
+        ? [{ id: `signage-empty-${s.name}`, status: "warn" as const, label: `${s.name}: the signage loop has no pictures`, detail: "That screen shows only the theme background. Pick pictures in its output settings.", fix: "outputs" as const, fixLabel: "Open outputs" }]
+        : s.missing > 0
+          ? [{ id: `signage-missing-${s.name}`, status: "warn" as const, label: `${s.name}: ${s.missing} of ${s.total} signage picture${s.total === 1 ? "" : "s"} ${s.missing === 1 ? "is" : "are"} missing`, detail: "Those slots show the theme background. Re-import the pictures or remove them from the loop.", fix: "outputs" as const, fixLabel: "Open outputs" }]
+          : [],
+    ),
+    ...(i.contentError
+      ? [{ id: "content", status: "warn" as const, label: "Saved services and songs are unavailable", detail: `${i.contentError}. Scripture still works. If the database file is damaged, restore a backup in Archive → Backups; save a log for whoever supports you.`, fix: "settings" as const, fixLabel: "Save a log" }]
+      : []),
+    ...(i.monitors?.missing.length
+      ? [{ id: "monitors-missing", status: "warn" as const, label: `${i.monitors.missing.join(", ")}: ${i.monitors.missing.length === 1 ? "its monitor is" : "their monitors are"} not connected`, detail: "Check the cable, or choose a connected monitor in Outputs.", fix: "outputs" as const, fixLabel: "Open outputs" }]
+      : []),
+    ...(i.monitors?.shared.length
+      ? [{ id: "monitors-shared", status: "warn" as const, label: `${i.monitors.shared.map((g) => g.join(" and ")).join("; ")} use the same monitor`, detail: "One would cover the other. Give each display output its own monitor.", fix: "outputs" as const, fixLabel: "Open outputs" }]
+      : []),
+    ...(i.missingFonts?.length
+      ? [{ id: "fonts", status: "warn" as const, label: `${i.missingFonts.length} theme font${i.missingFonts.length === 1 ? " is" : "s are"} not installed`, detail: i.missingFonts.map((m) => `${m.theme}: ${m.font}`).join(", ") + ". The screen will use a fallback font.", fix: "outputs" as const, fixLabel: "Open outputs" }]
+      : []),
+    ...(i.missingTranslations?.length
+      ? [{ id: "missing-translations", status: "warn" as const, label: `Some verses are saved for ${i.missingTranslations.join(", ")}, which ${i.missingTranslations.length === 1 ? "is" : "are"} not installed here`, detail: 'They will not show. Install the translation, or turn on "Use my translation" in Present to show them in yours.', fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      : []),
+    ...(i.unsupportedItems
+      ? [{ id: "unsupported-items", status: "warn" as const, label: `${i.unsupportedItems} item${i.unsupportedItems === 1 ? "" : "s"} from a newer version of Rhema Studio`, detail: "This version cannot show them. Update Rhema Studio on this computer.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      : []),
+    ...(i.corruptItems
+      ? [{ id: "corrupt-items", status: "warn" as const, label: `${i.corruptItems} saved item${i.corruptItems === 1 ? "" : "s"} could not be read`, detail: "Saving or copying this service could remove unreadable data. Restore a backup before editing it.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      : []),
+    ...(i.missingMedia
+      ? [{ id: "missing-media", status: "warn" as const, label: `${i.missingMedia} picture${i.missingMedia === 1 ? "" : "s"}, video${i.missingMedia === 1 ? "" : "s"} or sound${i.missingMedia === 1 ? "" : "s"} in the service ${i.missingMedia === 1 ? "is" : "are"} missing ${i.missingMedia === 1 ? "its" : "their"} file`, detail: "They would show or play nothing. Import the files again or remove the items.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      : []),
+    ...(i.unknownLicenceSongs
+      ? [{ id: "licence", status: "info" as const, label: `${i.unknownLicenceSongs} song${i.unknownLicenceSongs === 1 ? "" : "s"} in the service ${i.unknownLicenceSongs === 1 ? "has" : "have"} no licence recorded`, detail: "Not a blocker. Open the song in Prepare → Songs to record it.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      : []),
+    ...(i.timing && !i.timing.startSet
+      ? [{ id: "timing-start", status: "info" as const, label: "The main service has no start time", detail: "Set it in Prepare → Run of show to see when each item is expected and when the service ends.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      : i.timing?.overruns.length
+        ? [{ id: "timing-end-by", status: "warn" as const, label: `The plan runs past ${i.timing.overruns.length === 1 ? "an end-by time" : `${i.timing.overruns.length} end-by times`}`, detail: i.timing.overruns.map((o) => `${o.item} is planned to end at ${o.endsAt}, ${o.minutes} min after its end by ${o.endBy}`).join("; ") + ". Shorten something before it, or move the end by.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+        : i.timing?.plannedEnd
+          ? [{ id: "timing", status: "ok" as const, label: `Planned to end at ${i.timing.plannedEnd}` }]
+          : []),
+    ...(i.camerasWithoutAddress?.length
+      ? [{ id: "cameras", status: "info" as const, label: `${i.camerasWithoutAddress.join(", ")}: a camera layer has no stream address`, detail: "Its box shows colour bars (or what the scene says) instead. Add the camera's address (WHEP, e.g. from MediaMTX) in Production → Scenes." }]
+      : []),
+    ...(i.camerasNotSending?.length
+      ? [{
+          id: "cameras-sending",
+          status: "warn" as const,
+          label: i.camerasNotSending.length === 1 ? `${i.camerasNotSending[0].camera} is not sending` : `${i.camerasNotSending.length} cameras are not sending: ${i.camerasNotSending.map((c) => c.camera).join(", ")}`,
+          detail: (i.camerasNotSending.some((c) => c.routerOff) ? "The camera router is not running. " : "")
+            + i.camerasNotSending.map((c) => `${c.camera}: in the scene on ${c.outputs.join(", ")}${c.onAir ? " (on air now)" : ""}`).join("; ")
+            + ". Until it sends, its box shows colour bars, TV static or words there, as the scene says. Check the phone is on the church Wi-Fi with the camera page open.",
+          fix: "cameras" as const,
+          fixLabel: "Open Cameras",
+        }]
+      : []),
+    ...(i.feedsUnwatched?.length
+      ? [{ id: "feeds-unwatched", status: "info" as const, label: `${i.feedsUnwatched.join(", ")}: no screen is watching`, detail: "The browser feed is on, but no TV, browser or OBS has it open. Show it on a Google TV, or open its link.", fix: "outputs" as const, fixLabel: "Open outputs" }]
+      : []),
+    ...preflightChecks(i),
+  ]
+  return { ready: checks.every((c) => c.status !== "warn"), checks }
+}
+
+/** The plan's end and any item planned past its end by (nothing that happened, only the plan), on the church's clock (`zone`). */
+export function planCheck(items: QueueItem[], headers: OutlineHeader[], zone = ""): NonNullable<ReadinessInput["timing"]> | undefined {
+  const main = headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual")
+  if (!main) return undefined
+  if (clockMinutes(main.starts_at) === null) return { startSet: false, plannedEnd: null, overruns: [] }
+  const t = serviceTiming({ items, headers, firstOnAir: new Map(), onAirMs: new Map(), liveItemId: null, now: Date.now(), timeZone: zone })
+  if (!t) return undefined
+  const hm = (ms: number) => clockAt(ms, zone)
+  return {
+    startSet: true,
+    plannedEnd: hm(t.plannedEnd),
+    overruns: t.events.filter((e) => e.hardStop !== null && e.plannedEnd > e.hardStop + 30_000).map((e) => ({ item: e.label, endsAt: hm(e.plannedEnd), endBy: hm(e.hardStop!), minutes: Math.round((e.plannedEnd - e.hardStop!) / 60_000) })),
+  }
+}
+

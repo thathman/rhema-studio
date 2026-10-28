@@ -6,14 +6,20 @@ use std::time::Duration;
 use rosc::{OscPacket, OscMessage};
 
 use crate::coerce::parse_osc;
+use crate::command::RemoteCommand;
 use crate::dispatch::{CommandDispatcher, CommandSink};
 use crate::error::CommandError;
+use crate::keys::{check_key, new_key_set, KeyEntry, KeySet};
+use crate::peer::check_remote_key;
 
 /// Configuration for the OSC listener.
 #[derive(Debug, Clone)]
 pub struct OscConfig {
     pub port: u16,
     pub host: String,
+    /// Paired devices and the shared key; empty means open to local/private peers only. Otherwise
+    /// every message must carry a token as its first string argument.
+    pub keys: KeySet,
 }
 
 impl Default for OscConfig {
@@ -21,6 +27,7 @@ impl Default for OscConfig {
         Self {
             port: 8000,
             host: "0.0.0.0".into(),
+            keys: new_key_set(),
         }
     }
 }
@@ -89,6 +96,8 @@ where
 
     let active = Arc::new(AtomicBool::new(true));
     let thread_active = active.clone();
+    let keys = config.keys.clone();
+    let rate = crate::rate::RateLimiter::default();
 
     let thread = std::thread::Builder::new()
         .name("osc-listener".into())
@@ -98,7 +107,7 @@ where
             let mut buf = [0u8; 4096];
 
             while thread_active.load(Ordering::SeqCst) {
-                let (size, _src) = match socket.recv_from(&mut buf) {
+                let (size, src) = match socket.recv_from(&mut buf) {
                     Ok(result) => result,
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock
                         || e.kind() == std::io::ErrorKind::TimedOut =>
@@ -120,7 +129,7 @@ where
                     }
                 };
 
-                handle_packet(&packet, &*sink);
+                handle_packet(&packet, &*sink, &keys, Some((&rate, src.ip())));
             }
 
             log::info!("OSC listener stopped");
@@ -137,23 +146,72 @@ where
 }
 
 /// Recursively handle an OSC packet (messages and bundles).
-fn handle_packet(packet: &OscPacket, sink: &dyn CommandSink) {
+/// Rate limit and sender, when the message came off the network.
+type Limit<'a> = Option<(&'a crate::rate::RateLimiter, std::net::IpAddr)>;
+
+fn handle_packet(packet: &OscPacket, sink: &dyn CommandSink, keys: &KeySet, limit: Limit<'_>) {
     match packet {
-        OscPacket::Message(msg) => handle_message(msg, sink),
+        OscPacket::Message(msg) => handle_message_from(msg, sink, keys, limit),
         OscPacket::Bundle(bundle) => {
             for content in &bundle.content {
-                handle_packet(content, sink);
+                handle_packet(content, sink, keys, limit);
             }
         }
     }
 }
 
-/// Parse a single OSC message and dispatch the resulting command.
-fn handle_message(msg: &OscMessage, sink: &dyn CommandSink) {
-    match parse_osc(&msg.addr, &msg.args) {
+#[cfg(test)]
+fn handle_message(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet) {
+    handle_message_from(msg, sink, keys, None);
+}
+
+/// Parse a single OSC message and dispatch the resulting command. With a
+/// secret set, the first argument must be that string; it is stripped
+/// before parsing.
+///
+/// The rate limit is spent only after the key check, so packets spoofed
+/// from a controller's address without the key cannot use up its
+/// allowance; fader values (confidence, opacity) are exempt, since a fader
+/// sends dozens a second and the last one must land.
+fn handle_message_from(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet, limit: Limit<'_>) {
+    let presented = match msg.args.first() {
+        Some(rosc::OscType::String(k)) => Some(k.as_str()),
+        _ => None,
+    };
+    // One check: the set may change between two reads (a revoke on another thread).
+    let checked = match limit {
+        Some((_, peer)) => check_remote_key(keys, presented, peer),
+        None => check_key(keys, presented),
+    };
+    let (args, entry): (&[rosc::OscType], Option<KeyEntry>) = match checked {
+        Ok(None) => (&msg.args, None),
+        Ok(Some(e)) => (&msg.args[1..], Some(e)),
+        Err(reason) => {
+            log::warn!("OSC message refused for {}: {reason}", msg.addr);
+            return;
+        }
+    };
+    match parse_osc(&msg.addr, args) {
         Ok(cmd) => {
+            if let Some(e) = entry {
+                if e.paused_for(&cmd) {
+                    log::warn!("OSC command refused for {}: {} ({})", msg.addr, crate::keys::PAUSED_MESSAGE, e.name);
+                    return;
+                }
+                if !e.role.allows(&cmd) {
+                    log::warn!("OSC command refused for {}: {} may present but not change settings", msg.addr, e.name);
+                    return;
+                }
+            }
+            if let Some((rate, ip)) = limit {
+                let fader = matches!(cmd, RemoteCommand::Opacity(_) | RemoteCommand::Confidence(_));
+                if !fader && !rate.allow(ip) {
+                    log::warn!("OSC command refused: too many from {ip}");
+                    return;
+                }
+            }
             log::debug!("OSC command: {cmd}");
-            if let Err(e) = CommandDispatcher::dispatch(&cmd, sink) {
+            if let Err(e) = CommandDispatcher::dispatch_as(&cmd, sink, "OSC") {
                 log::warn!("OSC dispatch error for {}: {e}", msg.addr);
             }
         }
@@ -186,7 +244,10 @@ mod tests {
 
     impl CommandSink for MockSink {
         fn emit_event(&self, event: &str, _payload: &str) -> Result<(), CommandError> {
-            self.commands.lock().unwrap().push(event.to_string());
+            // Commands only: the service log's record (remote:audit) is not a command.
+            if event != "remote:audit" {
+                self.commands.lock().unwrap().push(event.to_string());
+            }
             Ok(())
         }
 
@@ -202,6 +263,7 @@ mod tests {
         let config = OscConfig {
             port: 0, // OS assigns a free port
             host: "127.0.0.1".into(),
+            ..Default::default()
         };
 
         let mut result = start_osc_listener(config, sink).expect("should bind");
@@ -213,11 +275,71 @@ mod tests {
     }
 
     #[test]
+    fn osc_listener_requires_the_key_when_one_is_set() {
+        let sink = Arc::new(MockSink::new());
+        let config = OscConfig { port: 0, host: "127.0.0.1".into(), keys: crate::keys::key_set_from(&[("s3cret", "Shared key")]) };
+        let result_keys = config.keys.clone();
+        let result = start_osc_listener(config, sink.clone()).expect("should bind");
+        let port = result.bound_port;
+        let send_socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let send = |args: Vec<rosc::OscType>| {
+            let packet = rosc::OscPacket::Message(rosc::OscMessage { addr: "/rhema/next".into(), args });
+            send_socket.send_to(&rosc::encoder::encode(&packet).unwrap(), format!("127.0.0.1:{port}")).unwrap();
+        };
+        send(vec![]);
+        send(vec![rosc::OscType::String("nope".into())]);
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(sink.command_count(), 0, "no key, no command");
+        send(vec![rosc::OscType::String("s3cret".into())]);
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(sink.command_count(), 1);
+        // A present-only entry cannot change the theme but can press Next.
+        keys_for_role_test(&result_keys, "tok");
+        let send_to = |addr: &str, args: Vec<rosc::OscType>| {
+            let packet = rosc::OscPacket::Message(rosc::OscMessage { addr: addr.into(), args });
+            send_socket.send_to(&rosc::encoder::encode(&packet).unwrap(), format!("127.0.0.1:{port}")).unwrap();
+        };
+        send_to("/rhema/theme", vec![rosc::OscType::String("tok".into()), rosc::OscType::String("Dark".into())]);
+        send_to("/rhema/next", vec![rosc::OscType::String("tok".into())]);
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(sink.command_count(), 2);
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[test]
+    fn unauthenticated_osc_is_limited_to_local_network_peers() {
+        let sink = Arc::new(MockSink::new());
+        let keys = new_key_set();
+        let rate = crate::rate::RateLimiter::default();
+        let message = OscMessage { addr: "/rhema/next".into(), args: vec![] };
+
+        handle_message_from(&message, &*sink, &keys, Some((&rate, "8.8.8.8".parse().unwrap())));
+        assert_eq!(sink.command_count(), 0, "an open listener refuses public-source commands");
+
+        handle_message_from(&message, &*sink, &keys, Some((&rate, "192.168.1.40".parse().unwrap())));
+        assert_eq!(sink.command_count(), 1, "legacy open control still works on a private LAN");
+
+        let paired = crate::keys::key_set_from(&[("s3cret", "Desk")]);
+        let keyed_message = OscMessage {
+            addr: "/rhema/next".into(),
+            args: vec![rosc::OscType::String("s3cret".into())],
+        };
+        handle_message_from(&keyed_message, &*sink, &paired, Some((&rate, "8.8.8.8".parse().unwrap())));
+        assert_eq!(sink.command_count(), 2, "a valid paired key preserves authenticated remote control");
+    }
+
+    fn keys_for_role_test(keys: &KeySet, token: &str) {
+        keys.write().unwrap().entries.push(KeyEntry { hash: crate::keys::hash_key(token), name: "phone".into(), role: crate::keys::Role::Present, paused: false });
+    }
+
+    #[test]
     fn osc_listener_receives_and_dispatches() {
         let sink = Arc::new(MockSink::new());
         let config = OscConfig {
             port: 0,
             host: "127.0.0.1".into(),
+            ..Default::default()
         };
 
         let result = start_osc_listener(config, sink.clone()).expect("should bind");
@@ -255,6 +377,7 @@ mod tests {
         let config = OscConfig {
             port,
             host: "127.0.0.1".into(),
+            ..Default::default()
         };
 
         let result = start_osc_listener(config, sink);
@@ -268,8 +391,30 @@ mod tests {
             addr: "/rhema/next".into(),
             args: vec![],
         };
-        handle_message(&msg, &sink);
+        handle_message(&msg, &sink, &new_key_set());
         assert_eq!(sink.command_count(), 1);
+    }
+
+    #[test]
+    fn the_limit_counts_only_keyed_commands_and_spares_faders() {
+        let sink = MockSink::new();
+        let keys = crate::keys::key_set_from(&[("k3y-123", "deck")]);
+        let rate = crate::rate::RateLimiter::new(1.0, 2.0);
+        let ip: std::net::IpAddr = "192.168.1.30".parse().unwrap();
+        let keyed = |addr: &str, extra: Vec<rosc::OscType>| OscMessage { addr: addr.into(), args: [vec![rosc::OscType::String("k3y-123".into())], extra].concat() };
+        // Spoofed packets without the key spend nothing.
+        for _ in 0..50 {
+            handle_message_from(&OscMessage { addr: "/rhema/next".into(), args: vec![] }, &sink, &keys, Some((&rate, ip)));
+        }
+        assert_eq!(sink.command_count(), 0);
+        handle_message_from(&keyed("/rhema/next", vec![]), &sink, &keys, Some((&rate, ip)));
+        handle_message_from(&keyed("/rhema/next", vec![]), &sink, &keys, Some((&rate, ip)));
+        handle_message_from(&keyed("/rhema/next", vec![]), &sink, &keys, Some((&rate, ip)));
+        assert_eq!(sink.command_count(), 2, "burst of 2, the third refused");
+        for i in 0..30u8 {
+            handle_message_from(&keyed("/rhema/confidence", vec![rosc::OscType::Float(f32::from(i) / 30.0)]), &sink, &keys, Some((&rate, ip)));
+        }
+        assert_eq!(sink.command_count(), 32, "fader values all land");
     }
 
     #[test]
@@ -279,7 +424,7 @@ mod tests {
             addr: "/foo/bar".into(),
             args: vec![],
         };
-        handle_message(&msg, &sink);
+        handle_message(&msg, &sink, &new_key_set());
         assert_eq!(sink.command_count(), 0);
     }
 
@@ -299,7 +444,7 @@ mod tests {
                 }),
             ],
         });
-        handle_packet(&bundle, &sink);
+        handle_packet(&bundle, &sink, &new_key_set(), None);
         assert_eq!(sink.command_count(), 2);
     }
 }

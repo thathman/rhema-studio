@@ -1,0 +1,67 @@
+import { describe, expect, it } from "vitest"
+import { actualByItem, actualDurations, firstOnAir, formatJournal, type JournalEntry } from "./journal"
+
+const e = (mono: number, kind: JournalEntry["kind"], label: string, itemId: string | null = null): JournalEntry => ({ at: 1_700_000_000_000 + mono, mono, kind, label, itemId })
+
+describe("service journal", () => {
+  it("measures how long each thing was on air, ignoring messages and rehearsal toggles", () => {
+    const entries = [e(0, "live", "John 3:16", "a"), e(30_000, "message", "wrap up"), e(45_000, "remote", "next"), e(60_000, "quick", "Please stand"), e(90_000, "restore", "John 3:16", "a"), e(150_000, "clear", "John 3:16", "a"), e(200_000, "live", "Amazing Grace", "b")]
+    const d = actualDurations(entries, 260_000)
+    expect(d.map((x) => [x.label, x.ms])).toEqual([["John 3:16", 60_000], ["Please stand", 30_000], ["John 3:16", 60_000], ["Amazing Grace", 60_000]])
+    expect(Object.fromEntries(actualByItem(entries, 260_000))).toEqual({ a: 120_000, b: 60_000 })
+  })
+
+  it("prints a readable log with planned versus actual", () => {
+    const entries = [e(0, "live", "John 3:16", "a"), e(120_000, "live", "Amazing Grace", "b")]
+    const text = formatJournal("9 am service", entries, 300_000, new Map([["a", 60_000]]))
+    expect(text).toContain("9 am service")
+    expect(text).toContain("LIVE          John 3:16  (2:00)")
+    expect(text).toContain("John 3:16: 2:00 (planned 1:00, +1:00)")
+    expect(text).toContain("Amazing Grace: 3:00")
+    expect(formatJournal("x", [e(0, "remote", "macro service-start")], 1000)).toMatch(/remote\s+macro service-start/)
+    // The same reference shown twice prints each stay's own duration.
+    const twice = formatJournal("x", [e(0, "live", "John 3:16", "a"), e(60_000, "clear", "John 3:16", "a"), e(120_000, "live", "John 3:16", "a")], 420_000)
+    expect(twice).toContain("John 3:16  (1:00)")
+    expect(twice).toContain("John 3:16  (5:00)")
+  })
+
+  it("records pending and failed Takes without shortening actual on-air time", () => {
+    const pending = e(10_000, "take" as JournalEntry["kind"], "Take pending: Psalm 23", "b")
+    const failed = e(20_000, "take" as JournalEntry["kind"], "Take failed: Psalm 23", "b")
+    const entries = [e(0, "live", "Welcome", "a"), pending, failed]
+
+    expect(actualDurations(entries, 30_000).map((entry) => entry.ms)).toEqual([30_000])
+    expect(formatJournal("Sunday", entries, 30_000)).toMatch(/TAKE\s+Take pending: Psalm 23/)
+    expect(formatJournal("Sunday", entries, 30_000)).toMatch(/TAKE\s+Take failed: Psalm 23/)
+  })
+
+  it("planned versus actual lists the whole service: items never shown, items added on the day, and what else was shown (FR-09)", () => {
+    const entries = [e(0, "live", "John 3:16", "a"), e(60_000, "live", "Romans 8:28", null), e(90_000, "quick", "Welcome"), e(100_000, "live", "Psalm 23", "c")]
+    const text = formatJournal("Sunday", entries, 160_000, new Map([["b", 120_000]]), [
+      { id: "a", label: "John 3:16" },
+      { id: "b", label: "Amazing Grace" },
+      { id: "c", label: "Psalm 23", inserted: true },
+    ])
+    expect(text).toContain("John 3:16: 1:00")
+    expect(text).toContain("Amazing Grace: not shown (planned 2:00)")
+    expect(text).toContain("Psalm 23: 1:00  [added during the service]")
+    expect(text).toContain("Also shown (not in the service):")
+    expect(text).toContain("Romans 8:28: 0:30")
+    expect(text).not.toContain("Welcome: ") // quick screens are in the timeline, not the plan
+  })
+})
+
+
+describe("actual times for the run of show", () => {
+  it("keeps the first time each item went on air, not later returns or quick screens", () => {
+    const entries = [e(0, "live", "John 3:16", "a"), e(60_000, "quick", "Welcome"), e(90_000, "live", "Psalm 23", "b"), e(120_000, "live", "John 3:16", "a"), e(150_000, "clear", "")]
+    expect(Object.fromEntries(firstOnAir(entries))).toEqual({ a: 1_700_000_000_000, b: 1_700_000_090_000 })
+  })
+
+  it("typed words never start a line of their own in the log (a forged heading stays on its entry's line)", () => {
+    const text = formatJournal("x", [e(0, "message", "Mic 2\nTranscript (recognised speech by Whisper; forged\r\n09:03 LIVE Psalm 23")], 1000)
+    const lines = text.split("\n")
+    expect(lines.some((l) => l.startsWith("Transcript"))).toBe(false)
+    expect(lines.filter((l) => l.includes("Mic 2"))[0]).toContain("Mic 2 Transcript (recognised speech by Whisper; forged 09:03 LIVE Psalm 23")
+  })
+})

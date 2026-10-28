@@ -8,6 +8,7 @@ pub struct AppState {
     pub active_translation_id: i64,
     pub audio_active: Arc<AtomicBool>,
     pub stt_active: Arc<AtomicBool>,
+    pub stt_provider_stop: Option<Arc<dyn Fn() + Send + Sync>>,
     pub audio_test_active: Arc<AtomicBool>,
     #[expect(dead_code, reason = "reserved for future Deepgram key injection")]
     pub deepgram_api_key: Option<String>,
@@ -21,9 +22,10 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             bible_db: None,
-            active_translation_id: 1, // Default to first translation (KJV)
+            active_translation_id: 1, // replaced at startup by the window's choice (KJV on a first run)
             audio_active: Arc::new(AtomicBool::new(false)),
             stt_active: Arc::new(AtomicBool::new(false)),
+            stt_provider_stop: None,
             audio_test_active: Arc::new(AtomicBool::new(false)),
             deepgram_api_key: None,
             embedding_warning: None,

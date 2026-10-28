@@ -30,13 +30,18 @@ export function numberToRoman(num: number): string {
   return String(num)
 }
 
+/** Drop accents and tone marks ("Jòhánù" → "Johanu", "Ọba" → "Oba", "Ìṣe" → "Ise") so Yorùbá book names match however they are typed. */
+export function foldMarks(input: string): string {
+  return input.normalize("NFD").replace(/\p{M}/gu, "")
+}
+
 /**
  * Normalize numbered-book input to the Roman form used by some Bible data
  * sources. This keeps matching tolerant of Arabic, Roman, and ordinal
  * prefixes: "1 S", "I S", and "1st S" all become "I S".
  */
 export function normalizeInput(input: string): string {
-  const trimmed = input.trim()
+  const trimmed = ordinalWords(foldMarks(input.trim()))
   const leadingNumberMatch = trimmed.match(/^(\d+)(?:st|nd|rd|th)?\s*(.*)$/i)
 
   if (leadingNumberMatch) {
@@ -49,16 +54,102 @@ export function normalizeInput(input: string): string {
 }
 
 /**
+ * Ordinals in words, as people say and type them: "First Samuel", and the
+ * Yorùbá order "Samuẹli Kínní", "Ọba Kejì" (accents already folded).
+ * Both become the number in front ("1 Samuel", "2 Oba").
+ */
+const ORDINAL_WORDS: Record<string, number> = { first: 1, second: 2, third: 3, kinni: 1, kini: 1, keji: 2, keta: 3 }
+function ordinalWords(s: string): string {
+  const before = s.match(/^(first|second|third)\s+(.+)$/i)
+  if (before) return `${ORDINAL_WORDS[before[1].toLowerCase()]} ${before[2]}`
+  const after = s.match(/^([^\d\s]+)\s+(kinni|kini|keji|keta)\b\s*(.*)$/i)
+  if (after) return `${ORDINAL_WORDS[after[2].toLowerCase()]} ${after[1]}${after[3] ? ` ${after[3]}` : ""}`
+  return s
+}
+
+/**
+ * A book with or without a chapter ("1 Samuel", "1 Kings 3", "Psalm 23"), for
+ * Quick find to offer that chapter's first verse beside its word search. A
+ * single plain word ("john", "mark", "acts") stays a word search unless the
+ * book is numbered or a chapter follows.
+ */
+export function parseBookChapter(input: string, books: Book[]): { book: Book; chapter: number } | null {
+  const normalized = normalizeInput(input)
+  const m = normalized.match(/^([IVX]+\s+[a-zA-Z.\s]+?|[a-zA-Z][a-zA-Z.\s]*?)(?:\s+(\d{1,3}))?$/)
+  if (!m) return null
+  const numbered = /^[IVX]+\s/.test(m[1])
+  if (!numbered && !m[2]) return null
+  const book = findMatchingBook(m[1].trim().replace(/\.$/, ""), books)
+  if (!book) return null
+  const chapter = m[2] ? parseInt(m[2]) : 1
+  return chapter >= 1 ? { book, chapter } : null
+}
+
+/**
+ * Common short forms that are not a prefix of the book's name or the Bible
+ * database's abbreviation ("Jn" for John, "Mt", "Php"), by canonical book
+ * number so they work in every translation. Numbered books use the Roman
+ * prefix normalizeInput produces ("1 Jn" → "i jn"). Only unambiguous forms.
+ */
+const BOOK_ALIASES: Record<string, number> = {
+  gn: 1, dt: 5, jgs: 7, jdg: 7, "i sm": 9, "ii sm": 10, sos: 22, "song of songs": 22, sg: 22,
+  jl: 29, ob: 31, hb: 35, hg: 37,
+  mt: 40, mk: 41, mrk: 41, lk: 42, luk: 42, jn: 43, jhn: 43, rm: 45, php: 50, phm: 57, phlm: 57, jm: 59,
+  "i pt": 60, "ii pt": 61, "i jn": 62, "i jhn": 62, "ii jn": 63, "ii jhn": 63, "iii jn": 64, "iii jhn": 64, jd: 65,
+  rv: 66, revelations: 66,
+}
+
+/**
+ * Yorùbá book names as the bundled Yorùbá Bible's own edition prints them
+ * (eBible.org "yor", the OYCB source; checked 2026-10-21), accents folded,
+ * by canonical book number. Numbered books carry the Roman prefix that
+ * normalizeInput produces ("1 Ọba" → "i oba").
+ */
+const YORUBA_BOOKS: Array<[string, number]> = [
+  ["genesisi", 1], ["eksodu", 2], ["lefitiku", 3], ["numeri", 4], ["deuteronomi", 5], ["josua", 6], ["onidajo", 7], ["rutu", 8],
+  ["i samueli", 9], ["ii samueli", 10], ["i oba", 11], ["ii oba", 12], ["i kronika", 13], ["ii kronika", 14], ["esra", 15],
+  ["nehemiah", 16], ["esteri", 17], ["jobu", 18], ["saamu", 19], ["owe", 20], ["oniwaasu", 21], ["orin solomoni", 22],
+  ["isaiah", 23], ["jeremiah", 24], ["ekun jeremiah", 25], ["esekieli", 26], ["danieli", 27], ["hosea", 28], ["joeli", 29],
+  ["amosi", 30], ["obadiah", 31], ["jona", 32], ["mika", 33], ["nahumu", 34], ["habakuku", 35], ["sefaniah", 36], ["hagai", 37],
+  ["sekariah", 38], ["malaki", 39], ["matiu", 40], ["marku", 41], ["luku", 42], ["johanu", 43], ["ise awon aposteli", 44],
+  ["romu", 45], ["i korinti", 46], ["ii korinti", 47], ["galatia", 48], ["efesu", 49], ["filipi", 50], ["kolose", 51],
+  ["i tesalonika", 52], ["ii tesalonika", 53], ["i timotiu", 54], ["ii timotiu", 55], ["titu", 56], ["filemoni", 57],
+  ["heberu", 58], ["jakobu", 59], ["i peteru", 60], ["ii peteru", 61], ["i johanu", 62], ["ii johanu", 63], ["iii johanu", 64],
+  ["juda", 65], ["ifihan", 66],
+]
+const YORUBA_EXACT = new Map(YORUBA_BOOKS)
+
+/**
  * Find matching book by name or abbreviation (case insensitive)
  */
 export function findMatchingBook(bookInput: string, books: Book[]): Book | undefined {
   const normalized = normalizeInput(bookInput).toLowerCase()
-  return books.find(
+  const key = normalized.replace(/\./g, "").replace(/\s+/g, " ").trim()
+  const alias = BOOK_ALIASES[key] ?? YORUBA_EXACT.get(key)
+  if (alias) {
+    const book = books.find((b) => b.book_number === alias)
+    if (book) return book
+  }
+  const english = books.find(
     b =>
       normalizeInput(b.name).toLowerCase().startsWith(normalized) ||
       normalizeInput(b.abbreviation).toLowerCase().startsWith(normalized)
   )
+  if (english) return english
+  // A Yorùbá name typed in part ("Joha", "Ise"); after the English names so their behaviour is unchanged.
+  if (key.replace(/^[ivx]+ /, "").length < 3) return undefined
+  const yo = YORUBA_BOOKS.find(([name]) => name.startsWith(key))
+  return yo ? books.find((b) => b.book_number === yo[1]) : undefined
 }
+
+/** Books of one chapter: "Jude 5" is verse 5 (Obadiah, Philemon, 2 John, 3 John, Jude). */
+const ONE_CHAPTER_BOOKS = new Set([31, 57, 63, 64, 65])
+
+/** "Jn. 3:16" → "Jn 3:16"; a dot after a book abbreviation is not part of it. */
+const dropAbbreviationDots = (s: string) => s.replace(/([a-zA-Z])\./g, "$1")
+
+/** A verse range or list after the first verse ("3:16-18", "3:16, 18"): the first verse is the one shown. */
+const RANGE_TAIL = String.raw`(?:\s*[-–—,]\s*\d+)*`
 
 /**
  * Parse Bible reference input and return autocomplete suggestion
@@ -73,7 +164,7 @@ export function getAutocompleteSuggestion(
     return { suggestion: "", stage: "none" }
   }
 
-  const normalizedInput = normalizeInput(trimmed)
+  const normalizedInput = dropAbbreviationDots(normalizeInput(trimmed))
 
   // Check if it's just a number (for numbered books like "1", "2", "3")
   if (/^\d+(?:st|nd|rd|th)?$/i.test(trimmed)) {
@@ -92,7 +183,7 @@ export function getAutocompleteSuggestion(
 
   // Parse: "NumberedBook Chapter:Verse" or "BookName Chapter:Verse"
   // Match patterns like: "I J", "I John", "John", "John 3", "John 3:16"
-  const match = normalizedInput.match(/^([IVX]+\s+[a-zA-Z]+|[IVX]+\s+[a-zA-Z\s]+|[a-zA-Z\s]+?)\s*(\d+)?:?(\d+)?$/)
+  const match = normalizedInput.match(new RegExp(String.raw`^([IVX]+\s+[a-zA-Z]+|[IVX]+\s+[a-zA-Z\s]+|[a-zA-Z\s]+?)\s*(\d+)?:?(\d+)?` + RANGE_TAIL + "$"))
 
   if (!match) {
     return { suggestion: "", stage: "none" }
@@ -120,6 +211,16 @@ export function getAutocompleteSuggestion(
   }
 
   const chapter = parseInt(chapterNum)
+
+  // A range or list needs a verse first ("John 3-5" is not a reference).
+  if (!verseNum && /[-–—,]/.test(normalizedInput.slice(match[1].length))) {
+    return { suggestion: "", stage: "none" }
+  }
+
+  // "Jude 5": a one-chapter book's number is the verse ("Jude 1" still offers "Jude 1:" to go on typing).
+  if (!verseNum && !trimmed.includes(":") && ONE_CHAPTER_BOOKS.has(matchingBook.book_number) && chapter > 1) {
+    return { suggestion: "", matchedBook: matchingBook, chapter: 1, verse: chapter, stage: "complete" }
+  }
 
   // Stage 2: Suggest colon after chapter
   if (!verseNum && !trimmed.includes(':')) {
@@ -180,11 +281,17 @@ export function parseTypedReference(
   if (!trimmed) return null
 
   const normalized = normalizeInput(trimmed)
-  // Book words, then chapter and verse separated by ":", ".", or whitespace.
+  // Book words, then chapter and verse separated by ":", ".", or whitespace (a range or list after it: its first verse).
   const match = normalized.match(
-    /^([IVX]+\s+[a-zA-Z.]+|[a-zA-Z][a-zA-Z.\s]*?)\s*(\d{1,3})\s*[:.\s]\s*(\d{1,3})$/
+    new RegExp(String.raw`^([IVX]+\s+[a-zA-Z.]+|[a-zA-Z][a-zA-Z.\s]*?)\s*(\d{1,3})\s*[:.\s]\s*(\d{1,3})` + RANGE_TAIL + "$")
   )
-  if (!match) return null
+  if (!match) {
+    // "Jude 5": a one-chapter book and one number.
+    const one = normalized.match(/^([IVX]+\s+[a-zA-Z.]+|[a-zA-Z][a-zA-Z.\s]*?)\s*(\d{1,3})$/)
+    const book = one ? findMatchingBook(one[1].trim().replace(/\.$/, ""), books) : undefined
+    if (!one || !book || !ONE_CHAPTER_BOOKS.has(book.book_number) || parseInt(one[2]) < 1) return null
+    return { book, chapter: 1, verse: parseInt(one[2]) }
+  }
 
   const book = findMatchingBook(match[1].trim().replace(/\.$/, ""), books)
   if (!book) return null
@@ -207,14 +314,23 @@ export function getTabNavigationResult(
     return currentInput
   }
 
-  const trimmed = currentInput.trim()
+  let trimmed = currentInput.trim()
   const suggestionTrimmed = currentSuggestion.trim()
 
   // Extract the full book name from the suggestion
-  const bookNameMatch = suggestionTrimmed.match(/^(((?:\d+|[IVX]+)\s+)?[a-zA-Z\s]+)\s+\d+:\d+$/i)
+  const bookNameMatch = suggestionTrimmed.match(/^(((?:\d+|[IVX]+)\s+)?[\p{L}\p{M}\s]+)\s+\d+:\d+$/iu)
 
   if (bookNameMatch) {
     const fullBookName = bookNameMatch[1]
+
+    // A short form or Yorùbá name ("jn", "Jòhánù 3") is not a prefix of the
+    // suggested name: carry on from that name, keeping the typed numbers.
+    const typedBook = trimmed.replace(/\s*\d[\d:\s]*$/, "")
+    const typedNumbers = trimmed.slice(typedBook.length).trim()
+    if (typedBook && !foldMarks(fullBookName).toLowerCase().startsWith(foldMarks(typedBook).toLowerCase())) {
+      if (!typedNumbers) return fullBookName + " "
+      trimmed = `${fullBookName} ${typedNumbers}`
+    }
 
     // Check if current input matches the COMPLETE book name
     const currentIsCompleteBookName =
@@ -232,7 +348,7 @@ export function getTabNavigationResult(
 
     // Stage 2: Has chapter -> advance to chapter with colon
     if (hasChapter) {
-      const chapterMatch = suggestionTrimmed.match(/^(((?:\d+|[IVX]+)\s+)?[a-zA-Z\s]+\s+\d+):\d+$/i)
+      const chapterMatch = suggestionTrimmed.match(/^(((?:\d+|[IVX]+)\s+)?[\p{L}\p{M}\s]+\s+\d+):\d+$/iu)
       if (chapterMatch) {
         return chapterMatch[1] + ":"
       }

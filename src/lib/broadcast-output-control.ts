@@ -1,9 +1,15 @@
+import { availableMonitors } from "@tauri-apps/api/window"
+import { resolveMonitorIndex } from "@/lib/monitor-health"
 import { toast } from "sonner"
 import { info as logInfo, error as logError } from "@tauri-apps/plugin-log"
 import { invoke } from "@tauri-apps/api/core"
+import { ask } from "@tauri-apps/plugin-dialog"
 import { emitTo } from "@tauri-apps/api/event"
 import { getAllWindows } from "@tauri-apps/api/window"
 import { useBroadcastStore } from "@/stores"
+import { useSettingsStore } from "@/stores/settings-store"
+import { capacityLimits, capacityUse, machineInfo, startWarning } from "@/lib/capacity"
+import { outputOnAir } from "@/lib/output-on-air"
 import type {
   BroadcastOutput,
   NdiAlphaMode,
@@ -84,20 +90,63 @@ async function isPreviewWindowVisible(outputId: string): Promise<boolean> {
 
 /** Refresh the store's runtime status for one output from the OS. */
 export async function reconcileOutputStatus(output: BroadcastOutput): Promise<void> {
+  // A browser feed is on while the app says so: there is no window or sender to ask.
+  if (output.type === "browser") return
   const previewOpen = await isPreviewWindowVisible(output.id)
   let ndiActive = false
+  let ndiReceivers: number | null = null
   try {
-    const status = await invoke<{ active: boolean } | null>("get_ndi_status", {
+    const status = await invoke<{ active: boolean; receivers?: number | null } | null>("get_ndi_status", {
       outputId: output.id,
     })
     ndiActive = status?.active ?? false
+    ndiReceivers = typeof status?.receivers === "number" ? status.receivers : null
   } catch {
     // Status stays false if the command fails.
   }
   const store = useBroadcastStore.getState()
   // The output may have been removed while these queries were in flight.
   if (!store.outputs.some((o) => o.id === output.id)) return
-  store.setOutputStatus(output.id, { previewOpen, ndiActive })
+  store.setOutputStatus(output.id, { previewOpen, ndiActive, ndiReceivers })
+}
+
+/** Outputs whose 60 fps the operator already said yes to in this session: asked once each. */
+const fps60Confirmed = new Set<string>()
+
+/**
+ * Before the operator turns an output on (#243 G13): past this computer's limits, or 60 fps NDI on
+ * a computer below what it needs, Rhema says so and asks. Returns whether to go on. Restarts and
+ * recovery do not come through here: those outputs were on already.
+ */
+export async function confirmStart(output: BroadcastOutput): Promise<boolean> {
+  const store = useBroadcastStore.getState()
+  if (outputOnAir(output, store.outputStatus[output.id])) return true
+  const machine = await machineInfo()
+  const limits = capacityLimits(machine, useSettingsStore.getState().capacityLimits)
+  const before = capacityUse(store.outputs.filter((o) => o.id !== output.id), store.outputStatus, store.scenes, useSettingsStore.getState().cameras.length)
+  const warning = startWarning(output, before, store.scenes, limits, machine)
+  const fps60 = warning?.fps60 && !fps60Confirmed.has(output.id) ? warning.fps60 : null
+  if (!warning?.over && !fps60) return true
+  let yes = false
+  try {
+    yes = await ask([warning?.over, fps60].filter(Boolean).join("\n\n"), {
+      title: fps60 ? `Start ${output.name} at 60 fps?` : `Turn on ${output.name}?`,
+      kind: "warning",
+      okLabel: fps60 ? "Start at 60 fps" : "Turn it on",
+      cancelLabel: "Keep it off",
+    })
+  } catch {
+    // Not under Tauri (a browser preview): the warning shows as a toast and the output starts.
+    toast.warning(warning?.over ? "This computer may drop frames" : "60 fps on this computer", { description: [warning?.over, fps60].filter(Boolean).join(" ") })
+    return true
+  }
+  if (yes && fps60) fps60Confirmed.add(output.id)
+  return yes
+}
+
+/** Forget the 60 fps answers (tests). */
+export function resetStartConfirmations(): void {
+  fps60Confirmed.clear()
 }
 
 /**
@@ -107,12 +156,31 @@ export async function reconcileOutputStatus(output: BroadcastOutput): Promise<vo
  */
 export async function enableOutput(output: BroadcastOutput): Promise<boolean> {
   const store = useBroadcastStore.getState()
+  // A fresh window has nothing yet: forget what was sent before so the sync sends everything.
+  store.resetOutputRuntime(output.id)
   try {
+    // A browser feed has no window or sender: it publishes to its LAN page while on (ARCH-002).
+    if (output.type === "browser") {
+      store.setOutputStatus(output.id, { previewOpen: false, ndiActive: false, feedActive: true })
+      store.syncBroadcastOutputFor(output.id)
+      return true
+    }
     if (output.type === "display") {
+      // The same screen as chosen, even if the OS renumbered monitors since.
+      let monitorIndex = output.monitorIndex
+      try {
+        const names = (await availableMonitors()).map((m) => m.name ?? null)
+        monitorIndex = resolveMonitorIndex(output, names, store.outputs.filter((o) => o.type === "display")) ?? output.monitorIndex
+        // Outputs set up before names were kept learn their monitor's name now.
+        if (!output.monitorName && names[monitorIndex]) store.updateOutput(output.id, { monitorName: names[monitorIndex] })
+      } catch {
+        // not under Tauri: the saved index
+      }
       await invoke("open_broadcast_window", {
         outputId: output.id,
-        monitorIndex: output.monitorIndex,
+        monitorIndex,
         title: output.name,
+        windowed: output.windowed === true,
       })
       const opened = await isPreviewWindowVisible(output.id)
       void logInfo(`[broadcast-ui] open_broadcast_window '${output.id}' ok, visible=${opened}`)
@@ -169,6 +237,13 @@ export async function enableOutput(output: BroadcastOutput): Promise<boolean> {
  */
 export async function disableOutput(output: BroadcastOutput): Promise<boolean> {
   const store = useBroadcastStore.getState()
+  if (output.type === "browser") {
+    // The page goes dark (an empty frame), then the feed stops publishing.
+    void invoke("feed_publish", { id: output.id, json: JSON.stringify({ off: true }) }).catch(() => {})
+    store.setOutputStatus(output.id, { previewOpen: false, ndiActive: false, feedActive: false })
+    store.resetOutputRuntime(output.id)
+    return true
+  }
   try {
     // Always stop the sender rather than trusting outputStatus: that state is
     // in-memory and only refreshed while the dialog is open, so after a main
@@ -179,6 +254,7 @@ export async function disableOutput(output: BroadcastOutput): Promise<boolean> {
     syncNdiConfigToOutput(output, false)
     await invoke("close_broadcast_window", { outputId: output.id }).catch(() => {})
     store.setOutputStatus(output.id, { previewOpen: false, ndiActive: false })
+    store.resetOutputRuntime(output.id)
     return true
   } catch (error) {
     void logError(`[broadcast-ui] disable output '${output.id}' FAILED: ${String(error)}`)

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest"
 import {
+  foldMarks,
   numberToRoman,
   normalizeInput,
   findMatchingBook,
   getAutocompleteSuggestion,
   getTabNavigationResult,
   parseTypedReference,
+  parseBookChapter,
   type Book,
 } from "./quick-search"
 
@@ -13,6 +15,7 @@ import {
 const mockBooks: Book[] = [
   { id: 1, translation_id: 1, book_number: 1, name: "Genesis", abbreviation: "Gen", testament: "OT" },
   { id: 43, translation_id: 1, book_number: 43, name: "John", abbreviation: "John", testament: "NT" },
+  { id: 65, translation_id: 1, book_number: 65, name: "Jude", abbreviation: "Jude", testament: "NT" },
   { id: 62, translation_id: 1, book_number: 62, name: "I John", abbreviation: "1John", testament: "NT" },
   { id: 63, translation_id: 1, book_number: 63, name: "II John", abbreviation: "2John", testament: "NT" },
   { id: 64, translation_id: 1, book_number: 64, name: "III John", abbreviation: "3John", testament: "NT" },
@@ -402,4 +405,80 @@ describe("parseTypedReference", () => {
     expect(parseTypedReference("John 0:16", mockBooks)).toBeNull()
     expect(parseTypedReference("John 3:0", mockBooks)).toBeNull()
   })
+
+  it("understands the common short forms people type (PRD FR-01: Jn 3 16)", () => {
+    const canon: Book[] = [[1, "Genesis", "Gen"], [5, "Deuteronomy", "Deut"], [7, "Judges", "Judg"], [22, "Song of Solomon", "Song"], [40, "Matthew", "Matt"], [41, "Mark", "Mark"], [42, "Luke", "Luke"], [43, "John", "John"], [45, "Romans", "Rom"], [50, "Philippians", "Phil"], [57, "Philemon", "Phlm"], [60, "1 Peter", "1Pet"], [62, "1 John", "1John"], [64, "3 John", "3John"], [66, "Revelation", "Rev"]]
+      .map(([n, name, abbreviation]) => ({ id: n as number, translation_id: 1, book_number: n as number, name: name as string, abbreviation: abbreviation as string, testament: (n as number) < 40 ? "OT" : "NT" }))
+    const cases: Array<[string, string, number, number]> = [
+      ["Jn 3 16", "John", 3, 16], ["jn3:16", "John", 3, 16], ["Jhn 3:16", "John", 3, 16], ["Mt 5:3", "Matthew", 5, 3], ["Mk 1:1", "Mark", 1, 1],
+      ["Lk 2:1", "Luke", 2, 1], ["Rm 8:28", "Romans", 8, 28], ["Php 4:13", "Philippians", 4, 13], ["Phm 1:6", "Philemon", 1, 6], ["Dt 6:4", "Deuteronomy", 6, 4],
+      ["Jdg 6:12", "Judges", 6, 12], ["1 Pt 5:7", "1 Peter", 5, 7], ["1 Jn 4:8", "1 John", 4, 8], ["3 Jn 1:2", "3 John", 1, 2], ["Revelations 22:21", "Revelation", 22, 21],
+      ["Song of Songs 2:1", "Song of Solomon", 2, 1], ["John 3:16", "John", 3, 16], ["Gen 1 1", "Genesis", 1, 1], ["Phil 4 13", "Philippians", 4, 13],
+    ]
+    for (const [input, book, chapter, verse] of cases) {
+      expect(parseTypedReference(input, canon), input).toMatchObject({ book: { name: book }, chapter, verse })
+    }
+  })
+
+  it("understands the Yorùbá Bible's own book names, with or without accents", () => {
+    const canon: Book[] = [[1, "Genesis", "Gen"], [7, "Judges", "Judg"], [11, "1 Kings", "1Kgs"], [19, "Psalms", "Ps"], [25, "Lamentations", "Lam"], [43, "John", "John"], [44, "Acts", "Acts"], [46, "1 Corinthians", "1Cor"], [62, "1 John", "1John"], [65, "Jude", "Jude"], [66, "Revelation", "Rev"]]
+      .map(([n, name, abbreviation]) => ({ id: n as number, translation_id: 2, book_number: n as number, name: name as string, abbreviation: abbreviation as string, testament: (n as number) < 40 ? "OT" : "NT" }))
+    const cases: Array<[string, string, number, number]> = [
+      ["Johanu 3:16", "John", 3, 16], ["Jòhánù 3 16", "John", 3, 16], ["Gẹnẹsisi 1:1", "Genesis", 1, 1], ["1 Ọba 3:9", "1 Kings", 3, 9],
+      ["Saamu 23:1", "Psalms", 23, 1], ["Ẹkún Jeremiah 3:22", "Lamentations", 3, 22], ["Ìṣe àwọn Aposteli 2:38", "Acts", 2, 38], ["Ise 2:38", "Acts", 2, 38],
+      ["1 Kọrinti 13:4", "1 Corinthians", 13, 4], ["1 Johanu 4:8", "1 John", 4, 8], ["Juda 1:3", "Jude", 1, 3], ["Ìfihàn 22:21", "Revelation", 22, 21],
+      ["Onidajọ 6:12", "Judges", 6, 12],
+      // English behaviour unchanged where a Yorùbá name could collide.
+      ["Jud 1:3", "Judges", 1, 3], ["John 3:16", "John", 3, 16], ["Jn 3 16", "John", 3, 16],
+    ]
+    for (const [input, book, chapter, verse] of cases) {
+      expect(parseTypedReference(input, canon), input).toMatchObject({ book: { name: book }, chapter, verse })
+    }
+    expect(foldMarks("Ọlọ́run")).toBe("Olorun")
+    // Tab carries on from the suggested book name, keeping what was typed after it.
+    expect(getTabNavigationResult("Jòhánù", "John 1:1")).toBe("John ")
+    expect(getTabNavigationResult("Jòhánù 3", "John 3:1")).toBe("John 3:")
+    expect(getTabNavigationResult("jn", "John 1:1")).toBe("John ")
+    expect(getTabNavigationResult("Jo", "John 1:1")).toBe("John ")
+    expect(getTabNavigationResult("Jòhánù 3", "Jòhánù 3:1")).toBe("Jòhánù 3:") // chapter step kept when the suggestion repeats what was typed
+  })
+
+  it("ranges, lists, dotted abbreviations and one-chapter books (search audit)", () => {
+    for (const input of ["John 3:16-18", "John 3:16, 18", "Jn. 3:16"]) {
+      expect(parseTypedReference(input, mockBooks), input).toMatchObject({ book: { book_number: 43 }, chapter: 3, verse: 16 })
+      expect(getAutocompleteSuggestion(input, mockBooks), input).toMatchObject({ stage: "complete", chapter: 3, verse: 16 })
+    }
+    expect(parseTypedReference("Jude 5", mockBooks)).toMatchObject({ book: { book_number: 65 }, chapter: 1, verse: 5 })
+    expect(getAutocompleteSuggestion("Jude 5", mockBooks)).toMatchObject({ stage: "complete", chapter: 1, verse: 5 })
+    // A book with many chapters keeps "John 5" as chapter 5.
+    expect(parseTypedReference("John 5", mockBooks)).toBeNull()
+    expect(getAutocompleteSuggestion("John 5", mockBooks)).toMatchObject({ stage: "chapter", chapter: 5 })
+    expect(getAutocompleteSuggestion("John 3-5", mockBooks).stage).toBe("none")
+    expect(getAutocompleteSuggestion("Jude 1", mockBooks)).toMatchObject({ stage: "chapter", suggestion: "Jude 1:1" })
+  })
 })
+
+describe("numbered books said or typed as words", () => {
+  it("reads First/Second and the Yoruba Kinni/Keji after the name", () => {
+    expect(parseTypedReference("First Samuel 3:10", arabicNumberedBooks)?.book.name).toBe("1 Samuel")
+    expect(parseTypedReference("second kings 2:9", arabicNumberedBooks)?.book.name).toBe("2 Kings")
+    expect(parseTypedReference("Samuẹli Kínní 3:10", [{ id: 9, translation_id: 2, book_number: 9, name: "1 Samuel", abbreviation: "1Sam", testament: "OT" }])?.book.name).toBe("1 Samuel")
+    expect(parseTypedReference("Johanu Kẹta 1:4", mockBooks)?.book.name).toBe("III John")
+    expect(normalizeInput("first love")).toBe("I love")
+  })
+})
+
+describe("parseBookChapter", () => {
+  it("finds a numbered book alone or with a chapter, in Roman- and Arabic-named Bibles", () => {
+    expect(parseBookChapter("1 Samuel", arabicNumberedBooks)).toMatchObject({ book: { name: "1 Samuel" }, chapter: 1 })
+    expect(parseBookChapter("1 kings 3", arabicNumberedBooks)).toMatchObject({ book: { name: "1 Kings" }, chapter: 3 })
+    expect(parseBookChapter("1 cor", mockBooks)).toMatchObject({ book: { name: "I Corinthians" }, chapter: 1 })
+    expect(parseBookChapter("Psalm 23", mockBooks)).toMatchObject({ book: { name: "Psalms" }, chapter: 23 })
+  })
+  it("leaves words alone", () => {
+    expect(parseBookChapter("john", mockBooks)).toBeNull()
+    expect(parseBookChapter("I am the way", mockBooks)).toBeNull()
+    expect(parseBookChapter("amazing grace", mockBooks)).toBeNull()
+  })
+})
+

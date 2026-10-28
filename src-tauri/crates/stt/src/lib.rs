@@ -3,7 +3,7 @@
 //! Provides real-time transcription via multiple providers:
 //! - **Deepgram** (cloud) — WebSocket streaming with keyword boosting
 //! - **Whisper** (local) — offline inference via whisper.cpp
-//! - **OpenAI Whisper** (cloud) — batched audio transcription API
+//! - **OpenAI Transcribe** (cloud) — bounded audio transcription requests
 //!
 //! # Key types
 //!
@@ -16,7 +16,7 @@
 //! # Feature flags
 //!
 //! - `rest-fallback` — enables REST API fallback client
-//! - `openai` — enables OpenAI Whisper API provider
+//! - `openai` — enables the OpenAI transcription API provider
 //! - `whisper` — enables local Whisper STT provider
 
 pub mod deepgram;
@@ -39,7 +39,7 @@ pub use provider::SttProvider;
 pub use types::{SttConfig, TranscriptEvent, Word};
 
 #[cfg(feature = "openai")]
-pub use openai::OpenAiWhisperProvider;
+pub use openai::OpenAiTranscribeProvider;
 
 #[cfg(feature = "whisper")]
 pub use whisper::WhisperProvider;

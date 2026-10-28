@@ -5,12 +5,22 @@
 @import "@fontsource-variable/source-serif-4";
 @import "@fontsource/geist-mono";
 @import "@fontsource-variable/inter";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/ibm-plex-sans/400-italic.css";
 
 @custom-variant dark (&:is(.dark *));
+/* The sidebar's icons-only form: always below 1180 px wide (COMPACT_SIDEBAR_QUERY), and wider when the operator folds it (#299). */
+@custom-variant compact {
+  @media (width < 1180px) { @slot; }
+  &:where([data-collapsed="true"], [data-collapsed="true"] *) { @slot; }
+}
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Inter Variable', sans-serif;
+    --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-serif: 'Source Serif 4 Variable', Georgia, serif;
     --font-mono: 'Geist Mono', ui-monospace, monospace;
     --color-sidebar-ring: var(--sidebar-ring);
@@ -21,6 +31,10 @@
     --color-sidebar-primary: var(--sidebar-primary);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar: var(--sidebar);
+    --color-sidebar-hover: var(--sidebar-hover);
+    --color-sidebar-tag: var(--sidebar-tag);
+    --color-sidebar-tag-border: var(--sidebar-tag-border);
+    --color-topbar: var(--topbar);
     --color-chart-5: var(--chart-5);
     --color-chart-4: var(--chart-4);
     --color-chart-3: var(--chart-3);
@@ -38,6 +52,7 @@
     --color-secondary: var(--secondary);
     --color-primary-foreground: var(--primary-foreground);
     --color-primary: var(--primary);
+    --color-primary-text: var(--primary-text);
     --color-popover-foreground: var(--popover-foreground);
     --color-popover: var(--popover);
     --color-card-foreground: var(--card-foreground);
@@ -53,6 +68,38 @@
     --color-live-pulse: var(--live-pulse);
     --color-surface-elevated: var(--surface-elevated);
     --color-surface-sunken: var(--surface-sunken);
+    --color-studio-rail: var(--studio-rail);
+    --color-sidebar-label: var(--sidebar-label);
+    --color-on-air: var(--on-air);
+    --color-gold: var(--gold);
+    --color-teal: var(--teal);
+    --color-tone-neutral: var(--tone-neutral);
+    --color-tone-neutral-foreground: var(--tone-neutral-foreground);
+    --color-tone-accent: var(--tone-accent);
+    --color-tone-accent-foreground: var(--tone-accent-foreground);
+    --color-gold-foreground: var(--gold-foreground);
+    --color-tone-green: var(--tone-green);
+    --color-tone-green-foreground: var(--tone-green-foreground);
+    --color-tone-amber: var(--tone-amber);
+    --color-tone-amber-foreground: var(--tone-amber-foreground);
+    --color-tone-rose: var(--tone-rose);
+    --color-tone-rose-foreground: var(--tone-rose-foreground);
+    --color-tone-blue: var(--tone-blue);
+    --color-tone-blue-foreground: var(--tone-blue-foreground);
+    --color-kind-scripture: var(--kind-scripture);
+    --color-kind-scripture-foreground: var(--kind-scripture-foreground);
+    --color-kind-song: var(--kind-song);
+    --color-kind-song-foreground: var(--kind-song-foreground);
+    --color-kind-media: var(--kind-media);
+    --color-kind-media-foreground: var(--kind-media-foreground);
+    --color-kind-slide: var(--kind-slide);
+    --color-kind-slide-foreground: var(--kind-slide-foreground);
+    --color-kind-other: var(--kind-other);
+    --color-kind-other-foreground: var(--kind-other-foreground);
+    /* The approved design is flat: panels carry a fine border, no shadow. */
+    --shadow-panel: none;
+    --shadow-lift: 0 15px 32px rgb(38 49 73 / 0.08);
+    --shadow-modal: 0 30px 100px rgb(7 10 27 / 0.27);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -62,91 +109,184 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Rhema Studio design tokens: the owner's direction (issue #215). Calm, dependable production
+ * software: a warm stone canvas, white cards with a fine border, near-charcoal type, a deep ink
+ * sidebar and live console, one restrained deep-teal accent, brass only for editorial moments,
+ * signal red only for what is live or dangerous. No purple, no gradients in the app's chrome
+ * (a church's own output themes may still use any colour). Every text pair meets WCAG AA.
+ */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.141 0.005 285.823);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.141 0.005 285.823);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.141 0.005 285.823);
-    --primary: oklch(0.532 0.157 131.589);
-    --primary-foreground: oklch(0.986 0.031 120.757);
-    --secondary: oklch(0.967 0.001 286.375);
-    --secondary-foreground: oklch(0.21 0.006 285.885);
-    --muted: oklch(0.967 0.001 286.375);
-    --muted-foreground: oklch(0.552 0.016 285.938);
-    --accent: oklch(0.967 0.001 286.375);
-    --accent-foreground: oklch(0.21 0.006 285.885);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.92 0.004 286.32);
-    --input: oklch(0.92 0.004 286.32);
-    --ring: oklch(0.705 0.015 286.067);
-    --chart-1: oklch(0.897 0.196 126.665);
-    --chart-2: oklch(0.768 0.233 130.85);
-    --chart-3: oklch(0.648 0.2 131.684);
-    --chart-4: oklch(0.532 0.157 131.589);
-    --chart-5: oklch(0.453 0.124 130.933);
-    --radius: 0.875rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.141 0.005 285.823);
-    --sidebar-primary: oklch(0.648 0.2 131.684);
-    --sidebar-primary-foreground: oklch(0.986 0.031 120.757);
-    --sidebar-accent: oklch(0.967 0.001 286.375);
-    --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-    --sidebar-border: oklch(0.92 0.004 286.32);
-    --sidebar-ring: oklch(0.705 0.015 286.067);
-    --ai-direct: oklch(72.3% 0.219 149.579);
-    --ai-semantic: oklch(76.9% 0.188 70.08);
+    --background: #f5f4ef;
+    --foreground: #202a32;
+    --card: #ffffff;
+    --card-foreground: #202a32;
+    --popover: #ffffff;
+    --popover-foreground: #202a32;
+    --primary: #256d68;
+    --primary-foreground: #ffffff;
+    /* Teal for text and links on cards and the page (selected tabs, teal labels); --primary is for fills behind white type. */
+    --primary-text: #256d68;
+    --secondary: #eef0ee;
+    --secondary-foreground: #202a32;
+    --muted: #eef0ee;
+    --muted-foreground: #5f6b72;
+    --accent: #e4f0eb;
+    --accent-foreground: #1f5e59;
+    /* Signal red as text (Delete, errors): a shade under the live red so it reads on the stone page. */
+    --destructive: #bb4547;
+    --border: #e2e4e1;
+    --input: #d6dad6;
+    --ring: #256d68;
+    --chart-1: #9fd3c9;
+    --chart-2: #5fb3a8;
+    --chart-3: #256d68;
+    --chart-4: #1f5e59;
+    --chart-5: #b38c58;
+    --radius: 0.5rem;
+    --sidebar: #17242b;
+    --sidebar-foreground: #b1c0c5;
+    --sidebar-primary: #8dc3b2;
+    --sidebar-primary-foreground: #17242b;
+    --sidebar-accent: #284148;
+    --sidebar-accent-foreground: #f8fcfb;
+    --sidebar-border: #24343c;
+    --sidebar-ring: #7fc4b8;
+    --sidebar-label: #80959d;
+    --sidebar-hover: #283a41;
+    --sidebar-tag: #1a2b31;
+    --sidebar-tag-border: #2c4047;
+    --topbar: #fcfcfa;
+    /* The theme editor's stage around the slide (approved design: sage in light). */
+    --canvas-stage: #e7efeb;
+    --ai-direct: oklch(52.7% 0.154 150.069);
+    --ai-semantic: oklch(55.5% 0.163 48.998);
     --ai-cloud: oklch(62.3% 0.214 259.815);
-    --confidence-high: oklch(72.3% 0.219 149.579);
-    --confidence-mid: oklch(76.9% 0.188 70.08);
-    --confidence-low: oklch(63.7% 0.237 25.331);
-    --live-pulse: oklch(0.65 0.25 25);
-    --surface-elevated: oklch(0.96 0 0);
-    --surface-sunken: oklch(0.92 0 0);
+    /* Light mode: darker than the dark-mode values so text on white meets WCAG AA. */
+    --confidence-high: oklch(52.7% 0.154 150.069);
+    --confidence-mid: oklch(55.5% 0.163 48.998);
+    --confidence-low: oklch(50.5% 0.213 27.518);
+    --live-pulse: #c34b4d;
+    --on-air: #c34b4d;
+    --gold: #b38c58;
+    --gold-foreground: #86663a;
+    --teal: #256d68;
+    --surface-elevated: #fafaf7;
+    --surface-sunken: #efefe9;
+    /* The current rail keeps a light ground until the navy sidebar replaces it (UX-02). */
+    --studio-rail: #ffffff;
+    --control-height: 3.25rem;
+    /* Chips and status (background / text): green success, amber warning, rose danger, slate-blue info. */
+    --tone-neutral: #eef0ee;
+    --tone-neutral-foreground: #55626a;
+    --tone-accent: #e4f0eb;
+    --tone-accent-foreground: #1f5e59;
+    --tone-green: #e6f2ea;
+    --tone-green-foreground: #2f6b4f;
+    --tone-amber: #f6eedf;
+    --tone-amber-foreground: #7a5a2e;
+    --tone-rose: #f8e9e8;
+    --tone-rose-foreground: #9e3b3d;
+    --tone-blue: #e8eff5;
+    --tone-blue-foreground: #3e5f7a;
+    /* What kind of item a row is: quiet families of blue, green and amber. */
+    --kind-scripture: #e8eff5;
+    --kind-scripture-foreground: #3e5f7a;
+    --kind-song: #e4f0eb;
+    --kind-song-foreground: #1f5e59;
+    --kind-media: #f6eedf;
+    --kind-media-foreground: #7a5a2e;
+    --kind-slide: #e6f2ea;
+    --kind-slide-foreground: #2f6b4f;
+    --kind-other: #eef0ee;
+    --kind-other-foreground: #55626a;
 }
 
+/* Dark planning mode. */
 .dark {
-    --background: oklch(0.141 0.005 285.823);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.21 0.006 285.885);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.21 0.006 285.885);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.453 0.124 130.933);
-    --primary-foreground: oklch(0.986 0.031 120.757);
-    --secondary: oklch(0.274 0.006 286.033);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.274 0.006 286.033);
-    --muted-foreground: oklch(0.705 0.015 286.067);
-    --accent: oklch(0.274 0.006 286.033);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.552 0.016 285.938);
-    --chart-1: oklch(0.897 0.196 126.665);
-    --chart-2: oklch(0.768 0.233 130.85);
-    --chart-3: oklch(0.648 0.2 131.684);
-    --chart-4: oklch(0.532 0.157 131.589);
-    --chart-5: oklch(0.453 0.124 130.933);
-    --sidebar: oklch(0.21 0.006 285.885);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.768 0.233 130.85);
-    --sidebar-primary-foreground: oklch(0.274 0.072 132.109);
-    --sidebar-accent: oklch(0.274 0.006 286.033);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.552 0.016 285.938);
+    --canvas-stage: #18181b;
+    --topbar: #16222a;
+    --background: #121c22;
+    --foreground: #e6ecee;
+    --card: #1a262e;
+    --card-foreground: #e6ecee;
+    --popover: #1d2a32;
+    --popover-foreground: #e6ecee;
+    --primary: #2b7a74;
+    --primary-foreground: #ffffff;
+    /* Lighter than --primary: the button teal is too dark to read as text on dark cards. */
+    --primary-text: #5fb3a8;
+    --secondary: #22313a;
+    --secondary-foreground: #e6ecee;
+    --muted: #22313a;
+    --muted-foreground: #98a6ad;
+    --accent: #1d3533;
+    --accent-foreground: #9fd3c9;
+    --destructive: #e58a8b;
+    --border: #2c3a42;
+    --input: #3a4a53;
+    --ring: #5fb3a8;
+    --sidebar: #111b21;
+    --sidebar-foreground: #b1c0c5;
+    --sidebar-primary: #8dc3b2;
+    --sidebar-primary-foreground: #111b21;
+    --sidebar-accent: #22333c;
+    --sidebar-accent-foreground: #f8fcfb;
+    --sidebar-border: #1f2d34;
+    --sidebar-ring: #7fc4b8;
+    --sidebar-label: #80959d;
+    --sidebar-hover: #283a41;
+    --sidebar-tag: #1a2b31;
+    --sidebar-tag-border: #2c4047;
     --ai-direct: oklch(72.3% 0.219 149.579);
     --ai-semantic: oklch(76.9% 0.188 70.08);
     --ai-cloud: oklch(62.3% 0.214 259.815);
     --confidence-high: oklch(72.3% 0.219 149.579);
     --confidence-mid: oklch(76.9% 0.188 70.08);
     --confidence-low: oklch(63.7% 0.237 25.331);
-    --live-pulse: oklch(0.65 0.25 25);
-    --surface-elevated: oklch(0.22 0 0);
-    --surface-sunken: oklch(0.12 0 0);
+    --gold-foreground: #d4b07c;
+    --surface-elevated: #22313a;
+    --surface-sunken: #0f181d;
+    --studio-rail: #111b21;
+    --tone-neutral: #22313a;
+    --tone-neutral-foreground: #b7c3c8;
+    --tone-accent: #1d3533;
+    --tone-accent-foreground: #9fd3c9;
+    --tone-green: #1b3229;
+    --tone-green-foreground: #8fd0ac;
+    --tone-amber: #33291b;
+    --tone-amber-foreground: #e2bf86;
+    --tone-rose: #3a2224;
+    --tone-rose-foreground: #f0a9aa;
+    --tone-blue: #1c2c3a;
+    --tone-blue-foreground: #a7c3dc;
+    --kind-scripture: #1c2c3a;
+    --kind-scripture-foreground: #a7c3dc;
+    --kind-song: #1d3533;
+    --kind-song-foreground: #9fd3c9;
+    --kind-media: #33291b;
+    --kind-media-foreground: #e2bf86;
+    --kind-slide: #1b3229;
+    --kind-slide-foreground: #8fd0ac;
+    --kind-other: #22313a;
+    --kind-other-foreground: #b7c3c8;
+}
+
+/* The live console: always dark, deep ink (wrap it in .dark too). */
+.present-surface {
+    --topbar: #16242b;
+    --background: #0f181d;
+    --foreground: #eef2f3;
+    --card: #17232a;
+    --card-foreground: #eef2f3;
+    --popover: #17232a;
+    --muted: #1f2d35;
+    --muted-foreground: #9aa8ae;
+    --secondary: #22313a;
+    --border: #2a3840;
+    --input: #3a4a53;
+    --surface-elevated: #162129;
+    --surface-sunken: #121c22;
 }
 
 @layer base {
@@ -155,13 +295,86 @@
     }
   body {
     @apply bg-background text-foreground;
+    letter-spacing: -0.012em;
     }
   html {
     @apply font-sans;
     }
 }
 
+/*
+ * A 44 px touch target around a small control without making it look bigger: an invisible
+ * box centred on it takes the click. Keep other controls clear of that box.
+ */
+@utility touch-hit {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+}
+
 /* Smooth spotlight morph between tutorial steps */
 #react-joyride-portal .react-joyride__spotlight {
   transition: left 0.3s ease, top 0.3s ease, width 0.3s ease, height 0.3s ease;
+}
+/* Everything clickable shows the pointer (Tailwind v4 buttons do not by default). */
+@layer base {
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [role="tab"], [role="switch"], [role="radio"], [role="menuitem"], [role="menuitemradio"], [role="option"], summary, select, label:has(> input[type="checkbox"]) {
+    cursor: pointer;
+  }
+}
+
+/*
+ * Native form controls in the house style (#215) rather than the browser's own: a select looks like
+ * the Input fields beside it (a quiet chevron, the same focus ring), and ticks and sliders are teal.
+ * Lists that show several rows (multiple or size) keep their native look.
+ */
+@layer base {
+  select:not([multiple]):not([size]) {
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235f6b72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.4rem center;
+    background-size: 0.875rem;
+  }
+  .dark select:not([multiple]):not([size]) {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2398a6ad' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
+  select:focus-visible {
+    border-color: var(--ring);
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
+  }
+  select:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  /* The dark theme's pop-up lists, time pickers and their icons are dark too. */
+  .dark select, .dark input {
+    color-scheme: dark;
+  }
+  input[type="checkbox"], input[type="radio"], input[type="range"] {
+    accent-color: var(--primary);
+  }
+}
+/* Room for the chevron: outside the layers so a field's own px-* padding cannot cover it. */
+select:not([multiple]):not([size]) {
+  padding-inline-end: 1.5rem;
+}
+
+/* Asked for less motion: pulses, spinners and dialog animations stop (outputs draw on canvas, unaffected). */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

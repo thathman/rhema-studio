@@ -89,11 +89,11 @@ pub fn coerce_string(arg: &OscType) -> Result<String, CommandError> {
 
 /// Parse an OSC address + arguments into a `RemoteCommand`.
 ///
-/// Handles all 12 Rhema OSC addresses:
+/// Handles all 15 Rhema OSC addresses:
 /// - `/rhema/next`, `/rhema/prev`, `/rhema/show`, `/rhema/hide` (no arguments)
 /// - `/rhema/send_to_live`, `/rhema/bible_next`, `/rhema/bible_prev`,
-///   `/rhema/add_to_queue` (no arguments)
-/// - `/rhema/theme` (string argument)
+///   `/rhema/add_to_queue`, `/rhema/verse_next`, `/rhema/verse_prev` (no arguments)
+/// - `/rhema/theme`, `/rhema/macro` (string argument)
 /// - `/rhema/opacity`, `/rhema/confidence` (float argument, normalized to [0.0, 1.0])
 /// - `/rhema/on_air` (bool argument)
 pub fn parse_osc(address: &str, args: &[OscType]) -> Result<RemoteCommand, CommandError> {
@@ -106,6 +106,38 @@ pub fn parse_osc(address: &str, args: &[OscType]) -> Result<RemoteCommand, Comma
         "/rhema/bible_next" => Ok(RemoteCommand::BibleNext),
         "/rhema/bible_prev" => Ok(RemoteCommand::BiblePrev),
         "/rhema/add_to_queue" => Ok(RemoteCommand::AddToQueue),
+        "/rhema/verse_next" => Ok(RemoteCommand::VerseNext),
+        "/rhema/verse_prev" => Ok(RemoteCommand::VersePrev),
+        "/rhema/event_next" => Ok(RemoteCommand::EventNext),
+        "/rhema/event_prev" => Ok(RemoteCommand::EventPrev),
+        "/rhema/bible_activate" | "/rhema/clear_source" | "/rhema/restore_source" | "/rhema/release_scene" => {
+            let arg = args.first().ok_or_else(|| CommandError::MissingArgument { address: address.into() })?;
+            let v = coerce_string(arg)?;
+            Ok(match address {
+                "/rhema/bible_activate" => RemoteCommand::BibleActivate(v.into()),
+                "/rhema/clear_source" => RemoteCommand::ClearSource(v),
+                "/rhema/restore_source" => RemoteCommand::RestoreSource(v),
+                _ => RemoteCommand::ReleaseScene(v),
+            })
+        }
+        "/rhema/take_scene" => {
+            let (Some(o), Some(s)) = (args.first(), args.get(1)) else {
+                return Err(CommandError::MissingArgument { address: address.into() });
+            };
+            Ok(RemoteCommand::TakeScene(crate::command::SceneTake { output: coerce_string(o)?, scene: coerce_string(s)? }))
+        }
+        "/rhema/event_start" => {
+            let arg = args.first().ok_or_else(|| CommandError::MissingArgument {
+                address: address.into(),
+            })?;
+            Ok(RemoteCommand::EventStart(coerce_string(arg)?))
+        }
+        "/rhema/macro" => {
+            let arg = args.first().ok_or_else(|| CommandError::MissingArgument {
+                address: address.into(),
+            })?;
+            Ok(RemoteCommand::Macro(coerce_string(arg)?))
+        }
         "/rhema/theme" => {
             let arg = args.first().ok_or_else(|| CommandError::MissingArgument {
                 address: address.into(),
@@ -308,6 +340,29 @@ mod tests {
             parse_osc("/rhema/bible_prev", &[]).unwrap(),
             RemoteCommand::BiblePrev
         );
+    }
+
+    #[test]
+    fn parse_osc_macro() {
+        assert_eq!(parse_osc("/rhema/macro", &[OscType::String("service-start".into())]).unwrap(), RemoteCommand::Macro("service-start".into()));
+        assert!(matches!(parse_osc("/rhema/macro", &[]), Err(CommandError::MissingArgument { .. })));
+    }
+
+    #[test]
+    fn parse_osc_event_clock() {
+        assert_eq!(parse_osc("/rhema/event_next", &[]).unwrap(), RemoteCommand::EventNext);
+        assert_eq!(parse_osc("/rhema/event_prev", &[]).unwrap(), RemoteCommand::EventPrev);
+        assert_eq!(parse_osc("/rhema/event_start", &[OscType::String("sermon".into())]).unwrap(), RemoteCommand::EventStart("sermon".into()));
+        assert!(parse_osc("/rhema/event_start", &[]).is_err());
+        assert_eq!(parse_osc("/rhema/bible_activate", &[OscType::String("Romans 8:28".into())]).unwrap(), RemoteCommand::BibleActivate("Romans 8:28".into()));
+        assert_eq!(parse_osc("/rhema/take_scene", &[OscType::String("main".into()), OscType::String("split".into())]).unwrap(), RemoteCommand::TakeScene(crate::command::SceneTake { output: "main".into(), scene: "split".into() }));
+        assert!(parse_osc("/rhema/take_scene", &[OscType::String("main".into())]).is_err());
+    }
+
+    #[test]
+    fn parse_osc_verse_next_prev() {
+        assert_eq!(parse_osc("/rhema/verse_next", &[]).unwrap(), RemoteCommand::VerseNext);
+        assert_eq!(parse_osc("/rhema/verse_prev", &[OscType::Int(1)]).unwrap(), RemoteCommand::VersePrev);
     }
 
     #[test]

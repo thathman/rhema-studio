@@ -1,53 +1,57 @@
 <p align="center">
-  <img src="public/rhema.svg" alt="Rhema logo" width="160" height="160" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/02_Product_Logos/Rhema-Studio-Light-Text.png" />
+    <img src="brand/02_Product_Logos/Rhema-Studio-Dark-Text.png" alt="Rhema Studio" width="420" />
+  </picture>
 </p>
 
-<h1 align="center">Rhema</h1>
+<h1 align="center">Rhema Studio</h1>
 
-<p align="center">Real-time AI-powered Bible verse detection for live sermons and broadcasts. A Tauri v2 desktop app with a React frontend and Rust backend.</p>
+**Rhema Studio** is a local-first church production platform: service preparation, live Scripture,
+songs and hymns, volunteer-friendly presenting, screens and feeds (NDI, browser feeds, OBS) and a crew
+on the church network. It is one family of apps:
 
-Rhema listens to a live sermon audio feed, transcribes speech in real time, detects Bible verse references (both explicit citations and quoted passages), and renders them as broadcast-ready overlays via NDI for live production.
+| App | What it is |
+|---|---|
+| **Rhema Studio** | the desktop app every operator uses (this repository) |
+| **Rhema Studio Receiver** | the Google TV app that shows a feed full screen (`android-tv/`) |
+| **Rhema Studio Cam** | the Android app that sends a phone's camera to the studio (`android-camera/`) |
+| **Rhema Studio Companion** | the companion / remote control app (`companion-app/`, in progress) |
 
-## Download
+The logo files and how to use them are in [`brand/`](brand/README.md); a preview of the whole family is
+[`docs/brand/preview.html`](docs/brand/preview.html).
 
-| Platform | | Requires |
-|---|---|---|
-| **Windows** | [**Rhema-windows-x64-setup.exe**](https://github.com/openbezal/rhema/releases/latest/download/Rhema-windows-x64-setup.exe) | Windows 10/11 x64 |
-| **macOS** | [**Rhema-macos-arm64.dmg**](https://github.com/openbezal/rhema/releases/latest/download/Rhema-macos-arm64.dmg) | macOS 11 Big Sur or newer, **Apple Silicon** |
-| **Linux** | [**Rhema-linux-x86_64.AppImage**](https://github.com/openbezal/rhema/releases/latest/download/Rhema-linux-x86_64.AppImage) | x86_64; `.deb` and `.rpm` on the [release page](https://github.com/openbezal/rhema/releases/latest) |
+**Developed and maintained by Rhema Studio contributors.** Built on the original
+[Rhema](https://github.com/openbezal/rhema) by OpenBezal (MIT licence). The original
+**Copyright (c) 2025 OpenBezal** notice stays in [LICENSE](LICENSE) and in the installer's notices, and
+the About panel credits it. Bible texts, NDI, fonts and other dependencies keep their own licences; see
+[docs/LICENSES.md](docs/LICENSES.md) and [BRANDING_AND_ATTRIBUTION.md](BRANDING_AND_ATTRIBUTION.md).
 
-There is no Intel Mac build — on an Intel Mac,
-[build from source](#getting-started).
+The new application shell lives under `src/studio/`; design and architecture documents are in
+[`docs/rhema-studio/`](docs/rhema-studio/). Start with [docs/QUICK-START.md](docs/QUICK-START.md).
 
-Every build is **unsigned** — there is no Apple Developer or Windows code
-signing certificate behind this project — so each OS warns on first run.
+## Builds
 
-**Windows:** SmartScreen warns — *More info → Run anyway*.
+Rhema Studio builds are published on [this repository's releases](https://github.com/thathman/rhema-studio/releases)
+when there are any. Do not use the original OpenBezal installers as if they were Rhema Studio. Every
+build is **unsigned**, so each OS warns on first run:
 
-**macOS:** drag `Rhema.app` to Applications first, then open it. Gatekeeper
-blocks unsigned apps that carry the browser's quarantine flag; on macOS 15 and
-newer the right-click → Open trick no longer works, so use:
+- **macOS:** the app is still called `Rhema.app` on disk (so settings, the AI-assistant link and updates
+  keep working); its menus say Rhema Studio. Drag it to Applications, then **System Settings → Privacy &
+  Security → Open Anyway**, or clear the quarantine flag: `xattr -cr /Applications/Rhema.app`.
+- **Windows:** SmartScreen warns — *More info → Run anyway*.
 
-- **System Settings → Privacy & Security**, scroll to the blocked-app notice,
-  then **Open Anyway**, or
-- clear the quarantine flag yourself:
-
-  ```sh
-  xattr -cr /Applications/Rhema.app
-  ```
-
-Releases do **not** bundle the embedding model or the Whisper model — together
-they exceed a gigabyte. The Bible database ships inside the app, so reference
-detection and keyword search work out of the box; embedding re-ranking and local
-speech-to-text stay inactive until you build from source and run
-`bun run setup:all`. All releases are listed at
-[github.com/openbezal/rhema/releases](https://github.com/openbezal/rhema/releases).
+Builds do **not** bundle the embedding model or the Whisper model (together over a gigabyte). The Bible
+database ships inside the app, so reference detection and keyword search work out of the box; embedding
+re-ranking and local speech-to-text stay off until you build from source and run `bun run setup:all`.
+For `cargo check`/`clippy` on an Intel Mac, install `onnxruntime` with Homebrew and set
+`ORT_LIB_LOCATION=$(brew --prefix onnxruntime) ORT_PREFER_DYNAMIC_LINK=1`.
 
 ## Features
 
-- **Speech-to-text** via local Whisper, cloud Deepgram, or cloud OpenAI Whisper
-  - Deepgram streams via WebSocket with REST fallback; OpenAI Whisper uploads each utterance and returns a final transcript
-  - Speech language selection includes English and Yoruba; Yoruba works with local or OpenAI Whisper
+- **Speech-to-text** via local Whisper, cloud Deepgram, or OpenAI Transcribe
+  - Deepgram streams via WebSocket with REST fallback; OpenAI uploads bounded utterances and returns a final transcript
+  - Speech language selection includes English and Yorùbá; OpenAI leaves Yorùbá to automatic language detection
 - **Voice-controlled translation switching** — say "read in NIV" or "switch to ESV" to change translations instantly during a sermon
 - **Dual-translation live output** — choose a primary and optional secondary translation (for example, English KJV + Yoruba OYCB); both texts stay synchronized to the same detected reference
 - **Multi-strategy verse detection**
@@ -81,7 +85,7 @@ speech-to-text stay inactive until you build from source and run
 | **AI/ML** | ONNX Runtime (Qwen3-0.6B embeddings), Aho-Corasick, Fuse.js |
 | **Database** | SQLite via rusqlite (bundled) with FTS5 |
 | **Broadcast** | NDI 6 SDK via dynamic loading (libloading FFI) |
-| **STT** | Local Whisper via `whisper-rs`; Deepgram WebSocket + REST; OpenAI Whisper API |
+| **STT** | Local Whisper via `whisper-rs`; Deepgram WebSocket + REST; OpenAI transcription API |
 
 ### Rust Crates
 
@@ -168,13 +172,13 @@ This runs the required phases idempotently, skipping any whose output artifacts 
 
 #### Optional: embedding re-ranking (`--with-embedding`)
 
-Everything above gives you the full search experience: live verse detection, exact/partial quote search, and typed references ("John 3:16") — benchmarked at recall@1 **0.836** across 152 queries. The embedding model adds semantic *paraphrase* matching in the Context search tab on top of that.
+Everything above gives you the full search experience: live verse detection, exact/partial quote search, and typed references ("John 3:16") — benchmarked at recall@1 **0.836** across 152 queries. The embedding model adds semantic *paraphrase* matching in the Bible panel's Meaning search (Present → Production) on top of that.
 
 ```bash
 bun run setup:all --with-embedding
 ```
 
-**What you gain:** better paraphrase queries in Context search — e.g. "God will never abandon you" finds Hebrews 13:5. Benchmark: paraphrase recall@5 goes from 0.800 to **1.000**; results gain Semantic badges with a real similarity %. Nothing else changes — exact quotes, verse fragments, typed references, and live detection are identical with or without it (overall recall@1 is 0.836 without vs 0.829 with).
+**What you gain:** better paraphrase queries in Meaning search — e.g. "God will never abandon you" finds Hebrews 13:5. Benchmark: paraphrase recall@5 goes from 0.800 to **1.000**; results gain Semantic badges with a real similarity %. Nothing else changes — exact quotes, verse fragments, typed references, and live detection are identical with or without it (overall recall@1 is 0.836 without vs 0.829 with).
 
 **What it costs:** a one-time ~2.5 hour build (Hugging Face model export, INT8 quantization, embedding all 31k verses with the same ONNX model the app runs), ~3.3 GB of disk (`models/` + `embeddings/`), the Python toolchain, and roughly 600–900 MB of extra memory while the app is running.
 
@@ -209,8 +213,8 @@ DEEPGRAM_API_KEY=your_key_here
 
 Get your API key at [deepgram.com](https://deepgram.com/)
 
-**Option 3: OpenAI Whisper (Cloud, Paid)**
-Enter an OpenAI API key in Settings → Speech Recognition, select Cloud (OpenAI Whisper), and choose English or Yorùbá. OpenAI Whisper returns a final result after each utterance rather than interim live words.
+**Option 3: OpenAI Transcribe (Cloud, Paid)**
+Enter an OpenAI API key in Settings → Speech Recognition and select Cloud (OpenAI). Choose English or Yorùbá; Yorùbá is left to automatic language detection. OpenAI returns a final result after each utterance rather than interim live words.
 
 ### NDI SDK (optional)
 
@@ -328,4 +332,4 @@ Create a `.env` file in the project root (optional):
 | Variable | Required | Description |
 |---|---|---|
 | `DEEPGRAM_API_KEY` | Optional | API key for Deepgram speech-to-text |
-| `OPENAI_API_KEY` | Optional | API key for OpenAI Whisper speech-to-text |
+| `OPENAI_API_KEY` | Optional | API key for OpenAI speech-to-text |

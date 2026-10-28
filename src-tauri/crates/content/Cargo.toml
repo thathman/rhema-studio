@@ -1,0 +1,19 @@
+[package]
+name = "rhema-content"
+version = "0.1.0"
+edition = "2021"
+description = "Rhema Studio user content database: services, rundown items, audit trail"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+thiserror.workspace = true
+rusqlite = { version = "0.34", features = ["bundled", "backup"] }
+uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
+base64 = "0.22"
+url = "2"

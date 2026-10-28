@@ -6,6 +6,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { useTranscriptStore } from "@/stores/transcript-store"
 import { mark } from "@/lib/latency-marks"
 import { useTauriEvent } from "./use-tauri-event"
+import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 
 interface TranscriptPartialPayload {
   text: string
@@ -27,17 +28,23 @@ const NOT_RUNNING_ERROR = "Transcription is not running"
 
 export const transcriptionActions = {
   async start(onMissingApiKey?: () => void): Promise<void> {
+    const settings = useSettingsStore.getState()
+    // Keep persisted older settings from routing Yoruba to Deepgram, which does not support it.
+    const provider = settings.speechLanguage === "yo" && settings.sttProvider === "deepgram"
+      ? "whisper"
+      : settings.sttProvider
+    const cloudProvider = provider === "deepgram" || provider === "openai" ? provider : null
+    // A grant for one cloud provider must not authorize sending audio to another.
+    const consentAt = cloudProvider
+      ? settings.cloudSpeechConsents[cloudProvider] ?? (cloudProvider === "deepgram" ? settings.cloudSpeechConsentAt : "")
+      : ""
+    if (cloudProvider && !consentAt) {
+      useCloudConsentStore.getState().ask(cloudProvider, () => void transcriptionActions.start(onMissingApiKey))
+      return
+    }
     const transcript = useTranscriptStore.getState()
     transcript.setConnectionStatus("connecting")
 
-    const settings = useSettingsStore.getState()
-    // Yoruba is not supported by Deepgram Nova-3. Enforce the local route
-    // here as a last line of defense for settings persisted by an older build
-    // or changed outside the settings dialog.
-    const provider =
-      settings.speechLanguage === "yo" && settings.sttProvider === "deepgram"
-        ? "whisper"
-        : settings.sttProvider
     try {
       await invoke("start_transcription", {
         apiKey:
@@ -45,13 +52,15 @@ export const transcriptionActions = {
             ? (settings.deepgramApiKey ?? "")
             : provider === "openai"
               ? (settings.openaiApiKey ?? "")
-              : "",
+            : "",
         deviceId: settings.audioDeviceId,
         gain: settings.gain,
         provider,
         language: settings.speechLanguage,
       })
       transcript.setTranscribing(true)
+      // What is actually running (the setting can change mid-session without restarting it).
+      useCloudConsentStore.setState({ runningProvider: provider })
     } catch (e) {
       const msg = String(e)
       transcript.setConnectionStatus("error")
@@ -73,6 +82,7 @@ export const transcriptionActions = {
       }
     }
     transcript.setTranscribing(false)
+    useCloudConsentStore.setState({ runningProvider: null })
     transcript.setPartial("")
     transcript.setConnectionStatus("disconnected")
   },
@@ -83,6 +93,28 @@ export function useTranscription(options?: UseTranscriptionOptions) {
   const isTranscribing = useTranscriptStore((s) => s.isTranscribing)
   const connectionStatus = useTranscriptStore((s) => s.connectionStatus)
 
+  const onMissingApiKey = options?.onMissingApiKey
+
+  const startTranscription = useCallback(
+    () => transcriptionActions.start(onMissingApiKey),
+    [onMissingApiKey]
+  )
+
+  return {
+    segments,
+    isTranscribing,
+    connectionStatus,
+    startTranscription,
+    stopTranscription: transcriptionActions.stop,
+  }
+}
+
+/**
+ * Speech recognition events (connection, errors, a lost microphone, what was
+ * heard), handled for the whole app: listening keeps its transcript and its
+ * warnings whichever view is on screen. Mount once, at the root.
+ */
+export function useTranscriptionEvents(): void {
   // STT lifecycle events
   useTauriEvent("stt_connected", () => {
     useTranscriptStore.getState().setConnectionStatus("connected")
@@ -114,12 +146,12 @@ export function useTranscription(options?: UseTranscriptionOptions) {
   })
 
   useTauriEvent<TranscriptPartialPayload>("transcript_partial", (payload) => {
-    mark(`transcript_partial received "${payload.text.slice(0, 30)}"`)
+    mark(`transcript_partial received ${payload.text.length} characters`)
     useTranscriptStore.getState().setPartial(payload.text)
   })
 
   useTauriEvent<TranscriptPartialPayload>("transcript_final", (payload) => {
-    mark(`transcript_final received "${payload.text.slice(0, 30)}"`)
+    mark(`transcript_final received ${payload.text.length} characters`)
     useTranscriptStore.getState().addSegment({
       id: crypto.randomUUID(),
       text: payload.text,
@@ -129,19 +161,5 @@ export function useTranscription(options?: UseTranscriptionOptions) {
       timestamp: Date.now(),
     })
   })
-
-  const onMissingApiKey = options?.onMissingApiKey
-
-  const startTranscription = useCallback(
-    () => transcriptionActions.start(onMissingApiKey),
-    [onMissingApiKey]
-  )
-
-  return {
-    segments,
-    isTranscribing,
-    connectionStatus,
-    startTranscription,
-    stopTranscription: transcriptionActions.stop,
-  }
 }
+

@@ -1,24 +1,28 @@
-//! OpenAI Whisper API STT provider.
+//! OpenAI Transcribe API STT provider.
 //!
 //! The transcription endpoint is request/response rather than a streaming
 //! WebSocket, so audio is segmented with the same energy VAD used by local
 //! Whisper and uploaded after each spoken utterance.
 
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use crossbeam_channel::Receiver;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 
 use crate::error::SttError;
 use crate::provider::SttProvider;
-use crate::types::{TranscriptEvent, Word};
+use crate::types::TranscriptEvent;
 
 const SAMPLE_RATE: u32 = 16_000;
 const MIN_BUFFER_SAMPLES: usize = SAMPLE_RATE as usize;
+// Keep unbroken speech chunks well below the transcription endpoint's 25 MB limit.
+const MAX_BUFFER_SAMPLES: usize = SAMPLE_RATE as usize * 60 * 8;
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(45);
 
-/// OpenAI's Whisper API accepts common audio containers. Wrap the captured
+/// OpenAI's transcription API accepts WAV files. Wrap the captured
 /// mono PCM in a small WAV header so no external encoder is required.
 fn pcm_to_wav(samples: &[i16]) -> Vec<u8> {
     let data_size = (samples.len() * 2) as u32;
@@ -50,9 +54,8 @@ fn append_text_field(body: &mut Vec<u8>, boundary: &str, name: &str, value: &str
     );
 }
 
-/// The OpenAI Whisper API does not accept `yo` as a `language` parameter.
-/// Leaving the hint out lets the multilingual model auto-detect the spoken
-/// language instead of rejecting the request before transcription starts.
+/// Yoruba is left to automatic detection until OpenAI documents a supported
+/// Yorùbá hint for the current transcription model.
 fn api_language_hint(language: Option<&str>) -> Option<&str> {
     match language {
         Some("en") => Some("en"),
@@ -63,34 +66,51 @@ fn api_language_hint(language: Option<&str>) -> Option<&str> {
 
 fn format_request_error(error: &reqwest::Error) -> String {
     if error.is_timeout() {
-        return format!(
-            "OpenAI request timed out before the API responded. Check your internet connection: {error}"
-        );
+        return format!("OpenAI transcription timed out before the API responded: {error}");
     }
 
     if error.is_connect() {
-        return format!(
-            "OpenAI connection failed before the API responded. Check DNS, TLS, and internet access for api.openai.com: {error}"
-        );
+        return format!("OpenAI transcription could not connect to api.openai.com: {error}");
     }
 
     format!("OpenAI request failed: {error}")
 }
 
-/// OpenAI Whisper API provider. It emits final results after each VAD
+async fn cancellable<T>(
+    cancel: &mut watch::Receiver<bool>,
+    operation: impl Future<Output = T>,
+) -> Option<T> {
+    if *cancel.borrow() {
+        return None;
+    }
+
+    tokio::select! {
+        biased;
+        changed = cancel.changed() => {
+            let _ = changed;
+            None
+        }
+        result = operation => Some(result),
+    }
+}
+
+/// OpenAI Transcribe API provider. It emits final results after each VAD
 /// utterance; the API does not provide interim tokens for a live stream.
-pub struct OpenAiWhisperProvider {
+pub struct OpenAiTranscribeProvider {
     api_key: String,
     language: Option<String>,
     cancelled: Arc<AtomicBool>,
+    cancel_tx: watch::Sender<bool>,
 }
 
-impl OpenAiWhisperProvider {
+impl OpenAiTranscribeProvider {
     pub fn new(api_key: String, language: Option<String>) -> Self {
+        let (cancel_tx, _) = watch::channel(false);
         Self {
             api_key,
             language,
             cancelled: Arc::new(AtomicBool::new(false)),
+            cancel_tx,
         }
     }
 
@@ -98,10 +118,10 @@ impl OpenAiWhisperProvider {
         &self,
         client: &reqwest::Client,
         samples: Vec<i16>,
-    ) -> Result<(String, Vec<Word>), SttError> {
+    ) -> Result<String, SttError> {
         // Build multipart directly so this provider does not need reqwest's
         // optional multipart feature (and its extra runtime dependencies).
-        let boundary = "rhema-openai-whisper-boundary";
+        let boundary = "rhema-openai-transcribe-boundary";
         let mut body = Vec::new();
         let wav = pcm_to_wav(&samples);
         body.extend_from_slice(
@@ -112,11 +132,11 @@ impl OpenAiWhisperProvider {
         );
         body.extend_from_slice(&wav);
         body.extend_from_slice(b"\r\n");
-        append_text_field(&mut body, boundary, "model", "whisper-1");
-        append_text_field(&mut body, boundary, "response_format", "verbose_json");
+        append_text_field(&mut body, boundary, "model", "gpt-transcribe");
+        append_text_field(&mut body, boundary, "response_format", "json");
         append_text_field(&mut body, boundary, "temperature", "0");
         if let Some(language) = api_language_hint(self.language.as_deref()) {
-            append_text_field(&mut body, boundary, "language", language);
+            append_text_field(&mut body, boundary, "languages[]", language);
         }
         body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
 
@@ -133,15 +153,15 @@ impl OpenAiWhisperProvider {
             .map_err(|e| SttError::ConnectionFailed(format_request_error(&e)))?;
 
         let status = response.status();
+        if !status.is_success() {
+            return Err(SttError::ConnectionFailed(format!(
+                "OpenAI transcription API returned {status}"
+            )));
+        }
         let body = response
             .text()
             .await
             .map_err(|e| SttError::ParseError(format!("failed to read OpenAI response: {e}")))?;
-        if !status.is_success() {
-            return Err(SttError::ConnectionFailed(format!(
-                "OpenAI Whisper API returned {status}: {body}"
-            )));
-        }
 
         let json: serde_json::Value = serde_json::from_str(&body)
             .map_err(|e| SttError::ParseError(format!("failed to parse OpenAI response: {e}")))?;
@@ -152,42 +172,20 @@ impl OpenAiWhisperProvider {
             .trim()
             .to_string();
 
-        // The API does not expose the same confidence shape as Deepgram.
-        // Preserve word timing when present and use a conservative result
-        // confidence for the downstream detection merger.
-        let words = json
-            .get("words")
-            .and_then(serde_json::Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(|item| {
-                        Some(Word {
-                            text: item.get("word")?.as_str()?.to_string(),
-                            start: item.get("start")?.as_f64()?,
-                            end: item.get("end")?.as_f64()?,
-                            confidence: 0.9,
-                            punctuated_word: None,
-                        })
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        Ok((transcript, words))
+        Ok(transcript)
     }
 }
 
-impl std::fmt::Debug for OpenAiWhisperProvider {
+impl std::fmt::Debug for OpenAiTranscribeProvider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OpenAiWhisperProvider")
+        f.debug_struct("OpenAiTranscribeProvider")
             .field("language", &self.language)
             .finish_non_exhaustive()
     }
 }
 
 #[async_trait::async_trait]
-impl SttProvider for OpenAiWhisperProvider {
+impl SttProvider for OpenAiTranscribeProvider {
     async fn start(
         &self,
         audio_rx: Receiver<Vec<i16>>,
@@ -223,12 +221,16 @@ impl SttProvider for OpenAiWhisperProvider {
 
             loop {
                 if cancelled.load(Ordering::SeqCst) {
-                    flush(&mut audio_buffer);
+                    audio_buffer.clear();
                     break;
                 }
 
                 match audio_rx.recv_timeout(Duration::from_millis(50)) {
                     Ok(samples) => {
+                        if cancelled.load(Ordering::SeqCst) {
+                            audio_buffer.clear();
+                            break;
+                        }
                         let result = vad.process(&AudioFrame {
                             samples,
                             timestamp_ms: 0,
@@ -236,40 +238,65 @@ impl SttProvider for OpenAiWhisperProvider {
                         if let Some(transition) = result.transition {
                             match transition {
                                 VadTransition::SpeechStarted => {
-                                    let _ = vad_event_tx.blocking_send(TranscriptEvent::SpeechStarted);
+                                    let _ =
+                                        vad_event_tx.blocking_send(TranscriptEvent::SpeechStarted);
                                 }
                                 VadTransition::SpeechEnded => flush(&mut audio_buffer),
                             }
                         }
                         for frame in result.frames {
-                            audio_buffer.extend_from_slice(&frame.samples);
+                            let mut offset = 0;
+                            while offset < frame.samples.len() {
+                                let remaining = MAX_BUFFER_SAMPLES - audio_buffer.len();
+                                let take = remaining.min(frame.samples.len() - offset);
+                                audio_buffer
+                                    .extend_from_slice(&frame.samples[offset..offset + take]);
+                                offset += take;
+                                if audio_buffer.len() == MAX_BUFFER_SAMPLES {
+                                    flush(&mut audio_buffer);
+                                }
+                            }
                         }
                     }
                     Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
                     Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
-                        flush(&mut audio_buffer);
+                        if cancelled.load(Ordering::SeqCst) {
+                            audio_buffer.clear();
+                        } else {
+                            flush(&mut audio_buffer);
+                        }
                         break;
                     }
                 }
             }
         });
 
-        let client = reqwest::Client::new();
-        while let Some(samples) = chunk_rx.recv().await {
+        let client = reqwest::Client::builder()
+            .timeout(REQUEST_TIMEOUT)
+            .build()
+            .map_err(|error| SttError::ConnectionFailed(format_request_error(&error)))?;
+        let mut cancel_rx = self.cancel_tx.subscribe();
+        loop {
+            let Some(samples) = cancellable(&mut cancel_rx, chunk_rx.recv()).await else {
+                break;
+            };
+            let Some(samples) = samples else {
+                break;
+            };
             let started = std::time::Instant::now();
-            match self.transcribe(&client, samples).await {
-                Ok((transcript, words)) => {
-                    log::info!(
-                        "[OpenAI Whisper] Transcribed in {:?}: {:?}",
-                        started.elapsed(),
-                        transcript
-                    );
+            let Some(result) = cancellable(&mut cancel_rx, self.transcribe(&client, samples)).await
+            else {
+                break;
+            };
+            match result {
+                Ok(transcript) => {
+                    log::info!("[OpenAI Transcribe] Completed in {:?}", started.elapsed());
                     if !transcript.is_empty() {
                         let _ = event_tx
                             .send(TranscriptEvent::Final {
                                 transcript,
-                                words,
-                                confidence: 0.9,
+                                words: Vec::new(),
+                                confidence: 0.0,
                                 speech_final: true,
                             })
                             .await;
@@ -278,13 +305,16 @@ impl SttProvider for OpenAiWhisperProvider {
                 }
                 Err(error) => {
                     let message = error.to_string();
-                    log::error!("[OpenAI Whisper] {message}");
+                    log::error!("[OpenAI Transcribe] {message}");
                     let _ = event_tx.send(TranscriptEvent::Error(message)).await;
                     break;
                 }
             }
         }
 
+        // Drop queued chunks before joining the VAD worker so a full bounded
+        // channel cannot keep its blocking_send alive after Stop.
+        drop(chunk_rx);
         let _ = vad_handle.await;
         let _ = event_tx.send(TranscriptEvent::Disconnected).await;
         Ok(())
@@ -292,16 +322,25 @@ impl SttProvider for OpenAiWhisperProvider {
 
     fn stop(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
+        self.cancel_tx.send_replace(true);
     }
 
     fn name(&self) -> &'static str {
-        "openai-whisper"
+        "openai-transcribe"
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{api_language_hint, pcm_to_wav};
+    use super::{
+        api_language_hint, cancellable, pcm_to_wav, OpenAiTranscribeProvider, MAX_BUFFER_SAMPLES,
+        SAMPLE_RATE,
+    };
+    use crate::provider::SttProvider;
+    use std::future::pending;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use tokio::sync::mpsc;
 
     #[test]
     fn omits_unsupported_yoruba_language_hint() {
@@ -322,5 +361,45 @@ mod tests {
         assert_eq!(&wav[36..40], b"data");
         assert_eq!(u32::from_le_bytes(wav[40..44].try_into().unwrap()), 4);
         assert_eq!(&wav[44..], &[1, 0, 254, 255]);
+    }
+
+    #[test]
+    fn upload_buffer_stays_below_the_api_file_limit() {
+        const API_FILE_LIMIT_BYTES: usize = 25 * 1024 * 1024;
+        assert_eq!(SAMPLE_RATE, 16_000);
+        assert!(MAX_BUFFER_SAMPLES * 2 + 44 < API_FILE_LIMIT_BYTES);
+    }
+
+    #[tokio::test]
+    async fn stop_drops_an_in_flight_upload_future() {
+        struct DropCounter(Arc<AtomicUsize>);
+        impl Drop for DropCounter {
+            fn drop(&mut self) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+
+        let provider = OpenAiTranscribeProvider::new("test-key".into(), None);
+        let mut cancel_rx = provider.cancel_tx.subscribe();
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let request = {
+            let dropped = dropped.clone();
+            async move {
+                let _guard = DropCounter(dropped);
+                pending::<()>().await;
+            }
+        };
+        let request_task = tokio::spawn(async move { cancellable(&mut cancel_rx, request).await });
+        tokio::task::yield_now().await;
+        provider.stop();
+
+        assert!(request_task.await.unwrap().is_none());
+        assert_eq!(dropped.load(Ordering::SeqCst), 1);
+
+        let mut cancel_rx = provider.cancel_tx.subscribe();
+        let (chunk_tx, mut chunk_rx) = mpsc::channel(1);
+        chunk_tx.try_send(vec![1, 2, 3]).unwrap();
+        assert!(cancellable(&mut cancel_rx, chunk_rx.recv()).await.is_none());
+        assert_eq!(chunk_rx.try_recv().unwrap(), vec![1, 2, 3]);
     }
 }

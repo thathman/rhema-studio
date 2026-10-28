@@ -5,6 +5,7 @@ export const BUNDLED_FONTS = [
   "Geist Variable",
   "Source Serif 4 Variable",
   "Inter Variable",
+  "IBM Plex Sans",
   "Geist Mono",
 ]
 

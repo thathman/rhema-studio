@@ -1,0 +1,144 @@
+/**
+ * The video player inside an output window, kept outside React so the
+ * element can be driven directly. One <video> per window, streamed from the
+ * media folder (crossOrigin keeps the canvas readable for NDI). While it
+ * plays, `onFrame` runs at the current NDI rate so the window redraws and
+ * pushes NDI; at the end, on error or when paused it stops forcing frames.
+ * Pause / Resume (`paused`) holds the picture on its frame and carries on from there.
+ */
+export interface VideoSpec {
+  url: string
+  fit: "cover" | "contain" | "stretch"
+  loop: boolean
+  sound: boolean
+  name: string
+  /** Changes on every present, so re-presenting the same file replays it while re-sends of the same live item do not. */
+  token: number
+  /** Paused by the operator (Present → Pause video): the frame stays up, the sound stops; Resume carries on. Absent = playing. */
+  paused?: boolean
+}
+
+/** loading: nothing to show yet (draw the background, never a label); ready: draw frames; failed: draw "▶ name". */
+export type VideoState = "loading" | "ready" | "failed"
+
+export interface VideoPlayer {
+  element(): HTMLVideoElement | null
+  state(): VideoState
+  /** Play `spec`, or stop and release the file when it is undefined. */
+  sync(spec: VideoSpec | undefined): void
+  dispose(): void
+}
+
+export interface VideoPlayerHooks {
+  onFrame: () => void
+  onEnded: () => void
+  /** Paused by the operator: draw the held frame once (and send it on NDI). */
+  onPaused?: () => void
+  onError: (name: string) => void
+  /** Sound is played by one window only, so screens do not echo; asked before each video starts. */
+  allowSound: boolean | (() => boolean)
+  /** Redraw rate, read before every frame (the NDI rate when NDI is on). */
+  fps: () => number
+  create?: () => HTMLVideoElement
+}
+
+export function createVideoPlayer(h: VideoPlayerHooks): VideoPlayer {
+  let el: HTMLVideoElement | null = null
+  let key: string | null = null
+  let name = "video"
+  let failed = false
+  let timer: ReturnType<typeof setTimeout> | null = null
+  /** The operator's Pause, as last sent. */
+  let wantPaused = false
+
+  const stopTimer = () => {
+    if (timer) clearTimeout(timer)
+    timer = null
+  }
+  const tick = () => {
+    timer = null
+    if (!el || el.paused || el.ended || failed) return
+    h.onFrame()
+    timer = setTimeout(tick, Math.round(1000 / Math.max(15, h.fps() || 30)))
+  }
+  const startTimer = () => {
+    if (timer || !el || el.paused || el.ended || failed) return
+    timer = setTimeout(tick, 0)
+  }
+  const ensure = (): HTMLVideoElement => {
+    if (el) return el
+    const v = h.create ? h.create() : document.createElement("video")
+    v.crossOrigin = "anonymous"
+    v.playsInline = true
+    v.preload = "auto"
+    v.addEventListener("error", () => {
+      if (!key) return // the src was just released on purpose
+      failed = true
+      stopTimer()
+      h.onError(name)
+    })
+    v.addEventListener("ended", () => {
+      stopTimer()
+      h.onEnded()
+    })
+    v.addEventListener("playing", startTimer)
+    v.addEventListener("pause", stopTimer)
+    // Opened paused (a paused video put back): its first frame, once it can be drawn.
+    v.addEventListener("loadeddata", () => { if (v.paused && wantPaused) h.onPaused?.() })
+    el = v
+    return v
+  }
+
+  return {
+    element: () => el,
+    state: () => (failed ? "failed" : el && el.readyState >= 2 && el.videoWidth > 0 ? "ready" : "loading"),
+    sync(spec) {
+      if (!spec) {
+        stopTimer()
+        if (el && key) {
+          key = null
+          el.pause()
+          el.removeAttribute("src")
+          el.load()
+        }
+        key = null
+        failed = false
+        return
+      }
+      const v = ensure()
+      name = spec.name
+      v.loop = spec.loop
+      v.muted = !(spec.sound && (typeof h.allowSound === "function" ? h.allowSound() : h.allowSound))
+      const next = `${spec.token}|${spec.url}`
+      const pause = spec.paused === true
+      if (key !== next) {
+        key = next
+        failed = false
+        wantPaused = pause
+        stopTimer()
+        if (v.src === spec.url) v.currentTime = 0
+        else v.src = spec.url
+        // Put back while paused: it waits on its first frame for Resume.
+        if (!pause) void v.play().catch((e) => console.warn("[output-video] play() refused", e))
+        return
+      }
+      if (pause !== wantPaused) {
+        wantPaused = pause
+        if (pause) {
+          v.pause()
+          stopTimer()
+          h.onPaused?.()
+          return
+        }
+        // Resume from where it stopped (a video that had ended stays ended until it is shown again).
+        if (!v.ended && !failed) void v.play().catch((e) => console.warn("[output-video] play() refused", e))
+        return
+      }
+      // Same item re-sent (theme edit, window re-sync): keep playing, never restart or force frames after the end.
+      if (!wantPaused) startTimer()
+    },
+    dispose() {
+      this.sync(undefined)
+    },
+  }
+}

@@ -41,6 +41,10 @@ fn i16_to_f32(samples: &[i16]) -> Vec<f32> {
     samples.iter().map(|&s| f32::from(s) / 32768.0).collect()
 }
 
+fn transcript_log_summary(text: &str) -> String {
+    format!("transcript chars={}", text.chars().count())
+}
+
 /// Extract transcript text, words, and average confidence from Whisper state.
 #[expect(clippy::cast_precision_loss, reason = "timestamps and word counts are small enough")]
 fn extract_segments(state: &WhisperState) -> (String, Vec<Word>, f64) {
@@ -302,8 +306,9 @@ impl SttProvider for WhisperProvider {
 
                 #[expect(clippy::cast_precision_loss, reason = "audio sample count fits in f64")]
                 let audio_duration_s = audio_i16.len() as f64 / 16_000.0;
+                let text_summary = transcript_log_summary(&text);
                 log::info!(
-                    "[Whisper] Transcribed {audio_duration_s:.1}s audio in {elapsed:.1?}: \"{text}\""
+                    "[Whisper] Transcribed {audio_duration_s:.1}s audio in {elapsed:.1?}: {text_summary}"
                 );
 
                 if !text.is_empty() {
@@ -338,10 +343,22 @@ impl SttProvider for WhisperProvider {
 
 #[cfg(test)]
 mod tests {
-    use super::context_parameters;
+    use super::{context_parameters, transcript_log_summary};
 
     #[test]
     fn context_parameters_disable_the_unstable_gpu_backend() {
         assert!(!context_parameters().use_gpu);
+    }
+
+    #[test]
+    fn transcript_log_summary_does_not_include_recognized_words() {
+        let transcript = "private marker Psalm 23 the Lord is my shepherd";
+        let summary = transcript_log_summary(transcript);
+        assert_eq!(
+            summary,
+            format!("transcript chars={}", transcript.chars().count())
+        );
+        assert!(!summary.contains("private marker"));
+        assert!(!summary.contains("shepherd"));
     }
 }

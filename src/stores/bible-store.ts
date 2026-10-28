@@ -1,19 +1,30 @@
 import { create } from "zustand"
 import { load } from "@tauri-apps/plugin-store"
 import { invoke } from "@tauri-apps/api/core"
-import type { Translation, Book, Verse, CrossReference } from "@/types"
+import type {
+  SongWithSections, Translation, Book, Verse, CrossReference, SongQueueItem, SlideQueueItem, ImageQueueItem, AudioQueueItem, CueQueueItem } from "@/types"
 import type { SemanticSearchResult } from "@/types/detection"
 
 interface PendingNavigation {
   bookNumber: number
   chapter: number
   verse: number
+  /** The first-run Genesis selection is an example, not a service item. */
+  sample?: boolean
   /**
    * Present the verse to the live output once navigation lands. Set only by
    * manual operator actions (quick search); detections leave it unset so the
    * Auto toggle stays the sole gate for detection-driven presents.
    */
   present?: boolean
+}
+
+/** What Preview shows when a song or custom slide is selected: the item and the step. */
+export interface SelectedSlide {
+  item: SongQueueItem | SlideQueueItem | ImageQueueItem | AudioQueueItem | CueQueueItem
+  index: number
+  /** A slide of the live song as it went live (words saved since apply next time it starts). */
+  song?: SongWithSections
 }
 
 interface BibleState {
@@ -24,6 +35,12 @@ interface BibleState {
   searchResults: Verse[]
   semanticResults: SemanticSearchResult[]
   selectedVerse: Verse | null
+  /** True only for the first-run Genesis example selected by SearchPanel. */
+  samplePreview: boolean
+  /** A song slide in Preview. Set by previewing a song; cleared by selecting a verse. */
+  selectedSlide: SelectedSlide | null
+  /** The exact rundown item whose content was selected, so repeated references stay distinct. */
+  selectedQueueItemId: string | null
   currentChapter: Verse[]
   crossReferences: CrossReference[]
   pendingNavigation: PendingNavigation | null
@@ -38,6 +55,11 @@ interface BibleState {
    */
   revealRequest: number
   revealBlock: ScrollLogicalPosition
+  /**
+   * Show saved service items in the active translation instead of the one
+   * they were saved with. A deliberate per-session choice; never persisted.
+   */
+  overrideServiceTranslations: boolean
 
   setTranslations: (translations: Translation[]) => void
   setActiveTranslation: (id: number) => void
@@ -46,25 +68,35 @@ interface BibleState {
   setSearchResults: (results: Verse[]) => void
   setSemanticResults: (results: SemanticSearchResult[]) => void
   selectVerse: (verse: Verse | null) => void
+  selectSlide: (slide: SelectedSlide | null) => void
+  /** Clear only a matching temporary slide preview; preserve a newer selection. */
+  clearSlidePreview: (itemId: string) => void
+  setSamplePreview: (sample: boolean) => void
+  setSelectedQueueItemId: (id: string | null) => void
   setCurrentChapter: (verses: Verse[]) => void
   setCrossReferences: (refs: CrossReference[]) => void
   setPendingNavigation: (nav: PendingNavigation | null) => void
   requestVerseReveal: (block: ScrollLogicalPosition) => void
+  setOverrideServiceTranslations: (on: boolean) => void
 }
 
 export const useBibleStore = create<BibleState>((set) => ({
   translations: [],
-  activeTranslationId: 1, // KJV default
+  activeTranslationId: 1, // until hydrateBibleStore picks the saved one, or KJV on a first run (id 1 is not KJV)
   secondaryTranslationId: null,
   books: [],
   searchResults: [],
   semanticResults: [],
   selectedVerse: null,
+  samplePreview: false,
+  selectedSlide: null,
+  selectedQueueItemId: null,
   currentChapter: [],
   crossReferences: [],
   pendingNavigation: null,
   revealRequest: 0,
   revealBlock: "nearest",
+  overrideServiceTranslations: false,
 
   setTranslations: (translations) => set({ translations }),
   setActiveTranslation: (activeTranslationId) =>
@@ -85,13 +117,28 @@ export const useBibleStore = create<BibleState>((set) => ({
   setBooks: (books) => set({ books }),
   setSearchResults: (searchResults) => set({ searchResults }),
   setSemanticResults: (semanticResults) => set({ semanticResults }),
-  selectVerse: (selectedVerse) => set({ selectedVerse }),
+  selectVerse: (selectedVerse) => set({ selectedVerse, selectedSlide: null, selectedQueueItemId: null, samplePreview: false }),
+  selectSlide: (selectedSlide) => set({ selectedSlide, selectedQueueItemId: null, samplePreview: false }),
+  clearSlidePreview: (itemId) => set((state) => state.selectedSlide?.item.id === itemId ? { selectedSlide: null } : state),
+  setSamplePreview: (samplePreview) => set({ samplePreview }),
+  setSelectedQueueItemId: (selectedQueueItemId) => set({ selectedQueueItemId }),
   setCurrentChapter: (currentChapter) => set({ currentChapter }),
   setCrossReferences: (crossReferences) => set({ crossReferences }),
   setPendingNavigation: (pendingNavigation) => set({ pendingNavigation }),
   requestVerseReveal: (revealBlock) =>
     set((s) => ({ revealRequest: s.revealRequest + 1, revealBlock })),
+  setOverrideServiceTranslations: (overrideServiceTranslations) => set({ overrideServiceTranslations }),
 }))
+
+/**
+ * The translation a first run starts with: KJV when the library has it
+ * (ids follow the library file, so id 1 is not KJV: in the bundled one it is
+ * AMP), else the first downloaded one.
+ */
+export function defaultTranslationId(translations: Pick<Translation, "id" | "abbreviation" | "is_downloaded">[] | null | undefined): number | null {
+  const usable = (Array.isArray(translations) ? translations : []).filter((t) => t.is_downloaded !== false)
+  return (usable.find((t) => t.abbreviation.toUpperCase() === "KJV") ?? usable[0])?.id ?? null
+}
 
 /** Load persisted translation selections from disk into Zustand, then sync the primary to Rust. */
 export async function hydrateBibleStore(): Promise<void> {
@@ -101,10 +148,11 @@ export async function hydrateBibleStore(): Promise<void> {
       store.get<number>("activeTranslationId"),
       store.get<number | null>("secondaryTranslationId"),
     ])
+    const firstRun = typeof activeValue === "number" ? null : defaultTranslationId(await invoke<Translation[]>("list_translations").catch(() => []))
     const activeTranslationId =
       typeof activeValue === "number"
         ? activeValue
-        : useBibleStore.getState().activeTranslationId
+        : (firstRun ?? useBibleStore.getState().activeTranslationId)
     useBibleStore.getState().setActiveTranslation(activeTranslationId)
     useBibleStore
       .getState()

@@ -1,4 +1,8 @@
 mod commands;
+pub mod mcp;
+mod mcp_drafts;
+#[cfg(feature = "qa-bridge")]
+mod qa_bridge;
 mod events;
 mod memstats;
 mod state;
@@ -34,6 +38,16 @@ pub fn run() {
     dotenvy::from_filename("../.env").ok();
     install_panic_hook();
     tauri::Builder::default()
+        // First, so a second launch exits before anything else starts; it
+        // brings the running copy's main window forward instead.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            use tauri::Manager;
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(tauri_plugin_log::log::LevelFilter::Info)
@@ -88,14 +102,26 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_opener::init())
+        .manage(commands::app_close::UnsavedWork::default())
+        .manage(commands::app_close::LastExit::default())
+        .manage(commands::store_check::DamagedStoreFiles::default())
+        .manage(commands::join::JoinRuntime::default())
+        .on_window_event(commands::app_close::on_window_event)
         .manage(Mutex::new(state::AppState::new()))
         .manage(Mutex::new(rhema_detection::DetectionPipeline::new()))
         .manage(Mutex::new(rhema_broadcast::ndi::NdiRuntime::default()))
+        .manage(commands::broadcast::OutputPacers::default())
         .manage(Mutex::new(rhema_detection::DirectDetector::new()))
         .manage(Mutex::new(rhema_detection::DetectionMerger::new()))
         .manage(Mutex::new(rhema_detection::ReadingMode::new()))
         .manage(Mutex::new(commands::remote::OscRuntime::new()))
         .manage(Mutex::new(commands::remote::HttpRuntime::new()))
+        .manage(commands::remote::RemoteKeys::new())
+        .manage(commands::camera_router::CameraRouter::default())
+        .manage(commands::content::ContentState(Mutex::new(None)))
+        .manage(commands::content::ContentOpenError(Mutex::new(None)))
+        .manage(commands::media::MediaState(std::sync::OnceLock::new()))
         .invoke_handler(tauri::generate_handler![
             commands::bible::list_translations,
             commands::bible::list_books,
@@ -126,6 +152,8 @@ pub fn run() {
             commands::broadcast::stop_ndi,
             commands::broadcast::get_ndi_status,
             commands::broadcast::push_ndi_frame,
+            commands::broadcast::push_ndi_region,
+            commands::broadcast::set_output_pace,
             commands::fonts::list_system_fonts,
             commands::remote::start_osc,
             commands::remote::stop_osc,
@@ -133,12 +161,175 @@ pub fn run() {
             commands::remote::start_http,
             commands::remote::stop_http,
             commands::remote::get_http_status,
+            commands::remote::host_status,
+            commands::remote::host_set_name,
+            commands::remote::remote_set_keys,
+            commands::remote::get_remote_auth_status,
+            commands::remote::remote_pair_start,
+            commands::app_close::set_unsaved_work,
+            commands::app_close::last_exit_unclean,
+            commands::store_check::damaged_store_files,
+            commands::secrets::secrets_get,
+            commands::secrets::secrets_set,
+            commands::app_close::close_main_window,
+            commands::remote::remote_lan_address,
+            commands::remote::remote_pair_cancel,
             commands::remote::update_remote_status,
+            commands::remote::mcp_server_command,
+            commands::ai_drafts::ai_drafts_list,
+            commands::ai_drafts::ai_draft_delete,
+            commands::ai_drafts::ai_draft_mark_opened,
+            commands::ai_drafts::ai_drafts_restore,
+            commands::remote::publish_live_state,
+            commands::remote::feeds_set,
+            commands::remote::feed_publish,
+            commands::remote::voice_answer,
+            commands::remote::feed_status,
+            commands::join::join_pair,
+            commands::join::tv_show,
+            commands::join::tv_status,
+            commands::join::tv_discover,
+            commands::join::host_discover,
+            commands::join::join_me,
+            commands::join::join_command,
+            commands::join::join_lookup,
+            commands::join::join_cameras,
+            commands::join::join_tally,
+            commands::companion::app_restart,
+            commands::join::join_voice,
+            commands::cameras::whep_offer,
+            commands::camera_router::camera_router_start,
+            commands::camera_router::camera_router_stop,
+            commands::camera_router::camera_router_status,
+            commands::camera_router::cameras_set,
+            commands::join::join_connect,
+            commands::join::join_disconnect,
+            commands::join::join_secure,
+            commands::content::content_list_programs,
+            commands::content::content_create_program,
+            commands::content::content_update_program,
+            commands::content::content_set_program_archived,
+            commands::content::content_set_program_template,
+            commands::content::content_approve_program,
+            commands::content::content_approve_program_with_designs,
+            commands::content::content_approved_designs,
+            commands::content::content_approved_songs,
+            commands::content::content_set_actor,
+            commands::content::content_save_service_log,
+            commands::content::content_list_service_logs,
+            commands::content::content_song_usage,
+            commands::media::church_folder_publish,
+            commands::media::church_folder_list,
+            commands::media::church_folder_open,
+            commands::content::content_get_service_log,
+            commands::content::content_delete_service_log,
+            commands::content::content_remove_old_log_transcripts,
+            commands::content::content_list_song_attachments,
+            commands::content::content_add_song_attachment,
+            commands::content::content_remove_song_attachment,
+            commands::content::content_get_program,
+            commands::content::content_replace_items,
+            commands::content::content_replace_items_with_history,
+            commands::content::content_delete_program,
+            commands::content::content_status,
+            commands::setup::setup_data_paths,
+            commands::setup::setup_show_data_folder,
+            commands::setup::setup_test_folder,
+            commands::machine::machine_info,
+            commands::machine::machine_health,
+            commands::content::content_list_songs,
+            commands::content::content_get_song,
+            commands::content::content_create_song,
+            commands::content::content_update_song,
+            commands::content::content_delete_song,
+            commands::content::content_list_reusable_slides,
+            commands::content::content_create_reusable_slide,
+            commands::content::content_update_reusable_slide,
+            commands::content::content_delete_reusable_slide,
+            commands::content::content_list_hymnbooks,
+            commands::content::content_upsert_hymnbook,
+            commands::content::content_delete_hymnbook,
+            commands::content::content_export_songs,
+            commands::content::content_import_songs,
+            commands::content::content_import_hymnbook,
+            commands::media::content_export_service_package,
+            commands::media::content_import_service_package,
+            commands::content::content_list_revisions,
+            commands::content::content_get_revision,
+            commands::content::content_restore_revision,
+            commands::content::content_backup,
+            commands::content::content_restore,
+            commands::content::content_inspect_backup,
+            commands::media::media_import,
+            commands::media::media_list,
+            commands::media::media_set_dimensions,
+            commands::media::media_delete,
         ])
         .setup(|app| {
             use tauri::Manager;
 
+            // Cmd+Q asks about unsaved work like closing the window does.
+            #[cfg(target_os = "macos")]
+            if let Err(e) = commands::app_close::route_quit_through_close(app) {
+                log::warn!("[app_close] could not replace the Quit menu item: {e}");
+            }
+
             memstats::spawn();
+
+            // A tick for the operator's window: loops and timed moves catch up on it when the
+            // window's own timers are held back behind other windows (WebView2 and WebKitGTK
+            // have no switch for that; on macOS the window's throttling is off as well).
+            let ticker = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                let _ = tauri::Emitter::emit_to(&ticker, tauri::EventTarget::webview_window("main"), "app:tick", ());
+            });
+            rhema_api::set_app_version(env!("CARGO_PKG_VERSION"));
+
+            #[cfg(feature = "qa-bridge")]
+            qa_bridge::spawn(app.handle());
+
+            // An OBS companion (#209) loads only what its one screen needs: no Bible search models.
+            let companion = app.path().app_data_dir().is_ok_and(|d| commands::companion::companion_mode(&d));
+            if companion {
+                log::info!("OBS companion mode: the Bible search models are not loaded");
+            }
+
+            // User content (services, rundowns) lives in the app data dir.
+            // Failure here must not stop the app: live presentation does not
+            // depend on the content database.
+            match app.path().app_data_dir() {
+                Ok(dir) => {
+                    // A damaged settings/themes file is set aside before the window reads it.
+                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+                    let moved = commands::store_check::set_aside_damaged(&dir, now);
+                    commands::app_close::mark_running(&app.state::<commands::app_close::LastExit>(), &dir);
+                    for (name, aside, recovered) in &moved {
+                        log::error!("{name} was damaged; set aside as {aside} (last good copy restored: {recovered})");
+                    }
+                    if let Ok(mut v) = app.state::<commands::store_check::DamagedStoreFiles>().0.lock() {
+                        *v = moved;
+                    }
+                    // Imported media lives beside the database.
+                    let _ = app.state::<commands::media::MediaState>().0.set(dir.join("media"));
+                    let path = dir.join("studio.db");
+                    let opened = std::fs::create_dir_all(&dir)
+                        .map_err(|e| e.to_string())
+                        .and_then(|()| rhema_content::ContentDb::open(&path).map_err(|e| e.to_string()));
+                    match opened {
+                        Ok(db) => {
+                            log::info!("Content database opened at {}", path.display());
+                            let state = app.state::<commands::content::ContentState>();
+                            *state.0.lock().unwrap() = Some(db);
+                        }
+                        Err(e) => {
+                            log::error!("Content database unavailable at {}: {e}", path.display());
+                            *app.state::<commands::content::ContentOpenError>().0.lock().unwrap() = Some(e);
+                        }
+                    }
+                }
+                Err(e) => log::error!("No app data dir for content database: {e}"),
+            }
 
             // Point the NDI runtime at the bundled resource dir (production).
             // The source-checkout path stays as a fallback inside the crate.
@@ -193,7 +384,9 @@ pub fn run() {
             let embeddings_path = base_dir.join("embeddings/kjv-qwen3-0.6b.bin");
             let ids_path = base_dir.join("embeddings/kjv-qwen3-0.6b-ids.bin");
 
-            if model_path.exists() && tokenizer_path.exists() {
+            if companion {
+                // Nothing to load: the companion screen never searches the Bible.
+            } else if model_path.exists() && tokenizer_path.exists() {
                 use rhema_detection::semantic::embedder::TextEmbedder;
                 use rhema_detection::semantic::index::VectorIndex;
                 match rhema_detection::OnnxEmbedder::load(&model_path, &tokenizer_path) {
@@ -252,8 +445,17 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        // Any orderly exit (the main window, Cmd+Q, the Dock's Quit, logout) is a clean close:
+        // no "closed unexpectedly" offer next time.
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                commands::camera_router::shutdown(app);
+                commands::remote::shutdown(app);
+                commands::app_close::clear_running(app);
+            }
+        });
 }
 
 /// Store an embedding warning in `AppState` (read by `detection_status`)

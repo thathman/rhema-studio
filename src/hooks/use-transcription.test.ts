@@ -22,6 +22,8 @@ async function loadModules() {
   const transcriptMod = await import("@/stores/transcript-store")
   const settingsMod = await import("@/stores/settings-store")
   const hookMod = await import("./use-transcription")
+  // These tests are about starting and stopping; consent to cloud audio is given here and tested on its own below.
+  settingsMod.useSettingsStore.setState({ cloudSpeechConsentAt: "2026-10-21T00:00:00.000Z" })
   return {
     useTranscriptStore: transcriptMod.useTranscriptStore,
     useSettingsStore: settingsMod.useSettingsStore,
@@ -83,7 +85,7 @@ describe("use-transcription", () => {
       )
     })
 
-    it("forwards the OpenAI key when provider is OpenAI Whisper", async () => {
+    it("forwards the OpenAI key when provider is OpenAI transcription", async () => {
       mockInvoke.mockResolvedValue(undefined)
       const { useSettingsStore, transcriptionActions } = await loadModules()
 
@@ -91,6 +93,7 @@ describe("use-transcription", () => {
         sttProvider: "openai",
         openaiApiKey: "sk-test-only",
         speechLanguage: "yo",
+        cloudSpeechConsents: { openai: "2026-10-21T00:00:00.000Z" },
       })
 
       await transcriptionActions.start()
@@ -278,6 +281,64 @@ describe("use-transcription", () => {
       expect(mockToastError).toHaveBeenCalledWith("Transcription error", {
         description: "WebSocket closed unexpectedly",
       })
+    })
+  })
+
+  describe("consent to cloud audio (RG-08)", () => {
+    it("asks before the first cloud session and starts only after agreeing; local recognition needs no consent", async () => {
+      mockInvoke.mockResolvedValue(undefined)
+      const { useSettingsStore, transcriptionActions } = await loadModules()
+      const { useCloudConsentStore } = await import("@/stores/cloud-consent-store")
+      useSettingsStore.setState({ sttProvider: "deepgram", deepgramApiKey: "dg-1234567890", cloudSpeechConsentAt: "" })
+      await transcriptionActions.start()
+      expect(mockInvoke).not.toHaveBeenCalled()
+      expect(useCloudConsentStore.getState().open).toBe(true)
+
+      useSettingsStore.getState().setCloudSpeechConsent("deepgram", true)
+      useCloudConsentStore.getState().onAgree?.()
+      await new Promise((r) => setTimeout(r, 0))
+      expect(mockInvoke).toHaveBeenCalledWith("start_transcription", expect.objectContaining({ provider: "deepgram" }))
+      expect(useCloudConsentStore.getState().runningProvider).toBe("deepgram")
+      useSettingsStore.setState({ sttProvider: "whisper" })
+      expect(useCloudConsentStore.getState().runningProvider).toBe("deepgram") // changing the setting does not change what runs
+      await transcriptionActions.stop()
+      expect(useCloudConsentStore.getState().runningProvider).toBeNull()
+
+      mockInvoke.mockClear()
+      useSettingsStore.setState({ sttProvider: "whisper", cloudSpeechConsentAt: "" })
+      await transcriptionActions.start()
+      expect(mockInvoke).toHaveBeenCalledWith("start_transcription", expect.objectContaining({ provider: "whisper" }))
+    })
+
+    it("asks again when OpenAI has not been consented to, even if Deepgram was", async () => {
+      mockInvoke.mockResolvedValue(undefined)
+      const { useSettingsStore, transcriptionActions } = await loadModules()
+      const { useCloudConsentStore } = await import("@/stores/cloud-consent-store")
+      useSettingsStore.setState({
+        sttProvider: "openai",
+        openaiApiKey: "openai-test-key",
+        cloudSpeechConsentAt: "2026-10-21T00:00:00.000Z",
+        cloudSpeechConsents: { deepgram: "2026-10-21T00:00:00.000Z" },
+      })
+
+      await transcriptionActions.start()
+
+      expect(mockInvoke).not.toHaveBeenCalled()
+      expect(useCloudConsentStore.getState().pendingProvider).toBe("openai")
+
+      useSettingsStore.getState().setCloudSpeechConsent("openai", true)
+      useCloudConsentStore.getState().onAgree?.()
+      await new Promise((r) => setTimeout(r, 0))
+
+      expect(mockInvoke).toHaveBeenCalledWith("start_transcription", expect.objectContaining({
+        provider: "openai",
+        apiKey: "openai-test-key",
+      }))
+      expect(useCloudConsentStore.getState().runningProvider).toBe("openai")
+
+      useSettingsStore.getState().setCloudSpeechConsent("openai", false)
+      await transcriptionActions.stop()
+      expect(useCloudConsentStore.getState().runningProvider).toBeNull()
     })
   })
 })

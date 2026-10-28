@@ -1,3 +1,4 @@
+import { mayLeaveThemeDraft } from "@/lib/theme-draft"
 import { useBroadcastStore, type NewThemeLayoutKind } from "@/stores/broadcast-store"
 import {
   Dialog,
@@ -46,7 +47,8 @@ export function NewThemeDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const handleCreate = (kind: NewThemeLayoutKind) => {
+  const handleCreate = async (kind: NewThemeLayoutKind) => {
+    if (!(await mayLeaveThemeDraft())) return
     useBroadcastStore.getState().createNewTheme(kind)
     onOpenChange(false)
   }

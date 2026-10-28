@@ -1,3 +1,5 @@
+import { outputOnAir } from "@/lib/output-on-air"
+import { resolveMonitorIndex } from "@/lib/monitor-health"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { PlusIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -12,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
+  confirmStart,
   disableOutput,
   enableOutput,
   reconcileOutputStatus,
@@ -21,6 +24,10 @@ import type { BroadcastOutput } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings } from "@/types"
 import { OutputCard } from "./output-card"
 import { OutputEditorDialog } from "./output-editor-dialog"
+import { outputEditPatch } from "@/lib/output-summary"
+import { useShellStore } from "@/studio/shell-store"
+import { useSettingsStore } from "@/stores/settings-store"
+import { capacityLimits, useMachineInfo } from "@/lib/capacity"
 
 const RECONCILE_INTERVAL_MS = 750
 
@@ -60,8 +67,8 @@ export function BroadcastOutputsDialog({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [busyIds, setBusyIds] = useState<string[]>([])
 
-  const fetchMonitors = useCallback(async () => {
-    setMonitorsRefreshing(true)
+  // Returns the monitors; callers set state when it resolves (never synchronously in an effect).
+  const fetchMonitors = useCallback(async (): Promise<Monitor[]> => {
     try {
       const result = await availableMonitors()
       void logInfo(
@@ -69,18 +76,23 @@ export function BroadcastOutputsDialog({
           .map((m) => `${m.name ?? "?"} ${m.size.width}x${m.size.height}`)
           .join(", ")}`,
       )
-      setMonitors(result)
+      return result
     } catch (error) {
       void logError(`[broadcast-ui] availableMonitors FAILED: ${String(error)}`)
       toast.error("Could not list monitors", { description: String(error) })
-      setMonitors([])
-    } finally {
-      setMonitorsRefreshing(false)
+      return []
     }
   }, [])
 
   useEffect(() => {
-    if (open) void fetchMonitors()
+    if (!open) return
+    let cancelled = false
+    void fetchMonitors().then((m) => {
+      if (!cancelled) setMonitors(m)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [open, fetchMonitors])
 
   // Keep the cards in sync with reality: a projector closed at the OS level
@@ -99,6 +111,17 @@ export function BroadcastOutputsDialog({
     return () => clearInterval(intervalId)
   }, [open])
 
+  // "Open output" elsewhere (Design → Used on…, Production → Screens): that output's editor, on top of the grid.
+  const editRequest = useShellStore((s) => s.editOutputRequest)
+  const [seenEditRequest, setSeenEditRequest] = useState(editRequest)
+  if (editRequest !== seenEditRequest) {
+    setSeenEditRequest(editRequest)
+    if (editRequest && outputs.some((o) => o.id === editRequest.id)) {
+      setEditingId(editRequest.id)
+      setEditorOpen(true)
+    }
+  }
+
   const editingOutput = editingId ? outputs.find((o) => o.id === editingId) : undefined
 
   // The draft id doubles as the editor's form identity, so it must stay stable
@@ -113,9 +136,10 @@ export function BroadcastOutputsDialog({
       type: "display",
       themeId: outputs.find((o) => o.id === MAIN_OUTPUT_ID)?.themeId ?? themes[0]?.id ?? "",
       monitorIndex: firstFreeMonitorIndex(outputs, monitors.length),
+      monitorName: monitors[firstFreeMonitorIndex(outputs, monitors.length)]?.name ?? null,
       ndi: defaultNdiSettings(name),
     }
-  }, [draftId, outputs, themes, monitors.length])
+  }, [draftId, outputs, themes, monitors])
 
   const withBusy = async (id: string, action: () => Promise<unknown>) => {
     setBusyIds((ids) => [...ids, id])
@@ -127,33 +151,39 @@ export function BroadcastOutputsDialog({
   }
 
   const handleToggle = (output: BroadcastOutput, enabled: boolean) =>
-    void withBusy(output.id, () => (enabled ? enableOutput(output) : disableOutput(output)))
+    void withBusy(output.id, async () => (enabled ? (await confirmStart(output)) && enableOutput(output) : disableOutput(output)))
 
   const handleRemove = (output: BroadcastOutput) =>
     void withBusy(output.id, async () => {
       // Stop the transport first: close_broadcast_window only hides the window
       // while NDI is still running for that output.
-      await disableOutput(output)
+      // If the sender did not stop, keep the output: removed, nothing could stop it any more.
+      if ((await disableOutput(output)) === false) {
+        toast.error(`${output.name} was not removed`, { description: "Its NDI sender did not stop. Try again, or restart Rhema Studio." })
+        return
+      }
       useBroadcastStore.getState().removeOutput(output.id)
       toast.success(`Removed ${output.name}`)
     })
 
-  const handleEditorSubmit = (next: BroadcastOutput) => {
+  const handleEditorSubmit = (next: BroadcastOutput, options?: { continueSetup?: boolean }) => {
     const store = useBroadcastStore.getState()
     const existing = store.outputs.find((o) => o.id === next.id)
 
     if (!existing) {
       store.addOutput(next)
       setDraftId(crypto.randomUUID())
-      setEditingId(null)
+      setEditingId(options?.continueSetup ? next.id : null)
       return
     }
 
     const status = store.outputStatus[next.id]
-    const wasOnAir = (status?.previewOpen ?? false) || (status?.ndiActive ?? false)
+    const wasOnAir = outputOnAir(existing, status)
     const transportChanged =
       existing.type !== next.type ||
       existing.monitorIndex !== next.monitorIndex ||
+      (existing.windowed === true) !== (next.windowed === true) ||
+      existing.monitorName !== next.monitorName ||
       existing.ndi.sourceName !== next.ndi.sourceName ||
       existing.ndi.resolution !== next.ndi.resolution ||
       existing.ndi.frameRate !== next.ndi.frameRate ||
@@ -161,30 +191,31 @@ export function BroadcastOutputsDialog({
 
     void withBusy(next.id, async () => {
       if (wasOnAir && transportChanged) await disableOutput(existing)
-      useBroadcastStore.getState().updateOutput(next.id, {
-        name: next.name,
-        type: next.type,
-        themeId: next.themeId,
-        monitorIndex: next.monitorIndex,
-        ndi: next.ndi,
-      })
+      useBroadcastStore.getState().updateOutput(next.id, outputEditPatch(next))
       if (wasOnAir && transportChanged) {
         const updated = useBroadcastStore.getState().outputs.find((o) => o.id === next.id)
-        if (updated) await enableOutput(updated)
+        // A new frame rate or type is asked about like turning it on (60 fps on a smaller computer).
+        if (updated && (await confirmStart(updated))) await enableOutput(updated)
+        else if (updated) toast.info(`Saved. ${updated.name} is off: turn it on when you are ready.`)
       }
     })
-    setEditingId(null)
+    setEditingId(options?.continueSetup ? next.id : null)
   }
 
   const monitorLabel = (output: BroadcastOutput) => {
-    const monitor = monitors[output.monitorIndex]
-    if (!monitor) return undefined
-    return `${monitor.name ?? `Display ${output.monitorIndex + 1}`} · ${monitor.size.width}×${monitor.size.height}`
+    const at = resolveMonitorIndex(output, monitors.map((m) => m.name ?? null), outputs.filter((o) => o.type === "display"))
+    const monitor = at === null ? undefined : monitors[at]
+    if (!monitor || at === null) return undefined
+    return `${monitor.name ?? `Display ${at + 1}`} · ${monitor.size.width}×${monitor.size.height}`
   }
+
+  const machine = useMachineInfo()
+  const overrides = useSettingsStore((s) => s.capacityLimits)
+  const limits = capacityLimits(machine, overrides)
 
   const onAirCount = outputs.filter((o) => {
     const status = outputStatus[o.id]
-    return o.type === "display" ? status?.previewOpen : status?.ndiActive
+    return outputOnAir(o, status)
   }).length
 
   return (
@@ -235,7 +266,8 @@ export function BroadcastOutputsDialog({
           </ScrollArea>
 
           <p className="text-xs text-muted-foreground">
-            {onAirCount} of {outputs.length} {outputs.length === 1 ? "output" : "outputs"} on air
+            {onAirCount} of {outputs.length} {outputs.length === 1 ? "output" : "outputs"} on air · this computer suits about {limits.outputs} at once
+            {limits.ndiSenders < limits.outputs ? `, ${limits.ndiSenders} of them NDI` : ""} (Settings → Outputs)
           </p>
         </DialogContent>
       </Dialog>
@@ -250,8 +282,18 @@ export function BroadcastOutputsDialog({
         draft={newOutputDraft}
         monitors={monitors}
         monitorsRefreshing={monitorsRefreshing}
-        onRefreshMonitors={() => void fetchMonitors()}
+        onRefreshMonitors={() => {
+          setMonitorsRefreshing(true)
+          void fetchMonitors().then((m) => {
+            setMonitors(m)
+            setMonitorsRefreshing(false)
+          })
+        }}
         onSubmit={handleEditorSubmit}
+        onToggleOutput={(output, enabled) => {
+          const saved = useBroadcastStore.getState().outputs.find((o) => o.id === output.id)
+          if (saved) handleToggle(saved, enabled)
+        }}
       />
     </>
   )

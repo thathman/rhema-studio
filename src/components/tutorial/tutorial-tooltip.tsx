@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef } from "react"
 import { SparklesIcon, ChevronLeftIcon } from "lucide-react"
 import type { TooltipRenderProps, Controls } from "react-joyride"
 
@@ -17,9 +17,12 @@ export function TutorialTooltip({
   const indexRef = useRef(index)
   const isLastStepRef = useRef(isLastStep)
 
-  controlsRef.current = controls
-  indexRef.current = index
-  isLastStepRef.current = isLastStep
+  // Latest values for the key handler, updated after render (not during it).
+  useLayoutEffect(() => {
+    controlsRef.current = controls
+    indexRef.current = index
+    isLastStepRef.current = isLastStep
+  })
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -50,7 +53,7 @@ export function TutorialTooltip({
     >
       <div className="flex items-center gap-2.5 border-b border-border/40 px-4 pb-3 pt-4">
         <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/15">
-          <SparklesIcon className="size-3.5 text-primary" />
+          <SparklesIcon className="size-3.5 text-primary-text" />
         </div>
         <h3 className="text-sm font-semibold leading-tight tracking-tight text-foreground">
           {step.title ?? `Step ${index + 1}`}
@@ -77,7 +80,7 @@ export function TutorialTooltip({
               }`}
             />
           ))}
-          <span className="ml-1 text-[0.6875rem] tabular-nums text-muted-foreground/50">
+          <span className="ml-1 text-[0.6875rem] tabular-nums text-muted-foreground">
             {index + 1}/{size}
           </span>
         </div>

@@ -96,7 +96,7 @@ export function SurfaceControls({
         <div className="flex flex-col">
           <h4 className="text-xs font-semibold">{title}</h4>
           {description && (
-            <p className="text-[0.625rem] text-muted-foreground">{description}</p>
+            <p className="text-[0.6875rem] text-muted-foreground">{description}</p>
           )}
         </div>
         <input

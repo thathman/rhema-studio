@@ -6,8 +6,49 @@ import {
   renderVerse,
   type VerseLayoutMetrics,
 } from "@/lib/verse-renderer"
-import { seedFreeBoxesFromMetrics, SAMPLE_VERSE } from "@/lib/theme-migrations"
-import { preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
+import { seedFreeBoxesFromMetrics, SAMPLE_VERSE, SAMPLE_BILINGUAL_VERSE, SAMPLE_BILINGUAL_SONG } from "@/lib/theme-migrations"
+import type { VerseRenderData } from "@/types/broadcast"
+
+/** A landscape stand-in for the Picture preview, drawn here (no file, nothing fetched). */
+function drawSamplePicture(): string {
+  if (typeof document === "undefined") return ""
+  const c = document.createElement("canvas")
+  c.width = 1600
+  c.height = 1000
+  const g = c.getContext("2d")
+  if (!g) return ""
+  const sky = g.createLinearGradient(0, 0, 0, 1000)
+  sky.addColorStop(0, "#5b8cc9")
+  sky.addColorStop(1, "#f3c98b")
+  g.fillStyle = sky
+  g.fillRect(0, 0, 1600, 1000)
+  g.fillStyle = "#fff4d6"
+  g.beginPath()
+  g.arc(1150, 330, 110, 0, Math.PI * 2)
+  g.fill()
+  g.fillStyle = "#3d5a3f"
+  g.beginPath()
+  g.moveTo(0, 760); g.lineTo(380, 520); g.lineTo(700, 760); g.lineTo(1050, 470); g.lineTo(1600, 820); g.lineTo(1600, 1000); g.lineTo(0, 1000)
+  g.closePath()
+  g.fill()
+  return c.toDataURL("image/png")
+}
+const SAMPLE_PICTURE_URL = drawSamplePicture()
+
+/** What the Designer preview shows: each kind of content the theme can be used for. */
+export type PreviewSample = "one" | "two" | "song" | "hymn" | "slide" | "picture"
+const PREVIEW_SAMPLES: Record<PreviewSample, VerseRenderData> = {
+  one: { ...SAMPLE_VERSE, content: "bible" },
+  two: { ...SAMPLE_BILINGUAL_VERSE, content: "bible" },
+  song: { ...SAMPLE_BILINGUAL_SONG, content: "song" },
+  hymn: { ...SAMPLE_BILINGUAL_SONG, reference: "Amazing Grace · Verse 1", footer: "Amazing Grace · Hymn Book 245", content: "hymn" },
+  slide: { kind: "slide", reference: "Announcements", segments: [{ text: "Youth meeting, Friday 6 pm. Choir practice, Saturday 4 pm." }], lines: ["Youth meeting · Friday 6 pm", "Choir practice · Saturday 4 pm"], content: "slide" },
+  picture: { kind: "image", reference: "", segments: [], image: { url: SAMPLE_PICTURE_URL, fit: "contain", blur: 0, brightness: 100, tint: null }, content: "picture" },
+}
+const PREVIEW_TABS: ReadonlyArray<readonly [PreviewSample, string]> = [["one", "Bible"], ["two", "Bible · two languages"], ["song", "Song"], ["hymn", "Hymn"], ["slide", "Slide"], ["picture", "Picture"]]
+// Read by the (module-level) redraw; the toolbar sets it and asks for a redraw.
+let previewSample: PreviewSample = "two"
+import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { Button } from "@/components/ui/button"
 import {
   SearchIcon,
@@ -17,6 +58,16 @@ import {
   Grid3X3Icon,
   MaximizeIcon,
 } from "lucide-react"
+import { CONTENT_TYPES } from "@/types/broadcast"
+import { MAIN_OUTPUT_ID } from "@/types"
+import { themeIdFor, withThemeFor } from "@/lib/output-themes"
+import { CONTENT_NAMES } from "@/lib/content-names"
+
+/** The stage colour around the slide, from the theme (sage in light, near-black in dark). */
+function stageColor(): string {
+  if (typeof document === "undefined") return "#e7efeb"
+  return getComputedStyle(document.documentElement).getPropertyValue("--canvas-stage").trim() || "#e7efeb"
+}
 import type { BroadcastTheme } from "@/types"
 
 const WS_WIDTH = 1920
@@ -40,6 +91,7 @@ export function DesignCanvas() {
   const editingThemeId = useBroadcastStore((s) => s.editingThemeId)
   const selectedElement = useBroadcastStore((s) => s.selectedElement)
   const [zoomLevel, setZoomLevel] = useState(0)
+  const [sample, setSample] = useState<PreviewSample>(previewSample)
 
   const resyncLatestTheme = useCallback(() => {
     const latestTheme = latestThemeRef.current
@@ -91,7 +143,7 @@ export function DesignCanvas() {
     if (!canvasElRef.current || !containerRef.current || !editingThemeId) return
 
     const canvas = new fabric.Canvas(canvasElRef.current, {
-      backgroundColor: "#18181b",
+      backgroundColor: stageColor(),
       controlsAboveOverlay: true,
     })
 
@@ -338,28 +390,47 @@ export function DesignCanvas() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Toolbar */}
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border/40 px-3" style={{ background: "#18181b" }}>
-        <Button variant="ghost" size="icon-xs" className="text-muted-foreground">
-          <MousePointer2Icon className="size-3.5" />
-        </Button>
-        <div className="flex items-center gap-1.5 text-[0.625rem] text-muted-foreground">
+      <div className="flex h-14 min-w-0 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-foreground">
+        {/* ponytail: was a button with no action; kept as a decorative mark */}
+        <MousePointer2Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground max-[1400px]:hidden" />
+        <div className="flex shrink-0 items-center gap-1.5 text-[0.6875rem] text-muted-foreground max-[1400px]:hidden">
           <Grid3X3Icon className="size-3" />
           <span>Grid</span>
         </div>
+        {/* Preview content: two languages by default, so second-language styling is visible while editing. */}
+        {/* On a narrow window the chips scroll inside their group rather than past the zoom controls. */}
+        <div role="radiogroup" aria-label="Preview" className="ml-3 flex min-w-0 shrink overflow-x-auto rounded-md border border-border/60 p-0.5 [scrollbar-width:none] max-[1400px]:ml-0">
+          {PREVIEW_TABS.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={sample === value}
+              onClick={() => {
+                previewSample = value
+                setSample(value)
+                resyncLatestTheme()
+                // The stand-in picture loads once; draw again when it is ready.
+                if (value === "picture") void loadThemeImage(SAMPLE_PICTURE_URL).then(() => resyncLatestTheme())
+              }}
+              className={`rounded px-2 py-0.5 text-[0.6875rem] font-medium whitespace-nowrap ${sample === value ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="flex-1" />
-        <Button variant="ghost" size="icon-xs" className="text-muted-foreground">
-          <SearchIcon className="size-3.5" />
-        </Button>
-        <span className="min-w-12 text-center text-[0.625rem] font-medium tabular-nums text-muted-foreground">
+        <SearchIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-12 text-center text-[0.6875rem] font-medium tabular-nums text-muted-foreground">
           {zoomLevel}%
         </span>
-        <Button variant="ghost" size="icon-xs" onClick={zoomOut} className="text-muted-foreground">
+        <Button variant="ghost" size="icon-xs" onClick={zoomOut} aria-label="Zoom out" title="Zoom out" className="text-muted-foreground">
           <MinusIcon className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={zoomIn} className="text-muted-foreground">
+        <Button variant="ghost" size="icon-xs" onClick={zoomIn} aria-label="Zoom in" title="Zoom in" className="text-muted-foreground">
           <PlusIcon className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={autoZoom} className="text-muted-foreground">
+        <Button variant="ghost" size="icon-xs" onClick={autoZoom} aria-label="Fit to window" title="Fit to window" className="text-muted-foreground">
           <MaximizeIcon className="size-3.5" />
         </Button>
       </div>
@@ -368,14 +439,16 @@ export function DesignCanvas() {
       <div ref={containerRef} className="relative min-h-0 flex-1">
         <canvas ref={canvasElRef} />
         {!draftTheme && (
-          <div className="absolute inset-0 flex items-center justify-center" style={{ background: "#18181b" }}>
+          <div className="absolute inset-0 flex items-center justify-center" style={{ background: "var(--canvas-stage)" }}>
             <p className="text-xs text-muted-foreground">Select a theme to begin editing</p>
           </div>
         )}
       </div>
 
+      {editingThemeId && <UseThemeFor themeId={editingThemeId} />}
+
       {/* Status bar */}
-      <div className="flex h-8 shrink-0 items-center border-t border-border/40 px-3 text-[0.5625rem] text-muted-foreground/70" style={{ background: "#18181b" }}>
+      <div className="flex h-8 shrink-0 items-center border-t border-border/40 px-3 text-[0.6875rem] text-muted-foreground bg-card">
         <span>Output: {WS_WIDTH} × {WS_HEIGHT}px</span>
         <span className="mx-2">·</span>
         <span>Zoom: {zoomLevel}%</span>
@@ -384,7 +457,7 @@ export function DesignCanvas() {
         <span className="mx-2">·</span>
         <span>
           {selectedElement ? (
-            <>Editing: <span className="font-medium text-primary">{elementLabel}</span></>
+            <>Editing: <span className="font-medium text-primary-text">{elementLabel}</span></>
           ) : (
             "Click frame to select"
           )}
@@ -533,7 +606,7 @@ function renderThemeBitmap(
   const ctx = offscreen.getContext("2d")
   if (!ctx) return { bitmap: offscreen, metrics: null }
 
-  const metrics = renderVerse(ctx, theme, SAMPLE_VERSE, {
+  const metrics = renderVerse(ctx, theme, PREVIEW_SAMPLES[previewSample], {
     imageCache: themeImageCache(),
   })
   if (theme.background.type === "transparent") {
@@ -541,3 +614,45 @@ function renderThemeBitmap(
   }
   return { bitmap: offscreen, metrics }
 }
+
+/**
+ * Where the theme being edited is used: pick an output, then the kinds of
+ * content that take this theme there (each kind can have its own look).
+ */
+function UseThemeFor({ themeId }: { themeId: string }) {
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const [outputId, setOutputId] = useState(MAIN_OUTPUT_ID)
+  const output = outputs.find((o) => o.id === outputId) ?? outputs[0]
+  if (!output) return null
+  const isMain = output.themeId === themeId
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border/40 px-3 py-2 text-[0.6875rem] bg-card text-foreground" role="group" aria-label="Use this theme for">
+      <span className="text-muted-foreground">Use this theme on</span>
+      <select value={output.id} onChange={(e) => setOutputId(e.target.value)} aria-label="Output" className="h-6 rounded border border-border bg-background px-1.5 text-[0.6875rem]">
+        {outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+      </select>
+      <span className="text-muted-foreground">for</span>
+      {CONTENT_TYPES.map((c) => {
+        const on = themeIdFor(output, c) === themeId
+        const own = !!output.themeFor?.[c]
+        return (
+          <button
+            key={c}
+            type="button"
+            aria-pressed={on}
+            // The output's main theme covers every kind without its own; turning one off there means picking another theme for it in Outputs.
+            disabled={isMain && !own}
+            title={isMain && !own ? `This is ${output.name}'s main theme; ${CONTENT_NAMES[c]} use it unless given their own (Outputs)` : undefined}
+            onClick={() => useBroadcastStore.getState().updateOutput(output.id, { themeFor: withThemeFor(output, c, on ? null : themeId) })}
+            // The canvas bar is always dark: light text in either app theme.
+            className={`inline-flex min-h-6 items-center rounded-full border px-2.5 ${on ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground"} disabled:cursor-default`}
+          >
+            {CONTENT_NAMES[c]}
+          </button>
+        )
+      })}
+      {isMain && <span className="text-muted-foreground">· the main theme of {output.name}</span>}
+    </div>
+  )
+}
+

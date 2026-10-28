@@ -9,6 +9,8 @@ import {
   type RichInlineLine,
 } from "@chenglou/pretext/rich-inline"
 import { imageContentBox } from "@/lib/theme-image-cache"
+import type { LowerThird } from "@/types/broadcast-output"
+import { DEFAULT_LOWER_THIRD_STYLE, layoutLowerThird } from "@/lib/lower-third-style"
 import type {
   BroadcastTheme,
   SurfaceFill,
@@ -16,6 +18,7 @@ import type {
   VerseRenderData,
   RenderOptions,
   VerseTextStyle,
+  ThemeLogo,
 } from "@/types/broadcast"
 
 // Pretext lazily creates one internal measurement context, preferring
@@ -506,6 +509,142 @@ function drawBackground(
  * background and every surface fill, so a picture behaves the same wherever it
  * is used. While the image is still loading a deterministic flat fill stands in.
  */
+export interface LowerThirdDrawOptions {
+  imageCache?: Map<string, HTMLImageElement>
+  /** The style's looping video, where the canvas has one playing. */
+  video?: HTMLVideoElement | null
+  /** Its entrance, 0…1 (1 = fully on). */
+  progress?: number
+  /** Pixels along the bottom to stay above (a ticker there). */
+  reserveBottom?: number
+}
+
+/** Words wrapped to `maxW` at the largest size (down to half) that fits `maxH`; at most three lines. */
+function fitLines(ctx: CanvasRenderingContext2D, text: string, size: number, maxW: number, maxH: number, font: (px: number) => string): { lines: string[]; size: number } {
+  let best = { lines: [text], size }
+  for (let px = size; px >= size * 0.5; px = Math.floor(px * 0.9)) {
+    ctx.font = font(px)
+    const lines: string[] = []
+    for (const para of text.split("\n")) {
+      let line = ""
+      for (const word of para.split(/\s+/).filter(Boolean)) {
+        const next = line ? `${line} ${word}` : word
+        if (line && ctx.measureText(next).width > maxW) {
+          lines.push(line)
+          line = word
+        } else line = next
+      }
+      if (line) lines.push(line)
+    }
+    best = { lines, size: px }
+    if (lines.length <= 3 && lines.length * px * 1.15 <= maxH) return best
+  }
+  return { lines: best.lines.slice(0, 3), size: best.size }
+}
+
+/**
+ * The lower third: a band near the bottom with a bold first line and a lighter
+ * second, laid out by its style (the classic dark band without one). Drawn
+ * last, over anything, including a transparent (OBS-keyed) frame.
+ */
+export function drawLowerThird(ctx: CanvasRenderingContext2D, width: number, height: number, lt: LowerThird, fontFamily?: string, opts: LowerThirdDrawOptions = {}): void {
+  const style = lt.style ?? DEFAULT_LOWER_THIRD_STYLE
+  const fam = style.fontFamily ?? fontFamily
+  // Quoted: a family like "Source Serif 4 Variable" makes an unquoted font shorthand invalid, and the canvas ignores it.
+  const family = fam ? `"${fam.replace(/"/g, "")}", system-ui, sans-serif` : "system-ui, sans-serif"
+  const measure = (text: string, size: number, weight: number) => {
+    ctx.font = `${weight} ${size}px ${family}`
+    return Math.max(...text.split("\n").map((t) => ctx.measureText(t).width))
+  }
+  const layout = layoutLowerThird(width, height, lt, style, measure, opts.reserveBottom)
+  const { band } = layout
+  const progress = opts.progress ?? 1
+  ctx.save()
+  // Its entrance: fading in, or rising from below as it fades.
+  ctx.globalAlpha = progress
+  if (style.animation === "slide") ctx.translate(0, (1 - progress) * (band.h * 0.6))
+  const radius = Math.round((band.h * style.radius) / 100)
+  const bg = style.background
+  roundRect(ctx, band.x, band.y, band.w, band.h, Math.min(radius, band.h / 2, band.w / 2))
+  ctx.save()
+  ctx.clip()
+  const img = lt.backing?.kind === "picture" ? opts.imageCache?.get(lt.backing.url) : undefined
+  const video = lt.backing?.kind === "video" && opts.video && opts.video.readyState >= 2 ? opts.video : null
+  const rect = { x: band.x, y: band.y, width: band.w, height: band.h }
+  if (video) drawVideoFrame(ctx, video, rect, "cover")
+  else if (img) {
+    const scale = Math.max(band.w / img.naturalWidth, band.h / img.naturalHeight)
+    ctx.drawImage(img, band.x + (band.w - img.naturalWidth * scale) / 2, band.y + (band.h - img.naturalHeight * scale) / 2, img.naturalWidth * scale, img.naturalHeight * scale)
+  }
+  // The colour lies over a picture or video as a shade (its opacity), or is the band itself.
+  if (bg.kind !== "none" && (bg.kind === "color" || video || img || lt.backing)) {
+    ctx.globalAlpha = progress * bg.opacity
+    ctx.fillStyle = bg.color
+    ctx.fillRect(band.x, band.y, band.w, band.h)
+    ctx.globalAlpha = progress
+  }
+  ctx.restore()
+  if (layout.accent) {
+    ctx.fillStyle = style.accent.color
+    ctx.fillRect(layout.accent.x, layout.accent.y, layout.accent.w, layout.accent.h)
+  }
+  ctx.textBaseline = "middle"
+  const l1 = layout.line1
+  const t1 = style.line1.uppercase ? lt.line1.toUpperCase() : lt.line1
+  const font1 = (px: number) => `${style.line1.weight} ${px}px ${family}`
+  const room = band.h * (layout.line2 ? 0.58 : 0.82)
+  const fit = fitLines(ctx, t1, l1.size, l1.maxW, room, font1)
+  ctx.font = font1(fit.size)
+  ctx.textAlign = l1.align
+  ctx.fillStyle = style.line1.color
+  const lh = fit.size * 1.15
+  // A wrapped first line stays centred on its place (and above the second line).
+  const top = layout.line2 ? Math.min(l1.y - ((fit.lines.length - 1) * lh) / 2, layout.line2.y - layout.line2.size * 0.7 - (fit.lines.length - 0.5) * lh) : l1.y - ((fit.lines.length - 1) * lh) / 2
+  fit.lines.forEach((line, i) => ctx.fillText(line, l1.x, Math.max(band.y + lh / 2, top + i * lh), l1.maxW))
+  if (layout.line2) {
+    ctx.font = `${style.line2.weight} ${layout.line2.size}px ${family}`
+    ctx.fillStyle = style.line2.color
+    ctx.fillText(lt.line2, layout.line2.x, layout.line2.y, layout.line2.maxW)
+  }
+  ctx.restore()
+}
+
+/** Draw a video frame into `rect` with the item's fit (cover crops, contain letterboxes, stretch fills). */
+function drawVideoFrame(ctx: CanvasRenderingContext2D, el: HTMLVideoElement, rect: VerseLayoutRect, fit: "cover" | "contain" | "stretch"): void {
+  const vw = el.videoWidth
+  const vh = el.videoHeight
+  if (fit === "stretch") {
+    ctx.drawImage(el, rect.x, rect.y, rect.width, rect.height)
+    return
+  }
+  const scale = fit === "cover" ? Math.max(rect.width / vw, rect.height / vh) : Math.min(rect.width / vw, rect.height / vh)
+  const w = vw * scale
+  const h = vh * scale
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(rect.x, rect.y, rect.width, rect.height)
+  ctx.clip()
+  if (fit === "contain") {
+    ctx.fillStyle = "#000"
+    ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+  }
+  ctx.drawImage(el, rect.x + (rect.width - w) / 2, rect.y + (rect.height - h) / 2, w, h)
+  ctx.restore()
+}
+
+/** A plain label in the middle of the frame (a video seen from a canvas that cannot play it). */
+function drawMediaLabel(ctx: CanvasRenderingContext2D, rect: VerseLayoutRect, text: string): void {
+  ctx.save()
+  ctx.fillStyle = "rgba(0,0,0,0.55)"
+  ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+  ctx.fillStyle = "#ffffff"
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  ctx.font = `600 ${Math.round(rect.height / 18)}px system-ui, sans-serif`
+  ctx.fillText(text, rect.x + rect.width / 2, rect.y + rect.height / 2, rect.width * 0.9)
+  ctx.restore()
+}
+
 function drawImageFill(
   ctx: CanvasRenderingContext2D,
   image: ThemeImageFill | null,
@@ -694,6 +833,23 @@ function drawVerseText(
   const actualFontSize = scaledFontSize ?? vt.fontSize
   const lineHeightPx = actualFontSize * vt.lineHeight
 
+  if (verse.lines) {
+    const primaryStyle = theme.verseText
+    const secondaryStyle = theme.secondaryVerseText ?? primaryStyle
+    const baseFontSize = scaledFontSize ?? primaryStyle.fontSize
+    const primaryScale = primaryStyle.fontSize > 0 ? baseFontSize / primaryStyle.fontSize : 1
+    let currentY = startY
+    const blocks: Array<[string[], VerseTextStyle]> = [[verse.lines, primaryStyle]]
+    if (verse.secondaryLines?.length) blocks.push([verse.secondaryLines, secondaryStyle])
+    for (const [b, [lines, lineStyle]] of blocks.entries()) {
+      if (b > 0) currentY += languageGapPx(theme, baseFontSize, primaryScale)
+      for (const text of lines) {
+        currentY += drawVerseText(ctx, theme, { reference: verse.reference, segments: [{ text }] }, textRectX, textRectWidth, currentY, lineStyle.fontSize * primaryScale, lineStyle)
+      }
+    }
+    return currentY - startY
+  }
+
   if (verse.translationLines && verse.translationLines.length > 1) {
     const primaryStyle = theme.verseText
     const secondaryStyle = theme.secondaryVerseText ?? primaryStyle
@@ -703,7 +859,7 @@ function drawVerseText(
       : 1
     let currentY = startY
     for (const [index, text] of verse.translationLines.entries()) {
-      if (index > 0) currentY += baseFontSize * primaryStyle.lineHeight
+      if (index > 0) currentY += languageGapPx(theme, baseFontSize, primaryScale)
       const lineStyle = index === 0 ? primaryStyle : secondaryStyle
       const lineFontSize = lineStyle.fontSize * primaryScale
       currentY += drawVerseText(
@@ -820,6 +976,15 @@ function drawVerseText(
   return currentY - startY
 }
 
+/**
+ * Space between the first and second language: the theme's setting (shrunk
+ * with the text when it is fitted smaller), else one line of the first language.
+ */
+export function languageGapPx(theme: BroadcastTheme, baseFontSize: number, primaryScale: number): number {
+  const gap = theme.layout.languageGap
+  return typeof gap === "number" && gap >= 0 ? gap * primaryScale : baseFontSize * theme.verseText.lineHeight
+}
+
 function buildScaledTheme(
   theme: BroadcastTheme,
   scale: number
@@ -828,6 +993,9 @@ function buildScaledTheme(
     ...theme.layout,
     offsetX: theme.layout.offsetX * scale,
     offsetY: theme.layout.offsetY * scale,
+    // Gaps are theme px too: a small preview shrinks them with everything else.
+    ...(typeof theme.layout.referenceGap === "number" ? { referenceGap: theme.layout.referenceGap * scale } : {}),
+    ...(typeof theme.layout.languageGap === "number" ? { languageGap: theme.layout.languageGap * scale } : {}),
     padding: {
       top: theme.layout.padding.top * scale,
       right: theme.layout.padding.right * scale,
@@ -964,7 +1132,9 @@ function calculateScaledFontSize(
   // Binary search for optimal font size
   let low = minFontSize
   let high = originalFontSize
-  let bestFit = originalFontSize
+  // Nothing fits: the smallest size, never the full one (text that cannot fit is clipped least).
+  // (A small preview's theme can be below the floor: then its own size.)
+  let bestFit = Math.min(minFontSize, originalFontSize)
 
   while (low <= high) {
     const mid = Math.floor((low + high) / 2)
@@ -1005,6 +1175,28 @@ export function measureVerseHeight(
   const effectiveFontSize = fontSizeOverride ?? vt.fontSize
   const lineHeightPx = effectiveFontSize * vt.lineHeight
 
+  if (verse.lines) {
+    // Lyrics: every entry is its own line; the second language follows after
+    // one blank line in the secondary style. Same scaling as dual verses.
+    const primaryStyle = theme.verseText
+    const secondaryStyle = theme.secondaryVerseText ?? primaryStyle
+    const baseFontSize = fontSizeOverride ?? primaryStyle.fontSize
+    const primaryScale = primaryStyle.fontSize > 0 ? baseFontSize / primaryStyle.fontSize : 1
+    let height = 0
+    let maxLineWidth = 1
+    const blocks: Array<[string[], VerseTextStyle]> = [[verse.lines, primaryStyle]]
+    if (verse.secondaryLines?.length) blocks.push([verse.secondaryLines, secondaryStyle])
+    for (const [b, [lines, lineStyle]] of blocks.entries()) {
+      if (b > 0) height += languageGapPx(theme, baseFontSize, primaryScale)
+      for (const text of lines) {
+        const m = measureVerseHeight(_ctx, theme, { reference: verse.reference, segments: [{ text }] }, textRectWidth, lineStyle.fontSize * primaryScale, lineStyle)
+        height += m.height
+        maxLineWidth = Math.max(maxLineWidth, m.maxLineWidth)
+      }
+    }
+    return { height, maxLineWidth }
+  }
+
   if (verse.translationLines && verse.translationLines.length > 1) {
     const primaryStyle = theme.verseText
     const secondaryStyle = theme.secondaryVerseText ?? primaryStyle
@@ -1015,7 +1207,7 @@ export function measureVerseHeight(
     let height = 0
     let maxLineWidth = 1
     for (const [index, text] of verse.translationLines.entries()) {
-      if (index > 0) height += baseFontSize * primaryStyle.lineHeight
+      if (index > 0) height += languageGapPx(theme, baseFontSize, primaryScale)
       const lineStyle = index === 0 ? primaryStyle : secondaryStyle
       const lineFontSize = lineStyle.fontSize * primaryScale
       const metrics = measureVerseHeight(
@@ -1144,7 +1336,8 @@ export function computeVerseLayoutMetrics(
   const textRectX = pos.x + pad.left + surfacePad
   const textRectY = pos.y + pad.top + surfacePad
   const textRectW = textAreaW - pad.left - pad.right - surfacePad * 2
-  const textRectH = textAreaH - pad.top - pad.bottom - surfacePad * 2
+  // A song's footer line (title, copyright) has its own strip at the bottom: the words fit above it.
+  const textRectH = textAreaH - pad.top - pad.bottom - surfacePad * 2 - (verse?.footer ? footerSpace(scaledTheme) : 0)
   const textAreaRect: VerseLayoutRect = {
     x: pos.x,
     y: pos.y,
@@ -1474,6 +1667,69 @@ function renderVerseImpl(
   // Draw background
   drawBackground(ctx, scaledTheme, metrics.backgroundRect, options?.imageCache)
 
+  // Whole-frame quick screens without text. Black on a transparent (keyed)
+  // theme means nothing at all, so the stream does not get a black box.
+  if (verse?.screen === "black") {
+    const { width, height } = scaledTheme.resolution
+    if (scaledTheme.background.type === "transparent") ctx.clearRect(0, 0, width, height)
+    else {
+      ctx.fillStyle = "#000"
+      ctx.fillRect(0, 0, width, height)
+    }
+    ctx.restore()
+    return metrics
+  }
+  if (verse?.screen === "logo") {
+    drawCentredLogo(ctx, scaledTheme, options?.imageCache, options?.opacity ?? 1)
+    ctx.restore()
+    return metrics
+  }
+
+  // A video covers the frame: its current frame where this canvas has the
+  // playing element (output windows), else "▶ name" (the main window's monitors).
+  // As a slide's background (words with it) the words are drawn over it, like a picture.
+  if (verse?.video) {
+    const frame = { x: 0, y: 0, width: scaledTheme.resolution.width, height: scaledTheme.resolution.height }
+    const el = options?.video
+    const hasText = Boolean(verse.reference) || Boolean(verse.lines?.length) || verse.segments.some((s) => s.text.trim())
+    const playing = !!el && options?.videoState !== "failed" && el.readyState >= 2 && el.videoWidth > 0 && el.videoHeight > 0
+    if (playing && el) drawVideoFrame(ctx, el, frame, verse.video.fit)
+    // Still loading on an output: the theme background only, never a label on the live screen; never a label under words.
+    else if (options?.videoState !== "loading" && !hasText) drawMediaLabel(ctx, frame, `▶ ${verse.video.name}`)
+    if (!hasText) {
+      ctx.restore()
+      return metrics
+    }
+    const scrim = backgroundScrimAlpha(scaledTheme)
+    if (playing && scrim > 0) {
+      ctx.save()
+      ctx.fillStyle = `rgba(0,0,0,${scrim})`
+      ctx.fillRect(frame.x, frame.y, frame.width, frame.height)
+      ctx.restore()
+    }
+  }
+
+  // A picture item covers the frame; with no text at all, nothing else is drawn.
+  if (verse?.image) {
+    const frame = { x: 0, y: 0, width: scaledTheme.resolution.width, height: scaledTheme.resolution.height }
+    drawImageFill(ctx, verse.image, frame, 0, options?.imageCache)
+    const hasText = Boolean(verse.reference) || Boolean(verse.lines?.length) || verse.segments.some((s) => s.text.trim())
+    if (!hasText) {
+      ctx.restore()
+      return metrics
+    }
+    // Words over a photo: darken it unless the theme already puts a solid plate under the text.
+    const scrim = backgroundScrimAlpha(scaledTheme)
+    if (scrim > 0) {
+      ctx.save()
+      ctx.fillStyle = `rgba(0,0,0,${scrim})`
+      ctx.fillRect(frame.x, frame.y, frame.width, frame.height)
+      ctx.restore()
+    }
+  }
+
+  drawLogo(ctx, scaledTheme, options?.imageCache, options?.opacity ?? 1)
+
   // The container behind the reference + verse block, then each element's own
   // plate on top of it.
   const baseOpacity = options?.opacity ?? 1
@@ -1534,7 +1790,103 @@ function renderVerseImpl(
       referenceRect.y
     )
   }
+  // In the strip kept under the text box for it (free layout: at the bottom of the verse box).
+  if (verse.footer) drawFooter(ctx, scaledTheme, verse.footer, metrics.textRect, metrics.verseBoxRect ? 0 : footerSpace(scaledTheme))
 
   ctx.restore()
   return metrics
+}
+
+/**
+ * How much to darken a background picture so light text stays readable:
+ * nothing when the theme's text box is an opaque plate, a little when it is
+ * translucent, a lot when the words sit straight on the picture. Dark text
+ * themes get no scrim (it would only hurt).
+ */
+export function backgroundScrimAlpha(theme: BroadcastTheme): number {
+  if (!isLightColor(theme.verseText.color)) return 0
+  const box = theme.textBox
+  if (box?.enabled && !box.image) {
+    if (box.opacity >= 0.6) return 0
+    return Math.max(0, 0.45 - box.opacity * 0.5)
+  }
+  return 0.45
+}
+
+function isLightColor(color: string): boolean {
+  const m = color.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  if (!m) return true
+  const hex = m[1].length === 3 ? m[1].split("").map((c) => c + c).join("") : m[1]
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.5
+}
+
+/** Where the logo goes: `size`% of the frame height, 2% margin, aspect from the loaded image (square until it loads). */
+export function logoRect(
+  logo: Pick<ThemeLogo, "corner" | "size">,
+  resolution: { width: number; height: number },
+  aspect = 1
+): VerseLayoutRect {
+  const h = (Math.min(25, Math.max(4, logo.size)) / 100) * resolution.height
+  const w = h * Math.max(0.2, aspect)
+  const m = 0.02 * resolution.height
+  const x = logo.corner.endsWith("left") ? m : resolution.width - m - w
+  const y = logo.corner.startsWith("top") ? m : resolution.height - m - h
+  return { x, y, width: w, height: h }
+}
+
+function drawLogo(ctx: CanvasRenderingContext2D, theme: BroadcastTheme, imageCache: Map<string, HTMLImageElement> | undefined, baseOpacity: number): void {
+  const logo = theme.logo
+  if (!logo?.url) return
+  if (theme.background.type === "transparent" && !logo.showOnTransparent) return
+  const img = imageCache?.get(logo.url)
+  if (!img) return
+  const rect = logoRect(logo, theme.resolution, img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1)
+  ctx.save()
+  ctx.globalAlpha = baseOpacity * Math.min(1, Math.max(0, logo.opacity))
+  ctx.drawImage(img, rect.x, rect.y, rect.width, rect.height)
+  ctx.restore()
+}
+
+/** The theme's logo, large and centred (the Logo quick screen); the background alone when the theme has none. */
+function drawCentredLogo(ctx: CanvasRenderingContext2D, theme: BroadcastTheme, imageCache: Map<string, HTMLImageElement> | undefined, baseOpacity: number): void {
+  const logo = theme.logo
+  if (!logo?.url) return
+  if (theme.background.type === "transparent" && !logo.showOnTransparent) return
+  const img = imageCache?.get(logo.url)
+  if (!img) return
+  const { width, height } = theme.resolution
+  const aspect = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1
+  let h = height * 0.4
+  let w = h * aspect
+  if (w > width * 0.7) {
+    w = width * 0.7
+    h = w / aspect
+  }
+  ctx.save()
+  ctx.globalAlpha = baseOpacity
+  ctx.drawImage(img, (width - w) / 2, (height - h) / 2, w, h)
+  ctx.restore()
+}
+
+/** Copyright line: reference style at 40% size, bottom of the text area. */
+const footerSize = (theme: BroadcastTheme) => Math.max(10, theme.reference.fontSize * 0.4)
+/** Height kept under the words for a footer line. */
+const footerSpace = (theme: BroadcastTheme) => footerSize(theme) * 1.6
+
+function drawFooter(ctx: CanvasRenderingContext2D, theme: BroadcastTheme, text: string, rect: VerseLayoutRect, below: number): void {
+  const ref = theme.reference
+  const size = footerSize(theme)
+  ctx.save()
+  ctx.font = `${ref.fontWeight} ${size}px "${ref.fontFamily}", sans-serif`
+  ctx.fillStyle = ref.color
+  ctx.globalAlpha *= 0.8
+  ctx.textBaseline = "bottom"
+  ctx.textAlign = "center"
+  let line = text
+  while (line.length > 8 && ctx.measureText(line).width > rect.width) line = `${line.slice(0, -4).trimEnd()}…`
+  ctx.fillText(line, rect.x + rect.width / 2, rect.y + rect.height + below)
+  ctx.restore()
 }

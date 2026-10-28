@@ -1,152 +1,105 @@
-import { useEffect } from "react"
+import { PauseIcon, PlayIcon } from "lucide-react"
 import { PanelHeader } from "@/components/ui/panel-header"
+import { Button } from "@/components/ui/button"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
-import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { useBroadcastStore, useBibleStore } from "@/stores"
-import {
-  getTranslationLabel,
-  presentVerse,
-  toDualVerseRenderData,
-  toVerseRenderData,
-} from "@/hooks/use-broadcast"
-import { bibleActions } from "@/hooks/use-bible"
+import { useBroadcastStore } from "@/stores"
+import { autoModeOf, type AutoMode } from "@/stores/broadcast-store"
+import { LiveSourcesStrip } from "@/studio/present/live-sources-strip"
+import { StatusChip } from "@/studio/ui/status-chip"
 
+/**
+ * What the screens show. The transport is the only ordinary place to Take or
+ * Clear live; this panel reports Program status and offers its scoped controls.
+ */
 export function LiveOutputPanel() {
   const isLive = useBroadcastStore((s) => s.isLive)
-  const autoLive = useBroadcastStore((s) => s.autoLive)
+  const rehearsal = useBroadcastStore((s) => s.rehearsal)
+  const autoMode = useBroadcastStore(autoModeOf)
   const liveVerse = useBroadcastStore((s) => s.liveVerse)
   const themes = useBroadcastStore((s) => s.themes)
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
-  const activeTranslationId = useBibleStore((s) => s.activeTranslationId)
-  const secondaryTranslationId = useBibleStore((s) => s.secondaryTranslationId)
 
   const activeTheme = themes.find((t) => t.id === activeThemeId) ?? themes[0]
 
   // The live output renders only what was explicitly presented — it no longer
   // follows the preview selection, so detections can't override the operator.
   const verseData = isLive ? liveVerse : null
+  // A video item on air can be paused and resumed on every screen (MD-002, #36).
+  const video = isLive && liveVerse?.content === "picture" ? liveVerse.video : undefined
 
-  // Refetch the live verse when the translation changes so the live output
-  // text follows the new translation. Updates the live output only — the
-  // preview keeps whatever the operator is browsing.
-  useEffect(() => {
-    const source = useBroadcastStore.getState().liveSourceVerse
-    if (!source) return
-    const ids = [
-      activeTranslationId,
-      ...(secondaryTranslationId !== null &&
-      secondaryTranslationId !== activeTranslationId
-        ? [secondaryTranslationId]
-        : []),
-    ]
-    void Promise.all(
-      ids.map((id) =>
-        bibleActions.fetchVerse(
-          source.book_number,
-          source.chapter,
-          source.verse,
-          id
-        )
-      )
-    )
-      .then((verses) => {
-        const primary = verses[0]
-        if (!primary?.text?.trim()) return
-        const entries = verses
-          .map((verse, index) => {
-            if (!verse?.text?.trim()) return null
-            return {
-              verse,
-              translation: getTranslationLabel(
-                ids[index],
-                index === 0 ? "KJV" : "Translation"
-              ),
-            }
-          })
-          .filter(
-            (
-              entry
-            ): entry is {
-              verse: NonNullable<typeof primary>
-              translation: string
-            } => entry !== null
-          )
-        useBroadcastStore
-          .getState()
-          .setLiveVerse(
-            entries.length > 1
-              ? toDualVerseRenderData(entries)
-              : toVerseRenderData(primary, entries[0]?.translation ?? "KJV"),
-            primary
-          )
-      })
-      .catch(() => {})
-  }, [activeTranslationId, secondaryTranslationId])
-
-  const handleGoLive = (checked: boolean) => {
-    useBroadcastStore.getState().setLive(checked)
-    // Going live with nothing presented yet: present the current preview
-    // verse so the output isn't blank.
-    if (checked && !useBroadcastStore.getState().liveVerse) {
-      const selected = useBibleStore.getState().selectedVerse
-      if (selected) void presentVerse(selected)
-    }
-  }
+  // Following a translation change on air lives in useLiveTranslationFollow (mounted once).
 
   return (
     <div
       data-slot="live-output-panel"
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card",
-        isLive && "shadow-[inset_0_2px_0_0_rgba(16,185,129,0.3)]"
+        "flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card transition-colors",
+        isLive ? "border-live-pulse/60" : "border-border"
       )}
     >
-      <PanelHeader title="Live display">
+      <PanelHeader title="Program">
+        {video && (
+          <>
+            <Button
+              size="xs"
+              variant="outline"
+              aria-pressed={!!video.paused}
+              title={video.paused ? `Carry on playing ${video.name} from where it stopped` : `Hold ${video.name} on this frame on every screen, NDI and feed`}
+              onClick={() => useBroadcastStore.getState().setVideoPaused(!video.paused)}
+            >
+              {video.paused ? <PlayIcon /> : <PauseIcon />}
+              {video.paused ? "Resume video" : "Pause video"}
+            </Button>
+            <span aria-hidden className="mx-2 h-4 w-px bg-border" />
+          </>
+        )}
         <label
           className="flex items-center gap-2"
-          title="When on, detected verses are presented to the live display automatically. Turn off for manual control."
+          title="Auto: On: while on air, a verse heard while listening goes live without Take live (while a song, hymn or slide is up it goes only to the feeds that follow Bible). Bible feeds only: it goes to the feeds that follow Bible and never the main screens. Off (the default): heard verses wait in the preview."
         >
-          <span
-            className={cn(
-              "text-[0.625rem] font-medium tracking-wider uppercase transition-colors",
-              autoLive ? "text-foreground" : "text-muted-foreground"
-            )}
-          >
+          <span className={cn("text-xs font-medium transition-colors", autoMode !== "manual" ? "text-foreground" : "text-muted-foreground")}>
             Auto
           </span>
-          <Switch
-            checked={autoLive}
-            onCheckedChange={(checked) =>
-              useBroadcastStore.getState().setAutoLive(checked)
-            }
-          />
+          <Select value={autoMode} onValueChange={(v) => useBroadcastStore.getState().setAutoMode(v as AutoMode)}>
+            <SelectTrigger size="sm" className="text-xs" aria-label="Auto: where heard verses go by themselves"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="manual">Off</SelectItem>
+              <SelectItem value="bible">Bible feeds only</SelectItem>
+              <SelectItem value="auto">On</SelectItem>
+            </SelectContent>
+          </Select>
         </label>
-        <label className="ml-2 flex items-center gap-2">
-          <span
-            className={cn(
-              "text-[0.625rem] font-medium tracking-wider uppercase transition-colors",
-              isLive ? "text-emerald-400" : "text-muted-foreground"
-            )}
-          >
-            {isLive ? "Live" : "Go live"}
-          </span>
-          <Switch
-            checked={isLive}
-            onCheckedChange={handleGoLive}
-            className="data-[state=checked]:bg-emerald-500"
-          />
-        </label>
+        <span aria-hidden className="mx-2 h-4 w-px bg-border" />
+        <StatusChip
+          tone={!isLive ? "off" : rehearsal ? "warn" : "live"}
+          label={!isLive ? "Off air" : rehearsal ? "Rehearsal" : "On air"}
+          title={!isLive ? "Nothing is on the screens. Take live puts Preview up; Restore brings back what was cleared." : rehearsal ? "Rehearsal: the screens keep what they showed before it." : "On air: the screens show Live. Clear takes it down."}
+          className="h-7 px-2.5"
+        />
       </PanelHeader>
 
       <div
+        data-slot="live-picture"
         className={cn(
-          "flex min-h-0 flex-1 items-center justify-center p-3 transition-opacity",
-          !isLive && "opacity-40"
+          "flex min-h-0 flex-1 items-center justify-center p-3 transition-opacity [container-type:size]",
+          !isLive && liveVerse && "opacity-40"
         )}
       >
-        <CanvasVerse theme={activeTheme} verse={verseData} />
+        <div className="relative" style={{ width: `min(100cqw, 100cqh * ${activeTheme.resolution.width / activeTheme.resolution.height})` }}>
+          <CanvasVerse theme={activeTheme} verse={verseData} />
+          {/* The approved design's empty Program: says so in words rather than a blank screen. On a short
+              panel the words get smaller and the hint goes, so they never spill over the sources below. */}
+          {!isLive && !liveVerse && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 overflow-hidden rounded-md bg-[#16262b] px-2 text-center">
+              <p className="text-lg leading-tight font-semibold tracking-[-0.02em] whitespace-nowrap text-[#d6e2df] [@container(max-height:5.5rem)]:text-sm">Nothing on air</p>
+              <p className="text-xs leading-snug text-[#9fb2b0] [@container(max-height:5.5rem)]:hidden">Select an item, then take it live.</p>
+            </div>
+          )}
+        </div>
       </div>
+      <LiveSourcesStrip />
     </div>
   )
 }

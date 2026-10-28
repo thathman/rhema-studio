@@ -4,21 +4,10 @@ import { LevelMeter } from "@/components/ui/level-meter"
 import { Button } from "@/components/ui/button"
 import { ApiKeyPrompt } from "@/components/ui/api-key-prompt"
 import { MicIcon, MicOffIcon } from "lucide-react"
-import {
-  useAudioStore,
-  useDetectionStore,
-  useQueueStore,
-  useBibleStore,
-  useBroadcastStore,
-  useTranscriptStore,
-} from "@/stores"
-import { useTauriEvent } from "@/hooks/use-tauri-event"
+import { useAudioStore, useTranscriptStore } from "@/stores"
 import { useTranscription } from "@/hooks/use-transcription"
-import { bibleActions } from "@/hooks/use-bible"
-import { presentVerse } from "@/hooks/use-broadcast"
-import { mark, observeLongTasks } from "@/lib/latency-marks"
-import { pickAutoPresentTarget } from "@/lib/auto-present-target"
-import type { DetectionResult, ReadingAdvance } from "@/types"
+import { observeLongTasks } from "@/lib/latency-marks"
+import { cn } from "@/lib/utils"
 
 /**
  * Leaf component that subscribes to the audio level only. Isolated so the
@@ -68,157 +57,6 @@ export function TranscriptPanel() {
   // Latency debugging: surface main-thread stalls in the unified [LAT] log.
   useEffect(() => observeLongTasks(), [])
 
-  useTauriEvent<{ rms: number; peak: number }>("audio_level", (payload) => {
-    useAudioStore.getState().setLevel(payload)
-  })
-
-  // Listen for voice translation commands: "read in NIV", "switch to ESV"
-  useTauriEvent<{ abbreviation: string; translation_id: number }>(
-    "translation_command",
-    (data) => {
-      useBibleStore.getState().setActiveTranslation(data.translation_id)
-      console.log(`[VOICE] Translation switched to ${data.abbreviation}`)
-    }
-  )
-
-  // Listen for detection results from the backend (batch replaces previous detections)
-  useTauriEvent<DetectionResult[]>("verse_detections", (detections) => {
-    mark(
-      `verse_detections received src=${detections[0]?.source ?? "?"} n=${detections.length} first=${detections[0]?.verse_ref ?? ""}`
-    )
-    useDetectionStore.getState().addDetections(detections)
-    mark(`addDetections done src=${detections[0]?.source ?? "?"}`)
-
-    // Auto-navigate book search + select verse for preview/live. Picks the
-    // most confident direct hit and skips operator-dismissed references —
-    // see pickAutoPresentTarget for why.
-    const directHit = pickAutoPresentTarget(detections, (verseRef) =>
-      useDetectionStore.getState().isDismissed(verseRef, "direct")
-    )
-    if (directHit && directHit.book_number > 0) {
-      const detectedVerse = {
-        id: 0,
-        translation_id: useBibleStore.getState().activeTranslationId,
-        book_number: directHit.book_number,
-        book_name: directHit.book_name,
-        book_abbreviation: "",
-        chapter: directHit.chapter,
-        verse: directHit.verse,
-        text: directHit.verse_text,
-      }
-      // Detections always update the preview. They only reach the live
-      // display when auto-live is on — otherwise the operator presents
-      // manually (issue #105).
-      if (useBroadcastStore.getState().autoLive) {
-        void presentVerse(detectedVerse)
-      } else {
-        bibleActions.selectVerse(detectedVerse)
-      }
-      // Navigate book search panel to this verse
-      useBibleStore
-        .getState()
-        .setPendingNavigation({
-          bookNumber: directHit.book_number,
-          chapter: directHit.chapter,
-          verse: directHit.verse,
-        })
-    }
-
-    // Auto-queue high-confidence detections
-    for (const d of detections) {
-      // Check if this detection refines an existing chapter-only queue item
-      if (
-        !d.is_chapter_only &&
-        d.source === "direct" &&
-        useQueueStore
-          .getState()
-          .updateEarlyRef(
-            d.book_number,
-            d.chapter,
-            d.verse,
-            d.verse_ref,
-            d.verse_text,
-          )
-      ) {
-        continue
-      }
-
-      if (d.auto_queued) {
-        const queue = useQueueStore.getState()
-        // For chapter-only detections, match by book+chapter (any verse) to
-        // avoid re-adding "Mark 1:1" when "Mark 1:2" already exists from a
-        // previous chapter-only → refinement cycle.
-        const dupIdx = d.is_chapter_only
-          ? queue.items.findIndex(
-              (i) =>
-                i.verse.book_number === d.book_number &&
-                i.verse.chapter === d.chapter,
-            )
-          : queue.findDuplicate(d.book_number, d.chapter, d.verse)
-        if (dupIdx !== -1) {
-          const existing = queue.items[dupIdx]
-          // Backfill text if the existing item was queued without it
-          // (e.g. an earlier detection emitted with empty verse text).
-          if (!existing.verse.text && d.verse_text) {
-            queue.backfillText(existing.id, d.verse_text)
-          }
-          queue.flashItem(existing.id)
-          if (!d.is_chapter_only) queue.setActive(dupIdx)
-          continue
-        }
-        queue.addItem({
-          id: crypto.randomUUID(),
-          verse: {
-            id: 0,
-            translation_id: useBibleStore.getState().activeTranslationId,
-            book_number: d.book_number,
-            book_name: d.book_name,
-            book_abbreviation: "",
-            chapter: d.chapter,
-            verse: d.verse,
-            text: d.verse_text,
-          },
-          reference: d.verse_ref,
-          confidence: d.confidence,
-          source: d.source === "direct" ? "ai-direct" : "ai-semantic",
-          added_at: Date.now(),
-          is_chapter_only: d.is_chapter_only,
-        })
-      }
-    }
-  })
-
-  // Reading mode navigation: auto-navigate book panel when reading mode
-  // advances to a new verse (chapter commands, verse commands, text matching).
-  // Does NOT add to queue — only direct/semantic feed the queue.
-  useTauriEvent<ReadingAdvance>("reading_mode_verse", (advance) => {
-    mark(`reading_mode_verse received ${advance.reference ?? ""}`)
-    if (advance.book_number > 0) {
-      const advanceVerse = {
-        id: 0,
-        translation_id: useBibleStore.getState().activeTranslationId,
-        book_number: advance.book_number,
-        book_name: advance.book_name,
-        book_abbreviation: "",
-        chapter: advance.chapter,
-        verse: advance.verse,
-        text: advance.verse_text,
-      }
-      // Same auto-live gate as detections: preview always follows, the live
-      // display only when the operator allows it (issue #105).
-      if (useBroadcastStore.getState().autoLive) {
-        void presentVerse(advanceVerse)
-      } else {
-        bibleActions.selectVerse(advanceVerse)
-      }
-      useBibleStore.getState().setPendingNavigation({
-        bookNumber: advance.book_number,
-        chapter: advance.chapter,
-        verse: advance.verse,
-      })
-    }
-  })
-
   // Auto-scroll on segment additions. Partial-driven scrolling lives in
   // LivePartialLine so the panel doesn't re-render per audio tick.
   useEffect(() => {
@@ -232,26 +70,41 @@ export function TranscriptPanel() {
       data-slot="transcript-panel"
       className="flex flex-col overflow-hidden rounded-lg border border-border bg-card"
     >
-      <PanelHeader
-        title="Live transcript"
-        icon={<MicIcon className="size-3" />}
-      >
-        <div className="flex items-end gap-2 pb-px">
+      <PanelHeader title="Transcript">
+        <div className="flex items-center gap-2">
           {isTranscribing && (
             <span
-              className={`mb-1 size-1.5 rounded-full ${
+              aria-hidden
+              className={cn(
+                "size-1.5 rounded-full",
                 connectionStatus === "connected"
-                  ? "bg-emerald-500"
+                  ? "bg-confidence-high"
                   : connectionStatus === "connecting"
-                    ? "animate-pulse bg-amber-500"
+                    ? "animate-pulse bg-confidence-mid"
                     : connectionStatus === "error"
-                      ? "bg-red-500"
+                      ? "bg-confidence-low"
                       : "bg-muted-foreground/40"
-              }`}
+              )}
               title={connectionStatus}
             />
           )}
           <AudioLevelMeter />
+          {isTranscribing ? (
+            <Button
+              variant="outline"
+              size="xs"
+              className="ml-1 text-destructive hover:text-destructive"
+              onClick={stopTranscription}
+            >
+              <MicOffIcon />
+              Stop listening
+            </Button>
+          ) : (
+            <Button variant="outline" size="xs" className="ml-1" onClick={startTranscription}>
+              <MicIcon />
+              Start listening
+            </Button>
+          )}
         </div>
       </PanelHeader>
 
@@ -260,9 +113,9 @@ export function TranscriptPanel() {
           {/* Faded top gradient */}
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-linear-to-b from-card to-transparent" />
 
-          {segments.length === 0 && !hasPartial && !isTranscribing && (
+          {segments.length === 0 && !hasPartial && (
             <p className="text-sm text-muted-foreground">
-              Click "Start transcribing" to begin
+              {isTranscribing ? "Listening. What the preacher says appears here." : "Start listening to follow the sermon as text."}
             </p>
           )}
 
@@ -290,26 +143,6 @@ export function TranscriptPanel() {
           {/* Partial (in-progress) text rendered by leaf subscriber */}
           <LivePartialLine scrollRef={scrollRef} />
         </div>
-      </div>
-
-      {/* Bottom control */}
-      <div className="flex gap-2 border-t border-border px-3 py-2">
-        {isTranscribing ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            onClick={stopTranscription}
-          >
-            <MicOffIcon className="size-3" />
-            Stop transcribing
-          </Button>
-        ) : (
-          <Button variant="ghost" size="sm" onClick={startTranscription}>
-              <MicIcon className="size-3" />
-            Start transcribing
-          </Button>
-        )}
       </div>
 
       <ApiKeyPrompt

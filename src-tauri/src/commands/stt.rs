@@ -11,6 +11,8 @@ use crate::events::{
     EVENT_AUDIO_SOURCE_RECOVERED, EVENT_TRANSCRIPT_FINAL, EVENT_TRANSCRIPT_PARTIAL,
 };
 use crate::state::AppState;
+use rhema_audio::{AudioConfig, AudioFrame};
+use rhema_stt::{DeepgramClient, SttConfig, SttProvider, TranscriptEvent};
 
 /// Epoch milliseconds — the shared clock for `[LAT]` latency marks. The
 /// frontend logs `Date.now()` through the `ui_mark` command, so backend and
@@ -34,6 +36,10 @@ fn truncate_safe(s: &str, max_bytes: usize) -> &str {
     &s[..end]
 }
 
+fn transcript_log_summary(kind: &str, transcript: &str) -> String {
+    format!("{kind} chars={}", transcript.chars().count())
+}
+
 fn normalize_speech_language(language: Option<String>) -> Result<String, String> {
     let language = language.unwrap_or_else(|| "en".to_string()).to_lowercase();
     match language.as_str() {
@@ -43,8 +49,10 @@ fn normalize_speech_language(language: Option<String>) -> Result<String, String>
         )),
     }
 }
-use rhema_audio::{AudioConfig, AudioFrame};
-use rhema_stt::{DeepgramClient, SttConfig, SttProvider, TranscriptEvent};
+
+/// Which listening session is the current one: a provider from an earlier session that
+/// exits late must not turn off the one started since.
+static STT_SESSION: AtomicU64 = AtomicU64::new(0);
 
 /// Start the full audio-capture-to-transcription pipeline.
 ///
@@ -113,16 +121,16 @@ pub async fn start_transcription(
             }
 
             log::info!(
-                "Starting OpenAI Whisper transcription: language={speech_language}, device_id={device_id:?}"
+                "Starting OpenAI transcription: language={speech_language}, device_id={device_id:?}"
             );
-            Box::new(rhema_stt::OpenAiWhisperProvider::new(
+            Box::new(rhema_stt::OpenAiTranscribeProvider::new(
                 resolved_api_key,
                 Some(speech_language.clone()),
             ))
         }
         #[cfg(not(feature = "openai"))]
         "openai" => {
-            return Err("OpenAI Whisper support was not compiled into this build.".into());
+            return Err("OpenAI transcription support was not compiled into this build.".into());
         }
         #[cfg(feature = "whisper")]
         "whisper" => {
@@ -150,7 +158,7 @@ pub async fn start_transcription(
                         .ok()
                         .filter(|p| p.exists())
                         .ok_or_else(|| {
-                            "Whisper model not found. Run: bun run download:whisper"
+                            "The on-computer speech model is not installed. Choose cloud speech in Settings → Audio, or reinstall Rhema Studio to get the model."
                                 .to_string()
                         })?
                 }
@@ -365,14 +373,43 @@ pub async fn start_transcription(
 
     let conn_active = stt_active.clone();
     let provider_log_name = stt_provider.name().to_string();
+    let session = STT_SESSION.fetch_add(1, Ordering::SeqCst) + 1;
+    let stt_provider: Arc<dyn SttProvider> = Arc::from(stt_provider);
+    let stop_provider = stt_provider.clone();
+    match state.lock() {
+        Ok(mut app_state) => {
+            app_state.stt_provider_stop = Some(Arc::new(move || stop_provider.stop()));
+        }
+        Err(error) => {
+            stt_active.store(false, Ordering::SeqCst);
+            audio_active.store(false, Ordering::SeqCst);
+            return Err(format!("Could not save speech stop handler: {error}"));
+        }
+    }
+
+    // Stop reaches the provider itself (it may be retrying a connection, not reading audio).
+    let watched = stt_provider.clone();
+    let watch_active = stt_active.clone();
+    tauri::async_runtime::spawn(async move {
+        while watch_active.load(Ordering::SeqCst) && STT_SESSION.load(Ordering::SeqCst) == session {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        watched.stop();
+    });
 
     // Task A: run the STT provider (Deepgram WS+REST or Whisper local).
+    let provider_state = app.clone();
     tauri::async_runtime::spawn(async move {
         let result = stt_provider.start(audio_send_rx, event_tx).await;
         if let Err(e) = result {
             log::error!("[STT-{provider_log_name}] Provider failed: {e}");
         }
-        conn_active.store(false, Ordering::SeqCst);
+        if STT_SESSION.load(Ordering::SeqCst) == session {
+            conn_active.store(false, Ordering::SeqCst);
+            if let Ok(mut app_state) = provider_state.state::<Mutex<AppState>>().lock() {
+                app_state.stt_provider_stop = None;
+            }
+        }
         log::info!("[STT-{provider_log_name}] Provider task exited");
     });
 
@@ -426,9 +463,9 @@ pub async fn start_transcription(
             let app_clone = det_app.clone();
             let _ = tokio::task::spawn_blocking(move || {
                 log::info!(
-                    "[LAT] worker start t={} final={is_final} {:?}",
+                    "[LAT] worker start t={} final={is_final} {}",
                     epoch_ms(),
-                    truncate_safe(&transcript, 40)
+                    transcript_log_summary("transcript", &transcript)
                 );
                 let direct_found = run_direct_detection(&app_clone, &transcript);
                 if !is_final {
@@ -458,7 +495,11 @@ pub async fn start_transcription(
                 TranscriptEvent::Partial { transcript, .. } => {
                     if !transcript.is_empty() {
                         let t0 = std::time::Instant::now();
-                        log::info!("[LAT] partial t={} {:?}", epoch_ms(), truncate_safe(&transcript, 60));
+                        log::info!(
+                            "[LAT] partial t={} {}",
+                            epoch_ms(),
+                            transcript_log_summary("transcript", &transcript)
+                        );
                         let _ = event_app.emit(
                             EVENT_TRANSCRIPT_PARTIAL,
                             TranscriptPayload {
@@ -488,7 +529,11 @@ pub async fn start_transcription(
                 } => {
                     if !transcript.is_empty() {
                         let t0 = std::time::Instant::now();
-                        log::info!("[LAT] final t={} {:?}", epoch_ms(), truncate_safe(&transcript, 60));
+                        log::info!(
+                            "[LAT] final t={} {}",
+                            epoch_ms(),
+                            transcript_log_summary("transcript", &transcript)
+                        );
                         // Emit as permanent transcript segment IMMEDIATELY
                         // (never blocked by detection work)
                         let _ = event_app.emit(
@@ -526,7 +571,11 @@ pub async fn start_transcription(
                             }
                         }
 
-                        log::debug!("[EVT] Final processed in {:?} ({:?})", t0.elapsed(), truncate_safe(&transcript, 40));
+                        log::debug!(
+                            "[EVT] Final processed in {:?} ({})",
+                            t0.elapsed(),
+                            transcript_log_summary("transcript", &transcript)
+                        );
                     }
                 }
                 TranscriptEvent::UtteranceEnd => {}
@@ -645,7 +694,11 @@ fn run_direct_detection(app: &AppHandle, transcript: &str) -> bool {
         results.first().map_or("", |r| r.verse_ref.as_str())
     );
     let _ = app.emit("verse_detections", &results);
-    log::info!("[DET-DIRECT] Detection took {:?} for {:?}", t0.elapsed(), truncate_safe(transcript, 50));
+    log::info!(
+        "[DET-DIRECT] Detection took {:?} for {}",
+        t0.elapsed(),
+        transcript_log_summary("transcript", transcript)
+    );
     has_high_confidence
 }
 
@@ -654,7 +707,10 @@ fn run_direct_detection(app: &AppHandle, transcript: &str) -> bool {
 /// verse references; ONNX can be re-enabled later with parallelized vector search.
 fn run_semantic_detection(app: &AppHandle, transcript: &str) {
     let t0 = std::time::Instant::now();
-    log::info!("[DET-SEMANTIC] Running on: {:?}", truncate_safe(transcript, 80));
+    log::info!(
+        "[DET-SEMANTIC] Running on {}",
+        transcript_log_summary("transcript", transcript)
+    );
 
     // FTS5 BM25 phrase search (~5ms)
     let fts_results = {
@@ -883,7 +939,10 @@ fn check_reading_mode(app: &AppHandle, transcript: &str, direct_found: bool) -> 
             if !rm.is_active() && !rm.has_verses() {
                 None
             } else {
-                log::info!("[READING] Checking chapter command for: {:?}", transcript);
+                log::info!(
+                    "[READING] Checking chapter command: {}",
+                    transcript_log_summary("transcript", transcript)
+                );
                 rm.check_chapter_command(transcript)
             }
         };
@@ -1023,7 +1082,7 @@ fn check_translation_command(app: &AppHandle, transcript: &str) {
 pub fn stop_transcription(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<(), String> {
-    let app_state = state.lock().map_err(|e| e.to_string())?;
+    let mut app_state = state.lock().map_err(|e| e.to_string())?;
 
     if !app_state.stt_active.load(Ordering::Relaxed) {
         return Err("Transcription is not running".into());
@@ -1032,7 +1091,24 @@ pub fn stop_transcription(
     // Setting these flags causes the background threads/tasks to exit.
     app_state.stt_active.store(false, Ordering::SeqCst);
     app_state.audio_active.store(false, Ordering::SeqCst);
+    if let Some(stop_provider) = app_state.stt_provider_stop.take() {
+        stop_provider();
+    }
 
     log::info!("Transcription stop requested");
     Ok(())
+}
+
+#[cfg(test)]
+mod transcript_log_privacy_tests {
+    use super::transcript_log_summary;
+
+    #[test]
+    fn diagnostic_transcript_summary_contains_no_transcript_text() {
+        let transcript = "private marker 8f41 Romans chapter 8 verse 28";
+        let summary = transcript_log_summary("final", transcript);
+        assert_eq!(summary, "final chars=45");
+        assert!(!summary.contains("private marker"));
+        assert!(!summary.contains("Romans"));
+    }
 }
