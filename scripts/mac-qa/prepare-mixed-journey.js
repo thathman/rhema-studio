@@ -417,6 +417,7 @@ async function runScenario() {
 
     const scriptureEvent = await addEvent("Bible", "Scripture", 7)
     await clickButton("Edit event: Scripture")
+    await clickTab("Content")
     await clickButton("Add content to Scripture")
     await setInput('input[aria-label="Quick find"]', "John 3 16")
     const verseRow = await waitFor(
@@ -438,6 +439,7 @@ async function runScenario() {
 
     const announcementEvent = await addEvent("Announcement", "Announcements", 4)
     await clickButton("Edit event: Announcements")
+    await clickTab("Content")
     await clickButton("Add content to Announcements")
     await clickButton("Slides")
     await setInput('[aria-label="Slide title"]', "QA Announcements")
@@ -455,6 +457,7 @@ async function runScenario() {
 
     const mediaEvent = await addEvent("Media / Slide", "Media", 5)
     await clickButton("Edit event: Media")
+    await clickTab("Content")
     await clickButton("Add content to Media")
     await clickButton("Pictures")
     const soundRow = await waitFor(
