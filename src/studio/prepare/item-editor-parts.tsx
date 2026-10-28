@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from "react"
-import { ImageIcon, MessageSquareIcon, PinIcon, StickyNoteIcon, Volume2Icon, XIcon } from "lucide-react"
-import { cleanComments, commentKey, MAX_COMMENTS } from "@/lib/comments"
+import { ImageIcon, MessageSquareIcon, MusicIcon, PinIcon, StickyNoteIcon, Volume2Icon, XIcon } from "lucide-react"
+import { canDeleteComment, cleanComments, commentDeleted, commentKey, MAX_COMMENTS, MAX_COMMENT_HISTORY, tombstoneComment } from "@/lib/comments"
 import { itemAssignees, knownPeople, MAX_ASSIGNEES, withAssignees } from "@/lib/assignees"
 import { useSettingsStore } from "@/stores/settings-store"
 import { Input } from "@/components/ui/input"
@@ -14,7 +14,7 @@ import { useMediaStore } from "@/stores/media-store"
 import { useSlideStore } from "@/stores/slide-store"
 import { useShellStore } from "@/studio/shell-store"
 
-import { CUE_TRIGGERS, GO_LIVE_CUES, ITEM_CUE_DOES, isImageItem, isSlideItem, isSongItem, isVerseItem, type CueQueueItem, type CueTrigger, type GoLiveCue, type ImageQueueItem, type ItemCue, type ItemCueDo, type QueueItem, type SlideQueueItem, type SongQueueItem, type TakeStep } from "@/types"
+import { CUE_TRIGGERS, GO_LIVE_CUES, ITEM_CUE_DOES, isAudioItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type AudioQueueItem, type CueQueueItem, type CueTrigger, type GoLiveCue, type ImageQueueItem, type ItemCue, type ItemCueDo, type QueueItem, type SlideQueueItem, type SongQueueItem, type TakeStep } from "@/types"
 import { CUE_DO_LABEL, cueTakesText, MAX_ITEM_CUES, TRIGGER_LABEL } from "@/lib/item-cues"
 import { useSongApproval, useSongPins } from "@/stores/song-pins-store"
 import { CUE_ACTIONS, takeImpact } from "@/lib/cues"
@@ -50,6 +50,53 @@ export function ImageItemControls({ item }: { item: ImageQueueItem }) {
           <SelectItem value="stretch">Stretch</SelectItem>
         </SelectContent>
       </Select>
+    </div>
+  )
+}
+
+/** Prepare-only settings for a local audio cue; none of these controls changes a screen. */
+export function AudioItemControls({ item }: { item: AudioQueueItem }) {
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
+  useEffect(() => {
+    const md = navigator.mediaDevices
+    if (!md?.enumerateDevices) return
+    let active = true
+    const refresh = () => void md.enumerateDevices().then((list) => { if (active) setDevices(list.filter((d) => d.kind === "audiooutput" && d.deviceId && d.deviceId !== "default")) }).catch(() => {})
+    refresh()
+    md.addEventListener?.("devicechange", refresh)
+    return () => { active = false; md.removeEventListener?.("devicechange", refresh) }
+  }, [])
+  const setAudio = (patch: Partial<AudioQueueItem["audio"]>) => useQueueStore.getState().updateItem(item.id, (i) => (isAudioItem(i) ? { ...i, audio: { ...i.audio, ...patch } } : i))
+  const output = item.audio.output_device_id ?? "__system"
+  const outputName = devices.find((d) => d.deviceId === item.audio.output_device_id)?.label
+  return (
+    <div className="ml-7 flex flex-col gap-2 py-2 pl-2 text-xs">
+      <p className="flex items-center gap-1.5 text-muted-foreground"><MusicIcon className="size-3.5" /> Local audio cue · congregation and OBS screens stay unchanged.</p>
+      <label className="flex flex-wrap items-center gap-2">
+        <span className="w-24">Play through</span>
+        <Select value={output} onValueChange={(value) => setAudio({ output_device_id: value === "__system" ? undefined : value })}>
+          <SelectTrigger className="h-7 min-w-48 max-w-72 text-xs" aria-label="Audio cue output"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__system">This computer’s default output</SelectItem>
+            {devices.map((device) => <SelectItem key={device.deviceId} value={device.deviceId}>{device.label || "Audio output"}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {item.audio.output_device_id && !outputName && <span className="text-confidence-mid">Saved output unavailable; playback will use the system default.</span>}
+      </label>
+      <label className="flex max-w-md items-center gap-2">
+        <span className="w-24">Cue volume</span>
+        <input aria-label="Audio cue volume" type="range" min={0} max={1} step={0.05} value={item.audio.volume ?? 1} onChange={(e) => setAudio({ volume: Number(e.target.value) })} className="flex-1" />
+        <span className="w-9 text-right tabular-nums">{Math.round((item.audio.volume ?? 1) * 100)}%</span>
+      </label>
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-1.5"><input type="checkbox" checked={item.audio.loop === true} onChange={(e) => setAudio({ loop: e.target.checked })} /> Repeat until stopped</label>
+        <label className="flex items-center gap-2">Fade in
+          <input aria-label="Audio fade in seconds" type="number" min={0} max={30} step={0.5} value={(item.audio.fade_in_ms ?? 0) / 1000} onChange={(e) => setAudio({ fade_in_ms: Math.max(0, Math.min(30, Number(e.target.value) || 0)) * 1000 })} className="h-7 w-16 rounded border border-input bg-card px-2 tabular-nums" /> s
+        </label>
+        <label className="flex items-center gap-2">Fade out on next item
+          <input aria-label="Audio fade out seconds" type="number" min={0} max={30} step={0.5} value={(item.audio.fade_out_ms ?? 0) / 1000} onChange={(e) => setAudio({ fade_out_ms: Math.max(0, Math.min(30, Number(e.target.value) || 0)) * 1000 })} className="h-7 w-16 rounded border border-input bg-card px-2 tabular-nums" /> s
+        </label>
+      </div>
     </div>
   )
 }
@@ -247,33 +294,38 @@ function StartRule({ item }: { item: QueueItem }) {
 export function CommentsEditor({ item }: { item: QueueItem }) {
   const [draft, setDraft] = useState("")
   const me = useSettingsStore((s) => s.operatorName.trim())
-  const comments = item.comments ?? []
+  const currentItem = useQueueStore((s) => s.items.find((i) => i.id === item.id))
+  const comments = cleanComments((currentItem ?? item).comments ?? [])
+  const activeComments = comments.filter((c) => !commentDeleted(c)).length
   const add = () => {
-    if (comments.length >= MAX_COMMENTS) return // never push the oldest out
-    const next = cleanComments([...comments, { by: me || "Unnamed", at: new Date().toISOString(), text: draft }])
+    if (!me || activeComments >= MAX_COMMENTS || comments.length >= MAX_COMMENT_HISTORY) return
+    const next = cleanComments([...comments, { id: crypto.randomUUID(), by: me, at: new Date().toISOString(), text: draft }])
     if (next.length === comments.length) return // nothing left after cleaning
     // Written here, so already read here (also when no name is set).
     useSettingsStore.getState().markCommentsSeen([commentKey(next[next.length - 1])])
     useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, comments: next }))
     setDraft("")
   }
-  const remove = (index: number) =>
+  const remove = (id: string) =>
     useQueueStore.getState().updateItem(item.id, (i) => {
-      const left = (i.comments ?? []).filter((_, k) => k !== index)
-      return { ...i, comments: left.length ? left : null }
+      const comments = cleanComments(i.comments ?? [])
+      const comment = comments.find((c) => c.id === id)
+      if (!comment || !canDeleteComment(comment, useSettingsStore.getState().operatorName)) return i
+      const tombstone = tombstoneComment(comment, useSettingsStore.getState().operatorName)
+      if (!tombstone) return i
+      return { ...i, comments: comments.map((c) => (c.id === id ? tombstone : c)) }
     })
   return (
     <div className="ml-7 space-y-1 py-1 pl-2 text-xs">
-      {comments.map((c, k) => (
-        <div key={`${c.at}-${k}`} className="flex items-start gap-2 rounded bg-muted/40 px-2 py-1">
+      {comments.map((c) => (
+        <div key={c.id ?? `${c.at}-${c.by}`} className="flex items-start gap-2 rounded bg-muted/40 px-2 py-1">
           <MessageSquareIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden />
           <div className="min-w-0 flex-1">
             <span className="font-medium">{c.by}</span> <span className="text-muted-foreground">{commentTime(c.at)}</span>
             <p className="whitespace-pre-wrap break-words">{c.text}</p>
+            {commentDeleted(c) && <p className="text-muted-foreground">Removed by {c.deleted_by || "unknown operator"}{c.deleted_at ? ` · ${commentTime(c.deleted_at)}` : ""}</p>}
           </div>
-          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={`Remove ${c.by}'s comment`} onClick={() => remove(k)}>
-            <XIcon className="size-3" />
-          </button>
+          {canDeleteComment(c, me) && <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={`Remove ${c.by}'s comment`} onClick={() => remove(c.id ?? "")}><XIcon className="size-3" /></button>}
         </div>
       ))}
       <div className="flex items-center gap-2">
@@ -291,11 +343,12 @@ export function CommentsEditor({ item }: { item: QueueItem }) {
             }
           }}
         />
-        <Button size="sm" variant="outline" className="h-7" disabled={!draft.trim() || comments.length >= MAX_COMMENTS} onClick={add}>
+        <Button size="sm" variant="outline" className="h-7" disabled={!draft.trim() || !me || activeComments >= MAX_COMMENTS || comments.length >= MAX_COMMENT_HISTORY} onClick={add}>
           Comment
         </Button>
       </div>
       {!me && <p className="text-xs text-muted-foreground">Set your name in Team so the team knows who wrote it.</p>}
+      {comments.length >= MAX_COMMENT_HISTORY && <p className="text-xs text-muted-foreground">This thread has reached its retained history limit. Keep this service copy as its audit record.</p>}
     </div>
   )
 }

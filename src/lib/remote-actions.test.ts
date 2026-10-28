@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { ImageQueueItem, QueueItem, SlideQueueItem, Verse } from "@/types"
+import type { AudioQueueItem, QueueItem, SlideQueueItem, Verse } from "@/types"
 
 const mockInvoke = vi.fn()
 
@@ -63,6 +63,7 @@ beforeEach(() => {
   useBibleStore.setState({
     selectedVerse: null,
     selectedSlide: null,
+    selectedQueueItemId: null,
     pendingNavigation: null,
     activeTranslationId: 1,
     secondaryTranslationId: null,
@@ -153,11 +154,11 @@ describe("remoteActions.sendToLive", () => {
     expect(mockInvoke).not.toHaveBeenCalledWith("get_verse", expect.anything())
   })
 
-  it("does not require approval to Send to Live for a sound item", async () => {
-    const audio: ImageQueueItem = {
+  it("does not require approval to Send to Live for a typed audio item", async () => {
+    const audio: AudioQueueItem = {
       id: "audio",
-      kind: "image",
-      image: { media_id: "walkin", name: "Walk-in", fit: "cover" },
+      kind: "audio",
+      audio: { media_id: "walkin", name: "Walk-in" },
       reference: "Walk-in",
       confidence: 1,
       source: "manual",
@@ -200,6 +201,52 @@ describe("remoteActions.sendToLive", () => {
     expect(useBroadcastStore.getState().isLive).toBe(false)
     expect(useBroadcastStore.getState().sources.bible).toMatchObject({ on: true, itemId: item.id })
     expect(useTakeAttemptStore.getState().attempts.at(-1)).toMatchObject({ itemId: item.id, status: "succeeded" })
+  })
+
+  it("takes the selected occurrence when the same Scripture appears twice", async () => {
+    const prayer = { ...queueItemFor(johnThreeSixteen), id: "prayer-reading", notes: "Opening prayer" }
+    const sermon = { ...queueItemFor(johnThreeSixteen), id: "sermon-reading", notes: "Sermon" }
+    useQueueStore.setState({ items: [prayer, sermon], activeIndex: null })
+    useBibleStore.setState({ selectedVerse: johnThreeSixteen, selectedQueueItemId: sermon.id })
+
+    await remoteActions.sendToLive()
+
+    expect(useQueueStore.getState().activeIndex).toBe(1)
+    expect(useBroadcastStore.getState().liveItemId).toBe("sermon-reading")
+  })
+
+  it("does not guess an occurrence when Preview has no selected service item", async () => {
+    const prayer = { ...queueItemFor(johnThreeSixteen), id: "prayer-reading" }
+    const sermon = { ...queueItemFor(johnThreeSixteen), id: "sermon-reading" }
+    useQueueStore.setState({ items: [prayer, sermon], activeIndex: null })
+    useBibleStore.setState({ selectedVerse: johnThreeSixteen, selectedQueueItemId: null })
+
+    await remoteActions.sendToLive()
+
+    expect(useQueueStore.getState().activeIndex).toBeNull()
+    expect(useBroadcastStore.getState().liveItemId).toBeNull()
+  })
+
+  it("does not retry an approval hold after the selected repeated occurrence changes", async () => {
+    const prayer = { ...queueItemFor(johnThreeSixteen), id: "prayer-reading" }
+    const sermon = { ...queueItemFor(johnThreeSixteen), id: "sermon-reading" }
+    useQueueStore.setState({ items: [prayer, sermon], activeIndex: null })
+    useBibleStore.setState({ selectedVerse: johnThreeSixteen, selectedQueueItemId: sermon.id })
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+
+    await remoteActions.sendToLive()
+    expect(useApprovalGateStore.getState().held?.id).toBe("sunday")
+    expect(useTakeAttemptStore.getState().attempts.at(-1)).toMatchObject({ itemId: sermon.id, status: "awaiting_approval" })
+
+    useBibleStore.setState({ selectedQueueItemId: prayer.id })
+    useApprovalGateStore.getState().presentAnyway()
+    await vi.waitFor(() => expect(useTakeAttemptStore.getState().attempts.at(-1)?.status).toBe("superseded"))
+
+    expect(useQueueStore.getState().activeIndex).toBeNull()
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(mockInvoke).not.toHaveBeenCalled()
+    expect(useApprovalGateStore.getState().acknowledged).not.toContain("sunday")
   })
 })
 
@@ -736,8 +783,8 @@ describe("queue position follows successful Takes", () => {
     const previous = queueItemFor(genesisOneOne)
     const soundItem = {
       id: "walk-in",
-      kind: "image",
-      image: { media_id: "audio-walk-in", name: "Walk-in", fit: "cover" },
+      kind: "audio",
+      audio: { media_id: "audio-walk-in", name: "Walk-in" },
       reference: "Walk-in",
       confidence: 1,
       source: "manual",
@@ -774,8 +821,10 @@ describe("queue position follows successful Takes", () => {
 it("Send to Live leaves the active rundown item alone when its selected verse cannot be shown", async () => {
   const previous = queueItemFor(genesisOneOne)
   const selected = { ...johnThreeSixteen, text: "" }
-  useQueueStore.setState({ items: [previous, queueItemFor(selected)], activeIndex: 0 })
-  useBibleStore.setState({ selectedVerse: selected })
+  const firstReading = { ...queueItemFor(selected), id: "prayer-reading" }
+  const selectedReading = { ...queueItemFor(selected), id: "sermon-reading" }
+  useQueueStore.setState({ items: [previous, firstReading, selectedReading], activeIndex: 0 })
+  useBibleStore.setState({ selectedVerse: selected, selectedQueueItemId: selectedReading.id })
   mockInvoke.mockResolvedValue(null)
 
   await remoteActions.sendToLive()
@@ -785,7 +834,7 @@ it("Send to Live leaves the active rundown item alone when its selected verse ca
   expect(useBroadcastStore.getState().presentWarning).toContain("not shown")
   const { buildLiveState } = await import("@/lib/live-state")
   const snapshot = buildLiveState() as ReturnType<typeof buildLiveState> & { takeAttempts?: { itemId: string | null; status: string }[] }
-  expect(snapshot.takeAttempts?.at(-1)).toMatchObject({ itemId: expect.any(String), status: "failed" })
+  expect(snapshot.takeAttempts?.at(-1)).toMatchObject({ itemId: selectedReading.id, status: "failed" })
 })
 
 describe("remoteActions bible navigation", () => {

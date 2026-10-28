@@ -47,7 +47,7 @@ export function AddItems({ className, onSelectAddedItem }: { className?: string;
         <DialogHeader>
           <DialogTitle>{target ? `Add to ${target}` : "Add to the service"}</DialogTitle>
           <DialogDescription>
-            Passages, songs, hymns, slides, pictures, videos and sound. {target ? `Added items go to the end of ${target}, in the order selected.` : "Added items go to the top of the order."} Adding one closes this picker and selects it in Prepare; nothing here goes live.
+            Passages, songs, hymns, slides, pictures, videos and audio cues. {target ? `Added items go to the end of ${target}, in the order selected.` : "Added items go to the top of the order."} Adding one closes this picker and selects it in Prepare; nothing here goes live.
           </DialogDescription>
         </DialogHeader>
         <Tabs defaultValue="bible" className="flex min-h-0 flex-1 flex-col">
@@ -56,7 +56,7 @@ export function AddItems({ className, onSelectAddedItem }: { className?: string;
             <TabsTrigger value="songs">Songs</TabsTrigger>
             <TabsTrigger value="hymns">Hymn book</TabsTrigger>
             <TabsTrigger value="slides">Slides</TabsTrigger>
-            <TabsTrigger value="media">Pictures</TabsTrigger>
+            <TabsTrigger value="media">Media</TabsTrigger>
             <TabsTrigger value="reuse">Reuse</TabsTrigger>
           </TabsList>
           <TabsContent value="bible" className="min-h-0 flex-1 overflow-hidden pt-3">

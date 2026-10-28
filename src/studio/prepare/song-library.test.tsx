@@ -315,14 +315,14 @@ describe("Add item workflow (#386)", () => {
 
     await act(async () => root!.render(<AddItems />))
     await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Add item"))!.click())
-    const mediaTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent?.trim() === "Pictures")!
+    const mediaTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent?.trim() === "Media")!
     await act(async () => { mediaTab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); mediaTab.click() })
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
     const add = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add")!
     await act(async () => add.click())
 
     const inserted = useQueueStore.getState().items[0]
-    expect(inserted).toMatchObject({ kind: "image", image: { media_id: audioAsset.id } })
+    expect(inserted).toMatchObject({ kind: "audio", audio: { media_id: audioAsset.id } })
     expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
@@ -352,7 +352,7 @@ describe("Add item workflow (#386)", () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 
-  it("leaves the picker open when a Bible Add is deduped", async () => {
+  it("adds an intentional repeat Scripture occurrence and selects its new service item", async () => {
     const existing: QueueItem = {
       id: "existing-verse",
       kind: "verse",
@@ -375,7 +375,12 @@ describe("Add item workflow (#386)", () => {
     const add = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add")!
     await act(async () => add.click())
 
-    expect(useQueueStore.getState().items).toHaveLength(1)
-    expect(document.querySelector('[role="dialog"]')).toBeTruthy()
+    const items = useQueueStore.getState().items
+    expect(items).toHaveLength(2)
+    expect(items[0].id).not.toBe(items[1].id)
+    expect(items[0]).toMatchObject({ verse: { book_number: verse.book_number, chapter: verse.chapter, verse: verse.verse } })
+    const inserted = items.find((item) => item.id !== "existing-verse")!
+    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 })

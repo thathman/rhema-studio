@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { parseBookChapter } from "@/lib/quick-search"
 import { resolveQuickFind } from "@/lib/quick-find-resolver"
 import { songQueueItem } from "@/lib/lyrics"
+import { isHymnSong } from "@/lib/song-kind"
 import { fuzzySongs } from "@/lib/fuzzy"
 import { bibleActions } from "@/hooks/use-bible"
 import { useBibleStore, useBroadcastStore, useQueueStore } from "@/stores"
@@ -202,6 +203,7 @@ export function QuickFind({ mode, autoFocus, scope = "all", onAdded }: { mode: "
         )}
         {results.map((hit) => {
           const key = hit.kind === "verse" ? `v-${hit.verse.book_number}-${hit.verse.chapter}-${hit.verse.verse}` : `s-${hit.song.id}`
+          const hymn = hit.kind === "song" && isHymnSong({ hymn_numbers: hit.song.numbers }, hit.song.tags)
           const isSel =
             hit.kind === "verse"
               ? !selectedSlide && !!selected && selected.book_number === hit.verse.book_number && selected.chapter === hit.verse.chapter && selected.verse === hit.verse.verse
@@ -227,7 +229,8 @@ export function QuickFind({ mode, autoFocus, scope = "all", onAdded }: { mode: "
                 ) : (
                   <>
                     <span className="flex items-center gap-1.5 text-xs font-semibold">
-                      <MusicIcon className="size-3 text-muted-foreground" aria-label="Song" />
+                      <MusicIcon className="size-3 text-muted-foreground" aria-label={hymn ? "Hymn" : "Song"} />
+                      {hymn && <span className="rounded border border-border px-1 text-[0.6875rem] font-normal text-muted-foreground">Hymn</span>}
                       {hit.song.title}
                       {hit.song.numbers.map((n) => (
                         <span key={n} className="rounded border border-border px-1 text-[0.6875rem] font-normal text-muted-foreground">{n}</span>

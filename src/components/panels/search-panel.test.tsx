@@ -12,10 +12,21 @@ const fixtures = vi.hoisted(() => {
     verse: 1,
     text: "In the beginning",
   }
+  const meaningResult = {
+    verse_ref: "Genesis 1:1",
+    verse_text: verse.text,
+    book_name: "Genesis",
+    book_number: 1,
+    chapter: 1,
+    verse: 1,
+    similarity: 0.91,
+    sources: ["semantic"],
+  }
   let deferChapter = false
   let pendingChapters: Array<(verses: unknown[]) => void> = []
   return {
     verse,
+    meaningResult,
     book: { id: 1, translation_id: 1, book_number: 1, name: "Genesis", abbreviation: "Gen", testament: "OT" },
     translation: { id: 1, abbreviation: "KJV", title: "King James Version", language: "en", is_copyrighted: false, is_downloaded: true },
     loadChapter: () => deferChapter
@@ -41,6 +52,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (command === "list_translations") return [fixtures.translation]
     if (command === "list_books") return [fixtures.book]
     if (command === "get_chapter") return fixtures.loadChapter()
+    if (command === "semantic_search") return [fixtures.meaningResult]
     return null
   }),
 }))
@@ -56,6 +68,7 @@ import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
+import type { VerseQueueItem } from "@/types"
 
 let root: Root | null = null
 let el: HTMLDivElement | null = null
@@ -73,6 +86,7 @@ beforeEach(() => {
     translations: [],
     currentChapter: [],
     pendingNavigation: null,
+    semanticResults: [],
     activeTranslationId: 1,
   })
   useBroadcastStore.setState({ isLive: false, liveVerse: null, liveSlide: null, liveItemId: null, rehearsal: false })
@@ -151,5 +165,56 @@ describe("first-run Bible preview", () => {
     expect(useBibleStore.getState().selectedVerse).toBe(selectedVerse)
     expect(useBibleStore.getState().samplePreview).toBe(false)
     expect(el!.querySelector('[data-slot="preview-panel"]')?.textContent).not.toContain("Sample preview")
+  })
+})
+
+describe("explicit repeated Scripture additions", () => {
+  function existingReading(): VerseQueueItem {
+    return {
+      id: "opening-reading",
+      verse: fixtures.verse,
+      reference: "Genesis 1:1",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+    }
+  }
+
+  async function renderLoadedChapter() {
+    await act(async () => root!.render(<SearchPanel />))
+    await vi.waitFor(() => expect(useBibleStore.getState().books).toHaveLength(1))
+    await act(async () => useBibleStore.getState().setPendingNavigation({ bookNumber: 1, chapter: 1, verse: 1 }))
+    await vi.waitFor(() => expect(el!.querySelector('[aria-label="Add another Genesis 1:1 to the service"]')).not.toBeNull())
+  }
+
+  it("keeps Add available for a verse already in the planned service", async () => {
+    useQueueStore.setState({ items: [existingReading()] })
+    await renderLoadedChapter()
+
+    await vi.waitFor(() => expect(el!.querySelector('[aria-label="Add another Genesis 1:1 to the service"]')).not.toBeNull())
+    const add = el!.querySelector<HTMLButtonElement>('[aria-label="Add another Genesis 1:1 to the service"]')!
+    await act(async () => add.click())
+    expect(useQueueStore.getState().items.map((item) => item.id)).toHaveLength(2)
+  })
+
+  it("keeps Add available for an already planned reference in Meaning results", async () => {
+    useQueueStore.setState({ items: [existingReading()] })
+    await renderLoadedChapter()
+    await act(async () => el!.querySelector<HTMLButtonElement>('[data-tour="context-search"]')!.click())
+    const input = await vi.waitFor(() => {
+      const element = el!.querySelector<HTMLInputElement>('[aria-label="Search by meaning"]')
+      expect(element).not.toBeNull()
+      return element!
+    })
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!
+      setValue.call(input, "beginning")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    await vi.waitFor(() => expect(el!.querySelector('[aria-label="Add another Genesis 1:1 to the service"]')).not.toBeNull())
+    const add = el!.querySelector<HTMLButtonElement>('[aria-label="Add another Genesis 1:1 to the service"]')!
+    await act(async () => add.click())
+    expect(useQueueStore.getState().items).toHaveLength(2)
   })
 })

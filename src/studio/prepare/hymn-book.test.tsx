@@ -6,10 +6,11 @@ vi.hoisted(() => {
   ;(globalThis as { CSS?: { escape: (value: string) => string } }).CSS ??= { escape: (value) => value }
 })
 
-const { hymn, fullSong } = vi.hoisted(() => {
+const { hymn, variousHymn, fullSong, searchRequest } = vi.hoisted(() => {
   const hymn = {
     id: "cac-245",
     title: "Grace Greater Than Our Sin",
+    alternate_titles: ["Oore to po"],
     authors: "Julia H. Johnston",
     licence: "public_domain" as const,
     primary_language: "en",
@@ -45,12 +46,13 @@ const { hymn, fullSong } = vi.hoisted(() => {
     arrangements: [{ id: "default", name: "Default", sequence: ["verse-1", "chorus"], is_default: true }],
     numbers: [{ hymnbook_id: "cac", hymnbook_code: "CAC", number: "245" }],
   }
-  return { hymn, fullSong }
+  const variousHymn = { ...hymn, id: "cac-v12", title: "Test Various Hymn", numbers: ["CACV 12"], first_line: "Ọ̀rọ̀ ìdánwò" }
+  return { hymn, variousHymn, fullSong, searchRequest: vi.fn(async (query: string) => { void query; return [hymn] }) }
 })
 
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(async (command: string) => {
-    if (command === "content_list_songs") return [hymn]
+  invoke: vi.fn(async (command: string, args?: { query?: string }) => {
+    if (command === "content_list_songs") return args?.query ? searchRequest(args.query) : [hymn, variousHymn]
     if (command === "content_get_song") return fullSong
     if (command === "content_list_hymnbooks") return []
     if (command === "content_list_song_attachments") return []
@@ -68,7 +70,17 @@ import { HymnBook } from "./hymn-book"
 
 let root: Root | null = null
 
+async function searchFor(query: string) {
+  const input = document.querySelector<HTMLInputElement>('input[aria-label="Find a hymn"]')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, query)
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  })
+}
+
 beforeEach(() => {
+  searchRequest.mockReset().mockResolvedValue([hymn])
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   useBibleStore.setState({ selectedVerse: null, selectedSlide: null })
   useQueueStore.setState({ items: [], headers: [], activeIndex: null, addTarget: null })
@@ -124,6 +136,100 @@ describe("Hymn Book details (#385)", () => {
 
     const inserted = useQueueStore.getState().items[0]
     expect(inserted).toMatchObject({ kind: "song", song: { song_id: hymn.id, languages: ["yo", "en"] } })
+    expect((inserted as unknown as { song: { hymn_numbers?: string[] } }).song.hymn_numbers).toEqual(["CAC 245"])
     expect(onAdded).toHaveBeenCalledWith(inserted.id)
+  })
+})
+
+describe("Hymn Book lyric search recovery (#397)", () => {
+  it("shows an index failure while retaining title and first-line fallback matches", async () => {
+    searchRequest.mockRejectedValueOnce(new Error("search index unavailable"))
+    await act(async () => root!.render(<HymnBook />))
+
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Find a hymn"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Grace Greater")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    })
+
+    expect(document.body.textContent).toContain("Grace Greater Than Our Sin")
+    expect(document.body.textContent).toContain("Full-text hymn search is unavailable")
+    expect(document.body.textContent).toContain("search index unavailable")
+    const retry = document.querySelector<HTMLButtonElement>('button[aria-label="Retry full-text hymn search"]')
+    expect(retry).toBeTruthy()
+
+    await act(async () => {
+      retry!.click()
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    })
+
+    expect(document.body.textContent).not.toContain("Full-text hymn search is unavailable")
+    expect(document.body.textContent).toContain("Grace Greater Than Our Sin")
+  })
+
+  it("keeps Yorùbá diacritic title fallback results when lyric search fails", async () => {
+    searchRequest.mockRejectedValueOnce(new Error("index offline"))
+    await act(async () => root!.render(<HymnBook />))
+
+    await searchFor("Ọ̀rẹ́ tó pọ̀")
+
+    expect(document.body.textContent).toContain("Grace Greater Than Our Sin")
+    expect(document.body.textContent).toContain("Full-text hymn search is unavailable")
+    expect(document.body.textContent).toContain("Oore to po")
+  })
+
+  it("keeps number lookup available without invoking the lyric index", async () => {
+    searchRequest.mockRejectedValueOnce(new Error("index offline"))
+    await act(async () => root!.render(<HymnBook />))
+
+    await searchFor("245")
+
+    expect(document.body.textContent).toContain("Grace Greater Than Our Sin")
+    expect(document.body.textContent).toContain("245")
+    expect(document.body.textContent).not.toContain("Full-text hymn search is unavailable")
+  })
+
+  it("reports an empty result only after full-text search succeeds", async () => {
+    searchRequest.mockResolvedValueOnce([])
+    await act(async () => root!.render(<HymnBook />))
+
+    await searchFor("unmatched stanza")
+
+    expect(document.querySelector('[role="status"]')?.textContent).toBe("No hymn matches.")
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it("ignores older results after rapid typing and switching hymn-book parts", async () => {
+    let resolveFirst!: (songs: typeof hymn[]) => void
+    let resolveSecond!: (songs: typeof hymn[]) => void
+    let resolveLatest!: (songs: typeof hymn[]) => void
+    const first = new Promise<typeof hymn[]>((resolve) => { resolveFirst = resolve })
+    const second = new Promise<typeof hymn[]>((resolve) => { resolveSecond = resolve })
+    const latest = new Promise<typeof hymn[]>((resolve) => { resolveLatest = resolve })
+    searchRequest
+      .mockImplementationOnce(() => first)
+      .mockImplementationOnce(() => second)
+      .mockImplementationOnce(() => latest)
+    await act(async () => root!.render(<HymnBook />))
+
+    await searchFor("old lyric")
+    expect(document.body.textContent).toContain("Searching full-text hymn lyrics")
+    await searchFor("new stanza")
+    const various = [...document.querySelectorAll<HTMLButtonElement>('div[aria-label="Part"] button')].find((button) => button.textContent?.trim() === "Various")!
+    await act(async () => {
+      various.click()
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    })
+
+    await act(async () => { resolveLatest([variousHymn]); await latest })
+    expect(document.body.textContent).toContain("Test Various Hymn")
+
+    await act(async () => {
+      resolveFirst([hymn])
+      resolveSecond([hymn])
+      await Promise.all([first, second])
+    })
+    expect(document.body.textContent).toContain("Test Various Hymn")
   })
 })

@@ -293,6 +293,12 @@ export interface SectionSummary {
   count: number
   /** Their planned minutes. */
   minutes: number
+  /** Phase-only breakdown when the phase contains event headers. */
+  eventCount?: number
+  /** Queue items owned by those events. */
+  momentCount?: number
+  /** Queue items in the phase but outside its events. */
+  looseItemCount?: number
 }
 
 /**
@@ -304,13 +310,47 @@ export function isSkipped(items: ReadonlyArray<{ hidden?: boolean | null }>, hea
   return !!items[index]?.hidden || !!phaseAt(headers, index)?.disabled
 }
 
+export interface VisibleRunItem<T> {
+  item: T
+  index: number
+  kind: "item" | "moment"
+  label: string
+}
+
+/** The first item Present can reach from an index, in either direction. */
+export function visibleRunItemFrom<T extends { hidden?: boolean | null; kind?: string; reference: string }>(
+  items: ReadonlyArray<T>, headers: OutlineHeader[], startIndex: number, direction: 1 | -1,
+): VisibleRunItem<T> | null {
+  for (let index = startIndex; index >= 0 && index < items.length; index += direction) {
+    if (isSkipped(items, headers, index)) continue
+    const item = items[index]
+    const kind = item.kind === "cue" ? "moment" : "item"
+    return { item, index, kind, label: kind === "moment" ? `Moment · ${item.reference}` : item.reference }
+  }
+  return null
+}
+
+/** The next visible rundown entry after the active index, or the first when nothing is active. */
+export function nextVisibleItem<T extends { hidden?: boolean | null; kind?: string; reference: string }>(
+  items: ReadonlyArray<T>, headers: OutlineHeader[], afterIndex: number | null,
+): VisibleRunItem<T> | null {
+  return visibleRunItemFrom(items, headers, (afterIndex ?? -1) + 1, 1)
+}
+
+/** The previous visible rundown entry before the active index. */
+export function previousVisibleItem<T extends { hidden?: boolean | null; kind?: string; reference: string }>(
+  items: ReadonlyArray<T>, headers: OutlineHeader[], beforeIndex: number,
+): VisibleRunItem<T> | null {
+  return visibleRunItemFrom(items, headers, beforeIndex - 1, -1)
+}
+
 /** The items as the plan counts them: a skipped one keeps its place but takes no time and has no fixed start. */
 export function timedItems<T extends { hidden?: boolean | null; planned_minutes?: number | null; starts_at?: string | null; gap_minutes?: number | null }>(items: T[], headers: OutlineHeader[]): T[] {
   if (!items.some((_, i) => isSkipped(items, headers, i))) return items
   return items.map((it, i) => (isSkipped(items, headers, i) ? { ...it, planned_minutes: null, starts_at: null, gap_minutes: null } : it))
 }
 
-/** The items with every one Present passes over marked hidden (a skipped phase's too), for views that know only items (the stage's Next). */
+/** Mark skipped entries as hidden for consumers that only receive items, without the phase headers. */
 export function markSkipped<T extends { hidden?: boolean | null }>(items: T[], headers: OutlineHeader[]): T[] {
   if (!headers.some((h) => h.disabled)) return items
   return items.map((it, i) => (!it.hidden && isSkipped(items, headers, i) ? { ...it, hidden: true } : it))
@@ -330,13 +370,31 @@ export function sectionSummaries(rawItems: Array<{ planned_minutes?: number | nu
   sorted.forEach((h, k) => {
     const end = sectionEndAt(sorted, k, rawItems.length)
     const slice = rawItems.slice(h.at, end)
+    const nextPhaseIndex = h.type === "phase" ? sorted.findIndex((candidate, index) => index > k && candidate.type === "phase") : -1
+    const phaseEvents = h.type === "phase"
+      ? sorted.slice(k + 1, nextPhaseIndex === -1 ? sorted.length : nextPhaseIndex)
+        .map((candidate, index) => ({ candidate, index: k + 1 + index }))
+        .filter(({ candidate }) => !!candidate.event)
+      : []
+    const momentCount = phaseEvents.reduce((sum, { candidate, index }) => {
+      const eventEnd = sectionEndAt(sorted, index, rawItems.length)
+      return sum + Math.max(0, Math.min(end, eventEnd) - Math.max(h.at, candidate.at))
+    }, 0)
     const nestedMomentGroup = h.type === "group" && sorted.some((event) => event.event && h.at >= event.at && h.at < sectionEndAt(sorted, sorted.indexOf(event), rawItems.length))
     const minutes = h.event
       ? phaseAt(headers, h.at)?.disabled ? 0 : h.event.duration_minutes ?? slice.reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0)
       : nestedMomentGroup
         ? slice.reduce((sum, item, offset) => sum + (isSkipped(rawItems, headers, h.at + offset) ? 0 : item.planned_minutes ?? 0), 0)
         : clockItems.filter((item) => item.sourceAt >= h.at && item.sourceAt < end).reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0)
-    out[h.id] = { count: slice.length, minutes }
+    out[h.id] = {
+      count: slice.length,
+      minutes,
+      ...(phaseEvents.length > 0 ? {
+        eventCount: phaseEvents.length,
+        momentCount,
+        looseItemCount: Math.max(0, slice.length - momentCount),
+      } : {}),
+    }
   })
   return out
 }

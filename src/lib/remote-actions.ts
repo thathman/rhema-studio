@@ -1,11 +1,11 @@
-import { cancelPendingPresents, presentCustomSlide, presentImage, presentSlide, presentVerse, type PresentOutcome } from "@/hooks/use-broadcast"
+import { cancelPendingPresents, presentAudioCue, presentCustomSlide, presentImage, presentSlide, presentVerse, type PresentOutcome } from "@/hooks/use-broadcast"
 import { fetchChapter, stepVerse } from "@/hooks/use-bible"
 import { resolveTranslations, isMissing } from "@/lib/translation-policy"
 import { useBibleStore } from "@/stores/bible-store"
 import { currentActor, useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
-import { isCueItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type CueQueueItem, type QueueItem, type SongWithSections } from "@/types"
-import { isSkipped } from "@/lib/run-of-show"
+import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type CueQueueItem, type QueueItem, type SongWithSections, type Verse } from "@/types"
+import { previousVisibleItem, visibleRunItemFrom } from "@/lib/run-of-show"
 import { useMediaStore } from "@/stores/media-store"
 import { serviceSongNow } from "@/stores/song-pins-store"
 import { approvalHolds, useApprovalGateStore } from "@/stores/approval-gate-store"
@@ -14,6 +14,7 @@ import { toast } from "sonner"
 import { useJournalStore } from "@/stores/journal-store"
 import { useTakeAttemptStore, type TakeAttemptOutcome } from "@/stores/take-attempt-store"
 import { useServiceStore } from "@/stores/service-store"
+import { useSoundStore } from "@/stores/sound-store"
 
 // Audio and Bible-source-only Takes do not supersede a pending audience visual.
 // Their rundown commit is ignored if a visual Take has since been requested.
@@ -25,7 +26,7 @@ let latestVisualTake = 0
  */
 function afterTake(item: QueueItem, entering: boolean) {
   return (outcome: PresentOutcome | void) => {
-    if (outcome === "presented" && entering) void runTakeSteps(item)
+    if (outcome === "presented" && entering && !isSoundItem(item)) void runTakeSteps(item)
   }
 }
 
@@ -48,8 +49,15 @@ function finishTakeAttempt(id: number, itemId: string | null, reference: string,
   useTakeAttemptStore.getState().finish(id, outcome, error)
   const attempt = useTakeAttemptStore.getState().attempts.find((current) => current.id === id)
   if (outcome === "presented" && itemId && positionGeneration === latestVisualTake) {
-    const index = useQueueStore.getState().items.findIndex((item) => item.id === itemId)
-    if (index !== -1) useQueueStore.getState().setActive(index)
+    const queue = useQueueStore.getState()
+    const index = queue.items.findIndex((item) => item.id === itemId)
+    if (index !== -1) {
+      const previous = queue.activeIndex === null ? undefined : queue.items[queue.activeIndex]
+      const next = queue.items[index]
+      const sound = useSoundStore.getState()
+      if (previous && isAudioItem(previous) && previous.id !== next.id && sound.itemId === previous.id && sound.fadeOutMs > 0) sound.fadeOut(sound.fadeOutMs)
+      queue.setActive(index)
+    }
   }
   const status = attempt?.status ?? (outcome === "presented" ? "succeeded" : outcome === "superseded" ? "superseded" : "failed")
   const reason = error ? `: ${error}` : outcome !== "presented" ? ` (${outcome})` : ""
@@ -70,6 +78,13 @@ async function takeOnBibleFeeds(item: QueueItem): Promise<PresentOutcome> {
 
 function sameSnapshot(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function matchesVerse(item: QueueItem, verse: Pick<Verse, "book_number" | "chapter" | "verse">): boolean {
+  return isVerseItem(item) &&
+    item.verse.book_number === verse.book_number &&
+    item.verse.chapter === verse.chapter &&
+    item.verse.verse === verse.verse
 }
 
 /** Language choices shape what each public output will display for a held Take. */
@@ -106,14 +121,17 @@ function sendToLivePreviewIsCurrent(bible: ReturnType<typeof useBibleStore.getSt
 
   const verse = bible.selectedVerse
   if (!verse || !sameSnapshot(currentBible.selectedVerse, verse)) return false
-  const matchesVerse = (item: QueueItem) =>
-    isVerseItem(item) &&
-    item.verse.book_number === verse.book_number &&
-    item.verse.chapter === verse.chapter &&
-    item.verse.verse === verse.verse
-  const capturedQueueItem = queue.items.find(matchesVerse)
-  const currentQueueItem = currentQueue.items.find(matchesVerse)
-  if (!sameSnapshot(capturedQueueItem ?? null, currentQueueItem ?? null)) return false
+  const selectedQueueItemId = bible.selectedQueueItemId
+  if (currentBible.selectedQueueItemId !== selectedQueueItemId) return false
+  if (selectedQueueItemId) {
+    const capturedQueueItem = queue.items.find((item) => item.id === selectedQueueItemId && matchesVerse(item, verse))
+    const currentQueueItem = currentQueue.items.find((item) => item.id === selectedQueueItemId && matchesVerse(item, verse))
+    if (!capturedQueueItem || !currentQueueItem || !sameSnapshot(capturedQueueItem, currentQueueItem)) return false
+  } else {
+    const capturedMatches = queue.items.filter((item) => matchesVerse(item, verse))
+    const currentMatches = currentQueue.items.filter((item) => matchesVerse(item, verse))
+    if (!sameSnapshot(capturedMatches, currentMatches)) return false
+  }
   const capturedTranslation = bible.translations.find((item) => item.id === verse.translation_id)?.abbreviation ?? null
   const currentTranslation = currentBible.translations.find((item) => item.id === verse.translation_id)?.abbreviation ?? null
   return capturedTranslation === currentTranslation
@@ -195,7 +213,8 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
   const took = afterTake(item, !opts.automatic && !isUp(item))
   try {
     let outcome: PresentOutcome
-    if (isSlideItem(item)) outcome = await presentCustomSlide(item, { goLive: true })
+    if (isAudioItem(item)) outcome = await presentAudioCue(item)
+    else if (isSlideItem(item)) outcome = await presentCustomSlide(item, { goLive: true })
     else if (isImageItem(item)) outcome = await presentImage(item, { goLive: true })
     else if (isSongItem(item)) {
       // Stepping within the live song keeps the arrangement it went live with.
@@ -243,9 +262,10 @@ async function takeCueItem(item: CueQueueItem, index: number): Promise<void> {
 /** From `index` on in direction `dir`, the first item Present runs (hidden ones and a skipped phase are passed over, #193). */
 function shownFrom(index: number, dir: 1 | -1): number {
   const { items, headers } = useQueueStore.getState()
-  let i = index
-  while (i >= 0 && i < items.length && isSkipped(items, headers, i)) i += dir
-  return i
+  const visible = dir > 0
+    ? visibleRunItemFrom(items, headers, index, dir)
+    : previousVisibleItem(items, headers, index + 1)
+  return visible?.index ?? (dir > 0 ? items.length : -1)
 }
 
 /**
@@ -254,9 +274,11 @@ function shownFrom(index: number, dir: 1 | -1): number {
  */
 /** A rundown item whose library file is a sound. */
 function isSoundItem(item: QueueItem | undefined): boolean {
-  if (!item || !isImageItem(item)) return false
+  if (!item) return false
+  if (isAudioItem(item)) return true
+  if (!isImageItem(item)) return false
   const id = item.image.media_id
-  return useMediaStore.getState().assets.find((a) => a.id === id)?.kind === "audio"
+  return useMediaStore.getState().assets.find((asset) => asset.id === id)?.kind === "audio"
 }
 
 function stepQueue(offset: number): Promise<void> {
@@ -414,8 +436,10 @@ function sendToLivePreview(
     }
     const positionGeneration = isSoundItem(item) || sourceOnly ? latestVisualTake : ++latestVisualTake
     const took = afterTake(queueItem, !isUp(item))
-    const presenting: Promise<PresentOutcome> = isSlideItem(item)
-      ? presentCustomSlide(item, { goLive: true })
+    const presenting: Promise<PresentOutcome> = isAudioItem(item)
+      ? presentAudioCue(item)
+      : isSlideItem(item)
+        ? presentCustomSlide(item, { goLive: true })
       : isImageItem(item)
         ? presentImage(item, { goLive: true })
         : isSongItem(item)
@@ -432,13 +456,10 @@ function sendToLivePreview(
   }
   const selectedVerse = bible.selectedVerse
   if (!selectedVerse) return Promise.resolve()
-  const idx = queue.items.findIndex(
-    (item) =>
-      isVerseItem(item) &&
-      item.verse.book_number === selectedVerse.book_number &&
-      item.verse.chapter === selectedVerse.chapter &&
-      item.verse.verse === selectedVerse.verse,
-  )
+  const matchingIndices = queue.items.flatMap((item, index) => matchesVerse(item, selectedVerse) ? [index] : [])
+  const idx = bible.selectedQueueItemId
+    ? queue.items.findIndex((item) => item.id === bible.selectedQueueItemId && matchesVerse(item, selectedVerse))
+    : matchingIndices.length === 1 ? matchingIndices[0] : -1
   const rundownItem = idx === -1 ? null : queue.items[idx]
   const itemId = rundownItem?.id ?? null
   const reference = rundownItem?.reference ?? `${selectedVerse.book_name} ${selectedVerse.chapter}:${selectedVerse.verse}`
@@ -501,6 +522,7 @@ export const remoteActions = {
   addToQueue: () => {
     const { selectedVerse } = useBibleStore.getState()
     if (!selectedVerse) return
+    if (useQueueStore.getState().items.some((item) => matchesVerse(item, selectedVerse))) return
     useQueueStore.getState().addItem({
       id: crypto.randomUUID(),
       verse: selectedVerse,

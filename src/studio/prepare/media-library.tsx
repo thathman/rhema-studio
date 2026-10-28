@@ -11,7 +11,7 @@ import { useMediaStore } from "@/stores/media-store"
 import { isContentCommandError } from "@/types/content"
 import type { MediaAssetStatus } from "@/types"
 import { soundType } from "@/lib/sound-type"
-import { imageQueueItem } from "@/lib/media-items"
+import { imageQueueItem, mediaQueueItem } from "@/lib/media-items"
 
 /**
  * Prepare → Pictures: the media library. Import copies pictures into the
@@ -60,7 +60,7 @@ export function MediaLibrary({ onAdded }: { onAdded?: (id: string) => void } = {
 
   const add = (a: MediaAssetStatus) => {
     const queue = useQueueStore.getState()
-    const id = queue.addItem(imageQueueItem(a), "end")
+    const id = queue.addItem(mediaQueueItem(a), "end")
     if (id) onAdded?.(id)
   }
 

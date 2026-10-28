@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { QueueItem, SlideQueueItem, TakeStep, Verse } from "@/types"
+import type { AudioQueueItem, ProgramWithItems, QueueItem, SlideQueueItem, TakeStep, Verse } from "@/types"
 
 /**
  * Take steps armed on a rundown item (#243 RS.4, OB.2): they run on the operator's own Take only,
@@ -29,9 +29,12 @@ const { presentQueueItem, remoteActions } = await import("./remote-actions")
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { useQueueStore } = await import("@/stores/queue-store")
 const { useBibleStore } = await import("@/stores/bible-store")
+const { useMediaStore } = await import("@/stores/media-store")
 const { useObsStore } = await import("@/stores/obs-store")
 const { useSettingsStore } = await import("@/stores/settings-store")
 const { useServiceStore } = await import("@/stores/service-store")
+const { toQueueItems } = await import("@/stores/service-store")
+const { useSoundStore } = await import("@/stores/sound-store")
 const { newScene } = await import("@/lib/scenes")
 const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
 
@@ -61,6 +64,8 @@ beforeEach(async () => {
     outputs: [{ id: MAIN_OUTPUT_ID, name: "Sanctuary", type: "display", themeId: theme, monitorIndex: 0, ndi: defaultNdiSettings() }],
   })
   useBibleStore.setState({ selectedVerse: null, selectedSlide: null, activeTranslationId: 1, translations: [{ id: 1, abbreviation: "KJV", title: "King James Version", language: "en", is_copyrighted: false, is_downloaded: true }] })
+  useMediaStore.setState({ assets: [], loaded: true })
+  useSoundStore.setState({ assetId: null, itemId: null, playing: false })
   useQueueStore.setState({
     items: [slide("welcome"), slide("sermon", [`scene.take:${scene.id}`, "obs.scene:Sermon"], { scene_id: scene.id }), slide("after"), reading("john", ["source.only", "obs.scene:Sermon"])],
     activeIndex: null,
@@ -72,6 +77,72 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks())
 
 describe("an item's Take steps", () => {
+  it("does not run hidden scene or OBS Take steps on a typed audio cue", async () => {
+    const audio: AudioQueueItem = {
+      id: "walk-in",
+      kind: "audio",
+      audio: { media_id: "walkin", name: "Walk-in" },
+      reference: "Walk-in",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+      on_take: [`scene.take:${scene.id}`, "obs.scene:Sermon"],
+    }
+    useMediaStore.setState({ assets: [{ id: "walkin", kind: "audio", name: "Walk-in", present: true, path: "/media/walkin.mp3", hash: "walkin", size: 1, mime: "audio/mpeg", width: null, height: null, duration_ms: null, created_at: "" }] as never })
+    useSoundStore.setState({ play: async ({ id, itemId }: { id: string; itemId?: string }) => {
+      useSoundStore.setState({ assetId: id, itemId: itemId ?? null, playing: true })
+      return true
+    } } as never)
+    useQueueStore.setState({ items: [audio], activeIndex: null })
+
+    await presentQueueItem(0)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(useQueueStore.getState().activeIndex).toBe(0)
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useBroadcastStore.getState().liveItemId).toBeNull()
+    expect(sceneOnMain()).toBeUndefined()
+    expect(obsSwitches()).toEqual([])
+  })
+
+  it("keeps legacy image rows migrated to audio from running their saved Take steps", async () => {
+    const legacy: ProgramWithItems = {
+      program: { id: "p1", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 1 },
+      items: [{
+        id: "walk-in",
+        program_id: "p1",
+        position: 0,
+        kind: "image",
+        reference: "Walk-in",
+        book_number: null,
+        chapter: null,
+        verse: null,
+        translation: null,
+        secondary_translation: null,
+        notes: null,
+        payload: JSON.stringify({ media_id: "walkin", fit: "cover", on_take: [`scene.take:${scene.id}`, "obs.scene:Sermon"] }),
+      }],
+    }
+    const migrated = toQueueItems(legacy, 1, [], new Map([["walkin", "audio"]]))
+    expect(migrated.items[0].kind).toBe("audio")
+    expect(migrated.items[0].on_take).toEqual([`scene.take:${scene.id}`, "obs.scene:Sermon"])
+    useMediaStore.setState({ assets: [{ id: "walkin", kind: "audio", name: "Walk-in", present: true, path: "/media/walkin.mp3", hash: "walkin", size: 1, mime: "audio/mpeg", width: null, height: null, duration_ms: null, created_at: "" }] as never })
+    useSoundStore.setState({ play: async ({ id, itemId }: { id: string; itemId?: string }) => {
+      useSoundStore.setState({ assetId: id, itemId: itemId ?? null, playing: true })
+      return true
+    } } as never)
+    useQueueStore.setState({ items: migrated.items, activeIndex: null })
+
+    await presentQueueItem(0)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(useQueueStore.getState().activeIndex).toBe(0)
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useBroadcastStore.getState().liveItemId).toBeNull()
+    expect(sceneOnMain()).toBeUndefined()
+    expect(obsSwitches()).toEqual([])
+  })
+
   it("takes the scene/look revisions pinned by the approved service", async () => {
     const theme = useBroadcastStore.getState().themes[0]
     const approvedScene = { ...scene, background: "#001122", updatedAt: scene.updatedAt - 1 }

@@ -20,7 +20,7 @@ export interface Program {
 }
 
 /** Kinds this build can show in the rundown. Anything else is preserved, not edited. */
-export const SUPPORTED_ITEM_KINDS = ["verse", "song", "slide", "image", "phase", "group", "cue"] as const
+export const SUPPORTED_ITEM_KINDS = ["verse", "song", "slide", "image", "audio", "phase", "group", "cue"] as const
 export type ProgramItemKind = (typeof SUPPORTED_ITEM_KINDS)[number]
 
 export interface ProgramItem {
@@ -141,6 +141,16 @@ export interface ImageItemPayload {
   fit?: "cover" | "contain" | "stretch" | null
   loop?: boolean
   sound?: boolean
+}
+
+/** `payload` of a `kind = "audio"` program item. Device ids are local to the host computer. */
+export interface AudioItemPayload {
+  media_id: string
+  output_device_id?: string
+  volume?: number
+  loop?: boolean
+  fade_in_ms?: number
+  fade_out_ms?: number
 }
 
 export interface RevisionSummary {
@@ -371,6 +381,9 @@ export interface SlideItemPayload {
 /** `payload` of a `kind = "song"` program item. */
 export interface SongItemPayload {
   song_id: string
+  /** Saved identity and number snapshot; absent on legacy services. */
+  hymn?: boolean
+  hymn_numbers?: string[]
   arrangement_id?: string | null
   languages?: string[]
   /** A title slide before the words (#193). */

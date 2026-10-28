@@ -4,7 +4,7 @@ import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { useBibleStore, useBroadcastStore } from "@/stores"
 import { bibleActions } from "@/hooks/use-bible"
 import { toCustomSlideRenderData, toImageRenderData, toVideoRenderData, toVerseRenderData } from "@/hooks/use-broadcast"
-import { isCueItem, isImageItem, isSlideItem, isSongItem } from "@/types"
+import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
 import { songSlides, toLyricRenderData } from "@/lib/lyrics"
@@ -30,13 +30,21 @@ export function PreviewPanel({ itemLook = false, compact = false }: { itemLook?:
   const isSamplePreview = useBibleStore((s) => s.samplePreview)
   const currentService = useServiceStore((s) => s.current)
   const previewSongId = selectedSlide && isSongItem(selectedSlide.item) ? selectedSlide.item.song.song_id : null
+  const previewAudioId = selectedSlide && isAudioItem(selectedSlide.item) ? selectedSlide.item.audio.media_id : null
   const previewMediaId = selectedSlide && isImageItem(selectedSlide.item) ? selectedSlide.item.image.media_id : null
   const previewUrl = useMediaStore((s) => (previewMediaId ? s.urls[previewMediaId] : undefined))
   const previewIsVideo = useMediaStore((s) => (previewMediaId ? s.assets.find((a) => a.id === previewMediaId)?.kind === "video" : false))
   const previewIsSound = useMediaStore((s) => (previewMediaId ? s.assets.find((a) => a.id === previewMediaId)?.kind === "audio" : false))
+  const previewAudio = useMediaStore((s) => (previewAudioId ? s.assets.find((a) => a.id === previewAudioId) : undefined))
+  const mediaLoaded = useMediaStore((s) => s.loaded)
+  const mediaLoading = useMediaStore((s) => s.loading)
+  const mediaError = useMediaStore((s) => s.error)
   useEffect(() => {
     if (previewMediaId && !previewUrl && !previewIsVideo) void useMediaStore.getState().dataUrl(previewMediaId)
   }, [previewMediaId, previewUrl, previewIsVideo])
+  useEffect(() => {
+    if (previewAudioId && !mediaLoaded && !mediaLoading) void useMediaStore.getState().list()
+  }, [previewAudioId, mediaLoaded, mediaLoading])
   // The approved service's words of the song when it has them (#193), else the library's.
   const savedSong = useServiceSong(previewSongId)
   // A slide picked from the live song shows the song as it went live (what Show live will present).
@@ -103,7 +111,26 @@ export function PreviewPanel({ itemLook = false, compact = false }: { itemLook?:
     "KJV"
 
   let verseData = selectedVerse ? toVerseRenderData(selectedVerse, translation) : null
-  if (selectedSlide && isImageItem(selectedSlide.item)) {
+  if (selectedSlide && isAudioItem(selectedSlide.item)) {
+    const output = selectedSlide.item.audio.output_device_id ? "the selected output on this computer" : "this computer’s default output"
+    const status = mediaError
+      ? `The local media library couldn't be checked: ${mediaError}`
+      : !mediaLoaded
+        ? "Checking the local media library…"
+        : !previewAudio?.present
+          ? `Audio file “${selectedSlide.item.audio.name}” is missing from this computer's media library.`
+          : null
+    verseData = {
+      kind: "slide",
+      reference: "",
+      segments: [],
+      lines: [
+        `♪ ${selectedSlide.item.audio.name}`,
+        status ?? `Local audio · ${output}`,
+        "Congregation and OBS screens stay unchanged",
+      ],
+    }
+  } else if (selectedSlide && isImageItem(selectedSlide.item)) {
     // A video previews as "▶ name"; it plays only on the outputs.
     // A sound item has no picture: Preview says what Show live will do.
     verseData = previewIsSound

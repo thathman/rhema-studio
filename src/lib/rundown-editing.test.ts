@@ -4,7 +4,7 @@ import type { ProgramItem, QueueItem, SongWithSections } from "@/types"
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 
 const { cleanCues, cuesFor, hasCues } = await import("@/lib/item-cues")
-const { isSkipped, nextInPhase, newPhase, planTimeline, sectionSummaries, timedItems } = await import("@/lib/run-of-show")
+const { isSkipped, nextInPhase, nextVisibleItem, previousVisibleItem, newPhase, planTimeline, sectionSummaries, timedItems } = await import("@/lib/run-of-show")
 const { songSlides } = await import("@/lib/lyrics")
 const { toItemInputs, toQueueItems, rundownSignature } = await import("@/stores/service-store")
 
@@ -64,6 +64,28 @@ describe("hidden items and skipped phases (#193)", () => {
     expect(nextInPhase("loop", 0, 4, -1, (i) => i === 0)).toBe(1)
     // As before without a skip: a loop of one keeps its item up.
     expect(nextInPhase("loop", 2, 3, 2)).toBe(2)
+  })
+
+  it("finds the next visible item across hidden items and a disabled phase", () => {
+    const items = [slide("Live"), slide("Hidden one", { hidden: true }), slide("Hidden two", { hidden: true }), slide("Skipped phase"), slide("Next")]
+    const headers = [
+      { id: "active", type: "phase" as const, name: "Main", at: 0, rule: "manual" as const },
+      { id: "disabled", type: "phase" as const, name: "Skipped", at: 3, rule: "manual" as const, disabled: true },
+      { id: "following", type: "phase" as const, name: "Following", at: 4, rule: "manual" as const },
+    ]
+
+    expect(nextVisibleItem(items, headers, 0)).toMatchObject({ index: 4, item: items[4], kind: "item", label: "Next" })
+    expect(nextVisibleItem(items, headers, 4)).toBeNull()
+  })
+
+  it("labels a cue as a moment and supports finding the previous visible entry", () => {
+    const cue: QueueItem = { id: "cue", kind: "cue", reference: "Prayer begins", confidence: 1, source: "manual", added_at: 0 }
+    const items = [slide("Opening"), cue, slide("Hidden", { hidden: true }), slide("Sermon")]
+
+    expect(nextVisibleItem(items, [], 0)).toMatchObject({ index: 1, kind: "moment", label: "Moment · Prayer begins" })
+    expect(nextVisibleItem(items, [], null)?.index).toBe(0)
+    expect(nextVisibleItem(items, [], 3)).toBeNull()
+    expect(previousVisibleItem(items, [], 3)?.index).toBe(1)
   })
 
   it("a church's own phase runs by hand", () => {

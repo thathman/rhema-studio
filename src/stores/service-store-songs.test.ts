@@ -73,7 +73,7 @@ describe("duplicate a service", () => {
         created.push(p)
         return p
       }
-      if (cmd === "content_replace_items") {
+      if (cmd === "content_replace_items_with_history") {
         const items = (args.items as Array<Record<string, unknown>>).map((it, position) => ({ ...it, program_id: args.programId, position, payload: it.payload ?? null }))
         return { program: { id: args.programId, title: "copy", service_date: null, revision: 2, created_at: "", updated_at: "", item_count: items.length }, items }
       }
@@ -89,7 +89,7 @@ describe("duplicate a service", () => {
     const ids = useQueueStore.getState().items.map((i) => i.id)
     expect(ids).not.toContain("v1")
     expect(ids).not.toContain("s1")
-    const sent = mock.mock.calls.find((c) => c[0] === "content_replace_items")?.[1] as { programId: string; items: Array<{ id: string; kind: string }> }
+    const sent = mock.mock.calls.find((c) => c[0] === "content_replace_items_with_history")?.[1] as { programId: string; items: Array<{ id: string; kind: string }> }
     expect(sent.programId).toBe("p-2")
     expect(sent.items.map((i) => i.kind)).toEqual(["verse", "song"])
     expect(sent.items.every((i) => i.id !== "v1" && i.id !== "s1")).toBe(true)

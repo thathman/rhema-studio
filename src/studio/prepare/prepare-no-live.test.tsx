@@ -442,6 +442,68 @@ describe("Prepare never takes anything live (#299)", () => {
     await vi.waitFor(() => expect(document.body.querySelector<HTMLInputElement>("#dup-title")?.value).toBe("Sunday service (copy)"), { timeout: 1000 })
   }, 30_000)
 
+  it("shows a zero-moment event in both rundown views and keeps its plan separate from Live (#409, #461)", async () => {
+    localStorage.setItem("rhema.prepare.rundown-view.v1", "simple")
+    const event = {
+      id: "prayer-event",
+      type: "group" as const,
+      name: "New event",
+      at: 0,
+      event: { schema_version: 1 as const, role: "Prayer", duration_minutes: 15 },
+    }
+    const phase = {
+      id: "main-phase",
+      type: "phase" as const,
+      name: "Main service",
+      at: 0,
+      rule: "manual" as const,
+      role: "main" as const,
+    }
+    useQueueStore.setState({ items: [], headers: [], activeIndex: null })
+    useBroadcastStore.setState({ isLive: true, liveVerse: null, liveSlide: null, liveItemId: "on-air-item" })
+    const savedIds = [phase.id, event.id]
+    const beforeLive = {
+      isLive: useBroadcastStore.getState().isLive,
+      liveItemId: useBroadcastStore.getState().liveItemId,
+    }
+
+    const el = await renderPrepare()
+    expect(el.textContent).toContain("Nothing in the service yet")
+    await act(async () => useQueueStore.setState({ headers: [phase, event] }))
+    const assertEventIsVisible = (name: string) => expect(el.querySelector(`[aria-label="Event: ${name}"]`)).not.toBeNull()
+    assertEventIsVisible("New event")
+    expect(el.querySelector('[aria-label="Phase: Main service"]')).toBeNull()
+    expect(el.textContent).not.toContain("Nothing in the service yet")
+
+    const grouped = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Grouped by phase")!
+    await act(async () => grouped.click())
+    assertEventIsVisible("New event")
+    expect(el.querySelector('[aria-label="Phase: Main service"]')).not.toBeNull()
+
+    const edit = el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: New event"]')!
+    await act(async () => edit.click())
+    expect(edit.getAttribute("aria-pressed")).toBe("true")
+    const title = el.querySelector<HTMLInputElement>('[aria-label="Event title"]')!
+    expect(title.value).toBe("New event")
+    const setValue = (field: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")!.set!.call(field, value)
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+    }
+    await act(async () => setValue(title, "Opening Prayer"))
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Event title"]')?.value).toBe("Opening Prayer")
+    assertEventIsVisible("Opening Prayer")
+
+    const hide = el.querySelector<HTMLButtonElement>('button[aria-label="Hide Opening Prayer"]')!
+    await act(async () => hide.click())
+    expect(hide.getAttribute("aria-expanded")).toBe("false")
+    assertEventIsVisible("Opening Prayer")
+
+    expect(useQueueStore.getState().headers.map((header) => header.id)).toEqual(savedIds)
+    expect(useQueueStore.getState().headers).toContainEqual({ ...event, name: "Opening Prayer" })
+    expect(useQueueStore.getState().headers.find((header) => header.id === event.id)?.event).toEqual(event.event)
+    expect(useBroadcastStore.getState()).toMatchObject(beforeLive)
+  })
+
   it("opens an event plan editor and keeps its edits separate from live output", async () => {
     useQueueStore.setState({
       items: [slide("Opening prayer")],
@@ -995,6 +1057,47 @@ describe("Prepare never takes anything live (#299)", () => {
     const eventHandle = el.querySelector<HTMLButtonElement>('button[aria-label="Drag event Sermon with its moments"]')!
     expect(eventHandle.disabled).toBe(false)
     expect(eventHandle.getAttribute("aria-disabled")).not.toBe("true")
+  })
+
+  it("shows zero-moment events in their phase summary without changing Plan or Live", async () => {
+    const items: QueueItem[] = []
+    const headers = [
+      { id: "main", type: "phase" as const, name: "Main service", at: 0, role: "main" as const },
+      { id: "prayer", type: "group" as const, name: "Opening Prayer", at: 0, event: { schema_version: 1 as const, duration_minutes: 15 } },
+    ]
+    useQueueStore.setState({ items, headers, activeIndex: null })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
+    const planBefore = structuredClone({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers })
+    const liveBefore = useBroadcastStore.getState()
+
+    const el = await renderPrepare()
+    const phase = el.querySelector<HTMLElement>('[aria-label="Phase: Main service"]')!
+    expect(phase.textContent).toContain("1 event")
+    expect(phase.textContent).not.toContain("0 items")
+    expect(el.querySelector('[aria-label="Event: Opening Prayer"]')).not.toBeNull()
+    expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers }).toEqual(planBefore)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
+  it("shows phase event, moment and loose-item counts without double-counting or changing duration", async () => {
+    const items = [slide("Loose welcome"), slide("Sermon Scripture"), slide("Sermon slide")]
+    const headers = [
+      { id: "main", type: "phase" as const, name: "Main service", at: 0, role: "main" as const },
+      { id: "prayer", type: "group" as const, name: "Prayer", at: 1, event: { schema_version: 1 as const, duration_minutes: 5 } },
+      { id: "sermon", type: "group" as const, name: "Sermon", at: 1, event: { schema_version: 1 as const, duration_minutes: 40 } },
+      { id: "post", type: "phase" as const, name: "Post-service", at: 3, role: "post" as const },
+    ]
+    useQueueStore.setState({ items, headers, activeIndex: null })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
+    const planBefore = structuredClone({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers })
+    const liveBefore = useBroadcastStore.getState()
+
+    const el = await renderPrepare()
+    const phase = el.querySelector<HTMLElement>('[aria-label="Phase: Main service"]')!
+    expect(phase.textContent).toContain("2 events · 2 moments · 1 item")
+    expect(phase.textContent).toContain("48 min")
+    expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers }).toEqual(planBefore)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
   })
 
   it("reveals and focuses a successful Add inside collapsed sections", async () => {

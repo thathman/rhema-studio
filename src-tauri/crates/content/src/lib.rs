@@ -16,7 +16,7 @@
 //!   their id; only removed items disappear.
 //! - A corrupt file fails to open rather than opening half-working.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 mod attachments;
@@ -91,7 +91,7 @@ pub const MIGRATIONS: &[Migration] = &[
 /// migration and a renderer; until then they are rejected on write and
 /// surfaced untouched on read. A `song` item carries a JSON `payload`
 /// (`SongItemPayload`); its `reference` is the title, for display only.
-pub const SUPPORTED_KINDS: &[&str] = &["verse", "song", "slide", "image", "phase", "group", "cue"];
+pub const SUPPORTED_KINDS: &[&str] = &["verse", "song", "slide", "image", "audio", "phase", "group", "cue"];
 /// A moment in the run of show that shows nothing (#193): it fires its cues (a stage message,
 /// an OBS recording chapter, the timer) when its turn comes. Its reference is its name.
 pub const CUE_KIND: &str = "cue";
@@ -104,6 +104,9 @@ pub const MAX_TITLE: usize = 200;
 pub const MAX_REFERENCE: usize = 200;
 pub const MAX_NOTES: usize = 4000;
 pub const MAX_ITEMS: usize = 2000;
+
+#[cfg(test)]
+pub(crate) static TEST_ACTOR_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Program {
@@ -470,6 +473,37 @@ impl ContentDb {
         expected_revision: i64,
         items: &[ItemInput],
     ) -> Result<ProgramWithItems> {
+        self.replace_items_inner(program_id, expected_revision, items, false, false)
+    }
+
+    /// Save a deliberate new-service copy or package import with its original comment history.
+    /// The target must still be empty; ordinary editor saves use `replace_items`.
+    pub fn replace_items_with_history(
+        &self,
+        program_id: &str,
+        expected_revision: i64,
+        items: &[ItemInput],
+    ) -> Result<ProgramWithItems> {
+        self.replace_items_inner(program_id, expected_revision, items, true, true)
+    }
+
+    pub(crate) fn restore_items_with_history(
+        &self,
+        program_id: &str,
+        expected_revision: i64,
+        items: &[ItemInput],
+    ) -> Result<ProgramWithItems> {
+        self.replace_items_inner(program_id, expected_revision, items, true, false)
+    }
+
+    fn replace_items_inner(
+        &self,
+        program_id: &str,
+        expected_revision: i64,
+        items: &[ItemInput],
+        allow_historical_comments: bool,
+        require_empty_program: bool,
+    ) -> Result<ProgramWithItems> {
         validate_items(items)?;
         let mut conn = self.lock()?;
         let tx = conn.transaction()?;
@@ -483,6 +517,10 @@ impl ContentDb {
                 .collect::<std::result::Result<_, _>>()?;
             rows
         };
+        if require_empty_program && (expected_revision != 1 || !existing.is_empty()) {
+            return Err(ContentError::Invalid("comment history can only be copied into a new empty service".into()));
+        }
+        let comment_deletions = validate_comment_changes(&tx, program_id, items, allow_historical_comments)?;
         let incoming_ids: Vec<String> = items
             .iter()
             .map(|it| match &it.id {
@@ -555,7 +593,7 @@ impl ContentDb {
             "program",
             program_id,
             "replace_items",
-            &serde_json::json!({ "count": items.len(), "kept": kept, "added": added, "removed": removed }),
+            &serde_json::json!({ "count": items.len(), "kept": kept, "added": added, "removed": removed, "comment_deletions": comment_deletions }),
         )?;
         revisions::snapshot(&tx, program_id)?;
         let program = load_program(&tx, program_id)?.ok_or_else(|| ContentError::NotFound(program_id.to_string()))?;
@@ -1050,17 +1088,169 @@ struct OnLivePayload {
 /// Cues an item may run as it goes live: none of them changes what the congregation sees.
 const GO_LIVE_CUES: [&str; 4] = ["timer.start", "timer.fresh", "timer.pause", "stage.clearMessage"];
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct CommentPayload {
+    #[serde(default)]
+    id: Option<String>,
     by: String,
     at: String,
     text: String,
+    #[serde(default)]
+    deleted_by: Option<String>,
+    #[serde(default)]
+    deleted_at: Option<String>,
 }
 
 fn valid_comment(c: &CommentPayload) -> bool {
     let short = |s: &str, n: usize| s.chars().count() <= n && !s.chars().any(char::is_control);
     let text_len = c.text.chars().count();
-    short(&c.by, 60) && short(&c.at, 40) && (1..=1000).contains(&text_len) && !c.text.chars().any(|ch| ch.is_control() && ch != '\n')
+    // `Option::is_none_or` is newer than the crate's Rust 1.77 MSRV.
+    #[allow(clippy::unnecessary_map_or)]
+    let id_ok = c.id.as_deref().map_or(true, |id| !id.is_empty() && short(id, 80));
+    let deletion_ok = match (&c.deleted_by, &c.deleted_at) {
+        (None, None) => true,
+        (Some(by), Some(at)) => !by.trim().is_empty() && short(by, 60) && !at.trim().is_empty() && short(at, 40),
+        _ => false,
+    };
+    id_ok && deletion_ok && short(&c.by, 60) && short(&c.at, 40) && (1..=1000).contains(&text_len) && !c.text.chars().any(|ch| ch.is_control() && ch != '\n')
+}
+
+fn comments_in_payload(raw: Option<&str>) -> Result<Vec<CommentPayload>> {
+    let Some(raw) = raw else { return Ok(Vec::new()) };
+    let value: serde_json::Value = serde_json::from_str(raw).map_err(|e| ContentError::Invalid(format!("bad item payload: {e}")))?;
+    let Some(comments) = value.get("comments") else { return Ok(Vec::new()) };
+    if comments.is_null() { return Ok(Vec::new()) }
+    serde_json::from_value(comments.clone()).map_err(|e| ContentError::Invalid(format!("bad item comments: {e}")))
+}
+
+fn legacy_comment_id(c: &CommentPayload, occurrence: usize) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in format!("{}\0{}\0{}\0{occurrence}", c.by, c.at, c.text).bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("legacy-{hash:016x}")
+}
+
+fn comment_ids(comments: &[CommentPayload]) -> Vec<(String, &CommentPayload)> {
+    let mut occurrences = HashMap::<String, usize>::new();
+    comments.iter().map(|c| {
+        let key = format!("{}\0{}\0{}", c.by, c.at, c.text);
+        let occurrence = occurrences.entry(key).or_default();
+        let id = c.id.clone().unwrap_or_else(|| legacy_comment_id(c, *occurrence));
+        *occurrence += 1;
+        (id, c)
+    }).collect()
+}
+
+/// Comments are collaboration history, not restorable presentation content. Carry every current
+/// comment into a restored snapshot, so a restore cannot erase later comments or undo a removal.
+pub(crate) fn preserve_comment_history(current: Option<&str>, target: Option<&str>) -> Result<Option<String>> {
+    let current_comments = comments_in_payload(current)?;
+    let history: Vec<(String, CommentPayload)> = comment_ids(&current_comments)
+        .into_iter()
+        .map(|(id, c)| {
+            let mut c = c.clone();
+            c.id = Some(id.clone());
+            (id, c)
+        })
+        .collect();
+    if history.is_empty() { return Ok(target.map(str::to_owned)) }
+
+    let mut target_comments = comments_in_payload(target)?;
+    let mut target_ids: Vec<String> = comment_ids(&target_comments).into_iter().map(|(id, _)| id).collect();
+    for (id, comment) in history {
+        if let Some(index) = target_ids.iter().position(|target_id| target_id == &id) {
+            target_comments[index] = comment;
+        } else {
+            target_comments.push(comment);
+        }
+        target_ids = comment_ids(&target_comments).into_iter().map(|(id, _)| id).collect();
+    }
+
+    let mut payload = match target {
+        Some(raw) => serde_json::from_str::<serde_json::Value>(raw).map_err(|e| ContentError::Invalid(format!("bad item payload: {e}")))?,
+        None => serde_json::json!({}),
+    };
+    payload["comments"] = serde_json::to_value(target_comments).map_err(|e| ContentError::Invalid(e.to_string()))?;
+    Ok(Some(serde_json::to_string(&payload).map_err(|e| ContentError::Invalid(e.to_string()))?))
+}
+
+/// Service edits are revision-checked as a whole. Within an item, comments are immutable records:
+/// only an author may add a tombstone, and neither stale nor edited payloads can resurrect one.
+/// Deleted item history remains in the program revision snapshot.
+fn validate_comment_changes(
+    tx: &Transaction<'_>,
+    program_id: &str,
+    items: &[ItemInput],
+    allow_historical_comments: bool,
+) -> Result<Vec<serde_json::Value>> {
+    let existing: HashMap<String, Option<String>> = {
+        let mut stmt = tx.prepare("SELECT id, payload FROM program_items WHERE program_id = ?1")?;
+        let rows = stmt.query_map(params![program_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect::<std::result::Result<_, _>>()?
+    };
+    let actor = actor().unwrap_or_default();
+    let mut deletions = Vec::new();
+    for item in items {
+        let after = comments_in_payload(item.payload.as_deref())?;
+        let Some(id) = item.id.as_deref().filter(|id| existing.contains_key(*id)) else {
+            if allow_historical_comments { continue; }
+            for (comment_id, new) in comment_ids(&after) {
+                let actor_is_author = !actor.trim().is_empty() && actor.trim().eq_ignore_ascii_case(new.by.trim());
+                match (new.deleted_by.as_deref(), new.deleted_at.as_deref()) {
+                    (None, None) if actor_is_author => {}
+                    (Some(by), Some(at)) if actor_is_author && actor.trim().eq_ignore_ascii_case(by.trim()) && !at.trim().is_empty() => {
+                        deletions.push(serde_json::json!({ "item_id": item.id, "comment_id": comment_id, "by": by, "at": at, "added_and_removed": true }));
+                    }
+                    (None, None) => return Err(ContentError::Invalid("a comment must be added by the named operator at this desk".into())),
+                    _ => return Err(ContentError::Invalid("only the named comment author may remove it".into())),
+                }
+            }
+            continue;
+        };
+        let before = comments_in_payload(existing.get(id).and_then(Option::as_deref))?;
+        let before = comment_ids(&before);
+        let after = comment_ids(&after);
+        let old_ids: HashSet<String> = before.iter().map(|(comment_id, _)| comment_id.clone()).collect();
+        if after.iter().any(|(new_id, new)| !old_ids.contains(new_id) && (new.deleted_by.is_some() || new.deleted_at.is_some())) {
+            return Err(ContentError::Invalid("a new comment cannot be created already removed".into()));
+        }
+        for (old_id, old) in before {
+            let Some((_, new)) = after.iter().find(|(new_id, _)| new_id == &old_id) else {
+                return Err(ContentError::Invalid("comments cannot be removed from a saved item; remove them with an author-attributed tombstone".into()));
+            };
+            if old.by != new.by || old.at != new.at || old.text != new.text {
+                return Err(ContentError::Invalid("a saved comment's author, time and text are immutable".into()));
+            }
+            match (old.deleted_by.as_deref(), old.deleted_at.as_deref(), new.deleted_by.as_deref(), new.deleted_at.as_deref()) {
+                (None, None, None, None) => {}
+                (None, None, Some(by), Some(at)) => {
+                    if actor.trim().is_empty()
+                        || old.by.trim().eq_ignore_ascii_case("unnamed")
+                        || !actor.trim().eq_ignore_ascii_case(old.by.trim())
+                        || !actor.trim().eq_ignore_ascii_case(by.trim())
+                        || at.trim().is_empty()
+                    {
+                        return Err(ContentError::Invalid("only the named comment author may remove it".into()));
+                    }
+                    deletions.push(serde_json::json!({ "item_id": id, "comment_id": old_id, "by": by, "at": at }));
+                }
+                (Some(old_by), Some(old_at), Some(new_by), Some(new_at)) if old_by == new_by && old_at == new_at => {}
+                _ => return Err(ContentError::Invalid("a removed comment's audit record cannot be changed or reversed".into())),
+            }
+        }
+        for (new_id, new) in after {
+            if old_ids.contains(&new_id) { continue }
+            if new.deleted_by.is_some() || new.deleted_at.is_some() {
+                return Err(ContentError::Invalid("a new comment cannot be created already removed".into()));
+            }
+            if actor.trim().is_empty() || !actor.trim().eq_ignore_ascii_case(new.by.trim()) {
+                return Err(ContentError::Invalid("a comment must be added by the named operator at this desk".into()));
+            }
+        }
+    }
+    Ok(deletions)
 }
 
 fn is_clock_time(s: &str) -> bool {
@@ -1092,8 +1282,14 @@ fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
     if p.assignees.as_ref().is_some_and(|names| names.len() > 12 || names.iter().any(|n| n.trim().is_empty() || n.chars().count() > 60 || n.chars().any(char::is_control))) {
         return Err(ContentError::Invalid(format!("item {i}: at most 12 people, each a short name")));
     }
-    if p.comments.as_ref().is_some_and(|cs| cs.len() > 100 || !cs.iter().all(valid_comment)) {
-        return Err(ContentError::Invalid(format!("item {i}: comments must be at most 100, each 1-1000 characters with a short name")));
+    if p.comments.as_ref().is_some_and(|cs| {
+        let ids: HashSet<String> = comment_ids(cs).into_iter().map(|(id, _)| id).collect();
+        cs.len() > 1000
+            || ids.len() != cs.len()
+            || cs.iter().filter(|c| c.deleted_at.is_none() && c.deleted_by.is_none()).count() > 100
+            || !cs.iter().all(valid_comment)
+    }) {
+        return Err(ContentError::Invalid(format!("item {i}: comments must have at most 100 active records and 1000 total history records, each 1-1000 characters with a short name")));
     }
     if let Some(on) = &p.on_live {
         if on.stage_message.as_deref().is_some_and(|m| m.chars().count() > 120 || m.chars().any(char::is_control)) {
@@ -1190,6 +1386,9 @@ pub(crate) fn validate_items(items: &[ItemInput]) -> Result<()> {
         if kind == "image" {
             media::validate_image_payload(i, it.payload.as_deref())?;
         }
+        if kind == "audio" {
+            media::validate_audio_payload(i, it.payload.as_deref())?;
+        }
         if kind == "phase" {
             validate_phase_payload(i, it.payload.as_deref())?;
         }
@@ -1228,6 +1427,19 @@ mod tests {
     fn with_id(mut it: ItemInput, id: &str) -> ItemInput {
         it.id = Some(id.into());
         it
+    }
+
+    #[test]
+    fn generated_legacy_comment_ids_match_the_frontend_migration() {
+        let comment = CommentPayload {
+            id: None,
+            by: "Ade".into(),
+            at: "2026-10-21T10:00:00Z".into(),
+            text: "Read slowly".into(),
+            deleted_by: None,
+            deleted_at: None,
+        };
+        assert_eq!(legacy_comment_id(&comment, 0), "legacy-2efa857cd2d7eab8");
     }
 
     /// A fresh temp directory per test; removed on drop.
@@ -1292,6 +1504,7 @@ mod tests {
 
     #[test]
     fn replace_items_orders_bumps_revision_and_audits() {
+        let _actor_guard = TEST_ACTOR_LOCK.lock().unwrap();
         let db = ContentDb::open_in_memory().unwrap();
         let p = db.create_program("Sunday", None).unwrap();
         let saved = db.replace_items(&p.id, 1, &[verse("Psalms 23:1", 19, 23, 1), verse("John 3:16", 43, 3, 16)]).unwrap();
@@ -1303,6 +1516,108 @@ mod tests {
         assert_eq!(events.iter().map(|e| e.action.as_str()).collect::<Vec<_>>(), vec!["create", "replace_items", "replace_items"]);
         assert!(events.iter().all(|e| e.actor.is_none()));
         assert!(events[2].payload.as_deref().unwrap().contains("\"removed\":2"));
+    }
+
+    #[test]
+    fn replacing_items_cannot_hard_delete_another_operators_comment() {
+        let _actor_guard = TEST_ACTOR_LOCK.lock().unwrap();
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        set_actor(Some("Ade"));
+        let first = ItemInput {
+            id: Some("i1".into()),
+            payload: Some(serde_json::json!({
+                "comments": [{ "id": "comment-1", "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": "Read slowly" }]
+            }).to_string()),
+            ..verse("John 3:16", 43, 3, 16)
+        };
+        let saved = db.replace_items(&p.id, p.revision, &[first]).unwrap();
+        set_actor(Some("Tolu"));
+        let removed = ItemInput { id: Some("i1".into()), payload: None, ..verse("John 3:16", 43, 3, 16) };
+        let result = db.replace_items(&p.id, saved.program.revision, &[removed]);
+        let tampered = ItemInput {
+            id: Some("i1".into()),
+            payload: Some(serde_json::json!({
+                "comments": [{ "id": "comment-1", "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": "Read slowly", "deleted_by": "Tolu", "deleted_at": "2026-10-21T11:00:00Z" }]
+            }).to_string()),
+            ..verse("John 3:16", 43, 3, 16)
+        };
+        let unauthorized_tombstone = db.replace_items(&p.id, saved.program.revision, &[tampered]);
+        set_actor(None);
+        assert!(result.is_err(), "a comment must not be physically removed by another operator");
+        assert!(unauthorized_tombstone.is_err(), "the database must reject an unauthorized tombstone");
+    }
+
+    #[test]
+    fn normal_save_cannot_inject_a_predeleted_comment_into_a_new_item() {
+        let _actor_guard = TEST_ACTOR_LOCK.lock().unwrap();
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        set_actor(Some("Tolu"));
+        let item = ItemInput {
+            id: Some("new-item".into()),
+            payload: Some(serde_json::json!({
+                "comments": [{ "id": "comment-from-elsewhere", "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": "Read slowly", "deleted_by": "Ade", "deleted_at": "2026-10-21T11:00:00Z" }]
+            }).to_string()),
+            ..verse("John 3:16", 43, 3, 16)
+        };
+        let result = db.replace_items(&p.id, p.revision, &[item]);
+        set_actor(None);
+        assert!(result.is_err(), "a normal save cannot introduce a forged deletion history");
+    }
+
+    #[test]
+    fn history_copy_writer_only_accepts_a_new_empty_service() {
+        let _actor_guard = TEST_ACTOR_LOCK.lock().unwrap();
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        let original = verse("John 3:16", 43, 3, 16);
+        let saved = db.replace_items(&p.id, p.revision, std::slice::from_ref(&original)).unwrap();
+        let forged_copy = ItemInput {
+            id: Some("another-item".into()),
+            payload: Some(serde_json::json!({
+                "comments": [{ "id": "foreign", "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": "Read slowly", "deleted_by": "Ade", "deleted_at": "2026-10-21T11:00:00Z" }]
+            }).to_string()),
+            ..verse("John 3:17", 43, 3, 17)
+        };
+        let result = db.replace_items_with_history(&p.id, saved.program.revision, &[original, forged_copy]);
+        assert!(result.is_err(), "history-preserving copy must not be usable to add comments to an existing service");
+    }
+
+    #[test]
+    fn only_the_author_can_tombstone_and_the_audit_cannot_be_reversed() {
+        let _actor_guard = TEST_ACTOR_LOCK.lock().unwrap();
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        let comment = serde_json::json!({ "id": "comment-1", "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": "Read slowly" });
+        let original = ItemInput {
+            id: Some("i1".into()),
+            payload: Some(serde_json::json!({ "comments": [comment] }).to_string()),
+            ..verse("John 3:16", 43, 3, 16)
+        };
+        set_actor(Some("Ade"));
+        let saved = db.replace_items(&p.id, p.revision, std::slice::from_ref(&original)).unwrap();
+        let removed = ItemInput {
+            id: Some("i1".into()),
+            payload: Some(serde_json::json!({
+                "comments": [{ "id": "comment-1", "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": "Read slowly", "deleted_by": "Ade", "deleted_at": "2026-10-21T11:00:00Z" }]
+            }).to_string()),
+            ..verse("John 3:16", 43, 3, 16)
+        };
+        let removed = db.replace_items(&p.id, saved.program.revision, &[removed]).unwrap();
+        let payload: serde_json::Value = serde_json::from_str(removed.items[0].payload.as_deref().unwrap()).unwrap();
+        assert_eq!(payload["comments"][0]["deleted_by"], "Ade");
+        assert_eq!(payload["comments"][0]["deleted_at"], "2026-10-21T11:00:00Z");
+        let event = db.audit_events("program", &p.id).unwrap().pop().unwrap();
+        assert_eq!(event.actor.as_deref(), Some("Ade"));
+        let detail: serde_json::Value = serde_json::from_str(event.payload.as_deref().unwrap()).unwrap();
+        assert_eq!(detail["comment_deletions"][0]["comment_id"], "comment-1");
+        assert_eq!(detail["comment_deletions"][0]["by"], "Ade");
+        let stale = db.replace_items(&p.id, saved.program.revision, std::slice::from_ref(&original));
+        assert!(matches!(stale, Err(ContentError::Conflict { expected: 2, actual: 3 })), "a stale save cannot overwrite a newer tombstone");
+        let restored = db.replace_items(&p.id, removed.program.revision, &[original]);
+        set_actor(None);
+        assert!(restored.is_err(), "a later save must not resurrect a tombstone");
     }
 
     fn header(kind: &str, name: &str, payload: Option<&str>) -> ItemInput {

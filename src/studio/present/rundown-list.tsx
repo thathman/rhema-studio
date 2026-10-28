@@ -12,16 +12,18 @@ import { presentActions } from "@/studio/present-actions"
 import { presentQueueItem } from "@/lib/remote-actions"
 import { sectionShort, songSlides, TITLE_SLIDE } from "@/lib/lyrics"
 import { MediaKindIcon, MissingMediaMark } from "@/studio/prepare/item-editor-parts"
-import { interleave, isSkipped, sectionSummaries } from "@/lib/run-of-show"
+import { interleave, isSkipped, nextVisibleItem, sectionSummaries } from "@/lib/run-of-show"
 import { assigneesShort, itemAssignees } from "@/lib/assignees"
 import { SectionHeader, SectionLabel } from "@/studio/prepare/section-header"
 import { takeImpact } from "@/lib/cues"
+import { commentDeleted } from "@/lib/comments"
 import { cuesFor, cueText } from "@/lib/item-cues"
 import { CUE_TRIGGERS } from "@/types"
+import { hymnNumbersFromLibrary, songKindLabel } from "@/lib/song-kind"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { BulkBar } from "@/studio/prepare/bulk-bar"
 import { AddEventPalette } from "@/studio/prepare/add-event-palette"
-import { isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
+import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
 import { nearestPlacementTarget, placementAtPointer, type RundownDropCandidate, type RundownDropPlacement } from "@/studio/prepare/drop-placement"
 
 type DropCue = { targetId: string; placement: RundownDropPlacement | "inside" }
@@ -43,6 +45,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
   const selected = useBibleStore((s) => s.selectedVerse)
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
   const selectedQueueItemId = useBibleStore((s) => s.selectedQueueItemId)
+  const songs = useSongStore((s) => s.songs)
   const isLive = useBroadcastStore((s) => s.isLive)
   const liveRef = useBroadcastStore((s) => s.liveVerse?.reference ?? null)
   const liveSlide = useBroadcastStore((s) => s.liveSlide)
@@ -69,14 +72,14 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
     if (!range && !toggle) preview(item)
   }
   // Present runs past these: the next item shown after the active one.
-  const nextShown = activeIndex === null ? -1 : items.findIndex((_, k) => k > activeIndex && !isSkipped(items, headers, k))
+  const nextShown = activeIndex === null ? -1 : nextVisibleItem(items, headers, activeIndex)?.index ?? -1
   const present = (_item: QueueItem, index: number) => presentActions.presentItem(index)
 
   if (items.length === 0 && headers.length === 0) {
     return (
       <p className="p-4 text-center text-xs text-muted-foreground">
         {mode === "prepare"
-          ? "Nothing in the service yet. Add item puts passages, songs, hymns, slides and pictures here."
+          ? "Nothing in the service yet. Add item puts passages, songs, hymns, slides, media and audio cues here."
           : "Nothing in the service yet. Use Quick find below, or open Prepare."}
       </p>
     )
@@ -84,22 +87,27 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
 
   const renderItem = (item: QueueItem, index: number) => {
         const song = isSongItem(item)
+        const songLabel = song
+          ? songKindLabel(item, songs[item.song.song_id] ? hymnNumbersFromLibrary(songs[item.song.song_id].numbers) : [], songs[item.song.song_id]?.song.tags)
+          : "Song"
         const custom = isSlideItem(item)
         const picture = isImageItem(item)
+        const audio = isAudioItem(item)
         const cue = isCueItem(item)
         const skipped = isSkipped(items, headers, index)
         const inPick = mode === "prepare" && picked.length > 1 && picked.includes(item.id)
         const isSelected = selectedQueueItemId
           ? selectedQueueItemId === item.id
-          : song || custom || picture || cue
+          : song || custom || picture || audio || cue
             ? selectedSlide?.item.id === item.id
             : !!selected && !selectedSlide &&
               selected.book_number === item.verse.book_number &&
               selected.chapter === item.verse.chapter &&
               selected.verse === item.verse.verse
-        const onAir = isLive && (liveItemId ? liveItemId === item.id : liveSlide === null && liveRef !== null && !song && !custom && !picture && liveRef.startsWith(item.reference) && !/^[\d:]/.test(liveRef.slice(item.reference.length)))
+        const onAir = !audio && isLive && (liveItemId ? liveItemId === item.id : liveSlide === null && liveRef !== null && !song && !custom && !picture && liveRef.startsWith(item.reference) && !/^[\d:]/.test(liveRef.slice(item.reference.length)))
         const isNext = mode === "present" && !onAir && activeIndex !== null && index === nextShown
         const expanded = song && (isSelected || liveSlide?.itemId === item.id)
+        const activeCommentCount = item.comments?.filter((c) => !commentDeleted(c)).length ?? 0
         return (
           <Row key={item.id} id={item.id} index={index} sortable={mode === "prepare"} dropPlacement={dropCue?.targetId === item.id && dropCue.placement !== "inside" ? dropCue.placement : undefined}>
             <div
@@ -121,13 +129,15 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
                 aria-selected={mode === "prepare" && picked.length > 1 ? inPick : undefined}
                 onClick={(e) => (mode === "prepare" ? pick(item, e) : preview(item))}
                 onDoubleClick={mode === "present" ? () => present(item, index) : undefined}
-                title={mode === "present" ? (cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to preview"}
+                title={mode === "present" ? (audio ? "Click to preview, double-click to play audio on this computer; screens stay unchanged" : cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to preview"}
               >
                 <span className="w-5 shrink-0 text-right text-xs text-muted-foreground">{index + 1}</span>
-                {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Song" />}
+                {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={songLabel.startsWith("Hymn") ? "Hymn" : "Song"} />}
                 {custom && <PresentationIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Slide" />}
                 {picture && <MediaKindIcon mediaId={item.image.media_id} />}
                 {picture && <MissingMediaMark mediaId={item.image.media_id} />}
+                {audio && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Audio cue" />}
+                {audio && <MissingMediaMark mediaId={item.audio.media_id} />}
                 {cue && <ZapIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Cue only" />}
                 {/* The title keeps its room: on a narrow row the details below wrap under it instead of squeezing it. */}
                 <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -137,6 +147,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
                 {item.ai_suggestion && <span className="shrink-0 rounded-[5px] bg-tone-amber px-1.5 py-0.5 text-[0.6875rem] font-semibold text-tone-amber-foreground" title={`Written by ${item.ai_suggestion}: check the words and accept them in Prepare`}>AI suggestion</span>}
                 {song && <SongBadges item={item} />}
                 {cue && <span className="shrink-0 text-[0.6875rem] text-muted-foreground">Cue only · nothing on screen</span>}
+                {audio && <span className="shrink-0 text-[0.6875rem] text-muted-foreground">Audio cue · local output; screens unchanged</span>}
                 {skipped && (
                   <span className="inline-flex shrink-0 items-center gap-0.5 text-[0.6875rem] font-semibold text-muted-foreground" title={item.hidden ? "Kept in the service; Present skips it" : "Its phase is skipped for this service"}>
                     <EyeOffIcon className="size-3" aria-hidden />{item.hidden ? "Hidden" : "Skipped"}
@@ -158,10 +169,10 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
                 {item.auto_advance && <TimerIcon className="size-3 shrink-0 text-muted-foreground" role="img" aria-label={`Moves on by itself after ${item.planned_minutes ?? 0} min while timed moves are on`} />}
                 {item.end_by ? <span className="shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums" title="Finish by">by {item.end_by}</span> : null}
                 <PeopleMark item={item} />
-                {item.comments?.length ? (
-                  <span className="inline-flex shrink-0 items-center gap-0.5 text-[0.6875rem] text-muted-foreground" title={`${item.comments.length} team comment${item.comments.length === 1 ? "" : "s"}`}>
+                {activeCommentCount > 0 ? (
+                  <span className="inline-flex shrink-0 items-center gap-0.5 text-[0.6875rem] text-muted-foreground" title={`${activeCommentCount} team comment${activeCommentCount === 1 ? "" : "s"}`}>
                     <MessageSquareIcon className="size-3" aria-hidden />
-                    {item.comments.length}
+                    {activeCommentCount}
                     <span className="sr-only"> comments</span>
                   </span>
                 ) : null}
@@ -174,7 +185,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
                 )}
                 {isNext && (
                   <span className="ml-auto shrink-0 text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase">
-                    Next
+                    {cue ? "Next moment" : "Next"}
                   </span>
                 )}
               </button>
@@ -409,8 +420,10 @@ function Row({ id, index, sortable, dropPlacement, children }: { id: string; ind
 function SongBadges({ item }: { item: SongQueueItem }) {
   const song = useSongStore((s) => s.songs[item.song.song_id])
   const arrangement = song?.arrangements.find((a) => a.id === item.song.arrangement_id)
+  const kindLabel = songKindLabel(item, song ? hymnNumbersFromLibrary(song.numbers) : [], song?.song.tags)
   return (
     <span className="flex shrink-0 items-center gap-1 text-[0.6875rem] text-muted-foreground">
+      <span className="rounded border border-border px-1">{kindLabel}</span>
       {item.song.languages.map((l) => (
         <span key={l} className="rounded border border-border px-1 uppercase">{l}</span>
       ))}
