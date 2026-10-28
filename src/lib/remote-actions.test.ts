@@ -457,6 +457,63 @@ describe("queue position follows successful Takes", () => {
     expect(mockInvoke).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ["active translation", () => useBibleStore.setState({ activeTranslationId: 2 })],
+    ["secondary translation", () => useBibleStore.setState({ secondaryTranslationId: null })],
+  ])("does not replay a held Take after the %s changes", async (_name, changePolicy) => {
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+    useBibleStore.setState({
+      selectedVerse: genesisOneOne,
+      activeTranslationId: 1,
+      secondaryTranslationId: 2,
+      translations: [
+        ...useBibleStore.getState().translations,
+        { ...useBibleStore.getState().translations[0]!, id: 2, abbreviation: "OYCB", title: "Yoruba Bible", language: "yo" },
+      ],
+    })
+
+    await remoteActions.sendToLive()
+    expect(useApprovalGateStore.getState().held?.id).toBe("sunday")
+
+    changePolicy()
+    useApprovalGateStore.getState().presentAnyway()
+    await vi.waitFor(() => expect(useTakeAttemptStore.getState().attempts.at(-1)?.status).toBe("superseded"))
+
+    expect(useApprovalGateStore.getState().acknowledged).not.toContain("sunday")
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(mockInvoke).not.toHaveBeenCalled()
+  })
+
+  it("does not replay a held Take after a Bible translation becomes unavailable", async () => {
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+    useBibleStore.setState({
+      selectedVerse: genesisOneOne,
+      activeTranslationId: 1,
+      secondaryTranslationId: 2,
+      translations: [
+        ...useBibleStore.getState().translations,
+        { ...useBibleStore.getState().translations[0]!, id: 2, abbreviation: "OYCB", title: "Yoruba Bible", language: "yo" },
+      ],
+    })
+
+    await remoteActions.sendToLive()
+    expect(useApprovalGateStore.getState().held?.id).toBe("sunday")
+
+    useBibleStore.setState({
+      translations: useBibleStore.getState().translations.map((translation) =>
+        translation.id === 2 ? { ...translation, is_downloaded: false } : translation,
+      ),
+    })
+    useApprovalGateStore.getState().presentAnyway()
+    await vi.waitFor(() => expect(useTakeAttemptStore.getState().attempts.at(-1)?.status).toBe("superseded"))
+
+    expect(useApprovalGateStore.getState().acknowledged).not.toContain("sunday")
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(mockInvoke).not.toHaveBeenCalled()
+  })
+
   it("does not replay a held Take after its rundown item is removed", async () => {
     const heldItem = queueItemFor(genesisOneOne)
     useQueueStore.setState({ items: [heldItem], activeIndex: null })
