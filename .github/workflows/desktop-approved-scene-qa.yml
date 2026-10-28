@@ -1,0 +1,76 @@
+name: Desktop approved scene QA (native Tauri)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/desktop-approved-scene-qa.yml"
+      - "package.json"
+      - "bun.lock"
+      - "scripts/mac-qa/approved-scene-journey.js"
+      - "scripts/mac-qa/open-approved-output-windows.js"
+      - "scripts/mac-qa/run-approved-scene-journey.sh"
+      - "scripts/mac-qa/watch-approved-scene-output.js"
+      - "scripts/mac-qa/qa.py"
+      - "data/schema.sql"
+      - "src/App.tsx"
+      - "src/hooks/use-broadcast.ts"
+      - "src-tauri/src/qa_bridge.rs"
+      - "src-tauri/src/lib.rs"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/tauri.approved-scene-qa.conf.json"
+      - "src/studio/production/**"
+      - "src/studio/prepare/**"
+      - "src/studio/present/**"
+      - "src/studio/present-actions.ts"
+      - "src/studio/shell-store.ts"
+      - "src/lib/approved-designs.ts"
+      - "src/lib/scene-renderer.ts"
+      - "src/lib/item-intent.ts"
+      - "src/lib/take-steps.ts"
+      - "src/lib/remote-actions.ts"
+      - "src/stores/broadcast-store.ts"
+      - "src/stores/queue-store.ts"
+      - "src/stores/service-store.ts"
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-approved-scene-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-approved-scene-journey:
+    name: Approved scene Take changes only its native Program render
+    runs-on: macos-15-intel
+    timeout-minutes: 40
+    env:
+      KEEP_QA_SCRATCH: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri
+      - name: Install ONNX Runtime
+        run: brew install onnxruntime
+      - name: Install JavaScript dependencies
+        run: bun install --frozen-lockfile
+      - name: Build and exercise the isolated native app
+        run: bash scripts/mac-qa/run-approved-scene-journey.sh
+        env:
+          TMPDIR: ${{ runner.temp }}
+      - name: Keep the synthetic QA report and app log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: approved-scene-native-journey-${{ github.run_id }}
+          path: ${{ runner.temp }}/rhema-approved-scene-qa.*/artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
