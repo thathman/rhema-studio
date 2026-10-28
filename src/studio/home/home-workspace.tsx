@@ -238,6 +238,7 @@ function kindLabel(it: Item): string {
   if (isSongItem(it)) return "Song"
   if (it.kind === "slide") return "Slide"
   if (isImageItem(it)) return "Picture or video"
+  if (it.kind === "audio") return "Audio cue"
   return "Scripture"
 }
 

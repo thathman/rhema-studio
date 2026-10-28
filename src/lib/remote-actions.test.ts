@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { ImageQueueItem, QueueItem, SlideQueueItem, Verse } from "@/types"
+import type { AudioQueueItem, QueueItem, SlideQueueItem, Verse } from "@/types"
 
 const mockInvoke = vi.fn()
 
@@ -153,11 +153,11 @@ describe("remoteActions.sendToLive", () => {
     expect(mockInvoke).not.toHaveBeenCalledWith("get_verse", expect.anything())
   })
 
-  it("does not require approval to Send to Live for a sound item", async () => {
-    const audio: ImageQueueItem = {
+  it("does not require approval to Send to Live for a typed audio item", async () => {
+    const audio: AudioQueueItem = {
       id: "audio",
-      kind: "image",
-      image: { media_id: "walkin", name: "Walk-in", fit: "cover" },
+      kind: "audio",
+      audio: { media_id: "walkin", name: "Walk-in" },
       reference: "Walk-in",
       confidence: 1,
       source: "manual",
@@ -736,8 +736,8 @@ describe("queue position follows successful Takes", () => {
     const previous = queueItemFor(genesisOneOne)
     const soundItem = {
       id: "walk-in",
-      kind: "image",
-      image: { media_id: "audio-walk-in", name: "Walk-in", fit: "cover" },
+      kind: "audio",
+      audio: { media_id: "audio-walk-in", name: "Walk-in" },
       reference: "Walk-in",
       confidence: 1,
       source: "manual",

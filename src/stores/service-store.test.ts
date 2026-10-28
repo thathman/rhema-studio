@@ -12,6 +12,7 @@ import { useQueueStore } from "./queue-store"
 import { useBibleStore } from "./bible-store"
 import { useBroadcastStore } from "./broadcast-store"
 import type { OutlineHeader } from "@/lib/run-of-show"
+import { useMediaStore } from "./media-store"
 
 const program = {
   id: "p1",
@@ -94,6 +95,7 @@ beforeEach(() => {
   useBibleStore.setState({ activeTranslationId: 1, secondaryTranslationId: null, translations: [KJV] })
   useBroadcastStore.setState({ isLive: false, liveVerse: null, liveItemId: null, liveSlide: null } as never)
   useServiceStore.setState({ programs: [], current: null, dirty: false, loading: false, saving: false, error: null, conflict: null, unsupportedItems: [], corruptItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
+  useMediaStore.setState({ assets: [], loading: false, loaded: true, error: null })
 })
 
 describe("conversions", () => {
@@ -298,6 +300,94 @@ describe("per-output scene assignments in saved services", () => {
     expect(useServiceStore.getState().closeProgram()).toBe("closed")
     expect(await useServiceStore.getState().openProgram(current.id)).toBe("ok")
     expect(useQueueStore.getState().items[0]).toMatchObject({ id: "sermon-moment", on_take: payload.on_take })
+  })
+})
+
+describe("legacy audio service reopening", () => {
+  it("checks local media metadata before decoding an older image row as an audio cue", async () => {
+    const oldService: ProgramWithItems = {
+      ...stored,
+      items: [item("legacy-audio", "Walk-in", 0, 0, 0, { kind: "image", payload: '{"media_id":"walkin","fit":"cover"}' })],
+    }
+    useMediaStore.setState({ assets: [], loaded: false, loading: false, error: null })
+    mockInvoke.mockImplementation(async (command: string) => {
+      if (command === "content_get_program") return oldService
+      if (command === "media_list") return [{ id: "walkin", kind: "audio", name: "Walk-in", file: "walk-in.mp3", hash: "hash", size: 10, mime: "audio/mpeg", width: null, height: null, duration_ms: null, source: "local", source_ref: "", original_path: "", created_at: "", path: "/media/walk-in.mp3", present: true }]
+      return null
+    })
+
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+    expect(mockInvoke).toHaveBeenCalledWith("media_list")
+    expect(useQueueStore.getState().items[0]).toMatchObject({ kind: "audio", audio: { media_id: "walkin", name: "Walk-in" } })
+  })
+
+  it("refuses to guess at an old image row when the local media catalog cannot be checked", async () => {
+    const oldService: ProgramWithItems = {
+      ...stored,
+      items: [item("legacy-audio", "Walk-in", 0, 0, 0, { kind: "image", payload: '{"media_id":"walkin","fit":"cover"}' })],
+    }
+    useMediaStore.setState({ assets: [], loaded: false, loading: false, error: null })
+    mockInvoke.mockImplementation(async (command: string) => {
+      if (command === "content_get_program") return oldService
+      if (command === "media_list") throw new Error("media database unavailable")
+      return null
+    })
+
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("error")
+    expect(useQueueStore.getState().items).toEqual([])
+    expect(useServiceStore.getState().error).toContain("Could not check the local media library")
+  })
+})
+
+describe("audio cue service saves", () => {
+  it("saves, closes and reopens the cue with its stable id and local playback settings", async () => {
+    const current = { ...program, item_count: 1, approved_revision: null }
+    const cue: QueueItem = {
+      id: "walkin-cue",
+      kind: "audio",
+      audio: { media_id: "walkin", name: "Walk-in", output_device_id: "usb-output", volume: 0.6, loop: true, fade_in_ms: 1500, fade_out_ms: 2500 },
+      reference: "Walk-in",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+      planned_minutes: 5,
+    }
+    let persisted: ProgramWithItems | null = null
+    useServiceStore.setState({ current, dirty: true })
+    useQueueStore.setState({ items: [cue], headers: [], activeIndex: null })
+    mockInvoke.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === "content_replace_items" || command === "content_replace_items_with_history") {
+        const rows = args?.items as Array<Record<string, unknown>>
+        persisted = {
+          program: { ...current, revision: 2 },
+          items: rows.map((row, position) => item(String(row.id), String(row.reference), 0, 0, 0, {
+            position,
+            kind: String(row.kind),
+            book_number: null,
+            chapter: null,
+            verse: null,
+            translation: null,
+            secondary_translation: null,
+            notes: typeof row.notes === "string" ? row.notes : null,
+            payload: typeof row.payload === "string" ? row.payload : null,
+          })),
+        }
+        return structuredClone(persisted)
+      }
+      if (command === "content_get_program") return persisted ? structuredClone(persisted) : null
+      return null
+    })
+
+    expect(await useServiceStore.getState().saveCurrent()).toBe("saved")
+    expect(JSON.parse(String(sentItems()[0].payload))).toMatchObject({ media_id: "walkin", output_device_id: "usb-output", volume: 0.6, loop: true, fade_in_ms: 1500, fade_out_ms: 2500, planned_minutes: 5 })
+    expect(useServiceStore.getState().closeProgram()).toBe("closed")
+    expect(await useServiceStore.getState().openProgram(current.id)).toBe("ok")
+    expect(useQueueStore.getState().items[0]).toMatchObject({
+      id: "walkin-cue",
+      kind: "audio",
+      audio: { media_id: "walkin", output_device_id: "usb-output", volume: 0.6, loop: true, fade_in_ms: 1500, fade_out_ms: 2500 },
+      planned_minutes: 5,
+    })
   })
 })
 

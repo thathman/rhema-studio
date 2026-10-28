@@ -8,8 +8,10 @@ vi.mock("@/stores/media-store", () => ({
 class FakeAudio {
   static made: FakeAudio[] = []
   static playResult: () => Promise<void> = async () => {}
+  static sinkFailure = false
   loop = false
   volume = 1
+  sinkId = ""
   currentTime = 0
   duration = 180
   paused = true
@@ -19,6 +21,10 @@ class FakeAudio {
   constructor(src: string) { this.src = src; FakeAudio.made.push(this) }
   addEventListener(type: string, listener: () => void) { (this.listeners[type] ??= []).push(listener) }
   emit(type: string) { for (const listener of this.listeners[type] ?? []) listener() }
+  async setSinkId(deviceId: string) {
+    if (FakeAudio.sinkFailure) throw new Error("NotFoundError")
+    this.sinkId = deviceId
+  }
   play() { return FakeAudio.playResult().then(() => { this.paused = false }) }
   pause() { this.paused = true }
   removeAttribute(attribute: string) { if (attribute === "src") this.src = "" }
@@ -35,6 +41,7 @@ beforeEach(() => {
   useSoundStore.getState().stop()
   FakeAudio.made = []
   FakeAudio.playResult = async () => {}
+  FakeAudio.sinkFailure = false
   const urls: Record<string, string | null> = { a: "asset://a.mp3", b: "asset://b.mp3", gone: null }
   mediaFileUrl.mockReset().mockImplementation(async (id: unknown) => urls[String(id)] ?? null)
   useJournalStore.setState({ entries: [], startItemIds: null, added: 0, keptAt: 0 })
@@ -58,6 +65,53 @@ describe("sound player", () => {
     expect(started).toBe(false)
     expect(useSoundStore.getState().error).toContain("missing")
     expect(useSoundStore.getState().name).toBe("Offering")
+  })
+
+  it("routes an audio cue locally and applies its saved volume, repeat, fades, and rundown id", async () => {
+    await useSoundStore.getState().play({
+      id: "a", name: "Walk-in", itemId: "cue-walk-in", outputDeviceId: "usb-output",
+      volume: 0.4, loop: true, fadeInMs: 100, fadeOutMs: 8000,
+    })
+
+    const el = FakeAudio.made[0]
+    expect(el.sinkId).toBe("usb-output")
+    expect(el.loop).toBe(true)
+    expect(el.volume).toBe(0)
+    expect(useSoundStore.getState()).toMatchObject({ itemId: "cue-walk-in", volume: 0.4, loop: true, fading: true, fadeDirection: "in", fadeOutMs: 8000, outputNote: null })
+    expect(useJournalStore.getState().entries.filter((entry) => entry.kind === "sound")).toMatchObject([{ itemId: "cue-walk-in", label: "Walk-in" }])
+
+    vi.advanceTimersByTime(50)
+    expect(el.volume).toBeCloseTo(0.2)
+    vi.advanceTimersByTime(50)
+    expect(el.volume).toBeCloseTo(0.4)
+    expect(useSoundStore.getState()).toMatchObject({ fading: false, fadeDirection: null })
+  })
+
+  it("reports when the selected output disappears and falls back to the computer output", async () => {
+    FakeAudio.sinkFailure = true
+    const started = await useSoundStore.getState().play({ id: "a", name: "Walk-in", outputDeviceId: "usb-output" })
+
+    expect(started).toBe(true)
+    expect(useSoundStore.getState().outputNote).toContain("using this computer’s default output")
+    expect(FakeAudio.made[0].paused).toBe(false)
+  })
+
+  it("fades out the previous cue after a replacement starts", async () => {
+    await useSoundStore.getState().play({ id: "a", name: "Walk-in", itemId: "cue-a", volume: 0.8, fadeOutMs: 1000 })
+    const previous = FakeAudio.made[0]
+
+    await useSoundStore.getState().play({ id: "b", name: "Offering", itemId: "cue-b", volume: 0.5 })
+    const current = FakeAudio.made[1]
+    expect(previous.paused).toBe(false)
+    expect(current.volume).toBe(0.5)
+
+    vi.advanceTimersByTime(500)
+    expect(previous.volume).toBeCloseTo(0.4)
+    expect(current.volume).toBe(0.5)
+    vi.advanceTimersByTime(500)
+    expect(previous.paused).toBe(true)
+    expect(current.paused).toBe(false)
+    expect(useSoundStore.getState()).toMatchObject({ itemId: "cue-b", playing: true })
   })
 
   it("keeps the current track and its journal when a replacement cannot start", async () => {
