@@ -27,6 +27,27 @@ impl Default for RemoteKeys {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum RemoteAccessChange {
+    Revoked,
+    RoleChanged { from: Role, to: Role },
+}
+
+/// Changes suitable for a local audit log. Credentials and operator-entered device names stay out.
+fn remote_access_changes(previous: &[KeyEntry], current: &[KeyEntry]) -> Vec<RemoteAccessChange> {
+    previous
+        .iter()
+        .filter_map(|old| match current.iter().find(|new| new.hash == old.hash) {
+            Some(new) if new.role != old.role => Some(RemoteAccessChange::RoleChanged {
+                from: old.role,
+                to: new.role,
+            }),
+            Some(_) => None,
+            None => Some(RemoteAccessChange::Revoked),
+        })
+        .collect()
+}
+
 /// Replace the accepted keys: the shared key (if any) plus every paired
 /// device. `require_auth` is the operator's switch; it is forced on while
 /// any key exists, and when on with no keys every command is refused.
@@ -38,13 +59,45 @@ pub fn remote_set_keys(app: AppHandle, remote: State<'_, RemoteKeys>, shared: Op
         entries.push(KeyEntry { hash: hash_key(&s), name: "Shared key".into(), role: Role::Configure, paused: false });
     }
     let n = entries.len();
+    let previous = remote.keys.read().map_err(|e| e.to_string())?.entries.clone();
     {
         let mut k = remote.keys.write().map_err(|e| e.to_string())?;
         k.require_auth = require_auth.unwrap_or(false) || n > 0;
         k.entries = entries;
     }
+    let current = remote.keys.read().map_err(|e| e.to_string())?.entries.clone();
+    for change in remote_access_changes(&previous, &current) {
+        match change {
+            RemoteAccessChange::RoleChanged { from, to } => log::info!(
+                "Remote device role changed: {} → {}",
+                from.as_str(),
+                to.as_str()
+            ),
+            RemoteAccessChange::Revoked => log::info!("Remote access credential revoked"),
+        }
+    }
     super::camera_router::desks_changed(&app);
     Ok(n)
+}
+
+/// The effective authentication switch and number of accepted credentials, for Show Health.
+#[derive(serde::Serialize)]
+pub struct RemoteAuthStatus {
+    pub required: bool,
+    pub credential_count: usize,
+}
+
+fn remote_auth_status(keys: &KeySet) -> Result<RemoteAuthStatus, String> {
+    let keys = keys.read().map_err(|e| e.to_string())?;
+    Ok(RemoteAuthStatus {
+        required: keys.require_auth,
+        credential_count: keys.entries.len(),
+    })
+}
+
+#[tauri::command]
+pub fn get_remote_auth_status(remote: State<'_, RemoteKeys>) -> Result<RemoteAuthStatus, String> {
+    remote_auth_status(&remote.keys)
 }
 
 /// Open the two-minute pairing window; returns the code to show on screen.
@@ -166,6 +219,7 @@ fn answer_lookup(app: &AppHandle, q: &rhema_api::Lookup) -> Result<serde_json::V
 pub struct OscRuntime {
     handle: Option<OscHandle>,
     bound_port: Option<u16>,
+    lan: bool,
 }
 
 impl OscRuntime {
@@ -173,6 +227,7 @@ impl OscRuntime {
         Self {
             handle: None,
             bound_port: None,
+            lan: false,
         }
     }
 }
@@ -198,9 +253,10 @@ pub async fn start_osc(
         return Err("OSC listener is already running".into());
     }
 
+    let lan = lan.unwrap_or(true);
     let config = OscConfig {
         port: port.unwrap_or(8000),
-        host: bind_host(lan).into(),
+        host: bind_host(Some(lan)).into(),
         keys: remote.keys.clone(),
     };
 
@@ -210,6 +266,7 @@ pub async fn start_osc(
     let bound_port = result.bound_port;
     runtime.handle = Some(result.handle);
     runtime.bound_port = Some(bound_port);
+    runtime.lan = lan;
 
     log::info!("OSC listener started on port {bound_port}");
     Ok(bound_port)
@@ -224,6 +281,7 @@ pub async fn stop_osc(state: State<'_, Mutex<OscRuntime>>) -> Result<(), String>
         Some(mut handle) => {
             handle.stop();
             runtime.bound_port = None;
+            runtime.lan = false;
             log::info!("OSC listener stopped");
             Ok(())
         }
@@ -241,6 +299,7 @@ pub async fn get_osc_status(
     Ok(OscStatus {
         running: runtime.handle.as_ref().is_some_and(rhema_api::OscHandle::is_active),
         port: runtime.bound_port,
+        lan: runtime.lan,
     })
 }
 
@@ -248,6 +307,7 @@ pub async fn get_osc_status(
 pub struct OscStatus {
     pub running: bool,
     pub port: Option<u16>,
+    pub lan: bool,
 }
 
 // --- HTTP Runtime ---
@@ -744,6 +804,55 @@ pub fn feed_status(state: State<'_, Mutex<HttpRuntime>>, id: String) -> Result<O
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn remote_auth_health_reports_only_effective_gate_and_credential_count() {
+        let keys = new_key_set();
+        assert_eq!(
+            remote_auth_status(&keys).unwrap().credential_count,
+            0
+        );
+        keys.write().unwrap().require_auth = true;
+        keys.write().unwrap().entries.push(KeyEntry {
+            hash: "private-hash".into(),
+            name: "private label".into(),
+            role: Role::Present,
+            paused: false,
+        });
+        let status = remote_auth_status(&keys).unwrap();
+        assert!(status.required);
+        assert_eq!(status.credential_count, 1);
+    }
+
+    #[test]
+    fn remote_access_audit_changes_exclude_names_and_credential_hashes() {
+        let entry = |hash: char, name: &str, role| KeyEntry {
+            hash: hash.to_string().repeat(64),
+            name: name.into(),
+            role,
+            paused: false,
+        };
+        let previous = [
+            entry('a', "Private phone label", Role::Configure),
+            entry('b', "Another device", Role::Present),
+        ];
+        let current = [
+            entry('a', "Private phone label", Role::Screens),
+            entry('c', "New device", Role::Present),
+        ];
+
+        assert_eq!(
+            remote_access_changes(&previous, &current),
+            [
+                RemoteAccessChange::RoleChanged {
+                    from: Role::Configure,
+                    to: Role::Screens,
+                },
+                RemoteAccessChange::Revoked,
+            ]
+        );
+        assert!(remote_access_changes(&current, &current).is_empty());
+    }
 
     #[test]
     fn feed_keys_keep_each_tv_key_and_drop_short_ones() {
