@@ -1,4 +1,4 @@
-import { ArchiveIcon, HouseIcon, LibraryBigIcon, MonitorCogIcon, PaletteIcon, PencilRulerIcon, PlayIcon, UsersIcon } from "lucide-react"
+import { ArchiveIcon, CableIcon, HouseIcon, LibraryBigIcon, MonitorCogIcon, PaletteIcon, PencilRulerIcon, PlayIcon, UsersIcon } from "lucide-react"
 import type { Workspace } from "@/studio/shell-store"
 
 export interface NavItem {
@@ -24,6 +24,7 @@ export function churchItems(): NavItem[] {
   return [
     { id: "library", label: "Library", icon: <LibraryBigIcon />, key: "4", workspace: "library" },
     { id: "design", label: "Design", icon: <PaletteIcon />, key: "5", workspace: "design" },
+    { id: "connections", label: "Connections", icon: <CableIcon />, workspace: "connections" },
     { id: "team", label: "Team", icon: <UsersIcon />, key: "6", workspace: "team" },
     { id: "archive", label: "Archive", icon: <ArchiveIcon />, key: "7", workspace: "archive" },
   ]
