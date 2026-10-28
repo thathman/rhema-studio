@@ -997,6 +997,47 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(eventHandle.getAttribute("aria-disabled")).not.toBe("true")
   })
 
+  it("shows zero-moment events in their phase summary without changing Plan or Live", async () => {
+    const items: QueueItem[] = []
+    const headers = [
+      { id: "main", type: "phase" as const, name: "Main service", at: 0, role: "main" as const },
+      { id: "prayer", type: "group" as const, name: "Opening Prayer", at: 0, event: { schema_version: 1 as const, duration_minutes: 15 } },
+    ]
+    useQueueStore.setState({ items, headers, activeIndex: null })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
+    const planBefore = structuredClone({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers })
+    const liveBefore = useBroadcastStore.getState()
+
+    const el = await renderPrepare()
+    const phase = el.querySelector<HTMLElement>('[aria-label="Phase: Main service"]')!
+    expect(phase.textContent).toContain("1 event")
+    expect(phase.textContent).not.toContain("0 items")
+    expect(el.querySelector('[aria-label="Event: Opening Prayer"]')).not.toBeNull()
+    expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers }).toEqual(planBefore)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
+  it("shows phase event, moment and loose-item counts without double-counting or changing duration", async () => {
+    const items = [slide("Loose welcome"), slide("Sermon Scripture"), slide("Sermon slide")]
+    const headers = [
+      { id: "main", type: "phase" as const, name: "Main service", at: 0, role: "main" as const },
+      { id: "prayer", type: "group" as const, name: "Prayer", at: 1, event: { schema_version: 1 as const, duration_minutes: 5 } },
+      { id: "sermon", type: "group" as const, name: "Sermon", at: 1, event: { schema_version: 1 as const, duration_minutes: 40 } },
+      { id: "post", type: "phase" as const, name: "Post-service", at: 3, role: "post" as const },
+    ]
+    useQueueStore.setState({ items, headers, activeIndex: null })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
+    const planBefore = structuredClone({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers })
+    const liveBefore = useBroadcastStore.getState()
+
+    const el = await renderPrepare()
+    const phase = el.querySelector<HTMLElement>('[aria-label="Phase: Main service"]')!
+    expect(phase.textContent).toContain("2 events · 2 moments · 1 item")
+    expect(phase.textContent).toContain("48 min")
+    expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers }).toEqual(planBefore)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
   it("reveals and focuses a successful Add inside collapsed sections", async () => {
     useQueueStore.setState({
       items: [slide("Existing moment")],
