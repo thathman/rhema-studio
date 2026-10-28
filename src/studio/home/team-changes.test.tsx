@@ -51,6 +51,13 @@ describe("teamChanges", () => {
   it("is empty when nothing really happened", () => {
     expect(teamChanges(program(), [slide("Welcome")], [], new Set(), "")).toEqual([])
   })
+
+  it("records a removed comment as an attributed change, not as unread work", () => {
+    const deleted = { id: "c1", by: "Ade", at: "2026-10-22T17:00:00.000Z", text: "Shorter please", deleted_by: "Ade", deleted_at: "2026-10-22T18:00:00.000Z" }
+    expect(teamChanges(program(), [slide("Welcome", [deleted])], [], new Set(), "Ade")).toMatchObject([
+      { kind: "comment", at: deleted.deleted_at, by: "Ade", deletedBy: "Ade", text: deleted.text, unread: false },
+    ])
+  })
 })
 
 describe("Home: Team changes", () => {

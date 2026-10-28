@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import { serviceTiming, type EventState, type OffsetMode, type ServiceTiming } from "@/lib/timing-engine"
+import { runOfShowClockRows } from "@/lib/run-of-show"
+import { eventTimes } from "@/lib/journal"
 import type { RunState } from "@/lib/timing-state"
 import { runStateNow, timingInputNow } from "@/stores/timing-input"
 import { useTimingTrust } from "@/stores/timing-trust-store"
@@ -52,7 +54,16 @@ export interface LiveStateV1 {
    * "lowerThird" and "stage" are absent from older hosts.
    */
   sources: { id: string; reference: string; on: boolean; revision: number; activatedAt?: number; by?: string; state?: string }[]
-  event: { mode: "screens" | "own"; currentId: string | null }
+  event: {
+    mode: "screens" | "own"
+    currentId: string | null
+    /** The content moment currently associated with the event; absent from older hosts. */
+    currentMomentId?: string | null
+    /** The current planned event's elapsed monotonic time. */
+    currentElapsedMs?: number
+    /** Event-level Timekeeper targets; older hosts expose only queue items in `rundown`. */
+    targets?: { id: string; reference: string; plannedMinutes: number | null; kind: "event" | "item"; time?: RundownTime }[]
+  }
   /** Each item; `time` for those in the main service once it has a start time (#196 R4; absent from older hosts). */
   rundown: { id: string; reference: string; plannedMinutes: number | null; time?: RundownTime }[]
   /**
@@ -213,6 +224,10 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
   const timing = serviceTiming(input)
   const times = rundownTimes(timing, onAirMs)
   const current = useServiceStore.getState().current
+  const untrusted = useTimingTrust.getState().untrusted
+  const currentElapsedMs = clock.currentId && (!untrusted || (untrusted.eventId ?? untrusted.itemId) !== clock.currentId)
+    ? eventTimes(useJournalStore.getState().entries, Math.max(monotonicNow(), useJournalStore.getState().entries.at(-1)?.mono ?? 0)).get(clock.currentId) ?? 0
+    : undefined
   return {
     v: 1,
     at: now,
@@ -232,13 +247,22 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
       }),
       ...stateSourceRows(),
     ],
-    event: { mode: clock.mode, currentId: clock.currentId },
+    event: {
+      mode: clock.mode,
+      currentId: clock.currentId,
+      currentMomentId: clock.currentMomentId,
+      ...(currentElapsedMs !== undefined ? { currentElapsedMs } : {}),
+      targets: runOfShowClockRows(q.items, q.headers).rows.map((row) => {
+        const time = times.get(row.id)
+        return { id: row.id, reference: row.reference, plannedMinutes: row.planned_minutes, kind: row.kind, ...(time ? { time } : {}) }
+      }),
+    },
     rundown: q.items.map((i) => { const time = times.get(i.id); return { id: i.id, reference: i.reference, plannedMinutes: i.planned_minutes ?? null, ...(time ? { time } : {}) } }),
     timing: timing
       ? {
           plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd, lateMs: timing.lateMs, offsetMinutes: useServiceOffset.getState().minutes, offsetBy: useServiceOffset.getState().by,
           offsetMode: useServiceOffset.getState().mode, state: runStateNow(), ...(input.timeZone ? { timeZone: input.timeZone } : {}),
-          ...(useTimingTrust.getState().untrusted ? { untrusted: useTimingTrust.getState().untrusted!.itemId } : {}),
+          ...(untrusted ? { untrusted: untrusted.eventId ?? untrusted.itemId } : {}),
         }
       : null,
     stageMessage: b.stageMessage,

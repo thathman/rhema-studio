@@ -2,7 +2,7 @@
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Rhema Studio Companion",
   "mainBinaryName": "Rhema Studio Companion",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "identifier": "com.openbezal.rhema.companion",
   "build": {
     "frontendDist": "../build",
@@ -16,8 +16,8 @@
         "label": "main",
         "url": "companion.html",
         "title": "Rhema Studio Companion",
-        "width": 420,
-        "height": 640,
+        "width": 860,
+        "height": 720,
         "minWidth": 360,
         "minHeight": 480,
         "resizable": true,
@@ -48,7 +48,7 @@
     "macOS": {
       "minimumSystemVersion": "10.15",
       "signingIdentity": "-",
-      "bundleVersion": "1.0.0.0"
+      "bundleVersion": "1.1.0.0"
     },
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" }

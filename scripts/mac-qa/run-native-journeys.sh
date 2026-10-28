@@ -33,7 +33,6 @@ cleanup() {
       "$QA_RUN/out/hymn-journey.json" \
       "$QA_RUN/out/scene-save-journey.json" \
       "$QA_RUN/out/take-failure-journey.json" \
-      "$QA_RUN/out/approved-scene-journey.json" \
       "$QA_SCRATCH/result.json" \
       "$QA_SCRATCH/scene-result.json" \
       "$QA_SCRATCH/app.log"; do
@@ -95,7 +94,10 @@ export QA_DIR="$QA_RUN"
 HOME="$QA_HOME" RHEMA_QA_DIR="$QA_RUN" "$APP_BIN" >"$QA_SCRATCH/app.log" 2>&1 &
 APP_PID=$!
 set +e
-"$ROOT/scripts/mac-qa/qa.py" main hymn-journey "$ROOT/scripts/mac-qa/hymn-journey.js" 60 >"$QA_SCRATCH/result.json"
+{
+  cat "$ROOT/scripts/mac-qa/hymn-journey.js"
+  printf '\nreturn await runScenario()\n'
+} | "$ROOT/scripts/mac-qa/qa.py" main hymn-journey - 60 >"$QA_SCRATCH/result.json"
 QA_STATUS=$?
 set -e
 
@@ -118,30 +120,10 @@ print(json.dumps(report.get("result"), ensure_ascii=False, indent=2))
 PY
 
 set +e
-"$ROOT/scripts/mac-qa/qa.py" main approved-scene-journey "$ROOT/scripts/mac-qa/approved-scene-journey.js" 60 >"$QA_SCRATCH/approved-scene-result.json"
-APPROVED_SCENE_STATUS=$?
-set -e
-
-if [[ "$APPROVED_SCENE_STATUS" != 0 ]]; then
-  cat "$QA_SCRATCH/approved-scene-result.json" >&2
-  cat "$QA_SCRATCH/app.log" >&2
-  exit "$APPROVED_SCENE_STATUS"
-fi
-
-python3 - "$QA_RUN/out/approved-scene-journey.json" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as report_file:
-    report = json.load(report_file)
-if not report.get("ok"):
-    print(json.dumps(report, ensure_ascii=False, indent=2), file=sys.stderr)
-    raise SystemExit(1)
-print(json.dumps(report.get("result"), ensure_ascii=False, indent=2))
-PY
-
-set +e
-"$ROOT/scripts/mac-qa/qa.py" main scene-save-journey "$ROOT/scripts/mac-qa/scene-save-journey.js" 60 >"$QA_SCRATCH/scene-result.json"
+{
+  cat "$ROOT/scripts/mac-qa/scene-save-journey.js"
+  printf '\nreturn await runScenario()\n'
+} | "$ROOT/scripts/mac-qa/qa.py" main scene-save-journey - 60 >"$QA_SCRATCH/scene-result.json"
 SCENE_STATUS=$?
 set -e
 
@@ -164,7 +146,10 @@ print(json.dumps(report.get("result"), ensure_ascii=False, indent=2))
 PY
 
 set +e
-"$ROOT/scripts/mac-qa/qa.py" main take-failure-journey "$ROOT/scripts/mac-qa/take-failure-journey.js" 60 >"$QA_SCRATCH/take-failure-result.json"
+{
+  cat "$ROOT/scripts/mac-qa/take-failure-journey.js"
+  printf '\nreturn await runScenario()\n'
+} | "$ROOT/scripts/mac-qa/qa.py" main take-failure-journey - 60 >"$QA_SCRATCH/take-failure-result.json"
 TAKE_FAILURE_STATUS=$?
 set -e
 

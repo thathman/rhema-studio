@@ -66,7 +66,7 @@ export function catchUpItemCues(now = Date.now()): void {
   const due = finish
   clearFinish()
   const item = itemById(due.id)
-  if (item && useEventClock.getState().currentId === due.id) queue(() => runItemCues(item, "finish"))
+  if (item && useEventClock.getState().currentMomentId === due.id) queue(() => runItemCues(item, "finish"))
 }
 
 // The steps of one moment and the next run in order (an "end" marker before the next item's "start").
@@ -81,11 +81,11 @@ function queue(fn: () => void | Promise<void>) {
 }
 
 useEventClock.subscribe((s, prev) => {
-  if (s.currentId === prev.currentId) return
-  const before = itemById(prev.currentId)
+  if (s.currentMomentId === prev.currentMomentId) return
+  const before = itemById(prev.currentMomentId)
   clearFinish()
   if (before) queue(() => runItemCues(before, "end"))
-  const now = itemById(s.currentId)
+  const now = itemById(s.currentMomentId)
   if (!now || useBroadcastStore.getState().rehearsal) return
   queue(() => runItemCues(now, "live"))
   armFinish(now)
@@ -94,7 +94,7 @@ useEventClock.subscribe((s, prev) => {
 // "When it is paused": a hold starting, or the service timer paused (not reset) during the item.
 // Just after the hold's own stage message, so the item's own one is what the stage shows.
 function paused() {
-  const item = itemById(useEventClock.getState().currentId)
+  const item = itemById(useEventClock.getState().currentMomentId)
   if (item) queueMicrotask(() => queue(() => runItemCues(item, "pause")))
 }
 useHold.subscribe((s, prev) => {

@@ -4,7 +4,7 @@ import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { useBibleStore, useBroadcastStore } from "@/stores"
 import { bibleActions } from "@/hooks/use-bible"
 import { toCustomSlideRenderData, toImageRenderData, toVideoRenderData, toVerseRenderData } from "@/hooks/use-broadcast"
-import { isCueItem, isImageItem, isSlideItem, isSongItem } from "@/types"
+import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
 import { songSlides, toLyricRenderData } from "@/lib/lyrics"
@@ -14,6 +14,7 @@ import { ItemPlan } from "@/studio/prepare/item-plan"
 import { planLines } from "@/lib/item-intent"
 import { useSettingsStore } from "@/stores/settings-store"
 import { usePreviewLabel } from "@/hooks/use-preview-label"
+import { useServiceStore } from "@/stores/service-store"
 
 /**
  * What Show live will present, only for the operator. Under it, the previewed rundown item's plan
@@ -25,14 +26,25 @@ import { usePreviewLabel } from "@/hooks/use-preview-label"
 export function PreviewPanel({ itemLook = false, compact = false }: { itemLook?: boolean; compact?: boolean } = {}) {
   const selectedVerse = useBibleStore((s) => s.selectedVerse)
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
+  const selectedQueueItemId = useBibleStore((s) => s.selectedQueueItemId)
+  const isSamplePreview = useBibleStore((s) => s.samplePreview)
+  const currentService = useServiceStore((s) => s.current)
   const previewSongId = selectedSlide && isSongItem(selectedSlide.item) ? selectedSlide.item.song.song_id : null
+  const previewAudioId = selectedSlide && isAudioItem(selectedSlide.item) ? selectedSlide.item.audio.media_id : null
   const previewMediaId = selectedSlide && isImageItem(selectedSlide.item) ? selectedSlide.item.image.media_id : null
   const previewUrl = useMediaStore((s) => (previewMediaId ? s.urls[previewMediaId] : undefined))
   const previewIsVideo = useMediaStore((s) => (previewMediaId ? s.assets.find((a) => a.id === previewMediaId)?.kind === "video" : false))
   const previewIsSound = useMediaStore((s) => (previewMediaId ? s.assets.find((a) => a.id === previewMediaId)?.kind === "audio" : false))
+  const previewAudio = useMediaStore((s) => (previewAudioId ? s.assets.find((a) => a.id === previewAudioId) : undefined))
+  const mediaLoaded = useMediaStore((s) => s.loaded)
+  const mediaLoading = useMediaStore((s) => s.loading)
+  const mediaError = useMediaStore((s) => s.error)
   useEffect(() => {
     if (previewMediaId && !previewUrl && !previewIsVideo) void useMediaStore.getState().dataUrl(previewMediaId)
   }, [previewMediaId, previewUrl, previewIsVideo])
+  useEffect(() => {
+    if (previewAudioId && !mediaLoaded && !mediaLoading) void useMediaStore.getState().list()
+  }, [previewAudioId, mediaLoaded, mediaLoading])
   // The approved service's words of the song when it has them (#193), else the library's.
   const savedSong = useServiceSong(previewSongId)
   // A slide picked from the live song shows the song as it went live (what Show live will present).
@@ -52,12 +64,25 @@ export function PreviewPanel({ itemLook = false, compact = false }: { itemLook?:
   useEffect(() => {
     const was = prevActive.current
     prevActive.current = activeTranslationId
-    const verse = useBibleStore.getState().selectedVerse
+    const selection = useBibleStore.getState()
+    const verse = selection.selectedVerse
     if (verse && verse.translation_id === was && verse.book_number > 0 && verse.chapter > 0 && verse.verse > 0) {
       bibleActions
         .fetchVerse(verse.book_number, verse.chapter, verse.verse)
         .then((v) => {
-          if (v) bibleActions.selectVerse(v)
+          // Translation loading is asynchronous. A verse may have been the
+          // selection when this request started, then the operator may have
+          // previewed a different service item. Don't let the old response
+          // clear that newer selection.
+          const current = useBibleStore.getState()
+          if (
+            v &&
+            current.selectedVerse === verse &&
+            current.selectedSlide === null &&
+            current.selectedQueueItemId === selection.selectedQueueItemId
+          ) {
+            bibleActions.selectVerse(v)
+          }
         })
         .catch(() => {})
     }
@@ -67,6 +92,12 @@ export function PreviewPanel({ itemLook = false, compact = false }: { itemLook?:
 
   const previewed = useSelectedItem()?.item ?? null
   const label = usePreviewLabel()
+  const sampleNotice =
+    isSamplePreview && selectedVerse && !selectedSlide && selectedQueueItemId === null && !previewed
+      ? currentService
+        ? "Sample preview — not in this service"
+        : "Sample preview — no service selected"
+      : null
   // For the compact line's plan (the full panel's ItemPlan reads its own).
   const scenes = useBroadcastStore((s) => s.scenes)
   const outputs = useBroadcastStore((s) => s.outputs)
@@ -80,7 +111,26 @@ export function PreviewPanel({ itemLook = false, compact = false }: { itemLook?:
     "KJV"
 
   let verseData = selectedVerse ? toVerseRenderData(selectedVerse, translation) : null
-  if (selectedSlide && isImageItem(selectedSlide.item)) {
+  if (selectedSlide && isAudioItem(selectedSlide.item)) {
+    const output = selectedSlide.item.audio.output_device_id ? "the selected output on this computer" : "this computer’s default output"
+    const status = mediaError
+      ? `The local media library couldn't be checked: ${mediaError}`
+      : !mediaLoaded
+        ? "Checking the local media library…"
+        : !previewAudio?.present
+          ? `Audio file “${selectedSlide.item.audio.name}” is missing from this computer's media library.`
+          : null
+    verseData = {
+      kind: "slide",
+      reference: "",
+      segments: [],
+      lines: [
+        `♪ ${selectedSlide.item.audio.name}`,
+        status ?? `Local audio · ${output}`,
+        "Congregation and OBS screens stay unchanged",
+      ],
+    }
+  } else if (selectedSlide && isImageItem(selectedSlide.item)) {
     // A video previews as "▶ name"; it plays only on the outputs.
     // A sound item has no picture: Preview says what Show live will do.
     verseData = previewIsSound
@@ -110,6 +160,7 @@ export function PreviewPanel({ itemLook = false, compact = false }: { itemLook?:
             <span className="text-[0.625rem] font-bold tracking-[0.08em] text-muted-foreground uppercase">Preview</span>
             <span className="truncate text-[0.6875rem] text-muted-foreground">Only you see this</span>
           </p>
+          {sampleNotice && <p className="truncate text-[0.6875rem] text-muted-foreground">{sampleNotice}</p>}
           <p className="truncate font-medium text-foreground">{label ?? "Nothing in Preview: click a running-order item or find a verse"}</p>
           {plan.length > 0 && <p className="truncate text-[0.6875rem] text-muted-foreground" title={plan.join(" · ")}>Planned · {plan.join(" · ")}</p>}
         </div>
@@ -125,6 +176,7 @@ export function PreviewPanel({ itemLook = false, compact = false }: { itemLook?:
       <PanelHeader title="Preview">
         <span className="text-xs text-muted-foreground">{ownLook ? `In its look, ${ownLook.name} · ` : ""}Only you see this</span>
       </PanelHeader>
+      {sampleNotice && <p className="px-3 pt-2 text-xs text-muted-foreground">{sampleNotice}</p>}
       {/* The picture fits the panel both ways, so a short panel never crops it. */}
       <div className="flex min-h-0 flex-1 items-center justify-center p-3 [container-type:size]">
         <div style={{ width: `min(100cqw, 100cqh * ${activeTheme.resolution.width / activeTheme.resolution.height})` }}>

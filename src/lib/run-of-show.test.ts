@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { clockInstant, clockText, dwellSeconds, nextInPhase, phaseRange, planTimeline, plannedTimes, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, sectionSummaries, type OutlineHeader } from "./run-of-show"
+import { clockInstant, clockText, dwellSeconds, nextInPhase, phaseRange, planTimeline, plannedTimes, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, newRunOfShowEvent, parseRunOfShowEvent, projectRunOfShowEvents, runOfShowClockRows, sectionSummaries, type OutlineHeader } from "./run-of-show"
 
 const h = (id: string, at: number, type: OutlineHeader["type"] = "phase"): OutlineHeader => ({ id, type, name: id, at })
 const read = (items: string[], headers: OutlineHeader[]) => interleave(items, headers).map((r) => ("header" in r ? `[${r.header.id}]` : r.item)).join(" ")
@@ -40,11 +40,101 @@ describe("section summaries", () => {
     const hs = [h("Warm", 0), h("Main", 2), h("Praise", 2, "group"), h("Word", 4, "group")]
     expect(sectionSummaries(items, hs)).toEqual({ Warm: { count: 2, minutes: 5 }, Main: { count: 3, minutes: 15 }, Praise: { count: 2, minutes: 5 }, Word: { count: 1, minutes: 10 } })
   })
+  it("counts zero-moment events in their phase without changing its duration", () => {
+    const prayer: OutlineHeader = {
+      id: "prayer",
+      type: "group",
+      name: "Opening Prayer",
+      at: 0,
+      event: { schema_version: 1, duration_minutes: 15 },
+    }
+    const headers: OutlineHeader[] = [
+      { id: "main", type: "phase", name: "Main service", at: 0, role: "main" },
+      prayer,
+    ]
+
+    expect(sectionSummaries([], headers).main).toMatchObject({
+      count: 0,
+      eventCount: 1,
+      momentCount: 0,
+      looseItemCount: 0,
+    })
+  })
+  it("breaks a phase into events, moments and loose items while preserving planned time", () => {
+    const items = [{ planned_minutes: 3 }, { planned_minutes: 2 }, { planned_minutes: 4 }]
+    const headers: OutlineHeader[] = [
+      { id: "main", type: "phase", name: "Main service", at: 0, role: "main" },
+      { id: "prayer", type: "group", name: "Prayer", at: 1, event: { schema_version: 1, duration_minutes: 5 } },
+      { id: "sermon", type: "group", name: "Sermon", at: 1, event: { schema_version: 1, duration_minutes: 40 } },
+      { id: "post", type: "phase", name: "Post-service", at: 3, role: "post" },
+    ]
+
+    expect(sectionSummaries(items, headers).main).toMatchObject({
+      count: 3,
+      minutes: 48,
+      eventCount: 2,
+      momentCount: 2,
+      looseItemCount: 1,
+    })
+  })
   it("the default phases put everything in the main service", () => {
     const ids = ["p", "w", "m", "o"]
     const phases = defaultPhases(3, () => ids.shift()!)
     expect(read(["a", "b", "c"], phases)).toBe("[p] [w] [m] a b c [o]")
     expect(phases.map((x) => x.rule)).toEqual(["loop", "auto_once", "manual", "loop"])
+  })
+
+  it("projects one event across nested moment groups without changing the current item timing", () => {
+    const items = [{ planned_minutes: 3 }, { planned_minutes: 7 }, { planned_minutes: 2 }]
+    const event: OutlineHeader = { id: "sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1, duration_minutes: 40, approval: "draft" } }
+    const hs: OutlineHeader[] = [event, h("Scripture", 1, "group"), { ...h("Worship", 2, "group"), event: { schema_version: 1, duration_minutes: 12, approval: "approved" } }]
+    expect(sectionEnd(items.length, hs, "sermon")).toBe(2)
+    expect(sectionSummaries(items, hs)).toMatchObject({ sermon: { count: 2, minutes: 40 }, Scripture: { count: 1, minutes: 7 }, Worship: { count: 1, minutes: 12 } })
+    expect(projectRunOfShowEvents(items, hs).map((e) => ({ id: e.id, duration_minutes: e.duration_minutes, moments: e.moments }))).toEqual([
+      { id: "sermon", duration_minutes: 40, moments: items.slice(0, 2) },
+      { id: "Worship", duration_minutes: 12, moments: items.slice(2) },
+    ])
+  })
+
+  it("projects event plans to one Timekeeper row with the event duration and preserves legacy items", () => {
+    const items = [
+      { id: "welcome-a", reference: "Welcome words", planned_minutes: 2 },
+      { id: "welcome-b", reference: "Welcome slide", planned_minutes: 3 },
+      { id: "sermon-a", reference: "Scripture", planned_minutes: 2 },
+      { id: "sermon-b", reference: "Sermon slides", planned_minutes: 4 },
+      { id: "closing", reference: "Closing hymn", planned_minutes: 5 },
+    ]
+    const headers: OutlineHeader[] = [
+      { id: "main", type: "phase", name: "Main service", at: 0, role: "main", starts_at: "10:00" },
+      { id: "welcome", type: "group", name: "Opening prayer", at: 0, event: { schema_version: 1, duration_minutes: 15, approval: "approved" } },
+      { id: "sermon", type: "group", name: "Sermon", at: 2, event: { schema_version: 1, duration_minutes: 40, approval: "approved" } },
+      { id: "post", type: "phase", name: "Post-service", at: 4, role: "post" },
+    ]
+
+    const projected = runOfShowClockRows(items, headers)
+    expect(projected.rows.map((row) => [row.id, row.reference, row.planned_minutes, row.moments.map((moment) => moment.id)])).toEqual([
+      ["welcome", "Opening prayer", 15, ["welcome-a", "welcome-b"]],
+      ["sermon", "Sermon", 40, ["sermon-a", "sermon-b"]],
+      ["closing", "Closing hymn", 5, ["closing"]],
+    ])
+    expect(projected.headers.find((header) => header.id === "main")?.at).toBe(0)
+  })
+
+  it("creates versioned event plans and treats legacy approval as non-authoritative", () => {
+    expect(newRunOfShowEvent(2, () => "event")).toEqual({ id: "event", type: "group", name: "New event", at: 2, event: { schema_version: 1 } })
+    expect(parseRunOfShowEvent({ schema_version: 1, approval: "approved", owner_id: "newer-build" })).toEqual({ schema_version: 1, payload_extra: { owner_id: "newer-build" } })
+    expect(parseRunOfShowEvent({ schema_version: 1, role: "Prayer" })).toMatchObject({ schema_version: 1, role: "Prayer" })
+    expect(parseRunOfShowEvent({ schema_version: 2 })).toBeNull()
+    expect(parseRunOfShowEvent({ schema_version: 1, approval: "draft", duration_minutes: 601 })).toBeNull()
+  })
+
+  it("keeps validated manual event cue snapshots and rejects malformed cue plans", () => {
+    const cue = { id: "cue-1", name: "Start prayer", trigger: "manual", steps: ["timer.fresh", "quick.pray"] }
+    expect(parseRunOfShowEvent({ schema_version: 1, cues: [cue] })).toEqual({ schema_version: 1, cues: [cue] })
+    expect(parseRunOfShowEvent({ schema_version: 1, cues: Array.from({ length: 13 }, (_, i) => ({ ...cue, id: `cue-${i}` })) })).toBeNull()
+    expect(parseRunOfShowEvent({ schema_version: 1, cues: [{ ...cue, trigger: "finish" }] })).toBeNull()
+    expect(parseRunOfShowEvent({ schema_version: 1, cues: [{ ...cue, steps: [] }] })).toBeNull()
+    expect(parseRunOfShowEvent({ schema_version: 1, cues: [{ ...cue, name: "  " }] })).toBeNull()
   })
 })
 
@@ -65,6 +155,16 @@ describe("adding to a section", () => {
     const g = [...hs, h("Word", 1, "group")]
     expect(sectionEnd(2, g, "Main")).toBe(2)
     expect(sectionEnd(2, g, "Word")).toBe(2)
+  })
+
+  it("adding at an event's end keeps nested group headers inside the event", () => {
+    const sermon: OutlineHeader = { id: "sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1, duration_minutes: 40, approval: "draft" } }
+    const next: OutlineHeader = { id: "prayer", type: "group", name: "Closing prayer", at: 3, event: { schema_version: 1, approval: "draft" } }
+    const headers = [sermon, h("Scripture", 3, "group"), next]
+    const at = sectionEnd(3, headers, sermon.id)
+    const after = headersAfterAppend(headers, at, sermon.id)
+    expect(read(["a", "b", "c", "d"], after)).toBe("[sermon] a b c [Scripture] d [prayer]")
+    expect(projectRunOfShowEvents(["a", "b", "c", "d"], after)[0].moments).toEqual(["a", "b", "c", "d"])
   })
 })
 

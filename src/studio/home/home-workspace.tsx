@@ -1,6 +1,6 @@
 import { useDismissedChecks } from "@/studio/dismissed-checks"
 import { useSettingsStore } from "@/stores/settings-store"
-import { openProductionTab } from "@/studio/production/production-tab"
+import { openConnectionsHub } from "@/studio/connections/navigation"
 import { approvalState } from "@/lib/approval"
 import { ArrowRightIcon, BookOpenIcon, CalendarDaysIcon, CheckIcon, ChevronRightIcon, ImageIcon, InfoIcon, MonitorIcon, MusicIcon, PlayIcon, PlusIcon, PresentationIcon, TriangleAlertIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -14,7 +14,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
 import { type ReadinessCheck, type ReadinessFix } from "@/studio/readiness"
 import { isImageItem, isSongItem } from "@/types"
-import { nextVisibleItem, plannedTimes } from "@/lib/run-of-show"
+import { isSkipped, nextVisibleItem, plannedTimes } from "@/lib/run-of-show"
 import { formatMinutes } from "@/lib/service-timing"
 import { useReadiness } from "@/studio/use-readiness"
 import { ChurchFolderCard } from "@/studio/home/church-folder-card"
@@ -39,8 +39,7 @@ export function HomeWorkspace() {
   const fix = (f: ReadinessFix) => {
     if (f === "outputs") openOutputs()
     else if (f === "prepare") setWorkspace("prepare")
-    else if (f === "cameras") openProductionTab("cameras")
-    else if (f === "obs") openProductionTab("obs")
+    else if (f === "cameras" || f === "obs") openConnectionsHub()
     else openSettings("diagnostics")
   }
 
@@ -50,7 +49,8 @@ export function HomeWorkspace() {
   const warnings = checks.filter((c) => c.status === "warn")
   const attention = checks.filter((c) => c.status !== "ok")
   const counted = okCount + warnings.length
-  const minutes = items.reduce((m, i) => m + (i.planned_minutes ?? 0), 0)
+  const skippedCount = items.reduce((count, _, index) => count + (isSkipped(items, headers, index) ? 1 : 0), 0)
+  const minutes = items.reduce((total, item, index) => total + (isSkipped(items, headers, index) ? 0 : item.planned_minutes ?? 0), 0)
   const operatorName = useSettingsStore((s) => s.operatorName).trim()
   const churchName = useSettingsStore((s) => s.brandKit.churchName.trim())
   // Planned times from the run of show when the service has a start time (10:00, 10:02…), else the order.
@@ -109,7 +109,7 @@ export function HomeWorkspace() {
         </section>
 
         <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-1">
-          <Stat icon={<CalendarDaysIcon />} label="Sunday plan" value={String(items.length)} unit={items.length === 1 ? "item" : "items"} detail={current ? `${current.title}${minutes ? ` · ${formatMinutes(minutes * 60_000)} planned in all` : ""}${dirty ? " · unsaved changes" : ""}` : "No saved service open"} />
+          <Stat icon={<CalendarDaysIcon />} label="Sunday plan" value={String(items.length)} unit={items.length === 1 ? "item" : "items"} detail={current ? `${current.title}${skippedCount ? ` · ${skippedCount} skipped` : ""}${minutes ? ` · ${formatMinutes(minutes * 60_000)} scheduled` : ""}${dirty ? " · unsaved changes" : ""}` : "No saved service open"} />
           {/* Checks counted, not a percentage (#298: no arbitrary percentages). */}
           <Stat icon={<CheckIcon />} label="Content readiness" value={String(okCount)} unit={`of ${counted} check${counted === 1 ? "" : "s"}`} detail={ready ? "Ready to present" : `${warnings.length} to check`} />
           <Stat icon={<MonitorIcon />} label="Screens" value={String(onAir)} unit={`of ${outputs.length} on`} detail={onAir ? "On air when you show something live" : "Turn them on in Outputs"} />
@@ -126,21 +126,27 @@ export function HomeWorkspace() {
                 <p className="px-2 py-6 text-center text-sm text-muted-foreground">Nothing in the service yet. Open Prepare to add passages, songs and slides.</p>
               ) : (
                 <ol className="divide-y divide-border">
-                  {items.slice(0, 6).map((it, i) => (
-                    <li key={it.id}>
-                      <button type="button" onClick={() => setWorkspace("prepare")} className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left outline-none hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50">
-                        <span className="flex h-8 w-[53px] shrink-0 items-center justify-center rounded-md bg-[#edf1ec] text-[0.6875rem] font-extrabold text-[#536d67] tabular-nums dark:bg-muted dark:text-muted-foreground" title={plannedAt.get(i) ? "Planned time" : undefined}>{plannedAt.get(i) ?? String(i + 1).padStart(2, "0")}</span>
-                        <KindTile item={it} />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold">{it.reference}</span>
-                          <span className="block truncate text-xs text-muted-foreground">{kindLabel(it, songs)}{it.planned_minutes ? ` · ${it.planned_minutes} min` : ""}{next?.item.id === it.id && activeIndex !== null ? next.kind === "moment" ? " · next moment" : " · next" : ""}</span>
-                        </span>
-                        <ChevronRightIcon className="size-4 text-muted-foreground" />
-                      </button>
-                    </li>
-                  ))}
+                  {items.slice(0, 6).map((it, i) => {
+                    const skipped = isSkipped(items, headers, i)
+                    const skipLabel = it.hidden ? "Hidden for this service" : skipped ? "Phase skipped for this service" : null
+                    const plannedTime = skipped ? null : plannedAt.get(i)
+                    return (
+                      <li key={it.id}>
+                        <button type="button" onClick={() => setWorkspace("prepare")} className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left outline-none hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50">
+                          <span className="flex h-8 w-[53px] shrink-0 items-center justify-center rounded-md bg-[#edf1ec] text-[0.6875rem] font-extrabold text-[#536d67] tabular-nums dark:bg-muted dark:text-muted-foreground" title={plannedTime ? "Planned time" : undefined}>{plannedTime ?? String(i + 1).padStart(2, "0")}</span>
+                          <KindTile item={it} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold">{it.reference}</span>
+                            <span className="block truncate text-xs text-muted-foreground">{kindLabel(it, songs)}{it.planned_minutes ? ` · ${it.planned_minutes} min` : ""}{skipLabel ? ` · ${skipLabel}` : ""}{next?.item.id === it.id && activeIndex !== null ? next.kind === "moment" ? " · next moment" : " · next" : ""}</span>
+                          </span>
+                          <ChevronRightIcon className="size-4 text-muted-foreground" />
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ol>
               )}
+              {items.length > 0 && skippedCount === items.length && <p role="status" className="px-2 pt-2 text-xs text-muted-foreground">Every item is hidden or in a skipped phase; nothing is scheduled to present.</p>}
               {items.length > 6 && <p className="px-2 pt-2 text-xs text-muted-foreground">and {items.length - 6} more in the full rundown</p>}
             </div>
           </section>
@@ -237,6 +243,7 @@ function kindLabel(it: Item, songs: ReturnType<typeof useSongStore.getState>["so
   }
   if (it.kind === "slide") return "Slide"
   if (isImageItem(it)) return "Picture or video"
+  if (it.kind === "audio") return "Audio cue"
   return "Scripture"
 }
 

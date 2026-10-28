@@ -31,7 +31,7 @@ beforeEach(() => {
   // Welcome started at 10:20 (20 min late) and runs 5 min: Worship is expected at 10:25.
   vi.setSystemTime(at(10, 22, 50))
   useQueueStore.setState({ items: [slide("Welcome", 5), slide("Worship", 20)], headers: [{ id: "m", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }] })
-  useEventClock.setState({ mode: "own", currentId: "Welcome" })
+  useEventClock.setState({ mode: "own", currentId: "Welcome", currentMomentId: "Welcome" })
   useJournalStore.setState({ entries: [{ at: at(10, 20), mono: 0, kind: "event", label: "Welcome", itemId: "Welcome" }] })
   useBroadcastStore.getState().loadThemes()
   useBroadcastStore.setState({ countdowns: null, stageCountdown: null, stageStyle: DEFAULT_STAGE_STYLE, outputs: [stageOut, mainOut], rehearsal: false })

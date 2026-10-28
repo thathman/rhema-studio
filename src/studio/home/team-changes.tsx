@@ -101,7 +101,7 @@ export function TeamChanges() {
 
 function headline(c: TeamChange, me: string): string {
   const you = (by: string | null) => (by && me.trim() && by.toLowerCase() === commentAuthor(me).toLowerCase() ? "You" : by)
-  if (c.kind === "comment") return `${c.by} on ${c.reference}`
+  if (c.kind === "comment") return c.deletedBy ? `${c.deletedBy} removed ${c.by}'s comment on ${c.reference}` : `${c.by} on ${c.reference}`
   const who = you(c.by)
   if (c.kind === "saved") return who ? `${who} saved version ${c.revision}` : `Version ${c.revision} saved`
   return who ? `${who} approved version ${c.revision}` : `Version ${c.revision} approved`
@@ -109,7 +109,7 @@ function headline(c: TeamChange, me: string): string {
 
 function detail(c: TeamChange): string {
   const at = when(c.at)
-  if (c.kind === "comment") return `“${c.text.replace(/\s+/g, " ")}”${at ? ` · ${at}` : ""}`
+  if (c.kind === "comment") return `“${c.text.replace(/\s+/g, " ")}”${at ? ` · ${c.deletedBy ? "removed " : ""}${at}` : ""}`
   if (c.kind === "approved" && c.changedSince) return `${at} · saved again since`
   return at
 }

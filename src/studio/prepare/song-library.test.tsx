@@ -6,6 +6,29 @@ vi.hoisted(() => {
   ;(globalThis as { CSS?: { escape: (value: string) => string } }).CSS ??= { escape: (value) => value }
 })
 
+vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: () => null }))
+vi.mock("@/studio/present/rundown-list", () => ({ SlideList: () => null }))
+vi.mock("@/studio/prepare/timing-rules", () => ({ TimingRules: () => null }))
+vi.mock("@/studio/prepare/item-editor-parts", () => {
+  const Empty = () => null
+  return {
+    BackgroundPicker: Empty,
+    CommentsEditor: Empty,
+    CueItemEditor: Empty,
+    CustomSlideEditor: Empty,
+    ImageItemControls: Empty,
+    ItemCuesEditor: Empty,
+    LookAndScene: Empty,
+    NoteEditor: Empty,
+    GoLiveCues: Empty,
+    PlannedMinutes: Empty,
+    SongApprovalNote: Empty,
+    TakeSteps: Empty,
+    TimedAdvance: Empty,
+    SongItemControls: Empty,
+  }
+})
+
 const song = {
   id: "song-new",
   title: "A New Song",
@@ -81,6 +104,12 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (command: string, args?: { tag?: string; withTag?: boolean }) => {
     if (command === "content_list_songs") return args?.tag === "cacghb" && args.withTag ? [hymn] : [song]
     if (command === "content_list_hymnbooks") return []
+    if (command === "content_get_song") return {
+      song: { id: hymn.id, title: hymn.title, authors: "", copyright: "", ccli_number: null, licence: "unknown", licence_note: "", primary_language: "en", tags: "cacghb", notes: "", key: "", tempo: null, revision: 1, created_at: "", updated_at: "" },
+      sections: [{ id: "hymn-section", kind: "verse", label: "Verse", texts: { en: "Test hymn words", yo: "Àwọn ọ̀rọ̀ ìdánwò" } }],
+      arrangements: [],
+      numbers: [],
+    }
     if (command === "media_list") return [audioAsset]
     if (command === "content_get_program") return previousService
     if (command === "search_verses") return [verse]
@@ -97,6 +126,7 @@ import { useServiceStore } from "@/stores/service-store"
 import type { QueueItem } from "@/types"
 import { SongLibrary } from "./song-library"
 import { AddItems } from "./add-items"
+import { ItemEditor } from "./item-editor"
 
 const slide = (id: string): QueueItem => ({
   id,
@@ -180,7 +210,7 @@ describe("Add item workflow (#386)", () => {
     expect(inserted).toMatchObject({ kind: "song", song: { song_id: song.id } })
     expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
-    expect(document.activeElement).toBe(trigger)
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 1000 })
   })
 
   it("closes after a successful Bible Add and selects that passage by ID", async () => {
@@ -201,7 +231,7 @@ describe("Add item workflow (#386)", () => {
     expect(inserted).toMatchObject({ verse: { book_number: verse.book_number, chapter: verse.chapter, verse: verse.verse } })
     expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
-    expect(document.activeElement).toBe(trigger)
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 1000 })
   })
 
   it("closes after a successful Hymn Add and selects that service item", async () => {
@@ -221,6 +251,41 @@ describe("Add item workflow (#386)", () => {
     expect(inserted).toMatchObject({ kind: "song", song: { song_id: hymn.id } })
     expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it("opens the newly added hymn in the Prepare event editor when another event was selected", async () => {
+    const opening = {
+      id: "opening-reading",
+      kind: "verse" as const,
+      verse,
+      reference: "John 3:16",
+      confidence: 1,
+      source: "manual" as const,
+      added_at: 0,
+    }
+    useQueueStore.setState({ items: [opening], headers: [], activeIndex: null, addTarget: null })
+    useBibleStore.setState({ selectedVerse: verse, selectedSlide: null, selectedQueueItemId: opening.id })
+    useAddDialog.setState({ open: false })
+
+    await act(async () => root!.render(<><AddItems /><ItemEditor /></>))
+    expect(document.body.textContent).toContain("Event editor · 1")
+    expect(document.body.textContent).toContain("John 3:16")
+
+    await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Add item"))!.click())
+    const hymnsTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent?.trim() === "Hymn book")!
+    await act(async () => { hymnsTab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); hymnsTab.click() })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    const hymnRow = document.querySelector<HTMLButtonElement>('[aria-label="Hymns"] button[title="Select to preview and view details"]')!
+    await act(async () => hymnRow.click())
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    const addFromDetails = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add to service")!
+    await act(async () => addFromDetails.click())
+
+    const inserted = useQueueStore.getState().items.at(-1)!
+    expect(inserted).toMatchObject({ kind: "song", song: { song_id: hymn.id } })
+    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(document.body.textContent).toContain("Event editor · 2")
+    expect([...document.querySelectorAll("h2")].some((heading) => heading.textContent === inserted.reference)).toBe(true)
   })
 
   it("closes after a successful slide Add and selects the inserted slide", async () => {
@@ -250,14 +315,14 @@ describe("Add item workflow (#386)", () => {
 
     await act(async () => root!.render(<AddItems />))
     await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Add item"))!.click())
-    const mediaTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent?.trim() === "Pictures")!
+    const mediaTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent?.trim() === "Media")!
     await act(async () => { mediaTab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); mediaTab.click() })
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
     const add = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add")!
     await act(async () => add.click())
 
     const inserted = useQueueStore.getState().items[0]
-    expect(inserted).toMatchObject({ kind: "image", image: { media_id: audioAsset.id } })
+    expect(inserted).toMatchObject({ kind: "audio", audio: { media_id: audioAsset.id } })
     expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
@@ -287,7 +352,7 @@ describe("Add item workflow (#386)", () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 
-  it("leaves the picker open when a Bible Add is deduped", async () => {
+  it("adds an intentional repeat Scripture occurrence and selects its new service item", async () => {
     const existing: QueueItem = {
       id: "existing-verse",
       kind: "verse",
@@ -310,7 +375,12 @@ describe("Add item workflow (#386)", () => {
     const add = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add")!
     await act(async () => add.click())
 
-    expect(useQueueStore.getState().items).toHaveLength(1)
-    expect(document.querySelector('[role="dialog"]')).toBeTruthy()
+    const items = useQueueStore.getState().items
+    expect(items).toHaveLength(2)
+    expect(items[0].id).not.toBe(items[1].id)
+    expect(items[0]).toMatchObject({ verse: { book_number: verse.book_number, chapter: verse.chapter, verse: verse.verse } })
+    const inserted = items.find((item) => item.id !== "existing-verse")!
+    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 })

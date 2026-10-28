@@ -7,13 +7,13 @@ vi.mock("@/studio/present/rundown-list", () => ({ SlideList: () => null }))
 vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: () => null }))
 vi.mock("@/studio/prepare/timing-rules", () => ({ TimingRules: () => null }))
 vi.mock("@/studio/prepare/item-editor-parts", () => Object.fromEntries([
-  "BackgroundPicker", "CommentsEditor", "CueItemEditor", "CustomSlideEditor", "ImageItemControls", "ItemCuesEditor",
+  "AudioItemControls", "BackgroundPicker", "CommentsEditor", "CueItemEditor", "CustomSlideEditor", "ImageItemControls", "ItemCuesEditor",
   "LookAndScene", "NoteEditor", "GoLiveCues", "PlannedMinutes", "SongApprovalNote", "TakeSteps", "TimedAdvance", "SongItemControls",
 ].map((name) => [name, () => null])))
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import type { ImageQueueItem, MediaAssetStatus, SongQueueItem, SongWithSections } from "@/types"
+import type { AudioQueueItem, ImageQueueItem, MediaAssetStatus, SongQueueItem, SongWithSections } from "@/types"
 import { useBibleStore } from "@/stores/bible-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useSongPins } from "@/stores/song-pins-store"
@@ -166,6 +166,23 @@ describe("Prepare confidence preview (#389)", () => {
 
     expect(lastPayload().current).toBeNull()
     expect(document.body.textContent).toContain("This song isn't available on this computer, so its words can't be previewed.")
+  })
+
+  it("keeps a local audio cue off the public stage preview", async () => {
+    const audio: AudioQueueItem = {
+      id: "audio-cue-1", kind: "audio", audio: { media_id: "media-audio-1", name: "Opening track" },
+      reference: "Opening track", confidence: 1, source: "manual", added_at: 0,
+    }
+    const asset: MediaAssetStatus = {
+      id: "media-audio-1", kind: "audio", name: "Opening track", file: "opening.mp3", hash: "hash", size: 10,
+      mime: "audio/mpeg", width: null, height: null, duration_ms: 1000, source: "import", source_ref: "",
+      original_path: "opening.mp3", created_at: "", path: "opening.mp3", present: true,
+    }
+    useMediaStore.setState({ assets: [asset], loaded: true, loading: false, error: null })
+    await act(async () => root!.render(<StagePreview item={audio} index={0} />))
+
+    expect(lastPayload().current).toMatchObject({ title: "Opening track", lines: [] })
+    expect(document.body.textContent).toContain("This audio cue plays locally; public screens stay unchanged.")
   })
 
   it("names an unavailable local audio file instead of implying it has stage lyrics", async () => {

@@ -32,7 +32,7 @@ export function captureApprovedDesigns(
   for (const id of sceneIds) {
     const found = sourceScenes.find((candidate) => candidate.id === id)
     if (!found) continue
-    const scene = normalizeScene(found) ?? JSON.parse(JSON.stringify(found)) as Scene
+    const scene = structuredClone(normalizeScene(found) ?? found)
     const sceneOutputs: ApprovedDesignSnapshot["scenes"][string]["outputs"] = {}
     for (const output of outputs) {
       if (output.role === "stage" || output.role === "signage") continue

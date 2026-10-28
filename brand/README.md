@@ -1,67 +1,33 @@
-# Rhema Studio brand files
+# Rhema Studio brand assets
 
-These are the owner's approved logo files (the "LOGOS ONLY" pack), copied **byte for byte**. Every file
-here matches its SHA-256 in `pack-manifest.json` (the pack's own manifest), and `src/lib/brand-files.test.ts`
-checks that, and that each platform copy (Tauri icons, Android resources, `public/rhema.svg`) is the same
-bytes as its source here. Only the files the apps and docs use were copied.
+This directory contains the owner's final logo pack from `Rhema_Studio_Four_Product_Logos_FINAL.zip`. The source pack's `README.md` and `ASSET-MANIFEST.json` are preserved as `ASSET-README.md` and `ASSET-MANIFEST.json`; `src/lib/brand-files.test.ts` verifies every copied pack asset against its SHA-256 manifest entry.
 
-## The family
+`ASSET-README.md` is the source ZIP's original note, written before these files were wired into Rhema Studio. This README is the current application usage map.
 
-| Product | Where it runs | Name on screen |
-|---|---|---|
-| Rhema Studio | the desktop app and every operator screen | **Rhema Studio** |
-| Rhema Studio Receiver | the Google TV app (`android-tv/`) | **Rhema Studio Receiver** |
-| Rhema Studio Cam | the Android phone camera app (`android-camera/`) | **Rhema Studio Cam** |
-| Rhema Studio Companion | the companion / remote control app (`companion-app/`) | **Rhema Studio Companion** |
+The master mark keeps the supplied R and its upper-left bulge, with the two radio curves inside that bulge. It has no quotation marks. Use the SVG and PNG files as supplied; do not redraw, recolor, crop, or add effects.
 
-The mark is a black rounded square with the approved R and the opening double quotation marks; the reversed
-version is a white square. In the app the mark is black or white only: no teal, no tint, no gradient.
+## Product uses
 
-## Rules
+| Surface | Visible artwork | Source file in this repository | Pack asset / platform copy |
+| --- | --- | --- | --- |
+| Studio desktop shell and setup | Official Studio wordmark when expanded; master mark in the compact rail | `src/components/product-lockup.tsx`, `src/studio/shell/sidebar.tsx`, `src/studio/setup/setup-wizard.tsx` | `02_Product_Logos/Rhema-Studio-Dark-Text.png` and `Rhema-Studio-Light-Text.png`; compact mark uses `01_Master_Mark/` |
+| Studio loading screen and browser tab | Official Studio lockup on the loading screen; browser tab uses the master mark | `index.html` | `02_Product_Logos/Rhema-Studio-Dark-Text.png` and `Rhema-Studio-Light-Text.png`; tab uses `01_Master_Mark/` |
+| Studio macOS and Windows launchers | App icon | `src-tauri/icons/icon.icns`, `icon.ico`, and generated size variants | `04_Launcher_Icons/Rhema-Studio-macOS.icns`, `Rhema-Studio-Windows.ico`; master-mark sizes |
+| Standalone Companion desktop app | Official Companion wordmark in the secure header | `src/components/product-lockup.tsx`, `src/studio/companion/companion-screen.tsx` (`secure` mode) | `02_Product_Logos/Rhema-Studio-Companion-Dark-Text.png` and `Rhema-Studio-Companion-Light-Text.png` |
+| Companion macOS and Windows launchers | App icon | `companion-app/src-tauri/icons/` | Pack's master-mark sizes, `.icns`, and `.ico` |
+| Studio's embedded OBS Companion view | Camera glyph, intentionally labeled “OBS companion” | `src/studio/companion/companion-screen.tsx` (non-secure mode) | Not a product-logo placement |
+| Google TV Receiver launcher and connection screen | Android launcher square and landscape Receiver lockup | `android-tv/res/drawable-nodpi/icon.png`, `receiver_logo.png` | `04_Launcher_Icons/Rhema-Studio-Android-512.png`; `02_Product_Logos/Rhema-Studio-Receiver-Light-Text.png` |
+| Google TV Receiver banner | Dark landscape lockup | `android-tv/res/drawable-xhdpi/banner.png` | `03_Google_TV/Rhema-Studio-Receiver-Google-TV-Dark-320x180.png` |
+| Android Cam launcher | Adaptive foreground and background | `android-camera/res/drawable-nodpi/ic_launcher_fg.png`, `ic_launcher_bg.png` | `04_Launcher_Icons/Rhema-Studio-Android-Adaptive-Foreground-432.png` and `...Background-432.png` |
+| Android Cam settings | Cam product wordmark on the dark settings page; the full-screen viewfinder remains clear | `android-camera/src/com/openbezal/rhema/camera/SettingsActivity.java` | `android-camera/res/drawable-nodpi/cam_wordmark.png`, copied from `02_Product_Logos/Rhema-Studio-Cam-Light-Text.png` |
+| Phone camera page and paired remote page | Inline light mark for dark phone UI | `src-tauri/crates/api/src/camera.html` and `remote.html` | Paths from `01_Master_Mark/Rhema-Studio-Mark-Light.svg`, embedded unchanged |
+| Studio browser feed | Master mark as browser tab icon | `feed.html` | `01_Master_Mark/Rhema-Studio-Master-Mark.svg` |
+| Repository README and brand preview | Full Studio and product lockups for documentation only | `README.md`, `docs/brand/preview.html` | `02_Product_Logos/` and `03_Google_TV/` |
 
-- Use these files as they are. Never redraw, recolour, re-letter, crop into the mark or add effects.
-  Scaling a PNG down for a size the pack does not have is fine (the Tauri icon sizes the pack lacks were
-  made by `npx tauri icon` from `Rhema-Studio-Mark-1024.png`).
-- On a light surface use the black mark; on a dark one the reversed (light) mark.
-- The pack's SVG lockups set the words in Inter as `<text>`; Rhema Studio does not depend on that font.
-  In the app the words are written in the app's own font beside the mark SVG; elsewhere use the PNG lockups.
-- Keep the required credit wherever the product is described: **Built on Rhema by OpenBezal (MIT licence,
-  © 2025 OpenBezal)**. `LICENSE` keeps the original MIT text and copyright. The current maintainers are
-  **Rhema Studio contributors**.
-- Identifiers stay as they were (`com.openbezal.rhema*`, crate and binary names, `rhema-camera://`,
-  mDNS service types, the `X-Rhema-Key` header): installed apps update in place and saved settings load.
+Website branding is deferred pending owner approval; this change keeps the current website unchanged.
 
-## Files
+The pack includes dark/light product lockups for Studio, Receiver, Cam and Companion in `brand/02_Product_Logos/`, plus Receiver TV artwork in `brand/03_Google_TV/`. The 320×180 dark TV file is the Receiver launcher banner; the other supplied variants remain approved source art. Studio and Companion use their product lockups in expanded app headers; the compact Studio rail and launchers use the master mark. Receiver uses its own landscape lockup and banner. Cam uses the supplied adaptive launcher foreground/background and a Cam wordmark on its settings page; the camera preview remains viewfinder-first, while the paired phone camera and remote pages use the inline light master mark. The embedded OBS Companion keeps its camera glyph to distinguish it from the standalone product. Tauri-generated size variants not supplied directly by the pack are generated from the supplied mark. Pack contents and copied platform assets are checked by `src/lib/brand-files.test.ts`. Product names, package identifiers, and the OpenBezal MIT credit are unchanged.
 
-| File | Used for |
-|---|---|
-| `01_Master_Mark/Rhema-Studio-Mark-1024.png` | Source for the other Tauri icon sizes (`npx tauri icon`): Windows Store, iOS/Android folders. |
-| `01_Master_Mark/Rhema-Studio-Mark-128.png` | src-tauri/icons/128x128.png. |
-| `01_Master_Mark/Rhema-Studio-Mark-16.png` | 16 px mark (small favicons). |
-| `01_Master_Mark/Rhema-Studio-Mark-256.png` | src-tauri/icons/128x128@2x.png. |
-| `01_Master_Mark/Rhema-Studio-Mark-32.png` | src-tauri/icons/32x32.png. |
-| `01_Master_Mark/Rhema-Studio-Mark-512.png` | src-tauri/icons/icon.png. |
-| `01_Master_Mark/Rhema-Studio-Mark-64.png` | src-tauri/icons/64x64.png. |
-| `01_Master_Mark/Rhema-Studio-Mark-Black.svg` | The mark: black rounded square, white R and opening quotes. Light surfaces; favicons of the app, feed and phone pages; public/rhema.svg is a copy. |
-| `01_Master_Mark/Rhema-Studio-Mark-Light-256.png` | Reversed mark, 256 px (docs, previews). |
-| `01_Master_Mark/Rhema-Studio-Mark-Light.svg` | The reversed mark: white square, black R. Dark surfaces: the ink sidebar, the dark About and setup screens, the phone remote and camera pages (inlined as is). |
-| `02_Product_Logos/Rhema-Studio-Cam-Dark-Text.png` | Rhema Studio Cam lockup, dark words. |
-| `02_Product_Logos/Rhema-Studio-Cam-White-Text.png` | Rhema Studio Cam lockup, white words. |
-| `02_Product_Logos/Rhema-Studio-Companion-Dark-Text.png` | Rhema Studio Companion lockup, dark words. |
-| `02_Product_Logos/Rhema-Studio-Companion-White-Text.png` | Rhema Studio Companion lockup, white words. |
-| `02_Product_Logos/Rhema-Studio-Dark-Text.png` | Rhema Studio lockup, dark words (light backgrounds): README, docs. |
-| `02_Product_Logos/Rhema-Studio-Receiver-Dark-Text.png` | Rhema Studio Receiver lockup, dark words. |
-| `02_Product_Logos/Rhema-Studio-Receiver-White-Text.png` | Rhema Studio Receiver lockup, white words: the TV app's idle/code screen (android-tv/res/drawable-nodpi/receiver_logo.png). |
-| `02_Product_Logos/Rhema-Studio-White-Text.png` | Rhema Studio lockup, white words (dark backgrounds). |
-| `03_Google_TV/Rhema-Studio-Receiver-TV-1920x1080.png` | Google TV landscape logo, full HD (store listing, previews). |
-| `03_Google_TV/Rhema-Studio-Receiver-TV-320x180.png` | Google TV launcher banner (android-tv/res/drawable-xhdpi/banner.png). |
-| `03_Google_TV/Rhema-Studio-Receiver-TV-640x360.png` | Google TV landscape logo, 640×360 (previews). |
-| `04_Launcher_Assets/Android-Adaptive-Foreground-1024.png` | Android adaptive icon foreground: Rhema Studio Cam (android-camera/res/drawable-nodpi/ic_launcher_fg.png, on white). |
-| `04_Launcher_Assets/Android-Cam-Launcher-512.png` | Cam launcher, 512 px (previews; the app uses the adaptive foreground). |
-| `04_Launcher_Assets/Companion-Launcher-512.png` | Companion launcher, 512 px, for companion-app/ (built on its own branch). |
-| `04_Launcher_Assets/Desktop-Launcher-512.png` | Desktop launcher, 512 px. |
-| `04_Launcher_Assets/Receiver-Square-Launcher-512.png` | Receiver square launcher icon (android-tv/res/drawable-nodpi/icon.png). |
-| `04_Launcher_Assets/Rhema-Studio-icon.icns` | macOS app icon (src-tauri/icons/icon.icns). |
-| `04_Launcher_Assets/Rhema-Studio-icon.ico` | Windows app icon (src-tauri/icons/icon.ico). |
+## Interface fonts and local development
 
-A preview of the whole family is in [`docs/brand/preview.html`](../docs/brand/preview.html).
+The brand ZIP contains logo artwork; it does not contain the interface fonts. Rhema Studio imports Geist, IBM Plex Sans, Source Serif 4, Geist Mono and Inter from `@fontsource` in `src/index.css`; Vite bundles these into `build/assets` for production. In linked worktrees that share `node_modules` through a symlink, Vite must allow the dependency directory's real path for the development app and Companion. Without that, font requests return 403 and the UI falls back to system fonts, which makes the page look off-brand even while the logo files are correct.

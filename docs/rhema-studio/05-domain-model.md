@@ -1,11 +1,11 @@
 # 05 — Domain Model and Persistence Proposal
 
-Status: partially implemented. `src-tauri/crates/content` provides `studio.db` with
-migrations `0001_programs` and `0002_item_identity`, programs + items + audit trail,
-optimistic concurrency (expected revision → Conflict), stable item ids across saves,
-backup-before-migrate, integrity check on open, and real-file tests. The frontend
-service store adds save generations and store-level unsaved-change protection.
-Everything else below remains a proposal.
+Status: implementation reference. `src-tauri/crates/content` owns the local `studio.db`
+and applies additive migrations `0001`–`0015`. The database currently covers services and
+their revisions, songs and hymnbooks, imported media, attachments, service logs, approval
+snapshots, reusable slides and announcements, and audit events. Settings and production
+looks remain in local JSON stores. Treat code and the current migrations as the source of
+truth where older proposal text below disagrees.
 
 ### Bible identity on items (implemented)
 Items store `book_number` (canonical Protestant 1–66 numbering shared by every
@@ -26,24 +26,22 @@ Versification differences between translations are not
 modelled yet; when a translation with a different versification is added, a
 `versification` column keyed per translation is the planned extension.
 
-### Audit, actor, backups (implemented / planned)
-`audit_events.actor` exists and is `NULL` until a user model exists; no placeholder
-values are written. Before applying a migration to an existing file the crate writes
-`studio.db.before-<version>.bak` via SQLite's online backup API; `backup_to(path)` is
-available for a scheduled backup command (planned: Settings → Backups).
+### Audit, actor, backups (implemented)
+`audit_events.actor` is `NULL` until a user model exists; no placeholder values are
+written. Before applying a migration to an existing file the crate writes
+`studio.db.before-<version>.bak` via SQLite's online backup API. Content writes use
+transactions; service and reusable-slide edits use expected revisions and record audit
+events. The Settings backup flow copies the database.
 
 ## 1. What exists today
 
 | Data | Where | Shape |
 |---|---|---|
-| Bible text | `data/rhema.db` (read-only SQLite, bundled) | `translations`, `books`, `verses`, `cross_references`, `embedding_status` |
-| Settings | `settings.json` via `tauri-plugin-store` | flat key/value |
-| Translation choice | `bible.json` | two keys |
-| Themes + outputs | `broadcast-themes.json` | `customThemes[]`, `outputs[]`, `activeThemeId`, `autoLive` |
-| UI theme | `localStorage` | one key |
-| Queue | memory only | lost on restart |
-
-There is no user content database. That is the gap.
+| Bible text | `data/rhema.db` (read-only SQLite, bundled) | translations, books, verses, cross-references |
+| Church content | `studio.db` (`rhema-content`) | services/items/revisions, songs/hymnbooks, media, service logs, reusable slides, audit |
+| Settings and operator preferences | local app stores and `localStorage` | per-machine configuration |
+| Production looks and outputs | local broadcast theme store | scenes, themes, output configuration and related snapshots |
+| Live queue and runtime | in-memory stores | working state; saved services live in `studio.db` |
 
 ## 2. The five layers (must not be conflated)
 
@@ -61,8 +59,10 @@ Service history  what actually went live, when, by whom
 ```
 
 - Editing a **song** never changes a past **service**.
-- A **program item** points at content by id and version; it does not copy the text
-  (except as a frozen snapshot in a Release, see §5).
+- A reusable slide or announcement is a source asset. A service occurrence stores its
+  own title, words, link, background and optional source id/revision. Editing the source
+  never silently changes the saved service occurrence; importing a service occurrence
+  into the Library creates a separate reusable source.
 - **Runtime** is memory plus a crash-recovery journal; it is never the source of truth.
 - **History** is append-only.
 
@@ -78,7 +78,7 @@ reference `users.id` and may be `local` until the team model exists.
 | `song_arrangement` | song_id, name, sequence[] of section ids | "Sunday short" vs "full" |
 | `hymnbook` / `hymn` | book code, number → song_id | Hymn-number search |
 | `bible_passage` | translation_id(s), book, chapter, verse_start, verse_end | Source reference, text comes from `rhema.db` |
-| `custom_slide` | title, body, template_id?, media_asset_id? | Announcements |
+| `reusable_slides` (migration 0015) | kind, title, body, link?, background_media_id?, revision | Reusable slide/announcement source; service occurrences keep copied payloads plus source id/revision |
 | `media_asset` | kind (image/video/audio), path, hash, duration?, width/height, source (local/canva), source_ref | Local file reference; hash detects moved/missing files |
 | `theme` | existing `BroadcastTheme` JSON | Migrated from `broadcast-themes.json` |
 | `brand_kit` | name, colours[], fonts[], logo asset ids | Planned |
@@ -111,8 +111,9 @@ document DB (new dependency, no benefit), cloud-first (violates offline requirem
 - `migrations/NNNN_name.sql` embedded with `include_str!`, applied in order inside one
   transaction each, recorded in `schema_migrations(version, applied_at)`.
 - Never edit an applied migration; add a new one.
-- The first migration imports `broadcast-themes.json` (themes, outputs) into tables and
-  leaves the JSON file in place as a fallback for one release.
+- Migrations are additive and transactional; never edit a migration already applied to
+  a user's database. Existing local stores remain outside `studio.db` until an explicit
+  migration is implemented.
 
 ### Revisions and undo
 

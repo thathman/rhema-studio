@@ -57,6 +57,7 @@ export interface TimingInput {
   firstOnAir: Map<string, number>
   /** Total time on air per item (ms), the live one up to now. */
   onAirMs: Map<string, number>
+  /** The active schedule row: an event ID, or a legacy queue item ID. */
   liveItemId: string | null
   /** Wall ms. Planned times fall nearest it, or nearest when the service began once it has. */
   now: number
@@ -294,11 +295,11 @@ function sectionTimings(input: TimingInput, main: OutlineHeader, t: ServiceTimin
     expectedStart: mainBegan ?? mainEvents[0]?.expectedStart ?? t.start, expectedEnd: t.expectedEnd,
     state: t.finished ? "done" : sectionState(mainEvents), loop: false,
   })
-  // Groups of the main service: from the next header (of either kind) back.
+  // A plain group ends at the next header; an event group includes any nested moment groups.
   const mainRange = phaseRange(items.length, headers, main.id)!
   sorted.forEach((g, k) => {
     if (g.type !== "group" || g.at < mainRange.start || g.at >= mainRange.end) return
-    const end = Math.min(sorted.slice(k + 1)[0]?.at ?? items.length, mainRange.end)
+    const end = Math.min(sorted.slice(k + 1).find((next) => g.event ? next.type === "phase" || !!next.event : true)?.at ?? items.length, mainRange.end)
     const evs = mainEvents.filter((e) => e.index >= g.at && e.index < end)
     if (!evs.length) return
     const first = evs.find((e) => e.state !== "skipped") ?? evs[0]

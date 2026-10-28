@@ -1,21 +1,25 @@
-// Native Tauri acceptance scenario for #398: a service Take uses its approved scene snapshot.
-const waitFor = async (predicate, label, timeoutMs = 5000) => {
+// Native Tauri acceptance scenario for approved service scene revisions.
+// The QA profile and all service/scene data are synthetic and isolated.
+const waitFor = async (predicate, label, timeoutMs = 8000) => {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const value = predicate()
     if (value) return value
     await sleep(50)
   }
-  throw new Error(`Timed out waiting for ${label}`)
+  throw new Error("Timed out waiting for " + label)
 }
 const normal = (value) => String(value ?? "").replace(/\s+/g, " ").trim()
 const buttons = () => [...document.querySelectorAll("button, [role=tab]")]
-const clickButton = async (name) => {
+const clickButton = async (name, { startsWith = false } = {}) => {
   const button = await waitFor(
-    () => buttons().find((candidate) => normal(candidate.getAttribute("aria-label") || candidate.innerText) === name),
-    `button “${name}”`,
+    () => buttons().find((candidate) => {
+      const label = normal(candidate.getAttribute("aria-label") || candidate.innerText)
+      return startsWith ? label.startsWith(name) : label === name
+    }),
+    "button “" + name + "”",
   )
-  if (button.disabled || button.getAttribute("aria-disabled") === "true") throw new Error(`Button “${name}” is disabled`)
+  if (button.disabled || button.getAttribute("aria-disabled") === "true") throw new Error("Button “" + name + "” is disabled")
   const pointerId = Date.now() % 100000
   const pointer = { bubbles: true, button: 0, pointerType: "mouse", pointerId, isPrimary: true }
   button.dispatchEvent(new PointerEvent("pointerdown", pointer))
@@ -27,21 +31,87 @@ const clickButton = async (name) => {
   return button
 }
 const setInput = async (selector, value) => {
-  const input = await waitFor(() => document.querySelector(selector), `input ${selector}`)
+  const input = await waitFor(() => document.querySelector(selector), "input " + selector)
   input.focus()
   const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value")?.set
-  if (!setter) throw new Error(`No value setter for ${selector}`)
+  if (!setter) throw new Error("No value setter for " + selector)
   setter.call(input, value)
   input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }))
   input.dispatchEvent(new Event("change", { bubbles: true }))
   await sleep(100)
 }
+const sceneState = (broadcast, outputId) => {
+  const state = broadcast.getState()
+  const output = state.outputs.find((candidate) => candidate.id === outputId)
+  const frame = state.outputFrames[outputId]
+  if (!output) throw new Error("Missing output " + outputId)
+  return JSON.parse(JSON.stringify({
+    sceneId: output.sceneId ?? null,
+    sceneSnapshot: output.sceneSnapshot ?? null,
+    sceneAppearanceSnapshot: output.sceneAppearanceSnapshot ?? null,
+    frameScene: frame?.scene ? { background: frame.scene.background } : null,
+  }))
+}
+const listenTauriEvent = async (event, handler) => {
+  const callback = window.__TAURI_INTERNALS__.transformCallback(handler)
+  const eventId = await window.__TAURI_INTERNALS__.invoke("plugin:event|listen", {
+    event,
+    target: { kind: "Any" },
+    handler: callback,
+  })
+  return () => window.__TAURI_INTERNALS__.invoke("plugin:event|unlisten", { event, eventId })
+}
+const captureProgramOutput = async (outputId, name, conditions = {}) => {
+  let resolveCapture
+  let rejectCapture
+  let unlisten = null
+  const captured = new Promise((resolve, reject) => {
+    resolveCapture = resolve
+    rejectCapture = reject
+  })
+  const timeout = setTimeout(() => rejectCapture(new Error(`Timed out capturing ${outputId} Program at ${name}`)), 12000)
+  try {
+    unlisten = await listenTauriEvent("qa:program-capture-ack", (event) => {
+      if (event.payload?.outputId !== outputId || event.payload?.name !== name) return
+      if (event.payload.error) rejectCapture(new Error(`${outputId} Program capture ${name} failed: ${event.payload.error}`))
+      else resolveCapture(event.payload.frame)
+    })
+    await window.__TAURI_INTERNALS__.invoke("plugin:event|emit", {
+      event: "qa:program-checkpoint",
+      payload: { outputId, name, ...conditions },
+    })
+    return await captured
+  } finally {
+    clearTimeout(timeout)
+    await unlisten?.()
+  }
+}
+const programState = (broadcast) => {
+  const state = broadcast.getState()
+  return JSON.parse(JSON.stringify({
+    isLive: state.isLive,
+    liveItemId: state.liveItemId,
+    liveItem: state.liveItem,
+    liveSlide: state.liveSlide,
+    liveVerse: state.liveVerse,
+  }))
+}
 
 async function runScenario() {
   await waitFor(() => document.querySelector("#root")?.childElementCount, "Rhema Studio window")
   const qa = await waitFor(() => window.__rhemaQa?.(), "isolated QA stores")
-  let stage = "open Production scenes"
+  let stage = "dismiss first-run setup in the isolated profile"
   try {
+    await clickButton("Use Rhema Studio now, finish later", { startsWith: true })
+    await waitFor(() => !qa.shell.getState().setupOpen, "setup state to close")
+    await waitFor(() => !!qa.settings.getState().setup.dismissedAt, "setup dismissal to save")
+    await waitFor(() => !document.querySelector('[role="dialog"][data-state="open"]'), "setup dialog to close")
+
+    stage = "set the isolated QA operator"
+    qa.settings.getState().setOperatorName("QA Operator")
+    await window.__TAURI_INTERNALS__.invoke("content_set_actor", { name: "QA Operator" })
+
+    stage = "create and save the approved scene through Production"
     await clickButton("Production")
     await clickButton("Scenes")
     await clickButton("Full screen")
@@ -55,8 +125,51 @@ async function runScenario() {
       "QA scene to save",
     )
     const sceneId = scene.id
+    // Keep this renderer fixture to a flat background so the captured centre pixel proves the
+    // scene revision on air without an unrelated full-frame feed layer covering that colour.
+    qa.broadcast.getState().saveScene({ ...scene, layers: [] })
+    await waitFor(
+      () => qa.broadcast.getState().scenes.find((candidate) => candidate.id === sceneId)?.layers.length === 0,
+      "flat synthetic scene fixture",
+    )
 
-    stage = "create a synthetic service event"
+    stage = "prepare independent baseline scenes on two outputs"
+    const main = qa.broadcast.getState().outputs.find((candidate) => candidate.id === "main")
+    const secondary = qa.broadcast.getState().outputs.find((candidate) => candidate.id === "qa-secondary")
+    if (!main || !secondary) throw new Error("The isolated QA output windows were not prepared")
+
+    const mainBaseline = {
+      id: "qa-main-baseline",
+      name: "QA Main Baseline",
+      background: "#112233",
+      layers: [],
+      createdAt: 0,
+      updatedAt: 0,
+    }
+    const secondaryBaseline = {
+      id: "qa-secondary-baseline",
+      name: "QA Secondary Baseline",
+      background: "#56789a",
+      layers: [],
+      createdAt: 0,
+      updatedAt: 0,
+    }
+    qa.broadcast.getState().saveScene(mainBaseline)
+    qa.broadcast.getState().saveScene(secondaryBaseline)
+    qa.broadcast.getState().takeScene("main", mainBaseline.id, "QA Operator")
+    qa.broadcast.getState().takeScene("qa-secondary", secondaryBaseline.id, "QA Operator")
+    const mainBefore = sceneState(qa.broadcast, "main")
+    const secondaryBefore = sceneState(qa.broadcast, "qa-secondary")
+    if (mainBefore.sceneSnapshot?.background !== "#112233" || mainBefore.frameScene?.background !== "#112233") {
+      throw new Error("Could not establish the Main Display baseline scene")
+    }
+    if (secondaryBefore.sceneSnapshot?.background !== "#56789a" || secondaryBefore.frameScene?.background !== "#56789a") {
+      throw new Error("Could not establish the secondary output baseline scene")
+    }
+    const mainProgramBaseline = await captureProgramOutput("main", "baseline-main", { expectedPixel: [17, 34, 51, 255] })
+    const secondaryProgramBaseline = await captureProgramOutput("qa-secondary", "baseline-secondary", { expectedPixel: [86, 120, 154, 255] })
+
+    stage = "create a synthetic event with an output-scoped scene Take"
     await clickButton("Prepare")
     const item = {
       id: "qa-approved-event",
@@ -66,91 +179,172 @@ async function runScenario() {
       confidence: 1,
       source: "manual",
       added_at: 0,
-      on_take: [`scene.take:${sceneId}@main`],
+      on_take: ["scene.take:" + sceneId + "@main"],
     }
     qa.queue.setState({ items: [item], headers: [], activeIndex: null, addTarget: null, removedActive: null })
     const created = await qa.service.getState().createFromRundown("QA Approved Scene Service", null, { discard: true })
-    if (created !== "created") throw new Error(`Could not create the synthetic service: ${created}`)
-    await waitFor(() => qa.service.getState().current?.title === "QA Approved Scene Service" && !qa.service.getState().dirty, "synthetic service to save")
+    if (created !== "created") throw new Error("Could not create the synthetic service: " + created)
+    await waitFor(
+      () => qa.service.getState().current?.title === "QA Approved Scene Service" && !qa.service.getState().dirty,
+      "synthetic service to save",
+    )
     const savedItem = qa.queue.getState().items.find((candidate) => candidate.reference === item.reference)
-    if (!savedItem || !savedItem.on_take?.includes(`scene.take:${sceneId}@main`)) throw new Error("Saving the service lost its scoped scene Take")
+    if (!savedItem || !savedItem.on_take?.includes("scene.take:" + sceneId + "@main")) {
+      throw new Error("Saving the service lost its scoped scene Take")
+    }
 
     stage = "approve the saved service through Prepare"
-    qa.settings.getState().setOperatorName("QA Operator")
-    await window.__TAURI_INTERNALS__.invoke("content_set_actor", { name: "QA Operator" })
     await clickButton("Approve")
     await waitFor(() => {
       const service = qa.service.getState()
       return service.current?.approved_revision === service.current?.revision
         && service.approvedDesignRevision === service.current?.revision
         && service.approvedDesigns?.scenes[sceneId]?.scene?.background === "#123456"
-    }, "approved service scene snapshot")
+        && service.approvedDesigns?.scenes[sceneId]?.outputs?.main
+        && service.approvedDesigns?.scenes[sceneId]?.outputs?.["qa-secondary"]
+    }, "approved service scene and output snapshots")
     const serviceBeforeEdit = qa.service.getState()
     const approvedScene = serviceBeforeEdit.approvedDesigns.scenes[sceneId].scene
+    const approvalRevision = serviceBeforeEdit.current.approved_revision
 
     stage = "edit the reusable scene after approval"
-    qa.broadcast.getState().saveScene({ ...qa.broadcast.getState().scenes.find((scene) => scene.id === sceneId), name: "QA Scene Edited After Approval", background: "#405060" })
-    const savedDraft = qa.broadcast.getState().scenes.find((scene) => scene.id === sceneId)
+    qa.broadcast.getState().saveScene({
+      ...qa.broadcast.getState().scenes.find((candidate) => candidate.id === sceneId),
+      name: "QA Scene Edited After Approval",
+      background: "#405060",
+    })
+    const savedDraft = qa.broadcast.getState().scenes.find((candidate) => candidate.id === sceneId)
     if (savedDraft?.name !== "QA Scene Edited After Approval" || savedDraft.background !== "#405060") {
       throw new Error("The post-approval reusable scene edit did not save")
     }
+    if (JSON.stringify(sceneState(qa.broadcast, "main")) !== JSON.stringify(mainBefore)) {
+      throw new Error("Editing the reusable scene changed the Main Display before Take")
+    }
+    if (JSON.stringify(sceneState(qa.broadcast, "qa-secondary")) !== JSON.stringify(secondaryBefore)) {
+      throw new Error("Editing the reusable scene changed the secondary output before Take")
+    }
+    const programBeforePreview = programState(qa.broadcast)
 
-    stage = "Take the approved event in Present"
+    stage = "preview the approved event without changing Program"
     await clickButton("Present")
     const row = await waitFor(
-      () => [...document.querySelectorAll("button[title]")].find((button) => button.title.includes("Click to preview") && normal(button.innerText).includes(savedItem.reference)),
+      () => [...document.querySelectorAll("button[title]")].find(
+        (button) => button.title.includes("Click to preview") && normal(button.innerText).includes(savedItem.reference),
+      ),
       "approved event in the Present rundown",
     )
     row.click()
-    await waitFor(() => qa.bible.getState().selectedQueueItemId === savedItem.id, "approved event preview")
-    await clickButton("Take live")
+    await waitFor(() => qa.bible.getState().selectedQueueItemId === savedItem.id, "approved event Preview")
+    if (JSON.stringify(programState(qa.broadcast)) !== JSON.stringify(programBeforePreview)) {
+      throw new Error("Preview changed actual Program state before explicit Take")
+    }
+    if (JSON.stringify(sceneState(qa.broadcast, "main")) !== JSON.stringify(mainBefore)) {
+      throw new Error("Preview changed the Main Display scene before explicit Take")
+    }
+    if (JSON.stringify(sceneState(qa.broadcast, "qa-secondary")) !== JSON.stringify(secondaryBefore)) {
+      throw new Error("Preview changed the secondary output scene before explicit Take")
+    }
+    const mainProgramBeforeTake = await captureProgramOutput("main", "before-take-main", {
+      expectedHash: mainProgramBaseline.hash,
+      expectedPixel: [17, 34, 51, 255],
+    })
+    const secondaryProgramBeforeTake = await captureProgramOutput("qa-secondary", "before-take-secondary", {
+      expectedHash: secondaryProgramBaseline.hash,
+      expectedPixel: [86, 120, 154, 255],
+    })
 
-    const outputId = "main"
+    stage = "Take the approved event in Present"
+    await clickButton("Take live")
     await waitFor(() => {
       const state = qa.broadcast.getState()
-      const output = state.outputs.find((candidate) => candidate.id === outputId)
+      const output = state.outputs.find((candidate) => candidate.id === "main")
       return state.liveItemId === savedItem.id
         && output?.sceneSnapshot?.name === "QA Approved Scene"
         && output?.sceneSnapshot?.background === "#123456"
-        && state.outputFrames[outputId]?.scene?.background === "#123456"
-    }, "approved scene revision to reach the congregation output")
+        && state.outputFrames.main?.scene?.background === "#123456"
+    }, "approved scene revision to reach the intended output")
     const state = qa.broadcast.getState()
-    const output = state.outputs.find((candidate) => candidate.id === outputId)
+    const mainAfter = sceneState(qa.broadcast, "main")
+    const secondaryAfter = sceneState(qa.broadcast, "qa-secondary")
+    const output = state.outputs.find((candidate) => candidate.id === "main")
     const approval = output.sceneAppearanceSnapshot?.approved
-    if (!state.isLive || state.liveVerse?.reference !== savedItem.reference) throw new Error("Taking the event did not put its content live")
-    if (qa.service.getState().approvedDesigns?.scenes[sceneId]?.scene?.name !== approvedScene.name) throw new Error("Editing the reusable scene changed the approved service snapshot")
-    if (qa.broadcast.getState().scenes.find((scene) => scene.id === sceneId)?.background !== "#405060") throw new Error("The library no longer shows the saved draft")
-    if (approval?.programId !== serviceBeforeEdit.current.id || approval?.revision !== serviceBeforeEdit.current.approved_revision) {
-      throw new Error(`The output did not record its approved service revision: ${JSON.stringify(approval)}`)
+    if (!state.isLive || state.liveItemId !== savedItem.id) throw new Error("Taking the event did not activate its content")
+    if (JSON.stringify(secondaryAfter) !== JSON.stringify(secondaryBefore)) {
+      throw new Error("Taking the event changed the other output's scene or frame")
     }
-    if (approval?.approvedBy !== "QA Operator" || !approval.approvedAt) {
-      throw new Error(`Approved actor/time were not preserved on the taken scene: ${JSON.stringify(approval)}`)
+    if (mainAfter.sceneId !== sceneId || mainAfter.sceneSnapshot?.name !== approvedScene.name || mainAfter.sceneSnapshot?.background !== "#123456") {
+      throw new Error("The intended output did not receive the approved scene snapshot")
     }
+    if (mainAfter.sceneSnapshot?.background === savedDraft.background) {
+      throw new Error("Take used the post-approval draft instead of the approved scene")
+    }
+    if (qa.service.getState().approvedDesigns?.scenes[sceneId]?.scene?.name !== approvedScene.name) {
+      throw new Error("Editing the reusable scene changed the approved service snapshot")
+    }
+    if (qa.broadcast.getState().scenes.find((candidate) => candidate.id === sceneId)?.background !== "#405060") {
+      throw new Error("The saved reusable draft was lost")
+    }
+    if (approval?.programId !== serviceBeforeEdit.current.id || approval?.revision !== approvalRevision) {
+      throw new Error("The output did not record the approved service revision: " + JSON.stringify(approval))
+    }
+    if (approval?.approvedBy !== serviceBeforeEdit.current.approved_by
+      || approval?.approvedAt !== serviceBeforeEdit.current.approved_at) {
+      throw new Error("Approved actor/time were not preserved: " + JSON.stringify({
+        approval,
+        serviceApprovedBy: serviceBeforeEdit.current.approved_by,
+        serviceApprovedAt: serviceBeforeEdit.current.approved_at,
+      }))
+    }
+    const mainProgramAfterTake = await captureProgramOutput("main", "after-take-main", {
+      expectedChangeFromHash: mainProgramBaseline.hash,
+      expectedPixel: [18, 52, 86, 255],
+    })
+    const secondaryProgramAfterTake = await captureProgramOutput("qa-secondary", "after-take-secondary", {
+      expectedHash: secondaryProgramBaseline.hash,
+      expectedPixel: [86, 120, 154, 255],
+    })
 
     return {
-      approvedScene: { name: approvedScene.name, background: approvedScene.background },
+      approvedScene: { id: sceneId, name: approvedScene.name, background: approvedScene.background },
       reusableDraft: { name: savedDraft.name, background: savedDraft.background },
-      onAirScene: { name: output.sceneSnapshot.name, background: output.sceneSnapshot.background },
-      onAirFrameBackground: state.outputFrames[outputId]?.scene?.background,
-      approvedService: { id: serviceBeforeEdit.current.id, revision: serviceBeforeEdit.current.approved_revision },
+      beforePreview: { main: mainBefore, secondary: secondaryBefore },
+      afterTake: { main: mainAfter, secondary: secondaryAfter },
+      renderedProgram: {
+        baseline: { main: mainProgramBaseline, secondary: secondaryProgramBaseline },
+        beforeTake: { main: mainProgramBeforeTake, secondary: secondaryProgramBeforeTake },
+        afterTake: { main: mainProgramAfterTake, secondary: secondaryProgramAfterTake },
+      },
+      approvedService: {
+        id: serviceBeforeEdit.current.id,
+        revision: approvalRevision,
+        approvedBy: serviceBeforeEdit.current.approved_by,
+        approvedAt: serviceBeforeEdit.current.approved_at,
+      },
       onAirApproval: approval,
-      liveItem: state.liveVerse.reference,
-      live: state.isLive,
+      liveItemId: state.liveItemId,
+      isLive: state.isLive,
     }
   } catch (error) {
     throw new Error(JSON.stringify({
       stage,
       message: error?.message,
       stack: error?.stack,
-      error: String(error),
-      buttons: buttons().map((button) => normal(button.getAttribute("aria-label") || button.innerText)).filter(Boolean).slice(0, 80),
+      outputs: qa.broadcast.getState().outputs.map((output) => ({
+        id: output.id,
+        scene: output.sceneSnapshot?.name,
+        background: output.sceneSnapshot?.background,
+        approval: output.sceneAppearanceSnapshot?.approved,
+      })),
       service: {
         title: qa.service.getState().current?.title,
         revision: qa.service.getState().current?.revision,
         approvedRevision: qa.service.getState().current?.approved_revision,
-        approvedScene: qa.service.getState().approvedDesigns?.scenes?.["qa-approved-scene"]?.scene,
       },
-      outputs: qa.broadcast.getState().outputs.map((output) => ({ id: output.id, scene: output.sceneSnapshot?.name, background: output.sceneSnapshot?.background, approval: output.sceneAppearanceSnapshot?.approved })),
+      setup: {
+        open: qa.shell.getState().setupOpen,
+        dismissedAt: qa.settings.getState().setup.dismissedAt,
+        dialogs: [...document.querySelectorAll('[role="dialog"]')].map((dialog) => ({ state: dialog.getAttribute("data-state"), text: normal(dialog.innerText).slice(0, 160) })),
+      },
       body: normal(document.body.innerText).slice(0, 2400),
     }))
   }

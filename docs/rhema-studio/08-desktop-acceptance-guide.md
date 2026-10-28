@@ -1,9 +1,8 @@
 # 08 — Desktop Acceptance Guide (integration gate)
 
-Status of this guide: **a manual checklist with four automated native-app journeys**. The
-automation covers Hymn Book/Add, approved-scene revision, failed-Take, and scene Save-versus-Take
-paths recorded in section 11; the remaining steps below still require manual desktop or device
-acceptance.
+Status of this guide: **a manual checklist**. Every step below is to be performed by a
+person on a real desktop build. Nothing here has been marked as passed by automation.
+Section 11 lists exactly what *has* been verified by automation and what has not.
 
 Build under test: the stacked branches at the heads recorded in
 `09-integration-merge-plan.md`. Run from source with `bun tauri dev`, or from the
@@ -247,6 +246,7 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 |---|---|---|
 | 10k.1 | With the projector showing a verse and NDI into OBS, turn Rehearsal on. Present three other items, a quick screen, Clear, Restore. | Projector, OBS and the stage screen never change; the app's Live panel and rundown behave normally; the header reads REHEARSAL. |
 | 10k.2 | Turn Rehearsal off. | Every output shows what it showed before rehearsal (ADR 0001); what was rehearsed is not shown. "Show this live" instead puts the rehearsed content on every output. |
+| 10k.3 | Take a scene to the projector, save an edit to that same scene, turn Rehearsal on, then Take the edited scene. Check the app's rehearsal preview and the projector/NDI output. Turn Rehearsal off without "Show this live", then Take the edited scene outside rehearsal. | Rehearsal previews the edited revision in the app; public outputs keep the original revision during rehearsal and after leaving; only the deliberate Take outside rehearsal applies the edit. | Unverified |
 
 ## 10l. Cues
 
@@ -257,53 +257,21 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 
 ## 11. What automation has and has not verified
 
-The automated native Tauri journeys are repeatable with:
+Verified by automation on the exact heads in `09-integration-merge-plan.md`:
 
-```sh
-bash scripts/mac-qa/run-native-journeys.sh
-```
+- Frontend unit tests (275), including service store round trips: bilingual
+  open/save/reopen under a different active translation, uninstalled translation
+  warning, conflict handling, save races, unsaved-change protection.
+- Rust content crate tests (15) on real temporary files: reopen, backup then migrate,
+  rollback on failed save, two-handle conflict, corrupt file refused.
+- TypeScript build, lint on Studio paths, `cargo check` and clippy on Linux.
+- A real desktop launch on an Intel Mac: database created at the real app-data path,
+  migrations applied once, restart does not re-migrate, integrity check passes.
 
-It builds a `qa-bridge` app with the separate `com.openbezal.rhema.qa` identity and
-uses a scratch profile. Its invented CAC Main 999 fixture stays in that test database.
-On the Intel Mac, 2026-10-26, against the open fix stack through PR #428, the journey
-passed: select a hymn and read its bilingual details; edit and save the library hymn;
-choose Yorùbá first; Add closes the picker and selects the inserted event; choose a
-look; save, close and reopen the service; view the rendered Yorùbá words in Present
-Preview. Live remained off. The same run against current `main` reproduced #385 at the
-missing selected-hymn details pane. The scene journey takes Full screen to the congregation
-output, edits and saves its reusable name and background, verifies the on-air snapshot and
-frame remain on the taken revision, then verifies an explicit Take applies the saved
-revision. The Hymn journey also seeds Phase One (A/B) and Phase Two (C), opens the picker
-from Phase Two, and adds the Hymn. It verifies A/B/C/Hymn order, unchanged phase boundaries,
-successful selection, and the same structure after service save/reopen. A third journey creates
-a scene in Production, approves a service event with that output-scoped scene Take, edits the
-reusable scene through the QA bridge, and Takes the event in Present. The taken frame retains the
-approved scene revision and records the approved service, actor and time. A fourth journey takes
-a valid synthetic slide live, attempts to take an image whose file is missing, and verifies
-the visible failed-Take status and missing-file warning while the prior live item and active
-rundown index stay unchanged. The Hymn journey asserts Live remains off; the approved-scene
-journey checks the taken revision and its approval identity; the failed-Take journey asserts
-that the prior Live item remains on air. The approved-scene journey creates its scene through
-Production, approves in Prepare, and uses the QA bridge to edit the reusable draft before taking
-the event in Present. These journeys use in-app WebView interaction and QA-only fixtures;
-they are not external keyboard or screen-reader tests. The runner
-creates a schema-valid temporary Bible database only when none is present; it contains a
-synthetic QA translation with no Bible text. The app log is checked for missing Bible tables,
-and the test restores pre-existing SQLite sidecars. It does not test Scripture content or
-search. CI artifacts are restricted to synthetic journey reports and the app log.
-
-PR #438's standard CI [40289671949](https://github.com/thathman/rhema-studio/actions/runs/40289671949)
-passes: frontend (1,833/1,833), typecheck, lint, production build, Rust, and Companion. Hosted
-native run [40289671818](https://github.com/thathman/rhema-studio/actions/runs/40289671818)
-passes all four journeys at `fe91dff`, including the approved-scene revision check. All four
-synthetic reports were inspected. These checks and the four scoped native journeys do not
-complete issue #411.
-
-Still unverified: the other interactive steps in sections 1–10l; onboarding and other
-application entrypoints; external keyboard and screen-reader operation; projector/TV
-receivers; OBS; NDI; MediaMTX and phone cameras; offline cold start with the real LAN
-system; device/network failure injection; long-run performance; and Windows launch.
-No physical-system result is claimed.
+Not verified by automation (needs the checklist above): every interactive step in
+sections 1–10l, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
+launch. The Windows artifact's *contents* can be inspected without Windows (see the
+report), but launching it cannot.
 
 ### 10m. One language per output (OP-003)
 

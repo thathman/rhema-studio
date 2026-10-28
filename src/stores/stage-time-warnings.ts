@@ -24,7 +24,7 @@ export function checkStageWarnings(now = monotonicNow()): void {
   if (timer.startedAt === null || timer.durationMs === 0 || b.rehearsal) return
   const left = remainingMs(timer, now)
   // The item happening may have its own warning (#196 R1.3); otherwise the stage look's.
-  const own = cleanItemTiming(useQueueStore.getState().items.find((i) => i.id === useEventClock.getState().currentId)?.timing)?.warn_minutes
+  const own = cleanItemTiming(useQueueStore.getState().items.find((i) => i.id === useEventClock.getState().currentMomentId)?.timing)?.warn_minutes
   const minutes = own ?? b.stageStyle.warnAtMinutes
   const at = minutes * 60_000
   const words = Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(1)

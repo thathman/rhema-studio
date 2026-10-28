@@ -1,9 +1,7 @@
 # 10 — Milestone 2B: Songs and Hymnbooks (specification)
 
-Status: **historical design specification (2026-10-20).** Songs and hymnbooks are
-implemented on `main`; this document records the original model and is not a current
-delivery checklist. Current delivery and acceptance status is tracked in
-[`TASKS.md`](../TASKS.md) and [`DEVELOPMENT-STATUS.md`](../DEVELOPMENT-STATUS.md).
+Status: **design only. Not implemented.** Starts from an integrated `main` after PRs
+#3, #1 and #2 are merged (see `09-integration-merge-plan.md`).
 
 ## 1. Goal
 
@@ -24,7 +22,6 @@ backgrounds per song, stage display, multi-user editing. Song *text* is local on
 | Arrangement | A named ordered list of sections (V1 C V2 C B C). A song has at least one, "Default". |
 | Hymnbook | A named collection (e.g. "Sacred Songs and Solos", "Yoruba Baptist Hymnal") mapping hymn numbers to songs. |
 | Hymn number | A song's number in one hymnbook. The same song may have numbers in several books. |
-| Hymn identity | The service item's saved distinction and number snapshot; the reusable library content remains a song. |
 | Slide | What goes on screen: one section (or a split of a long section) in the chosen language(s). |
 
 ## 3. Data model (`studio.db`, migration `0003_songs`)
@@ -100,13 +97,10 @@ CREATE VIRTUAL TABLE song_search USING fts5(
 ```
 
 Program items (existing `program_items`) gain nothing new in the schema: a song item
-is `kind = 'song'`, keeps its stable library `song_id` in the JSON payload, and uses
-`reference` for its display title. The nullable `payload TEXT` column added in 0003
-holds arrangement and language choices. New hymn items also save optional `hymn: true`
-and `hymn_numbers: [...]` snapshots in that JSON. Older service files without those
-fields remain readable; views can resolve identity from the linked library song.
-These are additive payload fields, not a schema migration, and never replace or
-renumber `song_id`.
+is `kind = 'song'` with `reference = <song_id>`, and a new nullable column
+`payload TEXT` (JSON) added in 0003 holds `{ "arrangement_id": ..., "languages": ["en","yo"] }`.
+The frontend's `SUPPORTED_ITEM_KINDS` becomes `["verse", "song"]`. Existing
+"set aside, never convert" handling stays for anything else.
 
 Deleting a song that a saved service references: refuse with `Conflict`-style error
 listing the services ("Used in: Sunday 25 Oct, …"). No cascading edits of services.

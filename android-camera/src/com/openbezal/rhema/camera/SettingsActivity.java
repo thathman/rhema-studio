@@ -28,6 +28,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -59,7 +60,7 @@ public final class SettingsActivity extends Activity {
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
-        setTitle("Rhema Camera settings");
+        setTitle("Rhema Studio Cam settings");
         prefs = Prefs.get(this);
         scroll = new ScrollView(this);
         scroll.setBackgroundColor(Ui.BG);
@@ -117,6 +118,13 @@ public final class SettingsActivity extends Activity {
         final int y = scroll.getScrollY();
         body.removeAllViews();
         live.clear();
+        ImageView wordmark = new ImageView(this);
+        wordmark.setImageResource(R.drawable.cam_wordmark);
+        wordmark.setAdjustViewBounds(true);
+        wordmark.setContentDescription("Rhema Studio Cam");
+        LinearLayout.LayoutParams wordmarkSize = new LinearLayout.LayoutParams(Ui.dp(this, 200), Ui.dp(this, 44));
+        wordmarkSize.bottomMargin = Ui.dp(this, 12);
+        body.addView(wordmark, wordmarkSize);
         CameraManager cm = (CameraManager) getSystemService(CAMERA_SERVICE);
         String id = Caps.camera(cm, prefs.getString(Prefs.CAMERA, null));
         chars = id == null ? null : Caps.chars(cm, id);

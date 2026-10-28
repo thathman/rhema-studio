@@ -54,6 +54,8 @@ import { ObsPanel } from "@/studio/production/obs-panel"
 import { ReadyMadeFeeds } from "@/studio/production/ready-made-feeds"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { runOfShowClockRows } from "@/lib/run-of-show"
+import { eventTimes } from "@/lib/journal"
 import { countdownLine, countdownTarget } from "@/lib/countdown"
 import { CountdownSelect } from "@/studio/production/countdown-select"
 
@@ -113,7 +115,7 @@ export function ProductionWorkspace() {
           <div className="min-w-0">
             <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">One service · production control</p>
             <h1 className="mt-1 text-2xl leading-tight font-bold tracking-[-0.035em]">Production control</h1>
-            <p className="mt-1 text-xs text-muted-foreground">The service's timing, screens and readiness in one place. Nothing here takes anything live.</p>
+            <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Monitoring only reads device status. Scene edits and OBS preview stay private until the relevant Take. Taking a scene changes the selected room display; switching in OBS changes the online stream. In rehearsal, scene Takes do not reach room displays and OBS program switches are blocked.</p>
           </div>
           <div className="flex flex-wrap gap-2"><Badge tone="ok">This computer</Badge></div>
         </header>
@@ -429,6 +431,7 @@ function Health() {
       <NeedsAttention needs={needs} />
       <Preflight ready={ready} checks={checks} fix={fix} />
       <div className="grid gap-[18px] lg:grid-cols-2">
+        <RemoteControlHealth />
         <ComputerHealth health={live.health} failed={live.failed} />
         <CapacityHealth />
         <NdiHealth ndi={live.ndi} />
@@ -438,6 +441,87 @@ function Health() {
         <SoundCheck />
       </div>
     </div>
+  )
+}
+
+interface RemoteListenerStatus {
+  running: boolean
+  port: number | null
+  /** Actual listener scope. */
+  lan?: boolean
+}
+
+interface RemoteAuthStatus {
+  required: boolean
+  credential_count: number
+}
+
+interface RemoteListenerSnapshot {
+  http: RemoteListenerStatus | null
+  osc: RemoteListenerStatus | null
+  auth: RemoteAuthStatus | null
+}
+
+/** Shows whether the running command listeners can be reached from the LAN and whether auth is required. */
+function RemoteControlHealth() {
+  const [snapshot, setSnapshot] = useState<RemoteListenerSnapshot | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const poll = async () => {
+      const [http, osc, auth] = await Promise.all([
+        invoke<RemoteListenerStatus>("get_http_status").catch(() => null),
+        invoke<RemoteListenerStatus>("get_osc_status").catch(() => null),
+        invoke<RemoteAuthStatus>("get_remote_auth_status").catch(() => null),
+      ])
+      if (!cancelled) setSnapshot({ http, osc, auth })
+    }
+    void poll()
+    const interval = setInterval(() => void poll(), 3000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [])
+
+  const httpKnown = !!snapshot?.http && (!snapshot.http.running || typeof snapshot.http.lan === "boolean")
+  const oscKnown = !!snapshot?.osc && (!snapshot.osc.running || typeof snapshot.osc.lan === "boolean")
+  const httpLan = !!snapshot?.http?.running && snapshot.http.lan === true
+  const oscOnLan = !!snapshot?.osc?.running && snapshot.osc.lan === true
+  const lanListeners = [
+    ...(httpLan ? [`HTTP · LAN · port ${snapshot?.http?.port ?? "unknown"}`] : []),
+    ...(oscOnLan ? [`OSC · LAN · port ${snapshot?.osc?.port ?? "unknown"}`] : []),
+  ]
+  const authKnown = !!snapshot?.auth && typeof snapshot.auth.required === "boolean" && typeof snapshot.auth.credential_count === "number"
+  const known = httpKnown && oscKnown && (lanListeners.length === 0 || authKnown)
+  const allStopped = httpKnown && oscKnown && !snapshot?.http?.running && !snapshot?.osc?.running
+  const unauthenticated = lanListeners.length > 0 && authKnown && !snapshot.auth?.required
+  const commandsRefused = authKnown && !!snapshot.auth?.required && snapshot.auth.credential_count === 0
+  const stateTone = unauthenticated || !known ? "warn" : lanListeners.length > 0 ? "ok" : "off"
+  const stateLabel = unauthenticated ? "Risk" : !known ? "Status unknown" : lanListeners.length > 0 ? "Key required" : allStopped ? "Stopped" : "Computer only"
+
+  return (
+    <Card kicker="Remote listeners" title="Remote control access" badge={<Badge tone={stateTone}>{stateLabel}</Badge>}>
+      {!snapshot ? (
+        <p className="text-xs text-muted-foreground">Reading current HTTP, OSC, and authentication status…</p>
+      ) : unauthenticated ? (
+        <div role="alert" className="rounded-md border border-confidence-mid/50 bg-confidence-mid/10 p-3 text-xs">
+          <p className="font-bold text-confidence-mid">Unauthenticated LAN control is enabled</p>
+          <p className="mt-1">Any device on a local/private network that can reach this listener can send remote commands. Public-source commands are refused.</p>
+          {!known && <p className="mt-1 font-semibold">Another listener's status could not be verified.</p>}
+        </div>
+      ) : !known ? (
+        <p role="status" className="text-xs font-semibold text-confidence-mid">Unable to verify remote listener state. Review Remote settings before allowing other devices to connect.</p>
+      ) : lanListeners.length > 0 ? (
+        <p className="text-xs">A key or paired device is required for remote commands.{commandsRefused && " No key or paired device is configured, so remote commands are currently refused."}</p>
+      ) : (
+        <p className="text-xs text-muted-foreground">No LAN listener is accepting remote commands{allStopped ? "; no remote command listener is running." : "."}</p>
+      )}
+      {snapshot && (
+        <ul className="flex flex-col gap-1 text-xs text-muted-foreground" aria-label="Remote listener status">
+          <li>{snapshot.http ? `HTTP · ${snapshot.http.running ? (snapshot.http.lan === true ? "LAN" : snapshot.http.lan === false ? "this computer only" : "scope unavailable") : "stopped"}${snapshot.http.running ? ` · port ${snapshot.http.port ?? "unknown"}` : ""}` : "HTTP · status unavailable"}</li>
+          <li>{snapshot.osc ? `OSC · ${snapshot.osc.running ? (snapshot.osc.lan === true ? "LAN" : snapshot.osc.lan === false ? "this computer only" : "scope unavailable") : "stopped"}${snapshot.osc.running ? ` · port ${snapshot.osc.port ?? "unknown"}` : ""}` : "OSC · status unavailable"}</li>
+        </ul>
+      )}
+      <div><Button size="sm" variant={unauthenticated ? "destructive" : "outline"} onClick={() => openSettings("remote")}><SettingsIcon /> Review Remote settings</Button></div>
+    </Card>
   )
 }
 
@@ -883,14 +967,26 @@ function TvRow({ output, tv, watching }: { output: BroadcastOutput; tv: Receiver
 function EventClockBar() {
   const mode = useEventClock((s) => s.mode)
   const currentId = useEventClock((s) => s.currentId)
+  const untrusted = useTimingTrust((s) => s.untrusted)
   const items = useQueueStore((s) => s.items)
-  const current = items.find((i) => i.id === currentId)
-  const at = current ? items.indexOf(current) : -1
-  const next = items[at + 1]
+  const headers = useQueueStore((s) => s.headers)
+  const entries = useJournalStore((s) => s.entries)
+  const [now, setNow] = useState(() => monotonicNow())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(monotonicNow()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  const rows = runOfShowClockRows(items, headers).rows
+  const current = rows.find((row) => row.id === currentId)
+  const at = current ? rows.indexOf(current) : -1
+  const next = rows[at + 1]
+  const elapsed = current ? eventTimes(entries, now).get(current.id) : undefined
+  const timeUntrusted = !!current && !!untrusted && (untrusted.eventId ?? untrusted.itemId) === current.id
   return (
     <div role="group" aria-label="Event clock" className="mb-3 flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-2.5 text-xs">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">Now: {current ? current.reference : "no event yet"}</span>
+        {current && (current.planned_minutes || elapsed !== undefined || timeUntrusted) && <span className="text-muted-foreground tabular-nums">{timeUntrusted ? "Elapsed time not trusted after restart" : elapsed !== undefined ? `${formatMs(elapsed)} elapsed` : "Not started yet"}{current.planned_minutes ? ` · ${current.planned_minutes} min planned` : ""}</span>}
         <span className="flex-1" />
         <select aria-label="What starts each event" value={mode} onChange={(e) => useEventClock.getState().setMode(e.target.value as "screens" | "own")} className="h-7 rounded-md border border-input bg-card px-1.5">
           <option value="screens">Follows the screens</option>
@@ -901,7 +997,7 @@ function EventClockBar() {
         <Button size="sm" variant="outline" disabled={at <= 0} onClick={() => useEventClock.getState().previous()}>Back one</Button>
         <Button size="sm" disabled={!next} onClick={() => useEventClock.getState().next()}>{next ? `Start ${next.reference}` : "Last event"}</Button>
         <FinishService />
-        <span className="text-muted-foreground">{mode === "screens" ? "Each item's event starts when it goes on air; you can also move it on here." : "Events start only from here; showing content does not move the clock."} The screens never change from here.</span>
+        <span className="text-muted-foreground">{mode === "screens" ? "An event starts when its first moment goes on air; later moments keep the same event time." : "Events start only from here; showing content does not move the clock."} The screens never change from here.</span>
       </div>
     </div>
   )
