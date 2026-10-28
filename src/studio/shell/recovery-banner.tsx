@@ -1,12 +1,21 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { dismissRecovery, putBack, useRecovery } from "@/lib/live-recovery"
+import { dismissRecovery, dismissRecoveryDamage, putBack, useRecovery } from "@/lib/live-recovery"
 
 /** After Rhema closed unexpectedly: offer to put back what was on the screens (never on its own). "Not now" leaves it in the Desk menu. */
 export function RecoveryBanner() {
   const offer = useRecovery((s) => s.offer)
   const dismissed = useRecovery((s) => s.dismissed)
+  const damaged = useRecovery((s) => s.damaged)
   const [busy, setBusy] = useState(false)
+  if (damaged) {
+    return (
+      <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm">
+        <p className="min-w-0 flex-1">Saved recovery data could not be read. Nothing was restored.</p>
+        <Button size="sm" variant="ghost" onClick={dismissRecoveryDamage}>Dismiss</Button>
+      </div>
+    )
+  }
   if (!offer || dismissed) return null
   const at = new Date(offer.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   const what = [offer.isLive && offer.liveVerse ? offer.liveVerse.reference || "a slide" : null, offer.outputsOn.length ? `${offer.outputsOn.length} output${offer.outputsOn.length === 1 ? "" : "s"} on` : null].filter(Boolean).join(" · ")
