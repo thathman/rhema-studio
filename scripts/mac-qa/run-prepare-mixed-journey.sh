@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 QA_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/rhema-prepare-qa.XXXXXX")"
 QA_RUN="$QA_SCRATCH/qa-run"
 QA_HOME="$QA_SCRATCH/home"
+QA_SOURCE="$QA_SCRATCH/prepare-mixed-journey-source.js"
 APP_BIN="$ROOT/src-tauri/target/debug/Rhema"
 APP_PID=""
 CREATED_BIBLE_DB=0
@@ -127,7 +128,7 @@ with wave.open(audio_path, "wb") as audio:
     audio.writeframes(struct.pack("<h", 0) * 800)
 PY
 
-python3 - "$ROOT/scripts/mac-qa/prepare-mixed-journey.js" "$QA_RUN/in/prepare-mixed-journey-source.js" "$QA_RUN/in/rhema-qa-audio.wav" <<'PY'
+python3 - "$ROOT/scripts/mac-qa/prepare-mixed-journey.js" "$QA_SOURCE" "$QA_RUN/in/rhema-qa-audio.wav" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -154,7 +155,7 @@ else
   WATCH_STATUS=1
 fi
 if [[ "$OPEN_STATUS" == 0 && "$WATCH_STATUS" == 0 ]]; then
-  "$ROOT/scripts/mac-qa/qa.py" main prepare-six-event-journey "$QA_RUN/in/prepare-mixed-journey-source.js" 180 >"$QA_SCRATCH/result.json"
+  "$ROOT/scripts/mac-qa/qa.py" main prepare-six-event-journey "$QA_SOURCE" 180 >"$QA_SCRATCH/result.json"
   QA_STATUS=$?
 else
   QA_STATUS=1
