@@ -43,6 +43,11 @@ interface Discard {
   discard?: boolean
 }
 
+interface CreateFromRundownOptions extends Discard {
+  /** Set only after replacing the rundown with rows validated by `toQueueItems`. */
+  sourceValidated?: boolean
+}
+
 interface ServiceState {
   programs: Program[]
   /** The service whose items are loaded into the rundown, if any. */
@@ -55,8 +60,10 @@ interface ServiceState {
   error: string | null
   /** Set when a save was refused because the database has a newer revision. */
   conflict: { expected: number; actual: number } | null
-  /** Items of the open service this build cannot edit. Saving is blocked while any exist. */
+  /** Item kinds written by a newer build that this build does not recognize. */
   unsupportedItems: ProgramItem[]
+  /** Known item kinds whose saved payload is malformed. Saving and copying stay blocked to protect them. */
+  corruptItems: ProgramItem[]
   /** Translation codes the open service names that are not installed here. */
   missingTranslations: string[]
   /** Immutable scene/look assets for the approved revision, if this build captured them. */
@@ -69,7 +76,7 @@ interface ServiceState {
   /** Create an empty service and open it. Refuses while another service has unsaved changes. */
   createProgram: (title: string, serviceDate: string | null, opts?: Discard) => Promise<Program | null>
   /** Create a service from the rundown on screen and save it. */
-  createFromRundown: (title: string, serviceDate: string | null, opts?: Discard) => Promise<CreateResult>
+  createFromRundown: (title: string, serviceDate: string | null, opts?: CreateFromRundownOptions) => Promise<CreateResult>
   /**
    * Copy the open service (its saved items, with fresh item ids) into a new
    * one and open that. The original is untouched. Refuses while unsaved.
@@ -476,6 +483,33 @@ function isStoredVerse(it: ProgramItem): boolean {
   )
 }
 
+/** Null is a valid absent payload; a present payload must be a JSON object we can preserve. */
+function hasReadablePayload(raw: string | null | undefined): boolean {
+  if (raw == null) return true
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+  } catch {
+    return false
+  }
+}
+
+function savedItemBlockMessage(
+  subject: string,
+  action: "saving" | "copying" | "approving",
+  unsupported: number,
+  corrupt: number,
+): string {
+  const problems = [
+    unsupported > 0 ? `${unsupported} item${unsupported === 1 ? "" : "s"} from a newer version that this version cannot edit` : null,
+    corrupt > 0 ? `${corrupt} saved item${corrupt === 1 ? "" : "s"} this version could not read` : null,
+  ].filter((problem): problem is string => problem !== null)
+  const reason = problems.join(" and ")
+  if (action === "saving") return `${subject} has ${reason}; saving would remove them. Update Rhema Studio for newer item kinds or restore a backup for unreadable saved data.`
+  if (action === "copying") return `${subject} has ${reason}; this version cannot copy them without omitting saved data. Update Rhema Studio for newer item kinds or restore a backup for unreadable saved data.`
+  return `${subject} has ${reason}. It cannot be approved until all saved items can be read; update Rhema Studio or restore a backup.`
+}
+
 const findTranslation = (translations: Translation[], abbrev: string | null): Translation | undefined =>
   abbrev === null ? undefined : translations.find((t) => t.abbreviation.toLowerCase() === abbrev.toLowerCase())
 
@@ -491,20 +525,22 @@ export function toQueueItems(
   data: ProgramWithItems,
   translationId: number,
   translations: Translation[] = []
-): { items: QueueItem[]; headers: OutlineHeader[]; unsupported: ProgramItem[]; missingTranslations: string[] } {
+): { items: QueueItem[]; headers: OutlineHeader[]; unsupported: ProgramItem[]; corrupt: ProgramItem[]; missingTranslations: string[] } {
   const items: QueueItem[] = []
   const headers: OutlineHeader[] = []
   const unsupported: ProgramItem[] = []
+  const corrupt: ProgramItem[] = []
   const missing = new Set<string>()
   for (const it of data.items) {
     if (it.kind === "phase" || it.kind === "group") {
+      if (!hasReadablePayload(it.payload)) corrupt.push(it)
       headers.push(parseHeader(it, items.length))
       continue
     }
     if (it.kind === "image") {
       const image = parseImagePayload(it.payload)
       if (!image) {
-        unsupported.push(it)
+        corrupt.push(it)
         continue
       }
       items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), ...parseCuesAndHidden(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
@@ -513,20 +549,24 @@ export function toQueueItems(
     if (it.kind === "slide") {
       const slide = parseSlidePayload(it.payload)
       if (!slide) {
-        unsupported.push(it)
+        corrupt.push(it)
         continue
       }
       items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), ...parseCuesAndHidden(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "cue") {
+      if (!hasReadablePayload(it.payload)) {
+        corrupt.push(it)
+        continue
+      }
       items.push({ id: it.id, kind: "cue", reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), ...parseCuesAndHidden(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "song") {
       const payload = parseSongPayload(it.payload)
       if (!payload) {
-        unsupported.push(it)
+        corrupt.push(it)
         continue
       }
       items.push({
@@ -542,8 +582,12 @@ export function toQueueItems(
       })
       continue
     }
-    if (!(SUPPORTED_ITEM_KINDS as readonly string[]).includes(it.kind) || !isStoredVerse(it)) {
+    if (!(SUPPORTED_ITEM_KINDS as readonly string[]).includes(it.kind)) {
       unsupported.push(it)
+      continue
+    }
+    if (!isStoredVerse(it) || !hasReadablePayload(it.payload)) {
+      corrupt.push(it)
       continue
     }
     const pinned = findTranslation(translations, it.translation)
@@ -572,7 +616,7 @@ export function toQueueItems(
       background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), ...parseCuesAndHidden(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
     })
   }
-  return { items, headers, unsupported, missingTranslations: [...missing] }
+  return { items, headers, unsupported, corrupt, missingTranslations: [...missing] }
 }
 
 const RULES: readonly PhaseRule[] = ["loop", "auto_once", "manual"]
@@ -726,6 +770,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
   error: null,
   conflict: null,
   unsupportedItems: [],
+  corruptItems: [],
   missingTranslations: [],
   approvedDesigns: null,
   approvedDesignRevision: null,
@@ -759,13 +804,18 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
 
   createFromRundown: async (title, serviceDate, opts) => {
     if (get().current && get().dirty && !opts?.discard) return "unsaved"
+    const { current, unsupportedItems, corruptItems } = get()
+    if (current && !opts?.sourceValidated && (unsupportedItems.length > 0 || corruptItems.length > 0)) {
+      set({ error: savedItemBlockMessage("This service", "copying", unsupportedItems.length, corruptItems.length) })
+      return "failed"
+    }
     const rundown = useQueueStore.getState()
     const hasPlan = rundown.items.length > 0 || rundown.headers.length > 0
     const holders = await idHolders()
     const program = await get().createProgram(title, serviceDate, { discard: true })
     if (!program) return "failed"
     baseline = "" // the rundown is not yet what the database has
-    set({ current: program, dirty: hasPlan, conflict: null, unsupportedItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
+    set({ current: program, dirty: hasPlan, conflict: null, unsupportedItems: [], corruptItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
     // Item ids are unique across services: items taken from another service (or copied) get new ones, or the save is refused.
     // In the same tick as the new service becoming current, so the original never looks changed.
     renewItemIds(holders)
@@ -790,6 +840,11 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     const current = get().current
     if (!current) return "error"
     if (get().dirty) return "unsaved"
+    const { unsupportedItems, corruptItems } = get()
+    if (unsupportedItems.length > 0 || corruptItems.length > 0) {
+      set({ error: savedItemBlockMessage("This service", "approving", unsupportedItems.length, corruptItems.length) })
+      return "error"
+    }
     const ticket = ++approvalGeneration
     try {
       const media = await useMediaStore.getState().list()
@@ -898,15 +953,15 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       return "failed"
     }
     const bible = useBibleStore.getState()
-    const { items, headers, unsupported } = toQueueItems(data, bible.activeTranslationId, bible.translations)
-    if (unsupported.length > 0) {
-      set({ error: `The template has ${unsupported.length} item${unsupported.length === 1 ? "" : "s"} this version cannot copy. Open it in a newer Rhema Studio, or remove them there.` })
+    const { items, headers, unsupported, corrupt } = toQueueItems(data, bible.activeTranslationId, bible.translations)
+    if (unsupported.length > 0 || corrupt.length > 0) {
+      set({ error: savedItemBlockMessage("The template", "copying", unsupported.length, corrupt.length) })
       return "failed"
     }
     const before = useQueueStore.getState().items
     const headersBefore = useQueueStore.getState().headers
     useQueueStore.setState({ items: items.map((i) => ({ ...i, id: crypto.randomUUID() })), headers: headers.map((h) => ({ ...h, id: crypto.randomUUID() })), activeIndex: null })
-    const r = await get().createFromRundown(title, serviceDate, { discard: true })
+    const r = await get().createFromRundown(title, serviceDate, { discard: true, sourceValidated: true })
     if (r === "failed") {
       useQueueStore.setState({ items: before, headers: headersBefore, activeIndex: null }) // nothing was created: the screen goes back as it was
       return r
@@ -921,8 +976,9 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     if (!get().current) return "failed"
     if (get().dirty) return "unsaved"
     // Items this version cannot show would be dropped from the copy without a word: refuse, as a template does.
-    if (get().unsupportedItems.length > 0) {
-      set({ error: `This service has ${get().unsupportedItems.length} item(s) this version cannot copy; update Rhema Studio to copy it whole.` })
+    const { unsupportedItems, corruptItems } = get()
+    if (unsupportedItems.length > 0 || corruptItems.length > 0) {
+      set({ error: savedItemBlockMessage("This service", "copying", unsupportedItems.length, corruptItems.length) })
       return "failed"
     }
     // The copy gets fresh item ids (createFromRundown), never sharing identity with the original.
@@ -941,13 +997,13 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
         if (rememberedServiceId() === id) remember(null) // not again at the next start
         if (get().current?.id === id) {
           closedBaseline = rundownSignature(operatorItems(useQueueStore.getState().items))
-          set({ current: null, dirty: false, approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
+          set({ current: null, dirty: false, unsupportedItems: [], corruptItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
           remember(null)
         }
         return "missing"
       }
       const bible = useBibleStore.getState()
-      const { items, headers, unsupported, missingTranslations } = toQueueItems(data, bible.activeTranslationId, bible.translations)
+      const { items, headers, unsupported, corrupt, missingTranslations } = toQueueItems(data, bible.activeTranslationId, bible.translations)
       let approvedDesigns: ApprovedDesignSnapshot | null = null
       let approvedDesignsError: string | null = null
       if (data.program.approved_revision !== null && data.program.approved_revision !== undefined) {
@@ -963,7 +1019,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       useQueueStore.setState({ items, headers, activeIndex: null })
       // Undo never reaches into the service open before.
       useQueueStore.getState().resetHistory()
-      set({ current: data.program, dirty: false, error: null, conflict: null, unsupportedItems: unsupported, missingTranslations, approvedDesigns, approvedDesignRevision: approvedDesigns ? data.program.approved_revision ?? null : null, approvedDesignsError })
+      set({ current: data.program, dirty: false, error: null, conflict: null, unsupportedItems: unsupported, corruptItems: corrupt, missingTranslations, approvedDesigns, approvedDesignRevision: approvedDesigns ? data.program.approved_revision ?? null : null, approvedDesignsError })
       remember(data.program.id)
       // Fill in verse text so preview works before anything is presented.
       // Text is not part of the signature, so this never marks dirty.
@@ -995,9 +1051,10 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     const current = get().current
     if (!current) return "nothing"
     if (get().saving) return "nothing"
-    if (get().unsupportedItems.length > 0) {
+    const { unsupportedItems, corruptItems } = get()
+    if (unsupportedItems.length > 0 || corruptItems.length > 0) {
       set({
-        error: `This service has ${get().unsupportedItems.length} item(s) this version cannot edit; saving would remove them.`,
+        error: savedItemBlockMessage("This service", "saving", unsupportedItems.length, corruptItems.length),
       })
       return "unsupported"
     }
@@ -1067,7 +1124,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       await invoke("content_delete_program", { id, expectedRevision: target.revision })
       set((st) => ({
         programs: st.programs.filter((p) => p.id !== id),
-        ...(st.current?.id === id ? { current: null, dirty: false, conflict: null, unsupportedItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null } : {}),
+        ...(st.current?.id === id ? { current: null, dirty: false, conflict: null, unsupportedItems: [], corruptItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null } : {}),
         error: null,
       }))
       if (get().current === null) remember(null)
@@ -1082,7 +1139,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     if (get().dirty && !opts?.discard) return "unsaved"
     // The rundown stays on screen: as it is now it belongs to a saved service (or was just discarded).
     closedBaseline = rundownSignature(operatorItems(useQueueStore.getState().items))
-    set({ current: null, dirty: false, conflict: null, unsupportedItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
+    set({ current: null, dirty: false, conflict: null, unsupportedItems: [], corruptItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
     remember(null)
     return "closed"
   },
