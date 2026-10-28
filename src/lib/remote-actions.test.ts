@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { ImageQueueItem, QueueItem, Verse } from "@/types"
+import type { ImageQueueItem, QueueItem, SlideQueueItem, Verse } from "@/types"
 
 const mockInvoke = vi.fn()
 
@@ -351,6 +351,122 @@ describe("queue position follows successful Takes", () => {
     useApprovalGateStore.getState().presentAnyway()
     await vi.waitFor(() => expect(useQueueStore.getState().activeIndex).toBe(1))
     expect(useBroadcastStore.getState().liveItemId).toBe(next.id)
+  })
+
+  it("does not replay a held rundown Take after its item changes", async () => {
+    const heldItem = queueItemFor(genesisOneOne)
+    useQueueStore.setState({ items: [heldItem], activeIndex: null })
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+
+    await presentQueueItem(0)
+    expect(useApprovalGateStore.getState().held?.id).toBe("sunday")
+    useQueueStore.setState({
+      items: [{ ...heldItem, verse: johnThreeSixteen, reference: "John 3:16" }],
+    })
+
+    useApprovalGateStore.getState().presentAnyway()
+    await vi.waitFor(() => expect(useTakeAttemptStore.getState().attempts.at(-1)?.status).toBe("superseded"))
+
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useBroadcastStore.getState().liveVerse).toBeNull()
+    expect(useQueueStore.getState().activeIndex).toBeNull()
+  })
+
+  it("retries the same held rundown item at its new position after a reorder", async () => {
+    const previous = queueItemFor(genesisOneOne)
+    const heldItem = queueItemFor(johnThreeSixteen)
+    useQueueStore.setState({ items: [previous, heldItem], activeIndex: null })
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+
+    await presentQueueItem(1)
+    useQueueStore.setState({ items: [heldItem, previous], activeIndex: null })
+    useApprovalGateStore.getState().presentAnyway()
+
+    await vi.waitFor(() => expect(useQueueStore.getState().activeIndex).toBe(0))
+    expect(useBroadcastStore.getState().liveItemId).toBe(heldItem.id)
+  })
+
+  it("does not replay a held verse after Preview changes while approval is pending", async () => {
+    const heldItem = queueItemFor(genesisOneOne)
+    const laterPreview = queueItemFor(johnThreeSixteen)
+    useQueueStore.setState({ items: [heldItem, laterPreview], activeIndex: null })
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+    useBibleStore.getState().selectVerse(genesisOneOne)
+    mockInvoke.mockImplementation(async (cmd: unknown, args: { verse?: number }) => {
+      if (cmd !== "get_verse") return null
+      return args.verse === genesisOneOne.verse ? genesisOneOne : johnThreeSixteen
+    })
+
+    await remoteActions.sendToLive()
+    expect(useApprovalGateStore.getState().held?.id).toBe("sunday")
+    useBibleStore.getState().selectVerse(johnThreeSixteen)
+
+    useApprovalGateStore.getState().presentAnyway()
+    await vi.waitFor(() => expect(useTakeAttemptStore.getState().attempts.at(-1)?.status).toBe("superseded"))
+
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useBroadcastStore.getState().liveVerse).toBeNull()
+    expect(useQueueStore.getState().activeIndex).toBeNull()
+  })
+
+  it("does not replay a held Take after its queue routing changes", async () => {
+    const heldItem: QueueItem = { ...queueItemFor(genesisOneOne), on_take: [] }
+    useQueueStore.setState({ items: [heldItem], activeIndex: null })
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+    useBibleStore.setState({ selectedVerse: genesisOneOne })
+    mockInvoke.mockImplementation(async (cmd: unknown) => (cmd === "get_verse" ? genesisOneOne : null))
+
+    await remoteActions.sendToLive()
+    expect(useApprovalGateStore.getState().held?.id).toBe("sunday")
+    useQueueStore.setState({
+      items: [{ ...heldItem, on_take: ["source.only"] }],
+    })
+
+    useApprovalGateStore.getState().presentAnyway()
+    await vi.waitFor(() => expect(useTakeAttemptStore.getState().attempts.at(-1)?.status).toBe("superseded"))
+
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useBroadcastStore.getState().liveVerse).toBeNull()
+    expect(useQueueStore.getState().activeIndex).toBeNull()
+  })
+
+  it("does not replay a held slide after Preview changes while approval is pending", async () => {
+    const heldSlide: SlideQueueItem = {
+      id: "held-slide",
+      kind: "slide",
+      slide: { title: "Welcome", body: "Original preview" },
+      reference: "Welcome",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+    }
+    const laterPreview: SlideQueueItem = {
+      id: "later-slide",
+      kind: "slide",
+      slide: { title: "Announcements", body: "Later preview" },
+      reference: "Announcements",
+      confidence: 1,
+      source: "manual",
+      added_at: 1,
+    }
+    useQueueStore.setState({ items: [heldSlide, laterPreview], activeIndex: null })
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+    useBibleStore.setState({ selectedSlide: { item: heldSlide, index: 0 } })
+
+    await remoteActions.sendToLive()
+    expect(useApprovalGateStore.getState().held?.id).toBe("sunday")
+    useBibleStore.setState({ selectedSlide: { item: laterPreview, index: 0 } })
+
+    useApprovalGateStore.getState().presentAnyway()
+    await vi.waitFor(() => expect(useTakeAttemptStore.getState().attempts.at(-1)?.status).toBe("superseded"))
+
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useQueueStore.getState().activeIndex).toBeNull()
   })
 
   it("does not let an older pending Take commit after the latest Take fails", async () => {
