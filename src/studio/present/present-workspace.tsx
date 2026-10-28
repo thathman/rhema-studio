@@ -28,6 +28,8 @@ import { SoundChip } from "@/studio/present/sound-chip"
 import { CueMenu } from "@/studio/present/cue-menu"
 import { TransportBar } from "@/studio/present/transport-bar"
 import { ScenesStrip } from "@/studio/present/scenes-strip"
+import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
+import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 
 /**
  * Present's two layouts over the same service. "production" (stored name kept) is the
@@ -54,6 +56,7 @@ export function PresentWorkspace() {
   const cloudSpeech = useCloudConsentStore((s) => s.runningProvider === "deepgram")
   const service = useServiceStore((s) => s.current)
   const warning = useBroadcastStore((s) => s.presentWarning)
+  const takeAttempts = useTakeAttemptStore((s) => s.attempts)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
   const override = useBibleStore((s) => s.overrideServiceTranslations)
   const setOverride = useBibleStore((s) => s.setOverrideServiceTranslations)
@@ -148,6 +151,7 @@ export function PresentWorkspace() {
           {warning && (
             <StatusChip tone="warn" label={warning} className="max-w-96" title={warning} onClick={() => useBroadcastStore.getState().setPresentWarning(null)} />
           )}
+          <TakeAttemptNotice attempts={takeAttempts} />
         </div>
         {/* Always present, so screen readers announce changes: what is on air, and warnings about it. */}
         <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">

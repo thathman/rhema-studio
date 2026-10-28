@@ -90,6 +90,466 @@ describe("live recovery", () => {
     expect(useBroadcastStore.getState().outputStatus[MAIN_OUTPUT_ID]?.previewOpen).toBe(false)
   })
 
+  it("restores the immutable scene and appearance captured at crash time", async () => {
+    const originalScene = { id: "same-scene", name: "Approved at crash", background: "#112233", layers: [], createdAt: 1, updatedAt: 2 }
+    const editedScene = { ...originalScene, name: "Unapproved edit", background: "#ffffff", updatedAt: 3 }
+    const theme = useBroadcastStore.getState().themes[0]
+    const originalAppearance = {
+      themes: { [theme.id]: { ...theme, background: { ...theme.background, color: "#112233" } } },
+      logoUrl: null,
+      approved: { programId: "service-at-crash", revision: 7, appearanceComplete: true, approvedAt: "2026-10-28T01:00:00Z", approvedBy: "Hendrix" },
+    }
+    const originalOutput = useBroadcastStore.getState().outputs[0]
+    useBroadcastStore.setState({
+      scenes: [originalScene],
+      outputs: [{ ...originalOutput, sceneId: originalScene.id, sceneSnapshot: originalScene, sceneAppearanceSnapshot: originalAppearance }],
+    })
+
+    const snap = takeSnapshot()
+    expect(snap.sceneSnapshots?.[MAIN_OUTPUT_ID]).toMatchObject({ scene: originalScene, appearance: originalAppearance })
+    expect(snap.sceneSnapshots?.[MAIN_OUTPUT_ID].appearance.themes[theme.id].layout.mode).toBe("stacked")
+
+    // The reusable scene and the hydrated output now point at an unapproved edit with the same ID.
+    useBroadcastStore.setState({
+      scenes: [editedScene],
+      outputs: [{ ...originalOutput, sceneId: editedScene.id, sceneSnapshot: editedScene, sceneAppearanceSnapshot: { themes: {}, logoUrl: "new-logo.png" } }],
+    })
+    await putBack(snap)
+
+    const restored = useBroadcastStore.getState().outputs[0]
+    expect(restored.sceneId).toBe(originalScene.id)
+    expect(restored.sceneSnapshot).toEqual(originalScene)
+    expect(restored.sceneAppearanceSnapshot).toMatchObject({
+      themes: { [theme.id]: { background: { color: "#112233" } } },
+      logoUrl: null,
+      approved: originalAppearance.approved,
+    })
+    expect(restored.sceneSnapshot?.background).not.toBe(editedScene.background)
+  })
+
+  it("restores the output theme selection captured with a scene", async () => {
+    const state = useBroadcastStore.getState()
+    const primaryTheme = state.themes[0]
+    const scriptureTheme = { ...primaryTheme, id: "recovery-scripture-theme", name: "Scripture look" }
+    const scene = {
+      id: "scene-with-output-selection",
+      name: "Saved",
+      background: "#112233",
+      layers: [{ id: "feed", name: "Bible", kind: "feed" as const, box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true, shows: ["bible" as const] }],
+      createdAt: 1,
+      updatedAt: 2,
+    }
+    const output = { ...state.outputs[0], themeId: primaryTheme.id, themeFor: { bible: scriptureTheme.id } }
+    useBroadcastStore.setState({ themes: [...state.themes, scriptureTheme], scenes: [scene], outputs: [{ ...output, sceneId: scene.id, sceneSnapshot: scene }] })
+    const snapshot = takeSnapshot()
+    const captured = snapshot.sceneSnapshots?.[MAIN_OUTPUT_ID]
+    expect(captured).toMatchObject({ themeId: primaryTheme.id, themeFor: { bible: scriptureTheme.id } })
+
+    useBroadcastStore.setState({
+      outputs: [{ ...useBroadcastStore.getState().outputs[0], themeId: scriptureTheme.id, themeFor: { bible: primaryTheme.id } }],
+    })
+    await putBack(snapshot)
+
+    expect(useBroadcastStore.getState().outputs[0]).toMatchObject({
+      themeId: primaryTheme.id,
+      themeFor: { bible: scriptureTheme.id },
+      sceneId: scene.id,
+      sceneSnapshot: scene,
+      sceneAppearanceSnapshot: captured?.appearance,
+    })
+  })
+
+  it("rejects a scene snapshot missing an explicit layer theme capture", async () => {
+    const state = useBroadcastStore.getState()
+    const primaryTheme = state.themes[0]
+    const explicitTheme = { ...primaryTheme, id: "recovery-explicit-theme", name: "Explicit look" }
+    const scene = {
+      id: "scene-with-explicit-theme",
+      name: "Saved",
+      background: "#112233",
+      layers: [{ id: "feed", name: "Bible", kind: "feed" as const, box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true, themeId: explicitTheme.id }],
+      createdAt: 1,
+      updatedAt: 2,
+    }
+    const output = { ...state.outputs[0], themeId: primaryTheme.id }
+    useBroadcastStore.setState({ themes: [...state.themes, explicitTheme], scenes: [scene], outputs: [{ ...output, sceneId: scene.id, sceneSnapshot: scene }] })
+    const snapshot = takeSnapshot()
+    const captured = snapshot.sceneSnapshots?.[MAIN_OUTPUT_ID]
+    expect(captured?.appearance.themes[explicitTheme.id]).toBeDefined()
+    const invalid = {
+      ...snapshot,
+      sceneSnapshots: {
+        [MAIN_OUTPUT_ID]: {
+          ...captured!,
+          appearance: { ...captured!.appearance, themes: { [primaryTheme.id]: captured!.appearance.themes[primaryTheme.id] } },
+        },
+      },
+    }
+    const broadcastBefore = useBroadcastStore.getState()
+
+    await putBack(invalid)
+
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
+  })
+
+  it("rejects a scene snapshot missing a selected per-content theme capture", async () => {
+    const state = useBroadcastStore.getState()
+    const primaryTheme = state.themes[0]
+    const scriptureTheme = { ...primaryTheme, id: "recovery-selected-theme", name: "Selected look" }
+    const scene = {
+      id: "scene-with-selected-theme",
+      name: "Saved",
+      background: "#112233",
+      layers: [{ id: "feed", name: "Bible", kind: "feed" as const, box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true, shows: ["bible" as const] }],
+      createdAt: 1,
+      updatedAt: 2,
+    }
+    const output = { ...state.outputs[0], themeId: primaryTheme.id, themeFor: { bible: scriptureTheme.id } }
+    useBroadcastStore.setState({ themes: [...state.themes, scriptureTheme], scenes: [scene], outputs: [{ ...output, sceneId: scene.id, sceneSnapshot: scene }] })
+    const snapshot = takeSnapshot()
+    const captured = snapshot.sceneSnapshots?.[MAIN_OUTPUT_ID]
+    expect(captured?.appearance.themes[scriptureTheme.id]).toBeDefined()
+    const invalid = {
+      ...snapshot,
+      sceneSnapshots: {
+        [MAIN_OUTPUT_ID]: {
+          ...captured!,
+          appearance: { ...captured!.appearance, themes: { [primaryTheme.id]: captured!.appearance.themes[primaryTheme.id] } },
+        },
+      },
+    }
+    const broadcastBefore = useBroadcastStore.getState()
+
+    await putBack(invalid)
+
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
+  })
+
+  it("skips legacy restore when the output selects a theme missing from its immutable appearance", async () => {
+    const state = useBroadcastStore.getState()
+    const primaryTheme = state.themes[0]
+    const scriptureTheme = { ...primaryTheme, id: "legacy-selected-theme", name: "Selected look" }
+    const scene = { id: "legacy-missing-selected-theme", name: "Saved", background: "#112233", layers: [], createdAt: 1, updatedAt: 2 }
+    const output = {
+      ...state.outputs[0],
+      themeId: primaryTheme.id,
+      themeFor: { bible: scriptureTheme.id },
+      sceneId: scene.id,
+      sceneSnapshot: scene,
+      sceneAppearanceSnapshot: { themes: { [primaryTheme.id]: primaryTheme }, logoUrl: null },
+    }
+    useBroadcastStore.setState({ themes: [...state.themes, scriptureTheme], scenes: [scene], outputs: [output], outputStatus: {} })
+    const legacy = { ...takeSnapshot(), outputsOn: [MAIN_OUTPUT_ID] }
+    delete legacy.sceneSnapshots
+    vi.mocked(invoke).mockClear()
+
+    await putBack(legacy)
+
+    expect(useBroadcastStore.getState().outputs[0].sceneSnapshot).toEqual(scene)
+    expect(useBroadcastStore.getState().outputs[0].sceneAppearanceSnapshot).toEqual(output.sceneAppearanceSnapshot)
+    expect(useBroadcastStore.getState().outputs[0].themeFor).toEqual({ bible: scriptureTheme.id })
+    expect(invoke).not.toHaveBeenCalledWith("open_broadcast_window", expect.anything())
+  })
+
+  it("restores a valid legacy v1 scene from the persisted output snapshot", async () => {
+    const originalScene = { id: "legacy-scene", name: "Taken before crash", background: "#112233", layers: [], createdAt: 1, updatedAt: 2 }
+    const editedScene = { ...originalScene, name: "Later edit", background: "#ffffff", updatedAt: 3 }
+    const theme = useBroadcastStore.getState().themes[0]
+    const originalAppearance = { themes: { [theme.id]: theme }, logoUrl: null }
+    const output = useBroadcastStore.getState().outputs[0]
+    useBroadcastStore.setState({
+      scenes: [editedScene],
+      outputs: [{ ...output, sceneId: originalScene.id, sceneSnapshot: originalScene, sceneAppearanceSnapshot: originalAppearance }],
+    })
+    const legacy = { ...takeSnapshot() }
+    delete legacy.sceneSnapshots
+    await putBack(legacy)
+
+    expect(useBroadcastStore.getState().outputs[0].sceneSnapshot).toEqual(originalScene)
+    expect(useBroadcastStore.getState().outputs[0].sceneAppearanceSnapshot).toMatchObject({
+      themes: { [theme.id]: { background: theme.background } },
+      logoUrl: null,
+    })
+  })
+
+  it("does not restore a legacy scene when its immutable output snapshot has no appearance capture", async () => {
+    const scene = { id: "legacy-without-look", name: "Persisted scene", background: "#112233", layers: [], createdAt: 1, updatedAt: 2 }
+    const output = useBroadcastStore.getState().outputs[0]
+    useBroadcastStore.setState({ scenes: [scene], outputs: [{ ...output, sceneId: scene.id, sceneSnapshot: scene, sceneAppearanceSnapshot: undefined }], outputStatus: {} })
+    const legacy = { ...takeSnapshot(), outputsOn: [MAIN_OUTPUT_ID] }
+    delete legacy.sceneSnapshots
+    const snapshotBefore = useBroadcastStore.getState().outputs[0].sceneSnapshot
+    const sceneTakesBefore = useBroadcastStore.getState().sceneTakes
+    vi.mocked(invoke).mockClear()
+
+    await putBack(legacy)
+
+    expect(useBroadcastStore.getState().outputs[0].sceneSnapshot).toBe(snapshotBefore)
+    expect(useBroadcastStore.getState().sceneTakes).toBe(sceneTakesBefore)
+    expect(invoke).not.toHaveBeenCalledWith("open_broadcast_window", expect.anything())
+  })
+
+  it("rejects a new scene snapshot with no captured appearance", async () => {
+    const scene = { id: "scene-without-look", name: "Saved", background: "#112233", layers: [], createdAt: 1, updatedAt: 2 }
+    const output = useBroadcastStore.getState().outputs[0]
+    useBroadcastStore.setState({ scenes: [scene], outputs: [{ ...output, sceneId: scene.id, sceneSnapshot: scene }] })
+    const snap = takeSnapshot()
+    const invalid = { ...snap, sceneSnapshots: { [MAIN_OUTPUT_ID]: { scene } } }
+    const broadcastBefore = useBroadcastStore.getState()
+
+    await putBack(invalid)
+
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
+  })
+
+  it("fails closed when a scene has no captured output theme", async () => {
+    const scene = { id: "scene-with-empty-look", name: "Saved", background: "#112233", layers: [], createdAt: 1, updatedAt: 2 }
+    const output = useBroadcastStore.getState().outputs[0]
+    useBroadcastStore.setState({
+      isLive: true,
+      liveVerse: { reference: "Still live", segments: [{ text: "Current program" }] },
+      scenes: [scene],
+      outputs: [{ ...output, sceneId: scene.id, sceneSnapshot: scene, sceneAppearanceSnapshot: { themes: {}, logoUrl: null } }],
+      outputStatus: { [MAIN_OUTPUT_ID]: { previewOpen: true, ndiActive: false } },
+    })
+    const snapshot = takeSnapshot()
+    expect(snapshot.scenes[MAIN_OUTPUT_ID]).toBe(scene.id)
+    expect(snapshot.sceneSnapshots).not.toHaveProperty(MAIN_OUTPUT_ID)
+
+    const broadcastBefore = useBroadcastStore.getState()
+    await putBack({
+      ...snapshot,
+      sceneSnapshots: {
+        [MAIN_OUTPUT_ID]: { scene, appearance: { themes: {}, logoUrl: null } },
+      },
+    })
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
+
+    await putBack(snapshot)
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
+  })
+
+  it("rejects malformed nested theme boxes without throwing or changing live state", async () => {
+    const scene = { id: "scene-with-bad-theme", name: "Saved", background: "#112233", layers: [], createdAt: 1, updatedAt: 2 }
+    const theme = useBroadcastStore.getState().themes[0]
+    useBroadcastStore.setState({ scenes: [scene], outputs: [{ ...useBroadcastStore.getState().outputs[0], sceneId: scene.id, sceneSnapshot: scene }] })
+    const snap = takeSnapshot()
+    const invalid = {
+      ...snap,
+      sceneSnapshots: {
+        [MAIN_OUTPUT_ID]: {
+          scene,
+          appearance: { themes: { [theme.id]: { ...theme, layout: { ...theme.layout, mode: "free", referenceBox: null } } }, logoUrl: null },
+        },
+      },
+    }
+    const broadcastBefore = useBroadcastStore.getState()
+
+    await expect(putBack(invalid)).resolves.toBe(false)
+
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
+  })
+
+  it("rejects a free-layout theme with a missing box rather than downgrading its appearance", async () => {
+    const scene = { id: "scene-with-incomplete-free-theme", name: "Saved", background: "#112233", layers: [], createdAt: 1, updatedAt: 2 }
+    const theme = useBroadcastStore.getState().themes[0]
+    useBroadcastStore.setState({ scenes: [scene], outputs: [{ ...useBroadcastStore.getState().outputs[0], sceneId: scene.id, sceneSnapshot: scene }] })
+    const snap = takeSnapshot()
+    const invalid = {
+      ...snap,
+      sceneSnapshots: {
+        [MAIN_OUTPUT_ID]: {
+          scene,
+          appearance: {
+            themes: { [theme.id]: { ...theme, layout: { ...theme.layout, mode: "free", referenceBox: { x: 0, y: 0, width: 100, height: 100 }, verseBox: undefined } } },
+            logoUrl: null,
+          },
+        },
+      },
+    }
+    const broadcastBefore = useBroadcastStore.getState()
+
+    await expect(putBack(invalid)).resolves.toBe(false)
+
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
+  })
+
+  it("rejects a new appearance snapshot whose layout mode is missing", async () => {
+    const scene = { id: "scene-with-missing-mode", name: "Saved", background: "#112233", layers: [], createdAt: 1, updatedAt: 2 }
+    const theme = useBroadcastStore.getState().themes[0]
+    useBroadcastStore.setState({ scenes: [scene], outputs: [{ ...useBroadcastStore.getState().outputs[0], sceneId: scene.id, sceneSnapshot: scene }] })
+    const snap = takeSnapshot()
+    const invalid = {
+      ...snap,
+      sceneSnapshots: {
+        [MAIN_OUTPUT_ID]: {
+          scene,
+          appearance: { themes: { [theme.id]: { ...theme, layout: { ...theme.layout, mode: undefined } } }, logoUrl: null },
+        },
+      },
+    }
+    const broadcastBefore = useBroadcastStore.getState()
+
+    await putBack(invalid)
+
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
+  })
+
+  it("rejects a new appearance snapshot when theme normalization would add styling defaults", async () => {
+    const scene = { id: "scene-with-incomplete-theme", name: "Saved", background: "#112233", layers: [], createdAt: 1, updatedAt: 2 }
+    const theme = useBroadcastStore.getState().themes[0]
+    const output = useBroadcastStore.getState().outputs[0]
+    useBroadcastStore.setState({
+      isLive: true,
+      liveVerse: { reference: "Current live", segments: [{ text: "Still on air" }] },
+      scenes: [scene],
+      outputs: [{ ...output, sceneId: scene.id, sceneSnapshot: scene }],
+      outputStatus: { [MAIN_OUTPUT_ID]: { previewOpen: true, ndiActive: false } },
+    })
+    const snap = takeSnapshot()
+    const incompleteTheme = { ...theme }
+    Reflect.deleteProperty(incompleteTheme, "verseNumbers")
+    const invalid = {
+      ...snap,
+      sceneSnapshots: {
+        [MAIN_OUTPUT_ID]: {
+          scene,
+          appearance: { themes: { [theme.id]: incompleteTheme }, logoUrl: null },
+        },
+      },
+    }
+    const broadcastBefore = useBroadcastStore.getState()
+
+    await putBack(invalid)
+
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useBroadcastStore.getState()).toMatchObject({
+      isLive: true,
+      liveVerse: { reference: "Current live" },
+      outputs: [{ sceneId: scene.id, sceneSnapshot: scene }],
+      outputStatus: { [MAIN_OUTPUT_ID]: { previewOpen: true, ndiActive: false } },
+    })
+    expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
+  })
+
+  it("rejects a free-layout percentage outside the design canvas", async () => {
+    const scene = { id: "scene-with-outside-box", name: "Saved", background: "#112233", layers: [], createdAt: 1, updatedAt: 2 }
+    const theme = useBroadcastStore.getState().themes[0]
+    useBroadcastStore.setState({ scenes: [scene], outputs: [{ ...useBroadcastStore.getState().outputs[0], sceneId: scene.id, sceneSnapshot: scene }] })
+    const snap = takeSnapshot()
+    const invalid = {
+      ...snap,
+      sceneSnapshots: {
+        [MAIN_OUTPUT_ID]: {
+          scene,
+          appearance: {
+            themes: {
+              [theme.id]: {
+                ...theme,
+                layout: {
+                  ...theme.layout,
+                  mode: "free",
+                  referenceBox: { x: 101, y: 0, width: 40, height: 10 },
+                  verseBox: { x: 0, y: 20, width: 80, height: 70 },
+                },
+              },
+            },
+            logoUrl: null,
+          },
+        },
+      },
+    }
+    const broadcastBefore = useBroadcastStore.getState()
+
+    await putBack(invalid)
+
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
+  })
+
+  it("rejects scene geometry or opacity that normalization would change", async () => {
+    const scene = {
+      id: "scene-with-invalid-opacity",
+      name: "Saved",
+      background: "#112233",
+      layers: [{ id: "bad-opacity", name: "Invalid opacity", kind: "color" as const, box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 3, visible: true, color: "#ffffff" }],
+      createdAt: 1,
+      updatedAt: 2,
+    }
+    const output = useBroadcastStore.getState().outputs[0]
+    useBroadcastStore.setState({ scenes: [scene], outputs: [{ ...output, sceneId: scene.id, sceneSnapshot: scene }] })
+    const snap = takeSnapshot()
+    const invalid = { ...snap, sceneSnapshots: { [MAIN_OUTPUT_ID]: { ...snap.sceneSnapshots?.[MAIN_OUTPUT_ID], scene } } }
+    const broadcastBefore = useBroadcastStore.getState()
+
+    await putBack(invalid)
+
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
+  })
+
+  it("does not use or re-enable an output with a scene omitted by size trimming", async () => {
+    const originalScene = { id: "trimmed-scene", name: "On air at crash", background: "#112233", layers: [], createdAt: 1, updatedAt: 2 }
+    const editedScene = { ...originalScene, name: "Edited after crash", background: "#ffffff", updatedAt: 3 }
+    const originalOutput = useBroadcastStore.getState().outputs[0]
+    useBroadcastStore.setState({
+      scenes: [originalScene],
+      outputs: [{ ...originalOutput, sceneId: originalScene.id, sceneSnapshot: originalScene, sceneAppearanceSnapshot: { themes: {}, logoUrl: null } }],
+    })
+    const snap = takeSnapshot()
+    const trimmed = { ...snap, liveVerse: null, sources: {}, sceneSnapshots: {}, outputsOn: [MAIN_OUTPUT_ID], trimmed: true }
+
+    useBroadcastStore.setState({
+      scenes: [editedScene],
+      outputs: [{ ...originalOutput, sceneId: editedScene.id, sceneSnapshot: editedScene, sceneAppearanceSnapshot: { themes: {}, logoUrl: "changed-logo.png" } }],
+      outputStatus: {},
+    })
+    const editedOutputSnapshot = useBroadcastStore.getState().outputs[0].sceneSnapshot
+    const sceneTakesBefore = useBroadcastStore.getState().sceneTakes
+    vi.mocked(invoke).mockClear()
+
+    await putBack(trimmed)
+
+    expect(useBroadcastStore.getState().outputs[0].sceneSnapshot).toBe(editedOutputSnapshot)
+    expect(useBroadcastStore.getState().outputs[0].sceneAppearanceSnapshot?.logoUrl).toBe("changed-logo.png")
+    expect(useBroadcastStore.getState().sceneTakes).toBe(sceneTakesBefore)
+    expect(invoke).not.toHaveBeenCalledWith("open_broadcast_window", expect.anything())
+  })
+
+  it("does not re-enable a no-scene output after trimming removed its live program", async () => {
+    const output = useBroadcastStore.getState().outputs[0]
+    useBroadcastStore.setState({
+      isLive: true,
+      liveVerse: { reference: "Romans 8:28", segments: [{ text: "Current program" }] },
+      sources: {},
+      outputs: [output],
+      outputStatus: { [MAIN_OUTPUT_ID]: { previewOpen: true, ndiActive: false } },
+    })
+    const full = takeSnapshot()
+    expect(full.scenes).toEqual({})
+    expect(full.outputsOn).toContain(MAIN_OUTPUT_ID)
+    const trimmed = { ...full, liveVerse: null, sources: {}, sceneSnapshots: {}, trimmed: true }
+    useRecovery.setState({ offer: trimmed, dismissed: false, damaged: false, restoreError: null })
+    useBroadcastStore.setState({ isLive: false, liveVerse: null, sources: {}, outputStatus: {} })
+    const outputStatusBefore = useBroadcastStore.getState().outputStatus
+    vi.mocked(invoke).mockClear()
+
+    expect(await putBack(trimmed)).toBe(false)
+
+    expect(useBroadcastStore.getState().outputStatus).toBe(outputStatusBefore)
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(invoke).not.toHaveBeenCalledWith("open_broadcast_window", expect.anything())
+    expect(useRecovery.getState()).toMatchObject({ offer: trimmed, restoreError: expect.stringContaining("shortened") })
+  })
+
   it("restores the event clock and timer on the first partial attempt without restarting them on retry", async () => {
     useQueueStore.setState({
       items: [{ id: "recovery-event", kind: "slide", slide: { title: "Service", body: "" }, reference: "Service", confidence: 1, source: "manual", added_at: 0 } as never],
@@ -135,6 +595,7 @@ describe("live recovery", () => {
 
   it("reports a missing saved scene separately from an output that failed to start", async () => {
     const snap = { ...takeSnapshot(), eventId: null, outputsOn: [], scenes: { [MAIN_OUTPUT_ID]: "removed-scene" } }
+    delete snap.sceneSnapshots
     useRecovery.setState({ offer: snap, dismissed: false })
 
     expect(await putBack(snap)).toBe(false)
@@ -152,9 +613,10 @@ describe("live recovery", () => {
     const { newScene, SCENE_PRESETS } = await import("@/lib/scenes")
     const scene = newScene("Pulpit", SCENE_PRESETS[0])
     useBroadcastStore.getState().saveScene(scene)
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
     const live = { reference: "Romans 8:28", segments: [{ text: "And we know" }], content: "bible" as const }
     useBroadcastStore.getState().setLiveVerse(live, null, { goLive: true })
-    const snap = { ...takeSnapshot(), outputsOn: [MAIN_OUTPUT_ID, sideOutput.id], scenes: { [MAIN_OUTPUT_ID]: scene.id }, eventId: null }
+    const snap = { ...takeSnapshot(), outputsOn: [MAIN_OUTPUT_ID, sideOutput.id], eventId: null }
     useBroadcastStore.setState({ isLive: false, liveVerse: null, liveItemId: null, sources: {}, outputStatus: {} })
     useRecovery.setState({ offer: snap, dismissed: false })
     useJournalStore.setState({ entries: [] })
@@ -308,6 +770,26 @@ describe("live recovery", () => {
     expect(useJournalStore.getState().entries.some((entry) => entry.kind === "recovery")).toBe(false)
     stop()
     vi.mocked(invoke).mockImplementation(async () => null)
+  })
+
+  it("rejects a malformed captured scene before changing live or output state", async () => {
+    const current = { reference: "Keep current Program", segments: [{ text: "Still on air" }], content: "bible" as const }
+    useBroadcastStore.getState().setLiveVerse(current, null, { goLive: true })
+    const scene = { id: "saved-scene", name: "Saved", background: "#112233", layers: [], createdAt: 1, updatedAt: 2 }
+    const output = useBroadcastStore.getState().outputs[0]
+    useBroadcastStore.setState({ scenes: [scene], outputs: [{ ...output, sceneId: scene.id, sceneSnapshot: scene }] })
+    const broadcastBefore = useBroadcastStore.getState()
+    const snap = takeSnapshot()
+    const invalid = {
+      ...snap,
+      liveVerse: { reference: "Do not apply", segments: [{ text: "Must not replace" }], content: "bible" as const },
+      sceneSnapshots: { [MAIN_OUTPUT_ID]: { scene: { ...scene, layers: "corrupt" } } },
+    }
+
+    await putBack(invalid)
+
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
   })
 
 })

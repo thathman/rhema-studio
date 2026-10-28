@@ -164,6 +164,7 @@ pub fn run() {
             commands::remote::host_status,
             commands::remote::host_set_name,
             commands::remote::remote_set_keys,
+            commands::remote::get_remote_auth_status,
             commands::remote::remote_pair_start,
             commands::app_close::set_unsaved_work,
             commands::app_close::last_exit_unclean,
