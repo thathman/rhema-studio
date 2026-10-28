@@ -30,7 +30,7 @@ cleanup() {
   if [[ "${KEEP_QA_SCRATCH:-0}" == 1 ]]; then
     mkdir -p "$QA_SCRATCH/artifacts"
     for artifact in \
-      "$QA_RUN/out/prepare-mixed-journey.json" \
+      "$QA_RUN/out/prepare-six-event-journey.json" \
       "$QA_RUN/out/program-output-baseline.json" \
       "$QA_RUN/out/program-output-before-take.json" \
       "$QA_RUN/out/program-output-after-take.json" \
@@ -46,7 +46,7 @@ cleanup() {
 trap cleanup EXIT
 
 # Never run this journey against an installed Bible database or church profile.
-# The app needs only a schema-valid empty Bible DB to boot; the journey uses synthetic hymn data.
+# The runner creates synthetic Scripture rows, one synthetic audio fixture and no church profile data.
 if [[ -L "$ROOT/data" || -e "$ROOT/data/rhema.db" || -L "$ROOT/data/rhema.db" ]]; then
   echo "Refusing to use existing Bible data at $ROOT/data/rhema.db; run this in a clean QA checkout." >&2
   exit 2
@@ -80,18 +80,65 @@ if [[ -e "$ROOT/data/rhema.db-wal" ]]; then
 fi
 BACKED_UP_BIBLE_SIDECARS=1
 rm -f "$ROOT/data/rhema.db-shm" "$ROOT/data/rhema.db-wal"
-python3 - "$ROOT/data/rhema.db" "$ROOT/data/schema.sql" <<'PY'
+python3 - "$ROOT/data/rhema.db" "$ROOT/data/schema.sql" "$QA_RUN/in/rhema-qa-audio.wav" <<'PY'
 import sqlite3
+import sys
+import wave
+import struct
+from pathlib import Path
+
+database_path, schema_path, audio_path = sys.argv[1:]
+with sqlite3.connect(database_path) as connection:
+    connection.executescript(Path(schema_path).read_text(encoding="utf-8"))
+    for abbreviation, title, language in (
+        ("QAEN", "QA English (synthetic)", "en"),
+        ("QAYO", "QA Yorùbá (synthetic)", "yo"),
+    ):
+        cursor = connection.execute(
+            "INSERT INTO translations (abbreviation, title, language, license, is_copyrighted, is_downloaded) "
+            "VALUES (?, ?, ?, 'Synthetic QA data', 0, 1)",
+            (abbreviation, title, language),
+        )
+        translation_id = cursor.lastrowid
+        connection.execute(
+            "INSERT INTO books (translation_id, book_number, name, abbreviation, testament) "
+            "VALUES (?, 43, 'John', 'John', 'NT')",
+            (translation_id,),
+        )
+        book_id = connection.execute(
+            "SELECT id FROM books WHERE translation_id = ? AND book_number = 43",
+            (translation_id,),
+        ).fetchone()[0]
+        text = (
+            "Synthetic English Scripture for the isolated six-event QA journey."
+            if language == "en"
+            else "Ìdánwò Ìwé Mímọ́ Yorùbá fún ìrìn-àjò QA tó ya sọ́tọ̀."
+        )
+        connection.execute(
+            "INSERT INTO verses (translation_id, book_id, book_number, book_name, book_abbreviation, chapter, verse, text) "
+            "VALUES (?, ?, 43, 'John', 'John', 3, 16, ?)",
+            (translation_id, book_id, text),
+        )
+
+with wave.open(audio_path, "wb") as audio:
+    audio.setnchannels(1)
+    audio.setsampwidth(2)
+    audio.setframerate(8000)
+    audio.writeframes(struct.pack("<h", 0) * 800)
+PY
+
+python3 - "$ROOT/scripts/mac-qa/prepare-mixed-journey.js" "$QA_RUN/in/prepare-mixed-journey-source.js" "$QA_RUN/in/rhema-qa-audio.wav" <<'PY'
+import json
 import sys
 from pathlib import Path
 
-database_path, schema_path = sys.argv[1:]
-with sqlite3.connect(database_path) as connection:
-    connection.executescript(Path(schema_path).read_text(encoding="utf-8"))
-    connection.execute(
-        "INSERT INTO translations (abbreviation, title, language, license, is_copyrighted, is_downloaded) "
-        "VALUES ('QA', 'QA fixture (no Bible text)', 'en', 'Synthetic QA data', 0, 0)"
-    )
+source_path, output_path, audio_path = map(Path, sys.argv[1:])
+source = source_path.read_text(encoding="utf-8")
+token = '"__QA_AUDIO_FIXTURE_PATH__"'
+if token not in source:
+    raise SystemExit(f"The native journey is missing its {token} template token")
+source = source.replace(token, json.dumps(str(audio_path)))
+output_path.write_text(source, encoding="utf-8")
 PY
 
 export QA_DIR="$QA_RUN"
@@ -107,7 +154,7 @@ else
   WATCH_STATUS=1
 fi
 if [[ "$OPEN_STATUS" == 0 && "$WATCH_STATUS" == 0 ]]; then
-  "$ROOT/scripts/mac-qa/qa.py" main prepare-mixed-journey "$ROOT/scripts/mac-qa/prepare-mixed-journey.js" 120 >"$QA_SCRATCH/result.json"
+  "$ROOT/scripts/mac-qa/qa.py" main prepare-six-event-journey "$QA_RUN/in/prepare-mixed-journey-source.js" 180 >"$QA_SCRATCH/result.json"
   QA_STATUS=$?
 else
   QA_STATUS=1
@@ -122,7 +169,7 @@ if [[ "$QA_STATUS" != 0 ]]; then
   exit "$QA_STATUS"
 fi
 
-python3 - "$QA_RUN/out/prepare-mixed-journey.json" "$QA_RUN/out" <<'PY'
+python3 - "$QA_RUN/out/prepare-six-event-journey.json" "$QA_RUN/out" <<'PY'
 import json
 import sys
 from pathlib import Path
