@@ -59,4 +59,19 @@ describe("one place to build a service (#299)", () => {
     expect(useShellStore.getState().goRequest).toBe("prepare")
     expect(useShellStore.getState().searchOpen).toBe(false)
   })
+
+  it("Find anything distinguishes content Library from Design templates", async () => {
+    useShellStore.setState({ searchOpen: true, designRequest: null, goRequest: null })
+    await render(<GlobalSearch />)
+    const items = [...document.querySelectorAll("[cmdk-item]")] as HTMLElement[]
+    const labels = items.map((item) => item.textContent?.trim())
+    const templates = items.find((item) => item.textContent?.includes("Design templates"))
+    const contentLibrary = items.find((item) => item.textContent?.includes("Library") && !item.textContent?.includes("Design templates"))
+
+    expect(labels).toContain("Design templates")
+    expect(contentLibrary).toBeTruthy()
+    await act(async () => templates!.click())
+    expect(useShellStore.getState().designRequest).toBe("library")
+    expect(useShellStore.getState().searchOpen).toBe(false)
+  })
 })
