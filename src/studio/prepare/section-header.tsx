@@ -90,6 +90,7 @@ export function SectionHeader({ header, summary, collapsed, selected = false, dr
     <>
     <li
       ref={setHeaderRef}
+      data-phase-id={phase ? header.id : undefined}
       aria-label={`${kind[0].toUpperCase()}${kind.slice(1)}: ${header.name}`}
       className={cn(
         "relative flex items-center gap-1.5 rounded-lg",
