@@ -371,9 +371,6 @@ export interface SlideItemPayload {
 /** `payload` of a `kind = "song"` program item. */
 export interface SongItemPayload {
   song_id: string
-  /** Saved identity and number snapshot; absent on legacy services. */
-  hymn?: boolean
-  hymn_numbers?: string[]
   arrangement_id?: string | null
   languages?: string[]
   /** A title slide before the words (#193). */

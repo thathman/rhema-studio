@@ -12,13 +12,12 @@ import { presentActions } from "@/studio/present-actions"
 import { presentQueueItem } from "@/lib/remote-actions"
 import { sectionShort, songSlides, TITLE_SLIDE } from "@/lib/lyrics"
 import { MediaKindIcon, MissingMediaMark } from "@/studio/prepare/item-editor-parts"
-import { interleave, isSkipped, nextVisibleItem, sectionSummaries } from "@/lib/run-of-show"
+import { interleave, isSkipped, sectionSummaries } from "@/lib/run-of-show"
 import { assigneesShort, itemAssignees } from "@/lib/assignees"
 import { SectionHeader, SectionLabel } from "@/studio/prepare/section-header"
 import { takeImpact } from "@/lib/cues"
 import { cuesFor, cueText } from "@/lib/item-cues"
 import { CUE_TRIGGERS } from "@/types"
-import { hymnNumbersFromLibrary, songKindLabel } from "@/lib/song-kind"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { BulkBar } from "@/studio/prepare/bulk-bar"
 import { AddEventPalette } from "@/studio/prepare/add-event-palette"
@@ -70,7 +69,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
     if (!range && !toggle) preview(item)
   }
   // Present runs past these: the next item shown after the active one.
-  const nextShown = activeIndex === null ? -1 : nextVisibleItem(items, headers, activeIndex)?.index ?? -1
+  const nextShown = activeIndex === null ? -1 : items.findIndex((_, k) => k > activeIndex && !isSkipped(items, headers, k))
   const present = (_item: QueueItem, index: number) => presentActions.presentItem(index)
 
   if (items.length === 0 && headers.length === 0) {
@@ -125,7 +124,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
                 title={mode === "present" ? (cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to preview"}
               >
                 <span className="w-5 shrink-0 text-right text-xs text-muted-foreground">{index + 1}</span>
-                {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={item.song.hymn ? "Hymn" : "Song"} />}
+                {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Song" />}
                 {custom && <PresentationIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Slide" />}
                 {picture && <MediaKindIcon mediaId={item.image.media_id} />}
                 {picture && <MissingMediaMark mediaId={item.image.media_id} />}
@@ -175,7 +174,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
                 )}
                 {isNext && (
                   <span className="ml-auto shrink-0 text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase">
-                    {cue ? "Next moment" : "Next"}
+                    Next
                   </span>
                 )}
               </button>
@@ -410,10 +409,8 @@ function Row({ id, index, sortable, dropPlacement, children }: { id: string; ind
 function SongBadges({ item }: { item: SongQueueItem }) {
   const song = useSongStore((s) => s.songs[item.song.song_id])
   const arrangement = song?.arrangements.find((a) => a.id === item.song.arrangement_id)
-  const kindLabel = songKindLabel(item, song ? hymnNumbersFromLibrary(song.numbers) : [], song?.song.tags)
   return (
     <span className="flex shrink-0 items-center gap-1 text-[0.6875rem] text-muted-foreground">
-      <span className="rounded border border-border px-1">{kindLabel}</span>
       {item.song.languages.map((l) => (
         <span key={l} className="rounded border border-border px-1 uppercase">{l}</span>
       ))}

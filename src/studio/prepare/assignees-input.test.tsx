@@ -77,14 +77,4 @@ describe("an item's people", () => {
     const mark = el.querySelector('[title="Prepared by Tolu, Ade, Bisi"]')!
     expect(mark.textContent).toBe("· Tolu+2")
   })
-
-  it("keeps a numbered hymn visibly distinct in the Prepare rundown", async () => {
-    const hymn = {
-      id: "hymn-245", kind: "song", song: { song_id: "cac-245", title: "Grace", hymn: true, hymn_numbers: ["CAC 245"], arrangement_id: null, languages: ["en"] },
-      reference: "Grace", confidence: 1, source: "manual", added_at: 0,
-    } as QueueItem
-    useQueueStore.setState({ items: [hymn], headers: [], activeIndex: null })
-    const el = await render(<RundownList mode="prepare" />)
-    expect(el.textContent).toContain("Hymn · CAC 245")
-  })
 })

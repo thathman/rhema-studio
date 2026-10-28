@@ -2,8 +2,6 @@
 export interface SongUsage {
   song_id: string
   title: string
-  hymn: boolean
-  hymn_numbers: string[]
   authors: string
   ccli_number: string | null
   licence: string
@@ -20,8 +18,8 @@ const cell = (v: string | number) => {
 
 /** CSV with the columns a CCLI copy report asks for, plus how often and when last. */
 export function usageCsv(rows: SongUsage[], from: string, to: string): string {
-  const head = ["Type", "Title", "Hymn numbers", "Authors", "CCLI song number", "Licence", "Services", "Last used"]
-  const lines = [head, ...rows.map((r) => [r.hymn ? "Hymn" : "Song", r.title, r.hymn_numbers.join("; "), r.authors, r.ccli_number ?? "", r.licence, r.services, r.last_date])].map((cols) => cols.map(cell).join(","))
+  const head = ["Title", "Authors", "CCLI song number", "Licence", "Services", "Last used"]
+  const lines = [head, ...rows.map((r) => [r.title, r.authors, r.ccli_number ?? "", r.licence, r.services, r.last_date])].map((cols) => cols.map(cell).join(","))
   return [`# Song usage ${from} to ${to} (saved services with a date)`, ...lines].join("\n") + "\n"
 }
 

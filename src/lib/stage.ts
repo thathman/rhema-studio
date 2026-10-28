@@ -1,13 +1,11 @@
 import type { QueueItem, StagePayload, VerseRenderData } from "@/types"
 import { warnMs } from "@/lib/item-timing"
 import { elapsedMs, formatMs, remainingMs, timerTone, type TimerState } from "@/lib/timer"
-import { nextVisibleItem, type OutlineHeader } from "@/lib/run-of-show"
 
 export interface StageInput {
   isLive: boolean
   liveVerse: VerseRenderData | null
   items: QueueItem[]
-  headers?: OutlineHeader[]
   activeIndex: number | null
   timer: TimerState
   now: number
@@ -42,11 +40,12 @@ export function stageFontVh(lines: string[]): number {
 export function buildStagePayload(i: StageInput): StagePayload {
   const live = i.isLive && i.liveVerse ? i.liveVerse : null
   const active = i.activeIndex === null ? null : i.items[i.activeIndex] ?? null
-  const next = nextVisibleItem(i.items, i.headers ?? [], i.activeIndex)
+  // What comes next on stage: hidden items are passed over, as Next passes over them (#193).
+  const next = i.items.find((it, k) => k > (i.activeIndex ?? -1) && !it.hidden) ?? null
   const running = i.timer.startedAt !== null || i.timer.accumulatedMs > 0
   return {
     current: live ? { title: live.reference, lines: currentLines(live) } : null,
-    next: next?.label ?? null,
+    next: next ? next.reference : null,
     note: active?.notes?.trim() || null,
     timer: running ? { label: i.timer.durationMs > 0 ? formatMs(remainingMs(i.timer, i.now)) : formatMs(elapsedMs(i.timer, i.now)), tone: timerTone(i.timer, i.now, warnMs(active?.timing)) } : null,
     message: i.message?.trim() || null,
