@@ -442,6 +442,68 @@ describe("Prepare never takes anything live (#299)", () => {
     await vi.waitFor(() => expect(document.body.querySelector<HTMLInputElement>("#dup-title")?.value).toBe("Sunday service (copy)"), { timeout: 1000 })
   }, 30_000)
 
+  it("shows a zero-moment event in both rundown views and keeps its plan separate from Live (#409, #461)", async () => {
+    localStorage.setItem("rhema.prepare.rundown-view.v1", "simple")
+    const event = {
+      id: "prayer-event",
+      type: "group" as const,
+      name: "New event",
+      at: 0,
+      event: { schema_version: 1 as const, role: "Prayer", duration_minutes: 15 },
+    }
+    const phase = {
+      id: "main-phase",
+      type: "phase" as const,
+      name: "Main service",
+      at: 0,
+      rule: "manual" as const,
+      role: "main" as const,
+    }
+    useQueueStore.setState({ items: [], headers: [], activeIndex: null })
+    useBroadcastStore.setState({ isLive: true, liveVerse: null, liveSlide: null, liveItemId: "on-air-item" })
+    const savedIds = [phase.id, event.id]
+    const beforeLive = {
+      isLive: useBroadcastStore.getState().isLive,
+      liveItemId: useBroadcastStore.getState().liveItemId,
+    }
+
+    const el = await renderPrepare()
+    expect(el.textContent).toContain("Nothing in the service yet")
+    await act(async () => useQueueStore.setState({ headers: [phase, event] }))
+    const assertEventIsVisible = (name: string) => expect(el.querySelector(`[aria-label="Event: ${name}"]`)).not.toBeNull()
+    assertEventIsVisible("New event")
+    expect(el.querySelector('[aria-label="Phase: Main service"]')).toBeNull()
+    expect(el.textContent).not.toContain("Nothing in the service yet")
+
+    const grouped = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Grouped by phase")!
+    await act(async () => grouped.click())
+    assertEventIsVisible("New event")
+    expect(el.querySelector('[aria-label="Phase: Main service"]')).not.toBeNull()
+
+    const edit = el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: New event"]')!
+    await act(async () => edit.click())
+    expect(edit.getAttribute("aria-pressed")).toBe("true")
+    const title = el.querySelector<HTMLInputElement>('[aria-label="Event title"]')!
+    expect(title.value).toBe("New event")
+    const setValue = (field: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")!.set!.call(field, value)
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+    }
+    await act(async () => setValue(title, "Opening Prayer"))
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Event title"]')?.value).toBe("Opening Prayer")
+    assertEventIsVisible("Opening Prayer")
+
+    const hide = el.querySelector<HTMLButtonElement>('button[aria-label="Hide Opening Prayer"]')!
+    await act(async () => hide.click())
+    expect(hide.getAttribute("aria-expanded")).toBe("false")
+    assertEventIsVisible("Opening Prayer")
+
+    expect(useQueueStore.getState().headers.map((header) => header.id)).toEqual(savedIds)
+    expect(useQueueStore.getState().headers).toContainEqual({ ...event, name: "Opening Prayer" })
+    expect(useQueueStore.getState().headers.find((header) => header.id === event.id)?.event).toEqual(event.event)
+    expect(useBroadcastStore.getState()).toMatchObject(beforeLive)
+  })
+
   it("opens an event plan editor and keeps its edits separate from live output", async () => {
     useQueueStore.setState({
       items: [slide("Opening prayer")],
