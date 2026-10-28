@@ -7,6 +7,7 @@ import { LIBRARY_LOOKS, LOOK_FAMILIES } from "@/lib/look-library-data"
 import type { LibraryLook, LookBackground, LookContent, LookFamily, LookFamilyId, SceneTemplateLayer } from "@/lib/look-library"
 import { contrastRatio } from "@/lib/brand-kit"
 import { BUNDLED_FONTS } from "@/lib/fonts"
+import worshipExpressionsSource from "../../design-packs/rhema-worship-expressions.rhema-design.json?raw"
 
 /**
  * Design packs (#354): a file of look recipes a church imports into Design → Library. A recipe
@@ -317,6 +318,15 @@ export function parseDesignPack(json: string): DesignPack {
   return designPackFrom(readDesignPackDoc(raw))
 }
 
+// Use the same strict parser for app-bundled recipes and imported files. This keeps the gallery
+// available on a clean, offline install without introducing a second, looser data path.
+const BUNDLED_DESIGN_PACKS: readonly DesignPack[] = [parseDesignPack(worshipExpressionsSource)]
+const BUNDLED_DESIGN_PACK_BY_ID = new Map(BUNDLED_DESIGN_PACKS.map((pack) => [pack.doc.id, pack]))
+
+export function isBundledDesignPack(id: string): boolean {
+  return BUNDLED_DESIGN_PACK_BY_ID.has(id)
+}
+
 /** A kept or backed-up pack, read again as an import is; null when it no longer reads (it is left out). */
 function packOrNull(raw: unknown): DesignPack | null {
   try {
@@ -349,13 +359,31 @@ async function persist(packs: readonly DesignPack[]): Promise<void> {
 
 let hydration: Promise<void> | null = null
 
+function storedPacks(raw: unknown): { packs: DesignPack[]; validCount: number } {
+  if (!Array.isArray(raw)) return { packs: [], validCount: 0 }
+  const valid = raw.map(packOrNull).filter((p): p is DesignPack => p !== null)
+  // Last saved version wins, matching importDesignPack's replace-by-id behavior.
+  const unique = [...new Map(valid.map((pack) => [pack.doc.id, pack])).values()]
+  // Older Rhema versions required manual import. Remove an unchanged copy now that it ships with
+  // the app; preserve customized copies as a local override, keeping stable look IDs.
+  const packs = unique.filter((pack) => {
+    const bundled = BUNDLED_DESIGN_PACK_BY_ID.get(pack.doc.id)
+    return !bundled || JSON.stringify(pack.doc) !== JSON.stringify(bundled.doc)
+  })
+  return { packs, validCount: valid.length }
+}
+
 /** Load the imported packs; each is checked again, as on import. */
 export function hydrateDesignPacks(): Promise<void> {
   hydration ??= (async () => {
     try {
       const store = await load(STORE_FILE, { autoSave: false, defaults: {} })
       const raw = await store.get("packs")
-      if (Array.isArray(raw)) useDesignPackStore.setState({ packs: raw.map(packOrNull).filter((p): p is DesignPack => p !== null) })
+      if (Array.isArray(raw)) {
+        const { packs, validCount } = storedPacks(raw)
+        useDesignPackStore.setState({ packs })
+        if (packs.length !== validCount) await persist(packs)
+      }
     } catch {
       // No store (a browser preview, a test): no imported packs.
     }
@@ -366,7 +394,11 @@ export function hydrateDesignPacks(): Promise<void> {
 /** Add a pack to the library, or replace the one with its id. Copies already made stay as they are. */
 export async function importDesignPack(pack: DesignPack): Promise<void> {
   await hydrateDesignPacks()
-  const packs = [...useDesignPackStore.getState().packs.filter((p) => p.doc.id !== pack.doc.id), pack]
+  const current = useDesignPackStore.getState().packs
+  if (isBundledDesignPack(pack.doc.id) && !current.some((p) => p.doc.id === pack.doc.id)) {
+    throw new Error("This pack is included with Rhema Studio. To import a customized version, give it a different pack ID.")
+  }
+  const packs = [...current.filter((p) => p.doc.id !== pack.doc.id), pack]
   useDesignPackStore.setState({ packs })
   await persist(packs)
 }
@@ -388,7 +420,7 @@ export function designPacksForBackup(packs: readonly DesignPack[] = useDesignPac
 export async function restoreDesignPacksFromBackup(raw: unknown): Promise<void> {
   if (!Array.isArray(raw)) return
   await hydrateDesignPacks()
-  const packs = raw.map(packOrNull).filter((p): p is DesignPack => p !== null)
+  const { packs } = storedPacks(raw)
   useDesignPackStore.setState({ packs })
   await persist(packs)
 }
@@ -396,11 +428,21 @@ export async function restoreDesignPacksFromBackup(raw: unknown): Promise<void> 
 // ── the library: built-in looks, then each imported pack's ───────────────
 
 export function libraryLooks(packs: readonly DesignPack[] = useDesignPackStore.getState().packs): LibraryLook[] {
-  return packs.length ? [...LIBRARY_LOOKS, ...packs.flatMap((p) => p.looks)] : [...LIBRARY_LOOKS]
+  const imported = uniquePacks(packs)
+  const importedIds = new Set(imported.map((pack) => pack.doc.id))
+  const bundled = BUNDLED_DESIGN_PACKS.filter((pack) => !importedIds.has(pack.doc.id))
+  return [...LIBRARY_LOOKS, ...bundled.flatMap((pack) => pack.looks), ...imported.flatMap((pack) => pack.looks)]
 }
 
 export function libraryFamilies(packs: readonly DesignPack[] = useDesignPackStore.getState().packs): LookFamily[] {
-  return [...LOOK_FAMILIES, ...packs.map((p) => p.family)]
+  const imported = uniquePacks(packs)
+  const importedIds = new Set(imported.map((pack) => pack.doc.id))
+  const bundled = BUNDLED_DESIGN_PACKS.filter((pack) => !importedIds.has(pack.doc.id))
+  return [...LOOK_FAMILIES, ...bundled.map((pack) => pack.family), ...imported.map((pack) => pack.family)]
+}
+
+function uniquePacks(packs: readonly DesignPack[]): DesignPack[] {
+  return [...new Map(packs.map((pack) => [pack.doc.id, pack])).values()]
 }
 
 /** For tests: forget the loaded packs. */

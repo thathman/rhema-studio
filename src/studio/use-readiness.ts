@@ -57,6 +57,7 @@ export function useReadiness() {
   const missingTranslations = useServiceStore((s) => s.missingTranslations)
   const overrideTranslations = useBibleStore((s) => s.overrideServiceTranslations)
   const unsupportedItems = useServiceStore((s) => s.unsupportedItems)
+  const corruptItems = useServiceStore((s) => s.corruptItems)
   const suggested = todaysService(programs, localDate())
   const monitorCount = useMonitorStore((s) => s.count)
   const monitorNames = useMonitorStore((s) => s.names)
@@ -206,6 +207,7 @@ export function useReadiness() {
     // With "Use my translation" on, those verses show in the operator's translation.
     missingTranslations: overrideTranslations ? [] : missingTranslations,
     unsupportedItems: unsupportedItems.length,
+    corruptItems: corruptItems.length,
     timing: planCheck(items, headers, zone),
     camerasWithoutAddress: scenes.filter((sc) => sc.layers.some((l) => l.kind === "camera" && !l.cameraUrl)).map((sc) => sc.name),
     camerasNotSending: cameraHealth(cameras, scenes, outputs, outputStatus, router.checked ? router.status : undefined)

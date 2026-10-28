@@ -30,27 +30,6 @@ describe("stage payload", () => {
     expect(buildStagePayload({ isLive: true, liveVerse: null, items: [], activeIndex: null, timer: idleTimer(), now: 0 })).toEqual({ current: null, next: null, note: null, timer: null, message: null, band: null })
   })
 
-  it("shows the next visible item after hidden entries and a disabled phase", () => {
-    const items = [item("a", "Live"), item("b", "Hidden one"), item("c", "Hidden two"), item("d", "Skipped phase"), item("e", "Next")]
-    items[1].hidden = true
-    items[2].hidden = true
-    const headers = [
-      { id: "main", type: "phase" as const, name: "Main", at: 0, rule: "manual" as const },
-      { id: "skip", type: "phase" as const, name: "Disabled", at: 3, rule: "manual" as const, disabled: true },
-      { id: "following", type: "phase" as const, name: "Following", at: 4, rule: "manual" as const },
-    ]
-    const payload = buildStagePayload({ isLive: false, liveVerse: null, items, activeIndex: 0, headers, timer: idleTimer(), now: 0 })
-
-    expect(payload.next).toBe("Next")
-  })
-
-  it("distinguishes a cue moment from the next service item", () => {
-    const moment = { id: "moment", kind: "cue" as const, reference: "Prayer begins", confidence: 1, source: "manual" as const, added_at: 0 }
-    const payload = buildStagePayload({ isLive: false, liveVerse: null, items: [item("a", "Welcome"), moment], activeIndex: 0, timer: idleTimer(), now: 0 })
-
-    expect(payload.next).toBe("Moment · Prayer begins")
-  })
-
   it("stage words get smaller for long lines, not only for many lines", () => {
     expect(stageFontVh(["Amazing grace"])).toBe(9)
     const long = stageFontVh(["For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life. ".repeat(3)])

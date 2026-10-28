@@ -84,6 +84,28 @@ export interface ContentStatus {
   error?: string | null
 }
 
+// ── Reusable slides and announcements (migration 0015) ──────────────────
+
+export interface ReusableSlide {
+  id: string
+  kind: "slide" | "announcement"
+  title: string
+  body: string
+  link: string | null
+  background_media_id: string | null
+  revision: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ReusableSlideInput {
+  kind: "slide" | "announcement"
+  title: string
+  body: string
+  link: string | null
+  background_media_id: string | null
+}
+
 // ── Media (migration 0004) ───────────────────────────────────────────────
 
 export interface MediaAsset {
@@ -351,14 +373,14 @@ export interface SlideItemPayload {
   title: string
   body: string
   link?: string
+  /** Reusable source attribution. Text stays copied into this service item. */
+  source_asset_id?: string
+  source_revision?: number
 }
 
 /** `payload` of a `kind = "song"` program item. */
 export interface SongItemPayload {
   song_id: string
-  /** Saved identity and number snapshot; absent on legacy services. */
-  hymn?: boolean
-  hymn_numbers?: string[]
   arrangement_id?: string | null
   languages?: string[]
   /** A title slide before the words (#193). */

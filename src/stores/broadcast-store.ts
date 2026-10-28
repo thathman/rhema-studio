@@ -2,7 +2,6 @@ import { create } from "zustand"
 import { emitTo } from "@tauri-apps/api/event"
 import { invoke } from "@tauri-apps/api/core"
 import { load, type Store } from "@tauri-apps/plugin-store"
-import type { QueueItem } from "@/types"
 import type {
   SongWithSections,
   BroadcastOutput,
@@ -21,8 +20,8 @@ import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import type { TimerState } from "@/lib/timer"
 import { useSongStore } from "@/stores/song-store"
-import { nextVisibleItem, type OutlineHeader } from "@/lib/run-of-show"
-import { forOutputLanguage } from "@/lib/output-language"
+import { markSkipped } from "@/lib/run-of-show"
+import { forOutputLanguage, isOutputLanguageFallback } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
@@ -37,6 +36,7 @@ import type { Scene, SceneAppearanceSnapshot, SceneFrame, SceneLayerKind } from 
 import type { CountdownTargets } from "@/lib/countdown"
 import { zoneCity } from "@/lib/stage-clock"
 import { countdownFrame, countsToTarget, DEFAULT_COUNTDOWN_LOOK, lookCounting, NO_COUNTDOWN_SOURCES, normalizeCountdownLook, type CountdownSources } from "@/lib/countdown-display"
+import { normalizeDesignDraft, normalizeDesignDrafts, type DesignDraft } from "@/lib/design-drafts"
 
 /** Heard verses (Settings → Display mode, the Live panel's Auto): wait, go live, or the Bible feeds only. */
 export type AutoMode = "manual" | "auto" | "bible"
@@ -63,23 +63,31 @@ export interface RehearsalReturn extends ProgramSnapshot {
   timer: TimerState
   /** Each output's scene (by output id; an output not listed showed its own feed). */
   outputScenes: Record<string, string>
+  /** The exact scene revision each public output had when rehearsal began. */
+  outputSceneSnapshots: Record<string, Scene>
+  outputSceneAppearances: Record<string, SceneAppearanceSnapshot>
   /** The scene each output's Restore offered. */
   sceneReturn: Record<string, string>
 }
 
 /** The outputs as the real screens have them: in rehearsal, each with the scene it had before (what is saved). */
 export function outputsForScreens(s: { rehearsal: boolean; rehearsalReturn: RehearsalReturn | null; outputs: BroadcastOutput[] }): BroadcastOutput[] {
-  return s.rehearsal && s.rehearsalReturn ? withScenes(s.outputs, s.rehearsalReturn.outputScenes) : s.outputs
+  return s.rehearsal && s.rehearsalReturn ? withScenes(s.outputs, s.rehearsalReturn.outputScenes, s.rehearsalReturn.outputSceneSnapshots, s.rehearsalReturn.outputSceneAppearances) : s.outputs
 }
 
 /** The outputs with these scenes on them (by output id); the rest back on their own feed. */
-function withScenes(outputs: BroadcastOutput[], scenes: Record<string, string>): BroadcastOutput[] {
+function withScenes(outputs: BroadcastOutput[], scenes: Record<string, string>, snapshots?: Record<string, Scene>, appearances?: Record<string, SceneAppearanceSnapshot>): BroadcastOutput[] {
   return outputs.map((o) => {
     const sceneId = scenes[o.id]
-    if (o.sceneId === sceneId) return o
     const next: BroadcastOutput = { ...o }
     if (sceneId) next.sceneId = sceneId
     else delete next.sceneId
+    const snapshot = snapshots?.[o.id] ?? (o.sceneSnapshot?.id === sceneId ? o.sceneSnapshot : undefined)
+    if (snapshot) next.sceneSnapshot = snapshot
+    else delete next.sceneSnapshot
+    const appearance = appearances?.[o.id]
+    if (appearance && sceneId) next.sceneAppearanceSnapshot = appearance
+    else delete next.sceneAppearanceSnapshot
     return next
   })
 }
@@ -180,6 +188,8 @@ interface BroadcastState {
    * rehearsal ends. `by`: who took it (default: see currentActor).
    */
   takeScene: (outputId: string, sceneId: string, by?: string) => void
+  /** Restore the exact scene/look and theme selection previously taken to this output. */
+  restoreSceneSnapshot: (outputId: string, scene: Scene, appearance: SceneAppearanceSnapshot, themeSelection: Pick<BroadcastOutput, "themeId" | "themeFor">, by?: string) => void
   /** Take an immutable scene/look revision stored with an approved service revision. */
   takeSceneRevision: (outputId: string, scene: Scene, appearance: SceneAppearanceSnapshot, programId: string, revision: number, by?: string, appearanceComplete?: boolean, approval?: { approvedAt?: string | null; approvedBy?: string | null }) => void
   /** Back to the output's own feed, full frame; Restore takes the scene again. */
@@ -205,6 +215,10 @@ interface BroadcastState {
   lowerThird: LowerThird | null
   /** Designed looks for the lower third (the first is the default). Saved with the themes. */
   lowerThirdStyles: LowerThirdStyle[]
+  /** Unpublished visual edits. Output renderers never read these drafts. */
+  designDrafts: DesignDraft[]
+  saveDesignDraft: (draft: DesignDraft) => void
+  deleteDesignDraft: (id: string) => void
   /** Add or replace a style (by id); `backing` (resolved) replaces the on-air band's when it uses this style. */
   saveLowerThirdStyle: (style: LowerThirdStyle, backing?: LowerThird["backing"]) => void
   /** Remove a style; the last one cannot go. */
@@ -785,6 +799,14 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   stageMessage: "",
   lowerThird: null,
   lowerThirdStyles: [DEFAULT_LOWER_THIRD_STYLE],
+  designDrafts: [],
+  saveDesignDraft: (draft) => {
+    const normalized = normalizeDesignDraft(draft)
+    if (!normalized) return
+    const drafts = get().designDrafts.filter((existing) => existing.id !== normalized.id)
+    set({ designDrafts: [...drafts, normalized] })
+  },
+  deleteDesignDraft: (id) => set({ designDrafts: get().designDrafts.filter((draft) => draft.id !== id) }),
   ticker: null,
   tickerItems: [],
   tickerStyle: DEFAULT_TICKER_STYLE,
@@ -961,8 +983,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (output.role === "stage") {
       recordFrame(outputId, { theme, verse: null, overlay: null, stage: true })
       const q = useQueueStore.getState()
-      // Stage and countdown use the same run-of-show rule for next-up (#390).
-      const countdown = output.stageLayout === "countdown" ? stageCountdownFrame(s, q.items, q.headers, q.activeIndex) : null
+      // What comes next leaves out hidden items and a skipped phase (#193).
+      const items = markSkipped(q.items, q.headers)
+      const countdown = output.stageLayout === "countdown" ? stageCountdownFrame(s, items, q.activeIndex) : null
+      const stageVerse = shown ? forOutputLanguage(shown, output.language) : null
       deliver(outputId, {
         // The stage window draws no theme: send the built-in one (no pictures) rather than the
         // output's, whose pictures can be megabytes, with every timer tick (NFR-03).
@@ -971,9 +995,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         role: "stage",
         // A stage that follows chosen sources shows their words; otherwise the program (ADR 0001).
         stage: applyStageStyle({ ...buildStagePayload({
-          isLive: shown !== null, liveVerse: shown, items: q.items, headers: q.headers, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
+          isLive: shown !== null, liveVerse: stageVerse, items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
-        }), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}), ...(s.stageClock ? { clock: s.stageClock } : {}),
+        }), ...(isOutputLanguageFallback(shown, output.language) ? { languageNotice: "Second language unavailable; showing available text." } : {}), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}), ...(s.stageClock ? { clock: s.stageClock } : {}),
           // This output's own layout, orientation and low-light colours (#196 R6); absent from older outputs.
           ...(output.stageLayout && output.stageLayout !== "countdown" ? { layout: output.stageLayout } : {}),
           ...(output.stageOrientation ? { portrait: output.stageOrientation } : {}),
@@ -992,7 +1016,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         (!layer.themeId && ["feed", "clock", "camera", "ticker", "lowerThird"].includes(layer.kind) && themeIdsOf(output).includes(s.draftTheme!.id)),
       ) ? s.draftTheme : null
       const sceneOutput = draft
-        ? { ...output, sceneAppearanceSnapshot: { themes: { ...(output.sceneAppearanceSnapshot?.themes ?? {}), [draft.id]: draft }, logoUrl: output.sceneAppearanceSnapshot?.logoUrl ?? useSettingsStore.getState().brandKit.logoUrl } }
+        ? { ...output, sceneAppearanceSnapshot: { themes: { ...(output.sceneAppearanceSnapshot?.themes ?? {}), [draft.id]: draft }, logoUrl: output.sceneAppearanceSnapshot ? output.sceneAppearanceSnapshot.logoUrl : useSettingsStore.getState().brandKit.logoUrl } }
         : output
       const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()), ticker: liveTicker, overlay: liveOverlay, logoUrl: useSettingsStore.getState().brandKit.logoUrl, cameraLabel: (url) => cameraLabelOf(url, useSettingsStore.getState().cameras), cameraBackup, cameraDown }, sceneOutput, scene)
       const overlay = followsLowerThird(output) && !owns.lowerThird ? liveOverlay : null
@@ -1200,19 +1224,24 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (rehearsal) {
       const { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, lowerThird, ticker, stageMessage, sceneReturn } = s
       const outputScenes = Object.fromEntries(s.outputs.flatMap((o) => (o.sceneId ? [[o.id, o.sceneId]] : [])))
-      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex, lowerThird, ticker, stageMessage, timer: useTimerStore.getState().timer, outputScenes, sceneReturn } })
+      const outputSceneSnapshots = Object.fromEntries(s.outputs.flatMap((o) => {
+        const scene = sceneForOutput(o, s.scenes)
+        return scene ? [[o.id, scene]] : []
+      }))
+      const outputSceneAppearances = Object.fromEntries(s.outputs.flatMap((o) => o.sceneAppearanceSnapshot ? [[o.id, o.sceneAppearanceSnapshot]] : []))
+      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex, lowerThird, ticker, stageMessage, timer: useTimerStore.getState().timer, outputScenes, outputSceneSnapshots, outputSceneAppearances, sceneReturn } })
       return
     }
     const back = s.rehearsalReturn
     if (back) {
-      const { activeIndex, lowerThird, ticker, stageMessage, timer, outputScenes, sceneReturn, ...program } = back
+      const { activeIndex, lowerThird, ticker, stageMessage, timer, outputScenes, outputSceneSnapshots, outputSceneAppearances, sceneReturn, ...program } = back
       // The lower third, ticker, stage message, timer and each screen's scene always come back
       // (a scene deleted meanwhile leaves its screen on its own feed); the program too unless the
       // operator chose Show this live.
       useTimerStore.setState({ timer })
       if (!opts.keepRehearsed) useQueueStore.setState({ activeIndex })
       const kept = Object.fromEntries(Object.entries(outputScenes).filter(([, id]) => s.scenes.some((x) => x.id === id)))
-      set({ ...(opts.keepRehearsed ? {} : program), lowerThird, ticker, stageMessage, outputs: withScenes(s.outputs, kept), sceneReturn, rehearsal, rehearsalReturn: null })
+      set({ ...(opts.keepRehearsed ? {} : program), lowerThird, ticker, stageMessage, outputs: withScenes(s.outputs, kept, outputSceneSnapshots, outputSceneAppearances), sceneReturn, rehearsal, rehearsalReturn: null })
     } else {
       set({ rehearsal, rehearsalReturn: null })
     }
@@ -1388,27 +1417,36 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     for (const o of get().outputs) if (o.sceneId === id) get().updateOutput(o.id, { sceneId: undefined })
   },
   takeScene: (outputId, sceneId, by = currentActor()) => {
-    const scene = get().scenes.find((x) => x.id === sceneId)
-    if (!scene) return
-    const output = get().outputs.find((x) => x.id === outputId)
-    const appearance = output && !get().rehearsal
-      ? captureSceneAppearance(scene, output, get().themes, useSettingsStore.getState().brandKit.logoUrl)
-      : undefined
-    set({ sceneReturn: { ...get().sceneReturn, [outputId]: sceneId }, ...sceneTake(outputId, sceneId, by) })
-    get().updateOutput(outputId, { sceneId, ...(!get().rehearsal ? { sceneSnapshot: normalizeScene(scene) ?? scene, sceneAppearanceSnapshot: appearance } : {}) })
+    const s = get()
+    const scene = s.scenes.find((x) => x.id === sceneId)
+    const output = s.outputs.find((x) => x.id === outputId)
+    if (!scene || !output || (output.role ?? "congregation") !== "congregation") return
+    const appearance = captureSceneAppearance(scene, output, s.themes, useSettingsStore.getState().brandKit.logoUrl)
+    set({ sceneReturn: { ...s.sceneReturn, [outputId]: sceneId }, ...sceneTake(outputId, sceneId, by) })
+    get().updateOutput(outputId, { sceneId, sceneSnapshot: structuredClone(normalizeScene(scene) ?? scene), sceneAppearanceSnapshot: appearance })
+  },
+  restoreSceneSnapshot: (outputId, scene, appearance, themeSelection, by = currentActor()) => {
+    const s = get()
+    const output = s.outputs.find((o) => o.id === outputId)
+    const snapshot = normalizeScene(scene)
+    if (!snapshot || !output || (output.role ?? "congregation") !== "congregation") return
+    set({ sceneReturn: { ...s.sceneReturn, [outputId]: snapshot.id }, ...sceneTake(outputId, snapshot.id, by) })
+    get().updateOutput(outputId, {
+      themeId: themeSelection.themeId,
+      themeFor: themeSelection.themeFor,
+      sceneId: snapshot.id,
+      sceneSnapshot: structuredClone(snapshot),
+      sceneAppearanceSnapshot: structuredClone(appearance),
+    })
   },
   takeSceneRevision: (outputId, scene, appearance, programId, revision, by = currentActor(), appearanceComplete = true, approval = {}) => {
-    if (!programId.trim() || !Number.isSafeInteger(revision) || revision < 0 || !get().outputs.some((output) => output.id === outputId)) return
+    const output = get().outputs.find((o) => o.id === outputId)
+    if (!programId.trim() || !Number.isSafeInteger(revision) || revision < 0 || !output || (output.role ?? "congregation") !== "congregation") return
     const snapshot = normalizeScene(scene)
     if (!snapshot) return
-    if (get().rehearsal) {
-      set({ sceneReturn: { ...get().sceneReturn, [outputId]: scene.id }, ...sceneTake(outputId, scene.id, by) })
-      get().updateOutput(outputId, { sceneId: scene.id })
-      return
-    }
-    const appearanceSnapshot = JSON.parse(JSON.stringify({ ...appearance, approved: { programId, revision, appearanceComplete, ...approval } })) as SceneAppearanceSnapshot
+    const appearanceSnapshot = structuredClone({ ...appearance, approved: { programId, revision, appearanceComplete, ...approval } })
     set({ sceneReturn: { ...get().sceneReturn, [outputId]: scene.id }, ...sceneTake(outputId, scene.id, by) })
-    get().updateOutput(outputId, { sceneId: scene.id, sceneSnapshot: snapshot, sceneAppearanceSnapshot: appearanceSnapshot })
+    get().updateOutput(outputId, { sceneId: scene.id, sceneSnapshot: structuredClone(snapshot), sceneAppearanceSnapshot: appearanceSnapshot })
   },
   releaseScene: (outputId, by = currentActor()) => {
     if (!get().outputs.find((o) => o.id === outputId)?.sceneId) return
@@ -1586,6 +1624,7 @@ export function hydrateBroadcastThemes(): Promise<void> {
       if ((await store.get("autoBibleFeeds")) === true && !patch.autoLive) patch.autoBibleFeeds = true
       const ltStyles = (await store.get("lowerThirdStyles")) as LowerThirdStyle[] | undefined
       if (Array.isArray(ltStyles) && ltStyles.length > 0) patch.lowerThirdStyles = ltStyles.map(normalizeLowerThirdStyle)
+      patch.designDrafts = normalizeDesignDrafts(await store.get("designDrafts"))
       patch.tickerStyle = normalizeTickerStyle((await store.get("tickerStyle")) as Partial<TickerStyle> | undefined)
       patch.stageStyle = normalizeStageStyle((await store.get("stageStyle")) as Partial<StageStyle> | undefined)
       patch.countdownLook = normalizeCountdownLook((await store.get("countdownLook")) as Partial<CountdownLook> | undefined)
@@ -1609,6 +1648,7 @@ export function hydrateBroadcastThemes(): Promise<void> {
           state.autoLive !== prevState.autoLive ||
           state.autoBibleFeeds !== prevState.autoBibleFeeds ||
           state.lowerThirdStyles !== prevState.lowerThirdStyles ||
+          state.designDrafts !== prevState.designDrafts ||
           state.tickerStyle !== prevState.tickerStyle ||
           state.stageStyle !== prevState.stageStyle ||
           state.countdownLook !== prevState.countdownLook ||
@@ -1655,6 +1695,8 @@ export interface LooksBackup {
   customThemes: BroadcastTheme[]
   outputs: BroadcastOutput[]
   lowerThirdStyles: LowerThirdStyle[]
+  /** Drafts are optional in older backup files and never applied while restoring. */
+  designDrafts?: DesignDraft[]
   tickerStyle: TickerStyle
   stageStyle: StageStyle
   /** Absent from backups made before the countdown display. */
@@ -1685,6 +1727,7 @@ export function looksForBackup(state: BroadcastState = useBroadcastStore.getStat
       return copy
     }),
     lowerThirdStyles: state.lowerThirdStyles,
+    designDrafts: state.designDrafts,
     tickerStyle: state.tickerStyle,
     stageStyle: state.stageStyle,
     countdownLook: state.countdownLook,
@@ -1730,6 +1773,7 @@ export function restoreLooksFromBackup(raw: unknown): void {
     if (main) patch.activeThemeId = main.themeId
   }
   if (Array.isArray(looks.lowerThirdStyles) && looks.lowerThirdStyles.length > 0) patch.lowerThirdStyles = looks.lowerThirdStyles.filter((x) => typeof x === "object" && x !== null).map((x) => normalizeLowerThirdStyle(x as LowerThirdStyle))
+  if (Array.isArray(looks.designDrafts)) patch.designDrafts = normalizeDesignDrafts(looks.designDrafts)
   if (typeof looks.tickerStyle === "object" && looks.tickerStyle !== null) patch.tickerStyle = normalizeTickerStyle(looks.tickerStyle as Partial<TickerStyle>)
   if (typeof looks.stageStyle === "object" && looks.stageStyle !== null) patch.stageStyle = normalizeStageStyle(looks.stageStyle as Partial<StageStyle>)
   if (typeof looks.countdownLook === "object" && looks.countdownLook !== null) patch.countdownLook = normalizeCountdownLook(looks.countdownLook as Partial<CountdownLook>)
@@ -1764,6 +1808,7 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     await store.set("autoLiveOptIn", state.autoLive)
     await store.set("autoBibleFeeds", state.autoBibleFeeds)
     await store.set("lowerThirdStyles", state.lowerThirdStyles)
+    await store.set("designDrafts", state.designDrafts)
     await store.set("tickerStyle", state.tickerStyle)
     await store.set("stageStyle", state.stageStyle)
     await store.set("countdownLook", state.countdownLook)
@@ -1826,17 +1871,19 @@ function churchZone(): string {
 }
 
 /** A countdown display's frame: what its look counts now, the item on now and the next one. */
-function stageCountdownFrame(s: BroadcastState, items: QueueItem[], headers: OutlineHeader[], activeIndex: number | null) {
+function stageCountdownFrame(s: BroadcastState, items: QueueItemLike[], activeIndex: number | null) {
   const zone = churchZone()
   const counting = lookCounting(s.countdownLook, s.countdownSources, useTimerStore.getState().timer, monotonicNow(), Date.now(), zone, s.countdowns)
   const item = activeIndex === null ? null : items[activeIndex]?.reference ?? null
-  const next = nextVisibleItem(items, headers, activeIndex)?.label ?? null
+  const next = items.find((it, k) => k > (activeIndex ?? -1) && !it.hidden)?.reference ?? null
   // A browser feed's screen may be set to another zone: the time of day is the church's (or this computer's).
   const frame = countdownFrame(s.countdownLook, counting, { item, next, zone: zone || Intl.DateTimeFormat().resolvedOptions().timeZone || "" })
   // The stage design's clock choices (#196 R2.6) reach the countdown display's time of day too.
   const st = s.stageStyle
   return { ...frame, ...(st.clockHours ? { hours: st.clockHours } : st.showClock ? { hours: 24 as const } : {}), ...(st.showClock && st.secondZone ? { zone2: { label: st.secondZoneLabel?.trim() || zoneCity(st.secondZone), zone: st.secondZone } } : {}) }
 }
+type QueueItemLike = { reference: string; hidden?: boolean | null }
+
 /** Stage outputs that show the countdown display. */
 function syncCountdownOutputs(): void {
   const s = useBroadcastStore.getState()
@@ -1849,7 +1896,7 @@ function syncStageOutputs(): void {
   for (const o of s.outputs) if (o.role === "stage") s.syncBroadcastOutputFor(o.id)
 }
 useQueueStore.subscribe((state, prev) => {
-  if (state.items !== prev.items || state.headers !== prev.headers || state.activeIndex !== prev.activeIndex) syncStageOutputs()
+  if (state.items !== prev.items || state.activeIndex !== prev.activeIndex) syncStageOutputs()
 })
 useTimerStore.subscribe(syncStageOutputs)
 // Clock layers work out the time themselves: resend only when the timer starts, stops or changes.

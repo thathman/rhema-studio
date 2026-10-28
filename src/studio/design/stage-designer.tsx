@@ -9,6 +9,9 @@ import { CountdownSelect } from "@/studio/production/countdown-select"
 import { stageClock } from "@/lib/stage-clock"
 import { validTimeZone } from "@/lib/church-time"
 import { useSettingsStore } from "@/stores/settings-store"
+import { normalizeStageStyle } from "@/lib/stage-style"
+import { DesignDraftActions } from "@/studio/design/design-draft-actions"
+import { useDesignDraft } from "@/studio/design/use-design-draft"
 
 /** What the preview shows: a verse live, the timer running, a note and the next item. */
 const SAMPLE: StagePayload = {
@@ -55,12 +58,17 @@ function ZoneInput({ value, disabled, onChange }: { value: string; disabled: boo
   )
 }
 
-/** The stage display (DS-004): what the team on the platform sees. Changes apply at once, also on air. */
+/** The stage display (DS-004): what the team on the platform sees. Edits stay in a draft until applied. */
 export function StageDesigner() {
-  const style = useBroadcastStore((s) => s.stageStyle)
+  const publishedStyle = useBroadcastStore((s) => s.stageStyle)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const draft = useDesignDraft("stage", "default", publishedStyle, normalizeStageStyle)
+  const style = draft.value
   const zone = useSettingsStore((s) => s.setup.timeZone)
   const canvas = useRef<HTMLCanvasElement>(null)
-  const patch = (p: Partial<StageStyle>) => useBroadcastStore.getState().saveStageStyle({ ...style, ...p })
+  const patch = (p: Partial<StageStyle>) => draft.update(normalizeStageStyle({ ...style, ...p }))
+  const liveOutputs = outputs.filter((output) => output.role === "stage").map((output) => output.name)
+  const apply = () => useBroadcastStore.getState().saveStageStyle(normalizeStageStyle(style))
   useEffect(() => {
     const ctx = canvas.current?.getContext("2d")
     // A countdown chosen shows first on the timers' line, as on the real stage.
@@ -70,7 +78,17 @@ export function StageDesigner() {
   }, [style, zone])
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">What the team on the platform sees on the stage display (a screen or an NDI viewer): the live words, the timer, what is next and your messages. Changes apply at once. The congregation never sees it.</p>
+      <p className="text-sm text-muted-foreground">What the team on the platform sees on the stage display (a screen or an NDI viewer): the live words, the timer, what is next and your messages. Preview and save a draft here; applying is deliberate.</p>
+      <DesignDraftActions
+        dirty={draft.dirty}
+        saved={draft.saved}
+        scope="all Stage outputs using this shared stage design"
+        outputs={liveOutputs}
+        onSave={draft.save}
+        onDiscard={draft.discard}
+        onApply={apply}
+        onApplied={draft.markApplied}
+      />
       <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,26rem)]">
         <div className="flex min-w-0 flex-col gap-2 xl:sticky xl:top-0">
           <canvas ref={canvas} width={1280} height={720} className="aspect-video w-full rounded-lg border border-border" role="img" aria-label="Stage display preview: a verse live, the timer, a note and what is next" />
@@ -133,7 +151,7 @@ export function StageDesigner() {
             <span className="text-muted-foreground">Only the stage sees it; a message you sent is never covered, and nothing else changes.</span>
           </fieldset>
           <div>
-            <Button size="xs" variant="outline" onClick={() => useBroadcastStore.getState().saveStageStyle(DEFAULT_STAGE_STYLE)}>Back to the built-in look</Button>
+            <Button size="xs" variant="outline" onClick={() => draft.update(normalizeStageStyle(DEFAULT_STAGE_STYLE))}>Reset draft to the built-in look</Button>
           </div>
         </div>
       </div>

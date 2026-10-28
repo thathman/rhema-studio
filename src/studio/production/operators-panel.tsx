@@ -294,7 +294,7 @@ function JoinedDesk() {
               notices={live.notices ?? []}
               role={me?.role ?? "present"}
               me={me?.name ?? ""}
-              eventTitle={live.rundown.find((r) => r.id === live.event.currentId)?.reference ?? null}
+              eventTitle={(live.event.targets ?? live.rundown).find((r) => r.id === live.event.currentId)?.reference ?? null}
               onSend={(n) => void useJoin.getState().send({ command: "notice_send", value: { text: n.text, to: n.to, priority: n.priority, ...(live.event.currentId ? { event: live.event.currentId } : {}), ...(n.action ? { action: n.action } : {}) } })}
               onAnswer={(id, state) => void useJoin.getState().send({ command: "notice_ack", value: { id, state } })}
               onAction={async (a, mode) => {
@@ -327,15 +327,18 @@ function JoinedDesk() {
 /** The event clock: Now, the run of show, Start / Back one, Hold / Resume (Timekeeper). `stale`: the host has not been heard from lately. */
 function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }) {
   const off = !useCanSend()
-  const current = live.rundown.find((r) => r.id === live.event.currentId)
-  const at = current ? live.rundown.indexOf(current) : -1
-  const next = live.rundown[at + 1]
+  const events = live.event.targets ?? live.rundown
+  const current = events.find((r) => r.id === live.event.currentId)
+  const at = current ? events.indexOf(current) : -1
+  const next = events[at + 1]
   const late = live.timing ? Math.round(live.timing.lateMs / 60_000) : 0
   const send = useJoin.getState().send
   return (
     <section aria-label="Event clock desk" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className={cn("font-semibold", stale && "opacity-50")}>Now: {current ? current.reference : "no event yet"}</span>
+        {current && live.timing?.untrusted === current.id && <span className="font-semibold text-confidence-mid" role="status">Elapsed time not trusted after restart</span>}
+        {current && live.event.currentElapsedMs !== undefined && <span className="text-muted-foreground tabular-nums">{formatMs(live.event.currentElapsedMs)} elapsed{current.plannedMinutes ? ` · ${current.plannedMinutes} min planned` : ""}</span>}
         {/* The host's run state (#196 R3.7; absent from older hosts). */}
         {live.timing?.state && live.timing.state !== "running" && <span className={cn("rounded-sm bg-muted px-1.5 text-[0.6875rem] font-semibold", live.timing.state === "untrusted" && "text-confidence-mid")}>{RUN_STATE_WORDS[live.timing.state] ?? live.timing.state}</span>}
         {live.timing && <span className={cn("tabular-nums", late > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground", stale && "opacity-50")}>ends {hhmm(live.timing.expectedEnd, live.timing?.timeZone)}{late !== 0 ? ` · ${Math.abs(late)} min ${late > 0 ? "late" : "early"}` : " · on time"}</span>}
@@ -351,7 +354,7 @@ function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }) {
       {live.timeChange !== undefined && <p role="status" aria-label="Last change to the time" className="text-muted-foreground">{live.timeChange ? <>Last change: {timeChangeWords({ what: live.timeChange.what, by: live.timeChange.by ?? null, at: live.timeChange.at }, live.at, (ms) => hhmm(ms, live.timing?.timeZone))}</> : "Nobody has changed the time yet."}</p>}
       <DeskHold live={live} />
       <ol aria-label="The host's run of show" className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border">
-        {live.rundown.map((r) => (
+        {events.map((r) => (
           <li key={r.id} className={cn("flex items-center gap-2 px-2.5 py-1.5", r.id === live.event.currentId && "bg-primary/10 font-semibold")}>
             <span className="min-w-0 flex-1 truncate">{r.reference}</span>
             {r.plannedMinutes ? <span className="text-muted-foreground tabular-nums">{r.plannedMinutes} min</span> : null}
@@ -373,7 +376,7 @@ const offsetText = (m: number) => (m === 0 ? "on time" : `${m > 0 ? "+" : "−"}
  * pause its own thin row (R3).
  */
 function RunOfShowView({ live, stale }: { live: LiveStateV1; stale: boolean }) {
-  const rows = backstageRows(live.rundown)
+  const rows = backstageRows(live.event.targets ?? live.rundown)
   const th = "px-1.5 py-1 text-left text-[0.625rem] font-semibold tracking-wide text-muted-foreground uppercase"
   const td = "px-1.5 py-1 tabular-nums"
   return (
@@ -584,12 +587,6 @@ function ScenesDesk({ live, role }: { live: LiveStateV1; role: string }) {
             {live.outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
           <span className="text-muted-foreground">shows {output.sceneName ?? live.scenes.find((s) => s.id === output.sceneId)?.name ?? "its own feed"}</span>
-          {output.sceneAt !== undefined && <span className="text-xs text-muted-foreground" title={`Take ${output.sceneRevision ?? "?"}${output.sceneBy ? ` by ${output.sceneBy}` : ""}`}>
-            Taken {new Date(output.sceneAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}{output.sceneBy ? ` by ${output.sceneBy}` : ""}
-            {output.sceneLiveDesignRevision !== undefined ? ` · Live design ${new Date(output.sceneLiveDesignRevision).toLocaleString()}${output.sceneLiveDesignBy ? ` by ${output.sceneLiveDesignBy}` : ""}` : ""}
-            {output.sceneApprovedRevision !== undefined ? ` · Approved service v${output.sceneApprovedRevision}${output.sceneApprovedBy ? ` by ${output.sceneApprovedBy}` : ""}${output.sceneApprovedAt ? ` at ${new Date(output.sceneApprovedAt).toLocaleString()}` : ""}${output.sceneApprovedAppearanceComplete === false ? " · some output looks were unavailable" : ""}` : ""}
-            {output.sceneNeedsUpdate && output.sceneSavedRevision !== undefined ? ` · Saved update ${new Date(output.sceneSavedRevision).toLocaleString()}${output.sceneSavedBy ? ` by ${output.sceneSavedBy}` : ""}` : ""}
-          </span>}
         </div>
       ) : (
         <p className="text-muted-foreground">The host has no congregation output.</p>
@@ -597,7 +594,7 @@ function ScenesDesk({ live, role }: { live: LiveStateV1; role: string }) {
       <ul className="flex flex-wrap gap-1.5">
         {live.scenes.map((s) => (
           <li key={s.id} className="flex items-center gap-0.5">
-            {takes && output && <Button size="sm" variant={s.id === output.sceneId ? "default" : "outline"} disabled={!ok || (s.id === output.sceneId && !output.sceneNeedsUpdate)} title={s.id === output.sceneId && output.sceneNeedsUpdate ? "A saved scene, look, or logo changed after this Take. Refresh deliberately to use the newer design." : undefined} onClick={() => void send({ command: "take_scene", value: { output: output.id, scene: s.id } })}>{s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} {s.name}</Button>}
+            {takes && output && <Button size="sm" variant={s.id === output.sceneId ? "default" : "outline"} disabled={!ok || (s.id === output.sceneId && !output.sceneNeedsUpdate)} onClick={() => void send({ command: "take_scene", value: { output: output.id, scene: s.id } })}>{s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} {s.name}</Button>}
             {!takes && <span className="px-1 font-medium">{s.name}</span>}
             {edits && deskEditable(s) && <Button size="sm" variant="ghost" aria-label={cameraOnly ? `Change the cameras in ${s.name}` : `Edit ${s.name}`} disabled={!ok} onClick={() => { setSaid(""); setEditing(s.id) }}>{cameraOnly ? "Cameras…" : "Edit…"}</Button>}
           </li>

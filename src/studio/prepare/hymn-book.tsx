@@ -19,15 +19,6 @@ interface Hymn {
   number: number
 }
 
-interface WordSearchState {
-  query: string
-  part: CacPart
-  retry: number
-  status: "loading" | "ready" | "failed"
-  hits: Set<string>
-  error?: string
-}
-
 const fold = (s: string) => foldMarks(s).toLowerCase()
 const shownNumber = (h: Pick<Hymn, "part" | "number">) => (h.part === 2 ? `V${h.number}` : String(h.number))
 
@@ -59,8 +50,7 @@ export function HymnBook({ onAdded }: { onAdded?: (id: string) => void } = {}) {
   const [hymns, setHymns] = useState<Hymn[] | null>(null)
   const [part, setPart] = useState<CacPart>(1)
   const [query, setQuery] = useState("")
-  const [wordSearch, setWordSearch] = useState<WordSearchState | null>(null)
-  const [wordSearchRetry, setWordSearchRetry] = useState(0)
+  const [wordHits, setWordHits] = useState<Set<string> | null>(null)
   const [busy, setBusy] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedHymnId, setSelectedHymnId] = useState<string | null>(null)
@@ -73,6 +63,7 @@ export function HymnBook({ onAdded }: { onAdded?: (id: string) => void } = {}) {
   const selectedSong = useSongStore((s) => selectedHymnId ? s.songs[selectedHymnId] ?? null : null)
   const selectedId = useBibleStore((s) => (s.selectedSlide && isSongItem(s.selectedSlide.item) ? s.selectedSlide.item.song.song_id : null))
   const file = useRef<HTMLInputElement>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -89,35 +80,26 @@ export function HymnBook({ onAdded }: { onAdded?: (id: string) => void } = {}) {
       .catch((e) => { if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e)) })
     return () => {
       cancelled = true
+      if (timer.current) clearTimeout(timer.current)
     }
   }, [])
 
   const q = query.trim()
   const isNumber = /^v?\d+$/i.test(q)
-  const needsFullTextSearch = q.length >= 3 && !isNumber
-  useEffect(() => {
+  // Words: the hymn titles and first lines here, and the words of every verse (either language) from the search index.
+  const onQuery = (value: string) => {
+    setQuery(value)
+    if (timer.current) clearTimeout(timer.current)
+    const words = value.trim()
     const ticket = ++wordSeq.current
-    if (!needsFullTextSearch) return
-    let active = true
-    const timer = setTimeout(() => {
-      void searchCacHymns(q)
-        .then((found) => {
-          if (active && ticket === wordSeq.current) setWordSearch({ query: q, part, retry: wordSearchRetry, status: "ready", hits: new Set(found.map((song) => song.id)) })
-        })
-        .catch((e: unknown) => {
-          if (active && ticket === wordSeq.current) setWordSearch({ query: q, part, retry: wordSearchRetry, status: "failed", hits: new Set(), error: e instanceof Error ? e.message : String(e) })
-        })
+    setWordHits(null)
+    if (words.length < 3 || /^v?\d+$/i.test(words)) return
+    timer.current = setTimeout(() => {
+      void searchCacHymns(words)
+        .then((found) => { if (ticket === wordSeq.current) setWordHits(new Set(found.map((s) => s.id))) })
+        .catch(() => {})
     }, 200)
-
-    return () => {
-      active = false
-      clearTimeout(timer)
-    }
-  }, [needsFullTextSearch, part, q, wordSearchRetry])
-
-  const currentWordSearch = wordSearch?.query === q && wordSearch.part === part && wordSearch.retry === wordSearchRetry ? wordSearch : null
-  const wordHits = currentWordSearch?.status === "ready" ? currentWordSearch.hits : null
-  const wordSearchStatus = needsFullTextSearch ? currentWordSearch?.status ?? "loading" : "idle"
+  }
   const shown = useMemo(() => {
     if (!hymns) return []
     if (!q) return hymns.filter((h) => h.part === part)
@@ -247,33 +229,18 @@ export function HymnBook({ onAdded }: { onAdded?: (id: string) => void } = {}) {
           aria-label="Find a hymn"
           placeholder="A number (245, or V12 in Various) or words in English or Yorùbá"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => onQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Escape") setQuery("")
+            if (e.key === "Escape") onQuery("")
             if (e.key === "Enter" && shown[0]) selectHymn(shown[0])
           }}
           className="h-11 pl-9 text-sm"
         />
       </div>
-      {wordSearchStatus === "loading" && (
-        <p role="status" className="text-xs text-muted-foreground">Searching full-text hymn lyrics; title and first-line matches are shown while it loads.</p>
-      )}
-      {wordSearchStatus === "failed" && currentWordSearch && (
-        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs">
-          <span className="min-w-0 flex-1">
-            <span className="font-medium">Full-text hymn search is unavailable.</span> Showing title, Yorùbá title and first-line matches only. {currentWordSearch.error}
-          </span>
-          <Button size="sm" variant="outline" aria-label="Retry full-text hymn search" onClick={() => setWordSearchRetry((retry) => retry + 1)}>Try again</Button>
-        </div>
-      )}
       <div className={cn("min-h-0 flex-1 gap-3", selectedHymn ? "grid grid-cols-[minmax(0,1fr)_minmax(15rem,0.8fr)] max-[720px]:grid-cols-1 max-[720px]:grid-rows-[minmax(10rem,1fr)_minmax(10rem,0.8fr)]" : "flex")}>
       <ul className={cn("flex min-h-0 flex-col gap-0.5 overflow-y-auto", !selectedHymn && "flex-1")} aria-label="Hymns">
         {!hymns && <li className="px-2 py-1 text-xs text-muted-foreground">Loading…</li>}
-        {hymns && shown.length === 0 && (
-          <li role="status" className="px-2 py-4 text-center text-xs text-muted-foreground">
-            {wordSearchStatus === "loading" ? "Searching hymn lyrics…" : wordSearchStatus === "failed" ? "No matches in titles or first lines; lyric matches may be missing." : "No hymn matches."}
-          </li>
-        )}
+        {hymns && shown.length === 0 && <li className="px-2 py-4 text-center text-xs text-muted-foreground">No hymn matches.</li>}
         {shown.map((h) => {
           const isSel = selectedId === h.song.id
           return (

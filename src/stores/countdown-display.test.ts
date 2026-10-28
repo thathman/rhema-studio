@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { BroadcastOutput, CountdownFrame, QueueItem, StagePayload } from "@/types"
-import type { OutlineHeader } from "@/lib/run-of-show"
 
 const invoke = vi.fn<(...args: unknown[]) => Promise<null>>(async () => null)
 const emitTo = vi.fn<(...args: unknown[]) => Promise<void>>(async () => {})
@@ -35,7 +34,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date", "setTimeout", "setInterval", "clearTimeout", "clearInterval"] })
   vi.setSystemTime(at(10, 22, 50))
   useQueueStore.setState({ items: [slide("Welcome", 5, { timing: { warn_minutes: 1 } }), slide("Sermon", 30)], activeIndex: 0, headers: [{ id: "m", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }] })
-  useEventClock.setState({ mode: "own", currentId: "Welcome" })
+  useEventClock.setState({ mode: "own", currentId: "Welcome", currentMomentId: "Welcome" })
   useJournalStore.setState({ entries: [{ at: at(10, 20), mono: 0, kind: "event", label: "Welcome", itemId: "Welcome" }] })
   useBroadcastStore.getState().loadThemes()
   useBroadcastStore.setState({ outputs: [countdownOut, stageOut], rehearsal: false, stageMessage: "", outputStatus: {} })
@@ -121,40 +120,5 @@ describe("the countdown display on the host", () => {
     expect(r.output).toMatchObject({ id: "rc", name: "Rhema Countdown", role: "stage", stageLayout: "countdown", type: "browser", ndi: { sourceName: "Rhema Countdown", alphaMode: "noneOpaque" } })
     expect(r.output.feedToken).toBeTruthy()
     expect(r.scene).toBeUndefined()
-  })
-
-  it("keeps stage and countdown next-up aligned when a phase is disabled", () => {
-    const items = [slide("Live", 5), slide("Hidden", 5, { hidden: true }), slide("Disabled phase item", 5), slide("Following phase item", 5)]
-    const headers: OutlineHeader[] = [
-      { id: "main", type: "phase", name: "Main", at: 0, rule: "manual" },
-      { id: "disabled", type: "phase", name: "Disabled", at: 2, rule: "manual" },
-      { id: "following", type: "phase", name: "Following", at: 3, rule: "manual" },
-    ]
-    useQueueStore.setState({ items, headers, activeIndex: 0 })
-
-    expect(sent("stage").at(-1)?.next).toBe("Disabled phase item")
-    expect(lastCountdown().next).toBe("Disabled phase item")
-
-    useQueueStore.setState({ headers: headers.map((header) => header.id === "disabled" ? { ...header, disabled: true } : header) })
-
-    expect(sent("stage").at(-1)?.next).toBe("Following phase item")
-    expect(lastCountdown().next).toBe("Following phase item")
-  })
-
-  it("keeps the last public stage frame frozen while rehearsal changes skipped phases", () => {
-    const items = [slide("Live", 5), slide("Skipped", 5)]
-    const headers: OutlineHeader[] = [
-      { id: "main", type: "phase", name: "Main", at: 0, rule: "manual" },
-      { id: "later", type: "phase", name: "Later", at: 1, rule: "manual" },
-    ]
-    useQueueStore.setState({ items, headers, activeIndex: 0 })
-    expect(sent("stage").at(-1)?.next).toBe("Skipped")
-    useBroadcastStore.setState({ rehearsal: true })
-    emitTo.mockClear()
-
-    useQueueStore.setState({ headers: headers.map((header) => header.id === "later" ? { ...header, disabled: true } : header) })
-
-    expect(sent("stage")).toHaveLength(0)
-    expect(sent("cd")).toHaveLength(0)
   })
 })

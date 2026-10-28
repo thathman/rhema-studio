@@ -208,6 +208,8 @@ fn services_using_media(conn: &Connection, media_id: &str) -> Result<Vec<String>
          SELECT 'the song ' || s.title FROM song_attachments a JOIN songs s ON s.id = a.song_id WHERE a.media_id = ?1
          UNION
          SELECT p.title || ' (approved design)' FROM approved_design_media d JOIN programs p ON p.id = d.program_id WHERE d.media_id = ?1
+         UNION
+         SELECT 'slide or announcement ' || title FROM reusable_slides WHERE background_media_id = ?1
          ORDER BY 1",
     )?;
     let rows = stmt.query_map(params![media_id], |r| r.get(0))?;

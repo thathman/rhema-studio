@@ -5,14 +5,15 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { publishLineage, publishToChurchFolder, unchangedCopy } from "@/lib/church-folder"
 import { useState } from "react"
 import { toast } from "sonner"
-import { BadgeCheckIcon, CalendarIcon, CopyIcon, FolderUpIcon, PencilIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
+import { BadgeCheckIcon, CalendarIcon, CopyIcon, EllipsisIcon, FolderUpIcon, PencilIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
 import { approvalBlockers, approvalLabel, approvalState } from "@/lib/approval"
 import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
 import { isImageItem, isSongItem } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   Select,
   SelectContent,
@@ -53,7 +54,17 @@ export function ServiceBar() {
   const current = useServiceStore((s) => s.current)
   const dirty = useServiceStore((s) => s.dirty)
   const approval = approvalState(useServiceStore((s) => s.current))
+  const approvedDesignsError = useServiceStore((s) => s.approvedDesignsError)
   const approve = async () => {
+    const savedItems = useServiceStore.getState()
+    if (savedItems.corruptItems.length > 0 || savedItems.unsupportedItems.length > 0) {
+      const reasons = [
+        savedItems.corruptItems.length > 0 ? `${savedItems.corruptItems.length} saved item${savedItems.corruptItems.length === 1 ? "" : "s"} could not be read` : null,
+        savedItems.unsupportedItems.length > 0 ? `${savedItems.unsupportedItems.length} item${savedItems.unsupportedItems.length === 1 ? "" : "s"} from a newer version cannot be read here` : null,
+      ].filter((reason): reason is string => reason !== null)
+      toast.error("Not approved", { description: `This service has ${reasons.join(" and ")}. Restore a backup or update Rhema Studio before approving it.` })
+      return
+    }
     const items = useQueueStore.getState().items
     // Fresh answers, not cached ones: a song imported since, or a file removed since.
     await Promise.all(items.filter(isSongItem).map((i) => useSongStore.getState().load(i.song.song_id, { refresh: true }).catch(() => null)))
@@ -72,9 +83,10 @@ export function ServiceBar() {
   const saving = useServiceStore((s) => s.saving)
   const loading = useServiceStore((s) => s.loading)
   const error = useServiceStore((s) => s.error)
-  const approvedDesignsError = useServiceStore((s) => s.approvedDesignsError)
   const conflict = useServiceStore((s) => s.conflict)
   const unsupported = useServiceStore((s) => s.unsupportedItems)
+  const corrupt = useServiceStore((s) => s.corruptItems)
+  const itemIntegrityBlocked = unsupported.length > 0 || corrupt.length > 0
   const missing = useServiceStore((s) => s.missingTranslations)
   const count = useQueueStore((s) => s.items.length)
   const items = useQueueStore((s) => s.items)
@@ -95,6 +107,7 @@ export function ServiceBar() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
   const [dupOpen, setDupOpen] = useState(false)
+  const [pendingServiceAction, setPendingServiceAction] = useState<"new" | "duplicate" | null>(null)
   const [dupTitle, setDupTitle] = useState("")
   const [dupDate, setDupDate] = useState("")
   const [editOpen, setEditOpen] = useState(false)
@@ -237,8 +250,8 @@ export function ServiceBar() {
         <Button
           variant="outline"
           size="sm"
-          disabled={dirty || publishing}
-          title={dirty ? "Save first; the saved version is what is published" : `Put this saved version in the church folder (${churchFolder})`}
+          disabled={dirty || publishing || itemIntegrityBlocked}
+          title={itemIntegrityBlocked ? "Recover or update saved items before publishing this service" : dirty ? "Save first; the saved version is what is published" : `Put this saved version in the church folder (${churchFolder})`}
           onClick={() => void publish()}
         >
           <FolderUpIcon /> Publish
@@ -304,23 +317,89 @@ export function ServiceBar() {
           </PopoverContent>
         </Popover>
       )}
-      {current && (
-        <Popover
-          open={dupOpen}
-          onOpenChange={(o) => {
-            setDupOpen(o)
-            if (o) {
-              setDupTitle(`${current.title} (copy)`)
-              setDupDate(current.service_date ?? "")
-            }
-          }}
-        >
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" disabled={dirty} title={dirty ? "Save or discard changes first" : "Make a copy of this service, e.g. for the 9 am and 11 am"}>
-              <CopyIcon /> Copy
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-72">
+      <Popover
+        open={newOpen || dupOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setNewOpen(false)
+            setDupOpen(false)
+          }
+        }}
+      >
+        <DropdownMenu>
+          <PopoverAnchor asChild>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon-sm" aria-label="Service actions" title="Service actions">
+                <EllipsisIcon />
+              </Button>
+            </DropdownMenuTrigger>
+          </PopoverAnchor>
+          <DropdownMenuContent
+            align="end"
+            className="w-56"
+            onCloseAutoFocus={() => {
+              const action = pendingServiceAction
+              if (!action) return
+              setPendingServiceAction(null)
+              if (action === "new") setNewOpen(true)
+              else setDupOpen(true)
+            }}
+          >
+            <DropdownMenuItem disabled={!!current && dirty} title={current && dirty ? "Save or discard changes first" : undefined} onSelect={() => setPendingServiceAction("new")}>
+              <PlusIcon /> New service
+            </DropdownMenuItem>
+            {current && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={dirty}
+                  title={dirty ? "Save or discard changes first" : undefined}
+                  onSelect={() => {
+                    setDupTitle(`${current.title} (copy)`)
+                    setDupDate(current.service_date ?? "")
+                    setPendingServiceAction("duplicate")
+                  }}
+                >
+                  <CopyIcon /> Duplicate service
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <PopoverContent align="end" className="w-72">
+          {newOpen ? (
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void create()
+              }}
+            >
+              <label className="text-xs text-muted-foreground" htmlFor="svc-title">Title</label>
+              <Input id="svc-title" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Sunday service" required maxLength={200} />
+              <label className="text-xs text-muted-foreground" htmlFor="svc-date">Date (optional)</label>
+              <div className="relative">
+                <CalendarIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input id="svc-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="pl-8" />
+              </div>
+              {templates.length > 0 && (
+                <>
+                  <label className="text-xs text-muted-foreground" htmlFor="svc-from">Start from</label>
+                  <select id="svc-from" value={fromTemplate} onChange={(e) => setFromTemplate(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-sm">
+                    <option value="">{count > 0 ? "The items on screen" : "Nothing (empty)"}</option>
+                    {templates.map((t) => <option key={t.id} value={t.id}>Template: {t.title}</option>)}
+                  </select>
+                </>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {fromTemplate ? `A copy of the template's items (the template is not changed).${!current && count > 0 ? ` The ${count} unsaved item${count === 1 ? "" : "s"} on screen will be replaced.` : ""}` : count > 0 ? `The ${count} item${count === 1 ? "" : "s"} on screen become this service and are saved.` : "Starts empty."}
+              </p>
+              <div className="mt-1 flex justify-end gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setNewOpen(false)}>Cancel</Button>
+                <Button type="submit" size="sm" disabled={!title.trim()}>Create</Button>
+              </div>
+            </form>
+          ) : dupOpen ? (
             <form
               className="flex flex-col gap-2"
               onSubmit={(e) => {
@@ -335,48 +414,7 @@ export function ServiceBar() {
               <Input id="dup-date" type="date" value={dupDate} onChange={(e) => setDupDate(e.target.value)} />
               <Button type="submit" size="sm" disabled={!dupTitle.trim()}>Make the copy</Button>
             </form>
-          </PopoverContent>
-        </Popover>
-      )}
-
-      <Popover open={newOpen} onOpenChange={setNewOpen}>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" disabled={!!current && dirty} title={current && dirty ? "Save or discard changes first" : !current ? (count > 0 ? "Save the items on screen as a new service" : "Start a new service") : count > 0 ? `Start another service from the items on screen, or from a template; "${current.title}" stays as saved` : `Start another service; "${current.title}" stays as saved`}>
-            <PlusIcon /> New service
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-72">
-          <form
-            className="flex flex-col gap-2"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void create()
-            }}
-          >
-            <label className="text-xs text-muted-foreground" htmlFor="svc-title">Title</label>
-            <Input id="svc-title" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Sunday service" required maxLength={200} />
-            <label className="text-xs text-muted-foreground" htmlFor="svc-date">Date (optional)</label>
-            <div className="relative">
-              <CalendarIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input id="svc-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="pl-8" />
-            </div>
-            {templates.length > 0 && (
-              <>
-                <label className="text-xs text-muted-foreground" htmlFor="svc-from">Start from</label>
-                <select id="svc-from" value={fromTemplate} onChange={(e) => setFromTemplate(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-sm">
-                  <option value="">{count > 0 ? "The items on screen" : "Nothing (empty)"}</option>
-                  {templates.map((t) => <option key={t.id} value={t.id}>Template: {t.title}</option>)}
-                </select>
-              </>
-            )}
-            <p className="text-xs text-muted-foreground">
-              {fromTemplate ? `A copy of the template's items (the template is not changed).${!current && count > 0 ? ` The ${count} unsaved item${count === 1 ? "" : "s"} on screen will be replaced.` : ""}` : count > 0 ? `The ${count} item${count === 1 ? "" : "s"} on screen become this service and are saved.` : "Starts empty."}
-            </p>
-            <div className="mt-1 flex justify-end gap-2">
-              <Button type="button" variant="ghost" size="sm" onClick={() => setNewOpen(false)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={!title.trim()}>Create</Button>
-            </div>
-          </form>
+          ) : null}
         </PopoverContent>
       </Popover>
 
@@ -385,8 +423,14 @@ export function ServiceBar() {
           <Button
             size="sm"
             onClick={() => void save()}
-            disabled={!dirty || saving || unsupported.length > 0}
-            title={unsupported.length > 0 ? "Contains items this version cannot edit" : dirty ? "Save changes" : "No unsaved changes"}
+            disabled={!dirty || saving || itemIntegrityBlocked}
+            title={corrupt.length > 0 && unsupported.length > 0
+              ? "Unreadable saved items and items from a newer version block saving"
+              : corrupt.length > 0
+                ? "Unreadable saved items block saving to protect the original data"
+                : unsupported.length > 0
+                  ? "Items from a newer version block saving"
+                  : dirty ? "Save changes" : "No unsaved changes"}
           >
             <SaveIcon /> {saving ? "Saving…" : dirty ? "Save" : "Saved"}
           </Button>
@@ -394,17 +438,12 @@ export function ServiceBar() {
           <Button
             size="sm"
             variant={approval === "approved" ? "outline" : "secondary"}
-            disabled={dirty || saving || approval === "approved"}
-            title={dirty ? "Save first; approval covers what is saved" : approvalLabel(current)}
+            disabled={dirty || saving || itemIntegrityBlocked}
+            title={itemIntegrityBlocked ? "Recover or update saved items before approving this service" : dirty ? "Save first; approval covers what is saved" : approvedDesignsError ?? `${approvalLabel(current)}. Pin saved content, scenes, looks and media; active outputs stay unchanged.`}
             onClick={() => void approve()}
           >
-            <BadgeCheckIcon /> {approval === "approved" ? "Approved" : approval === "changed" ? "Approve again" : "Approve"}
+            <BadgeCheckIcon /> {approval === "approved" ? "Refresh approval" : approval === "changed" ? "Approve again" : "Approve"}
           </Button>
-          {approval === "approved" && approvedDesignsError && (
-            <span role="status" className="inline-flex items-center gap-1 text-xs text-tone-amber-foreground" title={approvedDesignsError}>
-              <TriangleAlertIcon className="size-3.5" /> Design revisions not pinned
-            </span>
-          )}
 
           {conflict && (
             <Button size="sm" variant="outline" className="border-confidence-mid text-confidence-mid" onClick={() => void reload()} title={`Saved elsewhere as revision ${conflict.actual}; you opened revision ${conflict.expected}`}>
@@ -456,7 +495,12 @@ export function ServiceBar() {
 
       {unsupported.length > 0 && (
         <span className="flex items-center gap-1 text-xs text-confidence-mid" role="status" title={unsupported.map((u) => `${u.kind}: ${u.reference}`).join("\n")}>
-          <TriangleAlertIcon className="size-3.5" /> {unsupported.length} item{unsupported.length === 1 ? "" : "s"} this version cannot edit
+          <TriangleAlertIcon className="size-3.5" /> {unsupported.length} item{unsupported.length === 1 ? "" : "s"} from a newer version cannot be edited here
+        </span>
+      )}
+      {corrupt.length > 0 && (
+        <span className="flex items-center gap-1 text-xs text-confidence-mid" role="status" title={corrupt.map((item) => `${item.kind}: ${item.reference}`).join("\n")}>
+          <TriangleAlertIcon className="size-3.5" /> {corrupt.length} saved item{corrupt.length === 1 ? "" : "s"} could not be read; saving is blocked to protect them
         </span>
       )}
       {missing.length > 0 && (

@@ -11,6 +11,11 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useMediaStore } from "@/stores/media-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useSoundStore } from "@/stores/sound-store"
+import { useApprovalGateStore } from "@/stores/approval-gate-store"
+import { useEventClock } from "@/stores/event-clock-store"
+import { useServiceStore } from "@/stores/service-store"
+import { useSettingsStore } from "@/stores/settings-store"
+import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 import { presentQueueItem } from "@/lib/remote-actions"
 import { toItemInputs, toQueueItems } from "@/stores/service-store"
 
@@ -28,6 +33,11 @@ beforeEach(() => {
   useSoundStore.setState({ assetId: null, itemId: null, playing: false, play: async ({ id, itemId }: { id: string; itemId?: string }) => { played.push(id); useSoundStore.setState({ assetId: id, itemId: itemId ?? null, playing: true }); return true } } as never)
   useBroadcastStore.setState({ isLive: false, liveVerse: null, liveItemId: null, presentWarning: null, rehearsal: false })
   useQueueStore.setState({ items: [slide("s1", "Welcome"), sound("a1", "walkin", "Walk-in"), slide("s2", "Announcements"), sound("a2", "gone", "Old track")], activeIndex: null })
+  useApprovalGateStore.setState({ held: null, retry: null, acknowledged: [] })
+  useEventClock.setState({ mode: "screens", currentId: null })
+  useServiceStore.setState({ current: null, dirty: false })
+  useSettingsStore.setState({ requireApproval: false })
+  useTakeAttemptStore.setState({ attempts: [] })
 })
 
 describe("sound items in the service (MD-002)", () => {
@@ -36,6 +46,7 @@ describe("sound items in the service (MD-002)", () => {
       ...sound("a1", "walkin", "Walk-in"),
       audio: { media_id: "walkin", name: "Walk-in", output_device_id: "usb-output", volume: 0.6, loop: true, fade_in_ms: 1500, fade_out_ms: 2500 },
       planned_minutes: 5,
+      payload_extra: { future_audio_control: "keep-me" },
     }
     const [input] = toItemInputs([cue])
     expect(input.kind).toBe("audio")
@@ -47,6 +58,7 @@ describe("sound items in the service (MD-002)", () => {
       fade_in_ms: 1500,
       fade_out_ms: 2500,
       planned_minutes: 5,
+      future_audio_control: "keep-me",
     })
     const base = {
       program: { id: "p1", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 1 },
@@ -58,7 +70,7 @@ describe("sound items in the service (MD-002)", () => {
     } satisfies ProgramWithItems
     const reopened = toQueueItems(base, 1, [])
     expect(reopened.unsupported).toEqual([])
-    expect(reopened.items[0]).toMatchObject({ kind: "audio", audio: { media_id: "walkin", output_device_id: "usb-output", volume: 0.6, loop: true, fade_in_ms: 1500, fade_out_ms: 2500 }, planned_minutes: 5 })
+    expect(reopened.items[0]).toMatchObject({ kind: "audio", audio: { media_id: "walkin", output_device_id: "usb-output", volume: 0.6, loop: true, fade_in_ms: 1500, fade_out_ms: 2500 }, planned_minutes: 5, payload_extra: { future_audio_control: "keep-me" } })
 
     const oldRow: ProgramWithItems = { ...base, items: [{ ...base.items[0], kind: "image", payload: JSON.stringify({ media_id: "walkin", fit: "cover", planned_minutes: 5 }) }] }
     const migrated = toQueueItems(oldRow, 1, [], new Map([["walkin", "audio" as const]]))
@@ -187,5 +199,41 @@ describe("sound items in the service (MD-002)", () => {
     await audioTake
     expect(useQueueStore.getState().activeIndex).toBe(2)
     expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Announcements")
+  })
+
+  it("keeps a successful audio Take when a later visual Take is held for approval", async () => {
+    const previous = slide("s1", "Welcome")
+    const audio = sound("a1", "walkin", "Walk-in")
+    const visual = slide("s2", "Announcements")
+    useQueueStore.setState({ items: [previous, audio, visual], activeIndex: 0 })
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useEventClock.setState({ mode: "screens", currentId: previous.id })
+    useSettingsStore.setState({ requireApproval: true })
+
+    let startPlayback!: () => void
+    useSoundStore.setState({
+      assetId: null,
+      playing: false,
+      play: () => new Promise<boolean>((resolve) => {
+        startPlayback = () => {
+          useSoundStore.setState({ assetId: "walkin", playing: true })
+          resolve(true)
+        }
+      }),
+    } as never)
+
+    const audioTake = presentQueueItem(1)
+    expect(useQueueStore.getState().activeIndex).toBe(0)
+
+    await presentQueueItem(2)
+    expect(useApprovalGateStore.getState().held?.id).toBe("sunday")
+    expect(useQueueStore.getState().activeIndex).toBe(0)
+
+    startPlayback()
+    await audioTake
+    expect(useQueueStore.getState().activeIndex).toBe(1)
+    expect(useEventClock.getState().currentId).toBe(previous.id)
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useTakeAttemptStore.getState().attempts.map((attempt) => attempt.status)).toEqual(["succeeded", "awaiting_approval"])
   })
 })
