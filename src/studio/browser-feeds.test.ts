@@ -60,6 +60,20 @@ describe("browser feeds", () => {
     expect(calls.slice(before).filter((c) => c.cmd === "feed_publish")).toEqual([])
   })
 
+  it("publishes the taken scene revision to an enabled TV feed after a saved edit", async () => {
+    const { newScene, SCENE_PRESETS } = await import("@/lib/scenes")
+    const tv = useBroadcastStore.getState().outputs.find((o) => o.id === "tv")!
+    const scene = { ...newScene("TV program", SCENE_PRESETS[0]), background: "#000000" }
+    useBroadcastStore.getState().saveScene(scene)
+    useBroadcastStore.getState().takeScene("tv", scene.id)
+    useBroadcastStore.getState().saveScene({ ...scene, background: "#123456" })
+
+    await enableOutput(tv)
+
+    const published = JSON.parse(calls.filter((c) => c.cmd === "feed_publish").at(-1)!.args.json as string)
+    expect(published.scene.background).toBe("#000000")
+  })
+
   it("say in plain words whether a page shows the latest frame (receiver trust)", () => {
     expect(feedHealthLabel(null)).toBeNull()
     expect(feedHealthLabel({ watching: 0, current: false, behind: false })).toBe("No page is showing it")
@@ -134,5 +148,22 @@ describe("browser feeds", () => {
     noteFeedShown("unknown", 100)
     expect(shown()).toEqual(["Foyer TV showed John 3:16 after 0.4 s", "Foyer TV showed John 3:17 after 1.3 s", "Foyer TV showed a clear screen after 0.1 s"])
     expect(useJournalStore.getState().entries.at(-1)).toMatchObject({ outputId: "tv", afterMs: 90 })
+  })
+
+  it("logs the scene revision the screen actually showed after the saved scene was edited", () => {
+    resetFeedShown()
+    useJournalStore.setState({ entries: [] })
+    const layer = { id: "background", name: "Background", kind: "color" as const, box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true, color: "#000000" }
+    const taken = { id: "sermon", name: "Sermon", background: "#000000", layers: [layer], createdAt: 1, updatedAt: 1 }
+    const saved = { ...taken, name: "Edited sermon", background: "#ffffff", updatedAt: 2 }
+    useBroadcastStore.setState({
+      scenes: [saved],
+      outputs: useBroadcastStore.getState().outputs.map((o) => o.id === "tv" ? { ...o, sceneId: taken.id, sceneSnapshot: taken } : o),
+      outputFrames: { tv: { theme: useBroadcastStore.getState().themes[0], verse: null, overlay: null, scene: { sceneId: taken.id, background: taken.background, layers: [] } } },
+    })
+
+    noteFeedShown("tv", 250)
+
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Foyer TV showed the Sermon scene after 0.3 s")
   })
 })

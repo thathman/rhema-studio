@@ -85,8 +85,8 @@ scene, cameras included (a ticker-only feed shows Black too); Black also hides t
   composer's preview use the same code. The lower third and ticker draw over the whole frame, unless
   the scene has a ticker or lower-third layer of its own (#243): such a scene owns that source on its
   output, which then draws it only in the layer's box. A logo layer shows the Brand Kit logo.
-- **Composer:** Production → Programs. Edits stay in the composer until Save or Take, so a scene on air
-  never changes while it is arranged.
+- **Composer:** Production → Scenes. Save updates the library scene; an output keeps the revision it
+  took until an explicit Take applies the saved revision.
 
 ### Host/Join as built (ARCH-004 slice 1)
 
@@ -119,7 +119,7 @@ scene, cameras included (a ticker-only feed shows Black too); Black also hides t
 | **Restore** | Source | Re-activate the last cleared value of that source. Restore on the main console restores the source Clear last took off. |
 | **Take** | Program | Put a scene on a destination (Milestone C). |
 | **Black** | Emergency override | Covers every visual layer (sources, lower third, ticker, video) on every public destination until released. Stage and signage keep their own rules (#246 C12). Back/Restore releases it to exactly what was there. |
-| **Rehearsal** | Whole host | A sandbox: everything works in the app, no destination changes, the service log records only that rehearsal ran. Leaving puts back the program, lower third, ticker, stage message and timer as they were; loops and timed moves on air wait and carry on. **Show this live** leaves rehearsal and makes the rehearsed program real (a go-live: the approval question applies); the rest still comes back as it was. |
+| **Rehearsal** | Whole host | A sandbox: everything works in the app, no destination changes, the service log records only that rehearsal ran. Each output's scene revision is captured on entry; a rehearsal Take can preview an edited scene while the public output keeps its captured revision. Leaving restores each scene revision, the program, lower third, ticker, stage message and timer; loops and timed moves on air wait and carry on. **Show this live** leaves rehearsal and makes the rehearsed program real (a go-live: the approval question applies); the rest still comes back as it was. |
 | **Live edit** | Designer | Off (default, and off again whenever editing ends): a theme draft stays in the Designer. On: destinations using that theme show the draft as it is edited. |
 
 ## 4. States that must stay distinct
@@ -144,7 +144,7 @@ timing engine will follow an explicit current event, not "whatever is on air".
 | # | Contract | Decision | Status |
 | --- | --- | --- | --- |
 | C01 | Designer drafts reach live outputs | Drafts stay in the Designer unless Live edit is on; Live edit shows how many screens it touches and ends with editing. Saving remains the normal way to change a look on air. | **Done (this slice)** |
-| C02 | Rehearsal leaks into production | Rehearsal snapshots the real program (and the rundown position) and restores it on exit; Show this live is the deliberate path, behind the approval gate. Nothing rehearsed is logged as aired; go-live cues do not fire on exit. The lower third, ticker, stage message and service timer always come back as they were (even with Show this live); the ticker never reaches signage from rehearsal; the service log keeps only rehearsal on/off. A loop or timed move on air waits through rehearsal and carries on after; one started in rehearsal ends with it. | **Done** (#254, ARCH-003 slice 2) |
+| C02 | Rehearsal leaks into production | Rehearsal snapshots the real program, rundown position and each output's pinned scene revision, then restores them on exit; a rehearsal Take may preview a saved edit without changing the public scene. Show this live is the deliberate path, behind the approval gate. Nothing rehearsed is logged as aired; go-live cues do not fire on exit. The lower third, ticker, stage message and service timer always come back as they were (even with Show this live); the ticker never reaches signage from rehearsal; the service log keeps only rehearsal on/off. A loop or timed move on air waits through rehearsal and carries on after; one started in rehearsal ends with it. | **Done** (#254, ARCH-003 slice 2) |
 | C07 | One global live | Per-source state with `shows` on outputs; legacy adapter. | **Done (ARCH-001 slice 1)**: `src/lib/live-sources.ts`, `sources` in the store |
 | C05 | Ambiguous Restore | Restore is per source; Back releases an override to exactly what it covered. | **Done** for sources (`clearSource`/`restoreSource`, Present → Live → Sources), the ticker, the timer (pause/resume) and each camera (hidden from scenes) included; the main Clear/Restore keeps acting on the program |
 | C11 | Auto Bible affects unrelated outputs | Auto activates only the `bible` source while a song, hymn, slide or quick screen is on the program; feeds bound to other sources are untouched. Default stays off. | **Done** (`presentVerse(…, { sourceOnly })`); the main desk can do the same on purpose (Activate on Bible feeds), and Auto has a "Bible feeds only" choice |

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
-vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn(async () => "0.3.2") }))
+vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn(async () => "0.3.3") }))
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -12,6 +12,7 @@ import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { useJoin } from "@/stores/join-store"
 import { useRecovery } from "@/lib/live-recovery"
 import { defaultSetup } from "@/lib/setup-readiness"
+import { useProductionTab } from "@/studio/production/production-tab"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
 import { REMOTE_ROLES } from "@/lib/remote-roles"
@@ -48,9 +49,9 @@ beforeEach(async () => {
   onSettings.mockReset()
   useSettingsStore.setState({ operatorName: "", joinAddress: "", setup: defaultSetup() })
   useJoin.setState({ status: "off", me: null, live: null })
-  useRecovery.setState({ offer: null, dismissed: false })
-  useShellStore.setState({ workspace: "home", goRequest: null })
-  useShellStore.setState({ setupOpen: false, setupStatusOpen: false })
+  useRecovery.setState({ offer: null, dismissed: false, damaged: false, restoreError: null })
+  useProductionTab.setState({ requested: null })
+  useShellStore.setState({ workspace: "home", goRequest: null, setupOpen: false, setupStatusOpen: false })
   await mount()
 })
 afterEach(async () => {
@@ -188,12 +189,14 @@ describe("the Desk menu", () => {
     expect(row("Put back the last session's screens")).toBeUndefined()
     await act(async () => root.unmount())
     const at = Date.now() - 60_000
-    useRecovery.setState({ offer: { v: 1, at, service: null, isLive: false, liveVerse: null, liveItemId: null, sources: {}, outputsOn: [], scenes: {}, eventId: null }, dismissed: true })
+    useRecovery.setState({ offer: { v: 1, at, service: null, isLive: false, liveVerse: null, liveItemId: null, sources: {}, outputsOn: [], scenes: {}, eventId: null }, dismissed: true, restoreError: "Could not restore Projector. Check or reconnect it, then try again." })
     await mount()
     await openMenu()
     await act(async () => row("Put back the last session's screens").click())
     // Asked first: it replaces what is on the screens now.
     expect(document.body.textContent).toContain("It replaces what is on them now")
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain("Could not restore Projector")
+    expect(document.body.textContent).toContain("Continue with available state")
     expect(useRecovery.getState().offer).not.toBeNull()
     await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === "Put back")!.click())
     await act(async () => {})

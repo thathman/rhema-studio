@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils"
 
 const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["themes", "Themes", "How Bible, songs, hymns, slides and pictures look"],
-  ["library", "Library", "Ready-made looks to start from"],
+  ["library", "Templates", "Ready-made looks and layouts to start from"],
   ["lower-thirds", "Lower thirds", "Names, scripture and lyrics strips"],
   ["ticker", "News ticker", "The crawl along the screen"],
   ["stage", "Stage", "What the team on the platform sees"],
@@ -36,7 +36,7 @@ const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
 export function DesignWorkspace() {
   const tab = useShellStore((s) => s.designTab)
   const setTab = useShellStore((s) => s.setDesignTab)
-  // A lower-third style just added from the Library opens selected.
+  // A lower-third style just added from Templates opens selected.
   const [styleId, setStyleId] = useState<string>()
 
   // Editing starts on the first theme, as the designer always did (leaving the page settles it: see the shell).

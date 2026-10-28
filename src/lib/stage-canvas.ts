@@ -208,6 +208,25 @@ function drawStageUpright(ctx: CanvasRenderingContext2D, width: number, height: 
     y += boxH + 2 * vh
   }
 
+  // A language fallback is separate from the operator's message and stays visible on every layout.
+  if (stage.languageNotice) {
+    ctx.font = font(2.8 * vh, 600)
+    const lines = wrap(ctx, stage.languageNotice, width - padX * 2 - 2 * vw).slice(0, 2)
+    const lineH = 3.6 * vh
+    const boxH = lines.length * lineH + 2 * vh
+    ctx.fillStyle = ink.boxBg
+    ctx.strokeStyle = ink.boxInk
+    ctx.lineWidth = 0.3 * vh
+    ctx.beginPath()
+    ctx.roundRect(padX, y, width - padX * 2, boxH, 1 * vh)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = ink.boxInk
+    ctx.textAlign = "center"
+    lines.forEach((line, i) => ctx.fillText(line, width / 2, y + vh + (i + 0.8) * lineH))
+    y += boxH + 2 * vh
+  }
+
   // Bottom: the note and what is next.
   const bottom = height - 3 * vh
   ctx.font = font(3.6 * vh)

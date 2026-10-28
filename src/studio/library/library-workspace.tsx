@@ -6,11 +6,14 @@ import { SongLibrary } from "@/studio/prepare/song-library"
 import { HymnBook } from "@/studio/prepare/hymn-book"
 import { MediaLibrary } from "@/studio/prepare/media-library"
 import { SongFiles } from "@/studio/library/library-blocks"
+import { SlideLibrary } from "@/studio/library/slide-library"
+import type { LibrarySection } from "@/studio/shell-store"
+import { useShellStore } from "@/studio/shell-store"
 
-type Section = "songs" | "hymns" | "media" | "files"
-const SECTIONS: ReadonlyArray<readonly [Section, string]> = [
+const SECTIONS: ReadonlyArray<readonly [LibrarySection, string]> = [
   ["songs", "Songs & ministrations"],
   ["hymns", "Hymn book"],
+  ["slides", "Slides & announcements"],
   ["media", "Pictures & videos"],
   ["files", "Import & export"],
 ]
@@ -20,9 +23,11 @@ const SECTIONS: ReadonlyArray<readonly [Section, string]> = [
  * ministrations, the hymn book, pictures and videos, and songs as files.
  */
 export function LibraryWorkspace() {
-  const [section, setSection] = useState<Section>("songs")
+  const section = useShellStore((s) => s.librarySection)
+  const setSection = useShellStore((s) => s.setLibrarySection)
   // Bumped by "New song" in the page head: the song library opens its editor.
   const [newSong, setNewSong] = useState(0)
+  const [newSlide, setNewSlide] = useState(0)
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 px-[29px] pt-[26px] pb-4 max-[1200px]:px-5">
@@ -33,7 +38,10 @@ export function LibraryWorkspace() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => setSection("files")}><UploadIcon /> Import files</Button>
-          <Button onClick={() => { setSection("songs"); setNewSong((n) => n + 1) }}><PlusIcon /> New song</Button>
+          <Button onClick={() => {
+            if (section === "slides") { setNewSlide((n) => n + 1); return }
+            setSection("songs"); setNewSong((n) => n + 1)
+          }}><PlusIcon /> {section === "slides" ? "New slide" : "New song"}</Button>
         </div>
       </header>
       <div role="tablist" aria-label="Library" className="flex shrink-0 flex-wrap gap-2 px-[29px] pb-4 max-[1200px]:px-5">
@@ -58,6 +66,7 @@ export function LibraryWorkspace() {
         {section !== "songs" && (
           <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-card p-4">
             {section === "hymns" && <HymnBook />}
+            {section === "slides" && <SlideLibrary key={newSlide} />}
             {section === "media" && <MediaLibrary />}
             {section === "files" && <div className="h-full max-w-2xl overflow-y-auto"><SongFiles /></div>}
           </div>

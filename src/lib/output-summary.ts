@@ -3,6 +3,7 @@ import { FEED_NAMES } from "@/lib/content-names"
 import { tickerOnly } from "@/lib/feed-presets"
 import { followsLowerThird, followsOnlyOverlays, followsOnlyTicker, followsTicker } from "@/lib/live-sources"
 import { allSignageIds } from "@/lib/signage"
+import { sceneForOutput } from "@/lib/scenes"
 import type { BroadcastOutput, BroadcastTheme, Scene } from "@/types"
 
 /** How an output leaves this computer, in a word: a display, NDI or a browser feed (#299 UX15-4). */
@@ -48,7 +49,7 @@ export function outputPresentation(o: BroadcastOutput, scenes: Scene[], theme?: 
     if (tickerOnly(o, allSignageIds(o.signage).length, theme)) return "Ticker only · transparent, for keying"
     return o.ticker ? "Signage loop · ticker" : "Signage loop"
   }
-  const scene = o.sceneId ? scenes.find((s) => s.id === o.sceneId) : undefined
+  const scene = sceneForOutput(o, scenes)
   // A feed that follows only the ticker (Rhema Ticker | Alpha): the ticker and nothing else.
   if (!scene && followsOnlyTicker(o)) return theme?.background.type === "transparent" ? "Ticker only · transparent, for keying" : "Ticker only"
   // One that follows only the lower third (Rhema Lower third | Presenter), perhaps with the ticker.

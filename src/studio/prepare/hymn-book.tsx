@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { BookOpenIcon, PlusIcon, SearchIcon, UploadIcon } from "lucide-react"
+import { BookOpenIcon, PencilIcon, PlusIcon, SearchIcon, UploadIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useBibleStore, useQueueStore } from "@/stores"
+import { useSongStore } from "@/stores/song-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { songQueueItem } from "@/lib/lyrics"
 import { foldMarks } from "@/lib/quick-search"
 import { CAC_PARTS, cacNumber, importCacHymnbook, listCacHymns, searchCacHymns, type CacPart } from "@/lib/cac-hymnbook"
-import { presentActions } from "@/studio/present-actions"
+import { SongEditor } from "@/studio/prepare/song-editor"
 import { isSongItem, type SongSummary } from "@/types"
 
 interface Hymn {
@@ -45,15 +46,21 @@ function hymnItem(song: SongSummary, first: "en" | "yo", id?: string) {
  * the service. The book is imported once from its file and stays on this
  * computer.
  */
-export function HymnBook() {
+export function HymnBook({ onAdded }: { onAdded?: (id: string) => void } = {}) {
   const [hymns, setHymns] = useState<Hymn[] | null>(null)
   const [part, setPart] = useState<CacPart>(1)
   const [query, setQuery] = useState("")
   const [wordHits, setWordHits] = useState<Set<string> | null>(null)
   const [busy, setBusy] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [selectedHymnId, setSelectedHymnId] = useState<string | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const detailSeq = useRef(0)
   const wordSeq = useRef(0)
   const first = useSettingsStore((s) => s.hymnFirstLanguage)
+  const selectedSong = useSongStore((s) => selectedHymnId ? s.songs[selectedHymnId] ?? null : null)
   const selectedId = useBibleStore((s) => (s.selectedSlide && isSongItem(s.selectedSlide.item) ? s.selectedSlide.item.song.song_id : null))
   const file = useRef<HTMLInputElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -105,12 +112,40 @@ export function HymnBook() {
     return hymns.filter((h) => fold(h.song.title).includes(f) || (h.song.alternate_titles ?? []).some((t) => fold(t).includes(f)) || fold(h.song.first_line).includes(f) || wordHits?.has(h.song.id))
   }, [hymns, part, q, isNumber, wordHits])
 
+  const selectedHymn = hymns?.find((h) => h.song.id === selectedHymnId)
+  const selectedArrangement = selectedSong?.arrangements.find((a) => a.is_default)
+  const arrangedSections = selectedSong && selectedArrangement
+    ? selectedArrangement.sequence.flatMap((id) => {
+      const section = selectedSong.sections.find((candidate) => candidate.id === id)
+      return section ? [section] : []
+    })
+    : []
+  const detailSections = arrangedSections.length ? arrangedSections : selectedSong?.sections ?? []
+  const detailLanguages = selectedSong
+    ? [...new Set([selectedSong.song.primary_language, ...selectedSong.sections.flatMap((s) => Object.keys(s.texts))])]
+    : selectedHymn?.song.languages ?? []
+
   const add = (song: SongSummary) => {
     const queue = useQueueStore.getState()
-    const before = queue.items.length
-    queue.addItem(hymnItem(song, first))
-    const after = useQueueStore.getState().items.length
-    if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
+    const id = queue.addItem(hymnItem(song, first), "end")
+    if (id) onAdded?.(id)
+  }
+
+  const selectHymn = (hymn: Hymn) => {
+    const ticket = ++detailSeq.current
+    const item = hymnItem(hymn.song, first, `library-${hymn.song.id}`)
+    setSelectedHymnId(hymn.song.id)
+    setDetailLoading(true)
+    setDetailError(null)
+    useBibleStore.getState().selectSlide({ item, index: 0 })
+    void useSongStore.getState().load(hymn.song.id).then((loaded) => {
+      if (ticket !== detailSeq.current) return
+      if (!loaded) setDetailError("This hymn is no longer in the library.")
+    }).catch((e) => {
+      if (ticket === detailSeq.current) setDetailError(e instanceof Error ? e.message : String(e))
+    }).finally(() => {
+      if (ticket === detailSeq.current) setDetailLoading(false)
+    })
   }
 
   const importFile = async (f: File | undefined) => {
@@ -197,12 +232,13 @@ export function HymnBook() {
           onChange={(e) => onQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Escape") onQuery("")
-            if (e.key === "Enter" && shown[0]) presentActions.previewSlide(hymnItem(shown[0].song, first, `library-${shown[0].song.id}`), 0)
+            if (e.key === "Enter" && shown[0]) selectHymn(shown[0])
           }}
           className="h-11 pl-9 text-sm"
         />
       </div>
-      <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto" aria-label="Hymns">
+      <div className={cn("min-h-0 flex-1 gap-3", selectedHymn ? "grid grid-cols-[minmax(0,1fr)_minmax(15rem,0.8fr)] max-[720px]:grid-cols-1 max-[720px]:grid-rows-[minmax(10rem,1fr)_minmax(10rem,0.8fr)]" : "flex")}>
+      <ul className={cn("flex min-h-0 flex-col gap-0.5 overflow-y-auto", !selectedHymn && "flex-1")} aria-label="Hymns">
         {!hymns && <li className="px-2 py-1 text-xs text-muted-foreground">Loading…</li>}
         {hymns && shown.length === 0 && <li className="px-2 py-4 text-center text-xs text-muted-foreground">No hymn matches.</li>}
         {shown.map((h) => {
@@ -211,9 +247,9 @@ export function HymnBook() {
             <li key={h.song.id} className="flex items-stretch gap-1">
               <button
                 type="button"
-                onClick={() => presentActions.previewSlide(hymnItem(h.song, first, `library-${h.song.id}`), 0)}
+                onClick={() => selectHymn(h)}
                 className={cn("flex min-w-0 flex-1 items-start gap-2.5 rounded-md px-2 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50", isSel ? "bg-primary/10" : "hover:bg-muted/50")}
-                title="Click to preview"
+                title="Select to preview and view details"
               >
                 <span className="mt-0.5 w-10 shrink-0 text-right text-xs font-semibold tabular-nums text-muted-foreground">{shownNumber(h)}</span>
                 <span className="flex min-w-0 flex-col">
@@ -228,6 +264,42 @@ export function HymnBook() {
           )
         })}
       </ul>
+      {selectedHymn && (
+          <aside aria-label="Hymn details" className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card p-3">
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <h2 className="truncate text-sm font-semibold">{selectedHymn.song.title}</h2>
+                <p className="mt-1 text-xs text-muted-foreground">CAC {selectedHymn.part === 1 ? "Main" : "Various"} {shownNumber(selectedHymn)} · {selectedHymn.song.authors || "Author unknown"}</p>
+                <p className="text-xs text-muted-foreground">Languages: {detailLanguages.map((l) => l === "yo" ? "Yorùbá" : l === "en" ? "English" : l.toUpperCase()).join(" / ")}</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setEditing(true)} aria-label={`Edit library hymn ${selectedHymn.song.title}`}><PencilIcon /> Edit</Button>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">{selectedArrangement?.name ?? "Default arrangement"} · {selectedHymn.song.licence.replaceAll("_", " ")}</p>
+            {detailLoading && !selectedSong && <p className="py-3 text-xs text-muted-foreground">Loading lyrics…</p>}
+            {detailError && <p role="alert" className="py-2 text-xs text-destructive">Could not load hymn details: {detailError}</p>}
+            {detailSections.length > 0 && (
+              <ol aria-label="Hymn section order" className="mt-2 min-h-0 flex-1 list-decimal space-y-2 overflow-y-auto pl-5">
+                {detailSections.map((section, index) => (
+                  <li key={`${section.id}-${index}`} className="text-xs">
+                    <p className="font-medium">{section.label || `Section ${index + 1}`}</p>
+                    {Object.entries(section.texts).map(([language, words]) => (
+                      <p key={language} className="mt-1 whitespace-pre-wrap text-muted-foreground"><span className="font-medium text-foreground">{language === "yo" ? "Yorùbá" : language === "en" ? "English" : language.toUpperCase()}:</span> {words}</p>
+                    ))}
+                  </li>
+                ))}
+              </ol>
+            )}
+            {!detailLoading && !detailError && !selectedSong && <p className="py-3 text-xs text-muted-foreground">Hymn details are unavailable.</p>}
+            <Button className="mt-2" onClick={() => add(selectedHymn.song)}><PlusIcon /> Add to service</Button>
+          </aside>
+      )}
+      </div>
+      <SongEditor
+        songId={selectedHymnId}
+        open={editing && selectedHymnId !== null}
+        onClose={() => setEditing(false)}
+        onSaved={(saved) => { setSelectedHymnId(saved.song.id); void load() }}
+      />
       <div className="flex items-center justify-between text-[0.6875rem] text-muted-foreground">
         <span aria-live="polite">{!hymns ? "" : q ? `${shown.length} found` : `${hymns.filter((h) => h.part === 1).length} hymns in Main · ${hymns.filter((h) => h.part === 2).length} in Various`}</span>
         <button type="button" className="underline-offset-2 hover:underline" disabled={busy} onClick={() => file.current?.click()}>{busy ? "Importing…" : "Import the file again…"}</button>

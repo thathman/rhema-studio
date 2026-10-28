@@ -1,0 +1,147 @@
+// @vitest-environment jsdom
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
+import type { OutlineHeader } from "@/lib/run-of-show"
+import type { QueueItem } from "@/types"
+
+const { useReadinessMock } = vi.hoisted(() => ({ useReadinessMock: vi.fn() }))
+vi.mock("@/studio/use-readiness", () => ({ useReadiness: useReadinessMock }))
+vi.mock("@/studio/home/church-folder-card", () => ({ ChurchFolderCard: () => null }))
+vi.mock("@/studio/home/team-changes", () => ({ TeamChanges: () => null }))
+vi.mock("@/studio/setup/setup-card", () => ({ SetupCard: () => null }))
+
+import { useSettingsStore } from "@/stores/settings-store"
+import { HomeWorkspace } from "./home-workspace"
+import { useReadiness } from "@/studio/use-readiness"
+
+const slide = (id: string, over: Partial<QueueItem> = {}): QueueItem => ({
+  id,
+  kind: "slide",
+  slide: { title: id, body: "" },
+  reference: id,
+  confidence: 1,
+  source: "manual",
+  added_at: 0,
+  planned_minutes: 3,
+  ...over,
+} as QueueItem)
+
+describe("Home: skipped rundown items", () => {
+  let element: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    useSettingsStore.setState({ operatorName: "", brandKit: { ...useSettingsStore.getState().brandKit, churchName: "" } })
+  })
+
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    element.remove()
+  })
+
+  async function render(items: QueueItem[], headers: OutlineHeader[], activeIndex: number | null) {
+    vi.mocked(useReadiness).mockReturnValue({
+      ready: false,
+      checks: [],
+      onAir: 0,
+      items,
+      headers,
+      activeIndex,
+      current: { id: "sunday", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: items.length },
+      dirty: false,
+      programs: [],
+      suggested: null,
+      outputs: [],
+      setWorkspace: vi.fn(),
+      openOutputs: vi.fn(),
+    } as unknown as ReturnType<typeof useReadiness>)
+    element = document.createElement("div")
+    document.body.appendChild(element)
+    root = createRoot(element)
+    await act(async () => root.render(<HomeWorkspace />))
+    return element.querySelector('section[aria-labelledby="glance"]')!
+  }
+
+  it("marks skipped items and phases, and puts Next on the next runnable item", async () => {
+    const rows = await render(
+      [slide("Current"), slide("Hidden", { hidden: true }), slide("Warm-up item"), slide("Main item")],
+      [
+        { id: "warm-up", type: "phase", name: "Warm-up", at: 2, disabled: true },
+        { id: "main", type: "phase", name: "Main service", at: 3 },
+      ],
+      0,
+    )
+    const entries = [...rows.querySelectorAll("ol > li")]
+
+    expect(entries[1].textContent).toContain("Hidden for this service")
+    expect(entries[2].textContent).toContain("Phase skipped for this service")
+    expect(entries[3].textContent).toContain("next")
+    expect(entries[1].textContent).not.toContain(" · next")
+    expect(entries[2].textContent).not.toContain(" · next")
+  })
+
+  it("does not mark the active last item as Next when there is no runnable successor", async () => {
+    const rows = await render([slide("First"), slide("Last")], [], 1)
+
+    expect(rows.textContent).not.toContain(" · next")
+  })
+
+  it("does not mark a next item when every later item is hidden or in a disabled phase", async () => {
+    const rows = await render(
+      [slide("Current"), slide("Hidden tail", { hidden: true }), slide("Skipped phase tail")],
+      [{ id: "skipped", type: "phase", name: "Skipped phase", at: 2, disabled: true }],
+      0,
+    )
+    const entries = [...rows.querySelectorAll("ol > li")]
+
+    expect(entries[1].textContent).toContain("Hidden for this service")
+    expect(entries[2].textContent).toContain("Phase skipped for this service")
+    expect(rows.textContent).not.toContain(" · next")
+  })
+
+  it("counts saved items but schedules time only for items that are not skipped", async () => {
+    const rows = await render(
+      [slide("Current", { planned_minutes: 5 }), slide("Hidden", { hidden: true, planned_minutes: 10 }), slide("Warm-up item", { planned_minutes: 20 }), slide("Main item", { planned_minutes: 7 })],
+      [
+        { id: "warm-up", type: "phase", name: "Warm-up", at: 2, disabled: true },
+        { id: "main", type: "phase", name: "Main service", at: 3 },
+      ],
+      0,
+    )
+    const planStat = [...rows.ownerDocument.body.querySelectorAll<HTMLParagraphElement>("p")]
+      .find((paragraph) => paragraph.textContent?.trim() === "Sunday plan")?.parentElement
+
+    expect(planStat?.textContent).toContain("4items")
+    expect(planStat?.textContent).toContain("2 skipped")
+    expect(planStat?.textContent).toContain("12 min scheduled")
+  })
+
+  it("explains when every item is hidden or in a skipped phase", async () => {
+    const rows = await render(
+      [slide("Hidden one", { hidden: true }), slide("Skipped phase item")],
+      [{ id: "skipped", type: "phase", name: "Skipped phase", at: 1, disabled: true }],
+      0,
+    )
+    const entries = [...rows.querySelectorAll("ol > li")]
+
+    expect(entries[1].textContent).toContain("Phase skipped for this service")
+    expect(rows.textContent).toContain("Every item is hidden or in a skipped phase; nothing is scheduled to present.")
+    expect(rows.textContent).not.toContain(" · next")
+  })
+
+  it("keeps the upcoming clock aligned after hidden content", async () => {
+    const rows = await render(
+      [slide("First runnable", { planned_minutes: 4 }), slide("Hidden interlude", { hidden: true, planned_minutes: 25 }), slide("Next runnable", { planned_minutes: 6 })],
+      [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }],
+      null,
+    )
+    const entries = [...rows.querySelectorAll("ol > li")]
+
+    expect(entries[0].querySelector('[title="Planned time"]')?.textContent).toBe("10:00")
+    expect(entries[1].textContent).toContain("Hidden for this service")
+    expect(entries[2].querySelector('[title="Planned time"]')?.textContent).toBe("10:04")
+    expect(rows.textContent).not.toContain(" · next")
+  })
+})

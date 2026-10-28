@@ -13,33 +13,64 @@ import { Colour, NumberField, Row } from "@/studio/design/lower-third-designer"
 import { themeGrounds } from "@/lib/brand-kit"
 import { TICKER_AA, tickerContrast, type ContrastLine } from "@/lib/ticker-contrast"
 import { useSettingsStore } from "@/stores/settings-store"
+import { normalizeTickerStyle } from "@/lib/ticker"
+import { followsTicker } from "@/lib/live-sources"
+import { DesignDraftActions } from "@/studio/design/design-draft-actions"
+import { useDesignDraft } from "@/studio/design/use-design-draft"
 
 const SAMPLE_ITEMS = ["Youth meeting, Friday 6 pm", "Choir practice, Saturday 4 pm", "Harvest thanksgiving next Sunday"]
 
-/** How the news ticker looks and moves. Edits apply at once, to a running ticker too. */
+/** How the news ticker looks and moves. Edits stay in a draft until deliberately applied. */
 export function TickerDesigner() {
-  const style = useBroadcastStore((s) => s.tickerStyle)
+  const publishedStyle = useBroadcastStore((s) => s.tickerStyle)
   const items = useBroadcastStore((s) => s.tickerItems)
+  const ticker = useBroadcastStore((s) => s.ticker)
   const outputs = useBroadcastStore((s) => s.outputs)
+  const scenes = useBroadcastStore((s) => s.scenes)
   const themes = useBroadcastStore((s) => s.themes)
   const assets = useMediaStore((s) => s.assets)
+  const draft = useDesignDraft("ticker", "default", publishedStyle, normalizeTickerStyle)
+  const style = draft.value
   const [backing, setBacking] = useState<Ticker["backing"]>(null)
   const output = outputs.find((o) => o.ticker) ?? outputs.find((o) => o.id === MAIN_OUTPUT_ID)
   const theme = themes.find((t) => t.id === output?.themeId) ?? themes[0]
   const words = items.some((i) => i.trim()) ? items : SAMPLE_ITEMS
   // A fixed moment of the crawl, so the preview holds still while you design.
   const preview = useMemo<Ticker>(() => ({ items: words, style, startedAt: 0, backing }), [words, style, backing])
-  const save = (next: TickerStyle, media = false) => {
-    useBroadcastStore.getState().saveTickerStyle(next)
-    if (media) void lowerThirdBacking(next).then((b) => { setBacking(b); useBroadcastStore.getState().saveTickerStyle(next, b) })
-  }
-  const patch = (p: Partial<TickerStyle>) => save({ ...style, ...p })
+  const patch = (p: Partial<TickerStyle>) => draft.update(normalizeTickerStyle({ ...style, ...p }))
   const media = style.background.mediaId ? assets.find((a) => a.id === style.background.mediaId) : undefined
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the picture or video behind the band
-  useEffect(() => { void lowerThirdBacking(style).then(setBacking) }, [])
+  const styleBackgroundKind = style.background.kind
+  const styleBackgroundMediaId = style.background.mediaId
+  const liveOutputs = ticker ? outputs.filter((candidate) => {
+    if (candidate.role === "stage") return false
+    const scene = scenes.find((saved) => saved.id === candidate.sceneId)
+    const sceneOwnsTicker = scene?.layers.some((layer) => layer.kind === "ticker" && layer.visible) ?? false
+    return followsTicker(candidate) || sceneOwnsTicker
+  }).map((candidate) => candidate.name) : []
+  useEffect(() => {
+    let current = true
+    void lowerThirdBacking({ background: { kind: styleBackgroundKind, mediaId: styleBackgroundMediaId } }).then((value) => { if (current) setBacking(value) }).catch(() => { if (current) setBacking(null) })
+    return () => { current = false }
+  }, [styleBackgroundKind, styleBackgroundMediaId])
+
+  const apply = async () => {
+    const normalized = normalizeTickerStyle(style)
+    const resolved = await lowerThirdBacking(normalized)
+    useBroadcastStore.getState().saveTickerStyle(normalized, resolved)
+  }
   return (
     <div className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">How the news ticker looks and moves. Changes apply at once, also to a running ticker. The words are typed in Present (Ticker).</p>
+        <p className="text-sm text-muted-foreground">How the news ticker looks and moves. Preview and save a draft here; applying is a deliberate action. The words are typed in Present (Ticker).</p>
+        <DesignDraftActions
+          dirty={draft.dirty}
+          saved={draft.saved}
+          scope={ticker ? "the running ticker and outputs subscribed to it" : "the saved ticker style for its next use"}
+          outputs={liveOutputs}
+          onSave={draft.save}
+          onDiscard={draft.discard}
+          onApply={apply}
+          onApplied={draft.markApplied}
+        />
 <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,26rem)]">
             {/* The preview stays in view beside the settings on a wide window. */}
             <div className="flex min-w-0 flex-col gap-3 xl:sticky xl:top-0">
@@ -86,7 +117,7 @@ export function TickerDesigner() {
             noneLabel="None (colour only)"
             hint="Behind the band; the colour lies over it at its opacity. A video loops silently."
             value={style.background.mediaId ? { media_id: style.background.mediaId, name: media?.name ?? "" } : null}
-            onChange={(v) => save({ ...style, background: { ...style.background, kind: v ? (v.kind === "video" ? "video" : "picture") : "color", mediaId: v?.media_id ?? null } }, true)}
+            onChange={(v) => patch({ background: { ...style.background, kind: v ? (v.kind === "video" ? "video" : "picture") : "color", mediaId: v?.media_id ?? null } })}
           />
           <ContrastCheck style={style} under={theme ? themeGrounds(theme) : []} onUse={patch} />
             </div>
