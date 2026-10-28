@@ -68,7 +68,10 @@ let stage = "prepare isolated test profile"
 try {
 qaStores.settings.getState().setSetup({ dismissedAt: new Date().toISOString() })
 qaStores.shell.getState().setSetupOpen(false)
-await waitFor(() => !document.body.innerText.includes("Welcome to Rhema Studio"), "setup dialog to close")
+await waitFor(
+  () => !qaStores.shell.getState().setupOpen && !document.querySelector('[role="dialog"][data-state="open"]'),
+  "setup dialog to close",
+)
 
 stage = "seed QA hymn"
 let imported

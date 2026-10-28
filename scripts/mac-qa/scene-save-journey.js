@@ -10,9 +10,12 @@ const waitFor = async (predicate, label, timeoutMs = 5000) => {
 }
 const normal = (value) => String(value ?? "").replace(/\s+/g, " ").trim()
 const buttons = () => [...document.querySelectorAll("button, [role=tab]")]
-const clickButton = async (name) => {
+const clickButton = async (name, { startsWith = false } = {}) => {
   const button = await waitFor(
-    () => buttons().find((candidate) => normal(candidate.getAttribute("aria-label") || candidate.innerText) === name),
+    () => buttons().find((candidate) => {
+      const label = normal(candidate.getAttribute("aria-label") || candidate.innerText)
+      return startsWith ? label.startsWith(name) : label === name
+    }),
     `button “${name}”`,
   )
   if (button.disabled || button.getAttribute("aria-disabled") === "true") throw new Error(`Button “${name}” is disabled`)
@@ -53,8 +56,7 @@ async function runScenario() {
     await waitFor(() => sceneName.value === "Full screen", "new scene draft")
 
     stage = "Take the initial scene to the congregation output"
-    const initialTake = await waitFor(() => buttons().find((button) => normal(button.innerText) === "Take Full screen"), "initial Take button")
-    await clickButton(normal(initialTake.innerText))
+    await clickButton("Take Full screen to ", { startsWith: true })
     const stateAfterInitialTake = qaStores.broadcast.getState()
     const output = stateAfterInitialTake.outputs.find((candidate) => (candidate.role ?? "congregation") === "congregation")
     if (!output) throw new Error("No congregation output is configured")
@@ -91,7 +93,7 @@ async function runScenario() {
     if (afterSave.isLive !== liveBeforeEdit) throw new Error("Saving the scene changed Live content state")
 
     stage = "Take the saved revision deliberately"
-    await clickButton("Take QA Scene Draft")
+    await clickButton("Take QA Scene Draft to ", { startsWith: true })
     await waitFor(() => {
       const current = qaStores.broadcast.getState()
       return current.outputs.find((candidate) => candidate.id === outputId)?.sceneSnapshot?.name === "QA Scene Draft"
