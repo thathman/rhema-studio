@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils"
 import { useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
 import { useMediaStore } from "@/stores/media-store"
+import { useSlideStore } from "@/stores/slide-store"
+import { useShellStore } from "@/studio/shell-store"
 
 import { CUE_TRIGGERS, GO_LIVE_CUES, ITEM_CUE_DOES, isImageItem, isSlideItem, isSongItem, isVerseItem, type CueQueueItem, type CueTrigger, type GoLiveCue, type ImageQueueItem, type ItemCue, type ItemCueDo, type QueueItem, type SlideQueueItem, type SongQueueItem, type TakeStep } from "@/types"
 import { CUE_DO_LABEL, cueTakesText, MAX_ITEM_CUES, TRIGGER_LABEL } from "@/lib/item-cues"
@@ -327,6 +329,10 @@ export function CustomSlideEditor({ item }: { item: SlideQueueItem }) {
     })
   return (
     <div className="ml-7 flex flex-col gap-1.5 py-1 pl-2">
+      {item.slide.source_asset_id && <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/50 px-2 py-1.5">
+        <p className="text-[0.6875rem] text-muted-foreground">This is this service’s copy. Changes here won’t change the reusable source.</p>
+        <Button size="xs" variant="outline" onClick={() => { useSlideStore.getState().requestEdit(item.slide.source_asset_id!); useShellStore.getState().openLibrarySection("slides") }}>Edit reusable source</Button>
+      </div>}
       <Input aria-label="Slide title" maxLength={200} value={item.slide.title} placeholder="Title" className="h-8 text-sm" onChange={(e) => update({ title: e.target.value })} />
       <Textarea
         aria-label="Slide text"

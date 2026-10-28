@@ -12,6 +12,7 @@ export function designTabOf(tab: DesignTab): DesignTab {
   return tab === "outputs" ? "used-on" : tab
 }
 export type PresentView = "standard" | "production"
+export type LibrarySection = "songs" | "hymns" | "slides" | "media" | "files"
 
 export interface ShellPrefs {
   workspace: Workspace
@@ -86,6 +87,9 @@ interface ShellState extends ShellPrefs {
   pendingFind: string | null
   findInPresent: (query: string) => void
   setWorkspace: (workspace: Workspace) => void
+  librarySection: LibrarySection
+  setLibrarySection: (section: LibrarySection) => void
+  openLibrarySection: (section: LibrarySection) => void
   setPresentView: (view: PresentView) => void
   /** Fold the sidebar to icons or open it out again (the sidebar's button, Cmd/Ctrl+B). */
   setSidebarCollapsed: (collapsed: boolean) => void
@@ -132,6 +136,9 @@ export const useShellStore = create<ShellState>((set) => ({
   pendingFind: null,
   findInPresent: (pendingFind) => set({ pendingFind, goRequest: "present" }),
   setWorkspace: (workspace) => set({ workspace }),
+  librarySection: "songs",
+  setLibrarySection: (librarySection) => set({ librarySection }),
+  openLibrarySection: (librarySection) => set({ workspace: "library", librarySection }),
   setPresentView: (presentView) => set({ presentView }),
   setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),

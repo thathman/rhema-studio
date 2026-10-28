@@ -94,7 +94,7 @@ afterEach(() => {
 
 describe("first-run Bible preview", () => {
   it("labels the default Genesis preview as a sample while Program remains empty", async () => {
-    await act(async () => root!.render(<><SearchPanel /><PreviewPanel /><PreviewPanel compact /><LiveOutputPanel goLiveSwitch={false} /></>))
+    await act(async () => root!.render(<><SearchPanel /><PreviewPanel /><PreviewPanel compact /><LiveOutputPanel /></>))
     await vi.waitFor(() => expect(useBibleStore.getState().selectedVerse).toMatchObject({ book_number: 1, chapter: 1, verse: 1 }))
 
     const [preview, compactPreview] = el!.querySelectorAll<HTMLElement>('[data-slot="preview-panel"]')
@@ -109,7 +109,7 @@ describe("first-run Bible preview", () => {
   })
 
   it("clears the sample label when the operator selects another verse", async () => {
-    await act(async () => root!.render(<><SearchPanel /><PreviewPanel /><PreviewPanel compact /><LiveOutputPanel goLiveSwitch={false} /></>))
+    await act(async () => root!.render(<><SearchPanel /><PreviewPanel /><PreviewPanel compact /><LiveOutputPanel /></>))
     await vi.waitFor(() => expect(useBibleStore.getState().samplePreview).toBe(true))
 
     const otherVerse = { ...fixtures.verse, verse: 2, text: "And the earth was without form" }

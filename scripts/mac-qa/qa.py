@@ -16,7 +16,9 @@ js = f"""(async () => {{
     const result = await (async (qa, sleep) => {{ {body} }})(qa, sleep);
     await report({{ ok: true, result }});
   }} catch (e) {{
-    await report({{ ok: false, error: String(e && e.stack || e) }});
+    const message = e && typeof e.message === "string" ? e.message : String(e);
+    const stack = e && typeof e.stack === "string" ? e.stack : "";
+    await report({{ ok: false, error: stack ? message + "\\n" + stack : message }});
   }}
 }})();"""
 tmp = os.path.join(d, "in", f".{label}__{name}.tmp")
@@ -24,6 +26,10 @@ open(tmp, "w").write(js); os.rename(tmp, os.path.join(d, "in", f"{label}__{name}
 end = time.time() + timeout
 while time.time() < end:
     if os.path.exists(out):
-        time.sleep(0.05); print(open(out).read()); sys.exit(0)
+        time.sleep(0.05)
+        with open(out, encoding="utf-8") as report_file:
+            report = json.load(report_file)
+        print(json.dumps(report, ensure_ascii=False))
+        sys.exit(0 if report.get("ok") is True else 1)
     time.sleep(0.1)
 print(json.dumps({"ok": False, "error": "timeout: no report"})); sys.exit(1)

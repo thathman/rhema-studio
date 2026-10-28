@@ -56,6 +56,15 @@ export function ServiceBar() {
   const approval = approvalState(useServiceStore((s) => s.current))
   const approvedDesignsError = useServiceStore((s) => s.approvedDesignsError)
   const approve = async () => {
+    const savedItems = useServiceStore.getState()
+    if (savedItems.corruptItems.length > 0 || savedItems.unsupportedItems.length > 0) {
+      const reasons = [
+        savedItems.corruptItems.length > 0 ? `${savedItems.corruptItems.length} saved item${savedItems.corruptItems.length === 1 ? "" : "s"} could not be read` : null,
+        savedItems.unsupportedItems.length > 0 ? `${savedItems.unsupportedItems.length} item${savedItems.unsupportedItems.length === 1 ? "" : "s"} from a newer version cannot be read here` : null,
+      ].filter((reason): reason is string => reason !== null)
+      toast.error("Not approved", { description: `This service has ${reasons.join(" and ")}. Restore a backup or update Rhema Studio before approving it.` })
+      return
+    }
     const items = useQueueStore.getState().items
     // Fresh answers, not cached ones: a song imported since, or a file removed since.
     await Promise.all(items.filter(isSongItem).map((i) => useSongStore.getState().load(i.song.song_id, { refresh: true }).catch(() => null)))
@@ -76,6 +85,8 @@ export function ServiceBar() {
   const error = useServiceStore((s) => s.error)
   const conflict = useServiceStore((s) => s.conflict)
   const unsupported = useServiceStore((s) => s.unsupportedItems)
+  const corrupt = useServiceStore((s) => s.corruptItems)
+  const itemIntegrityBlocked = unsupported.length > 0 || corrupt.length > 0
   const missing = useServiceStore((s) => s.missingTranslations)
   const count = useQueueStore((s) => s.items.length)
   const items = useQueueStore((s) => s.items)
@@ -239,8 +250,8 @@ export function ServiceBar() {
         <Button
           variant="outline"
           size="sm"
-          disabled={dirty || publishing}
-          title={dirty ? "Save first; the saved version is what is published" : `Put this saved version in the church folder (${churchFolder})`}
+          disabled={dirty || publishing || itemIntegrityBlocked}
+          title={itemIntegrityBlocked ? "Recover or update saved items before publishing this service" : dirty ? "Save first; the saved version is what is published" : `Put this saved version in the church folder (${churchFolder})`}
           onClick={() => void publish()}
         >
           <FolderUpIcon /> Publish
@@ -412,8 +423,14 @@ export function ServiceBar() {
           <Button
             size="sm"
             onClick={() => void save()}
-            disabled={!dirty || saving || unsupported.length > 0}
-            title={unsupported.length > 0 ? "Contains items this version cannot edit" : dirty ? "Save changes" : "No unsaved changes"}
+            disabled={!dirty || saving || itemIntegrityBlocked}
+            title={corrupt.length > 0 && unsupported.length > 0
+              ? "Unreadable saved items and items from a newer version block saving"
+              : corrupt.length > 0
+                ? "Unreadable saved items block saving to protect the original data"
+                : unsupported.length > 0
+                  ? "Items from a newer version block saving"
+                  : dirty ? "Save changes" : "No unsaved changes"}
           >
             <SaveIcon /> {saving ? "Saving…" : dirty ? "Save" : "Saved"}
           </Button>
@@ -421,8 +438,8 @@ export function ServiceBar() {
           <Button
             size="sm"
             variant={approval === "approved" ? "outline" : "secondary"}
-            disabled={dirty || saving}
-            title={dirty ? "Save first; approval covers what is saved" : approvedDesignsError ?? `${approvalLabel(current)}. Pin saved content, scenes, looks and media; active outputs stay unchanged.`}
+            disabled={dirty || saving || itemIntegrityBlocked}
+            title={itemIntegrityBlocked ? "Recover or update saved items before approving this service" : dirty ? "Save first; approval covers what is saved" : approvedDesignsError ?? `${approvalLabel(current)}. Pin saved content, scenes, looks and media; active outputs stay unchanged.`}
             onClick={() => void approve()}
           >
             <BadgeCheckIcon /> {approval === "approved" ? "Refresh approval" : approval === "changed" ? "Approve again" : "Approve"}
@@ -478,7 +495,12 @@ export function ServiceBar() {
 
       {unsupported.length > 0 && (
         <span className="flex items-center gap-1 text-xs text-confidence-mid" role="status" title={unsupported.map((u) => `${u.kind}: ${u.reference}`).join("\n")}>
-          <TriangleAlertIcon className="size-3.5" /> {unsupported.length} item{unsupported.length === 1 ? "" : "s"} this version cannot edit
+          <TriangleAlertIcon className="size-3.5" /> {unsupported.length} item{unsupported.length === 1 ? "" : "s"} from a newer version cannot be edited here
+        </span>
+      )}
+      {corrupt.length > 0 && (
+        <span className="flex items-center gap-1 text-xs text-confidence-mid" role="status" title={corrupt.map((item) => `${item.kind}: ${item.reference}`).join("\n")}>
+          <TriangleAlertIcon className="size-3.5" /> {corrupt.length} saved item{corrupt.length === 1 ? "" : "s"} could not be read; saving is blocked to protect them
         </span>
       )}
       {missing.length > 0 && (
