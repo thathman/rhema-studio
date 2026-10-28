@@ -12,6 +12,10 @@ The handover is intentionally an architecture document; **do not assume that fea
 
 **Execution precedence remains [owner Finish-First / ZERO NEW PR](OWNER-FINISH-FIRST-2026-10-28.md).** Finish backlog reconciliation first; then use already approved integration paths for the complete browser operator journeys. No new PRs, unauthenticated LAN exposure, production deployment or silent Live output changes are authorized by this addition.
 
+## Timekeeper / timing suite owner decisions (28 October)
+
+The [canonical consolidated Timekeeper decision register and detailed view family](rhema-studio/35-timekeeper-and-timing-view-family.md) is mandatory when working on timing, Stage Confidence, room schedules, main Live timing or studio TV/receiver outputs. Approved requirements: one authoritative host timing engine; novice-first Timekeeper browser/native role desk; host-governed automatic plus manual reminders; configurable subtle banner and prominent temporary message per urgency/receiver; delegated Timekeeper authority with host reclaim/revision safety; private audience-specific read-only Stage, Backstage and Control Room displays; compact Live dock; countdown/intermission views; explicit output assignment, Preview/Take, privacy, failures, deduplication, stale/fixed-start handling. **Functional direction approved; individual final page visual acceptance and real hardware tests still required.** This work remains subject to the current backlog-clearance/no-new-PR order.
+
 ## 1. Product statement
 
 **Rhema Studio is one church production system**, not a collection of separate tools. It lets a volunteer **Prepare a service → Run it Live → Review its History**, while Library and Design supply reusable content and visuals. One main computer can do **everything alone**, completely offline for the live sanctuary/OBS/stage pipeline, while authorized volunteers and receivers join when available.
