@@ -2,6 +2,10 @@
 
 **Design intent, 2026-10-26. Not an as-built claim.** Owner decisions from review of Home, Prepare, legacy Present/Production, Library, Design, Team, Archive, Settings screenshots. See [handover](../CODEX-UNIFIED-HANDOFF.md), #442, #444, #447.
 
+## Owner amendment — Permissions is a first-class sidebar route (28 October 2026)
+
+**APPROVED NAVIGATION DECISION:** Add a visible **Permissions** route to the main Rhema Studio sidebar under **Your Church**, adjacent to Connections. It is an explicit utility workspace for role/grant management and access review, alongside (not inside) the six core creative/service destinations Home, Prepare, Live, Library, Design and History. **Connections** owns discovering/pairing/health, **Permissions** owns who can do what, **Prepare** owns assignments, and **Settings** retains technical network configuration rather than a second competing ACL editor. Host-controlled, server-enforced delegation of Bible source modes, Timekeeper reminders, Screens individual/group Takes and context-scoped asset edits must use one authorization truth. See **[37 — Permissions sidebar and authority design](37-permissions-sidebar-and-authority-design.md)** for proposed wireframes, role/capability granularity, privacy, migration and acceptance. This is the ratified route direction, not evidence the route exists in running React code.
+
 ## Canonical structure: one task, one owner
 
 | Main destination | Focus | First-time user entry | Advanced/contextual tools |
