@@ -30,6 +30,19 @@ afterEach(() => {
 })
 
 describe("Production control", () => {
+  it("explains which actions can change each public program", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    await act(async () => mount(el))
+    const header = el.querySelector("header")!
+    expect(header.textContent).toContain("Monitoring only reads device status.")
+    expect(header.textContent).toContain("Scene edits and OBS preview stay private until the relevant Take.")
+    expect(header.textContent).toContain("Taking a scene changes the selected room display; switching in OBS changes the online stream.")
+    expect(header.textContent).toContain("In rehearsal, scene Takes do not reach room displays and OBS program switches are blocked.")
+    expect(header.textContent).not.toContain("Nothing here takes anything live.")
+  })
+
   it("opens on the real timekeeper; Cameras is the camera router panel", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const el = document.createElement("div")
@@ -69,10 +82,16 @@ describe("Production control", () => {
     const s = useBroadcastStore.getState()
     expect(s.scenes.map((x) => x.name)).toEqual(["Bible and lyrics"])
     const main = s.outputs.find((o) => (o.role ?? "congregation") === "congregation")!
+    expect(button("Take Bible and lyrics").getAttribute("aria-label")).toBe(`Take Bible and lyrics to ${main.name}`)
     expect(main.sceneId).toBe(s.scenes[0].id)
+    expect(button("Back to its own feed").getAttribute("aria-label")).toBe(`Back to ${main.name}'s own feed`)
+    await act(async () => useBroadcastStore.setState({ rehearsal: true }))
+    expect(button("Take Bible and lyrics").getAttribute("aria-label")).toBe(`Rehearse Bible and lyrics on ${main.name}`)
+    await act(async () => useBroadcastStore.setState({ rehearsal: false }))
     await act(async () => button("Back to its own feed").click())
     expect(useBroadcastStore.getState().outputs.find((o) => o.id === main.id)?.sceneId).toBeUndefined()
     expect(button("Restore Bible and lyrics")).toBeTruthy()
+    expect(button("Restore Bible and lyrics").getAttribute("aria-label")).toBe(`Restore Bible and lyrics to ${main.name}`)
   })
 
   it("opens Scenes at the scene another page asked for (Design → Library's Use and edit)", async () => {
