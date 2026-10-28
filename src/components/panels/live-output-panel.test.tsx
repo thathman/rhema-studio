@@ -37,11 +37,12 @@ afterEach(() => {
   el.remove()
 })
 
-describe("Present's Live and Preview panels", () => {
-  it("Standard view has no second go-live switch: the header only says whether the screens are on air (#299 5.16)", async () => {
-    await render(<LiveOutputPanel goLiveSwitch={false} />)
+describe("Present's Program and Preview panels", () => {
+  it("Program has no second go-live switch and reports whether the screens are on air", async () => {
+    await render(<LiveOutputPanel />)
     expect(el.querySelector('[role="switch"]')).toBeNull()
     const header = el.querySelector('[data-slot="panel-header"]')!
+    expect(header.textContent).toContain("Program")
     expect(header.textContent).toContain("Off air")
     // Auto stays: where heard verses go is not a go-live control.
     expect(el.querySelector('[aria-label="Auto: where heard verses go by themselves"]')).not.toBeNull()
@@ -49,11 +50,6 @@ describe("Present's Live and Preview panels", () => {
     expect(header.textContent).toContain("On air")
     await act(async () => useBroadcastStore.setState({ rehearsal: true }))
     expect(header.textContent).toContain("Rehearsal")
-  })
-
-  it("the Advanced dashboard keeps its Go live switch", async () => {
-    await render(<LiveOutputPanel />)
-    expect(el.querySelector('[role="switch"][aria-label="Go live: show this on the screens"]')).not.toBeNull()
   })
 
   it("the one-line Preview says what Take live will put up, and the item's plan", async () => {
@@ -73,7 +69,7 @@ describe("Present's Live and Preview panels", () => {
   })
 
   it("a video item on air has Pause video / Resume video, held on every output without a new activation (#36)", async () => {
-    await render(<LiveOutputPanel goLiveSwitch={false} />)
+    await render(<LiveOutputPanel />)
     expect(el.textContent).not.toContain("Pause video")
     const clip = { kind: "image" as const, content: "picture" as const, reference: "", segments: [], video: { url: "asset://localhost/m/a.mp4", fit: "cover" as const, loop: false, sound: true, name: "Welcome clip", token: 3 } }
     await act(async () => useBroadcastStore.getState().setLiveVerse(clip, null, { goLive: true }))

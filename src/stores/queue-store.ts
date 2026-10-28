@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { isVerseItem, type QueueItem } from "@/types"
-import { headersAfterAppend, headersAfterInsert, headersAfterMove, headersAfterRemove, sectionEnd, type OutlineHeader } from "@/lib/run-of-show"
+import { headersAfterAppend, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, sectionEnd, type OutlineHeader } from "@/lib/run-of-show"
 
 interface QueueState {
   items: QueueItem[]
@@ -12,7 +12,8 @@ interface QueueState {
   /** The live item was removed from the rundown: the items either side of it, for Next/Previous. */
   removedActive: { prevId: string | null; nextId: string | null } | null
 
-  addItem: (item: QueueItem) => void
+  /** Add at the start by default, or at the end; a valid addTarget inserts at that section's end. Returns the inserted id, or null for a duplicate verse. */
+  addItem: (item: QueueItem, placement?: "start" | "end") => string | null
   removeItem: (id: string) => void
   /** Change an item's own settings (song languages, arrangement, notes). */
   updateItem: (id: string, patch: (item: QueueItem) => QueueItem) => void
@@ -27,6 +28,8 @@ interface QueueState {
   updateHeader: (id: string, patch: Partial<OutlineHeader>) => void
   /** Remove a phase or group; its items stay where they are. */
   removeHeader: (id: string) => void
+  /** Remove every phase in one undoable edit; events, groups and items stay. */
+  removePhases: () => void
   /** Flash-highlight a queue item briefly (1.5 s). */
   flashItem: (id: string) => void
   /** Find an existing item by book+chapter+verse. Returns its index or -1. */
@@ -57,7 +60,21 @@ interface QueueState {
   moveItems: (ids: string[], dir: -1 | 1) => void
   /** Move items, in their order, to the end of a phase or group. */
   moveToSection: (ids: string[], headerId: string) => void
+  /** Move items, in rundown order, before/after a stable item or to the end of a stable section. */
+  moveItemsToTarget: (ids: string[], target: QueueMoveTarget) => void
+  /** Move one event with all of its moments and nested groups to another event or phase. */
+  moveEventToTarget: (id: string, target: QueueEventMoveTarget) => void
+  /** Move an event one place up (-1) or down (1) through the event order. */
+  moveEvent: (id: string, dir: -1 | 1) => void
 }
+
+export type QueueMoveTarget =
+  | { kind: "before" | "after"; itemId: string }
+  | { kind: "section"; headerId: string }
+
+export type QueueEventMoveTarget =
+  | { kind: "phase"; phaseId: string }
+  | { kind: "event"; eventId: string; placement: "before" | "after" }
 
 export interface RundownSnapshot {
   items: QueueItem[]
@@ -87,15 +104,45 @@ function withActiveKept(state: { items: QueueItem[]; activeIndex: number | null 
 }
 
 /** A new item into the rundown: at the top, or at the end of the section being added to. */
-function inserted(state: { items: QueueItem[]; headers: OutlineHeader[]; activeIndex: number | null; addTarget: string | null }, item: QueueItem) {
+function inserted(state: { items: QueueItem[]; headers: OutlineHeader[]; activeIndex: number | null; addTarget: string | null }, item: QueueItem, placement: "start" | "end") {
   const target = state.addTarget && state.headers.some((h) => h.id === state.addTarget) ? state.addTarget : null
-  if (!target) return { ...withActiveKept(state, [item, ...state.items]), headers: headersAfterInsert(state.headers, 0) }
+  if (!target) {
+    const at = placement === "end" ? state.items.length : 0
+    return { ...withActiveKept(state, [...state.items.slice(0, at), item, ...state.items.slice(at)]), headers: headersAfterInsert(state.headers, at) }
+  }
   const at = sectionEnd(state.items.length, state.headers, target)
   const items = [...state.items.slice(0, at), item, ...state.items.slice(at)]
   return { ...withActiveKept(state, items), headers: headersAfterAppend(state.headers, at, target) }
 }
 
 type Rundown = Pick<QueueState, "items" | "headers" | "activeIndex" | "removedActive">
+
+type RundownRow = { kind: "item"; item: QueueItem } | { kind: "header"; header: OutlineHeader }
+
+function rundownRows(items: QueueItem[], headers: OutlineHeader[]): RundownRow[] {
+  return interleave(items, headers).map((row) => "header" in row
+    ? { kind: "header", header: row.header }
+    : { kind: "item", item: row.item })
+}
+
+function sameRundownRows(a: RundownRow[], b: RundownRow[]): boolean {
+  return a.length === b.length && a.every((row, index) => {
+    const other = b[index]
+    return row.kind === "item"
+      ? other.kind === "item" && row.item.id === other.item.id
+      : other.kind === "header" && row.header.id === other.header.id
+  })
+}
+
+function rundownFromRows(rows: RundownRow[]): { items: QueueItem[]; headers: OutlineHeader[] } {
+  const items: QueueItem[] = []
+  const headers: OutlineHeader[] = []
+  for (const row of rows) {
+    if (row.kind === "item") items.push(row.item)
+    else headers.push({ ...row.header, at: items.length })
+  }
+  return { items, headers }
+}
 
 /** The live item removed: the position stays on the one before it, and Next/Previous use both neighbours. */
 function withoutItem(state: Rundown, id: string): Partial<Rundown> {
@@ -163,10 +210,14 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
   highlightedId: null,
   removedActive: null,
 
-  addItem: (item) =>
+  addItem: (item, placement = "start") => {
+    let insertedId: string | null = null
     set((state) => {
       // Songs may repeat in a service (opening and closing hymn); verses dedupe.
-      if (!isVerseItem(item)) return inserted(state, item)
+      if (!isVerseItem(item)) {
+        insertedId = item.id
+        return inserted(state, item, placement)
+      }
       const idx = state.items.findIndex(
         (i) =>
           isVerseItem(i) &&
@@ -188,15 +239,24 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
         }
         return state
       }
-      return inserted(state, item)
-    }),
+      insertedId = item.id
+      return inserted(state, item, placement)
+    })
+    return insertedId
+  },
   // The active item itself removed: the position stays on the one before it (so "next"
   // on the stage and in the rundown is the item that followed), and stepping uses both
   // neighbours: Next goes to the one that followed, Previous to the one before (no skip).
   removeItem: (id) => set((state) => withoutItem(state, id)),
   updateItem: (id, patch) =>
     set((state) => ({ items: state.items.map((i) => (i.id === id ? patch(i) : i)) }), `item:${id}`),
-  reorderItems: (fromIndex, toIndex) => set((state) => moved(state, fromIndex, toIndex)),
+  reorderItems: (fromIndex, toIndex) => {
+    const state = get()
+    const source = state.items[fromIndex]
+    const target = state.items[toIndex]
+    if (!source || !target || fromIndex === toIndex) return
+    state.moveItemsToTarget([source.id], { kind: fromIndex < toIndex ? "after" : "before", itemId: target.id })
+  },
   setActive: (activeIndex) => set({ activeIndex, removedActive: null }),
   clearQueue: () => set({ items: [], headers: [], activeIndex: null, removedActive: null }),
   setHeaders: (headers) => set({ headers }),
@@ -204,6 +264,11 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
   setAddTarget: (addTarget) => set({ addTarget }),
   updateHeader: (id, patch) => set((state) => ({ headers: state.headers.map((h) => (h.id === id ? { ...h, ...patch, id } : h)) }), `header:${id}`),
   removeHeader: (id) => set((state) => ({ headers: state.headers.filter((h) => h.id !== id) })),
+  removePhases: () =>
+    set((state) => {
+      const headers = state.headers.filter((header) => header.type !== "phase")
+      return headers.length === state.headers.length ? state : { headers }
+    }),
   flashItem: (id) => {
     if (flashTimer) clearTimeout(flashTimer)
     set({ highlightedId: id })
@@ -285,7 +350,7 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
         // As new items are added: each at the end of the section being added to, or all at the top, in the order copied.
         const toSection = !!state.addTarget && state.headers.some((h) => h.id === state.addTarget)
         let next: Pick<QueueState, "items" | "headers" | "activeIndex" | "addTarget"> = state
-        for (const c of toSection ? copies : [...copies].reverse()) next = { ...next, ...inserted(next, c) }
+        for (const c of toSection ? copies : [...copies].reverse()) next = { ...next, ...inserted(next, c, toSection ? "end" : "start") }
         return { items: next.items, headers: next.headers, activeIndex: next.activeIndex }
       }
       // Right after that item, in its section: a header just below it stays below the copies.
@@ -318,19 +383,77 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
       }
       return next === state ? state : { items: next.items, headers: next.headers, activeIndex: next.activeIndex }
     }),
-  moveToSection: (ids, headerId) =>
+  moveToSection: (ids, headerId) => get().moveItemsToTarget(ids, { kind: "section", headerId }),
+  moveItemsToTarget: (ids, target) =>
     set((state) => {
-      if (!state.headers.some((h) => h.id === headerId)) return state
-      let next: Rundown = state
-      for (const id of state.items.filter((i) => ids.includes(i.id)).map((i) => i.id)) {
-        const from = next.items.findIndex((i) => i.id === id)
-        const item = next.items[from]
-        const items = next.items.filter((i) => i.id !== id)
-        const headers = headersAfterRemove(next.headers, from)
-        const at = sectionEnd(items.length, headers, headerId)
-        next = { ...next, ...withActiveKept(next, [...items.slice(0, at), item, ...items.slice(at)]), headers: headersAfterAppend(headers, at, headerId) }
+      const picked = new Set(ids)
+      const rows = rundownRows(state.items, state.headers)
+      const moving = rows.filter((row) => row.kind === "item" && picked.has(row.item.id))
+      if (moving.length === 0) return state
+      if (target.kind !== "section" && picked.has(target.itemId)) return state
+      const remaining = rows.filter((row) => row.kind !== "item" || !picked.has(row.item.id))
+      let insertion: number
+      if (target.kind === "section") {
+        const start = remaining.findIndex((row) => row.kind === "header" && row.header.id === target.headerId)
+        if (start === -1) return state
+        const header = (remaining[start] as Extract<RundownRow, { kind: "header" }>).header
+        // Keep same-index headers on their original side of the boundary, including
+        // the next phase's nested groups. Numeric offsets alone lose that order.
+        const end = remaining.findIndex((row, index) => index > start && row.kind === "header" && (
+          header.type === "phase" ? row.header.type === "phase"
+            : header.event ? row.header.type === "phase" || !!row.header.event : true
+        ))
+        insertion = end === -1 ? remaining.length : end
+      } else {
+        const index = remaining.findIndex((row) => row.kind === "item" && row.item.id === target.itemId)
+        if (index === -1) return state
+        insertion = index + (target.kind === "after" ? 1 : 0)
       }
-      return { items: next.items, headers: next.headers, activeIndex: next.activeIndex }
+      const nextRows = [...remaining.slice(0, insertion), ...moving, ...remaining.slice(insertion)]
+      if (sameRundownRows(rows, nextRows)) return state
+      const next = rundownFromRows(nextRows)
+      return { ...withActiveKept(state, next.items), headers: next.headers }
     }),
+  moveEventToTarget: (id, target) =>
+    set((state) => {
+      const rows = rundownRows(state.items, state.headers)
+      const start = rows.findIndex((row) => row.kind === "header" && row.header.id === id && !!row.header.event)
+      if (start === -1) return state
+
+      const end = rows.findIndex((row, index) => index > start && row.kind === "header" && (row.header.type === "phase" || !!row.header.event))
+      const stop = end === -1 ? rows.length : end
+      const moving = rows.slice(start, stop)
+      const remaining = [...rows.slice(0, start), ...rows.slice(stop)]
+
+      let insertion: number
+      if (target.kind === "phase") {
+        const phaseIndex = remaining.findIndex((row) => row.kind === "header" && row.header.id === target.phaseId && row.header.type === "phase")
+        if (phaseIndex === -1) return state
+        const nextPhase = remaining.findIndex((row, index) => index > phaseIndex && row.kind === "header" && row.header.type === "phase")
+        insertion = nextPhase === -1 ? remaining.length : nextPhase
+      } else {
+        const eventIndex = remaining.findIndex((row) => row.kind === "header" && row.header.id === target.eventId && !!row.header.event)
+        if (eventIndex === -1) return state
+        if (target.placement === "before") {
+          insertion = eventIndex
+        } else {
+          const nextEvent = remaining.findIndex((row, index) => index > eventIndex && row.kind === "header" && (row.header.type === "phase" || !!row.header.event))
+          insertion = nextEvent === -1 ? remaining.length : nextEvent
+        }
+      }
+
+      const nextRows = [...remaining.slice(0, insertion), ...moving, ...remaining.slice(insertion)]
+      if (sameRundownRows(rows, nextRows)) return state
+      const next = rundownFromRows(nextRows)
+      return { ...withActiveKept(state, next.items), headers: next.headers }
+    }),
+  moveEvent: (id, dir) => {
+    const rows = rundownRows(get().items, get().headers)
+    const events = rows.flatMap((row) => row.kind === "header" && row.header.event ? [row.header] : [])
+    const index = events.findIndex((event) => event.id === id)
+    const target = events[index + dir]
+    if (!target) return
+    get().moveEventToTarget(id, { kind: "event", eventId: target.id, placement: dir < 0 ? "before" : "after" })
+  },
   }
 })

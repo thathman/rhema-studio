@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { presentSlide } from "@/hooks/use-broadcast"
 import { buildSlides } from "@/lib/lyrics"
 import { outputOnAir } from "@/lib/output-on-air"
+import { sceneForOutput } from "@/lib/scenes"
 import { networkMeasures, playbackTrouble, screenPlayback, useWindowPlayback } from "@/lib/camera-playback"
 import { measuredOn } from "@/lib/glass-latency"
 import { useFeedHealthStore } from "@/lib/show-health"
@@ -210,7 +211,7 @@ export function outputMap(): OutputMapRow[] {
       kind: o.type,
       role: o.role ?? "congregation",
       on: outputOnAir(o, b.outputStatus[o.id]),
-      scene: o.sceneId ? (b.scenes.find((sc) => sc.id === o.sceneId)?.name ?? null) : null,
+      scene: sceneForOutput(o, b.scenes)?.name ?? null,
       ...(b.sceneTakes[o.id] ? { ...(b.sceneTakes[o.id].by ? { by: b.sceneTakes[o.id].by } : {}), at: b.sceneTakes[o.id].at } : {}),
       ...(signal.length ? { signal } : {}),
     }

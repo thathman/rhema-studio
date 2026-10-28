@@ -163,6 +163,8 @@ describe("Present's Sources strip", () => {
     scene.layers = [newLayer("camera"), newLayer("feed", { name: "Bible", shows: ["bible"] })]
     useBroadcastStore.setState({ scenes: [scene], outputs: [...useBroadcastStore.getState().outputs, out({ id: "stream", sceneId: scene.id })] })
     const b = useBroadcastStore.getState()
+    b.takeScene("stream", scene.id)
+    b.saveScene({ ...scene, layers: [newLayer("camera")] })
     b.activateSource({ reference: "Romans 8:28", segments: [], content: "bible" })
     expect(followerCount("bible", useBroadcastStore.getState().outputs, useBroadcastStore.getState().scenes)).toBe(1)
     const el = document.createElement("div")
@@ -200,6 +202,28 @@ describe("scene takes record who took them", () => {
     b.releaseScene(MAIN_OUTPUT_ID, "Femi's laptop")
     expect(entries().at(-1)).toMatchObject({ kind: "scene", label: "main: back to its own feed · by Femi's laptop", outputId: MAIN_OUTPUT_ID, by: "Femi's laptop" })
     expect(entries().at(-1)!.sceneId).toBeUndefined()
+  })
+
+  it("the joined Live State names the taken scene while a saved edit waits for Take", async () => {
+    const scene = newScene("Welcome")
+    useBroadcastStore.setState({ scenes: [scene] })
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
+    useBroadcastStore.getState().saveScene({ ...scene, name: "Welcome updated" })
+    expect(buildLiveState().outputs[0]).toMatchObject({ sceneName: "Welcome", sceneNeedsUpdate: true })
+  })
+
+  it("records an explicit refresh of a saved scene revision", () => {
+    const scene = newScene("Sermon")
+    useBroadcastStore.setState({ scenes: [scene] })
+    const b = useBroadcastStore.getState()
+    b.takeScene(MAIN_OUTPUT_ID, scene.id)
+    b.saveScene({ ...scene, name: "Sermon updated" })
+    expect(entries()).toHaveLength(1)
+
+    b.takeScene(MAIN_OUTPUT_ID, scene.id)
+
+    expect(entries().at(-1)).toMatchObject({ kind: "scene", label: "main: refreshed Sermon updated · by Tolu", outputId: MAIN_OUTPUT_ID, sceneId: scene.id })
+    expect(entries().at(-1)?.revision).toBe(useBroadcastStore.getState().sceneTakes[MAIN_OUTPUT_ID].revision)
   })
 
   it("content put on air is logged with who and its source's revision", () => {
