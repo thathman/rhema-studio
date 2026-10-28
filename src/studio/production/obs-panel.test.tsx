@@ -209,6 +209,7 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     const { useObsStore, useJournalStore, obs } = await setup({ studioMode: true })
     const { button, row } = await render()
     expect(button("Switch OBS to this scene")).toBeUndefined()
+    expect(button("Take in OBS")!.getAttribute("aria-label")).toBe("Take OBS preview Pulpit to the online stream")
     await act(async () => (row("Choir").querySelector("button") as HTMLButtonElement).click())
     await settle()
     expect(lastCommand(obs.requests)).toEqual({ type: "SetCurrentPreviewScene", data: { sceneName: "Choir" } })
@@ -234,6 +235,7 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     expect(el.querySelector('[role="alertdialog"]')).toBeNull()
     expect(obs.requests.some((r) => r.type === "SetCurrentProgramScene")).toBe(false)
     await act(async () => (row("Pulpit").querySelector("button") as HTMLButtonElement).click())
+    expect(el.querySelector('[role="alertdialog"] button')?.getAttribute("aria-label")).toBe("Switch OBS program to Pulpit")
     await act(async () => (el.querySelector('[role="alertdialog"] button') as HTMLButtonElement).click()) // "Switch OBS"
     await settle()
     expect(lastCommand(obs.requests)).toEqual({ type: "SetCurrentProgramScene", data: { sceneName: "Pulpit" } })
