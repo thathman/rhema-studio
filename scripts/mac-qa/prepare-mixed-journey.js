@@ -712,7 +712,7 @@ async function runScenario() {
           textsAreSynthetic: true,
         },
         announcement: { title: reopenedAnnouncement.slide.title, body: reopenedAnnouncement.slide.body },
-        audio: { id: audioAsset.id, name: audioAsset.name, mediaId: reopenedAudio.image.media_id, playbackVerified: false },
+        audio: { id: audioAsset.id, name: audioAsset.name, mediaId: reopenedAudio.audio.media_id, playbackVerified: false },
         sceneCamera: { sceneId: qaScene.id, cameraName: "qa-synthetic-camera", cameraLabel: "QA camera (synthetic)", hardwareVerified: false },
         timer: { cue: reopenedTimerCue.on_live.cue, plannedMinutes: reopenedTimerCue.planned_minutes },
       },
