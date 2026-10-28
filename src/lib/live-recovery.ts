@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import { create } from "zustand"
 import { enableOutput } from "@/lib/broadcast-output-control"
-import type { LiveSources } from "@/lib/live-sources"
+import { sourceOf, type LiveSources } from "@/lib/live-sources"
 import { outputOnAir } from "@/lib/output-on-air"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
@@ -53,6 +53,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value)
+}
+
+function sameSnapshotValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right)
 }
 
 function isOneOf<T extends string>(value: unknown, choices: readonly T[]): value is T {
@@ -152,6 +156,9 @@ export function parseLiveSnapshot(value: unknown): LiveSnapshot | null {
     timer = { durationMs: savedTimer.durationMs, elapsedMs: savedTimer.elapsedMs, running: savedTimer.running }
   }
   if (value.trimmed !== undefined && typeof value.trimmed !== "boolean") return null
+  // A live snapshot without its program is valid only when takeSnapshot explicitly marked it
+  // as trimmed. Treat an otherwise incomplete payload as damaged rather than a successful restore.
+  if (value.isLive && liveVerse === null && value.trimmed !== true) return null
 
   return {
     v: 1,
@@ -181,11 +188,19 @@ const MAX_CHARS = 400_000
  * to put the screens back for the rest of this run, and saving starts again so a second crash is
  * covered by what is on the screens now.
  */
-export const useRecovery = create<{ offer: LiveSnapshot | null; dismissed: boolean; damaged: boolean }>(() => ({ offer: null, dismissed: false, damaged: false }))
+export const useRecovery = create<{ offer: LiveSnapshot | null; dismissed: boolean; damaged: boolean; restoreError: string | null }>(() => ({ offer: null, dismissed: false, damaged: false, restoreError: null }))
 
 /** "Not now" on the banner: hide it, keep the offer for the Desk menu. */
 export function dismissRecovery(): void {
   useRecovery.setState({ dismissed: true })
+}
+
+/** Explicitly continue with the state that could be recovered after a partial attempt. */
+export function acceptPartialRecovery(): void {
+  const { offer, restoreError } = useRecovery.getState()
+  if (!offer || !restoreError) return
+  useJournalStore.getState().add({ kind: "recovery", label: `Continued after incomplete recovery: ${restoreError}` })
+  useRecovery.setState({ offer: null, dismissed: false, damaged: false, restoreError: null })
 }
 
 /** Dismiss the notice that a saved snapshot could not be trusted or restored. */
@@ -277,36 +292,89 @@ export function worthOffering(value: unknown, now = Date.now()): boolean {
 }
 
 /** Put back what was on the screens: the sources, the program, each output and its scene, the event. */
-export async function putBack(value: unknown): Promise<void> {
+export async function putBack(value: unknown): Promise<boolean> {
+  useRecovery.setState({ restoreError: null })
   const s = parseLiveSnapshot(value)
   if (!s) {
-    useRecovery.setState({ offer: null, dismissed: false, damaged: true })
-    return
+    useRecovery.setState({ offer: null, dismissed: false, damaged: true, restoreError: null })
+    return false
   }
-  const b = useBroadcastStore.getState()
-  // A trimmed snapshot has no sources: leave what is on now alone.
-  if (!s.trimmed) useBroadcastStore.setState({ sources: s.sources })
+  // A trimmed snapshot has no sources: leave what is on now alone. When the live verse and its
+  // source match, share that value object so noteSources does not create a new activation revision.
+  let restoredSources = s.sources
+  if (s.isLive && s.liveVerse) {
+    const id = sourceOf(s.liveVerse)
+    const source = s.sources[id]
+    if (source && sameSnapshotValue(source.value, s.liveVerse)) {
+      restoredSources = { ...s.sources, [id]: { ...source, value: s.liveVerse } }
+    }
+  }
+  const beforeRestore = useBroadcastStore.getState()
+  const sourcesAlreadyRestored = sameSnapshotValue(beforeRestore.sources, restoredSources)
+  const liveAlreadyRestored = !!s.isLive && !!s.liveVerse && beforeRestore.isLive && beforeRestore.liveItemId === s.liveItemId && sameSnapshotValue(beforeRestore.liveVerse, s.liveVerse)
+  if (!s.trimmed && !sourcesAlreadyRestored) useBroadcastStore.setState({ sources: restoredSources })
+  const missingOutputs = new Set<string>()
+  const failedOutputs = new Set<string>()
+  const missingScenes = new Set<string>()
+  const failedScenes = new Set<string>()
   for (const [outputId, sceneId] of Object.entries(s.scenes)) {
-    if (b.scenes.some((x) => x.id === sceneId) && b.outputs.some((o) => o.id === outputId)) b.takeScene(outputId, sceneId)
+    const current = useBroadcastStore.getState()
+    const scene = current.scenes.find((x) => x.id === sceneId)
+    const output = current.outputs.find((o) => o.id === outputId)
+    if (!output) {
+      missingOutputs.add(outputId)
+      continue
+    }
+    if (!scene) {
+      missingScenes.add(`${output.name} (ID: ${sceneId})`)
+      continue
+    }
+    // A retry after partial recovery should not record another scene Take.
+    if (output.sceneId !== sceneId) {
+      current.takeScene(outputId, sceneId)
+      if (useBroadcastStore.getState().outputs.find((o) => o.id === outputId)?.sceneId !== sceneId) failedScenes.add(output.name)
+    }
   }
-  if (s.isLive && s.liveVerse) useBroadcastStore.getState().setLiveVerse(s.liveVerse, null, { goLive: true, itemId: s.liveItemId })
+  if (s.isLive && s.liveVerse && !liveAlreadyRestored) useBroadcastStore.getState().setLiveVerse(s.liveVerse, null, { goLive: true, itemId: s.liveItemId })
   for (const id of s.outputsOn) {
     const output = useBroadcastStore.getState().outputs.find((o) => o.id === id)
-    if (output && !outputOnAir(output, useBroadcastStore.getState().outputStatus[id])) await enableOutput(output)
+    if (!output) {
+      missingOutputs.add(id)
+      continue
+    }
+    if (!outputOnAir(output, useBroadcastStore.getState().outputStatus[id]) && !(await enableOutput(output))) {
+      failedOutputs.add(output.name)
+    }
   }
-  // The same event again, not the operator taking it again: its time stays not trusted (#196 R3.8).
+
+  // Program state, clocks and timers are independent recovery records. Restore them on the first
+  // explicit attempt even if an output is unavailable; the guards make a retry idempotent.
   if (s.eventId && (useEventClock.getState().currentId !== s.eventId || useEventClock.getState().currentMomentId !== (s.eventMomentId ?? null))) {
     whilePuttingBack(() => useEventClock.getState().start(s.eventId!, s.eventMomentId ?? null))
   }
-  // The timer as it was, still counting the time Rhema was closed if it was running; not over one started since.
   const now = useTimerStore.getState().timer
   if (s.timer && now.startedAt === null && now.accumulatedMs === 0) {
     const ran = s.timer.elapsedMs + (s.timer.running ? Math.max(0, Date.now() - s.at) : 0)
     useTimerStore.setState({ timer: { durationMs: s.timer.durationMs, accumulatedMs: ran, startedAt: null } })
     if (s.timer.running) useTimerStore.getState().start()
   }
+
+  const problems: string[] = []
+  if (missingOutputs.size) problems.push(`Saved output configuration is no longer available for ${[...missingOutputs].join(", ")}. Restore the output or continue with the available state.`)
+  if (failedOutputs.size) problems.push(`Could not start outputs: ${[...failedOutputs].join(", ")}. Check the display or device connection, then try again.`)
+  if (missingScenes.size) problems.push(`The saved scene is no longer available for ${[...missingScenes].join(", ")}. Choose a replacement scene or continue with the available state.`)
+  if (failedScenes.size) problems.push(`Could not select saved scenes for ${[...failedScenes].join(", ")}. Choose a scene or continue with the available state.`)
+  if (s.trimmed) problems.push("This recovery snapshot was shortened to fit storage; its live content and source state are missing. Activate or select content manually before continuing.")
+  if (problems.length) {
+    useRecovery.setState({
+      dismissed: false,
+      restoreError: problems.join(" "),
+    })
+    return false
+  }
   useJournalStore.getState().add({ kind: "recovery", label: `Put back after Rhema Studio closed unexpectedly at ${new Date(s.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
-  useRecovery.setState({ offer: null, dismissed: false, damaged: false })
+  useRecovery.setState({ offer: null, dismissed: false, damaged: false, restoreError: null })
+  return true
 }
 
 let store: Store | null = null
@@ -348,7 +416,7 @@ function saveNotices() {
 
 /** Read the last snapshot (offer it after an unclean exit), then keep it up to date. */
 export async function startLiveRecovery(): Promise<() => void> {
-  useRecovery.setState({ offer: null, dismissed: false, damaged: false })
+  useRecovery.setState({ offer: null, dismissed: false, damaged: false, restoreError: null })
   let unclean = false
   try {
     unclean = await invoke<boolean>("last_exit_unclean")
@@ -371,7 +439,7 @@ export async function startLiveRecovery(): Promise<() => void> {
     recoveryReadable = false
   }
   if (unclean && !recoveryReadable) {
-    useRecovery.setState({ offer: null, dismissed: false, damaged: true })
+    useRecovery.setState({ offer: null, dismissed: false, damaged: true, restoreError: null })
   } else if (unclean && store) {
     // A malformed snapshot means none of this saved run is restored. With a valid or absent
     // snapshot, the journal and notices retain their existing independent recovery behavior.

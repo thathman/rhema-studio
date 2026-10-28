@@ -25,7 +25,7 @@ beforeEach(async () => {
   ;(
     globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true
-  useRecovery.setState({ offer: null, dismissed: false, damaged: true })
+  useRecovery.setState({ offer: null, dismissed: false, damaged: true, restoreError: null })
   host = document.createElement("div")
   document.body.append(host)
   root = createRoot(host)
@@ -50,5 +50,37 @@ describe("recovery damage notice", () => {
     )
     expect(useRecovery.getState().damaged).toBe(false)
     expect(host.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it("shows the failed output, partial state, retry, and explicit continue choice", async () => {
+    const offer = {
+      v: 1 as const,
+      at: Date.now(),
+      service: null,
+      isLive: true,
+      liveVerse: { reference: "John 3:16", segments: [{ text: "For God" }] },
+      liveItemId: null,
+      sources: {},
+      outputsOn: ["main"],
+      scenes: {},
+      eventId: null,
+      eventMomentId: null,
+    }
+    await act(async () =>
+      useRecovery.setState({
+        offer,
+        dismissed: false,
+        damaged: false,
+        restoreError: "Could not restore Projector. Check the output and try again.",
+      } as never)
+    )
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      "Could not restore Projector. Check the output and try again."
+    )
+    expect(host.textContent).toContain("The recovery attempt is incomplete")
+    expect(host.textContent).not.toContain("Nothing goes back until you choose.")
+    expect(host.textContent).toContain("Put back on the screens")
+    expect(host.textContent).toContain("Continue with available state")
   })
 })
