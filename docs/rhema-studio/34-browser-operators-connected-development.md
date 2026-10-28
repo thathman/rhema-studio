@@ -82,23 +82,37 @@ Role coverage baseline (verify server `Role::allows` and adjust proposed functio
 
 All roles receive private **Rhema Comms** capabilities permitted by server ACL: event-linked notices, acknowledgments, action requests and WebRTC talk with real microphone permission, talk indicators, role/channels, multi-speaker behavior per ADR. No cross-role leakage of stage/private notes or unapproved drafts. Do not mistake `viewer` for unauthorized.
 
+### Page 1 — Welcome / Connect / Your Workspace — OWNER APPROVED DIRECTION (28 October 2026)
+
+**Approved by owner at conceptual/flow level:** `Welcome → Connect → Your Workspace`. This is the entire first-time pathway; a valid returning session goes **directly to the assigned workspace**, with no repeat pairing and no separate generic operator dashboard. The role's own workspace contains its useful task-at-hand Home, so novice operators are not forced to navigate the full host application.
+
+**Branding approved:** the **church's verified identity comes first**: its logo, church name, safe Brand Kit palette/typography and, where applicable, campus/location; **Rhema Studio** appears discreetly as a trusted platform identifier (e.g. footer or "Powered by Rhema Studio"). Do not re-create the church website inside this entry flow. Before the host can be discovered or authenticated, show an unmistakable but neutral Rhema fallback rather than pretend to know the church identity. Fetch/present canonical church branding from the authenticated host; reject untrusted remote asset URLs, scripts and unsafe styling. Provide graceful fallbacks for missing logo, very long names, poor contrast and an unreliable connection. Support authorized multisite/campus selection only where host identity and permissions require it.
+
+**Novice-first approved UX principles:** one dominant **Connect to Church** action; automatic host discovery when available; obvious "Enter address" and QR fallback without technical jargon; brief code pairing and host-granted role; clear connected/awaiting approval/host not found/expired/revoked/paused signals in human language; no user-facing selection of elevated permissions. Contextual explanations, not a full-screen tutorial. Large touch targets, mobile/tablet/desktop layout, accessible contrast and keyboard navigation. Optional theme choice must not obscure the church's identity.
+
+After pairing, the host determines the role. The UI confirms it succinctly (e.g. "You're helping with Bible readings"), then opens that role's own screen. A Bible operator sees "Find Scripture" and the next assigned reading, not a generic menu of every desk; others likewise receive their own relevant actions, relevant Program/Preview truth and Comms.
+
+**Status distinction:** `FLOW + CHURCH-FIRST BRAND DIRECTION: OWNER APPROVED`; `PIXEL DESIGN / STATES / LAN IMPLEMENTATION: NOT YET REVIEWED OR VERIFIED`. This approval must not be misreported as a signed-off screenshot, full production authentication implementation, or real LAN acceptance. The previously defined owner sign-off remains necessary for actual layout, responsive states and interactions.
+
+**Explicit future scope exclusion:** a separate church website is a possible future owner-led project **after Rhema Studio is completed**. Do not design, scaffold, build, issue-track, estimate, PR, deploy, or otherwise include church website work in the present Rhema backlog. The *operator entry screen* is branded by the church but is **not** the church website. Do not confuse this with the existing Rhema product marketing/documentation website.
+
 ### Operator design review protocol: one page at a time, with owner sign-off
 
 **We have NOT completed the operator visual redesign together. Do not silently invent final approved page designs or count a generic console as accepted.** Implement shared safety/data foundations first, then present an individually reviewable page specification/screenshot/interactive demo to the owner for each step. Record feedback and approval, then continue to the next page. No automatic completion of 12 pages because their route exists.
 
-Review sequence (each role uses shared shell but gets its own purposeful IA):
-1. **Join / identity / role entry**: host discovery, QR/code, pending grant, certificate trust, reconnect, expired/revoked/paused.
-2. **Operator shell + role Home**: desktop/tablet/mobile chrome, current service, task-at-hand, status, Preview vs Program, quick navigation.
-3. **Bible desk**: search, sources/translations, private preview, live actions, bilingual behavior, permissions.
-4. **Worship desk**: song/hymn lookup, sequence and arrangement, lyric preview, section transport.
-5. **Timekeeper desk**: at-a-glance clocks, event progress, Hold/Resume/offset, alerts.
-6. **Screens/design desk**: output map, scoped Preview/Take, scenes/draft staging, host approval.
-7. **Stage desk**: confidence view, next cues, private messages, safety.
-8. **Camera desk**: incoming camera grid, true signal/tally/quality, routing requests.
-9. **OBS director desk**: preview/program status, online show, camera/record/transition.
-10. **Editor/contributor desk**: assigned service plan, moments, drafts, comments and approval.
-11. **Main presenter/configure + viewer**: full console versus deliberately minimal follow-only experience.
-12. **Common Comms/notifications, account/session/settings and failure/reconnect states**: close the real multi-operator journeys.
+Review sequence (role-specific responsive shell belongs to the first operator page and is reused, **not** a generic stopover dashboard):
+1. **Welcome / Connect / Your Workspace** (approved conceptual flow; church-branded entry): host discovery, QR/code, pending grant, certificate trust, reconnect, expired/revoked/paused.
+2. **Bible operator + common role shell**: next task and service, search, sources/translations, private preview, live actions, bilingual behavior, role/session/Comms entry, permission clarity.
+3. **Worship operator**: song/hymn lookup, sequence and arrangement, lyric preview, section transport.
+4. **Timekeeper operator**: at-a-glance clocks, event progress, Hold/Resume/offset, alerts.
+5. **Screens / graphics operator**: output map, scoped Preview/Take, scenes/draft staging, host approval.
+6. **Stage operator**: confidence view, next cues, private messages and safety.
+7. **Camera operator**: incoming camera grid, true signal/tally/quality, routing requests.
+8. **OBS director operator**: preview/program status, online show, camera/record/transition.
+9. **Editor / contributor operator**: assigned service plan, moments, drafts, comments and approval.
+10. **Viewer operator**: deliberate read-only follow experience, clear no-control boundaries.
+11. **Main Presenter / Configure operator**: capable but comprehensible full console, separately gated settings.
+12. **Shared Comms, account/session settings, permission/accessibility and error/reconnect states**: refine all roles and complete real multi-operator journeys.
 
 Each page review must show: purpose and primary action; role-based navigation and deliberate omissions; 1440 desktop, 1024 laptop, 768 tablet, ~390 mobile; empty/loading/stale/error/unauthorized/rehearsal/live states; keyboard/touch targets and screen-reader labels; single-language and bilingual fixtures where relevant; confirmation/undo for hazardous actions; observable host results; what explicitly does **not** change Live. A screenshot, mock, code stub or generic tests alone is not acceptance. Ask the owner to approve each page design before marking `VISUAL ACCEPTED`.
 
