@@ -138,7 +138,7 @@ Draft (private) → Submitted → Pending/Assigned → Under Review
                                        ├→ Request Changes → Updated submission / Withdrawn
                                        ├→ Declined (reason visible to requester)
                                        └→ Expired / Cancelled / Superseded / Revoked
-``
+```
 
 **Approved is not Live.** At minimum the UI distinguishes `Request submitted`, `Awaiting approval`, `Approved and ready to apply`, `Source activated`, `Scene Take applied on output(s)`, `Receiver confirmed`, `Failed`, `Expired` and `Declined`. Each message must correspond to truth confirmed by the main host, not optimistic React state. If implementation already supports safe host-initiated execution following approval, the action must remain **explicit** with correctly labelled scope. Never auto-execute a Take, show/hide, design-publish or source-activation merely because the approver clicked `Approve` unless a separately approved automation specifically arms that action.
 
