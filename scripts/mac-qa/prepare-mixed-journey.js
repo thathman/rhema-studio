@@ -145,7 +145,7 @@ async function runScenario() {
     stage = "seed a public-domain hymn with an explicitly synthetic QA language line"
     const imported = await window.__TAURI_INTERNALS__.invoke("content_import_hymnbook", {
       parts: [{
-        book: { code: "QA-PD", name: "QA public-domain hymn fixture", language: "en", publisher: "Synthetic QA fixture", licence_note: "Public-domain hymn title; synthetic QA arrangement metadata." },
+        book: { code: "QAPD", name: "QA public-domain hymn fixture", language: "en", publisher: "Synthetic QA fixture", licence_note: "Public-domain hymn title; synthetic QA arrangement metadata." },
         songs: [{
           number: "999",
           song: {
