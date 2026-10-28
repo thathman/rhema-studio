@@ -3,6 +3,7 @@ import { CAPACITY_KINDS, NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, defaultLimits, 
 import { autoModeOf, useBroadcastStore, type AutoMode } from "@/stores/broadcast-store"
 import { AssistantsSection } from "@/components/settings/assistants-section"
 import { ObsSettingsBlock } from "@/components/settings/obs-settings-block"
+import { RemoteAuthSetting } from "@/components/settings/remote-auth-setting"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { transcriptionActions } from "@/hooks/use-transcription"
 import { Fragment, useState, useEffect, useRef } from "react"
@@ -848,15 +849,7 @@ function RemoteControlSection() {
           )}
         </span>
       </label>
-      <label className="flex items-start gap-2 text-xs">
-        <input type="checkbox" className="mt-0.5" checked={remoteAuthRequired || anyKey} disabled={anyKey} onChange={(e) => setRemoteAuthRequired(e.target.checked)} />
-        <span>
-          Require a key or a paired device
-          <span className="block text-xs text-muted-foreground">
-            {anyKey ? "On while a key is set or a device is paired. Removing the last one keeps it on: nothing is accepted until you untick this." : remoteAuthRequired ? "On (the setting on new installs): a phone, desk or controller works only once it is paired below or sends the key. With none yet, every command is refused. Untick only if you want anything on the network accepted." : "Off: anything on the network is accepted, as this computer was set up before. Tick this so only paired devices and the key are accepted (new installs start with it on)."}
-          </span>
-        </span>
-      </label>
+      <RemoteAuthSetting required={remoteAuthRequired} locked={anyKey} onRequiredChange={setRemoteAuthRequired} />
       <label className="flex flex-col gap-1 text-xs">
         <span>Key the controller must send (optional)</span>
         <Input
