@@ -21,6 +21,8 @@ interface ApprovalGateState {
   retry: (() => void) | null
   /** Services (by id) that have gone live this session. */
   acknowledged: string[]
+  /** Undo a one-time acknowledgement when the operation it released is rejected as stale. */
+  revokeAcknowledgment: (serviceId: string) => void
   presentAnyway: () => void
   dismiss: () => void
 }
@@ -29,6 +31,9 @@ export const useApprovalGateStore = create<ApprovalGateState>((set, get) => ({
   held: null,
   retry: null,
   acknowledged: [],
+  revokeAcknowledgment: (serviceId) => set((state) => ({
+    acknowledged: state.acknowledged.filter((id) => id !== serviceId),
+  })),
   presentAnyway: () => {
     const { held, retry, acknowledged } = get()
     if (!held) return
