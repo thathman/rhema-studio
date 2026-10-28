@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ImageIcon, PlusIcon, UploadIcon } from "lucide-react"
+import { BookOpenIcon, ImageIcon, PlusIcon, UploadIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useMediaStore } from "@/stores/media-store"
@@ -13,6 +13,7 @@ import { safeLink } from "@/lib/qr-bulletin"
 import { slidePages } from "@/lib/slide-pages"
 import { slideLabel } from "@/stores/service-store"
 import { hasReadingMarks, readingPages } from "@/lib/responsive-reading"
+import { useShellStore } from "@/studio/shell-store"
 
 const EXAMPLES = [
   { title: "Welcome", body: "We're glad you're here.\nPlease silence your phone." },
@@ -24,9 +25,8 @@ const EXAMPLES = [
 const DRAFT_SLIDE_ID = "draft-slide"
 
 /**
- * Prepare → Slides: write an announcement or any free-text screen and add
- * it to the service. The preview follows as you type; nothing presents.
- * Each slide lives in the service it was made for (no library yet).
+ * Prepare → Slides: write a service-specific screen or open the reusable
+ * library. The preview follows as you type; nothing presents.
  */
 export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = {}) {
   const [title, setTitle] = useState("")
@@ -109,6 +109,10 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">This slide is for the open service.</p>
+        <Button size="xs" variant="outline" onClick={() => useShellStore.getState().openLibrarySection("slides")}><BookOpenIcon /> Browse reusable slides</Button>
+      </div>
       <div role="group" aria-label="Slide kind" className="flex w-fit rounded-md border border-border p-0.5">
         {(["free", "announcement", "qr", "reading"] as const).map((m) => (
           <button

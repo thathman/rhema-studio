@@ -7,6 +7,7 @@ import type { QueueItem, SlideQueueItem } from "@/types"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useShellStore } from "@/studio/shell-store"
 import { SlideComposer } from "./slide-composer"
 
 let root: Root | null = null
@@ -15,6 +16,7 @@ beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null })
   useQueueStore.setState({ items: [], headers: [], activeIndex: null, addTarget: null })
+  useShellStore.setState({ workspace: "prepare", librarySection: "songs" })
   root = createRoot(document.body.appendChild(document.createElement("div")))
 })
 
@@ -52,6 +54,14 @@ const modes = [
 ]
 
 describe("Prepare slide composer preview (#391)", () => {
+  it("opens the reusable slide library from Prepare", async () => {
+    await render()
+    const browse = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse reusable slides"))!
+    await act(async () => browse.click())
+    expect(useShellStore.getState().workspace).toBe("library")
+    expect(useShellStore.getState().librarySection).toBe("slides")
+  })
+
   it.each(modes)("clears the $name draft preview when its form becomes empty", async ({ name, field, value }) => {
     await render()
     if (name !== "Any text") {
