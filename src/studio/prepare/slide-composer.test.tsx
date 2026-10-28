@@ -5,6 +5,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import type { QueueItem, SlideQueueItem } from "@/types"
 import { useBibleStore } from "@/stores/bible-store"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useShellStore } from "@/studio/shell-store"
 import { SlideComposer } from "./slide-composer"
@@ -125,5 +126,20 @@ describe("Prepare slide composer preview (#391)", () => {
     expect(items).toHaveLength(2)
     expect(useBibleStore.getState().selectedQueueItemId).toBe(items[1].id)
     expect(useBibleStore.getState().selectedSlide?.item.id).toBe(items[1].id)
+  })
+
+  it("keeps Program unchanged while previewing, resetting, and adding a slide", async () => {
+    useBroadcastStore.setState({ isLive: true, liveItemId: "program-item", liveVerse: { reference: "Program baseline" } as never })
+    const before = useBroadcastStore.getState()
+    await render(selectAddedItem)
+    await setValue(document.querySelector<HTMLTextAreaElement>('[aria-label="Slide text"]')!, "Private Preview")
+    expect(useBibleStore.getState().selectedSlide?.item.id).toBe("draft-slide")
+
+    const add = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Add to service"))!
+    await act(async () => add.click())
+
+    expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
+    expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
+    expect(useBroadcastStore.getState().liveVerse).toEqual(before.liveVerse)
   })
 })

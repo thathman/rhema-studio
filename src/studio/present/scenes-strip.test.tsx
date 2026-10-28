@@ -12,6 +12,7 @@ import { SCENE_PRESETS, newScene } from "@/lib/scenes"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, type BroadcastOutput, type QueueItem, type Verse } from "@/types"
 import { useBibleStore } from "@/stores/bible-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useSettingsStore } from "@/stores/settings-store"
 
 const original = { takeScene: useBroadcastStore.getState().takeScene, releaseScene: useBroadcastStore.getState().releaseScene }
 const camera = { ...newScene("Camera with the Bible", SCENE_PRESETS[3]), id: "cam" }
@@ -60,6 +61,22 @@ afterEach(() => {
 })
 
 describe("Present's scenes", () => {
+  it("refreshes only the chosen screen's preview and waits for an explicit Take", async () => {
+    original.takeScene(MAIN_OUTPUT_ID, camera.id)
+    original.takeScene("overflow", camera.id)
+    const before = structuredClone(useBroadcastStore.getState().outputs)
+    await act(async () => useBroadcastStore.getState().saveScene({ ...camera, background: "#123456" }))
+    await render()
+    await click(button("Refresh saved preview for Sanctuary"))
+    expect(take).not.toHaveBeenCalled()
+    expect(useBroadcastStore.getState().outputs).toEqual(before)
+    expect(el.textContent).toContain("Preview refreshed for Sanctuary. Take scene to apply it.")
+    await click(button("Take scene Camera with the Bible to Sanctuary"))
+    expect(take).toHaveBeenCalledExactlyOnceWith(MAIN_OUTPUT_ID, camera.id)
+    expect(output(MAIN_OUTPUT_ID).sceneSnapshot?.background).toBe("#123456")
+    expect(output("overflow")).toEqual(before.find((o) => o.id === "overflow"))
+  })
+
   it("stays out of the way until there is a congregation screen and a saved scene", async () => {
     useBroadcastStore.setState({ scenes: [] })
     await render()
@@ -103,8 +120,9 @@ describe("Present's scenes", () => {
   })
 
   it("shows the taken revision and permits an explicit Take of a saved edit", async () => {
-    const taken = { ...camera, name: "Taken camera layout", updatedAt: 10 }
-    const saved = { ...camera, name: "Edited camera layout", updatedAt: 11 }
+    useSettingsStore.setState({ operatorName: "Tolu" })
+    const taken = { ...camera, name: "Taken camera layout", updatedAt: Date.UTC(2026, 9, 25, 10) }
+    const saved = { ...camera, name: "Edited camera layout", updatedAt: Date.UTC(2026, 9, 26, 11) }
     await act(async () => useBroadcastStore.setState({
       scenes: [saved],
       outputs: outputs().map((o) => o.id === MAIN_OUTPUT_ID ? { ...o, sceneId: camera.id, sceneSnapshot: taken } : o),
@@ -112,69 +130,17 @@ describe("Present's scenes", () => {
     await render()
     expect(el.textContent).toContain("Shows Taken camera layout")
     await click(sceneButton("Edited camera layout"))
-    const takeUpdated = button("Refresh scene Edited camera layout on Sanctuary")
+    const takeUpdated = button("Take scene Edited camera layout to Sanctuary")
+    const details = el.querySelector('[aria-label="Take details"]')
+    expect(details?.textContent).toContain("Affected output: Sanctuary only")
+    expect(details?.textContent).toContain(`Revision: ${new Date(saved.updatedAt).toLocaleString()}`)
+    expect(details?.textContent).toContain("Actor: Tolu")
+    expect(takeUpdated.getAttribute("aria-describedby")).toBe(details?.id)
     expect(takeUpdated.getAttribute("aria-disabled")).toBeNull()
+    expect(take).not.toHaveBeenCalled()
     await click(takeUpdated)
     expect(take).toHaveBeenLastCalledWith(MAIN_OUTPUT_ID, camera.id)
     expect(output(MAIN_OUTPUT_ID).sceneSnapshot?.name).toBe("Edited camera layout")
-  })
-
-  it("offers a scoped Refresh when the same scene's pinned look changed", async () => {
-    const saved = { ...camera, updatedAt: 20 }
-    const theme = useBroadcastStore.getState().themes[0]
-    const changedTheme = { ...theme, updatedAt: theme.updatedAt + 1 }
-    await act(async () => useBroadcastStore.setState({
-      scenes: [saved],
-      themes: [changedTheme, ...useBroadcastStore.getState().themes.slice(1)],
-      outputs: outputs().map((o) => o.id === MAIN_OUTPUT_ID ? {
-        ...o,
-        sceneId: saved.id,
-        sceneSnapshot: saved,
-        sceneAppearanceSnapshot: { themes: { [theme.id]: theme }, logoUrl: null },
-      } : o),
-    }))
-    await render()
-    await click(sceneButton("Camera with the Bible"))
-    const refresh = button("Refresh scene Camera with the Bible on Sanctuary")
-    expect(refresh.getAttribute("aria-disabled")).toBeNull()
-    const details = el.querySelector('[aria-label="Refresh details"]')
-    expect(details?.textContent).toContain("Affected output: Sanctuary only")
-    expect(details?.textContent).toContain("scene, look or logo changed since its last Take")
-    expect(refresh.getAttribute("aria-describedby")).toBe(details?.id)
-    expect(refresh.title).toContain("saved scene, look and logo")
-    await click(refresh)
-    expect(take).toHaveBeenCalledExactlyOnceWith(MAIN_OUTPUT_ID, saved.id)
-    expect(output(MAIN_OUTPUT_ID).sceneAppearanceSnapshot?.themes[theme.id].updatedAt).toBe(changedTheme.updatedAt)
-  })
-
-  it("keeps a rehearsal Refresh isolated from the public scene snapshot", async () => {
-    const theme = useBroadcastStore.getState().themes[0]
-    const changedTheme = { ...theme, updatedAt: theme.updatedAt + 1 }
-    const takenAppearance = { themes: { [theme.id]: theme }, logoUrl: null }
-    await act(async () => useBroadcastStore.setState({
-      themes: [changedTheme, ...useBroadcastStore.getState().themes.slice(1)],
-      outputs: outputs().map((o) => o.id === MAIN_OUTPUT_ID ? {
-        ...o,
-        sceneId: camera.id,
-        sceneSnapshot: camera,
-        sceneAppearanceSnapshot: takenAppearance,
-      } : o),
-    }))
-    const savedOutput = output(MAIN_OUTPUT_ID)
-    useBroadcastStore.getState().setRehearsal(true)
-    await render()
-    await click(sceneButton("Camera with the Bible"))
-    const refresh = button("Refresh scene Camera with the Bible on Sanctuary")
-    expect(refresh.title).toContain("Rehearse a refresh")
-    expect(refresh.title).toContain("public screen stays unchanged")
-    expect(el.querySelector('[aria-label="Refresh details"]')?.textContent).toContain("Rehearsal only; the public screen stays unchanged.")
-    await click(refresh)
-    expect(take).toHaveBeenCalledExactlyOnceWith(MAIN_OUTPUT_ID, camera.id)
-    expect(output(MAIN_OUTPUT_ID).sceneSnapshot).toEqual(savedOutput.sceneSnapshot)
-    expect(output(MAIN_OUTPUT_ID).sceneAppearanceSnapshot).toEqual(savedOutput.sceneAppearanceSnapshot)
-    await act(async () => useBroadcastStore.getState().setRehearsal(false))
-    expect(output(MAIN_OUTPUT_ID).sceneSnapshot).toEqual(savedOutput.sceneSnapshot)
-    expect(output(MAIN_OUTPUT_ID).sceneAppearanceSnapshot).toEqual(savedOutput.sceneAppearanceSnapshot)
   })
 
   it("says why a button cannot act, and a click on it does nothing", async () => {
@@ -193,13 +159,7 @@ describe("Present's scenes", () => {
     expect(take).not.toHaveBeenCalled()
     expect(release).not.toHaveBeenCalled()
     // The scene already on the screen cannot be taken again.
-    const theme = useBroadcastStore.getState().themes[0]
-    await act(async () => useBroadcastStore.setState({ outputs: outputs().map((o) => (o.id === MAIN_OUTPUT_ID ? {
-      ...o,
-      sceneId: "cam",
-      sceneSnapshot: camera,
-      sceneAppearanceSnapshot: { themes: { [theme.id]: theme }, logoUrl: null },
-    } : o)) }))
+    await act(async () => original.takeScene(MAIN_OUTPUT_ID, camera.id))
     await click(sceneButton("Camera with the Bible"))
     expect(button("Take scene Camera with the Bible to Sanctuary").title).toBe("Sanctuary already shows Camera with the Bible")
   })
@@ -210,6 +170,7 @@ describe("Present's scenes", () => {
     await render()
     expect(el.textContent).toContain(SCENES_REHEARSAL_NOTE)
     await click(sceneButton("Camera with the Bible"))
+    expect(el.querySelector('[aria-label="Take details"]')?.textContent).toContain("Scope: rehearsal only; the public screen stays unchanged")
     const takeBtn = button("Take scene Camera with the Bible to Sanctuary")
     expect(takeBtn.getAttribute("aria-disabled")).toBeNull()
     await click(takeBtn)

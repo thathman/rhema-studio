@@ -1623,6 +1623,34 @@ lines"}"#.to_string(), false),
     }
 
     #[test]
+    fn legacy_approval_migrates_and_design_manifest_survives_reopen() {
+        let tmp = TempDir::new();
+        let (id, revision) = {
+            let db = ContentDb::open_with_migrations(&tmp.db(), &MIGRATIONS[..13]).unwrap();
+            let p = db.create_program("Synthetic legacy service", None).unwrap();
+            let saved = db.replace_items(&p.id, p.revision, &[verse("John 3:16", 43, 3, 16)]).unwrap();
+            db.approve_program(&p.id, saved.program.revision).unwrap();
+            (p.id, saved.program.revision)
+        };
+        let manifest = ApprovedDesignSnapshot { version: 1, scenes: serde_json::json!({"scene": {"scene": {"updatedAt": 17}}}), looks: serde_json::json!({"look": {"updatedAt": 9}}), media_ids: vec![] };
+        let refreshed_revision = {
+            let db = ContentDb::open(&tmp.db()).unwrap();
+            assert!(db.last_backup().unwrap().exists());
+            assert_eq!(db.get_program(&id).unwrap().unwrap().program.approved_revision, Some(revision));
+            assert!(db.approved_designs(&id, revision).unwrap().is_none(), "legacy approval stays loadable, without fabricated design pins");
+            db.approve_program_with_designs(&id, revision, &manifest).unwrap().revision
+        };
+        assert_eq!(refreshed_revision, revision + 1);
+        let db = ContentDb::open(&tmp.db()).unwrap();
+        assert!(db.approved_designs(&id, revision).unwrap().is_none());
+        assert_eq!(db.approved_designs(&id, refreshed_revision).unwrap(), Some(manifest));
+        assert_eq!(db.get_program(&id).unwrap().unwrap().items[0].reference, "John 3:16");
+        let edited = db.replace_items(&id, refreshed_revision, &[verse("Romans 8:28", 45, 8, 28)]).unwrap();
+        assert_eq!(edited.program.approved_revision, Some(refreshed_revision));
+        assert!(db.approved_designs(&id, refreshed_revision).unwrap().is_some());
+    }
+
+    #[test]
     fn older_file_is_backed_up_then_migrated() {
         let tmp = TempDir::new();
         let id = {

@@ -15,6 +15,7 @@ import { acceptSceneRequest, declineSceneRequest } from "@/lib/desk-scenes"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { runOfShowClockRows } from "@/lib/run-of-show"
 
 const ICON = "flex size-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4"
 
@@ -56,7 +57,9 @@ function HostNotices() {
   const read = useNotices((s) => s.read)
   const operator = useSettingsStore((s) => s.operatorName.trim())
   const current = useEventClock((s) => s.currentId)
-  const event = useQueueStore((s) => s.items.find((i) => i.id === current))
+  const items = useQueueStore((s) => s.items)
+  const headers = useQueueStore((s) => s.headers)
+  const event = runOfShowClockRows(items, headers).rows.find((row) => row.id === current)
   const me = operator ? `${operator} (main desk)` : "Main desk"
   const scenes = useBroadcastStore((s) => s.scenes)
   const rundown = useQueueStore((s) => s.items)
@@ -133,7 +136,8 @@ async function runNoticeAction(a: NoticeAction, mode: ActionMode = "show"): Prom
     return outcome === "presented" ? null : NOT_SHOWN[outcome] ?? "it was not shown"
   }
   if (a.kind === "event") {
-    if (!useQueueStore.getState().items.some((i) => i.id === a.value)) return "that item is no longer in the run of show"
+    const { items, headers } = useQueueStore.getState()
+    if (!runOfShowClockRows(items, headers).rows.some((row) => row.id === a.value || row.moments.some((moment) => moment.id === a.value))) return "that event is no longer in the run of show"
     if (useBroadcastStore.getState().rehearsal) return "rehearsal is on, so the event clock does not move"
     useEventClock.getState().start(a.value)
     return null

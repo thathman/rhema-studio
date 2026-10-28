@@ -1,11 +1,12 @@
 import { useTimerStore, monotonicNow } from "@/stores/timer-store"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { ArrowDownIcon, ArrowUpIcon, BookmarkPlusIcon, CopyIcon, EyeIcon, EyeOffIcon, PencilIcon, PinIcon, PinOffIcon, PlusIcon, SaveIcon, UndoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { feedFrame } from "@/lib/live-sources"
 import { drawScene } from "@/lib/scene-renderer"
+import { sceneRevisionLabel, sceneTakeDetails } from "@/lib/scene-take-details"
 import { copyScene, FADES, layerBox, newLayer, newScene, ownPreset, SCENE_PRESETS, sceneClock, sceneForOutput, sceneFrame, type ScenePreset } from "@/lib/scenes"
 import { cameraLabelOf, cameraOfUrl, routerStatus, whepUrl, type RouterStatus } from "@/lib/cameras"
 import { overlayFor } from "@/lib/lower-third-style"
@@ -611,8 +612,17 @@ function ProgramBar({ congregation, target, onTarget, draft, dirty, onSave, onTa
   const scenes = useBroadcastStore((s) => s.scenes)
   const back = useBroadcastStore((s) => (target ? s.sceneReturn[target.id] : undefined))
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
+  const operatorName = useSettingsStore((s) => s.operatorName)
+  const takeDetailsId = useId()
   const showing = target ? sceneForOutput(target, scenes) : undefined
   const restorable = !showing && back ? scenes.find((s) => s.id === back) : undefined
+  const details = target && draft ? sceneTakeDetails({
+    outputName: target.name,
+    sceneName: draft.name,
+    revision: sceneRevisionLabel(draft, dirty, scenes.some((scene) => scene.id === draft.id)),
+    actor: operatorName,
+    rehearsal,
+  }) : null
   if (!target) return <p className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">Add a congregation output (Production → Screens) to take a scene to it.</p>
   return (
     // The live console's own colours (dark ink, in every theme), from its tokens.
@@ -625,9 +635,10 @@ function ProgramBar({ congregation, target, onTarget, draft, dirty, onSave, onTa
         {rehearsal && <strong className="mr-1.5 text-tone-amber-foreground" title="Rehearsal is on: a Take here stays in the app. The screens keep their scene, and it comes back when rehearsal ends.">Rehearsal ·</strong>}
         {showing ? <>Shows <strong>{showing.name}</strong></> : "Shows its own feed, full screen"}
       </span>
+      {details && <p id={takeDetailsId} role="note" aria-label="Take details" className="basis-full text-xs text-muted-foreground">{details}</p>}
       {draft && dirty && <Button size="sm" variant="outline" onClick={onSave} className="border-input bg-transparent text-foreground hover:bg-muted"><SaveIcon /> Save scene</Button>}
       {/* In rehearsal nothing reaches a screen, so Take is not red. */}
-      {draft && <Button size="sm" onClick={onTake} className={rehearsal ? "border border-gold bg-transparent text-tone-amber-foreground hover:bg-muted" : "bg-live-pulse text-white hover:bg-live-pulse/90"} title={rehearsal ? `Rehearse ${draft.name} on ${target.name}: the screen keeps its scene${dirty ? " (saves it first)" : ""}` : `Put ${draft.name} on ${target.name}${dirty ? " (saves it first)" : ""}`}>Take {draft.name}</Button>}
+      {draft && <Button size="sm" onClick={onTake} aria-describedby={details ? takeDetailsId : undefined} className={rehearsal ? "border border-gold bg-transparent text-tone-amber-foreground hover:bg-muted" : "bg-live-pulse text-white hover:bg-live-pulse/90"} title={rehearsal ? `Rehearse ${draft.name} on ${target.name}: the screen keeps its scene${dirty ? " (saves it first)" : ""}` : `Put ${draft.name} on ${target.name}${dirty ? " (saves it first)" : ""}`}>Take {draft.name}</Button>}
       {showing && <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().releaseScene(target.id)} className="border-input bg-transparent text-foreground hover:bg-muted">Back to its own feed</Button>}
       {restorable && <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().takeScene(target.id, restorable.id)} className="border-input bg-transparent text-foreground hover:bg-muted"><UndoIcon /> Restore {restorable.name}</Button>}
     </section>

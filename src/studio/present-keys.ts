@@ -1,5 +1,5 @@
 /**
- * Keyboard mapping for the Standard present view. Pure so it is testable
+ * Keyboard mapping for the Present console. Pure so it is testable
  * without a DOM; the hook in present-workspace wires it to `window`.
  */
 export type PresentKeyAction = "next" | "prev" | "clear" | "restore" | "verseNext" | "versePrev" | "ticker"

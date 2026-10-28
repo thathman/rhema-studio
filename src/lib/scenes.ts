@@ -56,7 +56,7 @@ export function sceneNeedsRefresh(
   for (const id of usedThemeIds) {
     const takenTheme = output.sceneAppearanceSnapshot.themes[id]
     const currentTheme = themes.find((theme) => theme.id === id)
-    if (!takenTheme || !currentTheme || takenTheme.updatedAt !== currentTheme.updatedAt) return true
+    if (!takenTheme || !currentTheme || JSON.stringify(takenTheme) !== JSON.stringify(currentTheme)) return true
   }
   return taken.layers.some((layer) => layer.kind === "logo") && output.sceneAppearanceSnapshot.logoUrl !== logoUrl
 }

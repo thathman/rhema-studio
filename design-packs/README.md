@@ -13,6 +13,11 @@ an output, or take a scene made from it.
 [`rhema-worship-expressions.rhema-design.json`](rhema-worship-expressions.rhema-design.json) has
 120 original looks, MIT licensed like Rhema Studio:
 
+It is included in Rhema Studio and appears in **Design → Library** on a fresh install, including
+without an Internet connection. No import step is needed. Its **Included offline** label marks the
+unchangeable app copy. **Use** or **Use and edit** makes church-owned copies; it never changes an
+output or an on-air scene by itself.
+
 - 8 colour families × 8 looks: scripture, song and hymn full screen; notices; keyed scripture and
   lyric bands for OBS and NDI; a name band; a ticker.
 - 8 × 5 scene templates: camera and scripture band, camera and lyrics, camera and half-screen
@@ -24,7 +29,11 @@ It has no pictures, videos, song lyrics or logos. A picture, video, camera or lo
 empty place: choose your own picture, video or camera for it in **Production → Scenes**, and the
 logo comes from your Brand Kit. Use pictures and videos your church owns or is licensed to use.
 
-To install it: **Design → Library → Import design pack**, choose the file, and confirm.
+An older installation may have imported this same pack manually. Rhema removes an unchanged saved
+copy during startup, so there is still only one gallery entry. A customized older copy is kept as
+the church's local version and temporarily takes the place of the bundled family; removing that
+local version restores the bundled one. Imported custom copies are carried in backups; the bundled
+recipes are shipped with the app and are not duplicated in backups.
 
 ## The format (version 1)
 
@@ -73,6 +82,9 @@ To install it: **Design → Library → Import design pack**, choose the file, a
 - At most 2 MB and 160 looks. Ids are lower-case letters, digits and dashes, and are unique.
 - Colours are `#rgb` or `#rrggbb`. Fonts must be ones Rhema bundles. Every reference must exist.
 - Anything else in the file (addresses, file paths, pictures, scripts, unknown fields) is dropped.
-- Importing a pack with the same `id` replaces it; copies already made from it stay as they are.
-- Imported packs are part of a backup and are checked again when it is restored.
+- Importing a local pack with the same `id` replaces that local pack; copies already made from it
+  stay as they are. IDs shipped with Rhema cannot be newly replaced; give a customized pack a new
+  ID instead.
+- Imported packs are part of a backup and are checked again when it is restored. Bundled packs
+  come with the app and are not copied into backups.
 - A future format will have a new `version`; Rhema refuses versions it does not know.

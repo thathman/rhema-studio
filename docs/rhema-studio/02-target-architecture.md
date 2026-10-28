@@ -117,7 +117,40 @@ Rule of thumb: **workspaces compose, modules own, runtime executes, engine draws
 Each step is independently shippable and reversible; none removes the legacy route
 until its replacement has tests.
 
-## 8. Cross-platform notes
+## 8. Run of Show events (#409; incremental implementation)
+
+The first event-model slice is implemented on `fix/event-first-run-of-show` and is not
+merged. A service event is represented by an existing `group` row with a versioned
+`run_of_show_event` payload. The row ID, reference and notes remain the event ID, title
+and notes; following rundown items project as its moments until the next event or phase.
+Ordinary groups can sit inside an event as moment groups. Existing queue-item scene,
+source, timing and cue fields remain attached to those moments.
+
+The current slices add event creation in Prepare, draft/approved status presentation,
+event-to-moments projection, nested-group insertion and collapse behavior, and service
+save/reopen serialization. The event editor has Content and Plan tabs: Content lists its
+ordered moments, opens one in the normal item editor for preview/edit, and opens Add with
+that event as the insertion target; Plan edits event title/role/owner/length/notes. Opening
+a moment changes Preview only; a deliberate Take in Present is still required to change an
+audience output. Editing an event returns it to draft. Keeping the stored kind as `group`
+lets older builds continue reading the rundown and preserve the event payload while saving.
+
+The event clock now resolves moments to their parent event, tracks the current moment
+separately for moment-specific cues, and steps between planned events rather than between
+each moment. An event's planned length becomes its timing-engine row; when it has no event
+length, the row uses the sum of its moments' planned lengths. Prepare's timing panel,
+cuesheet, Timekeeper display, service finish projection and joined-desk Live State use
+these event rows. Legacy services without event headers retain one clock row per item.
+Live State adds event targets and a separate current moment while keeping old rundown data
+for older joined clients. Recovery carries both IDs and suppresses elapsed-time claims for
+an untrusted event after restart.
+
+Per-audience scenes, source bindings, event-level cues/signals and a compatibility-preserving
+legacy migration remain unimplemented. The existing content moments retain their own scene,
+source and cue metadata. Do not describe #409 as complete, and do not treat this branch as
+owner-accepted or hardware-verified.
+
+## 9. Cross-platform notes
 
 - Window management and monitor enumeration already go through Tauri; keep all platform
   branching in Rust.

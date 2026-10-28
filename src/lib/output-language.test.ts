@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { forOutputLanguage } from "./output-language"
+import { forOutputLanguage, isOutputLanguageFallback } from "./output-language"
 
 const verse = { reference: "John 3:16", segments: [{ text: "For God so loved" }], translationLines: ["For God so loved", "Nítorí Ọlọ́run fẹ́"] }
 const lyric = { kind: "lyric" as const, reference: "Amazing Grace", segments: [], lines: ["Amazing grace"], secondaryLines: ["Oore-ọ̀fẹ́"] }
@@ -18,5 +18,16 @@ describe("per-output language", () => {
     expect(forOutputLanguage(single, "second")).toBe(single)
     expect(forOutputLanguage({ ...lyric, secondaryLines: [] }, "second")).toEqual({ ...lyric, secondaryLines: [] })
     expect(forOutputLanguage(null, "second")).toBeNull()
+  })
+
+  it("identifies visible-text fallback without flagging images or non-second outputs", () => {
+    const singleLanguage = { reference: "Psalm 23:1", segments: [{ text: "The LORD is my shepherd" }] }
+    expect(isOutputLanguageFallback(singleLanguage, "second")).toBe(true)
+    expect(isOutputLanguageFallback({ kind: "lyric", reference: "Single-language song", segments: [], lines: ["Amazing grace"] }, "second")).toBe(true)
+    expect(isOutputLanguageFallback(lyric, "second")).toBe(false)
+    expect(isOutputLanguageFallback(verse, "first")).toBe(false)
+    expect(isOutputLanguageFallback({ kind: "image", reference: "Church photo", segments: [] }, "second")).toBe(false)
+    expect(isOutputLanguageFallback({ kind: "slide", screen: "black", reference: "Black", segments: [] }, "second")).toBe(false)
+    expect(isOutputLanguageFallback({ reference: "Empty", segments: [] }, "second")).toBe(false)
   })
 })

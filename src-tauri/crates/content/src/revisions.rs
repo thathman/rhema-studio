@@ -124,6 +124,10 @@ fn load_revision(conn: &Connection, id: &str) -> Result<Option<Revision>> {
     }
 }
 
+fn has_design_table(conn: &Connection) -> Result<bool> {
+    Ok(conn.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'approved_design_snapshots'", [], |r| r.get::<_, i64>(0))? > 0)
+}
+
 impl ContentDb {
     /// Newest first.
     pub fn list_revisions(&self, program_id: &str) -> Result<Vec<RevisionSummary>> {
@@ -156,9 +160,14 @@ impl ContentDb {
         if has_snapshot == 0 {
             snapshot(&tx, program_id)?;
         }
-        // An approval through the legacy API cannot claim the design snapshot
-        // of an earlier approval is still current for this revision.
-        tx.execute("DELETE FROM approved_design_snapshots WHERE program_id = ?1 AND revision = ?2", params![program_id, expected_revision])?;
+        // A legacy caller cannot refresh a design-aware release without its manifest.
+        // Re-approving that exact release is a no-op; preserve its content/design pins.
+        if has_design_table(&tx)? {
+            let captured: i64 = tx.query_row("SELECT COUNT(*) FROM approved_design_snapshots WHERE program_id = ?1 AND revision = ?2", params![program_id, expected_revision], |r| r.get(0))?;
+            if captured > 0 {
+                return load_program(&tx, program_id)?.ok_or_else(|| ContentError::NotFound(program_id.into()));
+            }
+        }
         tx.execute(
             "UPDATE programs SET approved_revision = ?2, approved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
             params![program_id, expected_revision],
@@ -191,7 +200,50 @@ impl ContentDb {
 
         let mut conn = self.lock()?;
         let tx = conn.transaction()?;
-        crate::check_revision(&tx, program_id, expected_revision)?;
+        let program_state: Option<(i64, Option<i64>)> = tx.query_row(
+            "SELECT revision, approved_revision FROM programs WHERE id = ?1",
+            params![program_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional()?;
+        let Some((actual_revision, current_approved_revision)) = program_state else {
+            return Err(ContentError::NotFound(program_id.to_string()));
+        };
+        if actual_revision != expected_revision {
+            // The caller may be retrying a refresh whose successful response was lost.
+            // Accept only the exact manifest stored as the immediately following approved
+            // revision; all other stale approvals remain conflicts.
+            if let Some(program) = approved_refresh_retry(&tx, program_id, expected_revision, actual_revision, current_approved_revision, designs)? {
+                tx.commit()?;
+                return Ok(program);
+            }
+            return Err(ContentError::Conflict { expected: expected_revision, actual: actual_revision });
+        }
+        // Refresh is a new release identity even when the service rows did not change.
+        // Legacy approvals have no design manifest yet, but still need a new revision
+        // so adding their first pins cannot rewrite the historical approval.
+        let existing_snapshot: Option<String> = tx.query_row(
+            "SELECT snapshot FROM approved_design_snapshots WHERE program_id = ?1 AND revision = ?2",
+            params![program_id, expected_revision],
+            |row| row.get(0),
+        ).optional()?;
+        if current_approved_revision == Some(expected_revision) {
+            if let Some(raw) = &existing_snapshot {
+                let captured: ApprovedDesignSnapshot = serde_json::from_str(raw).map_err(|e| {
+                    ContentError::Corrupt(format!("approved designs for {program_id} v{expected_revision}: {e}"))
+                })?;
+                if &captured == designs {
+                    let program = load_program(&tx, program_id)?.ok_or_else(|| ContentError::NotFound(program_id.into()))?;
+                    tx.commit()?;
+                    return Ok(program);
+                }
+            }
+        }
+        let is_refresh = existing_snapshot.is_some() || current_approved_revision == Some(expected_revision);
+        let expected_revision = if is_refresh {
+            tx.execute("UPDATE programs SET revision = revision + 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1", params![program_id])?;
+            snapshot(&tx, program_id)?;
+            expected_revision + 1
+        } else { expected_revision };
         let has_snapshot: i64 = tx.query_row(
             "SELECT COUNT(*) FROM program_revisions WHERE program_id = ?1 AND revision = ?2",
             params![program_id, expected_revision],
@@ -238,6 +290,7 @@ impl ContentDb {
     /// The design manifest captured for one exact approved service revision.
     pub fn approved_designs(&self, program_id: &str, revision: i64) -> Result<Option<ApprovedDesignSnapshot>> {
         let conn = self.lock()?;
+        if !has_design_table(&conn)? { return Ok(None); }
         let raw: Option<String> = conn.query_row(
             "SELECT snapshot FROM approved_design_snapshots WHERE program_id = ?1 AND revision = ?2",
             params![program_id, revision],
@@ -305,6 +358,42 @@ impl ContentDb {
     }
 }
 
+/// Return the program only for an exact retry of the immediately committed design refresh.
+fn approved_refresh_retry(
+    tx: &Transaction<'_>,
+    program_id: &str,
+    expected_revision: i64,
+    actual_revision: i64,
+    current_approved_revision: Option<i64>,
+    designs: &ApprovedDesignSnapshot,
+) -> Result<Option<crate::Program>> {
+    let Some(retry_revision) = expected_revision
+        .checked_add(1)
+        .filter(|revision| actual_revision == *revision && current_approved_revision == Some(*revision))
+    else {
+        return Ok(None);
+    };
+    let raw: Option<String> = tx
+        .query_row(
+            "SELECT snapshot FROM approved_design_snapshots WHERE program_id = ?1 AND revision = ?2",
+            params![program_id, retry_revision],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    let captured: ApprovedDesignSnapshot = serde_json::from_str(&raw).map_err(|e| {
+        ContentError::Corrupt(format!("approved designs for {program_id} v{retry_revision}: {e}"))
+    })?;
+    if &captured != designs {
+        return Ok(None);
+    }
+    load_program(tx, program_id)?
+        .map(Some)
+        .ok_or_else(|| ContentError::NotFound(program_id.into()))
+}
+
 /// The pinned songs live in a table made when first needed rather than by a migration, so a
 /// database stays openable by builds from before pins (they ignore the table; a migration would
 /// make them refuse the file as newer).
@@ -352,6 +441,97 @@ mod tests {
 
     fn verse(reference: &str, b: i64, c: i64, v: i64) -> ItemInput {
         ItemInput { reference: reference.into(), book_number: Some(b), chapter: Some(c), verse: Some(v), ..ItemInput::default() }
+    }
+
+    #[test]
+    fn legacy_approval_cannot_remove_a_design_aware_release_manifest() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Synthetic legacy caller", None).unwrap();
+        let designs = ApprovedDesignSnapshot { version: 1, scenes: serde_json::json!({}), looks: serde_json::json!({}), media_ids: vec![] };
+        let approved = db.approve_program_with_designs(&p.id, p.revision, &designs).unwrap();
+        assert_eq!(db.approve_program(&p.id, approved.revision).unwrap(), approved);
+        assert_eq!(db.approved_designs(&p.id, approved.revision).unwrap(), Some(designs));
+    }
+
+    #[test]
+    fn explicit_design_refresh_keeps_the_previous_release_and_rejects_stale_approval() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Synthetic refresh", None).unwrap();
+        let before = ApprovedDesignSnapshot { version: 1, scenes: serde_json::json!({"s": {"revision": 1}}), looks: serde_json::json!({}), media_ids: vec![] };
+        let first = db.approve_program_with_designs(&p.id, p.revision, &before).unwrap();
+        let after = ApprovedDesignSnapshot { scenes: serde_json::json!({"s": {"revision": 2}}), ..before.clone() };
+        let refreshed = db.approve_program_with_designs(&p.id, first.revision, &after).unwrap();
+        assert!(refreshed.revision > first.revision);
+        assert_eq!(db.approved_designs(&p.id, first.revision).unwrap(), Some(before.clone()));
+        assert_eq!(db.approved_designs(&p.id, refreshed.revision).unwrap(), Some(after.clone()));
+
+        // A lost response after the refresh must not turn an exact retry into a conflict.
+        let revisions_after_refresh = db.list_revisions(&p.id).unwrap();
+        let approvals_after_refresh = db.audit_events("program", &p.id).unwrap().iter().filter(|e| e.action == "approve").count();
+        let retried = db.approve_program_with_designs(&p.id, first.revision, &after).unwrap();
+        assert_eq!(retried, refreshed);
+        assert_eq!(db.list_revisions(&p.id).unwrap(), revisions_after_refresh);
+        assert_eq!(db.audit_events("program", &p.id).unwrap().iter().filter(|e| e.action == "approve").count(), approvals_after_refresh);
+
+        let later_edit = db.update_program(&p.id, refreshed.revision, "Concurrent draft edit", None).unwrap();
+        let late_retry = db.approve_program_with_designs(&p.id, first.revision, &after);
+        assert!(matches!(late_retry, Err(ContentError::Conflict { expected, actual }) if expected == first.revision && actual == later_edit.revision));
+        assert_eq!(db.get_program(&p.id).unwrap().unwrap().program.title, "Concurrent draft edit");
+
+        assert!(matches!(db.approve_program_with_designs(&p.id, first.revision, &before), Err(ContentError::Conflict { .. })));
+    }
+
+    #[test]
+    fn refreshing_a_legacy_approval_creates_a_new_revision() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Synthetic legacy refresh", None).unwrap();
+        let legacy = db.approve_program(&p.id, p.revision).unwrap();
+        assert!(db.approved_designs(&p.id, legacy.revision).unwrap().is_none());
+
+        let designs = ApprovedDesignSnapshot {
+            version: 1,
+            scenes: serde_json::json!({"scene": {"revision": 2}}),
+            looks: serde_json::json!({}),
+            media_ids: vec![],
+        };
+        let refreshed = db.approve_program_with_designs(&p.id, legacy.revision, &designs).unwrap();
+
+        assert_eq!(refreshed.revision, legacy.revision + 1);
+        assert_eq!(refreshed.approved_revision, Some(refreshed.revision));
+        assert!(db.approved_designs(&p.id, legacy.revision).unwrap().is_none());
+        assert_eq!(db.approved_designs(&p.id, refreshed.revision).unwrap(), Some(designs));
+    }
+
+    #[test]
+    fn repeating_the_same_approval_request_is_idempotent() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Synthetic repeated approval", None).unwrap();
+        let designs = ApprovedDesignSnapshot {
+            version: 1,
+            scenes: serde_json::json!({"scene": {"revision": 2}}),
+            looks: serde_json::json!({}),
+            media_ids: vec![],
+        };
+        let first = db.approve_program_with_designs(&p.id, p.revision, &designs).unwrap();
+        let repeated = db.approve_program_with_designs(&p.id, p.revision, &designs).unwrap();
+
+        assert_eq!(repeated, first);
+        assert_eq!(db.approved_designs(&p.id, first.revision).unwrap(), Some(designs));
+    }
+
+    #[test]
+    fn approval_pins_designs_without_changing_saved_content_or_songs() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Synthetic service", None).unwrap();
+        let designs = ApprovedDesignSnapshot {
+            version: 1, scenes: serde_json::json!({"scene": {"scene": {"updatedAt": 1}}}),
+            looks: serde_json::json!({"look": {"updatedAt": 1}}), media_ids: vec![],
+        };
+        db.approve_program_with_designs(&p.id, p.revision, &designs).unwrap();
+        let edited = db.update_program(&p.id, p.revision, "Draft edit", None).unwrap();
+        assert_eq!(db.approved_designs(&p.id, p.revision).unwrap(), Some(designs));
+        assert_eq!(db.get_program(&p.id).unwrap().unwrap().program.approved_revision, Some(p.revision));
+        assert!(db.approved_designs(&p.id, edited.revision).unwrap().is_none());
     }
 
     #[test]

@@ -7,10 +7,11 @@ import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useBroadcastStore, useSettingsStore } from "@/stores"
+import { designDraftId } from "@/lib/design-drafts"
 import { useShellStore, type DesignTab } from "@/studio/shell-store"
 import { LOWER_THIRDS } from "@/lib/builtin-themes"
 import { SAMPLE_BILINGUAL_SONG } from "@/lib/theme-migrations"
-import { DESIGN_PACK_MAX_BYTES, importDesignPack, libraryFamilies, libraryLooks, packFamilyId, parseDesignPack, removeDesignPack, useDesignPackStore, type DesignPack } from "@/lib/design-packs"
+import { DESIGN_PACK_MAX_BYTES, importDesignPack, isBundledDesignPack, libraryFamilies, libraryLooks, packFamilyId, parseDesignPack, removeDesignPack, useDesignPackStore, type DesignPack } from "@/lib/design-packs"
 import { adoptLook, brandable, CONTENT_LABELS, filterLooks, isObsOverlay, LAYOUT_NAMES, lookAspects, lookAudio, lookCopies, lookLanguages, OBS_OVERLAY, readLookFavourites, resetCopy, resetLowerThirdCopy, resetSceneCopy, resetSingleLook, showsTwoLanguages, writeLookFavourites, type LibraryLook, type LookAspect, type LookBackground, type LookCopy, type LookFamilyId, type LookLanguage, type LookLayout } from "@/lib/look-library"
 import { openProductionTab } from "@/studio/production/production-tab"
 import { hasChurchColours, type BrandKit } from "@/lib/brand-kit"
@@ -60,7 +61,7 @@ const LANGUAGES: ReadonlyArray<readonly [LookLanguage | "both" | "all", string]>
 const storage = typeof localStorage === "undefined" ? null : localStorage
 
 /**
- * Design → Templates: ready-made looks to start from. Use adds the church's own
+ * Design → Library: ready-made looks to start from. Use adds the church's own
  * copy; nothing on a screen changes until that copy is chosen for an output.
  */
 export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: string) => void }) {
@@ -71,7 +72,7 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
   const [language, setLanguage] = useState<LookLanguage | "both" | "all">("all")
   const [favouritesOnly, setFavouritesOnly] = useState(false)
   const [favourites, setFavourites] = useState(() => readLookFavourites(storage))
-  // Built-in looks and imported design-pack templates share filters, Use and Reset.
+  // The built-in looks, then each imported design pack's, as one library: the same filters, Use and Reset.
   const packs = useDesignPackStore((s) => s.packs)
   const all = useMemo(() => libraryLooks(packs), [packs])
   const families = useMemo(() => libraryFamilies(packs), [packs])
@@ -146,7 +147,15 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
                 <h3 className="text-sm font-bold">{g.family.name}</h3>
                 <p className="text-xs text-muted-foreground">{g.family.description}</p>
               </div>
-              {g.family.id.startsWith("pack:") && <RemovePackButton pack={packs.find((p) => packFamilyId(p.doc.id) === g.family.id)} />}
+              {g.family.id.startsWith("pack:") && (() => {
+                const localPack = packs.find((p) => packFamilyId(p.doc.id) === g.family.id)
+                return localPack
+                  ? <div className="flex items-center gap-2">
+                    {isBundledDesignPack(localPack.doc.id) && <span className="text-xs text-muted-foreground">Local version</span>}
+                    <RemovePackButton pack={localPack} />
+                  </div>
+                  : <span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">Included offline</span>
+              })()}
             </header>
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
               {g.looks.map((l) => <LookCard key={l.id} look={l} favourite={favourites.has(l.id)} onFavourite={() => toggleFavourite(l.id)} onOpen={onOpen} />)}
@@ -173,7 +182,7 @@ function ImportPackButton({ onImported }: { onImported: (pack: DesignPack) => vo
       const n = pack.looks.length
       const ok = await confirm(
         here ? `Replace “${here.doc.name}” with this version?` : `Import “${pack.doc.name}”?`,
-        `${n} ${n === 1 ? "look" : "looks"} by ${pack.doc.author} (${pack.doc.license}) join Design → Templates. ${here ? "Copies you already made from the old version stay as they are. " : ""}Nothing on the screens, outputs, cameras or scenes changes.`,
+        `${n} ${n === 1 ? "look" : "looks"} by ${pack.doc.author} (${pack.doc.license}) join Design → Library. ${here ? "Copies you already made from the old version stay as they are. " : ""}Nothing on the screens, outputs, cameras or scenes changes.`,
         here ? "Replace" : "Import",
       )
       if (!ok) return
@@ -187,20 +196,24 @@ function ImportPackButton({ onImported }: { onImported: (pack: DesignPack) => vo
   return (
     <>
       <input ref={file} type="file" accept=".json,application/json" className="hidden" aria-label="Design pack file" onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = "" }} />
-      <Button size="sm" variant="outline" onClick={() => file.current?.click()} title="Add the looks in a Rhema design pack (.rhema-design.json) to Design templates">
+      <Button size="sm" variant="outline" onClick={() => file.current?.click()} title="Add the looks in a Rhema design pack (.rhema-design.json) to this library">
         <UploadIcon /> Import design pack
       </Button>
     </>
   )
 }
 
-/** Remove an imported pack from Templates; the church's copies of its looks stay. */
+/** Take an imported pack out of the library; the church's copies of its looks stay. */
 function RemovePackButton({ pack }: { pack: DesignPack | undefined }) {
   if (!pack) return null
+  const bundledOverride = isBundledDesignPack(pack.doc.id)
   const click = async () => {
-    if (!(await confirm(`Remove “${pack.doc.name}” from Design templates?`, "Its looks leave Design → Templates. Copies you made from them stay in your looks, and nothing on the screens changes.", "Remove"))) return
+    const consequence = bundledOverride
+      ? "This local version leaves Design → Library and Rhema's included offline pack returns. Copies you made stay in your looks, and nothing on the screens changes."
+      : "Its looks leave Design → Library. Copies you made from them stay in your looks, and nothing on the screens changes."
+    if (!(await confirm(`Remove “${pack.doc.name}” from the library?`, consequence, "Remove"))) return
     await removeDesignPack(pack.doc.id)
-    toast(`Removed “${pack.doc.name}” from Design templates.`)
+    toast(bundledOverride ? `Removed the local version of “${pack.doc.name}”.` : `Removed “${pack.doc.name}” from the library.`)
   }
   return (
     <Button size="xs" variant="ghost" onClick={() => void click()}>
@@ -233,11 +246,21 @@ function useLookCopies(look: LibraryLook): LookCopy[] {
   const scenes = useBroadcastStore((s) => s.scenes)
   const tickerStyle = useBroadcastStore((s) => s.tickerStyle)
   const stageStyle = useBroadcastStore((s) => s.stageStyle)
+  const tickerDraft = useBroadcastStore((s) => {
+    if (look.kind !== "ticker") return undefined
+    const draft = s.designDrafts.find((item) => item.kind === "ticker" && item.sourceId === "default")
+    return draft?.kind === "ticker" && draft.value.libraryLookId === look.id ? draft : undefined
+  })
+  const stageDraft = useBroadcastStore((s) => {
+    if (look.kind !== "stage") return undefined
+    const draft = s.designDrafts.find((item) => item.kind === "stage" && item.sourceId === "default")
+    return draft?.kind === "stage" && draft.value.libraryLookId === look.id ? draft : undefined
+  })
   const outputs = useBroadcastStore((s) => s.outputs)
   const outputStatus = useBroadcastStore((s) => s.outputStatus)
   const lowerThird = useBroadcastStore((s) => s.lowerThird)
   const ticker = useBroadcastStore((s) => s.ticker)
-  return useMemo(() => lookCopies(look, { themes, lowerThirdStyles, scenes, tickerStyle, stageStyle, outputs, outputStatus, lowerThird, ticker }), [look, themes, lowerThirdStyles, scenes, tickerStyle, stageStyle, outputs, outputStatus, lowerThird, ticker])
+  return useMemo(() => lookCopies(look, { themes, lowerThirdStyles, scenes, tickerStyle, stageStyle, tickerDraft, stageDraft, outputs, outputStatus, lowerThird, ticker }), [look, themes, lowerThirdStyles, scenes, tickerStyle, stageStyle, tickerDraft, stageDraft, outputs, outputStatus, lowerThird, ticker])
 }
 
 const COPIES_WHERE: Record<LibraryLook["kind"], string> = { theme: "In your themes", "lower-third": "In your lower-third styles", scene: "In your scenes", ticker: "In use", stage: "In use" }
@@ -310,7 +333,13 @@ function ResetMenu({ look, copies }: { look: LibraryLook; copies: LookCopy[] }) 
 /** Put a copy back as the library look has it. Refused when something shows it now (checked again here). */
 async function reset(look: LibraryLook, c: LookCopy) {
   const s = useBroadcastStore.getState()
-  const now = lookCopies(look, s).find((x) => x.id === c.id)
+  const tickerDraft = s.designDrafts.find((draft) => draft.kind === "ticker" && draft.sourceId === "default")
+  const stageDraft = s.designDrafts.find((draft) => draft.kind === "stage" && draft.sourceId === "default")
+  const now = lookCopies(look, {
+    ...s,
+    tickerDraft: tickerDraft?.kind === "ticker" ? tickerDraft : undefined,
+    stageDraft: stageDraft?.kind === "stage" ? stageDraft : undefined,
+  }).find((x) => x.id === c.id)
   if (!now || now.usedBy.length > 0) return
   switch (look.kind) {
     case "theme": {
@@ -337,14 +366,30 @@ async function reset(look: LibraryLook, c: LookCopy) {
       useBroadcastStore.getState().saveScene(back.scene)
       break
     }
-    case "ticker":
-      // Only the saved look (nothing is running: Reset waits until the ticker stops).
-      useBroadcastStore.setState({ tickerStyle: resetSingleLook(look) })
+    case "ticker": {
+      const current = s.designDrafts.find((draft) => draft.kind === "ticker" && draft.sourceId === "default")
+      if (current?.kind === "ticker" && current.value.libraryLookId !== look.id && !(await confirm(
+        "Replace the saved ticker draft?",
+        "This replaces the current saved ticker draft. Connected outputs keep their current design.",
+        "Replace draft",
+      ))) return
+      useBroadcastStore.getState().saveDesignDraft({
+        id: designDraftId("ticker", "default"), kind: "ticker", sourceId: "default", value: resetSingleLook(look), updatedAt: Date.now(),
+      })
       break
-    case "stage":
-      // No stage screen is on (Reset waits until they are off); they show it when next turned on.
-      s.saveStageStyle(resetSingleLook(look))
+    }
+    case "stage": {
+      const current = s.designDrafts.find((draft) => draft.kind === "stage" && draft.sourceId === "default")
+      if (current?.kind === "stage" && current.value.libraryLookId !== look.id && !(await confirm(
+        "Replace the saved stage draft?",
+        "This replaces the current saved stage draft. Connected outputs keep their current design.",
+        "Replace draft",
+      ))) return
+      useBroadcastStore.getState().saveDesignDraft({
+        id: designDraftId("stage", "default"), kind: "stage", sourceId: "default", value: resetSingleLook(look), updatedAt: Date.now(),
+      })
       break
+    }
   }
   toast(`“${c.name}” is back to the library look.`)
 }
@@ -354,17 +399,24 @@ async function reset(look: LibraryLook, c: LookCopy) {
  * copies take the church's colours and fonts. Never touches an output or the library look.
  */
 async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab, id?: string) => void, brand?: BrandKit) {
-  if (look.kind === "ticker" && !(await confirm(`Use “${look.name}” as your ticker look?`, "It replaces your ticker's look. A ticker running now keeps its look until you start it again."))) return
-  if (look.kind === "stage" && !(await confirm(`Use “${look.name}” on the stage display?`, "It replaces your stage look, and stage screens show it straight away. The congregation never sees the stage display."))) return
-  if (edit && look.kind === "theme" && !(await mayLeaveThemeDraft())) return
   const s = useBroadcastStore.getState()
+  const draftKind = look.kind === "ticker" || look.kind === "stage" ? look.kind : null
+  if (draftKind && s.designDrafts.some((draft) => draft.id === designDraftId(draftKind, "default")) && !(await confirm(
+    `Replace the saved ${draftKind} draft?`,
+    `This replaces the current saved ${draftKind} draft. Connected outputs keep their current design.`,
+    "Replace draft",
+  ))) return
+  if (edit && look.kind === "theme" && !(await mayLeaveThemeDraft())) return
   const taken = [...s.themes.map((t) => t.name), ...s.scenes.map((x) => x.name), ...s.lowerThirdStyles.map((x) => x.name)]
   const added = adoptLook(look, { takenNames: taken, library: libraryLooks(), brand })
   for (const t of added.themes) useBroadcastStore.getState().saveTheme(t)
   if (added.lowerThirdStyle) useBroadcastStore.getState().saveLowerThirdStyle(added.lowerThirdStyle)
-  // Only the saved look: the ticker on air keeps the look it started with.
-  if (added.tickerStyle) useBroadcastStore.setState({ tickerStyle: added.tickerStyle })
-  if (added.stageStyle) useBroadcastStore.getState().saveStageStyle(added.stageStyle)
+  if (added.tickerStyle) useBroadcastStore.getState().saveDesignDraft({
+    id: designDraftId("ticker", "default"), kind: "ticker", sourceId: "default", value: added.tickerStyle, updatedAt: Date.now(),
+  })
+  if (added.stageStyle) useBroadcastStore.getState().saveDesignDraft({
+    id: designDraftId("stage", "default"), kind: "stage", sourceId: "default", value: added.stageStyle, updatedAt: Date.now(),
+  })
   if (added.scene) useBroadcastStore.getState().saveScene(added.scene)
 
   const choose = { label: "Choose for a screen", onClick: () => useShellStore.getState().openOutputs() }
@@ -385,11 +437,11 @@ async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab
       return
     case "ticker":
       if (edit) onOpen("ticker")
-      toast(`Your ticker now uses “${look.name}”.`)
+      toast(`Saved “${look.name}” as a ticker draft.`, { description: "Open the ticker editor to preview and apply it." })
       return
     case "stage":
       if (edit) onOpen("stage")
-      toast(`The stage display now uses “${look.name}”.`)
+      toast(`Saved “${look.name}” as a stage draft.`, { description: "Open the stage editor to preview and apply it." })
       return
     case "scene":
       // Scenes opens the copy in the composer: arranging it there changes nothing on air until Take.

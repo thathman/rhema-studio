@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
-import type { ProgramItem, ProgramWithItems, VerseQueueItem } from "@/types"
+import type { ProgramItem, ProgramWithItems, QueueItem, VerseQueueItem } from "@/types"
+import type { OutlineHeader } from "@/lib/run-of-show"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 
+import { projectRunOfShowEvents } from "@/lib/run-of-show"
 import { rundownSignature, toItemInputs, toQueueItems } from "@/stores/service-store"
 import { useQueueStore } from "@/stores/queue-store"
 
@@ -40,6 +42,23 @@ describe("a service's phases and groups", () => {
     expect(JSON.parse(back[0].payload!)).toEqual({ later: 1, rule: "auto_once", role: "warmup", advance_seconds: 12 })
   })
 
+  it("round-trips event cue snapshots without dropping unrelated header data", () => {
+    const cues = [
+      { id: "cue-1", name: "Start prayer", trigger: "manual", steps: ["timer.fresh", "future.screen"] },
+      { id: "cue-2", name: "Future cue", trigger: "manual", steps: ["future.action"] },
+    ]
+    const source = program([
+      row("prayer", "group", "Opening Prayer", JSON.stringify({ run_of_show_event: { schema_version: 1, cues }, future_header_key: { keep: true } })),
+      row("moment", "verse", "John 3:16"),
+    ])
+    const { items, headers } = toQueueItems(source, 1, [])
+    expect(headers[0].event?.cues).toEqual(cues)
+    const saved = toItemInputs(items, undefined, undefined, headers)[0]
+    const payload = JSON.parse(saved.payload ?? "{}") as Record<string, unknown>
+    expect(payload.future_header_key).toEqual({ keep: true })
+    expect((payload.run_of_show_event as Record<string, unknown>).cues).toEqual(cues)
+  })
+
   it("a plain service has no headers and saves as before", () => {
     const { headers } = toQueueItems(program([row("a", "verse", "John 3:16")]), 1, [])
     expect(headers).toEqual([])
@@ -74,6 +93,22 @@ describe("a service's phases and groups", () => {
     useQueueStore.getState().addItem({ ...verse("y"), verse: { ...verse("y").verse, verse: 19 } })
     expect(useQueueStore.getState().items.map((i) => i.id)).toEqual(["a", "x", "y", "b"])
     expect(useQueueStore.getState().headers.map((h) => h.at)).toEqual([0, 3, 3])
+    useQueueStore.getState().setAddTarget(null)
+  })
+
+  it("adds a moment to the end of an event without moving its nested group", () => {
+    const items = [verse("a"), verse("b"), verse("c"), verse("d")]
+    const headers: OutlineHeader[] = [
+      { id: "sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1, duration_minutes: 40, approval: "draft" } },
+      { id: "scripture", type: "group", name: "Scripture", at: 2 },
+      { id: "response", type: "group", name: "Response", at: 3, event: { schema_version: 1, approval: "draft" } },
+    ]
+    useQueueStore.setState({ items, headers, activeIndex: null, addTarget: "sermon" })
+    const moment: QueueItem = { id: "x", kind: "cue", reference: "Prayer cue", confidence: 1, source: "manual", added_at: 0 }
+    useQueueStore.getState().addItem(moment)
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["a", "b", "c", "x", "d"])
+    expect(useQueueStore.getState().headers.map(({ id, at }) => [id, at])).toEqual([["sermon", 0], ["scripture", 2], ["response", 4]])
+    expect(projectRunOfShowEvents(useQueueStore.getState().items, useQueueStore.getState().headers)[0].moments.map((item) => item.id)).toEqual(["a", "b", "c", "x"])
     useQueueStore.getState().setAddTarget(null)
   })
 

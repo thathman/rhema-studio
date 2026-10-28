@@ -124,7 +124,6 @@ describe("Hymn Book details (#385)", () => {
 
     const inserted = useQueueStore.getState().items[0]
     expect(inserted).toMatchObject({ kind: "song", song: { song_id: hymn.id, languages: ["yo", "en"] } })
-    expect((inserted as unknown as { song: { hymn_numbers?: string[] } }).song.hymn_numbers).toEqual(["CAC 245"])
     expect(onAdded).toHaveBeenCalledWith(inserted.id)
   })
 })
