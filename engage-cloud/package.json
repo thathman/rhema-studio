@@ -1,0 +1,16 @@
+{
+  "name": "rhema-engage-cloud",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test src/*.test.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

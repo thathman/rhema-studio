@@ -21,6 +21,8 @@ import { warnMs } from "@/lib/item-timing"
 import { elapsedMs, formatMs, remainingMs, timerTone } from "@/lib/timer"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { TimingRules } from "@/studio/prepare/timing-rules"
+import { EngageItemEditor } from "@/studio/engage/quiz-editor"
+import { engageFromItem } from "@/lib/engage"
 import { AudioItemControls, BackgroundPicker, CommentsEditor, CueItemEditor, CustomSlideEditor, ImageItemControls, ItemCuesEditor, LookAndScene, NoteEditor, GoLiveCues, PlannedMinutes, SongApprovalNote, TakeSteps, TimedAdvance, SongItemControls } from "@/studio/prepare/item-editor-parts"
 
 const KIND: Record<string, [string, React.ReactNode]> = {
@@ -85,7 +87,7 @@ export function ItemEditor() {
           {isSlideItem(item) && <CustomSlideEditor item={item} />}
           {isImageItem(item) && <ImageItemControls item={item} />}
           {isAudioItem(item) && <AudioItemControls item={item} />}
-          {isCueItem(item) && <CueItemEditor item={item} />}
+          {isCueItem(item) && (engageFromItem(item) ? <EngageItemEditor item={item} /> : <CueItemEditor item={item} />)}
           {kind === "verse" && <p className="px-2 pt-3 text-xs text-muted-foreground">Shown in the translation it was added with (or the service's, if the operator overrides it in Present).</p>}
           {!isImageItem(item) && !isAudioItem(item) && !isCueItem(item) && <BackgroundPicker item={item} />}
           {!isCueItem(item) && !isAudioItem(item) && <LookAndScene item={item} />}

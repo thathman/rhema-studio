@@ -8,6 +8,7 @@ import { HymnBook } from "@/studio/prepare/hymn-book"
 import { SlideComposer } from "@/studio/prepare/slide-composer"
 import { MediaLibrary } from "@/studio/prepare/media-library"
 import { ReusePanel } from "@/studio/prepare/reuse-panel"
+import { EngageAddPanel } from "@/studio/engage/quiz-editor"
 import { useAddDialog } from "@/studio/prepare/add-target"
 import { useQueueStore } from "@/stores"
 import { presentActions } from "@/studio/present-actions"
@@ -47,7 +48,7 @@ export function AddItems({ className, onSelectAddedItem }: { className?: string;
         <DialogHeader>
           <DialogTitle>{target ? `Add to ${target}` : "Add to the service"}</DialogTitle>
           <DialogDescription>
-            Passages, songs, hymns, slides, pictures, videos and audio cues. {target ? `Added items go to the end of ${target}, in the order selected.` : "Added items go to the top of the order."} Adding one closes this picker and selects it in Prepare; nothing here goes live.
+            Passages, songs, hymns, quizzes, slides, pictures, videos and audio cues. {target ? `Added items go to the end of ${target}, in the order selected.` : "Added items go to the top of the order."} Adding one closes this picker and selects it in Prepare; nothing here goes live.
           </DialogDescription>
         </DialogHeader>
         <Tabs defaultValue="bible" className="flex min-h-0 flex-1 flex-col">
@@ -55,6 +56,7 @@ export function AddItems({ className, onSelectAddedItem }: { className?: string;
             <TabsTrigger value="bible">Bible</TabsTrigger>
             <TabsTrigger value="songs">Songs</TabsTrigger>
             <TabsTrigger value="hymns">Hymn book</TabsTrigger>
+            <TabsTrigger value="quiz">Quiz</TabsTrigger>
             <TabsTrigger value="slides">Slides</TabsTrigger>
             <TabsTrigger value="media">Media</TabsTrigger>
             <TabsTrigger value="reuse">Reuse</TabsTrigger>
@@ -67,6 +69,9 @@ export function AddItems({ className, onSelectAddedItem }: { className?: string;
           </TabsContent>
           <TabsContent value="hymns" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
             <HymnBook onAdded={added} />
+          </TabsContent>
+          <TabsContent value="quiz" className="min-h-0 flex-1 overflow-y-auto pt-3">
+            <EngageAddPanel onAdded={added} />
           </TabsContent>
           <TabsContent value="slides" className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-3">
             <SlideComposer onAdded={added} />

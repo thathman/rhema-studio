@@ -28,6 +28,7 @@ import { CueMenu } from "@/studio/present/cue-menu"
 import { TransportBar } from "@/studio/present/transport-bar"
 import { ScenesStrip } from "@/studio/present/scenes-strip"
 import { LiveToolsDrawer, type LiveToolsTab } from "@/studio/present/live-tools-drawer"
+import { EngageHostControl } from "@/studio/engage/host-control"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 
@@ -140,6 +141,7 @@ export function PresentWorkspace() {
           )}
           <ServiceTimer />
           <AuxTimers />
+          <EngageHostControl />
           <ObsChip />
           <SoundChip />
           <LowerThirdControl />
