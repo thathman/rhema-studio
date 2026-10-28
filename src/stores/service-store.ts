@@ -635,8 +635,21 @@ function parseHeader(it: ProgramItem, at: number): OutlineHeader {
   const { run_of_show_event, rule, role, starts_at, advance_seconds, ...others } = p
   // A phase skipped for this service (#193); on a group the key is not this build's and is kept.
   const { disabled, ...phaseRest } = others
+  const hasField = (key: string) => Object.prototype.hasOwnProperty.call(p, key)
+  const unparsedFields = it.kind === "phase"
+    ? {
+      ...(hasField("rule") && !RULES.includes(rule as PhaseRule) ? { rule } : {}),
+      ...(hasField("role") && !ROLES.includes(role as PhaseRole) ? { role } : {}),
+      ...(hasField("starts_at") && !(typeof starts_at === "string" && isClockTime(starts_at)) ? { starts_at } : {}),
+      ...(hasField("advance_seconds") && !isAdvanceSeconds(advance_seconds) ? { advance_seconds } : {}),
+      ...(hasField("disabled") && disabled !== true ? { disabled } : {}),
+    }
+    : Object.fromEntries(["rule", "role", "starts_at", "advance_seconds"]
+      .filter(hasField)
+      .map((key) => [key, p[key]]))
   const rest = {
     ...(it.kind === "phase" ? phaseRest : others),
+    ...unparsedFields,
     ...(!event && run_of_show_event !== undefined ? { run_of_show_event } : {}),
   }
   return {

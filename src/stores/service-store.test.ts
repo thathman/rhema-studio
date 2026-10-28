@@ -165,6 +165,40 @@ describe("conversions", () => {
     expect(headers).toMatchObject([{ id: "broken-header", name: "Sermon", type: "group" }])
   })
 
+  it("preserves valid JSON header fields this version cannot interpret", () => {
+    const phasePayload = {
+      rule: "future_rule",
+      role: "future_role",
+      starts_at: "26:17",
+      advance_seconds: -1,
+      disabled: "yes",
+      phase_extension: { preserve: true },
+    }
+    const groupPayload = {
+      rule: "group_rule",
+      starts_at: { mode: "custom" },
+      advance_seconds: "custom",
+      disabled: 1,
+      group_extension: "preserve",
+    }
+    const data: ProgramWithItems = {
+      program,
+      items: [
+        item("phase", "Pre-service", 0, 0, 0, { kind: "phase", book_number: null, chapter: null, verse: null, payload: JSON.stringify(phasePayload) }),
+        item("verse", "John 3:16", 43, 3, 16),
+        item("group", "Sermon", 0, 0, 0, { kind: "group", book_number: null, chapter: null, verse: null, payload: JSON.stringify(groupPayload) }),
+      ],
+    }
+
+    const { items, headers, unsupported, corrupt } = toQueueItems(data, 1, [KJV])
+    expect(unsupported).toEqual([])
+    expect(corrupt).toEqual([])
+
+    const savedHeaders = toItemInputs(items, undefined, undefined, headers).filter((saved) => saved.kind === "phase" || saved.kind === "group")
+    expect(savedHeaders.map((saved) => saved.id)).toEqual(["phase", "group"])
+    expect(savedHeaders.map((saved) => JSON.parse(saved.payload!))).toEqual([phasePayload, groupPayload])
+  })
+
   it("stored translation, secondary and notes ride on the rundown item and come back out unchanged", () => {
     const { items: loaded, missingTranslations } = toQueueItems(bilingual, 1, [KJV, OYCB])
     const items = loaded as VerseQueueItem[]
