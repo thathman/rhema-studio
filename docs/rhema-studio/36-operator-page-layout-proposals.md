@@ -248,6 +248,10 @@ The screens operator sees **"Add to Scene"**, not five disconnected creators. On
 
 ---
 
+## Main Studio utility — Permissions sidebar page (NEW OWNER REQUEST)
+
+The owner requests that Permissions be a visible first-class route in the MAIN Rhema Studio sidebar, adjacent to Connections under Your Church. This is a **host governance page**, not a new browser volunteer operator desk, but its visual workflow belongs in our page-layout review index. The proposed layout consists of **People & Devices list → Selected identity's effective role and action capabilities → Output/service scopes → Change impact preview and host confirm → Audit / revoke**. Keep simple role presets as defaults, with advanced scope grants only where the host backend really enforces them; show live state and expiry, avoid a crowded checkbox matrix. See the comprehensive **[37 — Permissions route and proposed layout](37-permissions-sidebar-and-authority-design.md)**. **Approved:** sidebar destination and central permissions redesign. **Not yet approved:** final layout, permanent Screens asset-save policy and precise advanced role/grant editor. **Not implemented by the doc.**
+
 ## Next-action / sign-off tracker
 
 | Page | Functional decisions approved | Page visual layout accepted? | Proposed layout documented? |
