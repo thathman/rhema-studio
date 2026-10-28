@@ -348,7 +348,7 @@ async function runScenario() {
     const addEvent = async (label, title, duration) => {
       const before = new Set(qa.queue.getState().headers.map((header) => header.id))
       await clickButton("Add event")
-      await clickButton(label)
+      await clickButton(label, { startsWith: true })
       const header = await waitFor(
         () => qa.queue.getState().headers.find((candidate) => !before.has(candidate.id) && candidate.event && candidate.name === title),
         `${title} event`,
