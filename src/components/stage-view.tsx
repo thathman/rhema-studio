@@ -10,8 +10,9 @@ export function StageView({ stage }: { stage: StagePayload }) {
   const style = stage.style
   const showNext = style?.showNext !== false
   const timerColor = stage.timer?.tone === "over" ? "#ff5a5a" : stage.timer?.tone === "warn" ? "#ffc547" : "#9be37a"
+  const rows = ["auto", ...(stage.aux?.length ? ["auto"] : []), ...(stage.message ? ["auto"] : []), ...(stage.languageNotice ? ["auto"] : []), "1fr", "auto"]
   return (
-    <div style={{ position: "fixed", inset: 0, background: style?.background ?? "#000", color: style?.words ?? "#fff", fontFamily: "system-ui, sans-serif", display: "grid", gridTemplateRows: `auto ${stage.aux?.length ? "auto " : ""}${stage.message ? "auto " : ""}1fr auto`, padding: "3vh 4vw", gap: "2vh" }}>
+    <div style={{ position: "fixed", inset: 0, background: style?.background ?? "#000", color: style?.words ?? "#fff", fontFamily: "system-ui, sans-serif", display: "grid", gridTemplateRows: rows.join(" "), padding: "3vh 4vw", gap: "2vh" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: "3.2vh", color: "#9aa0a6" }}>
         <span>{stage.current?.title ?? "Nothing live"}</span>
         {stage.band && <span style={{ color: "#9be37a", fontWeight: 700 }}>{stage.band}</span>}
@@ -26,6 +27,11 @@ export function StageView({ stage }: { stage: StagePayload }) {
       {stage.message && (
         <div role="alert" style={{ border: "0.6vh solid #ffd166", background: "#2a2000", color: "#ffd166", borderRadius: "1.5vh", padding: "1.5vh 2vw", fontSize: "5vh", fontWeight: 700, textAlign: "center" }}>
           {stage.message}
+        </div>
+      )}
+      {stage.languageNotice && (
+        <div role="status" aria-live="polite" style={{ border: "0.3vh solid #ffd166", background: "#2a2000", color: "#ffd166", borderRadius: "1vh", padding: "0.8vh 1.2vw", fontSize: "2.8vh", fontWeight: 600, textAlign: "center" }}>
+          {stage.languageNotice}
         </div>
       )}
       {/* "safe center": if the words still overflow, the first line stays visible and the end is cut, never both ends. */}
