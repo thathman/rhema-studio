@@ -16,7 +16,9 @@ import { elapsedMs } from "@/lib/timer"
 import type { JournalEntry } from "@/lib/journal"
 import { useNotices, type Notice } from "@/stores/notices-store"
 import { useTimingTrust, whilePuttingBack } from "@/stores/timing-trust-store"
-import type { BroadcastTheme, Scene, SceneAppearanceSnapshot, VerseRenderData } from "@/types"
+import type { BroadcastOutput, BroadcastTheme, Scene, SceneAppearanceSnapshot, VerseRenderData } from "@/types"
+
+type RecoveryThemeSelection = Pick<BroadcastOutput, "themeId" | "themeFor">
 
 /**
  * Recovery after Rhema closed unexpectedly mid-service (#246, live safety): what was on the
@@ -35,7 +37,7 @@ export interface LiveSnapshot {
   outputsOn: string[]
   scenes: Record<string, string>
   /** Immutable scene and look state captured with new v1 snapshots. Missing means a legacy v1 file. */
-  sceneSnapshots?: Record<string, { scene: Scene; appearance: SceneAppearanceSnapshot }>
+  sceneSnapshots?: Record<string, { scene: Scene; appearance: SceneAppearanceSnapshot } & RecoveryThemeSelection>
   eventId: string | null
   /** The content moment in that event; older snapshots omit it. */
   eventMomentId?: string | null
@@ -173,6 +175,31 @@ function parseSceneAppearance(value: unknown, allowLegacyMissingMode = false): S
   return { themes, logoUrl: value.logoUrl, ...(approved === undefined ? {} : { approved }) }
 }
 
+function parseThemeSelection(value: unknown): RecoveryThemeSelection | null {
+  if (!isRecord(value) || typeof value.themeId !== "string" || !value.themeId.trim()) return null
+  let themeFor: RecoveryThemeSelection["themeFor"]
+  if (value.themeFor !== undefined) {
+    if (!isRecord(value.themeFor)) return null
+    themeFor = {}
+    for (const [content, themeId] of Object.entries(value.themeFor)) {
+      if (!isOneOf(content, CONTENT_TYPES) || typeof themeId !== "string" || !themeId.trim()) return null
+      themeFor[content] = themeId
+    }
+  }
+  return { themeId: value.themeId, ...(themeFor === undefined ? {} : { themeFor }) }
+}
+
+function appearanceHasSceneThemes(scene: Scene, appearance: SceneAppearanceSnapshot, selection: RecoveryThemeSelection): boolean {
+  const required = new Set<string>([selection.themeId, ...Object.values(selection.themeFor ?? {})])
+  for (const layer of scene.layers) {
+    if (layer.themeId !== undefined) {
+      if (typeof layer.themeId !== "string" || !layer.themeId.trim()) return false
+      required.add(layer.themeId)
+    }
+  }
+  return [...required].every((id) => Object.hasOwn(appearance.themes, id))
+}
+
 /** Built-in themes from older app versions omitted the now-explicit stacked/free mode. */
 function canonicalCapturedAppearance(value: SceneAppearanceSnapshot): SceneAppearanceSnapshot | null {
   if (!isRecord(value.themes)) return null
@@ -186,12 +213,14 @@ function canonicalCapturedAppearance(value: SceneAppearanceSnapshot): SceneAppea
   return parseSceneAppearance({ ...value, themes })
 }
 
-function parseSceneSnapshot(value: unknown, expectedId: string): { scene: Scene; appearance: SceneAppearanceSnapshot } | null {
+function parseSceneSnapshot(value: unknown, expectedId: string): { scene: Scene; appearance: SceneAppearanceSnapshot } & RecoveryThemeSelection | null {
   if (!isRecord(value)) return null
   const scene = parseScene(value.scene, expectedId)
   if (!scene) return null
   const appearance = parseSceneAppearance(value.appearance)
-  return appearance ? { scene, appearance } : null
+  const themeSelection = parseThemeSelection(value)
+  if (!appearance || !themeSelection || !appearanceHasSceneThemes(scene, appearance, themeSelection)) return null
+  return { scene, appearance, ...themeSelection }
 }
 
 /** Validate and copy data read from recovery.json before any field reaches the live stores. */
@@ -361,8 +390,9 @@ export function takeSnapshot(now = Date.now()): LiveSnapshot {
       if (!scene) return []
       const rawAppearance = o.sceneAppearanceSnapshot ?? captureSceneAppearance(scene, o, b.themes, useSettingsStore.getState().brandKit.logoUrl)
       const appearance = canonicalCapturedAppearance(rawAppearance)
-      if (!appearance) return []
-      return [[o.id, { scene: structuredClone(scene), appearance: structuredClone(appearance) }]]
+      const themeSelection = parseThemeSelection({ themeId: o.themeId, ...(o.themeFor === undefined ? {} : { themeFor: o.themeFor }) })
+      if (!appearance || !themeSelection || !appearanceHasSceneThemes(scene, appearance, themeSelection)) return []
+      return [[o.id, { scene: structuredClone(scene), appearance: structuredClone(appearance), ...structuredClone(themeSelection) }]]
     })),
     eventId: useEventClock.getState().currentId,
     eventMomentId: useEventClock.getState().currentMomentId,
@@ -399,14 +429,15 @@ export async function putBack(value: unknown): Promise<void> {
     }
     const captured = s.sceneSnapshots?.[outputId]
     if (captured?.scene.id === sceneId) {
-      b.restoreSceneSnapshot(outputId, captured.scene, captured.appearance)
+      b.restoreSceneSnapshot(outputId, captured.scene, captured.appearance, { themeId: captured.themeId, ...(captured.themeFor === undefined ? {} : { themeFor: captured.themeFor }) })
     } else if (s.sceneSnapshots === undefined && !s.trimmed && output.sceneSnapshot?.id === sceneId && output.sceneAppearanceSnapshot) {
       // Legacy v1 snapshots contain only the ID. Use the immutable on-output snapshot persisted
       // alongside the output, and its matching appearance capture; never resolve the ID against
       // the mutable reusable-scene library or the current look values.
       const scene = parseScene(output.sceneSnapshot, sceneId)
       const appearance = parseSceneAppearance(output.sceneAppearanceSnapshot, true)
-      if (scene && appearance) b.restoreSceneSnapshot(outputId, scene, appearance)
+      const themeSelection = parseThemeSelection({ themeId: output.themeId, ...(output.themeFor === undefined ? {} : { themeFor: output.themeFor }) })
+      if (scene && appearance && themeSelection && appearanceHasSceneThemes(scene, appearance, themeSelection)) b.restoreSceneSnapshot(outputId, scene, appearance, themeSelection)
       else sceneOmittedFromRecovery.add(outputId)
     } else {
       sceneOmittedFromRecovery.add(outputId)
@@ -414,6 +445,8 @@ export async function putBack(value: unknown): Promise<void> {
   }
   if (s.isLive && s.liveVerse) useBroadcastStore.getState().setLiveVerse(s.liveVerse, null, { goLive: true, itemId: s.liveItemId })
   for (const id of s.outputsOn) {
+    // Trimmed recovery omits what was live; enabling an output could reveal a different current feed.
+    if (s.trimmed) continue
     // Do not re-enable a screen with a scene we could not restore from the crash snapshot.
     if (sceneOmittedFromRecovery.has(id)) continue
     const output = useBroadcastStore.getState().outputs.find((o) => o.id === id)
