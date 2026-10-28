@@ -72,6 +72,24 @@ function sameSnapshot(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
+/** Language choices shape what each public output will display for a held Take. */
+function liveLanguagePolicySnapshot() {
+  const bible = useBibleStore.getState()
+  const outputLanguages = useBroadcastStore.getState().outputs
+    .map(({ id, language }) => ({ id, language: language ?? "both" }))
+    .sort((left, right) => left.id.localeCompare(right.id))
+  const translations = bible.translations
+    .map(({ id, abbreviation, language, is_downloaded }) => ({ id, abbreviation, language, is_downloaded }))
+    .sort((left, right) => left.id - right.id)
+  return {
+    activeTranslationId: bible.activeTranslationId,
+    secondaryTranslationId: bible.secondaryTranslationId,
+    overrideServiceTranslations: bible.overrideServiceTranslations,
+    translations,
+    outputLanguages,
+  }
+}
+
 /** Whether the same Preview target and queue routing are still selected after an approval hold. */
 function sendToLivePreviewIsCurrent(bible: ReturnType<typeof useBibleStore.getState>, queue: ReturnType<typeof useQueueStore.getState>): boolean {
   const currentBible = useBibleStore.getState()
@@ -110,17 +128,19 @@ function retryHeldTakeIfCurrent(
   retry: () => void,
 ): () => void {
   const heldService = useServiceStore.getState().current
+  const heldLanguagePolicy = liveLanguagePolicySnapshot()
   return () => {
     const currentService = useServiceStore.getState().current
     if (
       !heldService ||
       currentService?.id !== heldService.id ||
       currentService.revision !== heldService.revision ||
-      !targetIsCurrent()
+      !targetIsCurrent() ||
+      !sameSnapshot(heldLanguagePolicy, liveLanguagePolicySnapshot())
     ) {
       if (heldService) useApprovalGateStore.getState().revokeAcknowledgment(heldService.id)
       finishTakeAttempt(attemptId, itemId, reference, "superseded", latestVisualTake)
-      toast.info("The service or Preview changed while approval was pending. Take the current selection again.")
+      toast.info("The service, Preview, or language settings changed while approval was pending. Take the current selection again.")
       return
     }
     retry()

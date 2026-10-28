@@ -65,6 +65,8 @@ beforeEach(() => {
     selectedSlide: null,
     pendingNavigation: null,
     activeTranslationId: 1,
+    secondaryTranslationId: null,
+    overrideServiceTranslations: false,
     translations: [
       {
         id: 1,
@@ -75,6 +77,9 @@ beforeEach(() => {
         is_downloaded: true,
       },
     ],
+  })
+  useBroadcastStore.setState({
+    outputs: useBroadcastStore.getState().outputs.map((output) => ({ ...output, language: "both" })),
   })
   useBroadcastStore.setState({ isLive: false, liveVerse: null, liveSourceVerse: null, liveItem: null, presentWarning: null })
   useQueueStore.setState({ items: [], activeIndex: null })
@@ -395,6 +400,61 @@ describe("queue position follows successful Takes", () => {
     expect(useTakeAttemptStore.getState().attempts.at(-1)).toMatchObject({ itemId: heldItem.id, status: "awaiting_approval" })
     expect(useQueueStore.getState().activeIndex).toBeNull()
     expect(useBroadcastStore.getState().isLive).toBe(false)
+  })
+
+  it("does not replay a held Take after the active Bible translation override changes", async () => {
+    const heldItem = { ...queueItemFor(genesisOneOne), translation: "KJV", secondary_translation: "OYCB" }
+    useQueueStore.setState({ items: [heldItem], activeIndex: null })
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+    useBibleStore.setState({
+      selectedVerse: genesisOneOne,
+      activeTranslationId: 2,
+      secondaryTranslationId: null,
+      overrideServiceTranslations: false,
+      translations: [
+        ...useBibleStore.getState().translations,
+        { ...useBibleStore.getState().translations[0]!, id: 2, abbreviation: "OYCB", title: "Yoruba Bible", language: "yo" },
+      ],
+    })
+
+    await remoteActions.sendToLive()
+    expect(useApprovalGateStore.getState().held?.id).toBe("sunday")
+
+    useBibleStore.setState({ overrideServiceTranslations: true })
+    useApprovalGateStore.getState().presentAnyway()
+    await vi.waitFor(() => expect(useTakeAttemptStore.getState().attempts.at(-1)?.status).toBe("superseded"))
+
+    expect(useApprovalGateStore.getState().acknowledged).not.toContain("sunday")
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(mockInvoke).not.toHaveBeenCalled()
+  })
+
+  it("does not replay a held Take after an output's bilingual language policy changes", async () => {
+    const heldItem = { ...queueItemFor(genesisOneOne), translation: "KJV", secondary_translation: "OYCB" }
+    useQueueStore.setState({ items: [heldItem], activeIndex: null })
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+    useBibleStore.setState({
+      selectedVerse: genesisOneOne,
+      translations: [
+        ...useBibleStore.getState().translations,
+        { ...useBibleStore.getState().translations[0]!, id: 2, abbreviation: "OYCB", title: "Yoruba Bible", language: "yo" },
+      ],
+    })
+    const output = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({ outputs: [{ ...output, language: "first" }] })
+
+    await remoteActions.sendToLive()
+    expect(useApprovalGateStore.getState().held?.id).toBe("sunday")
+
+    useBroadcastStore.setState({ outputs: [{ ...output, language: "second" }] })
+    useApprovalGateStore.getState().presentAnyway()
+    await vi.waitFor(() => expect(useTakeAttemptStore.getState().attempts.at(-1)?.status).toBe("superseded"))
+
+    expect(useApprovalGateStore.getState().acknowledged).not.toContain("sunday")
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(mockInvoke).not.toHaveBeenCalled()
   })
 
   it("does not replay a held Take after its rundown item is removed", async () => {
