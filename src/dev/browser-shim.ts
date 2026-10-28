@@ -27,13 +27,18 @@ const OYCB = { id: 7, abbreviation: "OYCB", title: "Yoruba Bible", language: "yo
 const BOOKS = [
   [1, "Genesis", "Gen", "OT"], [19, "Psalms", "Ps", "OT"], [43, "John", "Jn", "NT"], [45, "Romans", "Rom", "NT"], [62, "I John", "1Jn", "NT"],
 ].map(([n, name, abbr, t], i) => ({ id: i + 1, translation_id: 1, book_number: n, name, abbreviation: abbr, testament: t }))
+const SAMPLE_KJV: Record<string, string> = {
+  "19:23:1": "The LORD is my shepherd; I shall not want.",
+  "43:3:16": "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
+}
 
 function verse(translationId: number, bookNumber: number, chapter: number, v: number) {
   const book = BOOKS.find((b) => b.book_number === bookNumber)
   if (!book) return null
+  const reference = `${book.name} ${chapter}:${v}`
   const text = translationId === 7
-    ? `Nítorí Ọlọ́run fẹ́ aráyé tó bẹ́ẹ̀ gẹ́ẹ́, tí ó fi Ọmọ bíbí rẹ̀ kan ṣoṣo fúnni (${book.name} ${chapter}:${v})`
-    : `For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life. (${book.name} ${chapter}:${v})`
+    ? `[Sample OYCB text for ${reference}]`
+    : SAMPLE_KJV[`${bookNumber}:${chapter}:${v}`] ?? `[Sample KJV text for ${reference}]`
   return { id: bookNumber * 100000 + chapter * 1000 + v, translation_id: translationId, book_number: bookNumber, book_name: book.name, book_abbreviation: book.abbreviation, chapter, verse: v, text }
 }
 
@@ -78,7 +83,20 @@ export async function invoke(cmd: string, args: Record<string, unknown> = {}): P
     case "list_books": return BOOKS
     case "get_verse": return verse(Number(args.translationId ?? 1), Number(args.bookNumber), Number(args.chapter), Number(args.verse))
     case "get_chapter": return Array.from({ length: 10 }, (_, i) => verse(Number(args.translationId ?? 1), Number(args.bookNumber), Number(args.chapter), i + 1))
-    case "search_verses": return [verse(1, 43, 3, 16)]
+    case "search_verses": {
+      const translationId = Number(args.translationId ?? 1)
+      const query = String(args.query ?? "").trim().toLocaleLowerCase()
+      const limit = Math.max(0, Number(args.limit ?? 20))
+      return [[19, 23, 1], [43, 3, 16]].flatMap(([bookNumber, chapter, number]) => {
+        const result = verse(translationId, bookNumber, chapter, number)
+        if (!result) return []
+        const aliases = bookNumber === 19 ? ["psalm 23", "psalms 23"] : []
+        const searchable = [result.book_name, `${result.book_name} ${chapter}`, `${result.book_name} ${chapter}:${number}`, ...aliases, result.text]
+          .join(" ")
+          .toLocaleLowerCase()
+        return !query || searchable.includes(query) ? [result] : []
+      }).slice(0, limit)
+    }
     case "content_status": return { available: true, path: "(browser shim)", migrations: ["0001_programs", "0002_item_identity", "0003_songs"], last_backup: null }
     case "content_export_service_package": throw { message: "Not available in the browser shim" }
     case "content_import_service_package": throw { message: "Not available in the browser shim" }
