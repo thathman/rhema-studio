@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-export type Workspace = "home" | "prepare" | "present" | "production" | "library" | "design" | "team" | "archive" | "settings" | "more"
+export type Workspace = "home" | "prepare" | "present" | "production" | "library" | "design" | "connections" | "team" | "archive" | "settings" | "more"
 /**
  * The Design page's sections: every design edit lives there. "outputs" was the old Output looks
  * table (#299 UX15-4 retired it); it is kept so old links still work and opens "used-on".
@@ -27,7 +27,7 @@ export const SHELL_PREFS_KEY = "rhema-studio.shell"
 const DEFAULT_PREFS: ShellPrefs = { workspace: "home", presentView: "standard", sidebarCollapsed: false }
 
 // "more" has no way in since the sidebar dropped it (#218), so it is not restored.
-const WORKSPACES: readonly Workspace[] = ["home", "prepare", "present", "production", "library", "design", "team", "archive", "settings"]
+const WORKSPACES: readonly Workspace[] = ["home", "prepare", "present", "production", "library", "design", "connections", "team", "archive", "settings"]
 const VIEWS: readonly PresentView[] = ["standard", "production"]
 
 /** Minimal Storage surface so tests can pass a Map-backed fake. */

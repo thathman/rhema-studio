@@ -15,7 +15,6 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { useBibleStore } from "@/stores/bible-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useShellStore } from "@/studio/shell-store"
-import { useProductionTab } from "@/studio/production/production-tab"
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -53,7 +52,7 @@ beforeEach(async () => {
   useBibleStore.setState({ translations: [{ id: 7, abbreviation: "KJV", title: "King James Version", language: "en", is_copyrighted: false, is_downloaded: true }], activeTranslationId: 7, secondaryTranslationId: null })
   useServiceStore.setState({ programs: [] })
   useSetupLaunch.setState({ checked: false, autoOpened: false })
-  useProductionTab.setState({ requested: null })
+  useShellStore.setState({ goRequest: null })
 })
 
 describe("first launch", () => {
@@ -154,14 +153,13 @@ describe("the setup wizard", () => {
     expect(document.body.textContent).toContain("Not using:")
   })
 
-  it("Join an existing church host hands over to Production → Operators", async () => {
+  it("Join an existing church host opens the Connections hub", async () => {
     useShellStore.setState({ setupOpen: true })
     await render(<SetupWizard />)
     await click("Join an existing church host")
     expect(useShellStore.getState().setupOpen).toBe(false)
     expect(useSettingsStore.getState().setup.mode).toBe("join")
-    expect(useShellStore.getState().goRequest).toBe("production")
-    expect(useProductionTab.getState().requested).toBe("operators")
+    expect(useShellStore.getState().goRequest).toBe("connections")
   })
 
   it("Use Rhema Studio now closes and does not open by itself again", async () => {
@@ -207,9 +205,9 @@ describe("Join vs Solo keeps this computer's own settings (#298 G)", () => {
     expect(s.operatorName).toBe("Tolu")
     expect(s.brandKit.churchName).toBe("Grace Chapel")
     expect(s.setup).toMatchObject({ deviceName: "Sanctuary desk", campus: "Ikeja", lastStep: "operator" })
-    // Nothing paired or joined by itself: Operators is where that is done, with the host's approval.
+    // Nothing paired or joined by itself: Connections leads to the existing host approval and code flow.
     expect(s.joinAddress).toBe("")
-    expect(useProductionTab.getState().requested).toBe("operators")
+    expect(useShellStore.getState().goRequest).toBe("connections")
   })
 
   it("Solo main desk needs no volunteer, host or other computer to finish", async () => {

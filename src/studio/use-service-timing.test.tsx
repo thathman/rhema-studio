@@ -33,6 +33,8 @@ afterEach(() => {
   useSettingsStore.setState({ setup: originalSetup })
 })
 
+afterEach(() => vi.restoreAllMocks())
+
 function Probe() {
   const { timing } = useServiceTiming()
   return <span>{timing ? `${hhmm(timing.plannedEnd)} ${hhmm(timing.expectedEnd)}` : "none"}</span>
@@ -42,6 +44,7 @@ describe("one timing for Prepare and Present", () => {
   it("gives the planned and expected end from the run of show", async () => {
     setClock(10, 5, 0)
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    vi.spyOn(Date, "now").mockReturnValue(at(10, 14))
     useQueueStore.setState({ items: [slide("a", 10), slide("b", 20)], headers: [{ id: "m", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }] })
     useJournalStore.setState({ entries: [{ at: at(10, 5), mono: 0, kind: "event", label: "a", itemId: "a" }] })
     useBroadcastStore.setState({ isLive: true, liveItemId: "a" })

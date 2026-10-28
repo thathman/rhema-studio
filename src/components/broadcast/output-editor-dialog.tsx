@@ -34,6 +34,7 @@ import {
   NDI_RESOLUTION_OPTIONS,
 } from "@/lib/broadcast-output-control"
 import { useBroadcastStore } from "@/stores"
+import { useNearbyConnection } from "@/studio/connections/connections-store"
 import { useMediaStore } from "@/stores/media-store"
 import { CONTENT_TYPES, FEED_SOURCES, type ContentType, type FeedSourceKind } from "@/types/broadcast"
 import { withThemeFor } from "@/lib/output-themes"
@@ -808,7 +809,8 @@ type FoundTv = { name: string; address: string }
  * `url` is the feed's https link; without one (the secure page is off) nothing can be sent.
  */
 export function ShowOnTv({ url, onShown, outputId, ownLink }: { url: string | null; onShown?: (tv: ReceiverTv) => void; outputId?: string; ownLink?: (key: string) => string }) {
-  const [address, setAddress] = useState("")
+  const selectedTvAtMount = useNearbyConnection.getState().tvAddress
+  const [address, setAddress] = useState(selectedTvAtMount ?? "")
   const [code, setCode] = useState("")
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -817,6 +819,15 @@ export function ShowOnTv({ url, onShown, outputId, ownLink }: { url: string | nu
   const [finding, setFinding] = useState(true)
   const [findError, setFindError] = useState<string | null>(null)
   const codeInput = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (selectedTvAtMount) useNearbyConnection.getState().clearTv()
+    return useNearbyConnection.subscribe((state, previous) => {
+      if (state.tvAddress && state.tvAddress !== previous.tvAddress) {
+        setAddress(state.tvAddress)
+        state.clearTv()
+      }
+    })
+  }, [selectedTvAtMount])
   const look = () =>
     invoke<FoundTv[]>("tv_discover").then(
       (found) => {
