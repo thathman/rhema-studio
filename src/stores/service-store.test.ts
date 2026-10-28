@@ -687,7 +687,7 @@ describe("saving", () => {
         return { ...template, program: { ...createdProgram, revision: 2 }, items: template.items.map((row) => ({ ...row, id: "copied-verse", program_id: "new" })) }
       }
       if (cmd === "content_create_program") return createdProgram
-      if (cmd === "content_replace_items") {
+      if (cmd === "content_replace_items_with_history") {
         return { program: { ...createdProgram, revision: 2, item_count: args?.items?.length ?? 0 }, items: args?.items ?? [] }
       }
       return null
@@ -698,7 +698,7 @@ describe("saving", () => {
     expect(await useServiceStore.getState().newFromTemplate("template", "From template", null)).toBe("created")
     expect(useServiceStore.getState().current?.id).toBe("new")
     expect(useServiceStore.getState().corruptItems).toEqual([])
-    expect(mockInvoke.mock.calls.filter(([cmd]) => cmd === "content_replace_items").every(([, args]) => (args as { programId: string }).programId === "new")).toBe(true)
+    expect(mockInvoke.mock.calls.filter(([cmd]) => cmd === "content_replace_items_with_history").every(([, args]) => (args as { programId: string }).programId === "new")).toBe(true)
   })
 
   it("loads an unreadable row without changing the running Program", async () => {
@@ -728,7 +728,7 @@ describe("createFromRundown", () => {
     })
     mockInvoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "content_create_program") return { ...program, id: "new", revision: 1, item_count: 0 }
-      if (cmd === "content_replace_items") {
+      if (cmd === "content_replace_items_with_history") {
         const rows = args?.items as ProgramItem[]
         expect(rows).toHaveLength(1)
         expect(rows[0]).toMatchObject({ kind: "group", reference: "Opening Prayer" })
@@ -740,7 +740,7 @@ describe("createFromRundown", () => {
     })
 
     expect(await useServiceStore.getState().createFromRundown("Service draft", "2026-10-26")).toBe("created")
-    expect(mockInvoke.mock.calls.some(([cmd]) => cmd === "content_replace_items")).toBe(true)
+    expect(mockInvoke.mock.calls.some(([cmd]) => cmd === "content_replace_items_with_history")).toBe(true)
     expect(useServiceStore.getState()).toMatchObject({ current: { id: "new", revision: 2 }, dirty: false })
   })
 
