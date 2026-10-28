@@ -51,7 +51,7 @@ beforeEach(async () => {
   useJoin.setState({ status: "off", me: null, live: null })
   useRecovery.setState({ offer: null, dismissed: false, damaged: false, restoreError: null })
   useProductionTab.setState({ requested: null })
-  useShellStore.setState({ setupOpen: false, setupStatusOpen: false })
+  useShellStore.setState({ workspace: "home", goRequest: null, setupOpen: false, setupStatusOpen: false })
   await mount()
 })
 afterEach(async () => {
@@ -153,11 +153,11 @@ describe("the Desk menu", () => {
     expect(useSettingsStore.getState().setup.deviceName).toBe("Media booth")
   })
 
-  it("the role row says what this desk may do and leads to Operators (#299 1.10)", async () => {
+  it("the role row says what this desk may do and opens Connections (#299 1.10, #401)", async () => {
     await openMenu()
     expect(document.body.textContent).toContain("Every control, on this computer")
     await act(async () => row("See joined desks").click())
-    expect(useProductionTab.getState().requested).toBe("operators")
+    expect(useShellStore.getState().goRequest).toBe("connections")
     expect(document.getElementById("desk-name")).toBeNull()
   })
 

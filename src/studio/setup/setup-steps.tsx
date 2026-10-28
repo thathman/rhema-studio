@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { openSettings } from "@/lib/settings-dialog"
+import { openConnectionsHub } from "@/studio/connections/navigation"
 import { backupWhen, systemTimeZone, timeZones, type EquipmentItem } from "@/lib/setup-readiness"
 import { dataPaths, showDataFolder, testFolderWritable, type DataPaths } from "@/lib/data-folder"
 import { backupDatabaseToFile } from "@/lib/song-files"
@@ -310,11 +311,11 @@ export function ConnectionsStep({ onLeave, onJoin }: { onLeave: Leave; onJoin: (
       <ChurchFolderBlock />
       <ul className="divide-y divide-border rounded-lg border border-border bg-card px-4">
         <StatusRow label="Phones and other computers" detail={remote.detail} state={remote.state}>
-          <Button size="sm" variant="outline" onClick={() => onLeave(() => openSettings("remote"))}>Remote Control</Button>
+          <Button size="sm" variant="outline" onClick={() => onLeave(openConnectionsHub)}>Connections</Button>
           <Button size="sm" variant="ghost" onClick={onJoin}>Join a host</Button>
         </StatusRow>
         <StatusRow label="OBS" detail={obs.detail} state={obs.state}>
-          <Button size="sm" variant="outline" onClick={() => onLeave(() => openSettings("remote"))}>OBS settings</Button>
+          <Button size="sm" variant="outline" onClick={() => onLeave(openConnectionsHub)}>Connect OBS</Button>
         </StatusRow>
         <StatusRow label="Speech recognition" detail={speech.detail} state={speech.state}>
           <Button size="sm" variant="outline" onClick={() => onLeave(() => openSettings("speech"))}>Speech settings</Button>

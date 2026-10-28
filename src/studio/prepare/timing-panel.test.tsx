@@ -32,10 +32,13 @@ afterEach(() => {
   useSettingsStore.setState({ setup: originalSetup })
 })
 
+afterEach(() => vi.restoreAllMocks())
+
 describe("run of show timing: actual times", () => {
   it("shows when the service began against its start, each item's time on air, and moves the finish", async () => {
     setClock(10, 9, 300_000)
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    vi.spyOn(Date, "now").mockReturnValue(at(10, 14))
     useQueueStore.setState({
       items: [{ ...slide("Welcome", 3), assignees: ["Tolu", "Ade"], prepared_by: "Tolu, Ade" }, slide("Reading", 10)],
       headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }],
@@ -79,6 +82,7 @@ describe("run of show timing: an item jumped over", () => {
   it("says Skipped in the panel and the table, with no expected time or offset", async () => {
     setClock(10, 3, 180_000)
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    vi.spyOn(Date, "now").mockReturnValue(at(10, 4))
     document.body.innerHTML = ""
     useQueueStore.setState({
       items: [slide("Welcome", 3), slide("Notices", 5), slide("Reading", 10)],
