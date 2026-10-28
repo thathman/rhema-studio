@@ -1,10 +1,9 @@
 import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
-import { useEffect, useSyncExternalStore } from "react"
-import { ArrowUpIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, LayoutGridIcon, LayoutPanelLeftIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Dashboard } from "@/components/layout/dashboard"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { ArrowUpIcon, BookOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { LiveOutputPanel } from "@/components/panels/live-output-panel"
 import { useBibleStore, useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
@@ -28,23 +27,15 @@ import { SoundChip } from "@/studio/present/sound-chip"
 import { CueMenu } from "@/studio/present/cue-menu"
 import { TransportBar } from "@/studio/present/transport-bar"
 import { ScenesStrip } from "@/studio/present/scenes-strip"
+import { LiveToolsDrawer, type LiveToolsTab } from "@/studio/present/live-tools-drawer"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 
-/**
- * Present's two layouts over the same service. "production" (stored name kept) is the
- * original dashboard, an advanced view for listening checks and recovery (#299); the
- * service itself is built in Prepare only.
- */
-const VIEW_LABEL = { standard: "Standard", production: "Advanced" } as const
-const VIEW_TITLE = {
-  standard: "The live console",
-  production: "Advanced: the original dashboard with transcript, detections and its own queue, for listening checks and recovery. Build the service in Prepare.",
-} as const
-
 export function PresentWorkspace() {
-  const view = useShellStore((s) => s.presentView)
-  const setView = useShellStore((s) => s.setPresentView)
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [toolsTab, setToolsTab] = useState<LiveToolsTab>("bible")
+  const toolsButtonRef = useRef<HTMLButtonElement>(null)
+  const toolsOpenRef = useRef(false)
   const openOutputs = useShellStore((s) => s.openOutputs)
   const isLive = useBroadcastStore((s) => s.isLive)
   // Verses carry a reference; quick screens and custom slides may only have lines.
@@ -63,10 +54,32 @@ export function PresentWorkspace() {
   const activeAbbrev = useBibleStore((s) => s.translations.find((t) => t.id === s.activeTranslationId)?.abbreviation ?? "active")
   const startsAt = useQueueStore((s) => (s.headers.find((h) => h.type === "phase" && h.role === "main") ?? s.headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at ?? null)
   const onAir = outputs.filter((o) => outputOnAir(o, outputStatus[o.id])).length
+  const updateToolsOpen = (open: boolean) => {
+    toolsOpenRef.current = open
+    setToolsOpen(open)
+  }
+  const closeTools = () => {
+    updateToolsOpen(false)
+    queueMicrotask(() => toolsButtonRef.current?.focus())
+  }
+
+  // Register one keyboard map for the whole Live console. shouldIgnoreKeyboard
+  // suppresses it while the tools drawer or another modal is open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (toolsOpenRef.current || e.defaultPrevented || shouldIgnoreKeyboard(e.target, e.key)) return
+      const action = keyToPresentAction(e)
+      if (!action) return
+      e.preventDefault()
+      presentActions[action]()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   return (
     <div className="flex h-full flex-col">
-      {/* The approved design: "Live console" with what is on air and the view on one row, the live tools on the next. */}
+      {/* One Live console: Run of show, Preview, Program and Take never change with a view preference. */}
       <header className="flex shrink-0 flex-col gap-2.5 border-b border-border px-[22px] pt-3.5 pb-3 [@media(max-height:860px)]:gap-1.5 [@media(max-height:860px)]:pt-2 [@media(max-height:860px)]:pb-2">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
@@ -99,33 +112,29 @@ export function PresentWorkspace() {
               onClick={openOutputs}
               title="Open outputs"
             />
-            <div role="group" aria-label="Present view" className="ml-2 flex rounded-md border border-border p-0.5">
-              {(["standard", "production"] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  aria-pressed={view === v}
-                  onClick={() => setView(v)}
-                  title={VIEW_TITLE[v]}
-                  className={cn(
-                    "flex h-7 items-center gap-1.5 rounded px-2.5 text-xs font-medium [&_svg]:size-3.5",
-                    view === v ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {v === "standard" ? <LayoutPanelLeftIcon /> : <LayoutGridIcon />}
-                  <span className="max-[1200px]:sr-only">{VIEW_LABEL[v]}</span>
-                </button>
-              ))}
-            </div>
           </div>
         </div>
         <div role="toolbar" aria-label="Live tools" className="flex flex-wrap items-center gap-2">
+          <Button
+            ref={toolsButtonRef}
+            type="button"
+            variant="outline"
+            size="xs"
+            data-tour="live-tools"
+            aria-label={toolsOpen ? "Hide Bible and listening tools" : "Open Bible and listening tools"}
+            aria-controls="live-tools-panel"
+            aria-expanded={toolsOpen}
+            title="Search the Bible and review what listening has heard"
+            onClick={() => toolsOpen ? closeTools() : updateToolsOpen(true)}
+          >
+            <BookOpenIcon /> Bible &amp; listening
+          </Button>
           <StatusChip tone={listening ? "ok" : "off"} label={listening ? (cloudSpeech ? "Listening (Deepgram)" : "Listening") : "Listening off"} title={listening && cloudSpeech ? "Microphone sound is being sent to Deepgram" : undefined} />
           {listening && autoLive && (
             <StatusChip
               tone="warn"
               label="Auto-live on"
-              title="Verses heard in the sermon replace what is on screen without Take live. Click to turn off (also the Auto switch on the Live panel in the Advanced view)."
+              title="Heard verses can change the Bible source without Take live. Click to turn this off; the Auto control is in the Program panel."
               onClick={() => useBroadcastStore.getState().setAutoLive(false)}
             />
           )}
@@ -160,13 +169,18 @@ export function PresentWorkspace() {
         <span role="alert" aria-atomic="true" className="sr-only">{warning ?? ""}</span>
       </header>
       <div className="relative min-h-0 flex-1">
-        {view === "standard" ? <StandardView /> : <Dashboard />}
+        <LiveConsoleSurface
+          toolsOpen={toolsOpen}
+          toolsTab={toolsTab}
+          onToolsTabChange={setToolsTab}
+          onCloseTools={closeTools}
+        />
       </div>
     </div>
   )
 }
 
-/** Below this width Standard view has no room for the Preview panel: a one-line Preview sits over the transport. */
+/** Below this width the console has no room for the Preview panel: a one-line Preview sits over the transport. */
 const NARROW_PRESENT_QUERY = "(max-width: 1199.98px)"
 function subscribeNarrow(onChange: () => void): () => void {
   const mq = typeof window.matchMedia === "function" ? window.matchMedia(NARROW_PRESENT_QUERY) : null
@@ -175,7 +189,17 @@ function subscribeNarrow(onChange: () => void): () => void {
 }
 const isNarrow = () => typeof window.matchMedia === "function" && window.matchMedia(NARROW_PRESENT_QUERY).matches
 
-function StandardView() {
+function LiveConsoleSurface({
+  toolsOpen,
+  toolsTab,
+  onToolsTabChange,
+  onCloseTools,
+}: {
+  toolsOpen: boolean
+  toolsTab: LiveToolsTab
+  onToolsTabChange: (tab: LiveToolsTab) => void
+  onCloseTools: () => void
+}) {
   // One Preview at a time (the panel also follows translation changes): full when it fits, else the line.
   const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => false)
   const isLive = useBroadcastStore((s) => s.isLive)
@@ -184,19 +208,6 @@ function StandardView() {
   const held = useBroadcastStore((s) => s.heldLive !== null)
   const quickOnAir = useBroadcastStore((s) => s.liveVerse?.quickScreen ?? null)
   const service = useServiceStore((s) => s.current)
-
-  // Keyboard verbs, only in Standard view and never while typing.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || shouldIgnoreKeyboard(e.target, e.key)) return
-      const action = keyToPresentAction(e)
-      if (!action) return
-      e.preventDefault()
-      presentActions[action]()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [])
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3 [@media(max-height:860px)]:gap-2 [@media(max-height:860px)]:pt-2.5">
@@ -233,7 +244,7 @@ function StandardView() {
         {/* Never shorter than a readable picture with its sources, however many lines they take: the open
             scenes scroll under it instead. */}
         <div className="min-h-min flex-1 overflow-hidden rounded-xl [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
-          <LiveOutputPanel goLiveSwitch={false} />
+          <LiveOutputPanel />
         </div>
         <ScenesStrip />
       </div>
@@ -242,44 +253,50 @@ function StandardView() {
       {narrow && <div className="shrink-0"><PreviewPanel compact /></div>}
       <TransportBar className="col-span-2 max-[1200px]:shrink-0" />
 
-      <div className="col-span-2 grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0">
-        <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-4" data-tour="quick-find">
-          <div>
-            <h2 className="text-sm font-semibold tracking-tight">Find &amp; cue anything</h2>
-            <p className="text-xs text-muted-foreground">A reference, a hymn number, or a few words</p>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col [&>*]:min-h-0 [&>*]:flex-1"><QuickFind mode="present" /></div>
-        </section>
-        <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-4" role="group" aria-label="Quick screens">
-          {/* Back sits in the header so it is never clipped on a short (1366x768) screen; the screens scroll if they must. */}
-          <div className="flex items-start justify-between gap-2">
+      {toolsOpen ? (
+        <div className="col-span-2 min-h-0 overflow-hidden max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0">
+          <LiveToolsDrawer tab={toolsTab} onTabChange={onToolsTabChange} onClose={onCloseTools} />
+        </div>
+      ) : (
+        <div className="col-span-2 grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0">
+          <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-4" data-tour="quick-find">
             <div>
-              <h2 className="text-sm font-semibold tracking-tight">One-touch moments</h2>
-              <p className="text-xs text-muted-foreground">Temporary screens, with safe return</p>
+              <h2 className="text-sm font-semibold tracking-tight">Find &amp; cue anything</h2>
+              <p className="text-xs text-muted-foreground">A reference, a hymn number, or a few words</p>
             </div>
-            <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
-          </div>
-          {/* Four across, two rows: on a small window the icons give way so every screen stays in view. */}
-          <div className="-m-1 grid min-h-0 grid-cols-4 content-start gap-2 overflow-y-auto p-1 max-[1200px]:gap-1.5">
-            {(["welcome", "stand", "pray", "offering", "technical", "logo", "black"] as const).map((s) => {
-              // Calm until pressed: only the screen that is on air turns red, so the row also says what is showing.
-              const onAir = isLive && quickOnAir === s
-              return (
-                <BigButton
-                  key={s}
-                  icon={QUICK_ICONS[s]}
-                  label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering", technical: "Technical issue", logo: "Logo", black: "Black" }[s]}
-                  tone={onAir ? "live" : "neutral"}
-                  aria-pressed={onAir}
-                  className="h-11 min-w-0 justify-start gap-1.5 px-2.5 text-[0.8125rem] leading-tight max-[1200px]:justify-center max-[1200px]:px-1.5 max-[1200px]:text-xs max-[1200px]:[&>span:first-child]:hidden [&_svg]:!size-4"
-                  onClick={() => presentActions.quickScreen(s)}
-                />
-              )
-            })}
-          </div>
-          <TickerRow />
-        </section>
-      </div>
+            <div className="flex min-h-0 flex-1 flex-col [&>*]:min-h-0 [&>*]:flex-1"><QuickFind mode="present" /></div>
+          </section>
+          <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-4" role="group" aria-label="Quick screens">
+            {/* Back sits in the header so it is never clipped on a short (1366x768) screen; the screens scroll if they must. */}
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold tracking-tight">One-touch moments</h2>
+                <p className="text-xs text-muted-foreground">Temporary screens, with safe return</p>
+              </div>
+              <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
+            </div>
+            {/* Four across, two rows: on a small window the icons give way so every screen stays in view. */}
+            <div className="-m-1 grid min-h-0 grid-cols-4 content-start gap-2 overflow-y-auto p-1 max-[1200px]:gap-1.5">
+              {(["welcome", "stand", "pray", "offering", "technical", "logo", "black"] as const).map((s) => {
+                // Calm until pressed: only the screen that is on air turns red, so the row also says what is showing.
+                const onAir = isLive && quickOnAir === s
+                return (
+                  <BigButton
+                    key={s}
+                    icon={QUICK_ICONS[s]}
+                    label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering", technical: "Technical issue", logo: "Logo", black: "Black" }[s]}
+                    tone={onAir ? "live" : "neutral"}
+                    aria-pressed={onAir}
+                    className="h-11 min-w-0 justify-start gap-1.5 px-2.5 text-[0.8125rem] leading-tight max-[1200px]:justify-center max-[1200px]:px-1.5 max-[1200px]:text-xs max-[1200px]:[&>span:first-child]:hidden [&_svg]:!size-4"
+                    onClick={() => presentActions.quickScreen(s)}
+                  />
+                )
+              })}
+            </div>
+            <TickerRow />
+          </section>
+        </div>
+      )}
       </div>
     </div>
     </div>
