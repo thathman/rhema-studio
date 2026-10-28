@@ -175,9 +175,14 @@ export interface ItemTiming {
 
 /** One team comment on a rundown item (CL-007). `at` is an ISO time. */
 export interface ItemComment {
+  /** Stable across service copies; older service files receive a deterministic id when read. */
+  id?: string
   by: string
   at: string
   text: string
+  /** A soft delete is permanent and retained with the service for audit and sync. */
+  deleted_by?: string
+  deleted_at?: string
 }
 
 /** Cues an item may run as it goes live: none changes what the congregation sees. */

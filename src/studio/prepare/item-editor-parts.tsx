@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from "react"
 import { ImageIcon, MessageSquareIcon, PinIcon, StickyNoteIcon, Volume2Icon, XIcon } from "lucide-react"
-import { cleanComments, commentKey, MAX_COMMENTS } from "@/lib/comments"
+import { canDeleteComment, cleanComments, commentDeleted, commentKey, MAX_COMMENTS, MAX_COMMENT_HISTORY, tombstoneComment } from "@/lib/comments"
 import { itemAssignees, knownPeople, MAX_ASSIGNEES, withAssignees } from "@/lib/assignees"
 import { useSettingsStore } from "@/stores/settings-store"
 import { Input } from "@/components/ui/input"
@@ -247,33 +247,38 @@ function StartRule({ item }: { item: QueueItem }) {
 export function CommentsEditor({ item }: { item: QueueItem }) {
   const [draft, setDraft] = useState("")
   const me = useSettingsStore((s) => s.operatorName.trim())
-  const comments = item.comments ?? []
+  const currentItem = useQueueStore((s) => s.items.find((i) => i.id === item.id))
+  const comments = cleanComments((currentItem ?? item).comments ?? [])
+  const activeComments = comments.filter((c) => !commentDeleted(c)).length
   const add = () => {
-    if (comments.length >= MAX_COMMENTS) return // never push the oldest out
-    const next = cleanComments([...comments, { by: me || "Unnamed", at: new Date().toISOString(), text: draft }])
+    if (!me || activeComments >= MAX_COMMENTS || comments.length >= MAX_COMMENT_HISTORY) return
+    const next = cleanComments([...comments, { id: crypto.randomUUID(), by: me, at: new Date().toISOString(), text: draft }])
     if (next.length === comments.length) return // nothing left after cleaning
     // Written here, so already read here (also when no name is set).
     useSettingsStore.getState().markCommentsSeen([commentKey(next[next.length - 1])])
     useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, comments: next }))
     setDraft("")
   }
-  const remove = (index: number) =>
+  const remove = (id: string) =>
     useQueueStore.getState().updateItem(item.id, (i) => {
-      const left = (i.comments ?? []).filter((_, k) => k !== index)
-      return { ...i, comments: left.length ? left : null }
+      const comments = cleanComments(i.comments ?? [])
+      const comment = comments.find((c) => c.id === id)
+      if (!comment || !canDeleteComment(comment, useSettingsStore.getState().operatorName)) return i
+      const tombstone = tombstoneComment(comment, useSettingsStore.getState().operatorName)
+      if (!tombstone) return i
+      return { ...i, comments: comments.map((c) => (c.id === id ? tombstone : c)) }
     })
   return (
     <div className="ml-7 space-y-1 py-1 pl-2 text-xs">
-      {comments.map((c, k) => (
-        <div key={`${c.at}-${k}`} className="flex items-start gap-2 rounded bg-muted/40 px-2 py-1">
+      {comments.map((c) => (
+        <div key={c.id ?? `${c.at}-${c.by}`} className="flex items-start gap-2 rounded bg-muted/40 px-2 py-1">
           <MessageSquareIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden />
           <div className="min-w-0 flex-1">
             <span className="font-medium">{c.by}</span> <span className="text-muted-foreground">{commentTime(c.at)}</span>
             <p className="whitespace-pre-wrap break-words">{c.text}</p>
+            {commentDeleted(c) && <p className="text-muted-foreground">Removed by {c.deleted_by || "unknown operator"}{c.deleted_at ? ` · ${commentTime(c.deleted_at)}` : ""}</p>}
           </div>
-          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={`Remove ${c.by}'s comment`} onClick={() => remove(k)}>
-            <XIcon className="size-3" />
-          </button>
+          {canDeleteComment(c, me) && <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={`Remove ${c.by}'s comment`} onClick={() => remove(c.id ?? "")}><XIcon className="size-3" /></button>}
         </div>
       ))}
       <div className="flex items-center gap-2">
@@ -291,11 +296,12 @@ export function CommentsEditor({ item }: { item: QueueItem }) {
             }
           }}
         />
-        <Button size="sm" variant="outline" className="h-7" disabled={!draft.trim() || comments.length >= MAX_COMMENTS} onClick={add}>
+        <Button size="sm" variant="outline" className="h-7" disabled={!draft.trim() || !me || activeComments >= MAX_COMMENTS || comments.length >= MAX_COMMENT_HISTORY} onClick={add}>
           Comment
         </Button>
       </div>
       {!me && <p className="text-xs text-muted-foreground">Set your name in Team so the team knows who wrote it.</p>}
+      {comments.length >= MAX_COMMENT_HISTORY && <p className="text-xs text-muted-foreground">This thread has reached its retained history limit. Keep this service copy as its audit record.</p>}
     </div>
   )
 }

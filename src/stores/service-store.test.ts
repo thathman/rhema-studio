@@ -79,7 +79,7 @@ const bilingual: ProgramWithItems = {
 }
 
 const sentItems = () => {
-  const call = mockInvoke.mock.calls.filter((c) => c[0] === "content_replace_items").at(-1)!
+  const call = mockInvoke.mock.calls.filter((c) => c[0] === "content_replace_items" || c[0] === "content_replace_items_with_history").at(-1)!
   return (call[1] as { items: Array<Record<string, unknown>> }).items
 }
 
@@ -533,7 +533,7 @@ describe("saving", () => {
     useBroadcastStore.setState({ liveItemId: "i1" })
     useServiceStore.getState().closeProgram()
     mockInvoke.mockImplementation(async (cmd: string, a?: { items?: ProgramItem[] }) =>
-      cmd === "content_create_program" ? { ...program, id: "p2", revision: 1 } : cmd === "content_replace_items" ? { program: { ...program, id: "p2", revision: 2 }, items: a?.items ?? [] } : null)
+      cmd === "content_create_program" ? { ...program, id: "p2", revision: 1 } : cmd === "content_replace_items_with_history" ? { program: { ...program, id: "p2", revision: 2 }, items: a?.items ?? [] } : null)
     await useServiceStore.getState().createFromRundown("Evening", null, { discard: true })
     const ids = sentItems().map((i) => String(i.id))
     expect(ids).toHaveLength(2)
@@ -552,7 +552,7 @@ describe("saving", () => {
     const slideItem = { ...useQueueStore.getState().items[0], kind: "slide", slide: { title: "Hi", body: "" } }
     useBibleStore.setState({ selectedSlide: { item: slideItem as never, index: 0 } })
     mockInvoke.mockImplementation(async (cmd: string, a?: { items?: ProgramItem[] }) =>
-      cmd === "content_create_program" ? { ...program, id: "p3", revision: 1 } : cmd === "content_replace_items" ? { program: { ...program, id: "p3", revision: 2 }, items: a?.items ?? [] } : null)
+      cmd === "content_create_program" ? { ...program, id: "p3", revision: 1 } : cmd === "content_replace_items_with_history" ? { program: { ...program, id: "p3", revision: 2 }, items: a?.items ?? [] } : null)
     expect(await useServiceStore.getState().duplicateCurrent("Copy", null)).toBe("created")
     const ids = sentItems().map((i) => String(i.id))
     expect(ids).not.toContain("i2")
@@ -560,7 +560,7 @@ describe("saving", () => {
     expect(useJournalStore.getState().entries[0].itemId).toBe(ids[1])
     expect(useBibleStore.getState().selectedSlide?.item.id).toBe(ids[0])
     // The original service is never written with the new ids.
-    expect(mockInvoke.mock.calls.filter((c) => c[0] === "content_replace_items").every((c) => (c[1] as { programId: string }).programId !== program.id)).toBe(true)
+    expect(mockInvoke.mock.calls.filter((c) => c[0] === "content_replace_items_with_history").every((c) => (c[1] as { programId: string }).programId !== program.id)).toBe(true)
     useBroadcastStore.setState({ liveItemId: null })
     useBibleStore.setState({ selectedSlide: null })
     useJournalStore.getState().clear()
@@ -687,7 +687,7 @@ describe("saving", () => {
         return { ...template, program: { ...createdProgram, revision: 2 }, items: template.items.map((row) => ({ ...row, id: "copied-verse", program_id: "new" })) }
       }
       if (cmd === "content_create_program") return createdProgram
-      if (cmd === "content_replace_items") {
+      if (cmd === "content_replace_items_with_history") {
         return { program: { ...createdProgram, revision: 2, item_count: args?.items?.length ?? 0 }, items: args?.items ?? [] }
       }
       return null
@@ -698,7 +698,7 @@ describe("saving", () => {
     expect(await useServiceStore.getState().newFromTemplate("template", "From template", null)).toBe("created")
     expect(useServiceStore.getState().current?.id).toBe("new")
     expect(useServiceStore.getState().corruptItems).toEqual([])
-    expect(mockInvoke.mock.calls.filter(([cmd]) => cmd === "content_replace_items").every(([, args]) => (args as { programId: string }).programId === "new")).toBe(true)
+    expect(mockInvoke.mock.calls.filter(([cmd]) => cmd === "content_replace_items_with_history").every(([, args]) => (args as { programId: string }).programId === "new")).toBe(true)
   })
 
   it("loads an unreadable row without changing the running Program", async () => {
@@ -728,7 +728,7 @@ describe("createFromRundown", () => {
     })
     mockInvoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "content_create_program") return { ...program, id: "new", revision: 1, item_count: 0 }
-      if (cmd === "content_replace_items") {
+      if (cmd === "content_replace_items_with_history") {
         const rows = args?.items as ProgramItem[]
         expect(rows).toHaveLength(1)
         expect(rows[0]).toMatchObject({ kind: "group", reference: "Opening Prayer" })
@@ -740,7 +740,7 @@ describe("createFromRundown", () => {
     })
 
     expect(await useServiceStore.getState().createFromRundown("Service draft", "2026-10-26")).toBe("created")
-    expect(mockInvoke.mock.calls.some(([cmd]) => cmd === "content_replace_items")).toBe(true)
+    expect(mockInvoke.mock.calls.some(([cmd]) => cmd === "content_replace_items_with_history")).toBe(true)
     expect(useServiceStore.getState()).toMatchObject({ current: { id: "new", revision: 2 }, dirty: false })
   })
 
@@ -748,7 +748,7 @@ describe("createFromRundown", () => {
     useQueueStore.setState({ items: [queueItem("John 3:16", 43, 3, 16)] })
     mockInvoke.mockImplementation(async (cmd: string) => {
       if (cmd === "content_create_program") return { ...program, id: "new", revision: 1, item_count: 0 }
-      if (cmd === "content_replace_items") throw { kind: "database", message: "disk full" }
+      if (cmd === "content_replace_items_with_history") throw { kind: "database", message: "disk full" }
       return null
     })
     expect(await useServiceStore.getState().createFromRundown("Sunday", null)).toBe("created_unsaved")
@@ -762,10 +762,11 @@ describe("createFromRundown", () => {
     useQueueStore.setState({ items: [queueItem("John 3:16", 43, 3, 16)] })
     mockInvoke.mockImplementation(async (cmd: string) => {
       if (cmd === "content_create_program") return { ...program, id: "new", revision: 1, item_count: 0 }
-      if (cmd === "content_replace_items") return { ...savedResponse(2), program: { ...program, id: "new", revision: 2, item_count: 1 } }
+      if (cmd === "content_replace_items_with_history") return { ...savedResponse(2), program: { ...program, id: "new", revision: 2, item_count: 1 } }
       return null
     })
     expect(await useServiceStore.getState().createFromRundown("Sunday", null)).toBe("created")
+    expect(mockInvoke).toHaveBeenCalledWith("content_replace_items_with_history", expect.objectContaining({ programId: "new" }))
     expect(useServiceStore.getState()).toMatchObject({ dirty: false })
     expect(useServiceStore.getState().current?.revision).toBe(2)
   })
@@ -794,16 +795,16 @@ describe("createFromRundown", () => {
       calls.push([cmd, a])
       if (cmd === "content_get_program") return a.id === "tpl" ? template : { program: { ...program, id: "new", revision: 2 }, items: [item("n1", "John 3:16", 43, 3, 16, { program_id: "new" })] }
       if (cmd === "content_create_program") return { ...program, id: "new", title: a.title, service_date: a.serviceDate, revision: 1 }
-      if (cmd === "content_replace_items") return { program: { ...program, id: "new", revision: 2 }, items: (a.items as Array<{ id: string }>).map((x, n) => item(x.id, "John 3:16", 43, 3, 16, { program_id: "new", position: n })) }
+      if (cmd === "content_replace_items_with_history") return { program: { ...program, id: "new", revision: 2 }, items: (a.items as Array<{ id: string }>).map((x, n) => item(x.id, "John 3:16", 43, 3, 16, { program_id: "new", position: n })) }
       if (cmd === "content_list_programs") return []
       return null
     })
     useServiceStore.setState({ current: null, dirty: false } as never)
     expect(await useServiceStore.getState().newFromTemplate("tpl", "Sunday 25th", "2026-10-25")).toBe("created")
-    const saved = calls.find(([c]) => c === "content_replace_items")!
+    const saved = calls.find(([c]) => c === "content_replace_items_with_history")!
     expect(saved[1].programId).toBe("new")
     expect((saved[1].items as Array<{ id: string }>)[0].id).not.toBe("i1")
-    expect(calls.some(([c, a]) => c === "content_replace_items" && a.programId === "tpl")).toBe(false)
+    expect(calls.some(([c, a]) => c === "content_replace_items_with_history" && a.programId === "tpl")).toBe(false)
     expect(useServiceStore.getState().current?.id).toBe("new")
   })
 
@@ -812,7 +813,7 @@ describe("createFromRundown", () => {
     const writes: string[] = []
     mockInvoke.mockImplementation(async (cmd: string) => {
       if (cmd === "content_get_program") return template
-      if (cmd === "content_create_program" || cmd === "content_replace_items") { writes.push(cmd); throw { kind: "database", message: "disk full" } }
+      if (cmd === "content_create_program" || cmd === "content_replace_items_with_history") { writes.push(cmd); throw { kind: "database", message: "disk full" } }
       return null
     })
     useQueueStore.setState({ items: [], activeIndex: null })
@@ -890,9 +891,15 @@ describe("createFromRundown", () => {
   it("saves and reopens team comments (CL-007), and a new comment counts as an unsaved change", () => {
     const v: VerseQueueItem = { id: "c1", verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, comments: [{ by: "Ade", at: "2026-10-21T10:00:00Z", text: "Read slowly\nthen pause" }] }
     const [input] = toItemInputs([v])
-    expect(JSON.parse(input.payload ?? "{}").comments).toEqual([{ by: "Ade", at: "2026-10-21T10:00:00Z", text: "Read slowly\nthen pause" }])
+    expect(JSON.parse(input.payload ?? "{}").comments).toMatchObject([{ id: expect.stringMatching(/^legacy-/), by: "Ade", at: "2026-10-21T10:00:00Z", text: "Read slowly\nthen pause" }])
     const reopened = toQueueItems({ program, items: [item("c1", "John 3:16", 43, 3, 16, { payload: input.payload ?? null })] }, 1, [])
-    expect(reopened.items[0].comments).toEqual(v.comments)
+    expect(reopened.items[0].comments).toMatchObject(JSON.parse(input.payload ?? "{}").comments)
+    expect(reopened.items[0].comments?.[0].id).toBe(JSON.parse(input.payload ?? "{}").comments[0].id)
+    const tombstone = { id: "comment-1", by: "Ade", at: "2026-10-21T10:00:00Z", text: "Read slowly", deleted_by: "Ade", deleted_at: "2026-10-21T11:00:00Z" }
+    const [deletedInput] = toItemInputs([{ ...v, comments: [tombstone] }])
+    const deletedReopen = toQueueItems({ program, items: [item("c1", "John 3:16", 43, 3, 16, { payload: deletedInput.payload ?? null })] }, 1, [])
+    expect(JSON.parse(deletedInput.payload ?? "{}").comments).toEqual([tombstone])
+    expect(deletedReopen.items[0].comments).toEqual([tombstone])
     expect(rundownSignature([v])).not.toBe(rundownSignature([{ ...v, comments: [...(v.comments ?? []), { by: "Tolu", at: "2026-10-21T11:00:00Z", text: "ok" }] }]))
   })
 

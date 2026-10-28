@@ -10,6 +10,7 @@ const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { useNotices } = await import("@/stores/notices-store")
 const { useSettingsStore } = await import("@/stores/settings-store")
 const { useJournalStore } = await import("@/stores/journal-store")
+const { useQueueStore } = await import("@/stores/queue-store")
 const { useRouterHealth } = await import("@/lib/cameras")
 
 /** Scenes made and changed from joined desks (#243 SC.16, SC.17): what the host shares and its approval rule. */
@@ -30,9 +31,17 @@ beforeEach(() => {
   useNotices.setState({ notices: [] })
   useSceneRequests.setState({ requests: [] })
   useJournalStore.setState({ entries: [] })
+  useQueueStore.setState({ items: [], headers: [] })
 })
 
 describe("what the host shares with a desk", () => {
+  it("keeps private service comments out of the shared Live State", () => {
+    useQueueStore.setState({ items: [{ id: "i1", reference: "John 3:16", planned_minutes: 10, comments: [{ id: "c1", by: "Ade", at: "2026-10-21T10:00:00Z", text: "private team comment" }] }] as never })
+    const live = buildLiveState()
+    expect(live.rundown).toEqual([{ id: "i1", reference: "John 3:16", plannedMinutes: 10 }])
+    expect(JSON.stringify(live)).not.toContain("private team comment")
+  })
+
   it("is each scene's arrangement with its revision and whether it is on a screen, without pictures or held copies", () => {
     const shared = sceneForDesk(scene("on"), true)
     expect(shared).toMatchObject({ id: "on", onScreen: true })

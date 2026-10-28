@@ -1,6 +1,7 @@
 import { FolderSyncIcon, MessageSquareIcon, NetworkIcon, ShieldCheckIcon, SmartphoneIcon, UsersIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { commentDeleted } from "@/lib/comments"
 import { Input } from "@/components/ui/input"
 import { useQueueStore } from "@/stores"
 import { useServiceStore } from "@/stores/service-store"
@@ -28,7 +29,7 @@ export function TeamWorkspace() {
   const operatorName = useSettingsStore((s) => s.operatorName)
   const requireApproval = useSettingsStore((s) => s.requireApproval)
   const current = useServiceStore((s) => s.current)
-  const comments = useQueueStore((s) => s.items.reduce((n, i) => n + (i.comments?.length ?? 0), 0))
+  const comments = useQueueStore((s) => s.items.reduce((n, i) => n + (i.comments?.filter((c) => !commentDeleted(c)).length ?? 0), 0))
   const state = current ? approvalState(current) : null
   return (
     <div className="h-full overflow-y-auto">
