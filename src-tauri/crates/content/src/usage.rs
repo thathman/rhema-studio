@@ -203,7 +203,7 @@ mod tests {
 
         let usage = db.song_usage("2026-10-01", "2026-10-31").unwrap();
         assert!(!usage[0].hymn);
-        assert!(usage[0].hymn_numbers.is_empty());
+        assert_eq!(usage[0].hymn_numbers, Vec::<String>::new());
     }
 
     #[test]
@@ -224,7 +224,7 @@ mod tests {
 
         let usage = db.song_usage("2026-10-01", "2026-10-31").unwrap();
         assert!(!usage[0].hymn);
-        assert!(usage[0].hymn_numbers.is_empty());
+        assert_eq!(usage[0].hymn_numbers, Vec::<String>::new());
     }
 
     #[test]
