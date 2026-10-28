@@ -8,7 +8,7 @@ import { isCueItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type CueQ
 import { isSkipped } from "@/lib/run-of-show"
 import { useMediaStore } from "@/stores/media-store"
 import { serviceSongNow } from "@/stores/song-pins-store"
-import { approvalHolds } from "@/stores/approval-gate-store"
+import { approvalHolds, useApprovalGateStore } from "@/stores/approval-gate-store"
 import { runTakeSteps, takesSourceOnly } from "@/lib/take-steps"
 import { toast } from "sonner"
 import { useJournalStore } from "@/stores/journal-store"
@@ -118,6 +118,7 @@ function retryHeldTakeIfCurrent(
       currentService.revision !== heldService.revision ||
       !targetIsCurrent()
     ) {
+      if (heldService) useApprovalGateStore.getState().revokeAcknowledgment(heldService.id)
       finishTakeAttempt(attemptId, itemId, reference, "superseded", latestVisualTake)
       toast.info("The service or Preview changed while approval was pending. Take the current selection again.")
       return

@@ -373,6 +373,47 @@ describe("queue position follows successful Takes", () => {
     expect(useQueueStore.getState().activeIndex).toBeNull()
   })
 
+  it("requires approval again when the held service revision changes before retry", async () => {
+    const heldItem = queueItemFor(genesisOneOne)
+    useQueueStore.setState({ items: [heldItem], activeIndex: null })
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+
+    await presentQueueItem(0)
+    expect(useApprovalGateStore.getState().held).toMatchObject({ id: "sunday", revision: 1 })
+
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 2, approved_revision: null } as never })
+    useApprovalGateStore.getState().presentAnyway()
+    await vi.waitFor(() => expect(useTakeAttemptStore.getState().attempts.at(-1)?.status).toBe("superseded"))
+
+    expect(useApprovalGateStore.getState().acknowledged).not.toContain("sunday")
+    mockInvoke.mockImplementation(async (cmd: unknown) => (cmd === "get_verse" ? genesisOneOne : null))
+
+    await presentQueueItem(0)
+
+    expect(useApprovalGateStore.getState().held).toMatchObject({ id: "sunday", revision: 2 })
+    expect(useTakeAttemptStore.getState().attempts.at(-1)).toMatchObject({ itemId: heldItem.id, status: "awaiting_approval" })
+    expect(useQueueStore.getState().activeIndex).toBeNull()
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+  })
+
+  it("does not replay a held Take after its rundown item is removed", async () => {
+    const heldItem = queueItemFor(genesisOneOne)
+    useQueueStore.setState({ items: [heldItem], activeIndex: null })
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+
+    await presentQueueItem(0)
+    useQueueStore.setState({ items: [], activeIndex: null })
+
+    useApprovalGateStore.getState().presentAnyway()
+    await vi.waitFor(() => expect(useTakeAttemptStore.getState().attempts.at(-1)?.status).toBe("superseded"))
+
+    expect(useApprovalGateStore.getState().acknowledged).not.toContain("sunday")
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useQueueStore.getState().activeIndex).toBeNull()
+  })
+
   it("retries the same held rundown item at its new position after a reorder", async () => {
     const previous = queueItemFor(genesisOneOne)
     const heldItem = queueItemFor(johnThreeSixteen)
