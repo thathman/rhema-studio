@@ -90,9 +90,9 @@ describe("picture items", () => {
         { id: "bad", program_id: "p1", position: 1, kind: "image", reference: "?", book_number: null, chapter: null, verse: null, translation: null, secondary_translation: null, notes: null, payload: "{}" },
       ],
     }
-    const { items, unsupported } = toQueueItems(data, 1, [])
+    const { items, corrupt } = toQueueItems(data, 1, [])
     expect(items[0]).toMatchObject({ kind: "image", image: { media_id: "m-1", name: "Welcome", fit: "cover" } })
-    expect(unsupported.map((u) => u.id)).toEqual(["bad"])
+    expect(corrupt.map((u) => u.id)).toEqual(["bad"])
     expect(rundownSignature([picture()])).not.toBe(rundownSignature([{ ...picture(), image: { ...picture().image, fit: "contain" as const } }]))
   })
 })

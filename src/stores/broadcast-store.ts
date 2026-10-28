@@ -21,7 +21,7 @@ import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import type { TimerState } from "@/lib/timer"
 import { useSongStore } from "@/stores/song-store"
 import { markSkipped } from "@/lib/run-of-show"
-import { forOutputLanguage } from "@/lib/output-language"
+import { forOutputLanguage, isOutputLanguageFallback } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
@@ -188,6 +188,8 @@ interface BroadcastState {
    * rehearsal ends. `by`: who took it (default: see currentActor).
    */
   takeScene: (outputId: string, sceneId: string, by?: string) => void
+  /** Restore the exact scene/look and theme selection previously taken to this output. */
+  restoreSceneSnapshot: (outputId: string, scene: Scene, appearance: SceneAppearanceSnapshot, themeSelection: Pick<BroadcastOutput, "themeId" | "themeFor">, by?: string) => void
   /** Take an immutable scene/look revision stored with an approved service revision. */
   takeSceneRevision: (outputId: string, scene: Scene, appearance: SceneAppearanceSnapshot, programId: string, revision: number, by?: string, appearanceComplete?: boolean, approval?: { approvedAt?: string | null; approvedBy?: string | null }) => void
   /** Back to the output's own feed, full frame; Restore takes the scene again. */
@@ -984,6 +986,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       // What comes next leaves out hidden items and a skipped phase (#193).
       const items = markSkipped(q.items, q.headers)
       const countdown = output.stageLayout === "countdown" ? stageCountdownFrame(s, items, q.activeIndex) : null
+      const stageVerse = shown ? forOutputLanguage(shown, output.language) : null
       deliver(outputId, {
         // The stage window draws no theme: send the built-in one (no pictures) rather than the
         // output's, whose pictures can be megabytes, with every timer tick (NFR-03).
@@ -992,9 +995,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         role: "stage",
         // A stage that follows chosen sources shows their words; otherwise the program (ADR 0001).
         stage: applyStageStyle({ ...buildStagePayload({
-          isLive: shown !== null, liveVerse: shown, items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
+          isLive: shown !== null, liveVerse: stageVerse, items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
-        }), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}), ...(s.stageClock ? { clock: s.stageClock } : {}),
+        }), ...(isOutputLanguageFallback(shown, output.language) ? { languageNotice: "Second language unavailable; showing available text." } : {}), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}), ...(s.stageClock ? { clock: s.stageClock } : {}),
           // This output's own layout, orientation and low-light colours (#196 R6); absent from older outputs.
           ...(output.stageLayout && output.stageLayout !== "countdown" ? { layout: output.stageLayout } : {}),
           ...(output.stageOrientation ? { portrait: output.stageOrientation } : {}),
@@ -1421,6 +1424,20 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const appearance = captureSceneAppearance(scene, output, s.themes, useSettingsStore.getState().brandKit.logoUrl)
     set({ sceneReturn: { ...s.sceneReturn, [outputId]: sceneId }, ...sceneTake(outputId, sceneId, by) })
     get().updateOutput(outputId, { sceneId, sceneSnapshot: structuredClone(normalizeScene(scene) ?? scene), sceneAppearanceSnapshot: appearance })
+  },
+  restoreSceneSnapshot: (outputId, scene, appearance, themeSelection, by = currentActor()) => {
+    const s = get()
+    const output = s.outputs.find((o) => o.id === outputId)
+    const snapshot = normalizeScene(scene)
+    if (!snapshot || !output || (output.role ?? "congregation") !== "congregation") return
+    set({ sceneReturn: { ...s.sceneReturn, [outputId]: snapshot.id }, ...sceneTake(outputId, snapshot.id, by) })
+    get().updateOutput(outputId, {
+      themeId: themeSelection.themeId,
+      themeFor: themeSelection.themeFor,
+      sceneId: snapshot.id,
+      sceneSnapshot: structuredClone(snapshot),
+      sceneAppearanceSnapshot: structuredClone(appearance),
+    })
   },
   takeSceneRevision: (outputId, scene, appearance, programId, revision, by = currentActor(), appearanceComplete = true, approval = {}) => {
     const output = get().outputs.find((o) => o.id === outputId)

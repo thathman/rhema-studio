@@ -739,6 +739,59 @@ describe("updateDraftNested deep paths", () => {
     expect(useBroadcastStore.getState().outputFrames.stream).toBeUndefined()
   })
 
+  it("applies a stage output's selected language to lyrics and Scripture", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    s.addOutput({ id: "stage", name: "Stage", type: "display", role: "stage", themeId: s.themes[0].id, monitorIndex: 1, ndi: ndiDefaults, language: "second" })
+
+    useBroadcastStore.setState({ isLive: true, liveVerse: {
+      kind: "lyric",
+      reference: "Amazing Grace · Verse 1",
+      segments: [],
+      lines: ["Amazing grace"],
+      secondaryLines: ["Oore-ọ̀fẹ́ ìyanu"],
+    } })
+    useBroadcastStore.getState().syncBroadcastOutput()
+    let payload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-stage")?.[2] as { stage: { current: { lines: string[] } } }
+    expect(payload.stage.current.lines).toEqual(["Oore-ọ̀fẹ́ ìyanu"])
+    let mainPayload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-main")?.[2] as { verse: { lines?: string[]; secondaryLines?: string[]; translationLines?: string[] } }
+    expect(mainPayload.verse).toMatchObject({ lines: ["Amazing grace"], secondaryLines: ["Oore-ọ̀fẹ́ ìyanu"] })
+
+    emitToMock.mockClear()
+    useBroadcastStore.setState({ liveVerse: {
+      kind: "verse",
+      reference: "John 3:16",
+      segments: [{ text: "For God so loved the world" }],
+      translationLines: ["For God so loved the world", "Nítorí Ọlọ́run fẹ́ aráyé"],
+    } })
+    useBroadcastStore.getState().syncBroadcastOutput()
+    payload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-stage")?.[2] as { stage: { current: { lines: string[] } } }
+    expect(payload.stage.current.lines).toEqual(["Nítorí Ọlọ́run fẹ́ aráyé"])
+    mainPayload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-main")?.[2] as { verse: { translationLines: string[] } }
+    expect(mainPayload.verse.translationLines).toEqual(["For God so loved the world", "Nítorí Ọlọ́run fẹ́ aráyé"])
+  })
+
+  it("labels a Stage fallback when its selected second language is unavailable", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    s.addOutput({ id: "stage", name: "Stage", type: "display", role: "stage", themeId: s.themes[0].id, monitorIndex: 1, ndi: ndiDefaults, language: "second" })
+    const availableText = "The Lord is my shepherd"
+    useBroadcastStore.setState({ isLive: true, liveVerse: {
+      kind: "verse",
+      reference: "Psalm 23:1",
+      segments: [{ text: availableText }],
+    } })
+
+    emitToMock.mockClear()
+    useBroadcastStore.getState().syncBroadcastOutput()
+
+    const stagePayload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-stage")?.[2] as {
+      stage: { current: { lines: string[] } | null; languageNotice?: string | null }
+    }
+    expect(stagePayload.stage.current?.lines).toEqual([availableText])
+    expect(stagePayload.stage.languageNotice).toBe("Second language unavailable; showing available text.")
+  })
+
   it("the ticker crawls only on outputs that show it, takes word changes at once and stops", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const s = useBroadcastStore.getState()

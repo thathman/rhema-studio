@@ -71,13 +71,34 @@ import { useAddDialog } from "@/studio/prepare/add-target"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useShellStore } from "@/studio/shell-store"
 import { presentActions } from "@/studio/present-actions"
-import type { QueueItem } from "@/types"
+import type { BroadcastOutput, QueueItem } from "@/types"
 import { projectRunOfShowEvents } from "@/lib/run-of-show"
 import { toItemInputs } from "@/stores/service-store"
+import { newScene } from "@/lib/scenes"
 
 const slide = (id: string): QueueItem =>
   ({ id, kind: "slide", slide: { title: id, body: "words" }, reference: id, confidence: 1, source: "manual", added_at: 0, planned_minutes: 3 }) as unknown as QueueItem
 
+const preferenceStorage = new Map<string, string>()
+const localStorageMock = {
+  getItem: (key: string) => preferenceStorage.get(key) ?? null,
+  setItem: (key: string, value: string) => { preferenceStorage.set(key, String(value)) },
+  removeItem: (key: string) => { preferenceStorage.delete(key) },
+  clear: () => preferenceStorage.clear(),
+}
+Object.defineProperty(globalThis, "localStorage", { configurable: true, value: localStorageMock })
+Object.defineProperty(window, "localStorage", { configurable: true, value: localStorageMock })
+
+const display = (id: string, name: string, sceneId: string): BroadcastOutput => ({
+  id,
+  name,
+  type: "display",
+  role: "congregation",
+  sceneId,
+  themeId: "default",
+  monitorIndex: 0,
+  ndi: { sourceName: name, resolution: "r1080p", frameRate: "fps30", alphaMode: "noneOpaque" },
+})
 let root: Root | null = null
 afterEach(() => {
   act(() => root?.unmount())
@@ -88,7 +109,7 @@ afterEach(() => {
   mockService.program = null
   mockService.items = []
   document.body.replaceChildren()
-  useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false })
+  useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false, unsupportedItems: [], corruptItems: [] })
 })
 
 async function renderPrepare(withLiveControls = false) {
@@ -473,6 +494,72 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
     expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
     expect(el.textContent).toContain("Draft")
+
+    const signalsTab = el.querySelector<HTMLButtonElement>('button[role="tab"][aria-label="Event signals"]')
+    expect(signalsTab).not.toBeNull()
+    await act(async () => { signalsTab!.focus(); signalsTab!.click() })
+    expect(el.textContent).toContain("Manual only.")
+    expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
+    expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
+  })
+
+  it("edits per-output scene intent from an event without changing the live program", async () => {
+    const liveScene = newScene("Current program")
+    const prayerScene = newScene("Prayer camera and name")
+    const overflowScene = newScene("Overflow sermon layout")
+    useQueueStore.setState({
+      items: [slide("Camera and speaker"), slide("John 3:16")],
+      headers: [{ id: "prayer", type: "group", name: "Opening Prayer", at: 0, event: { schema_version: 1, duration_minutes: 15 } }],
+      activeIndex: null,
+    })
+    useBroadcastStore.setState({
+      isLive: true,
+      liveItemId: "on-air-item",
+      scenes: [liveScene, prayerScene, overflowScene],
+      outputs: [
+        display("sanctuary", "Sanctuary", liveScene.id),
+        display("overflow", "Overflow", liveScene.id),
+      ],
+    })
+    const before = useBroadcastStore.getState()
+    const beforeOutputs = structuredClone(before.outputs)
+    const el = await renderPrepare()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Opening Prayer"]')!.click())
+    const scenesTab = el.querySelector<HTMLButtonElement>('button[role="tab"][aria-label="Event scenes"]')
+    expect(scenesTab).not.toBeNull()
+    await act(async () => { scenesTab!.focus(); scenesTab!.click() })
+    expect(el.textContent).toContain("Plan only")
+
+    const setSelectValue = (field: HTMLSelectElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(field, value)
+      field.dispatchEvent(new Event("change", { bubbles: true }))
+    }
+    const scene = el.querySelector<HTMLSelectElement>('select[aria-label="Scene for Camera and speaker"]')
+    expect(scene).not.toBeNull()
+    await act(async () => setSelectValue(scene!, prayerScene.id))
+    const addOverride = el.querySelector<HTMLButtonElement>('button[aria-label="Add screen override for Camera and speaker"]')
+    expect(addOverride).not.toBeNull()
+    await act(async () => addOverride!.click())
+    const screen = el.querySelector<HTMLSelectElement>('select[aria-label="Screen target for Camera and speaker 1"]')
+    expect(screen).not.toBeNull()
+    await act(async () => setSelectValue(screen!, "overflow"))
+    const overrideScene = el.querySelector<HTMLSelectElement>('select[aria-label="Scene override 1 for Camera and speaker"]')
+    expect(overrideScene).not.toBeNull()
+    await act(async () => setSelectValue(overrideScene!, overflowScene.id))
+
+    expect(useQueueStore.getState().items[0]).toMatchObject({
+      scene_id: prayerScene.id,
+      on_take: [`scene.take:${overflowScene.id}@overflow`],
+    })
+    const savedMoment = toItemInputs(useQueueStore.getState().items, undefined, undefined, useQueueStore.getState().headers).find((item) => item.reference === "Camera and speaker")!
+    expect(JSON.parse(savedMoment.payload ?? "{}")).toMatchObject({
+      scene_id: prayerScene.id,
+      on_take: [`scene.take:${overflowScene.id}@overflow`],
+    })
+    expect(useBroadcastStore.getState().outputs).toEqual(beforeOutputs)
+    expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
+    expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
   })
 
   it("shows an event's ordered moments and opens one in the editor without taking it live", async () => {
@@ -665,6 +752,80 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useBroadcastStore.getState()).toEqual(liveBefore)
   })
 
+  it("keeps phase context visible in Simple list and opens a phase in Grouped by phase", async () => {
+    const pendingFrames: FrameRequestCallback[] = []
+    const originalRequestAnimationFrame = window.requestAnimationFrame
+    window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      pendingFrames.push(callback)
+      return pendingFrames.length
+    }) as typeof window.requestAnimationFrame
+    try {
+      useQueueStore.setState({
+        items: [slide("Welcome")],
+        headers: [
+          { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+          { id: "custom-main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "custom" },
+          { id: "post", type: "phase", name: "Post-service", at: 1, rule: "loop", role: "post" },
+        ],
+        activeIndex: null,
+      })
+      const el = await renderPrepare()
+      const simple = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Simple list")!
+      expect(simple.classList.contains("h-11")).toBe(true)
+      await act(async () => simple.click())
+
+      expect(el.querySelector('[aria-label="Phases"]')).not.toBeNull()
+      expect(el.querySelector('[aria-label="Phase: Main service"]')).toBeNull()
+      const phaseOverview = el.querySelector<HTMLButtonElement>('[aria-label="Phases"] button[data-phase-id="custom-main"]')
+      expect(phaseOverview).not.toBeNull()
+      await act(async () => phaseOverview!.click())
+
+      expect(el.querySelector('[aria-label="Phase: Main service"]')).not.toBeNull()
+      expect([...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Grouped by phase")?.getAttribute("aria-pressed")).toBe("true")
+      expect(pendingFrames.length).toBeGreaterThan(0)
+      const mainSection = el.querySelector<HTMLElement>('li[data-phase-id="main"]')!
+      const customMainSection = el.querySelector<HTMLElement>('li[data-phase-id="custom-main"]')!
+      const mainScroll = vi.fn()
+      const customMainScroll = vi.fn()
+      Object.defineProperty(mainSection, "scrollIntoView", { configurable: true, value: mainScroll })
+      Object.defineProperty(customMainSection, "scrollIntoView", { configurable: true, value: customMainScroll })
+      await act(async () => pendingFrames.forEach((frame) => frame(0)))
+      expect(customMainScroll).toHaveBeenCalledWith({ block: "start", behavior: "smooth" })
+      expect(mainScroll).not.toHaveBeenCalled()
+    } finally {
+      window.requestAnimationFrame = originalRequestAnimationFrame
+    }
+  })
+
+  it("places an existing zero-moment event inside Main service when organising an empty rundown", async () => {
+    const event = { id: "prayer", type: "group" as const, name: "Prayer", at: 0, event: { schema_version: 1 as const, duration_minutes: 10 } }
+    useQueueStore.setState({ items: [], headers: [event], activeIndex: null })
+    useQueueStore.getState().resetHistory()
+    const before = structuredClone({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
+    const liveBefore = useBroadcastStore.getState()
+    const el = await renderPrepare()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[title="Add phase structure around the current running order"]')!.click())
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+    await act(async () => [...dialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add phases")!.click())
+
+    const headers = useQueueStore.getState().headers
+    const mainIndex = headers.findIndex((header) => header.type === "phase" && header.role === "main")
+    const eventIndex = headers.findIndex((header) => header.id === event.id)
+    const postIndex = headers.findIndex((header) => header.type === "phase" && header.role === "post")
+    expect(mainIndex).toBeGreaterThanOrEqual(0)
+    expect(eventIndex).toBeGreaterThan(mainIndex)
+    expect(postIndex).toBeGreaterThan(eventIndex)
+    expect(headers[eventIndex]).toEqual(event)
+    expect(useQueueStore.getState().past).toHaveLength(1)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')!.click())
+    expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex }).toEqual(before)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
   it("confirms phase creation, preserves the plan and Live, and lets Undo restore the flat list", async () => {
     const items = [slide("Welcome"), slide("Sermon"), slide("Closing")]
     useQueueStore.setState({ items, headers: [{ id: "sermon", type: "group", name: "Sermon", at: 1 }], activeIndex: 1 })
@@ -809,6 +970,33 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(0)
   })
 
+  it("keeps phase and group controls accessible without exposing disabled drag semantics", async () => {
+    useQueueStore.setState({
+      items: [slide("Opening"), slide("Sermon")],
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+        { id: "worship", type: "group", name: "Worship", at: 0 },
+        { id: "sermon", type: "group", name: "Sermon", at: 1, event: { schema_version: 1, duration_minutes: 20 } },
+      ],
+      activeIndex: null,
+    })
+
+    const el = await renderPrepare()
+    for (const label of ["Phase: Main service", "Group: Worship"]) {
+      const row = el.querySelector<HTMLElement>(`[aria-label="${label}"]`)!
+      expect(row.getAttribute("role")).not.toBe("button")
+      expect(row.getAttribute("aria-disabled")).not.toBe("true")
+      for (const control of row.querySelectorAll<HTMLButtonElement>("button")) {
+        expect(control.disabled).toBe(false)
+        expect(control.getAttribute("aria-disabled")).not.toBe("true")
+      }
+    }
+
+    const eventHandle = el.querySelector<HTMLButtonElement>('button[aria-label="Drag event Sermon with its moments"]')!
+    expect(eventHandle.disabled).toBe(false)
+    expect(eventHandle.getAttribute("aria-disabled")).not.toBe("true")
+  })
+
   it("reveals and focuses a successful Add inside collapsed sections", async () => {
     useQueueStore.setState({
       items: [slide("Existing moment")],
@@ -933,6 +1121,30 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(el.querySelector('[aria-label="Group: Scripture moments"]')).toBeNull()
     expect(el.querySelector('[aria-label="Event: Closing prayer"]')).not.toBeNull()
     expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(1)
+  })
+
+  it("distinguishes unreadable saved items from newer-version items and blocks unsafe service actions", async () => {
+    useServiceStore.setState({
+      current: { id: "service", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 2 },
+      dirty: true,
+      unsupportedItems: [{ id: "future", kind: "interactive_scene", reference: "Scene", payload: null } as never],
+      corruptItems: [{ id: "broken", kind: "slide", reference: "Welcome", payload: "{bad" } as never],
+    })
+    const el = await renderPrepare()
+    expect(el.textContent).toContain("1 saved item could not be read")
+    expect(el.textContent).toContain("1 item from a newer version")
+
+    const save = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save"))!
+    const approve = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Approve"))!
+    expect(save.disabled).toBe(true)
+    expect(save.title).toContain("Unreadable saved items")
+    expect(approve.disabled).toBe(true)
+    expect(approve.title).toContain("Recover or update saved items")
+
+    await act(async () => useServiceStore.setState({ dirty: false }))
+    expect(approve.disabled).toBe(true)
+    await act(async () => useServiceStore.setState({ unsupportedItems: [], corruptItems: [] }))
+    expect(approve.disabled).toBe(false)
   })
 
   it("says whether the service is saved, next to its name", async () => {

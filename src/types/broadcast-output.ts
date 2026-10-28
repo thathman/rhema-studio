@@ -138,9 +138,9 @@ export interface SignageSchedule {
 }
 
 /**
- * Which language(s) of a bilingual frame a congregation output shows. Absent
- * means `both`. "second" falls back to the frame as prepared when there is
- * no second language.
+ * Which language(s) of a bilingual frame an output shows. Absent means `both`.
+ * "second" falls back to the frame as prepared when there is no second
+ * language; Stage outputs label that fallback.
  */
 export type BroadcastOutputLanguage = "both" | "first" | "second"
 
@@ -149,6 +149,8 @@ export interface StagePayload {
   current: { title: string; lines: string[] } | null
   next: string | null
   note: string | null
+  /** A requested language is absent from the live text; the available text is shown as fallback. */
+  languageNotice?: string
   timer: { label: string; tone: "ok" | "warn" | "over" } | null
   /** A private message from the operator ("wrap up", "mic 2 is off"). */
   message: string | null
