@@ -231,6 +231,35 @@ describe("settings store", () => {
     expect(useSettingsStore.getState().remoteAuthRequired).toBe(false)
   })
 
+  it("keeps authentication required when a shared key or paired device exists", async () => {
+    mockGet.mockResolvedValue(null)
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+
+    useSettingsStore.getState().setRemoteSecret("shared controller key")
+    useSettingsStore.getState().setRemoteAuthRequired(false)
+    expect(useSettingsStore.getState().remoteAuthRequired).toBe(true)
+
+    useSettingsStore.setState({ remoteSecret: "", remoteDevices: [{ hash: "h", name: "Phone", paired_at: "2026-10-27T10:00:00Z" }] as never })
+    useSettingsStore.getState().setRemoteAuthRequired(false)
+    expect(useSettingsStore.getState().remoteAuthRequired).toBe(true)
+  })
+
+  it("keeps authentication on when the last legacy credential is removed", async () => {
+    mockGet.mockResolvedValue(null)
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+
+    useSettingsStore.setState({ remoteAuthRequired: false, remoteSecret: "legacy-key", remoteDevices: [] })
+    useSettingsStore.getState().setRemoteSecret("")
+    expect(useSettingsStore.getState().remoteAuthRequired).toBe(true)
+
+    const phone = { hash: "phone-hash", name: "Phone", paired_at: "2026-10-27T10:00:00Z" }
+    useSettingsStore.setState({ remoteAuthRequired: false, remoteSecret: "", remoteDevices: [phone] as never })
+    useSettingsStore.getState().revokeRemoteDevice(phone.hash)
+    expect(useSettingsStore.getState().remoteAuthRequired).toBe(true)
+  })
+
   it("an old settings file without the setup section keeps everything and gets the setup defaults (#298)", async () => {
     mockGet.mockImplementation(async (key: string) => {
       const old: Record<string, unknown> = { operatorName: "Tolu", brandKit: { version: 1, churchName: "Grace Chapel" }, onboardingComplete: false }

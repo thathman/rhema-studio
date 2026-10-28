@@ -1,0 +1,55 @@
+name: Desktop Prepare QA (native Tauri)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/desktop-prepare-qa.yml"
+      - "package.json"
+      - "bun.lock"
+      - "scripts/mac-qa/**"
+      - "src-tauri/src/qa_bridge.rs"
+      - "src-tauri/src/commands/content.rs"
+      - "src-tauri/tauri.prepare-qa.conf.json"
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-prepare-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-prepare-journey:
+    name: Mixed Prepare moments, reopen, Preview, and explicit Take
+    runs-on: macos-15-intel
+    timeout-minutes: 40
+    env:
+      KEEP_QA_SCRATCH: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri
+      - name: Install ONNX Runtime
+        run: brew install onnxruntime
+      - name: Install JavaScript dependencies
+        run: bun install --frozen-lockfile
+      - name: Build and exercise the isolated native app
+        run: bash scripts/mac-qa/run-prepare-mixed-journey.sh
+        env:
+          TMPDIR: ${{ runner.temp }}
+      - name: Keep the synthetic QA report and app log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prepare-native-journey-${{ github.run_id }}
+          path: ${{ runner.temp }}/rhema-prepare-qa.*/artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
