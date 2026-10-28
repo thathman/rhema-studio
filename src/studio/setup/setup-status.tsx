@@ -7,7 +7,7 @@ import type { EquipmentItem, SetupItem, SetupStepId } from "@/lib/setup-readines
 import { cn } from "@/lib/utils"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
-import { openProductionTab } from "@/studio/production/production-tab"
+import { openConnectionsHub } from "@/studio/connections/navigation"
 import type { ReadinessCheck, ReadinessFix } from "@/studio/readiness"
 import { useReadiness } from "@/studio/use-readiness"
 import { EssentialRow, StatusRow } from "@/studio/setup/status-rows"
@@ -49,15 +49,15 @@ function equipmentFix(item: EquipmentItem): { label: string; open: () => void } 
   }
   switch (item.id) {
     case "obs":
-      return { label: "OBS settings", open: () => openSettings("remote") }
+      return { label: "Connections", open: openConnectionsHub }
     case "cloud-speech":
       return { label: "Speech settings", open: () => openSettings("speech") }
     case "mcp":
       return { label: "AI assistants", open: () => openSettings("assistants") }
     case "join":
-      return { label: "Operators", open: () => openProductionTab("operators") }
+      return { label: "Connections", open: openConnectionsHub }
     case "paired":
-      return { label: "Remote Control", open: () => openSettings("remote") }
+      return { label: "Connections", open: openConnectionsHub }
     default:
       return null
   }
@@ -67,8 +67,7 @@ function equipmentFix(item: EquipmentItem): { label: string; open: () => void } 
 function serviceFix(f: ReadinessFix): () => void {
   if (f === "outputs") return () => useShellStore.getState().openOutputs()
   if (f === "prepare") return () => useShellStore.getState().goTo("prepare")
-  if (f === "cameras") return () => openProductionTab("cameras")
-  if (f === "obs") return () => openProductionTab("obs")
+  if (f === "cameras" || f === "obs") return openConnectionsHub
   return () => openSettings("diagnostics")
 }
 

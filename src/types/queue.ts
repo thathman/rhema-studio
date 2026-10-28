@@ -94,13 +94,16 @@ export interface SongQueueItem extends QueueItemBase {
   verse?: undefined
 }
 
-/** An announcement or any free-text screen: one slide, no library behind it. */
+/** An announcement or free-text screen. Library-backed items hold a content snapshot plus source identity. */
 export interface CustomSlide {
   title: string
   /** Plain text; each line is drawn on its own line. */
   body: string
   /** A safe http(s) link shown as a QR code with the text beside it (SG-003). */
   link?: string
+  /** The reusable library source this occurrence was copied from. The content above stays local to this service item. */
+  source_asset_id?: string
+  source_revision?: number
 }
 
 export interface SlideQueueItem extends QueueItemBase {
@@ -172,9 +175,14 @@ export interface ItemTiming {
 
 /** One team comment on a rundown item (CL-007). `at` is an ISO time. */
 export interface ItemComment {
+  /** Stable across service copies; older service files receive a deterministic id when read. */
+  id?: string
   by: string
   at: string
   text: string
+  /** A soft delete is permanent and retained with the service for audit and sync. */
+  deleted_by?: string
+  deleted_at?: string
 }
 
 /** Cues an item may run as it goes live: none changes what the congregation sees. */

@@ -9,12 +9,22 @@ import { dayAt } from "@/lib/church-time"
 export type PhaseRule = "loop" | "auto_once" | "manual"
 export type PhaseRole = "pre" | "warmup" | "main" | "post" | "custom"
 
+/** A saved event cue is a snapshot of a manual action sequence; it never runs from elapsed time. */
+export interface RunOfShowEventCue {
+  id: string
+  name: string
+  trigger: "manual"
+  /** Kept as strings so a newer build's actions survive a save by this build. */
+  steps: string[]
+}
+
 /** Versioned plan metadata on a service event. The event's title/id/notes are its header fields. */
 export interface RunOfShowEventPlan {
   schema_version: 1
   role?: string
   duration_minutes?: number
   ownership?: string
+  cues?: RunOfShowEventCue[]
   /** Deprecated v1 payload key; the parser ignores it because service approval is authoritative. */
   approval?: "draft" | "approved"
   /** Event metadata written by a later build; retained on the next save. */
@@ -60,7 +70,7 @@ export interface EventInsertionPoint {
   beforeHeaderId?: string
 }
 
-const EVENT_FIELDS = new Set(["schema_version", "role", "duration_minutes", "ownership", "approval"])
+const EVENT_FIELDS = new Set(["schema_version", "role", "duration_minutes", "ownership", "cues", "approval"])
 
 /** Read only this schema version; an unknown or malformed marker remains opaque payload data. */
 export function parseRunOfShowEvent(value: unknown): RunOfShowEventPlan | null {
@@ -74,11 +84,28 @@ export function parseRunOfShowEvent(value: unknown): RunOfShowEventPlan | null {
   if (raw.role !== undefined && !role || raw.ownership !== undefined && !ownership) return null
   const duration = raw.duration_minutes
   if (duration !== undefined && (typeof duration !== "number" || !Number.isFinite(duration) || duration <= 0 || duration > 600)) return null
+  let cues: RunOfShowEventCue[] | undefined
+  if (raw.cues !== undefined) {
+    if (!Array.isArray(raw.cues) || raw.cues.length > 12) return null
+    const seen = new Set<string>()
+    cues = []
+    for (const value of raw.cues) {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) return null
+      const cue = value as Record<string, unknown>
+      const id = cue.id
+      const name = text(cue.name)
+      if (typeof id !== "string" || !/^[a-zA-Z0-9._-]{1,80}$/.test(id) || seen.has(id) || !name || cue.trigger !== "manual") return null
+      if (!Array.isArray(cue.steps) || cue.steps.length === 0 || cue.steps.length > 12 || cue.steps.some((step) => typeof step !== "string" || step.length === 0 || step.length > 60)) return null
+      seen.add(id)
+      cues.push({ id, name, trigger: "manual", steps: [...cue.steps] as string[] })
+    }
+  }
   return {
     schema_version: 1,
     ...(role ? { role } : {}),
     ...(duration !== undefined ? { duration_minutes: duration } : {}),
     ...(ownership ? { ownership } : {}),
+    ...(cues !== undefined ? { cues } : {}),
     ...(Object.keys(raw).some((key) => !EVENT_FIELDS.has(key)) ? { payload_extra: Object.fromEntries(Object.entries(raw).filter(([key]) => !EVENT_FIELDS.has(key))) } : {}),
   }
 }
@@ -361,6 +388,15 @@ export function defaultPhases(itemCount: number, newId: () => string = () => cry
     { id: newId(), type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
     { id: newId(), type: "phase", name: "Post-service loop", at: itemCount, rule: "loop", role: "post" },
   ]
+}
+
+/** Keep existing event/group headers inside Main service when adding phases. */
+export function organiseHeadersIntoDefaultPhases(headers: OutlineHeader[], itemCount: number, newId?: () => string): OutlineHeader[] {
+  const phases = defaultPhases(itemCount, newId)
+  const postIndex = phases.findIndex((phase) => phase.role === "post")
+  return postIndex < 0
+    ? [...phases, ...headers]
+    : [...phases.slice(0, postIndex), ...headers, ...phases.slice(postIndex)]
 }
 
 /** How a phase runs, for its chip and strip. */

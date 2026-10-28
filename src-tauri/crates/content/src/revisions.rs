@@ -327,7 +327,13 @@ impl ContentDb {
         if revision.summary.program_id != program_id {
             return Err(ContentError::Invalid("that revision belongs to another service".into()));
         }
-        let mut restored = self.replace_items(program_id, expected_revision, &revision.items)?;
+        let current = self.get_program(program_id)?.ok_or_else(|| ContentError::NotFound(program_id.to_string()))?;
+        let mut items = revision.items;
+        for item in &mut items {
+            let old = current.items.iter().find(|candidate| item.id.as_deref() == Some(candidate.id.as_str()));
+            item.payload = crate::preserve_comment_history(old.and_then(|it| it.payload.as_deref()), item.payload.as_deref())?;
+        }
+        let mut restored = self.restore_items_with_history(program_id, expected_revision, &items)?;
         let mut conn = self.lock()?;
         let tx = conn.transaction()?;
         audit(&tx, "program", program_id, "restore_revision", &serde_json::json!({ "from_revision": revision.summary.revision }))?;
@@ -649,6 +655,7 @@ mod tests {
 
     #[test]
     fn the_operator_name_is_recorded_on_audit_rows() {
+        let _actor_guard = crate::TEST_ACTOR_LOCK.lock().unwrap();
         let db = ContentDb::open_in_memory().unwrap();
         let p = db.create_program("Sunday", None).unwrap();
         crate::set_actor(Some("  Tolu  "));
@@ -664,6 +671,77 @@ mod tests {
         assert_eq!(approve.actor.as_deref(), Some("Tolu"));
         let _ = db.update_program(&p.id, renamed.revision, "Sunday 9am", None).unwrap();
         assert_eq!(db.audit_events("program", &p.id).unwrap().last().unwrap().actor, None);
+    }
+
+    #[test]
+    fn restoring_an_older_revision_preserves_comment_tombstones() {
+        let _actor_guard = crate::TEST_ACTOR_LOCK.lock().unwrap();
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        let original = ItemInput {
+            id: Some("i1".into()),
+            kind: "verse".into(),
+            reference: "John 3:16".into(),
+            book_number: Some(43),
+            chapter: Some(3),
+            verse: Some(16),
+            payload: Some(serde_json::json!({
+                "comments": [{ "id": "comment-1", "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": "Read slowly" }]
+            }).to_string()),
+            ..ItemInput::default()
+        };
+        crate::set_actor(Some("Ade"));
+        let saved = db.replace_items(&p.id, p.revision, &[original]).unwrap();
+        let old = db.list_revisions(&p.id).unwrap().into_iter().find(|r| r.revision == saved.program.revision).unwrap();
+        let removed = ItemInput {
+            id: Some("i1".into()),
+            kind: "verse".into(),
+            reference: "John 3:16".into(),
+            book_number: Some(43),
+            chapter: Some(3),
+            verse: Some(16),
+            payload: Some(serde_json::json!({
+                "comments": [{ "id": "comment-1", "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": "Read slowly", "deleted_by": "Ade", "deleted_at": "2026-10-21T11:00:00Z" }]
+            }).to_string()),
+            ..ItemInput::default()
+        };
+        let current = db.replace_items(&p.id, saved.program.revision, &[removed]).unwrap();
+        let restored = db.restore_revision(&p.id, current.program.revision, &old.id).unwrap();
+        crate::set_actor(None);
+        let payload: serde_json::Value = serde_json::from_str(restored.items[0].payload.as_deref().unwrap()).unwrap();
+        assert_eq!(payload["comments"][0]["deleted_by"], "Ade");
+        assert_eq!(payload["comments"][0]["deleted_at"], "2026-10-21T11:00:00Z");
+    }
+
+    #[test]
+    fn restoring_an_older_revision_keeps_comments_added_after_it() {
+        let _actor_guard = crate::TEST_ACTOR_LOCK.lock().unwrap();
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        let item = ItemInput {
+            id: Some("i1".into()),
+            kind: "verse".into(),
+            reference: "John 3:16".into(),
+            book_number: Some(43),
+            chapter: Some(3),
+            verse: Some(16),
+            ..ItemInput::default()
+        };
+        let saved = db.replace_items(&p.id, p.revision, std::slice::from_ref(&item)).unwrap();
+        let old = db.list_revisions(&p.id).unwrap().into_iter().find(|r| r.revision == saved.program.revision).unwrap();
+        crate::set_actor(Some("Tolu"));
+        let later = ItemInput {
+            payload: Some(serde_json::json!({
+                "comments": [{ "id": "comment-later", "by": "Tolu", "at": "2026-10-21T12:00:00Z", "text": "Keep the ending quiet" }]
+            }).to_string()),
+            ..item.clone()
+        };
+        let current = db.replace_items(&p.id, saved.program.revision, &[later]).unwrap();
+        let restored = db.restore_revision(&p.id, current.program.revision, &old.id).unwrap();
+        crate::set_actor(None);
+        let payload: serde_json::Value = serde_json::from_str(restored.items[0].payload.as_deref().unwrap()).unwrap();
+        assert_eq!(payload["comments"][0]["id"], "comment-later");
+        assert_eq!(payload["comments"][0]["text"], "Keep the ending quiet");
     }
 
     #[test]

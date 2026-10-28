@@ -10,6 +10,7 @@ import { useServiceStore, toItemInputs, toQueueItems, rundownSignature, cleanNam
 import type { Translation } from "@/types"
 import { useQueueStore } from "./queue-store"
 import { useBibleStore } from "./bible-store"
+import { useBroadcastStore } from "./broadcast-store"
 import type { OutlineHeader } from "@/lib/run-of-show"
 
 const program = {
@@ -78,7 +79,7 @@ const bilingual: ProgramWithItems = {
 }
 
 const sentItems = () => {
-  const call = mockInvoke.mock.calls.filter((c) => c[0] === "content_replace_items").at(-1)!
+  const call = mockInvoke.mock.calls.filter((c) => c[0] === "content_replace_items" || c[0] === "content_replace_items_with_history").at(-1)!
   return (call[1] as { items: Array<Record<string, unknown>> }).items
 }
 
@@ -91,7 +92,8 @@ beforeEach(() => {
   mockInvoke.mockReset()
   useQueueStore.setState({ items: [], activeIndex: null })
   useBibleStore.setState({ activeTranslationId: 1, secondaryTranslationId: null, translations: [KJV] })
-  useServiceStore.setState({ programs: [], current: null, dirty: false, loading: false, saving: false, error: null, conflict: null, unsupportedItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
+  useBroadcastStore.setState({ isLive: false, liveVerse: null, liveItemId: null, liveSlide: null } as never)
+  useServiceStore.setState({ programs: [], current: null, dirty: false, loading: false, saving: false, error: null, conflict: null, unsupportedItems: [], corruptItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
 })
 
 describe("conversions", () => {
@@ -145,18 +147,56 @@ describe("conversions", () => {
     expect(toItemInputs(loadedMoments, undefined, undefined, loadedHeaders)[0]).toMatchObject(saved[0])
   })
 
-  it("unknown kinds and malformed verses are set aside, never converted", () => {
+  it("separates future item kinds from malformed known items and unreadable headers", () => {
     const data: ProgramWithItems = {
       program,
       items: [
         item("ok", "John 3:16", 43, 3, 16),
         item("song", "Amazing Grace", 0, 0, 0, { kind: "song", book_number: null, chapter: null, verse: null }),
         item("broken", "Nowhere 1:1", 0, 0, 0, { book_number: null }),
+        item("future", "Future content", 0, 0, 0, { kind: "interactive_scene" }),
+        item("broken-header", "Sermon", 0, 0, 0, { kind: "group", payload: "{not-json" }),
       ],
     }
-    const { items, unsupported } = toQueueItems(data, 1, [KJV])
+    const { items, headers, unsupported, corrupt } = toQueueItems(data, 1, [KJV])
     expect(items.map((i) => i.id)).toEqual(["ok"])
-    expect(unsupported.map((i) => i.id)).toEqual(["song", "broken"])
+    expect(unsupported.map((i) => i.id)).toEqual(["future"])
+    expect(corrupt.map((i) => i.id)).toEqual(["song", "broken", "broken-header"])
+    expect(headers).toMatchObject([{ id: "broken-header", name: "Sermon", type: "group" }])
+  })
+
+  it("preserves valid JSON header fields this version cannot interpret", () => {
+    const phasePayload = {
+      rule: "future_rule",
+      role: "future_role",
+      starts_at: "26:17",
+      advance_seconds: -1,
+      disabled: "yes",
+      phase_extension: { preserve: true },
+    }
+    const groupPayload = {
+      rule: "group_rule",
+      starts_at: { mode: "custom" },
+      advance_seconds: "custom",
+      disabled: 1,
+      group_extension: "preserve",
+    }
+    const data: ProgramWithItems = {
+      program,
+      items: [
+        item("phase", "Pre-service", 0, 0, 0, { kind: "phase", book_number: null, chapter: null, verse: null, payload: JSON.stringify(phasePayload) }),
+        item("verse", "John 3:16", 43, 3, 16),
+        item("group", "Sermon", 0, 0, 0, { kind: "group", book_number: null, chapter: null, verse: null, payload: JSON.stringify(groupPayload) }),
+      ],
+    }
+
+    const { items, headers, unsupported, corrupt } = toQueueItems(data, 1, [KJV])
+    expect(unsupported).toEqual([])
+    expect(corrupt).toEqual([])
+
+    const savedHeaders = toItemInputs(items, undefined, undefined, headers).filter((saved) => saved.kind === "phase" || saved.kind === "group")
+    expect(savedHeaders.map((saved) => saved.id)).toEqual(["phase", "group"])
+    expect(savedHeaders.map((saved) => JSON.parse(saved.payload!))).toEqual([phasePayload, groupPayload])
   })
 
   it("stored translation, secondary and notes ride on the rundown item and come back out unchanged", () => {
@@ -493,7 +533,7 @@ describe("saving", () => {
     useBroadcastStore.setState({ liveItemId: "i1" })
     useServiceStore.getState().closeProgram()
     mockInvoke.mockImplementation(async (cmd: string, a?: { items?: ProgramItem[] }) =>
-      cmd === "content_create_program" ? { ...program, id: "p2", revision: 1 } : cmd === "content_replace_items" ? { program: { ...program, id: "p2", revision: 2 }, items: a?.items ?? [] } : null)
+      cmd === "content_create_program" ? { ...program, id: "p2", revision: 1 } : cmd === "content_replace_items_with_history" ? { program: { ...program, id: "p2", revision: 2 }, items: a?.items ?? [] } : null)
     await useServiceStore.getState().createFromRundown("Evening", null, { discard: true })
     const ids = sentItems().map((i) => String(i.id))
     expect(ids).toHaveLength(2)
@@ -512,7 +552,7 @@ describe("saving", () => {
     const slideItem = { ...useQueueStore.getState().items[0], kind: "slide", slide: { title: "Hi", body: "" } }
     useBibleStore.setState({ selectedSlide: { item: slideItem as never, index: 0 } })
     mockInvoke.mockImplementation(async (cmd: string, a?: { items?: ProgramItem[] }) =>
-      cmd === "content_create_program" ? { ...program, id: "p3", revision: 1 } : cmd === "content_replace_items" ? { program: { ...program, id: "p3", revision: 2 }, items: a?.items ?? [] } : null)
+      cmd === "content_create_program" ? { ...program, id: "p3", revision: 1 } : cmd === "content_replace_items_with_history" ? { program: { ...program, id: "p3", revision: 2 }, items: a?.items ?? [] } : null)
     expect(await useServiceStore.getState().duplicateCurrent("Copy", null)).toBe("created")
     const ids = sentItems().map((i) => String(i.id))
     expect(ids).not.toContain("i2")
@@ -520,7 +560,7 @@ describe("saving", () => {
     expect(useJournalStore.getState().entries[0].itemId).toBe(ids[1])
     expect(useBibleStore.getState().selectedSlide?.item.id).toBe(ids[0])
     // The original service is never written with the new ids.
-    expect(mockInvoke.mock.calls.filter((c) => c[0] === "content_replace_items").every((c) => (c[1] as { programId: string }).programId !== program.id)).toBe(true)
+    expect(mockInvoke.mock.calls.filter((c) => c[0] === "content_replace_items_with_history").every((c) => (c[1] as { programId: string }).programId !== program.id)).toBe(true)
     useBroadcastStore.setState({ liveItemId: null })
     useBibleStore.setState({ selectedSlide: null })
     useJournalStore.getState().clear()
@@ -584,7 +624,7 @@ describe("saving", () => {
   it("refuses to save a service that holds items this build cannot edit", async () => {
     const data: ProgramWithItems = {
       program,
-      items: [item("ok", "John 3:16", 43, 3, 16), item("song", "Amazing Grace", 0, 0, 0, { kind: "song", book_number: null, chapter: null, verse: null })],
+      items: [item("ok", "John 3:16", 43, 3, 16), item("song", "Amazing Grace", 0, 0, 0, { kind: "future_song", book_number: null, chapter: null, verse: null })],
     }
     mockInvoke.mockImplementation(async (cmd: string) => (cmd === "content_get_program" ? data : null))
     expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
@@ -593,6 +633,90 @@ describe("saving", () => {
     expect(await useServiceStore.getState().saveCurrent()).toBe("unsupported")
     expect(mockInvoke.mock.calls.some((c) => c[0] === "content_replace_items")).toBe(false)
     expect(useServiceStore.getState().error).toMatch(/cannot edit/)
+  })
+
+  it("keeps unreadable saved items distinct and blocks save and copy without writing", async () => {
+    const data: ProgramWithItems = {
+      program,
+      items: [
+        item("ok", "John 3:16", 43, 3, 16),
+        item("broken", "Welcome slide", 0, 0, 0, { kind: "slide", book_number: null, chapter: null, verse: null, payload: "{not-json" }),
+        item("future", "New scene", 0, 0, 0, { kind: "interactive_scene" }),
+      ],
+    }
+    mockInvoke.mockImplementation(async (cmd: string, args?: { id?: string }) => {
+      if (cmd === "content_get_program" && args?.id === "p1") return data
+      if (cmd === "content_get_program" && args?.id === "template") return { ...data, program: { ...program, id: "template", is_template: true } }
+      return null
+    })
+
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+    expect(useServiceStore.getState().corruptItems.map((saved) => saved.id)).toEqual(["broken"])
+    expect(useServiceStore.getState().unsupportedItems.map((saved) => saved.id)).toEqual(["future"])
+
+    expect(await useServiceStore.getState().createFromRundown("Partial copy", null, { discard: true })).toBe("failed")
+    expect(useServiceStore.getState().error).toMatch(/cannot copy/)
+    expect(await useServiceStore.getState().approve()).toBe("error")
+    expect(useServiceStore.getState().error).toMatch(/could not read/)
+    expect(await useServiceStore.getState().duplicateCurrent("Copy", null)).toBe("failed")
+    expect(useServiceStore.getState().error).toMatch(/could not read/)
+    expect(await useServiceStore.getState().newFromTemplate("template", "From template", null)).toBe("failed")
+    expect(useServiceStore.getState().error).toMatch(/could not read/)
+    useServiceStore.setState({ dirty: true })
+    expect(await useServiceStore.getState().saveCurrent()).toBe("unsupported")
+    expect(useServiceStore.getState().error).toMatch(/could not read/)
+    expect(mockInvoke.mock.calls.some(([cmd]) =>
+      cmd === "content_replace_items" || cmd === "content_create_program" || cmd === "content_approve_program_with_designs",
+    )).toBe(false)
+  })
+
+  it("allows a validated template to create a new service beside an unreadable current service", async () => {
+    const corruptService: ProgramWithItems = {
+      program,
+      items: [item("broken", "Welcome slide", 0, 0, 0, { kind: "slide", book_number: null, chapter: null, verse: null, payload: "{not-json" })],
+    }
+    const template: ProgramWithItems = {
+      program: { ...program, id: "template", is_template: true },
+      items: [item("template-verse", "John 3:16", 43, 3, 16, { program_id: "template" })],
+    }
+    const createdProgram = { ...program, id: "new", title: "From template", revision: 1 }
+    mockInvoke.mockImplementation(async (cmd: string, args?: { id?: string; items?: ProgramItem[] }) => {
+      if (cmd === "content_get_program" && args?.id === "p1") return corruptService
+      if (cmd === "content_get_program" && args?.id === "template") return template
+      if (cmd === "content_get_program" && args?.id === "new") {
+        return { ...template, program: { ...createdProgram, revision: 2 }, items: template.items.map((row) => ({ ...row, id: "copied-verse", program_id: "new" })) }
+      }
+      if (cmd === "content_create_program") return createdProgram
+      if (cmd === "content_replace_items_with_history") {
+        return { program: { ...createdProgram, revision: 2, item_count: args?.items?.length ?? 0 }, items: args?.items ?? [] }
+      }
+      return null
+    })
+
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+    expect(useServiceStore.getState().corruptItems.map((row) => row.id)).toEqual(["broken"])
+    expect(await useServiceStore.getState().newFromTemplate("template", "From template", null)).toBe("created")
+    expect(useServiceStore.getState().current?.id).toBe("new")
+    expect(useServiceStore.getState().corruptItems).toEqual([])
+    expect(mockInvoke.mock.calls.filter(([cmd]) => cmd === "content_replace_items_with_history").every(([, args]) => (args as { programId: string }).programId === "new")).toBe(true)
+  })
+
+  it("loads an unreadable row without changing the running Program", async () => {
+    const data: ProgramWithItems = {
+      program,
+      items: [item("broken", "Welcome slide", 0, 0, 0, { kind: "slide", book_number: null, chapter: null, verse: null, payload: "{not-json" })],
+    }
+    const liveVerse = { kind: "slide", reference: "Current Program", lines: ["Keep this live"] }
+    useBroadcastStore.setState({ isLive: true, liveItemId: "live-item", liveVerse, liveSlide: null } as never)
+    mockInvoke.mockImplementation(async (cmd: string) => (cmd === "content_get_program" ? data : null))
+
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+    expect(useServiceStore.getState().corruptItems.map((saved) => saved.id)).toEqual(["broken"])
+    expect(useBroadcastStore.getState()).toMatchObject({
+      isLive: true,
+      liveItemId: "live-item",
+      liveVerse,
+    })
   })
 })
 
@@ -604,7 +728,7 @@ describe("createFromRundown", () => {
     })
     mockInvoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "content_create_program") return { ...program, id: "new", revision: 1, item_count: 0 }
-      if (cmd === "content_replace_items") {
+      if (cmd === "content_replace_items_with_history") {
         const rows = args?.items as ProgramItem[]
         expect(rows).toHaveLength(1)
         expect(rows[0]).toMatchObject({ kind: "group", reference: "Opening Prayer" })
@@ -616,7 +740,7 @@ describe("createFromRundown", () => {
     })
 
     expect(await useServiceStore.getState().createFromRundown("Service draft", "2026-10-26")).toBe("created")
-    expect(mockInvoke.mock.calls.some(([cmd]) => cmd === "content_replace_items")).toBe(true)
+    expect(mockInvoke.mock.calls.some(([cmd]) => cmd === "content_replace_items_with_history")).toBe(true)
     expect(useServiceStore.getState()).toMatchObject({ current: { id: "new", revision: 2 }, dirty: false })
   })
 
@@ -624,7 +748,7 @@ describe("createFromRundown", () => {
     useQueueStore.setState({ items: [queueItem("John 3:16", 43, 3, 16)] })
     mockInvoke.mockImplementation(async (cmd: string) => {
       if (cmd === "content_create_program") return { ...program, id: "new", revision: 1, item_count: 0 }
-      if (cmd === "content_replace_items") throw { kind: "database", message: "disk full" }
+      if (cmd === "content_replace_items_with_history") throw { kind: "database", message: "disk full" }
       return null
     })
     expect(await useServiceStore.getState().createFromRundown("Sunday", null)).toBe("created_unsaved")
@@ -638,10 +762,11 @@ describe("createFromRundown", () => {
     useQueueStore.setState({ items: [queueItem("John 3:16", 43, 3, 16)] })
     mockInvoke.mockImplementation(async (cmd: string) => {
       if (cmd === "content_create_program") return { ...program, id: "new", revision: 1, item_count: 0 }
-      if (cmd === "content_replace_items") return { ...savedResponse(2), program: { ...program, id: "new", revision: 2, item_count: 1 } }
+      if (cmd === "content_replace_items_with_history") return { ...savedResponse(2), program: { ...program, id: "new", revision: 2, item_count: 1 } }
       return null
     })
     expect(await useServiceStore.getState().createFromRundown("Sunday", null)).toBe("created")
+    expect(mockInvoke).toHaveBeenCalledWith("content_replace_items_with_history", expect.objectContaining({ programId: "new" }))
     expect(useServiceStore.getState()).toMatchObject({ dirty: false })
     expect(useServiceStore.getState().current?.revision).toBe(2)
   })
@@ -670,16 +795,16 @@ describe("createFromRundown", () => {
       calls.push([cmd, a])
       if (cmd === "content_get_program") return a.id === "tpl" ? template : { program: { ...program, id: "new", revision: 2 }, items: [item("n1", "John 3:16", 43, 3, 16, { program_id: "new" })] }
       if (cmd === "content_create_program") return { ...program, id: "new", title: a.title, service_date: a.serviceDate, revision: 1 }
-      if (cmd === "content_replace_items") return { program: { ...program, id: "new", revision: 2 }, items: (a.items as Array<{ id: string }>).map((x, n) => item(x.id, "John 3:16", 43, 3, 16, { program_id: "new", position: n })) }
+      if (cmd === "content_replace_items_with_history") return { program: { ...program, id: "new", revision: 2 }, items: (a.items as Array<{ id: string }>).map((x, n) => item(x.id, "John 3:16", 43, 3, 16, { program_id: "new", position: n })) }
       if (cmd === "content_list_programs") return []
       return null
     })
     useServiceStore.setState({ current: null, dirty: false } as never)
     expect(await useServiceStore.getState().newFromTemplate("tpl", "Sunday 25th", "2026-10-25")).toBe("created")
-    const saved = calls.find(([c]) => c === "content_replace_items")!
+    const saved = calls.find(([c]) => c === "content_replace_items_with_history")!
     expect(saved[1].programId).toBe("new")
     expect((saved[1].items as Array<{ id: string }>)[0].id).not.toBe("i1")
-    expect(calls.some(([c, a]) => c === "content_replace_items" && a.programId === "tpl")).toBe(false)
+    expect(calls.some(([c, a]) => c === "content_replace_items_with_history" && a.programId === "tpl")).toBe(false)
     expect(useServiceStore.getState().current?.id).toBe("new")
   })
 
@@ -688,7 +813,7 @@ describe("createFromRundown", () => {
     const writes: string[] = []
     mockInvoke.mockImplementation(async (cmd: string) => {
       if (cmd === "content_get_program") return template
-      if (cmd === "content_create_program" || cmd === "content_replace_items") { writes.push(cmd); throw { kind: "database", message: "disk full" } }
+      if (cmd === "content_create_program" || cmd === "content_replace_items_with_history") { writes.push(cmd); throw { kind: "database", message: "disk full" } }
       return null
     })
     useQueueStore.setState({ items: [], activeIndex: null })
@@ -766,9 +891,15 @@ describe("createFromRundown", () => {
   it("saves and reopens team comments (CL-007), and a new comment counts as an unsaved change", () => {
     const v: VerseQueueItem = { id: "c1", verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, comments: [{ by: "Ade", at: "2026-10-21T10:00:00Z", text: "Read slowly\nthen pause" }] }
     const [input] = toItemInputs([v])
-    expect(JSON.parse(input.payload ?? "{}").comments).toEqual([{ by: "Ade", at: "2026-10-21T10:00:00Z", text: "Read slowly\nthen pause" }])
+    expect(JSON.parse(input.payload ?? "{}").comments).toMatchObject([{ id: expect.stringMatching(/^legacy-/), by: "Ade", at: "2026-10-21T10:00:00Z", text: "Read slowly\nthen pause" }])
     const reopened = toQueueItems({ program, items: [item("c1", "John 3:16", 43, 3, 16, { payload: input.payload ?? null })] }, 1, [])
-    expect(reopened.items[0].comments).toEqual(v.comments)
+    expect(reopened.items[0].comments).toMatchObject(JSON.parse(input.payload ?? "{}").comments)
+    expect(reopened.items[0].comments?.[0].id).toBe(JSON.parse(input.payload ?? "{}").comments[0].id)
+    const tombstone = { id: "comment-1", by: "Ade", at: "2026-10-21T10:00:00Z", text: "Read slowly", deleted_by: "Ade", deleted_at: "2026-10-21T11:00:00Z" }
+    const [deletedInput] = toItemInputs([{ ...v, comments: [tombstone] }])
+    const deletedReopen = toQueueItems({ program, items: [item("c1", "John 3:16", 43, 3, 16, { payload: deletedInput.payload ?? null })] }, 1, [])
+    expect(JSON.parse(deletedInput.payload ?? "{}").comments).toEqual([tombstone])
+    expect(deletedReopen.items[0].comments).toEqual([tombstone])
     expect(rundownSignature([v])).not.toBe(rundownSignature([{ ...v, comments: [...(v.comments ?? []), { by: "Tolu", at: "2026-10-21T11:00:00Z", text: "ok" }] }]))
   })
 
@@ -783,6 +914,19 @@ describe("createFromRundown", () => {
     const reopened = toQueueItems({ program, items: [item("s2", "Hi", 0, 0, 0, { kind: "slide", book_number: null, chapter: null, verse: null, payload })] }, 1, [])
     const [input] = toItemInputs(reopened.items)
     expect(JSON.parse(input.payload ?? "{}")).toMatchObject({ title: "Hi", body: "There", transition: "fade", future: { x: 1 } })
+  })
+
+  it("preserves reusable slide source identity while keeping service copy edits independent", () => {
+    const sourceSlide = { id: "rs1", kind: "slide", slide: { title: "Welcome", body: "Library wording", source_asset_id: "source-1", source_revision: 4 }, reference: "Welcome", confidence: 1, source: "manual", added_at: 0 } as unknown as QueueItem
+    const [saved] = toItemInputs([sourceSlide])
+    expect(JSON.parse(saved.payload ?? "{}")).toMatchObject({ title: "Welcome", body: "Library wording", source_asset_id: "source-1", source_revision: 4 })
+
+    const reopened = toQueueItems({ program, items: [item("rs1", "Welcome", 0, 0, 0, { kind: "slide", book_number: null, chapter: null, verse: null, payload: saved.payload ?? null })] }, 1, []).items[0]
+    expect(reopened).toMatchObject({ slide: { source_asset_id: "source-1", source_revision: 4, body: "Library wording" } })
+    if (reopened.kind !== "slide") throw new Error("expected a slide")
+    const editedOccurrence = { ...reopened, slide: { ...reopened.slide, body: "This Sunday only" } }
+    const [serviceCopy] = toItemInputs([editedOccurrence])
+    expect(JSON.parse(serviceCopy.payload ?? "{}")).toMatchObject({ body: "This Sunday only", source_asset_id: "source-1", source_revision: 4 })
   })
 
   it("an edit made while a load is running still counts as unsaved once the load ends", async () => {

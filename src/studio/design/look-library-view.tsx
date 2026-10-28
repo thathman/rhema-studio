@@ -11,7 +11,7 @@ import { designDraftId } from "@/lib/design-drafts"
 import { useShellStore, type DesignTab } from "@/studio/shell-store"
 import { LOWER_THIRDS } from "@/lib/builtin-themes"
 import { SAMPLE_BILINGUAL_SONG } from "@/lib/theme-migrations"
-import { DESIGN_PACK_MAX_BYTES, importDesignPack, libraryFamilies, libraryLooks, packFamilyId, parseDesignPack, removeDesignPack, useDesignPackStore, type DesignPack } from "@/lib/design-packs"
+import { DESIGN_PACK_MAX_BYTES, importDesignPack, isBundledDesignPack, libraryFamilies, libraryLooks, packFamilyId, parseDesignPack, removeDesignPack, useDesignPackStore, type DesignPack } from "@/lib/design-packs"
 import { adoptLook, brandable, CONTENT_LABELS, filterLooks, isObsOverlay, LAYOUT_NAMES, lookAspects, lookAudio, lookCopies, lookLanguages, OBS_OVERLAY, readLookFavourites, resetCopy, resetLowerThirdCopy, resetSceneCopy, resetSingleLook, showsTwoLanguages, writeLookFavourites, type LibraryLook, type LookAspect, type LookBackground, type LookCopy, type LookFamilyId, type LookLanguage, type LookLayout } from "@/lib/look-library"
 import { openProductionTab } from "@/studio/production/production-tab"
 import { hasChurchColours, type BrandKit } from "@/lib/brand-kit"
@@ -61,7 +61,7 @@ const LANGUAGES: ReadonlyArray<readonly [LookLanguage | "both" | "all", string]>
 const storage = typeof localStorage === "undefined" ? null : localStorage
 
 /**
- * Design → Library: ready-made looks to start from. Use adds the church's own
+ * Design → Templates: ready-made looks to start from. Use adds the church's own
  * copy; nothing on a screen changes until that copy is chosen for an output.
  */
 export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: string) => void }) {
@@ -147,7 +147,15 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
                 <h3 className="text-sm font-bold">{g.family.name}</h3>
                 <p className="text-xs text-muted-foreground">{g.family.description}</p>
               </div>
-              {g.family.id.startsWith("pack:") && <RemovePackButton pack={packs.find((p) => packFamilyId(p.doc.id) === g.family.id)} />}
+              {g.family.id.startsWith("pack:") && (() => {
+                const localPack = packs.find((p) => packFamilyId(p.doc.id) === g.family.id)
+                return localPack
+                  ? <div className="flex items-center gap-2">
+                    {isBundledDesignPack(localPack.doc.id) && <span className="text-xs text-muted-foreground">Local version</span>}
+                    <RemovePackButton pack={localPack} />
+                  </div>
+                  : <span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">Included offline</span>
+              })()}
             </header>
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
               {g.looks.map((l) => <LookCard key={l.id} look={l} favourite={favourites.has(l.id)} onFavourite={() => toggleFavourite(l.id)} onOpen={onOpen} />)}
@@ -174,7 +182,7 @@ function ImportPackButton({ onImported }: { onImported: (pack: DesignPack) => vo
       const n = pack.looks.length
       const ok = await confirm(
         here ? `Replace “${here.doc.name}” with this version?` : `Import “${pack.doc.name}”?`,
-        `${n} ${n === 1 ? "look" : "looks"} by ${pack.doc.author} (${pack.doc.license}) join Design → Library. ${here ? "Copies you already made from the old version stay as they are. " : ""}Nothing on the screens, outputs, cameras or scenes changes.`,
+        `${n} ${n === 1 ? "look" : "looks"} by ${pack.doc.author} (${pack.doc.license}) join Design → Templates. ${here ? "Copies you already made from the old version stay as they are. " : ""}Nothing on the screens, outputs, cameras or scenes changes.`,
         here ? "Replace" : "Import",
       )
       if (!ok) return
@@ -188,7 +196,7 @@ function ImportPackButton({ onImported }: { onImported: (pack: DesignPack) => vo
   return (
     <>
       <input ref={file} type="file" accept=".json,application/json" className="hidden" aria-label="Design pack file" onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = "" }} />
-      <Button size="sm" variant="outline" onClick={() => file.current?.click()} title="Add the looks in a Rhema design pack (.rhema-design.json) to this library">
+      <Button size="sm" variant="outline" onClick={() => file.current?.click()} title="Add the looks in a Rhema design pack (.rhema-design.json) to Design templates">
         <UploadIcon /> Import design pack
       </Button>
     </>
@@ -198,10 +206,14 @@ function ImportPackButton({ onImported }: { onImported: (pack: DesignPack) => vo
 /** Take an imported pack out of the library; the church's copies of its looks stay. */
 function RemovePackButton({ pack }: { pack: DesignPack | undefined }) {
   if (!pack) return null
+  const bundledOverride = isBundledDesignPack(pack.doc.id)
   const click = async () => {
-    if (!(await confirm(`Remove “${pack.doc.name}” from the library?`, "Its looks leave Design → Library. Copies you made from them stay in your looks, and nothing on the screens changes.", "Remove"))) return
+    const consequence = bundledOverride
+      ? "This local version leaves Design → Templates and Rhema's included offline pack returns. Copies you made stay in your looks, and nothing on the screens changes."
+      : "Its looks leave Design → Templates. Copies you made from them stay in your looks, and nothing on the screens changes."
+    if (!(await confirm(`Remove “${pack.doc.name}” from Design templates?`, consequence, "Remove"))) return
     await removeDesignPack(pack.doc.id)
-    toast(`Removed “${pack.doc.name}” from the library.`)
+    toast(bundledOverride ? `Removed the local version of “${pack.doc.name}”.` : `Removed “${pack.doc.name}” from Design templates.`)
   }
   return (
     <Button size="xs" variant="ghost" onClick={() => void click()}>
