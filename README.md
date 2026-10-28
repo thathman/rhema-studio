@@ -214,7 +214,7 @@ DEEPGRAM_API_KEY=your_key_here
 Get your API key at [deepgram.com](https://deepgram.com/)
 
 **Option 3: OpenAI Transcribe (Cloud, Paid)**
-Enter an OpenAI API key in Settings → Speech Recognition and select Cloud (OpenAI). Choose English or Yorùbá; Yorùbá is left to automatic language detection. OpenAI returns a final result after each utterance rather than interim live words.
+Enter an OpenAI API key in Settings → Speech Recognition and select Cloud (OpenAI). If Settings has no key, Rhema may use `OPENAI_API_KEY` from the environment that launched the app. Choose English or Yorùbá; Yorùbá is left to automatic language detection. OpenAI returns a final result after each utterance rather than interim live words.
 
 ### NDI SDK (optional)
 

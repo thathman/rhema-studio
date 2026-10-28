@@ -29,7 +29,12 @@ export function CloudSpeechConsent() {
           <DialogDescription>Cloud speech recognition is about to start listening.</DialogDescription>
         </DialogHeader>
         <ul className="list-disc space-y-1 pl-5 text-sm">
-          <li>While listening, Rhema sends the chosen microphone&apos;s audio (the sermon, prayers, or anything said near it) to {providerCompany}, using your church&apos;s own {providerName} API key.</li>
+          <li>
+            While listening, Rhema sends the chosen microphone&apos;s audio (the sermon, prayers, or anything said near it) to {providerCompany}
+            {pendingProvider === "openai"
+              ? ". Rhema uses the OpenAI API key saved in Settings. If none is saved, it may use OPENAI_API_KEY from the environment that launched Rhema."
+              : ", using the Deepgram API key saved in Settings."}
+          </li>
           <li>{providerCompany} returns recognized words; Rhema Studio uses them to suggest Bible references. If Auto-live is armed, it can update the Bible source; taking a scene remains a separate action.</li>
           <li>Rhema keeps the live transcript in memory while listening. It is saved with a service log only when you choose to keep it there.</li>
           <li>Current builds do not write transcript text to diagnostic logs. Logs from older builds may already contain short fragments; review them before sharing.</li>
