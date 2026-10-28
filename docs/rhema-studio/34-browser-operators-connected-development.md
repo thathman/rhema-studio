@@ -152,6 +152,10 @@ Proposed novice-first split: giant live current-event timer, small planned vs el
 
 **Acceptance examples:** take Camera+Scripture to Sanctuary while Overflow remains on its own Worship lyrics scene; explicitly select Sanctuary+Overflow, examine two independently rendered variants and request group Take; one output fails after the group starts and Rhema reports exactly which changed; role has single-Take permission but not group permission; draft lower-third edit does not change either output; hiding only lower-third leaves camera and Bible source intact; activating a new Live Bible passage updates subscribed output composition without a scene Take; group request never touches OBS or Stage; stale revision/host override blocks the operation; test browser role UX and physical receiver acknowledgments, not mock screenshots alone.
 
+### Operator page layout wireframes — PROPOSED, NOT OWNER-VISUALLY APPROVED
+
+All proposed **Page 1–5 layouts**, including detailed **Page 5 Screens & Graphics** single/group Take wireframes, output-picker/Preview/Program hierarchy, contextual Library+Design graphic picker, edit/scoping distinction and 1440/1024/768/390px behaviors, are preserved in **[36 — Role Operator Page Layout Proposals](36-operator-page-layout-proposals.md)**. These are **proposed layouts / interaction demos**, not owner-signed-off pixel designs or evidence of working code. The owner's ratified functional decisions in this file and [35 — Timing Views](35-timekeeper-and-timing-view-family.md) remain authoritative; do not silently approve the open Page 5 permanent-scene/design-edit permissions choice.
+
 ### Operator design review protocol: one page at a time, with owner sign-off
 
 **We have NOT completed the operator visual redesign together. Do not silently invent final approved page designs or count a generic console as accepted.** Implement shared safety/data foundations first, then present an individually reviewable page specification/screenshot/interactive demo to the owner for each step. Record feedback and approval, then continue to the next page. No automatic completion of 12 pages because their route exists.
