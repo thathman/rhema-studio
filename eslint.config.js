@@ -6,7 +6,16 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'src-tauri/target', 'companion-app/src-tauri/target', '.remember', 'web', 'data/build-bible-db.ts']),
+  // QA journey bodies are injected into an async callback by scripts/mac-qa/qa.py.
+  globalIgnores([
+    'dist',
+    'src-tauri/target',
+    'companion-app/src-tauri/target',
+    '.remember',
+    'web',
+    'data/build-bible-db.ts',
+    'scripts/mac-qa/prepare-mixed-journey.js',
+  ]),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

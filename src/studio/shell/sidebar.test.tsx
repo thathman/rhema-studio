@@ -9,13 +9,13 @@ const saved = vi.hoisted(() => {
 })
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
-vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn(async () => "0.3.2") }))
+vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn(async () => "0.3.3") }))
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { SHELL_PREFS_KEY, useShellStore } from "@/studio/shell-store"
+import { SHELL_PREFS_KEY, useShellStore, type Workspace } from "@/studio/shell-store"
 import { churchItems } from "./nav-items"
 import { Sidebar } from "./sidebar"
 
@@ -23,6 +23,7 @@ import { Sidebar } from "./sidebar"
 let root: Root
 let host: HTMLDivElement
 let narrow = false
+let selectedWorkspace: Workspace | null = null
 
 const nav = () => host.querySelector("nav")!
 const toggle = () => host.querySelector<HTMLButtonElement>("button[aria-controls='studio-sidebar']")!
@@ -33,6 +34,7 @@ beforeEach(async () => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as never
   narrow = false
+  selectedWorkspace = null
   window.matchMedia = ((q: string) => ({ matches: q.includes("1180") ? narrow : false, media: q, addEventListener() {}, removeEventListener() {} })) as never
   saved.clear()
   useShellStore.setState({ sidebarCollapsed: false })
@@ -43,7 +45,7 @@ beforeEach(async () => {
     root.render(
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
-          <Sidebar workspace="home" isLive={false} church={churchItems()} onWorkspace={() => {}} onSettings={() => {}} />
+          <Sidebar workspace="home" isLive={false} church={churchItems()} onWorkspace={(workspace) => { selectedWorkspace = workspace }} onSettings={() => {}} />
         </TooltipProvider>
       </ThemeProvider>,
     ),
@@ -59,6 +61,11 @@ afterEach(async () => {
 const savedPrefs = () => JSON.parse(saved.get(SHELL_PREFS_KEY) ?? "{}") as { sidebarCollapsed?: boolean }
 
 describe("the collapsible sidebar", () => {
+  it("opens the single Connections workspace from the church navigation", async () => {
+    await act(async () => navButton("Connections").click())
+    expect(selectedWorkspace).toBe("connections")
+  })
+
   it("opens expanded; its button folds it and opens it out, and the choice is remembered", async () => {
     expect(nav().dataset.collapsed).toBeUndefined()
     expect(toggle().getAttribute("aria-expanded")).toBe("true")

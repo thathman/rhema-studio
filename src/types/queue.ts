@@ -80,6 +80,10 @@ export interface VerseQueueItem extends QueueItemBase {
 export interface SongQueueRef {
   song_id: string
   title: string
+  /** Saved identity: hymn and song stay distinct even if the library later changes. */
+  hymn?: boolean
+  /** Human-readable hymnbook numbers captured when this item was added. */
+  hymn_numbers?: string[]
   /** null = the song's default arrangement. */
   arrangement_id: string | null
   /** Language tags to show, first is primary; empty = the song's primary language. */
@@ -94,13 +98,16 @@ export interface SongQueueItem extends QueueItemBase {
   verse?: undefined
 }
 
-/** An announcement or any free-text screen: one slide, no library behind it. */
+/** An announcement or free-text screen. Library-backed items hold a content snapshot plus source identity. */
 export interface CustomSlide {
   title: string
   /** Plain text; each line is drawn on its own line. */
   body: string
   /** A safe http(s) link shown as a QR code with the text beside it (SG-003). */
   link?: string
+  /** The reusable library source this occurrence was copied from. The content above stays local to this service item. */
+  source_asset_id?: string
+  source_revision?: number
 }
 
 export interface SlideQueueItem extends QueueItemBase {
@@ -126,6 +133,28 @@ export interface ImageQueueItem extends QueueItemBase {
   verse?: undefined
 }
 
+/** A local audio cue. It plays through this computer's audio output and has no screen content. */
+export interface AudioQueueRef {
+  media_id: string
+  name: string
+  /** A device id on this computer; absent means the system default output. */
+  output_device_id?: string
+  /** 0–1; absent means the current Sound control volume. */
+  volume?: number
+  /** Repeat until another cue or the operator stops it. */
+  loop?: boolean
+  /** Fade in when the cue starts, in milliseconds. */
+  fade_in_ms?: number
+  /** Fade out when a later rundown item succeeds, in milliseconds. */
+  fade_out_ms?: number
+}
+
+export interface AudioQueueItem extends QueueItemBase {
+  kind: "audio"
+  audio: AudioQueueRef
+  verse?: undefined
+}
+
 /**
  * A moment in the run of show that shows nothing (#193): taking it fires its cues (an OBS
  * recording chapter, a stage message, the timer) and starts its event; the screens keep what they
@@ -136,7 +165,7 @@ export interface CueQueueItem extends QueueItemBase {
   verse?: undefined
 }
 
-export type QueueItem = VerseQueueItem | SongQueueItem | SlideQueueItem | ImageQueueItem | CueQueueItem
+export type QueueItem = VerseQueueItem | SongQueueItem | SlideQueueItem | ImageQueueItem | AudioQueueItem | CueQueueItem
 
 export function isVerseItem(item: QueueItem): item is VerseQueueItem {
   return item.kind === undefined || item.kind === "verse"
@@ -152,6 +181,10 @@ export function isSlideItem(item: QueueItem): item is SlideQueueItem {
 
 export function isImageItem(item: QueueItem): item is ImageQueueItem {
   return item.kind === "image"
+}
+
+export function isAudioItem(item: QueueItem): item is AudioQueueItem {
+  return item.kind === "audio"
 }
 
 export function isCueItem(item: QueueItem): item is CueQueueItem {
@@ -172,9 +205,14 @@ export interface ItemTiming {
 
 /** One team comment on a rundown item (CL-007). `at` is an ISO time. */
 export interface ItemComment {
+  /** Stable across service copies; older service files receive a deterministic id when read. */
+  id?: string
   by: string
   at: string
   text: string
+  /** A soft delete is permanent and retained with the service for audit and sync. */
+  deleted_by?: string
+  deleted_at?: string
 }
 
 /** Cues an item may run as it goes live: none changes what the congregation sees. */

@@ -5,14 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
-## 2026-10-26 — Map the approved product brand assets (#422)
+## 2026-10-26 — Unified Connections hub (#401)
 
-- **Main checked:** `d982db84e39f43bc5c31a53619aaac937c3dd136`. **Branch / PR:** `branding/final-logo-pack`, PR #422, based on `fix/timing-test-clock`; open and unmerged.
-- **Behaviour / documentation:** `docs/brand/ASSET-MAP.md` records the exact Studio, Companion, Receiver, Cam, launcher, phone-page and website assets and their consumers. The Studio Vite app at `127.0.0.1:3000` is served from `/Users/hendrix/rhema-final-logos`; its Setup screen uses the supplied Studio lockup. The map distinguishes the paired Companion wordmark from the compact embedded OBS-only camera glyph.
-- **Verification at `3190f10`:** hosted CI passed. The focused brand/Setup/sidebar/Companion set passed 5 files / 38 tests; typecheck, lint, Studio build, Companion web build and website build passed. The localhost preview rendered the lockup and the referenced logo URLs returned 200. The pack hash test checks its source files and copied platform icons.
-- **Hosted checks at `6ea67ff`:** run `40375552344` passed Frontend, Lint, Rust and Companion. Earlier runs at `0f128be` hit setup-bun and Linux dependency-install stalls; this successful run supersedes them. This progress-log correction is documentation-only and follows the verified `6ea67ff` head.
-- **Not verified:** no Android Cam APK build or physical-device test; the website was not deployed. The localhost preview confirmed the supplied Studio lockup, not every platform surface on physical hardware.
-- **Next:** keep website publication and Cam/device acceptance as separate owner-reviewed steps.
+- **Main / PR:** `fork/main` verified at `6eaa7dd`; PR [#437](https://github.com/thathman/rhema-studio/pull/437) is open and stacked on PR #436 (`fix/guided-output-editor`). The branch is not merged.
+- **Behaviour:** Added one Connections workspace for Nearby, Connected and Issues. It uses existing TV/host discovery and secure pairing flows, routes camera setup to the QR controls, and distinguishes saved device setup from reported health. Setup, Team, Home readiness, Settings search and the Desk menu lead to the shared page. Scanning, pairing and selecting a host or TV do not take content live. Updated the production guide.
+- **Verification:** Vitest passed (243 files, 1,769 tests); typecheck, full lint and production build passed. Browser checks used the local dev app with its Tauri shim: empty discovery, camera setup, listener-off pairing and refresh, host join, and dialog sizing. No physical device or OBS hardware was tested.
+- **Not done:** Physical TV, phone/camera, volunteer-host and OBS connection testing; owner acceptance; merge after PR #436 is integrated.
+- **Next:** Review PR #437 on top of #436, then repeat Connections on real church LAN devices before closing #401.
 
 ## 2026-10-25 — Small fixes from issue audit 3 (#299, #213, #243/#246 C17, #187, #215)
 

@@ -1,6 +1,7 @@
 import { validTimeZone } from "@/lib/church-time"
 import { timedItems } from "@/lib/run-of-show"
-import { eventStarts, eventTimes, serviceFinishedAt } from "@/lib/journal"
+import { eventPlanStarts, eventTimes, serviceFinishedAt } from "@/lib/journal"
+import { runOfShowClockRows } from "@/lib/run-of-show"
 import type { TimingInput } from "@/lib/timing-engine"
 import { runState, type RunState } from "@/lib/timing-state"
 import { useEventClock } from "@/stores/event-clock-store"
@@ -25,11 +26,14 @@ export function timingInputNow(now = Date.now()): TimingInput {
   const q = useQueueStore.getState()
   const entries = useJournalStore.getState().entries
   const offset = useServiceOffset.getState()
+  const schedule = runOfShowClockRows(q.items, q.headers)
+  const trust = useTimingTrust.getState().untrusted
   return {
-    // Hidden items and a skipped phase take no planned time (#193).
-    items: timedItems(q.items, q.headers),
-    headers: q.headers,
-    firstOnAir: eventStarts(entries),
+    // Event plans are the schedule rows; legacy items remain individual rows. Hidden items and
+    // skipped phases keep their place but take no planned time (#193).
+    items: timedItems(schedule.rows, schedule.headers),
+    headers: schedule.headers,
+    firstOnAir: eventPlanStarts(entries),
     onAirMs: eventTimes(entries, Math.max(monotonicNow(), entries.at(-1)?.mono ?? 0)),
     liveItemId: useEventClock.getState().currentId,
     now: Math.max(now, entries.at(-1)?.at ?? 0),
@@ -37,7 +41,7 @@ export function timingInputNow(now = Date.now()): TimingInput {
     offsetMode: offset.mode,
     timeZone: churchTimeZone(),
     holds: holdSpans(),
-    untrustedId: useTimingTrust.getState().untrusted?.itemId ?? null,
+    untrustedId: trust?.eventId ?? trust?.itemId ?? null,
     finishedAt: serviceFinishedAt(entries),
   }
 }
@@ -48,10 +52,10 @@ export function runStateNow(): RunState {
   const u = useTimingTrust.getState().untrusted
   const current = useEventClock.getState().currentId
   return runState({
-    begun: entries.some((e) => e.kind === "event" && e.itemId),
+    begun: entries.some((e) => e.kind === "event" && (e.eventId || e.itemId)),
     held: useHold.getState().hold !== null,
     // Not trusted while that item is still the one happening (or nothing has started since).
-    untrusted: !!u && (current === u.itemId || current === null),
+    untrusted: !!u && (current === (u.eventId ?? u.itemId) || current === null),
     finished: serviceFinishedAt(entries) !== null,
   })
 }

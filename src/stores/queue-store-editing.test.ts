@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useQueueStore } from "./queue-store"
-import type { OutlineHeader } from "@/lib/run-of-show"
+import { interleave, projectRunOfShowEvents, type OutlineHeader } from "@/lib/run-of-show"
 import type { QueueItem } from "@/types"
 
 const slide = (id: string, extra: Partial<QueueItem> = {}): QueueItem =>
@@ -132,5 +132,181 @@ describe("several items at once (#193)", () => {
     q().moveToSection(["d"], "p1")
     expect(ids()).toEqual(["d", "c", "a", "b"])
     expect(q().headers.find((h) => h.id === "p2")!.at).toBe(1)
+  })
+  it("moves selected items before a stable item id across phases in one undoable edit", () => {
+    useQueueStore.setState({
+      items: [...q().items, slide("e"), slide("f")],
+      headers: [
+        phase("p1", 0),
+        { id: "event1", type: "group", name: "Event 1", at: 1, event: { schema_version: 1 } },
+        { id: "moments", type: "group", name: "Moments", at: 2 },
+        { id: "event2", type: "group", name: "Event 2", at: 4, event: { schema_version: 1 } },
+        phase("p2", 5),
+      ],
+    })
+
+    q().moveItemsToTarget(["a", "c"], { kind: "before", itemId: "e" })
+
+    expect(ids()).toEqual(["b", "d", "a", "c", "e", "f"])
+    expect(q().headers.find((h) => h.id === "event2")?.at).toBe(2)
+    expect(q().headers.find((h) => h.id === "p2")?.at).toBe(5)
+    expect(q().past).toHaveLength(1)
+
+    q().undo()
+    expect(ids()).toEqual(["a", "b", "c", "d", "e", "f"])
+    expect(q().headers.find((h) => h.id === "event2")?.at).toBe(4)
+    q().redo()
+    expect(ids()).toEqual(["b", "d", "a", "c", "e", "f"])
+  })
+
+  it("moves an item into a nested group by header id and keeps the active item selected", () => {
+    useQueueStore.setState({ headers: [phase("p1", 0), { id: "event", type: "group", name: "Sermon", at: 0, event: { schema_version: 1 } }, { id: "moments", type: "group", name: "Bible moments", at: 1 }, phase("p2", 3)] })
+    q().setActive(1)
+
+    q().moveItemsToTarget(["a"], { kind: "section", headerId: "moments" })
+
+    expect(ids()).toEqual(["b", "c", "a", "d"])
+    expect(q().headers.find((h) => h.id === "p2")?.at).toBe(3)
+    expect(q().items[q().activeIndex ?? -1].id).toBe("b")
+    expect(q().past).toHaveLength(1)
+    q().undo()
+    expect(ids()).toEqual(["a", "b", "c", "d"])
+    expect(q().headers.find((h) => h.id === "p2")?.at).toBe(3)
+    expect(q().items[q().activeIndex ?? -1].id).toBe("b")
+  })
+
+  it("moving to an event end keeps a same-index following phase's nested group attached", () => {
+    useQueueStore.setState({ headers: [
+      phase("main", 0),
+      { id: "event", type: "group", name: "Event", at: 0, event: { schema_version: 1 } },
+      phase("post", 2),
+      { id: "post-group", type: "group", name: "Post group", at: 2 },
+    ] })
+    q().moveItemsToTarget(["d"], { kind: "section", headerId: "event" })
+    expect(ids()).toEqual(["a", "b", "d", "c"])
+    expect(q().headers.map(({ id, at }) => [id, at])).toEqual([
+      ["main", 0], ["event", 0], ["post", 3], ["post-group", 3],
+    ])
+  })
+
+  it("moves an event with its moments and nested groups into another phase as one undoable edit", () => {
+    const event = { id: "event1", type: "group" as const, name: "Opening prayer", at: 0, event: { schema_version: 1 as const, duration_minutes: 15 } }
+    const nested = { id: "event1-scripture", type: "group" as const, name: "Scripture moments", at: 1 }
+    useQueueStore.setState({
+      items: [slide("prayer"), slide("verse"), slide("sermon"), slide("quiz")],
+      headers: [
+        phase("pre", 0),
+        event,
+        nested,
+        phase("main", 2),
+        { id: "event2", type: "group", name: "Sermon", at: 2, event: { schema_version: 1, duration_minutes: 40 } },
+        phase("post", 4),
+      ],
+      activeIndex: 1,
+    })
+    const before = { items: q().items, headers: q().headers }
+
+    q().moveEventToTarget("event1", { kind: "phase", phaseId: "main" })
+
+    expect(ids()).toEqual(["sermon", "quiz", "prayer", "verse"])
+    expect(q().headers.map(({ id, at }) => [id, at])).toEqual([
+      ["pre", 0], ["main", 0], ["event2", 0], ["event1", 2], ["event1-scripture", 3], ["post", 4],
+    ])
+    expect(q().headers.find((header) => header.id === "event1")?.event?.duration_minutes).toBe(15)
+    expect(q().items[q().activeIndex ?? -1].id).toBe("verse")
+    expect(q().past).toHaveLength(1)
+
+    q().undo()
+    expect(q().items).toEqual(before.items)
+    expect(q().headers).toEqual(before.headers)
+    q().redo()
+    expect(ids()).toEqual(["sermon", "quiz", "prayer", "verse"])
+  })
+
+
+})
+
+
+describe("stable movement boundaries", () => {
+  const event = (id: string, at: number): OutlineHeader => ({
+    id, type: "group", name: id, at, notes: "keep notes", payload_extra: { future: id },
+    event: { schema_version: 1, role: "Prayer", duration_minutes: 15, ownership: "Pastor", payload_extra: { future: id } },
+  })
+  const rows = () => interleave(q().items, q().headers).map((r) => "header" in r ? r.header.id : r.item.id)
+  const members = () => Object.fromEntries(projectRunOfShowEvents(q().items, q().headers).map((e) => [e.id, e.moments.map((m) => m.id)]))
+
+  it("moves empty events and their empty groups across equal-position phases without taking other moments", () => {
+    const headers = [phase("pre", 0), event("empty", 0), { id: "nested", type: "group" as const, name: "nested", at: 0 },
+      phase("main", 0), event("service", 0), event("response", 2), phase("post", 4)]
+    useQueueStore.setState({ headers, activeIndex: 2 })
+    const before = { items: q().items, headers: q().headers }
+    q().moveEventToTarget("empty", { kind: "event", eventId: "service", placement: "after" })
+    expect(rows()).toEqual(["pre", "main", "service", "a", "b", "empty", "nested", "response", "c", "d", "post"])
+    expect(members()).toEqual({ service: ["a", "b"], empty: [], response: ["c", "d"] })
+    expect(q().headers.find((h) => h.id === "empty")).toEqual({ ...headers[1], at: 2 })
+    expect(q().items[q().activeIndex!].id).toBe("c")
+    expect(q().past).toHaveLength(1)
+    q().undo()
+    expect(q().items).toEqual(before.items)
+    expect(q().headers).toEqual(before.headers)
+    q().redo()
+    expect(members()).toEqual({ service: ["a", "b"], empty: [], response: ["c", "d"] })
+  })
+
+  it("moves events in both directions, across phases and into empty phases with membership intact", () => {
+    useQueueStore.setState({ headers: [phase("pre", 0), event("first", 0),
+      { id: "nested", type: "group", name: "nested", at: 1 }, phase("main", 2), event("second", 2), phase("post", 4)], activeIndex: 1 })
+    const before = { items: q().items, headers: q().headers }
+    q().moveEvent("second", -1)
+    expect(rows()).toEqual(["pre", "second", "c", "d", "first", "a", "nested", "b", "main", "post"])
+    expect(members()).toEqual({ second: ["c", "d"], first: ["a", "b"] })
+    q().undo()
+    expect(q().headers).toEqual(before.headers)
+    q().moveEvent("first", 1)
+    expect(rows()).toEqual(["pre", "main", "second", "c", "d", "first", "a", "nested", "b", "post"])
+    q().moveEventToTarget("first", { kind: "phase", phaseId: "post" })
+    expect(rows()).toEqual(["pre", "main", "second", "c", "d", "post", "first", "a", "nested", "b"])
+    expect(members()).toEqual({ second: ["c", "d"], first: ["a", "b"] })
+    expect(q().items[q().activeIndex!].id).toBe("b")
+    for (const item of q().items) expect(item).toBe(before.items.find((i) => i.id === item.id))
+    q().undo()
+    q().undo()
+    expect(q().items).toEqual(before.items)
+    expect(q().headers).toEqual(before.headers)
+  })
+
+  it("preserves unrelated events when items move before/after stable targets in rundown order", () => {
+    useQueueStore.setState({ headers: [phase("main", 0), event("first", 0), event("second", 2)], activeIndex: 3 })
+    q().moveItemsToTarget(["b", "a", "b", "missing"], { kind: "after", itemId: "c" })
+    expect(ids()).toEqual(["c", "a", "b", "d"])
+    expect(members()).toEqual({ first: [], second: ["c", "a", "b", "d"] })
+    expect(q().items[q().activeIndex!].id).toBe("d")
+    expect(q().past).toHaveLength(1)
+    q().undo()
+    expect(members()).toEqual({ first: ["a", "b"], second: ["c", "d"] })
+    q().moveItemsToTarget(["d"], { kind: "before", itemId: "a" })
+    expect(members()).toEqual({ first: ["d", "a", "b"], second: ["c"] })
+  })
+
+  it("ignores missing, self and unchanged targets without consuming history or Redo", () => {
+    useQueueStore.setState({ headers: [event("first", 0), event("second", 2)] })
+    q().moveEvent("first", 1)
+    q().undo()
+    const before = q()
+    q().moveItemsToTarget(["missing"], { kind: "before", itemId: "a" })
+    q().moveItemsToTarget(["a"], { kind: "before", itemId: "missing" })
+    q().moveItemsToTarget(["a"], { kind: "after", itemId: "a" })
+    q().moveItemsToTarget(["a"], { kind: "section", headerId: "missing" })
+    q().moveItemsToTarget(["b"], { kind: "after", itemId: "a" })
+    q().moveEventToTarget("first", { kind: "event", eventId: "first", placement: "after" })
+    q().moveEventToTarget("first", { kind: "event", eventId: "second", placement: "before" })
+    q().moveEventToTarget("first", { kind: "phase", phaseId: "missing" })
+    q().moveEventToTarget("missing", { kind: "event", eventId: "first", placement: "after" })
+    q().moveEvent("first", -1)
+    q().moveEvent("second", 1)
+    q().reorderItems(-1, 2)
+    q().reorderItems(0, 99)
+    expect(q()).toBe(before)
+    expect(q().future).toHaveLength(1)
   })
 })
