@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
-vi.mock("@tauri-apps/api/window", () => ({ availableMonitors: vi.fn(async () => []) }))
+vi.mock("@tauri-apps/api/window", () => ({ availableMonitors: vi.fn(async () => []), getAllWindows: vi.fn(async () => []) }))
+vi.mock("@tauri-apps/plugin-log", () => ({ info: vi.fn(async () => {}), error: vi.fn(async () => {}) }))
 /** recovery.json, in memory. */
 const kept = new Map<string, unknown>()
 const fakeStore = { get: vi.fn(async (k: string) => kept.get(k)), set: vi.fn(async (k: string, v: unknown) => void kept.set(k, v)), save: vi.fn(async () => {}) }
@@ -11,22 +12,31 @@ vi.mock("@tauri-apps/plugin-store", () => ({ load: vi.fn(async () => fakeStore) 
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { useEventClock } = await import("@/stores/event-clock-store")
 const { useJournalStore } = await import("@/stores/journal-store")
+const { useQueueStore } = await import("@/stores/queue-store")
 const { useTimerStore } = await import("@/stores/timer-store")
-const { takeSnapshot, worthOffering, putBack, useRecovery, restoreJournal, restoreNotices, startLiveRecovery, dismissRecovery } = await import("@/lib/live-recovery")
+const { takeSnapshot, worthOffering, putBack, useRecovery, restoreJournal, restoreNotices, startLiveRecovery, dismissRecovery, acceptPartialRecovery, parseLiveSnapshot } = await import("@/lib/live-recovery")
 const { useNotices } = await import("@/stores/notices-store")
 const { invoke } = await import("@tauri-apps/api/core")
-const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
+const { getAllWindows } = await import("@tauri-apps/api/window")
+const { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } = await import("@/types")
 
 /** Recovery after an unexpected close (#246): offered, never automatic; puts back what was up. */
 beforeEach(() => {
   kept.clear()
+  vi.mocked(invoke).mockReset()
+  vi.mocked(invoke).mockImplementation(async () => null)
+  vi.mocked(getAllWindows).mockReset()
+  vi.mocked(getAllWindows).mockResolvedValue([])
   const themeId = useBroadcastStore.getState().themes[0].id
   useBroadcastStore.setState({
     isLive: false, liveVerse: null, sources: {}, rehearsal: false, scenes: [], outputStatus: {},
     outputs: [{ id: MAIN_OUTPUT_ID, name: "Projector", type: "display", themeId, monitorIndex: 0, ndi: defaultNdiSettings() }],
   })
   useJournalStore.setState({ entries: [] })
-  useRecovery.setState({ offer: null, dismissed: false, damaged: false })
+  useEventClock.setState({ mode: "screens", currentId: null, currentMomentId: null })
+  useQueueStore.setState({ items: [], headers: [], activeIndex: null })
+  useTimerStore.getState().reset()
+  useRecovery.setState({ offer: null, dismissed: false, damaged: false, restoreError: null })
 })
 
 describe("live recovery", () => {
@@ -53,13 +63,31 @@ describe("live recovery", () => {
     useBroadcastStore.setState({ isLive: false, liveVerse: null, sources: {} })
     useRecovery.setState({ offer: snap })
     useJournalStore.setState({ entries: [] })
-    await putBack(snap)
+    expect(await putBack(snap)).toBe(true)
     const b = useBroadcastStore.getState()
     expect(b.isLive).toBe(true)
     expect(b.liveVerse?.reference).toBe("Romans 8:28")
     expect(b.sources.bible?.on).toBe(true)
     expect(useRecovery.getState().offer).toBeNull()
     expect(useJournalStore.getState().entries.some((e) => e.kind === "recovery")).toBe(true)
+  })
+
+  it("keeps recovery pending when an output cannot be brought back", async () => {
+    const snap = {
+      ...takeSnapshot(),
+      isLive: true,
+      liveVerse: { reference: "Romans 8:28", segments: [{ text: "And we know" }], content: "bible" as const },
+      outputsOn: [MAIN_OUTPUT_ID],
+      eventId: null,
+    }
+    useRecovery.setState({ offer: snap, dismissed: false })
+    useJournalStore.setState({ entries: [] })
+
+    expect(await putBack(snap)).toBe(false)
+
+    expect(useRecovery.getState().offer).toMatchObject(snap)
+    expect(useJournalStore.getState().entries.some((entry) => entry.kind === "recovery")).toBe(false)
+    expect(useBroadcastStore.getState().outputStatus[MAIN_OUTPUT_ID]?.previewOpen).toBe(false)
   })
 
   it("restores the immutable scene and appearance captured at crash time", async () => {
@@ -322,7 +350,7 @@ describe("live recovery", () => {
     }
     const broadcastBefore = useBroadcastStore.getState()
 
-    await expect(putBack(invalid)).resolves.toBeUndefined()
+    await expect(putBack(invalid)).resolves.toBe(false)
 
     expect(useBroadcastStore.getState()).toBe(broadcastBefore)
     expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
@@ -347,7 +375,7 @@ describe("live recovery", () => {
     }
     const broadcastBefore = useBroadcastStore.getState()
 
-    await expect(putBack(invalid)).resolves.toBeUndefined()
+    await expect(putBack(invalid)).resolves.toBe(false)
 
     expect(useBroadcastStore.getState()).toBe(broadcastBefore)
     expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
@@ -509,24 +537,120 @@ describe("live recovery", () => {
     expect(full.scenes).toEqual({})
     expect(full.outputsOn).toContain(MAIN_OUTPUT_ID)
     const trimmed = { ...full, liveVerse: null, sources: {}, sceneSnapshots: {}, trimmed: true }
+    useRecovery.setState({ offer: trimmed, dismissed: false, damaged: false, restoreError: null })
     useBroadcastStore.setState({ isLive: false, liveVerse: null, sources: {}, outputStatus: {} })
     const outputStatusBefore = useBroadcastStore.getState().outputStatus
     vi.mocked(invoke).mockClear()
 
-    await putBack(trimmed)
+    expect(await putBack(trimmed)).toBe(false)
 
     expect(useBroadcastStore.getState().outputStatus).toBe(outputStatusBefore)
     expect(useBroadcastStore.getState().isLive).toBe(false)
     expect(invoke).not.toHaveBeenCalledWith("open_broadcast_window", expect.anything())
+    expect(useRecovery.getState()).toMatchObject({ offer: trimmed, restoreError: expect.stringContaining("shortened") })
   })
 
-  it("Not now hides the offer but keeps it for the Desk menu until it is put back (#299 1.18)", async () => {
-    const snap = { ...takeSnapshot(), eventId: null, outputsOn: [] }
+  it("restores the event clock and timer on the first partial attempt without restarting them on retry", async () => {
+    useQueueStore.setState({
+      items: [{ id: "recovery-event", kind: "slide", slide: { title: "Service", body: "" }, reference: "Service", confidence: 1, source: "manual", added_at: 0 } as never],
+      headers: [],
+      activeIndex: null,
+    })
+    const snap = {
+      ...takeSnapshot(),
+      isLive: true,
+      liveVerse: { reference: "Romans 8:28", segments: [{ text: "And we know" }], content: "bible" as const },
+      liveItemId: null,
+      outputsOn: [MAIN_OUTPUT_ID],
+      eventId: "recovery-event",
+      timer: { durationMs: 600_000, elapsedMs: 120_000, running: true },
+    }
     useRecovery.setState({ offer: snap, dismissed: false })
+
+    expect(await putBack(snap)).toBe(false)
+    expect(useEventClock.getState().currentId).toBe("recovery-event")
+    const startedAt = useTimerStore.getState().timer.startedAt
+    expect(startedAt).not.toBeNull()
+    expect(useTimerStore.getState().timer.durationMs).toBe(600_000)
+    expect(useJournalStore.getState().entries.filter((entry) => entry.kind === "event")).toHaveLength(1)
+
+    expect(await putBack(snap)).toBe(false)
+    expect(useEventClock.getState().currentId).toBe("recovery-event")
+    expect(useTimerStore.getState().timer.startedAt).toBe(startedAt)
+    expect(useJournalStore.getState().entries.filter((entry) => entry.kind === "event")).toHaveLength(1)
+  })
+
+  it("reports an output from the snapshot that is no longer configured", async () => {
+    const snap = { ...takeSnapshot(), isLive: false, outputsOn: ["removed-projector"], eventId: null }
+    useRecovery.setState({ offer: snap, dismissed: false })
+    useJournalStore.setState({ entries: [] })
+
+    expect(await putBack(snap)).toBe(false)
+
+    expect(useRecovery.getState().offer).toMatchObject(snap)
+    expect(useRecovery.getState().restoreError).toContain("Saved output configuration is no longer available for removed-projector")
+    expect(useRecovery.getState().restoreError).not.toContain("Check the display or device connection")
+    expect(useJournalStore.getState().entries.some((entry) => entry.kind === "recovery")).toBe(false)
+  })
+
+  it("reports a missing saved scene separately from an output that failed to start", async () => {
+    const snap = { ...takeSnapshot(), eventId: null, outputsOn: [], scenes: { [MAIN_OUTPUT_ID]: "removed-scene" } }
+    delete snap.sceneSnapshots
+    useRecovery.setState({ offer: snap, dismissed: false })
+
+    expect(await putBack(snap)).toBe(false)
+
+    expect(useRecovery.getState().restoreError).toContain("The saved scene is no longer available")
+    expect(useRecovery.getState().restoreError).toContain("Projector (ID: removed-scene)")
+    expect(useRecovery.getState().restoreError).not.toContain("Check the display or device connection")
+    expect(useJournalStore.getState().entries.some((entry) => entry.kind === "recovery")).toBe(false)
+  })
+
+  it("retries only unresolved outputs without duplicating scene or source activations", async () => {
+    const state = useBroadcastStore.getState()
+    const sideOutput = { ...state.outputs[0], id: "side-display", name: "Side Projector", monitorIndex: 1 }
+    useBroadcastStore.setState({ outputs: [...state.outputs, sideOutput] })
+    const { newScene, SCENE_PRESETS } = await import("@/lib/scenes")
+    const scene = newScene("Pulpit", SCENE_PRESETS[0])
+    useBroadcastStore.getState().saveScene(scene)
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
+    const live = { reference: "Romans 8:28", segments: [{ text: "And we know" }], content: "bible" as const }
+    useBroadcastStore.getState().setLiveVerse(live, null, { goLive: true })
+    const snap = { ...takeSnapshot(), outputsOn: [MAIN_OUTPUT_ID, sideOutput.id], eventId: null }
+    useBroadcastStore.setState({ isLive: false, liveVerse: null, liveItemId: null, sources: {}, outputStatus: {} })
+    useRecovery.setState({ offer: snap, dismissed: false })
+    useJournalStore.setState({ entries: [] })
+    const visible = new Set([MAIN_OUTPUT_ID])
+    vi.mocked(getAllWindows).mockImplementation(async () => [...visible].map((id) => ({ label: outputWindowLabel(id), isVisible: async () => true } as never)))
+
+    expect(await putBack(snap)).toBe(false)
+    expect(useRecovery.getState().offer).toMatchObject(snap)
+    expect(useRecovery.getState().restoreError).toContain("Side Projector")
+    const sceneRevision = useBroadcastStore.getState().sceneTakes[MAIN_OUTPUT_ID]?.revision
+    const sourceRevision = useBroadcastStore.getState().sources.bible?.revision
+
+    visible.add(sideOutput.id)
+    expect(await putBack(snap)).toBe(true)
+
+    expect(useRecovery.getState().offer).toBeNull()
+    expect(useJournalStore.getState().entries.filter((entry) => entry.kind === "recovery")).toHaveLength(1)
+    expect(useBroadcastStore.getState().sceneTakes[MAIN_OUTPUT_ID]?.revision).toBe(sceneRevision)
+    expect(useBroadcastStore.getState().sources.bible?.revision).toBe(sourceRevision)
+    const opened = vi.mocked(invoke).mock.calls.filter(([command]) => command === "open_broadcast_window").map(([, args]) => (args as { outputId: string }).outputId)
+    expect(opened).toEqual([MAIN_OUTPUT_ID, sideOutput.id, sideOutput.id])
+  })
+
+  it("Not now hides the offer but preserves its failed-output reason for the Desk menu", async () => {
+    const snap = { ...takeSnapshot(), eventId: null, outputsOn: [MAIN_OUTPUT_ID] }
+    useRecovery.setState({ offer: snap, dismissed: false })
+    expect(await putBack(snap)).toBe(false)
+    const error = useRecovery.getState().restoreError
+    expect(error).toContain("Projector")
     dismissRecovery()
-    expect(useRecovery.getState()).toMatchObject({ offer: snap, dismissed: true })
-    await putBack(snap)
-    expect(useRecovery.getState()).toEqual({ offer: null, dismissed: false, damaged: false })
+    expect(useRecovery.getState()).toMatchObject({ offer: snap, dismissed: true, restoreError: error })
+    vi.mocked(getAllWindows).mockResolvedValue([{ label: outputWindowLabel(MAIN_OUTPUT_ID), isVisible: async () => true } as never])
+    expect(await putBack(snap)).toBe(true)
+    expect(useRecovery.getState()).toEqual({ offer: null, dismissed: false, damaged: false, restoreError: null })
   })
 
   it("puts the timer back, counting the time Rhema was closed while it ran", async () => {
@@ -544,11 +668,25 @@ describe("live recovery", () => {
     useTimerStore.getState().reset()
   })
 
-  it("a trimmed snapshot (pictures as data) leaves the sources on now alone", async () => {
+  it("a trimmed snapshot leaves current sources alone and needs explicit acceptance as incomplete", async () => {
     useBroadcastStore.getState().setLiveVerse({ reference: "Romans 8:28", segments: [{ text: "And we know" }], content: "bible" }, null, { goLive: true })
     const before = useBroadcastStore.getState().sources
-    await putBack({ ...takeSnapshot(), liveVerse: null, sources: {}, trimmed: true, outputsOn: [], eventId: null })
+    const snap = { ...takeSnapshot(), liveVerse: null, sources: {}, trimmed: true, outputsOn: [], eventId: null }
+    useRecovery.setState({ offer: snap, dismissed: false })
+    expect(await putBack(snap)).toBe(false)
     expect(useBroadcastStore.getState().sources).toBe(before)
+    expect(useRecovery.getState().offer).toMatchObject(snap)
+    expect(useRecovery.getState().restoreError).toContain("shortened to fit storage")
+    expect(useJournalStore.getState().entries.some((entry) => entry.kind === "recovery")).toBe(false)
+
+    acceptPartialRecovery()
+    expect(useRecovery.getState().offer).toBeNull()
+    expect(useJournalStore.getState().entries.some((entry) => entry.kind === "recovery" && entry.label.startsWith("Continued after incomplete recovery:"))).toBe(true)
+  })
+
+  it("rejects an untrimmed live snapshot with no program content", () => {
+    const impossible = { ...takeSnapshot(), isLive: true, liveVerse: null, trimmed: undefined }
+    expect(parseLiveSnapshot(impossible)).toBeNull()
   })
 
   it("brings back the service log after a crash, with durations still adding up", () => {

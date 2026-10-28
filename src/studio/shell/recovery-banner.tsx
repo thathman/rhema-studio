@@ -1,12 +1,13 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { dismissRecovery, dismissRecoveryDamage, putBack, useRecovery } from "@/lib/live-recovery"
+import { acceptPartialRecovery, dismissRecovery, dismissRecoveryDamage, putBack, useRecovery } from "@/lib/live-recovery"
 
 /** After Rhema closed unexpectedly: offer to put back what was on the screens (never on its own). "Not now" leaves it in the Desk menu. */
 export function RecoveryBanner() {
   const offer = useRecovery((s) => s.offer)
   const dismissed = useRecovery((s) => s.dismissed)
   const damaged = useRecovery((s) => s.damaged)
+  const restoreError = useRecovery((s) => s.restoreError)
   const [busy, setBusy] = useState(false)
   if (damaged) {
     return (
@@ -23,9 +24,11 @@ export function RecoveryBanner() {
     <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-on-air/40 bg-on-air/10 px-4 py-2 text-sm">
       <p className="min-w-0 flex-1">
         <span className="font-semibold">Rhema Studio closed unexpectedly at {at}{offer.service ? ` during ${offer.service.title}` : ""}.</span>{" "}
-        <span className="text-muted-foreground">On the screens then: {what || "nothing"}. Nothing goes back until you choose.</span>
+        <span className="text-muted-foreground">On the screens then: {what || "nothing"}. {restoreError ? "The recovery attempt is incomplete; some service state may already be back." : "Nothing goes back until you choose."}</span>
+        {restoreError && <span className="block font-medium text-destructive">{restoreError}</span>}
       </p>
       <Button size="sm" disabled={busy} onClick={() => { setBusy(true); void putBack(offer).finally(() => setBusy(false)) }}>Put back on the screens</Button>
+      {restoreError && <Button size="sm" variant="outline" disabled={busy} onClick={acceptPartialRecovery}>Continue with available state</Button>}
       <Button size="sm" variant="ghost" title="The Desk menu keeps this until Rhema Studio closes" onClick={dismissRecovery}>Not now</Button>
     </div>
   )
