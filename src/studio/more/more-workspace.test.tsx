@@ -45,7 +45,7 @@ describe("one place to build a service (#299)", () => {
 
     await act(async () => button("Signage")!.click())
     expect(useShellStore.getState().outputsDialogOpen).toBe(true)
-    // Nothing here switches Present to its advanced view any more.
+    // This action leaves the stored legacy Present preference alone.
     expect(useShellStore.getState().presentView).toBe("standard")
   })
 

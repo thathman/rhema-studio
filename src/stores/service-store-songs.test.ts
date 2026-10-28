@@ -45,9 +45,9 @@ describe("song items in a saved service", () => {
       program,
       items: [stored("bad", { kind: "song", reference: "???", payload: "{not json" }), stored("none", { kind: "song", reference: "x", payload: null })],
     }
-    const { items, unsupported } = toQueueItems(data, 1, [])
+    const { items, corrupt } = toQueueItems(data, 1, [])
     expect(items).toEqual([])
-    expect(unsupported.map((u) => u.id)).toEqual(["bad", "none"])
+    expect(corrupt.map((u) => u.id)).toEqual(["bad", "none"])
     expect(parseSongPayload('{"song_id":""}')).toBeNull()
     expect(parseSongPayload('{"song_id":"x","languages":["en",3]}')).toEqual({ song_id: "x", arrangement_id: null, languages: ["en"] })
   })
