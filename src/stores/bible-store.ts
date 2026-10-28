@@ -69,6 +69,8 @@ interface BibleState {
   setSemanticResults: (results: SemanticSearchResult[]) => void
   selectVerse: (verse: Verse | null) => void
   selectSlide: (slide: SelectedSlide | null) => void
+  /** Clear only a matching temporary slide preview; preserve a newer selection. */
+  clearSlidePreview: (itemId: string) => void
   setSamplePreview: (sample: boolean) => void
   setSelectedQueueItemId: (id: string | null) => void
   setCurrentChapter: (verses: Verse[]) => void
@@ -117,6 +119,7 @@ export const useBibleStore = create<BibleState>((set) => ({
   setSemanticResults: (semanticResults) => set({ semanticResults }),
   selectVerse: (selectedVerse) => set({ selectedVerse, selectedSlide: null, selectedQueueItemId: null, samplePreview: false }),
   selectSlide: (selectedSlide) => set({ selectedSlide, selectedQueueItemId: null, samplePreview: false }),
+  clearSlidePreview: (itemId) => set((state) => state.selectedSlide?.item.id === itemId ? { selectedSlide: null } : state),
   setSamplePreview: (samplePreview) => set({ samplePreview }),
   setSelectedQueueItemId: (selectedQueueItemId) => set({ selectedQueueItemId }),
   setCurrentChapter: (currentChapter) => set({ currentChapter }),

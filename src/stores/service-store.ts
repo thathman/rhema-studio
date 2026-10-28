@@ -224,7 +224,7 @@ function itemInputs(
           translation: null,
           secondary_translation: null,
           notes: i.notes ?? null,
-          payload: JSON.stringify({ title: i.slide.title, body: i.slide.body, ...(i.slide.link ? { link: i.slide.link } : {}), ...bg(i) } satisfies SlideItemPayload & { background_media_id?: string }),
+          payload: JSON.stringify({ title: i.slide.title, body: i.slide.body, ...(i.slide.link ? { link: i.slide.link } : {}), ...(i.slide.source_asset_id ? { source_asset_id: i.slide.source_asset_id } : {}), ...(i.slide.source_revision ? { source_revision: i.slide.source_revision } : {}), ...bg(i) } satisfies SlideItemPayload & { background_media_id?: string }),
         }
       : isVerseItem(i)
       ? {
@@ -293,8 +293,8 @@ const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by",
 const KNOWN_PAYLOAD_KEYS: Record<string, Set<string>> = {
   verse: new Set(COMMON_PAYLOAD_KEYS),
   image: new Set([...COMMON_PAYLOAD_KEYS, "media_id", "fit", "loop", "sound"]),
-  slide: new Set([...COMMON_PAYLOAD_KEYS, "title", "body", "link"]),
-  song: new Set([...COMMON_PAYLOAD_KEYS, "song_id", "arrangement_id", "languages", "title_slide"]),
+  slide: new Set([...COMMON_PAYLOAD_KEYS, "title", "body", "link", "source_asset_id", "source_revision"]),
+  song: new Set([...COMMON_PAYLOAD_KEYS, "song_id", "hymn", "hymn_numbers", "arrangement_id", "languages", "title_slide"]),
   cue: new Set(COMMON_PAYLOAD_KEYS),
 }
 
@@ -451,7 +451,9 @@ export function parseSlidePayload(raw: string | null | undefined): SlideItemPayl
     const title = typeof p.title === "string" ? p.title : ""
     const body = typeof p.body === "string" ? p.body : ""
     const link = typeof p.link === "string" ? safeLink(p.link) : null
-    return title.trim() || body.trim() || link ? { title, body, ...(link ? { link } : {}) } : null
+    const sourceId = typeof p.source_asset_id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(p.source_asset_id) ? p.source_asset_id : undefined
+    const sourceRevision = Number.isSafeInteger(p.source_revision) && Number(p.source_revision) > 0 ? Number(p.source_revision) : undefined
+    return title.trim() || body.trim() || link ? { title, body, ...(link ? { link } : {}), ...(sourceId && sourceRevision ? { source_asset_id: sourceId, source_revision: sourceRevision } : {}) } : null
   } catch {
     return null
   }

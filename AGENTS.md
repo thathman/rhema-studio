@@ -4,6 +4,8 @@
 
 **Mandatory coverage preservation:** Read [docs/rhema-studio/32-feature-coverage-inventory.md](docs/rhema-studio/32-feature-coverage-inventory.md) after the handover. Earlier approved features (especially Rhema Comms simultaneous full-duplex PTT, private notices, MCP service drafts, quiz, rehearsal, independent outputs and church sync) may be described in separate issues; none may be dropped just because the unified route specification summarizes them.
 
+**New owner-approved scope, not yet implemented (28 October):** Read [docs/rhema-studio/34-browser-operators-connected-development.md](docs/rhema-studio/34-browser-operators-connected-development.md) for the secure LAN browser operator application (full capabilities of each authorized role without desktop installation), explicit real-backend Connected Development Mode versus simulation, and **one-operator-page-at-a-time visual redesign with owner approval**. This remains scheduled under Finish-First after the existing PR backlog is controlled. **Do not lift the no-new-PR freeze, expose unauthenticated LAN endpoints, publish/deploy, or claim the role browser app is working based on docs/mocks.**
+
 ## ACTIVE OWNER OVERRIDE — BACKLOG-CLEARANCE / FINISH-FIRST MODE (28 October 2026)
 
 **Highest-priority current instruction. This replaces any earlier suggestion to start additional PR waves or to maximize new feature-PR throughput.** Read [docs/OWNER-FINISH-FIRST-2026-10-28.md](docs/OWNER-FINISH-FIRST-2026-10-28.md) before any work. The owner's immediate success metric is **fewer open PRs and a usable, integrated Rhema Studio**, not a larger number of branches, tests, reports, or proposals.

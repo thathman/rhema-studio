@@ -45,6 +45,12 @@ Major feature acceptance areas:
 
 Deliver each major feature as a **working complete journey**, not a growing PR list. A feature is `DONE` only when integrated and verified in the appropriate environment. Label simulator/mock/CI-native/physical-device results separately. Close duplicate or superseded PRs without discarding unique functionality.
 
+### Newly approved owner scope (28 October) — after the current PR integration wave
+
+The owner explicitly approves **LAN-hosted full role browser operators** (without desktop installation), **safe connected browser development** to a test Tauri host (while preserving the clearly labelled simulator), and **individual page-by-page role workspace redesign with owner visual acceptance**. This is a required *major feature* and a direct UX request, **not** permission to start new PRs during the freeze or to abandon existing major features. Read the detailed [browser operator + connected development contract](rhema-studio/34-browser-operators-connected-development.md); reconcile existing host/join/comms/device work before implementing the missing vertical slices. Preserve host-only authority, offline show, HTTPS/role ACL and output Take safety. The full operator experience is not currently shipped.
+
+Sequence once integration is stable: test-only connected browser mode → secure host-served LAN operator shell and role session → one real Bible operator journey → other roles and Comms parity → owner-reviewed designs one page at a time. Report each phase as `SPECIFIED`, `INTEGRATED`, `REAL LAN VERIFIED` or `VISUALLY ACCEPTED` with evidence. Never claim simulated fixtures prove real integration.
+
 ## Phase C — lighter tests, still safe
 
 **Owner intent: reduce repeated test work and CI latency, not disable essential checks or compromise Live safety.**
