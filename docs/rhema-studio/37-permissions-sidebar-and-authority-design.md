@@ -1,6 +1,6 @@
 # 37 — Permissions: First-Class Main Studio Sidebar Route and Access Management
 
-**Owner direction:** 28 October 2026. **APPROVED PRODUCT DECISION:** Permissions must be an unmistakable, directly accessible **route in the MAIN Rhema Studio sidebar**, not solely a Settings subpage or an implicit part of Connections. Update the permissions design and make it the central place the main production host manages role assignments and delegated authority. This is a **requirement/UX design contract**, not a claim that the route or fine-grained authorization is currently implemented.
+**Owner direction:** 28 October 2026. **APPROVED PRODUCT DECISIONS:** Permissions must be an unmistakable, directly accessible **route in the MAIN Rhema Studio sidebar**, not solely a Settings subpage or an implicit part of Connections; **Approval Requests must be a first-class area within that Permissions route**, where authorized host approvers can review, decide and track delegated operator requests. The host remains the source of role assignment and delegated authority. This is a **requirement/UX design contract**, not a claim that the route, approval queue or fine-grained authorization is implemented.
 
 **Status boundary:** Main sidebar placement and need to modernize centralized permissions are owner-directed. Proposed layout, exact labels, grouping, preset/editing policies, fine-grained grant schemas and permanent scene/design-save rules below are **recommendations pending owner visual/security review** unless independently approved in linked contracts. Owner-approved Bible Direct/Request, Timekeeper host reminders and individual/group Screens Takes remain binding. Do not promote an unapproved permission proposal to a broad live capability.
 
@@ -40,7 +40,7 @@ Treat the six primary task destinations (Home, Prepare, Live, Library, Design, H
 | Destination | Owns | Links to |
 | --- | --- | --- |
 | **Connections** | Discover network devices, pair/invite, certificate verification, connectivity, endpoint health, device setup, service outputs | `Manage permissions` for selected paired identity |
-| **Permissions** | Role policies, person/device identity mapping, action grants, output scopes, temporary delegated capabilities, who can approve, review/revoke, access log | `Open connection`, `See operator desk`, `Review service assignment` |
+| **Permissions** | Role policies, person/device identity mapping, action grants, output scopes, temporary delegated capabilities, **Approval Requests inbox and decisions**, approvers, review/revoke, access log | `Open connection`, `See operator desk`, `Review service assignment`, `Open request in context` |
 | **Prepare / Team** | Who is scheduled for a service, task assignment, collaboration, editorial review and service-specific approvals | `View effective access` and only sanctioned request-change path |
 | **Live / Director** | Reclaim/suspend controls immediately, authorize a pending command/request, see on-air access context | `Open permissions for [operator]` without abandoning Live unsaved work |
 | **Settings → Remote / Security** | Low-level HTTP/TLS/OSC transport, local ports, auth keys/certificates, provider/network diagnostics | Canonical Permissions UI for role/grant changes; remove duplicate editable policies when safe |
@@ -51,11 +51,13 @@ Treat the six primary task destinations (Home, Prepare, Live, Library, Design, H
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ PERMISSIONS                         [Review activity] [Add operator]    │
+│ PERMISSIONS        [Approval Requests (3)] [Activity] [Add operator]    │
 │ Control who can prepare, present, operate screens and change settings   │
 │ Host authority: This Church · connected / offline status                │
 ├─────────────────────────────────────────────────────────────────────────┤
-│ [Active Operators ##] [Needs Review #] [Temporary Grants #] [Revoked]  │
+│ [Operators ##] [Approval Requests #] [Temporary Grants #] [Revoked]   │
+├──────────────────────────────┬──────────────────────────────────────────┤
+│ [Operators & Devices] [Roles] [Approval Requests (3)] [Activity]      │
 ├──────────────────────────────┬──────────────────────────────────────────┤
 │ PEOPLE & DEVICES             │ DETAILS: [Selected operator]             │
 │ Search [name or role]        │ Current role: Screens                    │
@@ -80,6 +82,99 @@ Treat the six primary task destinations (Home, Prepare, Live, Library, Design, H
 **First-time default:** if no operator/devices are paired, explain "The main computer still controls the service. Pair a volunteer when ready" and link to Connections. Do not invent online members from saved role records.
 
 **Main hierarchy:** (1) Who has access? (2) What can they do? (3) Which output/content/service? (4) For how long? (5) Who authorized it? Default to plain-language capability descriptions, not a wall of 200 toggles. A role "What this allows" explainer compares an actual server-derived role-policy snapshot. Advanced grant controls remain secondary and display impact before Apply.
+
+## 3A. Approval Requests — OWNER-APPROVED FIRST-CLASS AREA (28 October 2026)
+
+**Owner request, approved at product/placement level:** Add a prominent **Approval Requests** section/tab **inside the main sidebar Permissions route**, not a second unrelated app or an inbox hidden in a settings modal. When there are actionable requests, show a truthful pending-count badge next to the Permissions navigation item and on the Approval Requests tab; counts must be filtered to the current approver's **actual authority**. Keep the primary role-management sections usable, and offer `View requests` from the main Live host/Director without replacing its Running Order / Preview / Program. The detailed arrangement below is **proposed pending visual review**.
+
+### A. Proposed approval inbox layout (desktop)
+
+```text
+┌──────────────────────────────────────────────────────────────────────────┐
+│ PERMISSIONS                           [Approval Requests ● 3]            │
+│ [Operators & Devices] [Roles] [Approval Requests] [Activity]             │
+├────────────────────────────────┬─────────────────────────────────────────┤
+│ PENDING APPROVALS              │ REQUEST DETAIL                           │
+│ Search / filter by service,    │ Requested by: Bible Operator · Tablet    │
+│ role, type and urgency         │ Request: Activate Psalm 100:1–5         │
+│                                │ Service: Sunday Worship / Bible Reading  │
+│ ● Bible — Psalm 100:1–5        │ Affected source/output subscriptions     │
+│   Awaiting host · 2m ago       │ Prepared preview, language and version   │
+│ ● Screens — Group Take         │ Existing Program and preview impact      │
+│   Sanctuary + Overflow        │ Role policy / reason permission needed   │
+│ ● Editor — Save design         │ Submitted at / expires at / revision     │
+│   Updated sermon lower third   │ Who can approve (host-authenticated)     │
+│                                │                                         │
+│ [Pending] [Mine] [Decided]     │ [Approve] [Decline] [Request Changes]    │
+│                                │ [Open in Bible / Live / Design]           │
+├────────────────────────────────┴─────────────────────────────────────────┤
+│ DECISION ACTIVITY / HISTORY — who decided what, when and what occurred   │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+**Not a social-message inbox:** Each entry represents a **typed, actionable request** with a pinned subject and proposed action. Private Rhema Comms notifications may *link* to requests, but a "Ready", "Seen" or notice acknowledgment does **not** equal formal approval. A service-plan `approved_revision` is distinct from authorization to activate a source or alter an output.
+
+### B. Request types and routing (proposed scope; no implicit extra authority)
+
+| Request type | Created by | Review in Permissions | Post-approval behavior |
+| --- | --- | --- | --- |
+| **Scripture activation** | Bible Operator in `Prepare for host approval` mode | Passage/edition, current Preview, live-source followers and event | **Grant scoped activation approval** to intended request, then explicitly activate/acknowledge under host rules; never treat approval as an arbitrary scene Take |
+| **Lyrics/source activation** | Worship Operator where the host has separately enabled request-only workflow | Song/hymn, current section, edition/languages, subscribed output consequences | Prepared source may be activated through normal authorized channel; permanent worship plan remains unchanged |
+| **Single/Group Scene Take** | Screens Operator who lacks specified destination/action authorization | Scene revision, current Program → intended result **per output**, target list and stage/OBS exclusions | Authorized explicit scoped Take after final revision/permission preflight, no silent broad group fanout |
+| **Temporary or elevated permission** | A paired operator asking to do a specific protected task | What capability, which screen/service, device identity, purpose and requested duration | Limited, expiring **host-granted capability**, not global permanent elevation; effective access updates only after actual server acknowledgment |
+| **Save a reusable scene/design or edit approved plan** | Screens/Editor/Presenter subject to role policy | Before/after version diff, affected live references, editorial plan impact and approval revision | Save approved **draft/version** or allow persistent change through separate document/service approval gates; never silently apply to Live |
+| **Other host-gated event/production changes** | Relevant scoped operator | Clear action and affected clock/event/recipient | Only when a corresponding typed backend permission and lifecycle exist; don't turn general Comms notices into arbitrary execution privileges |
+
+**General principle:** Requests for unsupported or unapproved capabilities are rejected or marked **Unavailable**, not manufactured into executable approval buttons. A role cannot self-approve, and approval to do a protected operation must not accidentally grant ongoing full operator rights. Existing specialized approval controls in Prepare/Live continue to exist **as contextual entry points** into the same canonical request and audit records.
+
+### C. Request lifecycle, decisions and human feedback
+
+Recommended typed workflow:
+
+``text
+Draft (private) → Submitted → Pending/Assigned → Under Review
+                                       ├→ Approved (scoped, revision-pinned)
+                                       │      └→ Awaiting execution → Applied / Failed
+                                       ├→ Request Changes → Updated submission / Withdrawn
+                                       ├→ Declined (reason visible to requester)
+                                       └→ Expired / Cancelled / Superseded / Revoked
+``
+
+**Approved is not Live.** At minimum the UI distinguishes `Request submitted`, `Awaiting approval`, `Approved and ready to apply`, `Source activated`, `Scene Take applied on output(s)`, `Receiver confirmed`, `Failed`, `Expired` and `Declined`. Each message must correspond to truth confirmed by the main host, not optimistic React state. If implementation already supports safe host-initiated execution following approval, the action must remain **explicit** with correctly labelled scope. Never auto-execute a Take, show/hide, design-publish or source-activation merely because the approver clicked `Approve` unless a separately approved automation specifically arms that action.
+
+**Requested changes** returns the request to the submitter with comment; updating it increments revision and invalidates previous approvals. Denial optionally includes required reason/constructive instruction. Requests can be withdrawn by requester; approver can reject stale, risky or unauthorized submissions without risking current Program.
+
+### D. Reviewer authority, conflict and safety boundaries
+
+- The **main host administrator** can review and decide requests within its product authority. Additional delegated **approvers** require an explicit capability/subject/resource scope (e.g. permitted plan-editor approval or a named output); do **not** equate `Presenter`, `Editor`, `Screens` or generic `Configure` with unconditional security-administrator privileges.
+- **No self-approval**, no approval from an untrusted/revoked/stale remote session and no privilege escalation by client-managed state; host re-checks requester/approver identity, ACL, target outputs, request contents, current approvals and **pinned service/scene/design revisions** at decision and execution.
+- If a passage/scene/output/plan version changed while pending, mark **Needs fresh review** and require a new safe preview; old approval tokens cannot apply to a newer version. Avoid double execution with idempotency/request IDs. Receiver partial failures remain per output; no false group-wide success.
+- Protect Stage/pastor-private notes and streaming/lobby visibility; show **filtered request details** to each reviewer. A Bible approval doesn't imply a permission to Take a congregation scene, while `group Take` never implicitly includes OBS/Stage outputs.
+- An approval request cannot bypass rehearsal isolation, loss-of-connection fail-closed policy, required second-person rules where configured, service freeze, or host reclaim/revocation. A pending request must not create a writable token that survives expiry.
+- **Audit log (immutable append-like history):** created/changed/withdrawn/assigned/approved/declined/expired/applied/failed events, actor identity, role/device, affected resource and output IDs, approval scope, submitted/approved revision, host timestamps, decisions/reason, and verified destination outcomes. Avoid raw keys, personal secrets and private content in broad notifications.
+- **Duplicate prevention and expiration:** avoid repeated requests on flaky Wi-Fi or double clicks, avoid stale approval cards after service ends, show reassign/review history rather than re-sending to all staff. Permissions must remain usable on an offline LAN host, with approved local persistence and reconnect sync. No "approved" toast before host confirmation.
+
+### E. Notifications and contextual shortcuts
+
+- **Permissions sidebar:** badge for **actionable pending** request count (do not count one's own submitted requests as things one can approve).
+- **Main Live header / Director desk:** discreet `Approval Requests (N)` entry to quickly inspect/approve without abandoning the service or losing current Preview; return to caller location.
+- **Bible/Worship/Screens/Editor desks:** `Request approval` initiates typed submission **once**. The requester sees who it is waiting for, request status, eventual decision and resulting *actual* Live/output status. `Resubmit` after requested changes with a new revision.
+- **Prepare:** normal service-document approval and editorial review link to the canonical request record where applicable. Existing service-plan `approved_revision` still governs whether the proposed change is eligible for Live.
+- **Rhema Comms:** optional private event-linked alert to approvers ("Bible requested Psalm 100:1–5"), opens the same request; a production notice is not an approval and cannot carry implicit authorization.
+- No unauthorized notification leakage onto stage, lobby, congregation, stream, or passive timing displays.
+
+### F. Acceptance scenarios (requires code and device evidence)
+
+1. Bible operator requests Psalm 100:1–5 while host controls activation; pending badge increments; host reviews and approves; requester receives truthful state; **actual source activation and congregation Take remain separately controlled**.
+2. Screens Operator requests a Sanctuary+Overflow group Take; approval shows both target Programs and language variants, no Stage/OBS targets; one output fails, accurately reported as partial and recoverable.
+3. Editor asks to save a modified lower third. Approver sees diff/affected outputs; approval pins version and doesn't silently modify existing Live graphics.
+4. Two reviewers click Approve simultaneously; host revision guard decides once, other reviewer sees already handled. Requester cannot approve own submission.
+5. Stale role/device or revoked operator submits or tries to approve; host refuses. Pending approval expires when service ends or output authorization is removed.
+6. Request detail changes after approval or live Plan revision changes; old authorization is invalidated before apply.
+7. Browser disconnect/reconnect, host restart, duplicate click and offline LAN all preserve accurate history, no phantom approval or automatic on-air mutation.
+8. The host remains fully operational when there are no connected volunteers; empty inbox shows useful guidance rather than fake pending requests.
+
+**Stage of implementation:** Existing `src/lib/approval.ts` manages service/event approval revisions, `src/stores/notices-store.ts` + `src/studio/notices-panel.tsx` handle private notices/action acknowledgments and some scene-edit requests, and `src-tauri/crates/api/src/command.rs` exposes individual remote commands. These are **separate existing primitives**, not proof of a centralized typed request queue, approver inbox, and secure request lifecycle. Reuse/extract canonical primitives where safe; do **not** merely relabel Notices or treat event `approved_revision` as universal approval to Take Live. Backend and unified client still need implementation and tests.
 
 ## 4. Role presets plus effective permission details
 
@@ -158,14 +253,14 @@ Permissions → Choose operator/device → See effective access
 
 **Implementation order when Codex is allowed to work:** 
 1. Read this and docs 28, 34, 36 plus actual host capabilities; reconcile navigation and authorization with main's latest SHA.
-2. Add a genuine sidebar Permissions workspace route/title and UI, with safe read-only existing role/pairing data first; preserve back-stack, unsaved draft guards and existing deep links.
+2. Add a genuine sidebar Permissions workspace route/title and UI **with Approval Requests as a visible first-class section and actionable badge**, alongside safe read-only existing role/pairing data; preserve back-stack, unsaved draft guards and existing deep links.
 3. Consolidate the role/pair/revoke management surface: Permissions owns grants and access review; Connections owns transport/pairing discovery; Settings retains low-level network keys but links to central route; avoid two mutable copies.
-4. Add canonical **capability-scoped host policy** for previously approved Bible direct vs request, Screens group Take, Timekeeper reminders and per-output scopes, coupled with strong server tests and migration.
+4. Add canonical **typed approval-request lifecycle and capability-scoped host policy** for previously approved Bible direct vs request, Screens group Take, Timekeeper reminders, content/plan revision and per-output scopes, coupled with strong server tests, request-state persistence, event audit and migration. Integrate existing Prepare approval and Rhema Comms notices as linked views of canonical requests, not parallel approval databases.
 5. Introduce service-temporary vs persistent design/scene-write grant only after owner ratifies the default policy; explicit named capability and tests for Settings/Design persistence.
 6. Cover browser paired operator, timekeeper handoff, supervisor reclaim, stale/offline, failed revocation, group take disallowed, host changes concurrent with operator action, legacy role migration and mixed version host protocols.
 7. Record runtime/browser/native screenshots and run targeted tests; do not infer feature completion from this doc, screenshots or a markdown PR.
 
-**No shipping claim:** This is a scoped owner-directed design and build handoff. As of this document the dedicated sidebar route and granular host ACL are **not implemented** or visually signed off.
+**No shipping claim:** This is a scoped owner-directed design and build handoff. As of this document the dedicated sidebar route, Approval Requests inbox/lifecycle and granular host ACL are **not implemented** or visually signed off.
 
 ## 9. Owner visual review points
 
