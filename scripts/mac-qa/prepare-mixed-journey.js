@@ -402,7 +402,8 @@ async function runScenario() {
     })
     const arrangementRow = await waitFor(() => document.querySelector(`[data-rundown-item-id="${arrangementMoment.id}"]`), "song arrangement moment row")
     await activateButton(arrangementRow.querySelector('button[title="Click to preview"]'))
-    await clickTab("Order")
+    await clickTab("Slides")
+    await clickButton("Order")
     await chooseOption(alternateArrangement.name)
     await waitFor(
       () => qa.queue.getState().items.find((item) => item.id === arrangementMoment.id)?.song?.arrangement_id === alternateArrangement.id,
