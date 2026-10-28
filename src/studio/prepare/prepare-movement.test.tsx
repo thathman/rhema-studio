@@ -103,10 +103,8 @@ async function render() {
   await act(async () => root!.render(<RundownList mode="prepare" />))
   return el
 }
-function pointerDown(el: HTMLElement) {
-  const event = new Event("pointerdown", { bubbles: true })
-  Object.assign(event, { button: 0, ctrlKey: false, pointerType: "mouse", isPrimary: true })
-  el.dispatchEvent(event)
+function keyDown(el: HTMLElement, key: string) {
+  el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }))
 }
 type DragEnd = Parameters<NonNullable<ComponentProps<typeof DragDropProvider>["onDragEnd"]>>[0]
 async function drop(source: unknown, target: unknown, y: number, canceled = false) {
@@ -163,15 +161,22 @@ describe("Prepare movement keeps the plan separate from Live", () => {
     expect(selectCollision(headerId, itemId, 20).collisions[0]?.id).toBe(headerId)
   })
 
-  it("moves an event from its keyboard menu, undoes/redoes it, saves and reopens every moment and nested group", async () => {
+  it("moves an event with Enter and ArrowDown, undoes/redoes it, saves and reopens every moment and nested group", async () => {
     useServiceStore.setState({ current: { id: "service", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 10 }, dirty: false })
     const before = order()
     const liveBefore = live()
     const el = await render()
-    await act(async () => pointerDown(el.querySelector<HTMLButtonElement>('[aria-label="Opening prayer: options"]')!))
-    const down = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent?.trim() === "Move event down")!
-    expect(down).toBeDefined()
-    await act(async () => { pointerDown(down); down.dispatchEvent(new Event("pointerup", { bubbles: true })); down.click() })
+    const options = el.querySelector<HTMLButtonElement>('[aria-label="Opening prayer: options"]')!
+    options.focus()
+    await act(async () => keyDown(options, "Enter"))
+    let active = document.activeElement as HTMLElement
+    expect(active.getAttribute("role")).toBe("menuitem")
+    for (let step = 0; step < 8 && active.textContent?.trim() !== "Move event down"; step += 1) {
+      await act(async () => keyDown(active, "ArrowDown"))
+      active = document.activeElement as HTMLElement
+    }
+    expect(active.textContent?.trim()).toBe("Move event down")
+    await act(async () => keyDown(active, "Enter"))
     expect(ids()).toEqual(["Sermon", "Response", "Prayer", "Scripture"])
     expect(q().items[q().activeIndex!].id).toBe("Scripture")
     expect(q().past).toHaveLength(1)

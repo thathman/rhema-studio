@@ -394,11 +394,17 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
   setRemoteListeners: (patch) => set((s) => ({ remoteListeners: { ...s.remoteListeners, ...patch } })),
   setRemoteAuthRequired: (remoteAuthRequired) => {
-    set({ remoteAuthRequired })
+    // A configured key or paired device always keeps the server's auth gate on. The loader still
+    // preserves an explicitly saved legacy `false`; this guard applies when a user changes it.
+    set((s) => ({ remoteAuthRequired: remoteAuthRequired || s.remoteSecret.trim().length > 0 || s.remoteDevices.length > 0 }))
     void pushRemoteKeys()
   },
   setRemoteSecret: (remoteSecret) => {
-    set((s) => ({ remoteSecret, remoteAuthRequired: s.remoteAuthRequired || remoteSecret.trim().length > 0 }))
+    set((s) => ({
+      remoteSecret,
+      // Clearing the last legacy credential must not silently undo the server's forced-on state.
+      remoteAuthRequired: s.remoteAuthRequired || remoteSecret.trim().length > 0 || s.remoteSecret.trim().length > 0 || s.remoteDevices.length > 0,
+    }))
     void pushRemoteKeys()
   },
   addRemoteDevice: (d) => {
@@ -406,7 +412,15 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     void pushRemoteKeys()
   },
   revokeRemoteDevice: (hash) => {
-    set((s) => ({ remoteDevices: s.remoteDevices.filter((x) => x.hash !== hash) }))
+    set((s) => {
+      const remoteDevices = s.remoteDevices.filter((x) => x.hash !== hash)
+      return {
+        remoteDevices,
+        // The backend requires auth while any credential exists; removing the last one keeps the
+        // effective setting on until the operator explicitly accepts the risk in Remote settings.
+        remoteAuthRequired: s.remoteAuthRequired || remoteDevices.length !== s.remoteDevices.length,
+      }
+    })
     void pushRemoteKeys()
   },
   setRemoteDeviceRole: (hash, role) => {
