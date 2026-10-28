@@ -131,7 +131,7 @@ Treat the six primary task destinations (Home, Prepare, Live, Library, Design, H
 
 Recommended typed workflow:
 
-``text
+```text
 Draft (private) → Submitted → Pending/Assigned → Under Review
                                        ├→ Approved (scoped, revision-pinned)
                                        │      └→ Awaiting execution → Applied / Failed
