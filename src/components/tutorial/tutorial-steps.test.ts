@@ -11,9 +11,11 @@ describe("first-run tour (Studio)", () => {
       expect(typeof s.target).toBe("string")
       expect(String(s.title).length).toBeGreaterThan(0)
     }
-    // Nothing points at the classic dashboard any more.
+    // No step targets the retired dashboard panels.
     expect(TUTORIAL_STEPS.some((s) => /transcript-panel|detections-panel|book-search|context-search/.test(String(s.target)))).toBe(false)
-    // Present steps show the Standard view a volunteer works in.
-    expect(TUTORIAL_STEPS.filter((s) => (s.data as TourPlace).workspace === "present").every((s) => (s.data as TourPlace).presentView === "standard")).toBe(true)
+    // Present is one console; the tutorial opens its optional Bible/listening tools from the toolbar.
+    const presentSteps = TUTORIAL_STEPS.filter((s) => (s.data as TourPlace).workspace === "present")
+    expect(presentSteps.every((s) => !("presentView" in (s.data as object)))).toBe(true)
+    expect(presentSteps.some((s) => s.target === '[data-tour="live-tools"]')).toBe(true)
   })
 })

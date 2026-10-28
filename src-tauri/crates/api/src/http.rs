@@ -19,6 +19,7 @@ use crate::command::RemoteCommand;
 use crate::dispatch::{CommandDispatcher, CommandSink};
 use crate::error::CommandError;
 use crate::keys::{check_key, new_key_set, new_pairing_window, try_pair_as, KeySet, PairOutcome, PairingWindow};
+use crate::peer::{check_remote_key, is_local_network_ip, OPEN_REMOTE_OUTSIDE_LOCAL_NETWORK};
 
 /// Configuration for the HTTP API server.
 #[derive(Debug, Clone)]
@@ -26,7 +27,8 @@ pub struct HttpConfig {
     pub port: u16,
     pub host: String,
     /// Paired devices and the shared key; empty means open. `/command` requires
-    /// `X-Rhema-Key: <token>` (or `Authorization: Bearer <token>`) otherwise.
+    /// `X-Rhema-Key: <token>` (or `Authorization: Bearer <token>`) otherwise; with auth off,
+    /// unpaired commands are accepted only from local/private source addresses.
     pub keys: KeySet,
     /// The pairing window `/pair` checks against.
     pub pairing: PairingWindow,
@@ -904,13 +906,21 @@ pub fn set_app_version(version: &str) {
     let _ = APP_VERSION.set(version.to_string());
 }
 
-async fn health_handler<S: CommandSink + 'static>(AxumState(state): AxumState<Arc<AppState<S>>>) -> impl IntoResponse {
+/// The local-network health answer; public-source requests are refused.
+async fn health_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+) -> axum::response::Response {
+    if !is_local_network_ip(peer.ip()) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     Json(HealthResponse {
         status: "ok",
         service: "rhema",
         version: APP_VERSION.get().cloned().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string()),
         tls_port: state.tls_port.get().copied(),
     })
+    .into_response()
 }
 
 /// The origins of Rhema's own windows (Tauri's web view on macOS/Linux and on Windows).
@@ -1031,11 +1041,16 @@ async fn remote_page() -> impl IntoResponse {
     )
 }
 
+/// The current display status for local-network pages; public-source requests are refused.
 async fn status_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
-) -> impl IntoResponse {
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+) -> axum::response::Response {
+    if !is_local_network_ip(peer.ip()) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let snapshot = state.status.read().await;
-    Json(snapshot.clone())
+    Json(snapshot.clone()).into_response()
 }
 
 #[derive(Deserialize)]
@@ -1153,13 +1168,16 @@ struct PairResponse {
     error: Option<String>,
 }
 
-/// `POST /api/v1/pair {"code":"123456","name":"Tolu's phone"}` while the
-/// operator has the pairing window open. The token comes back exactly once.
+/// `POST /api/v1/pair {"code":"123456","name":"Tolu's phone"}` on the local network while
+/// the operator has the pairing window open. The token comes back exactly once.
 async fn pair_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(req): Json<PairRequest>,
 ) -> impl IntoResponse {
+    if !is_local_network_ip(peer.ip()) {
+        return (StatusCode::FORBIDDEN, Json(PairResponse { success: false, token: None, name: None, error: Some("pairing is available only on the local network".into()) }));
+    }
     if !state.rate.allow(peer.ip()) {
         return (StatusCode::TOO_MANY_REQUESTS, Json(PairResponse { success: false, token: None, name: None, error: Some("too many requests; slow down".into()) }));
     }
@@ -1768,6 +1786,29 @@ fn presented_key(headers: &HeaderMap) -> Option<&str> {
         .map(str::trim)
 }
 
+fn check_http_command_key(
+    keys: &KeySet,
+    headers: &HeaderMap,
+    peer: SocketAddr,
+) -> Result<Option<crate::keys::KeyEntry>, (StatusCode, &'static str)> {
+    match check_remote_key(keys, presented_key(headers), peer.ip()) {
+        Err(reason) if reason == OPEN_REMOTE_OUTSIDE_LOCAL_NETWORK => {
+            log::warn!("HTTP command refused: unauthenticated request from {}", peer.ip());
+            Err((StatusCode::FORBIDDEN, reason))
+        }
+        Err(reason) => {
+            log::warn!("HTTP command refused: {reason}");
+            Err((StatusCode::UNAUTHORIZED, reason))
+        }
+        Ok(entry) => Ok(entry),
+    }
+}
+
+fn command_key_refusal(status: StatusCode, reason: &'static str) -> (StatusCode, Json<CommandResponse>) {
+    let message = if status == StatusCode::FORBIDDEN { reason.to_string() } else { format!("{reason} (X-Rhema-Key)") };
+    (status, CommandResponse::refused(message))
+}
+
 async fn command_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
@@ -1778,26 +1819,26 @@ async fn command_handler<S: CommandSink + 'static>(
         log::warn!("HTTP command refused: too many from {}", peer.ip());
         return (StatusCode::TOO_MANY_REQUESTS, CommandResponse::refused("too many commands; slow down"));
     }
-    let by = match check_key(&state.keys, presented_key(&headers)) {
-        Err(reason) => {
-            log::warn!("HTTP command refused: {reason}");
-            return (StatusCode::UNAUTHORIZED, CommandResponse::refused(format!("{reason} (X-Rhema-Key)")));
-        }
-        Ok(Some(entry)) if entry.paused_for(&request.command) => {
+    let entry = match check_http_command_key(&state.keys, &headers, peer) {
+        Err((status, reason)) => return command_key_refusal(status, reason),
+        Ok(entry) => entry,
+    };
+    let by = match entry {
+        Some(entry) if entry.paused_for(&request.command) => {
             log::info!("HTTP command refused for {}: the main desk has taken back control", entry.name);
             return (StatusCode::LOCKED, CommandResponse::refused(crate::keys::PAUSED_MESSAGE));
         }
-        Ok(Some(entry)) if !entry.role.allows(&request.command) => {
+        Some(entry) if !entry.role.allows(&request.command) => {
             let why = refusal_for(entry.role, &request.command);
             log::warn!("HTTP command refused for {}: {why}", entry.name);
             return (StatusCode::FORBIDDEN, CommandResponse::refused(why));
         }
-        Ok(Some(entry)) => {
+        Some(entry) => {
             state.presence.saw(&entry, peer.ip());
             (entry.name, Some(entry.hash), entry.role)
         }
         // An open remote (no keys) may do everything, as before.
-        Ok(None) => ("an open remote".to_string(), None, crate::keys::Role::Configure),
+        None => ("an open remote".to_string(), None, crate::keys::Role::Configure),
     };
     let (by, by_id, role) = by;
     let mut command = request.command;
@@ -1943,6 +1984,30 @@ mod tests {
     use crate::keys::{hash_key, key_set_from};
     use std::sync::Mutex;
 
+    #[test]
+    fn http_command_key_check_limits_open_access_and_refuses_bad_or_revoked_keys() {
+        let open = new_key_set();
+        let no_key = HeaderMap::new();
+        let public_peer = "8.8.8.8:45000".parse().unwrap();
+        let lan_peer = "192.168.1.20:45000".parse().unwrap();
+
+        assert_eq!(check_http_command_key(&open, &no_key, public_peer).unwrap_err().0, StatusCode::FORBIDDEN);
+        assert!(check_http_command_key(&open, &no_key, lan_peer).unwrap().is_none());
+
+        let paired = key_set_from(&[("token", "Desk")]);
+        let mut wrong_key = HeaderMap::new();
+        wrong_key.insert("x-rhema-key", "tampered".parse().unwrap());
+        assert_eq!(check_http_command_key(&paired, &wrong_key, public_peer).unwrap_err().0, StatusCode::UNAUTHORIZED);
+
+        let mut valid_key = HeaderMap::new();
+        valid_key.insert("x-rhema-key", "token".parse().unwrap());
+        assert_eq!(check_http_command_key(&paired, &valid_key, public_peer).unwrap().unwrap().name, "Desk");
+
+        let revoked = new_key_set();
+        revoked.write().unwrap().require_auth = true;
+        assert_eq!(check_http_command_key(&revoked, &valid_key, public_peer).unwrap_err().0, StatusCode::UNAUTHORIZED);
+    }
+
     struct MockSink {
         commands: Mutex<Vec<String>>,
         /// The last production notice's event, as the app would receive it.
@@ -1963,6 +2028,47 @@ mod tests {
         fn command_count(&self) -> usize {
             self.commands.lock().unwrap().len()
         }
+    }
+
+    fn app_state_for_network_tests() -> Arc<AppState<MockSink>> {
+        let (_shutdown, stopping) = watch::channel(false);
+        Arc::new(AppState {
+            live: new_live_hub(),
+            feeds: new_feed_hub(),
+            voice: new_voice_hub(),
+            cameras: crate::cameras::new_camera_hub(),
+            presence: crate::presence::new_presence(),
+            tls_port: std::sync::OnceLock::new(),
+            stopping,
+            sink: Arc::new(MockSink::new()),
+            status: new_shared_status(),
+            keys: new_key_set(),
+            pairing: new_pairing_window(),
+            rate: crate::rate::RateLimiter::default(),
+            recent: RecentIds::default(),
+            gate: std::sync::Mutex::new(()),
+        })
+    }
+
+    #[tokio::test]
+    async fn public_sources_cannot_read_status_health_or_open_pairing() {
+        let state = app_state_for_network_tests();
+        let public_peer: SocketAddr = "8.8.8.8:45000".parse().unwrap();
+
+        let health = health_handler(AxumState(state.clone()), ConnectInfo(public_peer)).await;
+        assert_eq!(health.status(), StatusCode::FORBIDDEN);
+
+        let status = status_handler(AxumState(state.clone()), ConnectInfo(public_peer)).await;
+        assert_eq!(status.status(), StatusCode::FORBIDDEN);
+
+        let pair = pair_handler(
+            AxumState(state),
+            ConnectInfo(public_peer),
+            Json(PairRequest { code: "unused".into(), name: "Desk".into(), role: None }),
+        )
+        .await
+        .into_response();
+        assert_eq!(pair.status(), StatusCode::FORBIDDEN);
     }
 
     impl CommandSink for MockSink {
