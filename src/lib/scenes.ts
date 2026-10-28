@@ -1,10 +1,10 @@
 import { forOutputLanguage } from "@/lib/output-language"
-import { themeIdFor } from "@/lib/output-themes"
+import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { cameraPathOf, cameraSourceId, feedFrame, withCameraPath, type LiveSources, type StateSources } from "@/lib/live-sources"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import type { ContentType } from "@/types/broadcast"
 import { NO_SIGNALS } from "@/types/scene"
-import type { BroadcastOutput, BroadcastTheme, LowerThird, NoSignal, Scene, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind, Ticker, VerseRenderData } from "@/types"
+import type { BroadcastOutput, BroadcastTheme, LowerThird, NoSignal, Scene, SceneAppearanceSnapshot, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind, Ticker, VerseRenderData } from "@/types"
 import { elapsedMs, formatMs, remainingMs, type TimerState } from "@/lib/timer"
 import { countdownTarget, isCountdownTo, type CountdownTargets } from "@/lib/countdown"
 
@@ -21,6 +21,65 @@ const clamp = (n: unknown, lo: number, hi: number, d: number) => (typeof n === "
 const MEDIA_FILE = /^[0-9a-f]{64}\.[a-z0-9]{1,8}$/
 
 export const FULL: SceneBox = { x: 0, y: 0, w: 100, h: 100 }
+
+/** The immutable revision on air, falling back to the saved scene for older output records. */
+export function sceneForOutput(
+  output: Pick<BroadcastOutput, "role" | "sceneId" | "sceneSnapshot">,
+  scenes: readonly Scene[],
+): Scene | undefined {
+  if (!output.sceneId || (output.role ?? "congregation") !== "congregation") return undefined
+  if (output.sceneSnapshot?.id === output.sceneId) return output.sceneSnapshot
+  return scenes.find((scene) => scene.id === output.sceneId)
+}
+
+/** True when the saved scene, one of its looks, or its church logo has changed since Take. */
+export function sceneNeedsRefresh(
+  output: BroadcastOutput,
+  scenes: readonly Scene[],
+  themes: readonly BroadcastTheme[],
+  logoUrl: string | null,
+): boolean {
+  if (!output.sceneId) return false
+  const taken = output.sceneSnapshot?.id === output.sceneId ? output.sceneSnapshot : null
+  const saved = scenes.find((scene) => scene.id === output.sceneId)
+  if (!taken || !output.sceneAppearanceSnapshot) return true
+  if (output.sceneAppearanceSnapshot.approved?.appearanceComplete === false) return true
+  if (saved && taken.updatedAt !== saved.updatedAt) return true
+
+  const usedThemeIds = new Set<string>()
+  for (const layer of taken.layers) {
+    if (layer.themeId) usedThemeIds.add(layer.themeId)
+    else if (["feed", "clock", "camera", "ticker", "lowerThird"].includes(layer.kind)) {
+      for (const id of themeIdsOf(output)) usedThemeIds.add(id)
+    }
+  }
+  for (const id of usedThemeIds) {
+    const takenTheme = output.sceneAppearanceSnapshot.themes[id]
+    const currentTheme = themes.find((theme) => theme.id === id)
+    if (!takenTheme || !currentTheme || JSON.stringify(takenTheme) !== JSON.stringify(currentTheme)) return true
+  }
+  return taken.layers.some((layer) => layer.kind === "logo") && output.sceneAppearanceSnapshot.logoUrl !== logoUrl
+}
+
+/** Capture only looks a scene can resolve on this output, including its per-content looks. */
+export function captureSceneAppearance(
+  scene: Scene,
+  output: Pick<BroadcastOutput, "themeId" | "themeFor">,
+  themes: readonly BroadcastTheme[],
+  logoUrl: string | null,
+): SceneAppearanceSnapshot {
+  const ids = new Set([
+    ...themeIdsOf(output),
+    ...scene.layers.flatMap((layer) => layer.themeId ? [layer.themeId] : []),
+  ])
+  const snapshots: Record<string, BroadcastTheme> = {}
+  const fallback = themes.find((candidate) => candidate.id === output.themeId) ?? themes[0]
+  for (const id of ids) {
+    const theme = themes.find((candidate) => candidate.id === id) ?? fallback
+    if (theme) snapshots[id] = JSON.parse(JSON.stringify(theme)) as BroadcastTheme
+  }
+  return { themes: snapshots, logoUrl }
+}
 
 let seq = 0
 const newId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `layer-${Date.now()}-${++seq}`)
@@ -169,7 +228,7 @@ export function normalizeScene(raw: unknown): Scene | null {
     const fadeMs = clamp(l.fadeMs, 0, 3000, 0)
     return [{ ...l, clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
-  return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0), ...(typeof s.libraryLookId === "string" && s.libraryLookId ? { libraryLookId: s.libraryLookId } : {}) }
+  return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0), ...(typeof s.updatedBy === "string" ? { updatedBy: s.updatedBy.trim().slice(0, 60) || null } : s.updatedBy === null ? { updatedBy: null } : {}), ...(typeof s.libraryLookId === "string" && s.libraryLookId ? { libraryLookId: s.libraryLookId } : {}) }
 }
 
 interface LiveState {
@@ -241,10 +300,10 @@ export function clockText(c: SceneClock, wall: number): string {
 }
 
 /** What one feed layer shows, and in which look, on this output. */
-export function layerContent(s: LiveState, output: Pick<BroadcastOutput, "themeId" | "themeFor" | "language">, layer: SceneLayer): { verse: VerseRenderData | null; theme: BroadcastTheme | undefined } {
+export function layerContent(s: LiveState, output: Pick<BroadcastOutput, "themeId" | "themeFor" | "language" | "sceneAppearanceSnapshot">, layer: SceneLayer): { verse: VerseRenderData | null; theme: BroadcastTheme | undefined } {
   const shown = layer.held !== undefined && layer.held !== null ? layer.held : feedFrame(s, layer.shows)
   const themeId = layer.themeId ?? themeIdFor(output, shown?.content)
-  const theme = s.themes.find((t) => t.id === themeId) ?? s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
+  const theme = output.sceneAppearanceSnapshot?.themes[themeId] ?? output.sceneAppearanceSnapshot?.themes[output.themeId] ?? s.themes.find((t) => t.id === themeId) ?? s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
   return { verse: shown ? forOutputLanguage(shown, layer.language ?? output.language) : null, theme }
 }
 
@@ -273,9 +332,10 @@ export const FADES = (kind: SceneLayerKind) => kind !== "ticker" && kind !== "lo
  * The frame an output draws for a scene. `preview` adds labels for what the composer shows but an
  * output never draws (a camera that is not connected yet).
  */
-export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId" | "themeFor" | "language" | "cameraFallback">, scene: Scene, preview = false): SceneFrame {
+export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId" | "themeFor" | "language" | "cameraFallback" | "sceneAppearanceSnapshot">, scene: Scene, preview = false): SceneFrame {
   // The ticker and lower third fall back to the output's verse font, as they do over the whole frame.
-  const font = () => (s.themes.find((t) => t.id === output.themeId) ?? s.themes[0])?.verseText?.fontFamily
+  const themeForId = (id: string | undefined) => (id ? output.sceneAppearanceSnapshot?.themes[id] : undefined) ?? (id ? s.themes.find((t) => t.id === id) : undefined) ?? s.themes[0]
+  const font = () => themeForId(output.themeId)?.verseText?.fontFamily
   return {
     sceneId: scene.id,
     background: scene.background,
@@ -293,11 +353,14 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
     if (l.kind === "picture") return { ...base, imageUrl: l.imageUrl ?? null, ...(preview && !l.imageUrl ? { label: "Choose a picture" } : {}) }
     // A video plays on each output (a window from the media folder, a browser feed from the host), looped and silent.
     if (l.kind === "video") return { ...base, ...(l.videoUrl ? { videoUrl: l.videoUrl } : {}), ...(l.mediaFile ? { mediaFile: l.mediaFile } : {}), ...(preview ? { label: l.videoUrl ? `${l.name} · video` : "Choose a video" } : {}) }
-    if (l.kind === "logo") return { ...base, imageUrl: s.logoUrl ?? null, ...(preview && !s.logoUrl ? { label: "Add the church logo in Design → Brand Kit" } : {}) }
+    if (l.kind === "logo") {
+      const logoUrl = output.sceneAppearanceSnapshot ? output.sceneAppearanceSnapshot.logoUrl : s.logoUrl
+      return { ...base, imageUrl: logoUrl, ...(preview && !logoUrl ? { label: "Add the church logo in Design → Brand Kit" } : {}) }
+    }
     if (l.kind === "ticker") return { ...base, ticker: s.ticker ?? null, fontFamily: font(), ...(preview && !s.ticker ? { label: `${l.name} · shows when the ticker runs` } : {}) }
     if (l.kind === "lowerThird") return { ...base, overlay: s.overlay ?? null, fontFamily: font(), ...(preview && !s.overlay ? { label: `${l.name} · shows when a lower third is up` } : {}) }
     if (l.kind === "clock") {
-      const theme = s.themes.find((t) => t.id === (l.themeId ?? output.themeId)) ?? s.themes[0]
+      const theme = themeForId(l.themeId ?? output.themeId)
       const clock = l.clockShows === "time" ? { mode: "time" as const, at: 0, text: "" } : l.clockShows === "until" ? untilClock(l.until, s.now ?? Date.now()) : l.clockShows === "countdown" ? countdownClock(s.countdowns, l.countdownTo) : (s.clock ?? null)
       const missing = l.clockShows === "until" ? "choose the time to count down to" : l.clockShows === "countdown" ? ((l.countdownTo ?? "next") === "next" ? "no next item in the run of show now" : "not in the run of show now") : "set the service timer in Present"
       return { ...base, theme, clock, ...(preview && !clock ? { label: `${l.name} · ${missing}` } : {}) }
@@ -309,7 +372,7 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
     const own = output.cameraFallback && output.cameraFallback.mode !== "camera" ? output.cameraFallback : undefined
     const noSignal = own ? (own.mode as NonNullable<SceneLayer["noSignal"]>) : (l.noSignal ?? "bars")
     const words = own ? own.words?.trim() : l.cameraFallback
-    const fallback = noSignal === "words" && words ? { fallback: words, theme: s.themes.find((t) => t.id === (l.themeId ?? output.themeId)) ?? s.themes[0] } : {}
+    const fallback = noSignal === "words" && words ? { fallback: words, theme: themeForId(l.themeId ?? output.themeId) } : {}
     const ident = noSignal === "bars" && (own ? own.name : l.noSignalName) ? { ident: (l.cameraUrl && s.cameraLabel?.(l.cameraUrl)) || l.name } : {}
     const label = !l.cameraUrl ? `${l.name} · choose a camera` : play.instead ? `${l.name} · ${play.instead}` : play.url ? `${l.name} · camera` : `${l.name} · hidden from scenes`
     return { ...base, ...(play.url ? { cameraUrl: play.url } : {}), noSignal, ...fallback, ...ident, ...(play.retry ? { retry: play.retry } : {}), ...(play.hold ? { hold: true } : {}), ...(play.stale ? { stale: true } : {}), ...(preview ? { label } : {}) }

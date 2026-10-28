@@ -59,8 +59,10 @@ export interface ReadinessInput {
   signage?: Array<{ name: string; total: number; missing: number }>
   /** Translations the service's items were saved for that this computer does not have (they cannot show). */
   missingTranslations?: string[]
-  /** Items of a kind this version cannot show or save. */
+  /** Item kinds this build does not recognize because they came from a newer version. */
   unsupportedItems?: number
+  /** Saved items this build recognizes but could not read. */
+  corruptItems?: number
   /** The run of show's plan (#196, #213 preflight): absent when the service has no phases. */
   timing?: { startSet: boolean; plannedEnd: string | null; overruns: Array<{ item: string; endsAt: string; endBy: string; minutes: number }> }
   /** Scenes with a camera layer that has no stream address (it shows the scene's background). */
@@ -225,7 +227,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
       : { id: "rundown", status: "info", label: "Nothing in the service yet", detail: "You can still find and show passages live.", fix: "prepare", fixLabel: "Prepare service" },
     i.listening
       ? { id: "listening", status: "ok", label: "Listening for verse references" }
-      : { id: "listening", status: "info", label: "Listening is off", detail: "Optional. Turn it on in Present's Advanced view to detect verses from the sermon." },
+      : { id: "listening", status: "info", label: "Listening is off", detail: "Optional. Turn it on in Present's Bible and listening tools to detect verses from the sermon." },
     ...(i.missingSongs
       ? [{ id: "missing-songs", status: "warn" as const, label: `${i.missingSongs} song${i.missingSongs === 1 ? "" : "s"} in the service ${i.missingSongs === 1 ? "is" : "are"} not in the library`, detail: "They cannot be shown. Remove them or import the songs again.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
       : []),
@@ -262,6 +264,9 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
       : []),
     ...(i.unsupportedItems
       ? [{ id: "unsupported-items", status: "warn" as const, label: `${i.unsupportedItems} item${i.unsupportedItems === 1 ? "" : "s"} from a newer version of Rhema Studio`, detail: "This version cannot show them. Update Rhema Studio on this computer.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      : []),
+    ...(i.corruptItems
+      ? [{ id: "corrupt-items", status: "warn" as const, label: `${i.corruptItems} saved item${i.corruptItems === 1 ? "" : "s"} could not be read`, detail: "Saving or copying this service could remove unreadable data. Restore a backup before editing it.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
       : []),
     ...(i.missingMedia
       ? [{ id: "missing-media", status: "warn" as const, label: `${i.missingMedia} picture${i.missingMedia === 1 ? "" : "s"}, video${i.missingMedia === 1 ? "" : "s"} or sound${i.missingMedia === 1 ? "" : "s"} in the service ${i.missingMedia === 1 ? "is" : "are"} missing ${i.missingMedia === 1 ? "its" : "their"} file`, detail: "They would show or play nothing. Import the files again or remove the items.", fix: "prepare" as const, fixLabel: "Open Prepare" }]

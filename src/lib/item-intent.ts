@@ -35,21 +35,35 @@ export function parseTakeStep(step: string): ParsedTakeStep | null {
   return null
 }
 
-const ORDER: ParsedTakeStep["kind"][] = ["source", "scene", "obs"]
-
 /**
- * Steps worth saving: well-formed, one of each kind (the first wins), in the order they run.
- * Anything else (a step from a newer build, a broken one) is dropped, as unknown macro steps are.
+ * Steps worth saving: one source action, one shared scene, one scene per output, and one OBS action.
+ * The first action for each target wins. The shared scene always runs before output overrides.
+ * Anything malformed or unknown is dropped, as unknown macro steps are.
  */
 export function cleanTakeSteps(raw: unknown): TakeStep[] {
   if (!Array.isArray(raw)) return []
-  const byKind = new Map<ParsedTakeStep["kind"], TakeStep>()
+  const scenes = new Map<string | null, TakeStep>()
+  let source: TakeStep | undefined
+  let obs: TakeStep | undefined
   for (const s of raw) {
     if (typeof s !== "string" || s.length > MAX_STEP || CONTROL.test(s)) continue
     const p = parseTakeStep(s)
-    if (p && !byKind.has(p.kind)) byKind.set(p.kind, s as TakeStep)
+    if (!p) continue
+    if (p.kind === "scene") {
+      if (!scenes.has(p.outputId)) scenes.set(p.outputId, s as TakeStep)
+    } else if (p.kind === "source" && !source) {
+      source = s as TakeStep
+    } else if (p.kind === "obs" && !obs) {
+      obs = s as TakeStep
+    }
   }
-  return ORDER.flatMap((k) => (byKind.has(k) ? [byKind.get(k)!] : []))
+  const targeted = [...scenes].filter(([outputId]) => outputId !== null).map(([, step]) => step)
+  return [
+    ...(source ? [source] : []),
+    ...(scenes.has(null) ? [scenes.get(null)!] : []),
+    ...targeted,
+    ...(obs ? [obs] : []),
+  ]
 }
 
 /** The item's steps, parsed and cleaned. */

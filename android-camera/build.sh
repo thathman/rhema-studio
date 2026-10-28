@@ -18,7 +18,7 @@ J=${JAVA_HOME:+$JAVA_HOME/bin/}
 P=src/com/openbezal/rhema/camera
 rm -rf build && mkdir -p build/classes build/dex build/gen build/check
 # Plain Java parts only (no Android), checked with the computer's own Java.
-"${J}javac" --release 8 -Xlint:-options -d build/check $P/Pairing.java $P/Rtp.java $P/Sdp.java $P/Auth.java $P/RtspReader.java $P/Plan.java $P/Kelvin.java $P/Looks.java $P/Lut.java $P/Exposure.java $P/Pace.java $P/Publisher.java $P/Report.java $(find test -name '*.java')
+"${J}javac" --release 8 -Xlint:-options -d build/check $P/CamAction.java $P/Pairing.java $P/Rtp.java $P/Sdp.java $P/Auth.java $P/RtspReader.java $P/Plan.java $P/Kelvin.java $P/Looks.java $P/Lut.java $P/Exposure.java $P/Pace.java $P/Publisher.java $P/Report.java $(find test -name '*.java')
 "${J}java" -cp build/check com.openbezal.rhema.camera.CameraCoreCheck
 "$BT/aapt2" compile --dir res -o build/res.zip
 "$BT/aapt2" link ${CAMERA_DEBUG:+--debug-mode} -o build/base.apk -I "$JAR" --manifest AndroidManifest.xml --java build/gen build/res.zip
