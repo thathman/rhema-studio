@@ -142,5 +142,6 @@ describe("Home: skipped rundown items", () => {
     expect(entries[0].querySelector('[title="Planned time"]')?.textContent).toBe("10:00")
     expect(entries[1].textContent).toContain("Hidden for this service")
     expect(entries[2].querySelector('[title="Planned time"]')?.textContent).toBe("10:04")
+    expect(rows.textContent).not.toContain(" · next")
   })
 })
