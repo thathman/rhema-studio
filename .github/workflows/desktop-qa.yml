@@ -1,0 +1,52 @@
+name: Desktop QA (native Tauri)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/desktop-qa.yml"
+      - "package.json"
+      - "bun.lock"
+      - "src/**"
+      - "src-tauri/**"
+      - "scripts/mac-qa/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-journeys:
+    name: Hymn, scene save and failed-Take journeys in native macOS app
+    runs-on: macos-15-intel
+    timeout-minutes: 40
+    env:
+      KEEP_QA_SCRATCH: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri
+      - name: Install ONNX Runtime
+        run: brew install onnxruntime
+      - name: Install JavaScript dependencies
+        run: bun install --frozen-lockfile
+      - name: Build and exercise the isolated native app
+        run: bash scripts/mac-qa/run-native-journeys.sh
+        env:
+          TMPDIR: ${{ runner.temp }}
+      - name: Keep synthetic QA reports and app log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-journeys-${{ github.run_id }}
+          path: ${{ runner.temp }}/rhema-native-qa.*/artifacts/
+          if-no-files-found: ignore
+          retention-days: 7

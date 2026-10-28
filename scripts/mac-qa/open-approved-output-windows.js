@@ -14,7 +14,7 @@ await waitFor(
   () => [...document.querySelectorAll("button")].some((button) => button.innerText.replace(/\s+/g, " ").trim() === "Production"),
   "workspace navigation",
 )
-await waitFor(() => document.body.innerText.includes("Welcome to Rhema Studio"), "first-run setup prompt")
+await waitFor(() => document.querySelector("[data-setup-welcome]"), "first-run setup prompt")
 
 let stage = "find the Main output"
 try {

@@ -11,6 +11,7 @@ on:
       - "scripts/mac-qa/run-approved-scene-journey.sh"
       - "scripts/mac-qa/watch-approved-scene-output.js"
       - "scripts/mac-qa/qa.py"
+      - "scripts/mac-qa/run-native-journeys.sh"
       - "data/schema.sql"
       - "src/App.tsx"
       - "src/hooks/use-broadcast.ts"
