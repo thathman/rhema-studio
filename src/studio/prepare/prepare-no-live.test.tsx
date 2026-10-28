@@ -473,6 +473,13 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
     expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
     expect(el.textContent).toContain("Draft")
+
+    const signalsTab = el.querySelector<HTMLButtonElement>('button[role="tab"][aria-label="Event signals"]')
+    expect(signalsTab).not.toBeNull()
+    await act(async () => { signalsTab!.focus(); signalsTab!.click() })
+    expect(el.textContent).toContain("Manual only.")
+    expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
+    expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
   })
 
   it("shows an event's ordered moments and opens one in the editor without taking it live", async () => {

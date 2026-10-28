@@ -8,6 +8,7 @@ import { eventPlanApprovalState } from "@/lib/approval"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useAddDialog } from "@/studio/prepare/add-target"
+import { EventCuesEditor } from "@/studio/prepare/event-cues-editor"
 import type { QueueItem } from "@/types"
 
 /** Editable plan metadata for one event. Plan edits never activate content or alter a live screen. */
@@ -78,9 +79,10 @@ export function RunOfShowEventEditor({ header, onOpenMoment }: { header: Outline
       </header>
 
       <Tabs defaultValue="content" className="flex min-h-0 flex-1 flex-col">
-        <TabsList className="mx-5 mt-3 grid w-[calc(100%-2.5rem)] grid-cols-2">
+        <TabsList className="mx-5 mt-3 grid w-[calc(100%-2.5rem)] grid-cols-3">
           <TabsTrigger value="content" aria-label="Event content">Content</TabsTrigger>
           <TabsTrigger value="plan" aria-label="Event plan">Plan</TabsTrigger>
+          <TabsTrigger value="signals" aria-label="Event signals">Signals</TabsTrigger>
         </TabsList>
         <TabsContent value="content" aria-label="Event content" className="min-h-0 overflow-y-auto px-5 py-4">
           <section className="space-y-3">
@@ -187,6 +189,9 @@ export function RunOfShowEventEditor({ header, onOpenMoment }: { header: Outline
               className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             />
           </section>
+        </TabsContent>
+        <TabsContent value="signals" aria-label="Event signals" className="min-h-0 overflow-y-auto px-5 py-4">
+          <EventCuesEditor eventId={header.id} />
         </TabsContent>
       </Tabs>
     </div>
