@@ -9,7 +9,7 @@ import { sampleRefusal, startSampleService } from "@/lib/sample-service"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useTutorialStore } from "@/stores/tutorial-store"
 import { useShellStore } from "@/studio/shell-store"
-import { openProductionTab } from "@/studio/production/production-tab"
+import { openConnectionsHub } from "@/studio/connections/navigation"
 import { BibleStep, BrandStep, ChurchStep, ConnectionsStep, FinishStep, OperatorStep, ScreensStep } from "@/studio/setup/setup-steps"
 import { RestoreView } from "@/studio/setup/restore-view"
 import { switchMode } from "@/stores/companion-mode"
@@ -100,7 +100,7 @@ function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
   }
   const join = () => {
     useSettingsStore.getState().setSetup({ mode: "join" })
-    leaveTo(() => openProductionTab("operators"))
+    leaveTo(openConnectionsHub)
   }
   const finish = (then?: () => void) => {
     mark("finish", "done")

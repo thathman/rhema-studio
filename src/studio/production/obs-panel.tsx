@@ -188,7 +188,7 @@ export function ObsPanel() {
             </p>
             {held && !joined && <p id={reasonId} role="status" className="rounded-md bg-muted px-2.5 py-2 font-semibold">{OBS_REHEARSAL_REASON}.</p>}
             {studioMode && !joined && (
-              <ObsAction held={held} reasonId={reasonId} className="w-fit" disabled={!preview || busy} onClick={() => void run(() => obs.take())}>
+              <ObsAction held={held} reasonId={reasonId} aria-label={preview ? `Take OBS preview ${preview} to the online stream` : "Take OBS preview to the online stream"} className="w-fit" disabled={!preview || busy} onClick={() => void run(() => obs.take())}>
                 <ArrowRightLeftIcon /> Take in OBS{preview ? `: ${preview}` : ""}
               </ObsAction>
             )}
@@ -224,7 +224,7 @@ export function ObsPanel() {
                     </ObsAction>
                   )}
                   {!joined && studioMode === false && confirm !== name && (
-                    <ObsAction held={held} reasonId={reasonId} size="sm" variant="outline" disabled={busy || name === program} onClick={() => setConfirm(name)}>
+                    <ObsAction held={held} reasonId={reasonId} aria-label={`Review switching the OBS program to ${name}`} size="sm" variant="outline" disabled={busy || name === program} onClick={() => setConfirm(name)}>
                       Switch OBS to this scene…
                     </ObsAction>
                   )}
@@ -232,7 +232,7 @@ export function ObsPanel() {
                 {!joined && !held && studioMode === false && confirm === name && (
                   <div role="alertdialog" aria-label={`Switch OBS to ${name}?`} className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-2">
                     <span className="min-w-0 flex-1"><span className="font-semibold">This changes what the stream shows.</span> Switch OBS's program to {name} now?</span>
-                    <Button size="sm" variant="destructive" disabled={busy} onClick={() => { setConfirm(null); void run(() => obs.switchProgram(name)) }}>Switch OBS</Button>
+                    <Button size="sm" variant="destructive" aria-label={`Switch OBS program to ${name}`} disabled={busy} onClick={() => { setConfirm(null); void run(() => obs.switchProgram(name)) }}>Switch OBS</Button>
                     <Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button>
                   </div>
                 )}

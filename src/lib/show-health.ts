@@ -5,6 +5,7 @@ import { outputOnAir } from "@/lib/output-on-air"
 import { overLimits, type CapacityLimits, type CapacityUse } from "@/lib/capacity"
 import { cameraPathOf, cameraSourceId, type StateSources } from "@/lib/live-sources"
 import { measuredFps, playbackTrouble, type ScreenPlayback } from "@/lib/camera-playback"
+import { sceneForOutput } from "@/lib/scenes"
 import type { OutputFrame } from "@/stores/broadcast-store"
 import type { CameraSource } from "@/stores/settings-store"
 import type { BroadcastOutput, BroadcastOutputStatus, ReceiverTv, Scene, SceneLayer } from "@/types"
@@ -102,11 +103,20 @@ export function cameraHealth(cameras: CameraSource[], scenes: Scene[], outputs: 
       const r = row(ours ? name! : l.cameraUrl, ours ? (cameras.find((c) => c.name === name)?.label ?? name!) : l.name, ours)
       if (!r.urls.includes(l.cameraUrl)) r.urls.push(l.cameraUrl)
       if (!r.scenes.includes(sc.name)) r.scenes.push(sc.name)
-      for (const o of outputs) {
-        if (o.sceneId !== sc.id) continue
-        if (!r.assigned.includes(o.name)) r.assigned.push(o.name)
-        if (outputOnAir(o, status[o.id]) && !r.onAir.includes(o.name)) r.onAir.push(o.name)
-      }
+    }
+  }
+  for (const o of outputs) {
+    const scene = sceneForOutput(o, scenes)
+    if (!scene) continue
+    for (const l of scene.layers) {
+      if (l.kind !== "camera" || !l.cameraUrl) continue
+      const name = cameraPathOf(l.cameraUrl)
+      const ours = !!name && (cameras.some((c) => c.name === name) || !!router?.paths.some((p) => p.name === name))
+      const r = row(ours ? name! : l.cameraUrl, ours ? (cameras.find((c) => c.name === name)?.label ?? name!) : l.name, ours)
+      if (!r.urls.includes(l.cameraUrl)) r.urls.push(l.cameraUrl)
+      if (!r.scenes.includes(scene.name)) r.scenes.push(scene.name)
+      if (!r.assigned.includes(o.name)) r.assigned.push(o.name)
+      if (outputOnAir(o, status[o.id]) && !r.onAir.includes(o.name)) r.onAir.push(o.name)
     }
   }
   return [...rows.values()]
@@ -180,7 +190,7 @@ export function attention(outputs: BroadcastOutput[], status: Record<string, Bro
     const st = status[o.id]
     if (!outputOnAir(o, st)) continue
     // A scene on air whose camera is not sending shows its fallback words (or its background) there.
-    const scene = o.sceneId ? cams?.scenes.find((s) => s.id === o.sceneId) : undefined
+    const scene = sceneForOutput(o, cams?.scenes ?? [])
     for (const l of scene?.layers ?? []) {
       if (l.kind !== "camera" || !l.cameraUrl) continue
       const c = cams!.cameras.find((x) => x.urls.includes(l.cameraUrl!))
@@ -227,7 +237,10 @@ export function showing(o: BroadcastOutput, frame: OutputFrame | undefined, scen
   if (o.role === "stage") return "Stage display"
   if (o.role === "signage") return "Signage"
   if (!frame) return "Starting…"
-  if (frame.scene) return `Scene: ${scenes.find((s) => s.id === frame.scene!.sceneId)?.name ?? "a scene"}`
+  if (frame.scene) {
+    const scene = frame.scene.sceneId === o.sceneId ? sceneForOutput(o, scenes) : scenes.find((s) => s.id === frame.scene!.sceneId)
+    return `Scene: ${scene?.name ?? "a scene"}`
+  }
   const v = frame.verse
   if (!v) return "Nothing on air (its look)"
   if (v.screen === "black") return "Black"

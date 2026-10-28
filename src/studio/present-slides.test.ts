@@ -118,10 +118,10 @@ describe("custom slides", () => {
         { id: "bad", program_id: "p1", position: 1, kind: "slide", reference: "?", book_number: null, chapter: null, verse: null, translation: null, secondary_translation: null, notes: null, payload: "{}" },
       ],
     }
-    const { items, unsupported } = toQueueItems(data, 1, [])
+    const { items, corrupt } = toQueueItems(data, 1, [])
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ kind: "slide", slide: { title: "Offering", body: "Give as the Lord leads." }, notes: "slow" })
-    expect(unsupported.map((u) => u.id)).toEqual(["bad"])
+    expect(corrupt.map((u) => u.id)).toEqual(["bad"])
     expect(rundownSignature([item])).not.toBe(rundownSignature([{ ...item, slide: { ...item.slide, body: "changed" } }]))
   })
 })

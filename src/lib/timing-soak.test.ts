@@ -66,7 +66,7 @@ describe("a three-hour service on the timing engine and event clock (soak)", () 
       headers,
     })
     useBroadcastStore.setState({ isLive: false, liveItemId: null, liveVerse: null, rehearsal: false, stageMessage: "" })
-    useEventClock.setState({ mode: "screens", currentId: null })
+    useEventClock.setState({ mode: "screens", currentId: null, currentMomentId: null })
     useJournalStore.setState({ entries: [] })
     useTimerStore.getState().reset()
     useTimerStore.getState().setDurationMinutes(35)

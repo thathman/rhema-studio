@@ -34,6 +34,7 @@ import {
 import { useBible, bibleActions, fetchChapter, findLoadedVerse } from "@/hooks/use-bible"
 import { presentVerse } from "@/hooks/use-broadcast"
 import { useBibleStore, useQueueStore } from "@/stores"
+import { useServiceStore } from "@/stores/service-store"
 import type { Book, Verse, SemanticSearchResult } from "@/types"
 import { Input } from "@/components/ui/input"
 import { PanelHeader } from "@/components/ui/panel-header"
@@ -46,6 +47,17 @@ const RESULT_SOURCE_STYLES: Record<string, { text: string; label: string }> = {
   reference: { text: "text-ai-cloud", label: "Reference" },
   keyword: { text: "text-ai-direct", label: "Words" },
   semantic: { text: "text-ai-semantic", label: "Meaning" },
+}
+
+function canShowFirstRunSample(): boolean {
+  const bible = useBibleStore.getState()
+  return (
+    useServiceStore.getState().current === null &&
+    useQueueStore.getState().items.length === 0 &&
+    bible.selectedVerse === null &&
+    bible.selectedSlide === null &&
+    bible.selectedQueueItemId === null
+  )
 }
 
 /**
@@ -145,14 +157,18 @@ export function SearchPanel() {
 
   const selectedBookNumber = selectedBook?.book_number
 
-  // Load initial data and default to Genesis 1:1
+  // On a first run with no service or Preview selection, start with a clearly
+  // labelled Genesis example. A late Bible load must not replace a selection
+  // the operator made while translations or books were loading.
   useEffect(() => {
     bibleActions.loadTranslations().catch(console.error)
     bibleActions.loadBooks().then(() => {
+      if (!canShowFirstRunSample()) return
       useBibleStore.getState().setPendingNavigation({
         bookNumber: 1,
         chapter: 1,
         verse: 1,
+        sample: true,
       })
     }).catch(console.error)
   }, [])
@@ -244,9 +260,14 @@ export function SearchPanel() {
         return
       }
 
-      const { bookNumber, chapter: navChapter, verse: navVerse, present } = pendingNavigation
-      const pendingKey = `${bookNumber}:${navChapter}:${navVerse}:${present ? "live" : ""}`
+      const { bookNumber, chapter: navChapter, verse: navVerse, present, sample } = pendingNavigation
+      const pendingKey = `${bookNumber}:${navChapter}:${navVerse}:${present ? "live" : ""}:${sample ? "sample" : ""}`
       if (pendingKey === lastHandledKey) return
+
+      if (sample && !canShowFirstRunSample()) {
+        useBibleStore.getState().setPendingNavigation(null)
+        return
+      }
 
       const book = state.books.find((b) => b.book_number === bookNumber)
       if (!book) {
@@ -270,7 +291,11 @@ export function SearchPanel() {
         if (ticket !== navSeq) return
         const target = verses.find((v) => v.verse === navVerse)
         if (target) {
+          // Service state and operator selection may change while the chapter
+          // request is in flight. Do not replace either with the sample verse.
+          if (sample && !canShowFirstRunSample()) return
           bibleActions.selectVerse(target)
+          if (sample) useBibleStore.getState().setSamplePreview(true)
           if (present) void presentVerse(target)
           useBibleStore.getState().requestVerseReveal("center")
         }

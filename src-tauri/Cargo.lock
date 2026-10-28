@@ -4446,7 +4446,7 @@ dependencies = [
 
 [[package]]
 name = "rhema"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "crossbeam-channel",
  "dotenvy",
@@ -4557,6 +4557,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror 2.0.19",
+ "url",
  "uuid",
 ]
 

@@ -60,7 +60,7 @@ export function refreshStageClock(now = Date.now()) {
 
 useQueueStore.subscribe((s, prev) => { if (s.items !== prev.items || s.headers !== prev.headers) updateStageFinish() })
 useJournalStore.subscribe((s, prev) => { if (s.entries !== prev.entries) updateStageFinish() })
-useEventClock.subscribe((s, prev) => { if (s.currentId !== prev.currentId) updateStageFinish() })
+useEventClock.subscribe((s, prev) => { if (s.currentId !== prev.currentId || s.currentMomentId !== prev.currentMomentId) updateStageFinish() })
 useServiceOffset.subscribe((s, prev) => { if (s.minutes !== prev.minutes || s.mode !== prev.mode) updateStageFinish() })
 useHold.subscribe((s, prev) => { if (s.hold !== prev.hold) updateStageFinish() })
 useTimingTrust.subscribe((s, prev) => { if (s.untrusted !== prev.untrusted) updateStageFinish() })

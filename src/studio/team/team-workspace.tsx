@@ -1,4 +1,4 @@
-import { FolderSyncIcon, MessageSquareIcon, NetworkIcon, ShieldCheckIcon, SmartphoneIcon, UsersIcon, SettingsIcon } from "lucide-react"
+import { FolderSyncIcon, MessageSquareIcon, NetworkIcon, ShieldCheckIcon, SmartphoneIcon, UsersIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -6,10 +6,9 @@ import { useQueueStore } from "@/stores"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
-import { openSettings } from "@/lib/settings-dialog"
 import { approvalState } from "@/lib/approval"
 import { UnreadComments } from "@/studio/prepare/unread-comments"
-import { openProductionTab } from "@/studio/production/production-tab"
+import { openConnectionsHub } from "@/studio/connections/navigation"
 
 function Way({ icon, title, detail, action }: { icon: React.ReactNode; title: string; detail: string; action: { label: string; run: () => void } }) {
   return (
@@ -40,7 +39,7 @@ export function TeamWorkspace() {
             <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Your studio. Your people.</h1>
             <p className="mt-1 text-xs text-muted-foreground">Share the preparation. Keep the live production computer fully in control.</p>
           </div>
-          <Button variant="outline" onClick={() => openSettings("remote")}><SettingsIcon /> Connection settings</Button>
+          <Button variant="outline" onClick={openConnectionsHub}><NetworkIcon /> Connections</Button>
         </header>
         {/* A plain card, like the others (#215): what sharing means, and the two ways to start. */}
         <section aria-label="Working together" className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-card p-5 shadow-panel">
@@ -50,7 +49,7 @@ export function TeamWorkspace() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => useShellStore.getState().goTo("archive")}><FolderSyncIcon /> Share through the church folder</Button>
-            <Button variant="outline" onClick={() => openSettings("remote")}><SmartphoneIcon /> Use a phone as a remote</Button>
+            <Button variant="outline" onClick={openConnectionsHub}><SmartphoneIcon /> Connect a phone or device</Button>
           </div>
         </section>
 
@@ -86,8 +85,8 @@ export function TeamWorkspace() {
             <h2 className="text-base font-bold tracking-[-0.03em]">Ways to work together</h2>
             <ul className="divide-y divide-border">
               <Way icon={<FolderSyncIcon />} title="Church folder" detail="A shared folder (a NAS, or one kept in step by Drive, OneDrive, Dropbox or Syncthing): publish a service, open it on another computer." action={{ label: "Set up", run: () => useShellStore.getState().goTo("archive") }} />
-              <Way icon={<SmartphoneIcon />} title="A phone as a remote" detail="Next, previous and the live status on a phone on the same network (pairing code)." action={{ label: "Settings", run: () => openSettings("remote") }} />
-              <Way icon={<NetworkIcon />} title="Host or join a studio on the network" detail="Several computers working on one service at once, each with a role (Bible, timekeeper, screens…), and the team's talk channel." action={{ label: "Open Operators", run: () => openProductionTab("operators") }} />
+              <Way icon={<SmartphoneIcon />} title="A phone as a remote" detail="Next, previous and the live status on a phone on the same network (pairing code)." action={{ label: "Open Connections", run: openConnectionsHub }} />
+              <Way icon={<NetworkIcon />} title="Host or join a studio on the network" detail="Several computers working on one service at once, each with a role (Bible, timekeeper, screens…), and the team's talk channel." action={{ label: "Open Connections", run: openConnectionsHub }} />
             </ul>
           </section>
         </div>

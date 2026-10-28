@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { cleanTakeSteps, idByName, parseTakeStep, planLines, sceneStep, takesSourceOnly } from "./item-intent"
+import { cleanTakeSteps, idByName, intentPayload, parseTakeStep, planLines, sceneStep, takesSourceOnly } from "./item-intent"
 import { takeImpact } from "./cues"
 import type { QueueItem } from "@/types"
 
@@ -27,10 +27,38 @@ describe("an item's Take steps as saved", () => {
     expect(cleanTakeSteps(null)).toEqual([])
   })
 
+  it("keeps one shared scene and one override per output, with the shared scene first", () => {
+    const raw = [
+      sceneStep("screen-b-first", "screen-b"),
+      "obs.scene:OBS one",
+      sceneStep("shared-first"),
+      sceneStep("screen-a", "screen-a"),
+      sceneStep("screen-b-duplicate", "screen-b"),
+      sceneStep("shared-duplicate"),
+      "source.only",
+      "source.only",
+      "obs.scene:OBS two",
+    ]
+    const expected = [
+      "source.only",
+      sceneStep("shared-first"),
+      sceneStep("screen-b-first", "screen-b"),
+      sceneStep("screen-a", "screen-a"),
+      "obs.scene:OBS one",
+    ]
+    expect(cleanTakeSteps(raw)).toEqual(expected)
+    expect(intentPayload({ on_take: raw as QueueItem["on_take"] })).toEqual({ on_take: expected })
+  })
+
   it("Bible feeds only applies to readings, never to a slide", () => {
     expect(takesSourceOnly(slide({ on_take: ["source.only"] }))).toBe(false)
     const reading = { id: "r", verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, on_take: ["source.only"] } as QueueItem
     expect(takesSourceOnly(reading)).toBe(true)
+  })
+
+  it("summarizes several scene targets as one scene impact", () => {
+    expect(takeImpact([sceneStep("shared"), sceneStep("sanctuary", "main"), sceneStep("overflow", "overflow"), "obs.scene:Sermon"]))
+      .toEqual(["Arranges a congregation screen as a scene: what is live stays live", "Changes OBS's preview or program (never in rehearsal)"])
   })
 
   it("say what they touch before they run", () => {

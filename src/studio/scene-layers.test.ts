@@ -138,6 +138,7 @@ describe("a scene with a ticker or lower-third layer owns it (#243)", () => {
   it("a hidden ticker layer still owns the ticker; a scene without one leaves it to the output", () => {
     const scene = take("ticker")
     useBroadcastStore.getState().saveScene({ ...scene, layers: scene.layers.map((l) => ({ ...l, visible: l.kind !== "ticker" })) })
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
     useBroadcastStore.getState().setTickerItems(["Choir Saturday"])
     useBroadcastStore.getState().setTicker({ backing: null })
     expect(sent("broadcast-main")!.ticker).toBeNull()
@@ -157,12 +158,14 @@ describe("a scene with a ticker or lower-third layer owns it (#243)", () => {
     expect(sent("broadcast-main")!.scene?.layers.find((l) => l.kind === "ticker")?.ticker).toBeNull()
   })
 
-  it("a new Brand Kit logo reaches a scene on air", () => {
+  it("a new Brand Kit logo waits for an explicit scene Take", () => {
     const scene = newScene("Logo", SCENE_PRESETS[0])
     scene.layers = [newLayer("logo")]
     useBroadcastStore.getState().saveScene(scene)
     useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
     useSettingsStore.setState({ brandKit: { ...useSettingsStore.getState().brandKit, logoUrl: "data:image/png;base64,BB" } })
+    expect(sent("broadcast-main")!.scene?.layers[0].imageUrl).toBeNull()
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
     expect(sent("broadcast-main")!.scene?.layers[0].imageUrl).toBe("data:image/png;base64,BB")
   })
 })

@@ -188,6 +188,10 @@ fn services_using_media(conn: &Connection, media_id: &str) -> Result<Vec<String>
             OR json_extract(i.payload, '$.background_media_id') = ?1
          UNION
          SELECT 'the song ' || s.title FROM song_attachments a JOIN songs s ON s.id = a.song_id WHERE a.media_id = ?1
+         UNION
+         SELECT p.title || ' (approved design)' FROM approved_design_media d JOIN programs p ON p.id = d.program_id WHERE d.media_id = ?1
+         UNION
+         SELECT 'slide or announcement ' || title FROM reusable_slides WHERE background_media_id = ?1
          ORDER BY 1",
     )?;
     let rows = stmt.query_map(params![media_id], |r| r.get(0))?;
@@ -295,6 +299,30 @@ mod tests {
             let it = ItemInput { kind: "image".into(), reference: "x".into(), payload: bad, ..ItemInput::default() };
             assert!(matches!(db.replace_items(&p.id, 3, std::slice::from_ref(&it)), Err(ContentError::Invalid(_))));
         }
+    }
+
+    #[test]
+    fn approved_scene_media_cannot_be_deleted_while_its_release_is_retained() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let asset = db.register_media(&picture("Backdrop", 9)).unwrap();
+        let program = db.create_program("Sunday", None).unwrap();
+        db.approve_program_with_designs(
+            &program.id,
+            program.revision,
+            &crate::ApprovedDesignSnapshot {
+                version: 1,
+                scenes: serde_json::json!({ "welcome": { "scene": { "id": "welcome" } } }),
+                looks: serde_json::json!({}),
+                media_ids: vec![asset.id.clone()],
+            },
+        ).unwrap();
+
+        match db.delete_media(&asset.id).unwrap_err() {
+            ContentError::InUse { titles } => assert_eq!(titles, vec!["Sunday (approved design)"]),
+            other => panic!("{other:?}"),
+        }
+        db.delete_program(&program.id, program.revision).unwrap();
+        assert_eq!(db.delete_media(&asset.id).unwrap(), asset.file);
     }
 
     #[test]

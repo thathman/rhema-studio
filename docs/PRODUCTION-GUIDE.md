@@ -2,6 +2,14 @@
 
 For the person running outputs, OBS and the stage screen. The volunteer guide (`docs/QUICK-START.md`) covers the Standard view; this page covers everything behind it. Services are built in Prepare only; Present's **Advanced** view (the original dashboard: transcript, detections and its own queue) is for listening checks and recovery, over the same service; its Live panel keeps the old **Go live** switch, which the Standard view replaces with an On air / Off air / Rehearsal badge (Take live, Clear and Restore do the rest). There is no Hold in the Present transport: Hold is per scene layer (below) until its rules for the transport are settled (#243).
 
+## Connections (left sidebar)
+
+Use **Connections** for a quick view of screens, cameras, volunteer devices and OBS computers. **Nearby** searches for Google TV Receivers and Rhema Studio hosts that advertise on the church network; phones and cameras do not advertise, so use **Set up** for the camera QR flow and **Pair phone, controller or OBS computer** for the short-lived pairing code. The pairing dialog says whether its link uses HTTPS or unencrypted HTTP. If it says **Not encrypted**, pair only on a trusted local network, or stop the listener, enable **Secure page for phones (https)** in Remote settings, restart the listener, and pair again. If the network listener is off, open network settings and turn it on, then press **Check again** in the pairing dialog. If a host is not discovered, **Join by address** opens the existing host-and-code form. Discovery and pairing stay on the local network and do not require an internet account.
+
+Choosing a nearby TV carries its address into the existing screen/feed setup. It does not take a scene live; finish the TV's secure **Show on TV** pairing from the output that should send it. Adding Connections or opening a pairing form does not change a public output. Camera setup reuses **Production → Cameras** controls; phones need the network listener and secure phone page enabled before their QR link can be used. Paired-device roles and revocation remain in **Settings → Remote control**.
+
+The **Connected** cards distinguish saved setup from current reports. A saved TV address is not proof the TV is on; “Showing now” requires a receiver feed report. Camera sending comes from the local camera router, volunteer presence from the host, and OBS status from OBS itself. **Issues** lists failures Rhema can detect and links to the relevant recovery controls. The main computer keeps full service control when optional devices disconnect.
+
 ## Outputs (Production → Screens → Open outputs, or Settings → Outputs)
 
 - Each output is a window on a monitor or an NDI sender, with its own theme and a role:

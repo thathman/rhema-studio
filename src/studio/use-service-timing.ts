@@ -23,6 +23,7 @@ export function useServiceTiming() {
   useQueueStore((s) => s.headers)
   useJournalStore((s) => s.entries)
   useEventClock((s) => s.currentId)
+  useEventClock((s) => s.currentMomentId)
   useHold((s) => s.hold)
   useTimingTrust((s) => s.untrusted)
   useSettingsStore((s) => s.setup.timeZone)
