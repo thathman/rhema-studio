@@ -2,22 +2,18 @@ import { PauseIcon, PlayIcon } from "lucide-react"
 import { PanelHeader } from "@/components/ui/panel-header"
 import { Button } from "@/components/ui/button"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
-import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { approvalHolds } from "@/stores/approval-gate-store"
-import { useBroadcastStore, useBibleStore } from "@/stores"
+import { useBroadcastStore } from "@/stores"
 import { autoModeOf, type AutoMode } from "@/stores/broadcast-store"
-import { presentVerse } from "@/hooks/use-broadcast"
 import { LiveSourcesStrip } from "@/studio/present/live-sources-strip"
 import { StatusChip } from "@/studio/ui/status-chip"
 
 /**
- * What the screens show. `goLiveSwitch` (the Advanced dashboard): the old Go live / On air switch.
- * Present's Standard view has Take live, Clear and Restore in its transport instead, so there it is
- * off and the header only says whether the screens are on air (#299 5.16).
+ * What the screens show. The transport is the only ordinary place to Take or
+ * Clear live; this panel reports Program status and offers its scoped controls.
  */
-export function LiveOutputPanel({ goLiveSwitch = true }: { goLiveSwitch?: boolean } = {}) {
+export function LiveOutputPanel() {
   const isLive = useBroadcastStore((s) => s.isLive)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
   const autoMode = useBroadcastStore(autoModeOf)
@@ -35,17 +31,6 @@ export function LiveOutputPanel({ goLiveSwitch = true }: { goLiveSwitch?: boolea
 
   // Following a translation change on air lives in useLiveTranslationFollow (mounted once).
 
-  const handleGoLive = (checked: boolean) => {
-    if (checked && approvalHolds(() => handleGoLive(true))) return
-    useBroadcastStore.getState().setLive(checked)
-    // Going live with nothing presented yet: present the current preview
-    // verse so the output isn't blank.
-    if (checked && !useBroadcastStore.getState().liveVerse) {
-      const selected = useBibleStore.getState().selectedVerse
-      if (selected) void presentVerse(selected)
-    }
-  }
-
   return (
     <div
       data-slot="live-output-panel"
@@ -54,7 +39,7 @@ export function LiveOutputPanel({ goLiveSwitch = true }: { goLiveSwitch?: boolea
         isLive ? "border-live-pulse/60" : "border-border"
       )}
     >
-      <PanelHeader title="Live">
+      <PanelHeader title="Program">
         {video && (
           <>
             <Button
@@ -87,29 +72,12 @@ export function LiveOutputPanel({ goLiveSwitch = true }: { goLiveSwitch?: boolea
           </Select>
         </label>
         <span aria-hidden className="mx-2 h-4 w-px bg-border" />
-        {goLiveSwitch ? (
-          <label
-            className="flex items-center gap-2"
-            title={isLive ? "On air: the screens show Live. Switch off to take it off the screens." : "Off air: the screens show nothing. Switch on to show Live (the preview, if nothing was presented yet)."}
-          >
-            <span className={cn("text-xs font-medium transition-colors", isLive ? "text-destructive" : "text-muted-foreground")}>
-              {isLive ? "On air" : "Go live"}
-            </span>
-            <Switch
-              aria-label="Go live: show this on the screens"
-              checked={isLive}
-              onCheckedChange={handleGoLive}
-              className="data-[state=checked]:bg-live-pulse"
-            />
-          </label>
-        ) : (
-          <StatusChip
-            tone={!isLive ? "off" : rehearsal ? "warn" : "live"}
-            label={!isLive ? "Off air" : rehearsal ? "Rehearsal" : "On air"}
-            title={!isLive ? "Nothing is on the screens. Take live puts Preview up; Restore brings back what was cleared." : rehearsal ? "Rehearsal: the screens keep what they showed before it." : "On air: the screens show Live. Clear takes it down."}
-            className="h-7 px-2.5"
-          />
-        )}
+        <StatusChip
+          tone={!isLive ? "off" : rehearsal ? "warn" : "live"}
+          label={!isLive ? "Off air" : rehearsal ? "Rehearsal" : "On air"}
+          title={!isLive ? "Nothing is on the screens. Take live puts Preview up; Restore brings back what was cleared." : rehearsal ? "Rehearsal: the screens keep what they showed before it." : "On air: the screens show Live. Clear takes it down."}
+          className="h-7 px-2.5"
+        />
       </PanelHeader>
 
       <div

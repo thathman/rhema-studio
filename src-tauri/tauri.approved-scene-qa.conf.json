@@ -1,0 +1,30 @@
+{
+  "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Rhema Approved Scene QA",
+  "version": "0.3.3",
+  "identifier": "com.openbezal.rhema.approvedsceneqa",
+  "build": {
+    "frontendDist": "../build",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "bun dev",
+    "beforeBuildCommand": "bun run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Rhema Approved Scene QA",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "backgroundThrottling": "disabled"
+      }
+    ]
+  },
+  "bundle": {
+    "resources": []
+  }
+}

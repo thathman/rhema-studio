@@ -64,8 +64,12 @@ export function SectionHeader({ header, summary, collapsed, selected = false, dr
   })
   const setHeaderRef = useCallback((element: Element | null) => {
     dropRef(element)
-    draggableRef(element)
-  }, [dropRef, draggableRef])
+    // Phase and group rows are drop targets only. Do not register their DOM
+    // element as a disabled draggable: the accessibility plugin exposes that
+    // disabled draggable as a button and can make the row's child controls
+    // appear unavailable to assistive technology.
+    draggableRef(header.event ? element : null)
+  }, [dropRef, draggableRef, header.event])
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(header.name)
   const [removePhaseOpen, setRemovePhaseOpen] = useState(false)
@@ -86,6 +90,7 @@ export function SectionHeader({ header, summary, collapsed, selected = false, dr
     <>
     <li
       ref={setHeaderRef}
+      data-phase-id={phase ? header.id : undefined}
       aria-label={`${kind[0].toUpperCase()}${kind.slice(1)}: ${header.name}`}
       className={cn(
         "relative flex items-center gap-1.5 rounded-lg",

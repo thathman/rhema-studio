@@ -168,10 +168,11 @@ describe("presentActions live safety", () => {
     const pending = deferredLookups()
     presentActions.prev()
     expect(useBroadcastStore.getState().isLive).toBe(false)
-    expect(useQueueStore.getState().activeIndex).toBe(0)
+    expect(useQueueStore.getState().activeIndex).toBe(1)
     pending[0].resolve(verse(19, 23, 1, "ok"))
     await flush()
     expect(useBroadcastStore.getState().isLive).toBe(true)
+    expect(useQueueStore.getState().activeIndex).toBe(0)
   })
 
   it("Show live presents the preview in the translation the preview is in", async () => {

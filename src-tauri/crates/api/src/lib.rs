@@ -17,6 +17,7 @@ pub mod feed_video;
 pub mod http;
 pub mod osc;
 pub mod presence;
+pub mod peer;
 pub mod tls;
 
 pub use cameras::{new_camera_hub, valid_camera_name, CameraHub, CameraWatch, ObsTally, RouterTarget, SharedCameras, Tally, Watcher, COMPANION_PATH, PUBLISH_PREFIX, READ_PREFIX};
