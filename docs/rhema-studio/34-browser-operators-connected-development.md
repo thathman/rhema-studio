@@ -228,6 +228,14 @@ Owner answered **yes** to [43 — Page 9 Editor Operator §9](43-editor-operator
 
 [44 — Page 10 Viewer Operator](44-viewer-operator-page-10-layout-proposal.md) proposes a light, **read-only-production** `Follow Service` experience: host-authoritative **Now & Next** and clock first, compact Running Order, role-filtered private crew notices, and only the `Talk/ACK/Reply` capabilities specifically allowed by Rhema Comms permissions. It must not offer production Take, Prepare edits, OBS control, Stage cues or native recording commands. Actual host freshness and private-content filtering matter more than fake video preview; reuse the existing `viewer` role, `RunOfShowView`, `JoinedTalk` and `NoticesPanel`. **Page 10's hierarchy is only proposed**, awaiting owner visual approval; active build / no-new-PR policy continues.
 
+### Page 10 Viewer hierarchy — OWNER APPROVED (29 October 2026)
+
+The owner approved [44 — Viewer §9](44-viewer-operator-page-10-layout-proposal.md#9-owner-decision-29-october-2026): **Now & Next + large authoritative service clock → compact Running Order → private filtered crew messages → permitted Rhema Comms**. Viewer is read-only for all production controls, with only separately authorized Talk/ACK/Reply, subject to host channel/recipient policy. **Structural UX sign-off, not role expansion, finished pixels or working browser evidence.**
+
+### Page 11 Main Presenter / Configure — PROPOSED (29 October 2026)
+
+[45 — Page 11 Main Presenter / Configure](45-main-presenter-configure-page-11-layout-proposal.md) proposes one confident **Live service command desk**: Running Order/Now Next + crew readiness, named output-scoped private Preview/actual Program, one explicit Take and contextual Bible/Worship/Graphics/Scene controls, with compact Permissions/Comms requests and independently authorized Rhema-native recording awareness. **Configure** is a privilege boundary managed via existing Connections, Permissions and Settings routes, **not** a second all-powerful Live clone. The full Page 11 visual hierarchy is **NOT yet owner approved**. Preserve Rust `Role::Present` vs `Role::Configure`, host reclaim, no unauthorized group Take or independent recording controls, offline Live safety, no new PRs.
+
 ### Operator design review protocol: one page at a time, with owner sign-off
 
 **We have NOT completed the operator visual redesign together. Do not silently invent final approved page designs or count a generic console as accepted.** Implement shared safety/data foundations first, then present an individually reviewable page specification/screenshot/interactive demo to the owner for each step. Record feedback and approval, then continue to the next page. No automatic completion of 12 pages because their route exists.
