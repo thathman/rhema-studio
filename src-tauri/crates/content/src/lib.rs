@@ -916,8 +916,22 @@ pub fn set_actor(name: Option<&str>) {
     *ACTOR.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = name;
 }
 
+thread_local! {
+    /// A paired desk saving through the control server (C5): its name, for this call only.
+    static CALL_ACTOR: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Run `f` with its saves, revisions and audit rows recorded as `name` (a desk, not the operator
+/// signed in at this computer).
+pub fn as_actor<T>(name: &str, f: impl FnOnce() -> T) -> T {
+    let before = CALL_ACTOR.with(|a| a.replace(Some(name.trim().to_string()).filter(|n| !n.is_empty())));
+    let out = f();
+    CALL_ACTOR.with(|a| *a.borrow_mut() = before);
+    out
+}
+
 pub(crate) fn actor() -> Option<String> {
-    ACTOR.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+    CALL_ACTOR.with(|a| a.borrow().clone()).or_else(|| ACTOR.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone())
 }
 
 fn audit(tx: &Transaction<'_>, entity: &str, entity_id: &str, action: &str, payload: &serde_json::Value) -> Result<()> {

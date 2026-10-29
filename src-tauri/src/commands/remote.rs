@@ -273,6 +273,10 @@ impl CommandSink for TauriSink {
         answer_lookup(&self.app, q)
     }
 
+    fn plans(&self, by: &rhema_api::Desk, q: &rhema_api::PlanRequest) -> Result<serde_json::Value, rhema_api::PlanError> {
+        answer_plan(&self.app, by, q)
+    }
+
     fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
         // A scene change that must wait for the main desk becomes a host approval request first.
         emit_recorded_event(
@@ -307,6 +311,69 @@ impl CommandSink for TauriSink {
             _ => Err(CommandError::DispatchFailed(format!(
                 "Unknown backend action: {action}"
             ))),
+        }
+    }
+}
+
+/// A paired desk's plan request (C5, `docs/contracts/plan-drafts-v1.md`), already checked for its role.
+/// A save keeps the approved revision pinned; a submit asks the main desk to approve exactly the
+/// revision the desk saw. The main desk hears of both; neither changes Live.
+fn answer_plan(app: &AppHandle, by: &rhema_api::Desk, q: &rhema_api::PlanRequest) -> Result<serde_json::Value, rhema_api::PlanError> {
+    use rhema_api::{PlanError, PlanRequest};
+    use rhema_content::ContentError;
+    let failed = |e: ContentError| match e {
+        ContentError::NotFound(_) => PlanError::NotFound,
+        ContentError::Conflict { expected, actual } => PlanError::Conflict { expected, actual },
+        ContentError::Invalid(m) => PlanError::Invalid(m),
+        e @ (ContentError::InUse { .. } | ContentError::Refused { .. }) => PlanError::Invalid(e.to_string()),
+        e => PlanError::Unavailable(e.to_string()),
+    };
+    let unavailable = || PlanError::Unavailable("Services are not available on the host".into());
+    let content = app.try_state::<super::content::ContentState>().ok_or_else(unavailable)?;
+    let guard = content.0.lock().map_err(|_| unavailable())?;
+    let db = guard.as_ref().ok_or_else(unavailable)?;
+    fn json<T: serde::Serialize>(v: &T) -> Result<serde_json::Value, PlanError> {
+        serde_json::to_value(v).map_err(|e| PlanError::Unavailable(e.to_string()))
+    }
+    match q {
+        PlanRequest::List => {
+            let plans: Vec<_> = db.list_programs().map_err(failed)?.into_iter().filter(|p| p.archived_at.is_none() && !p.is_template).collect();
+            json(&plans)
+        }
+        PlanRequest::Get { id } => json(&db.get_program(id).map_err(failed)?.ok_or(PlanError::NotFound)?),
+        PlanRequest::Save { id, expected_revision, items } => {
+            let items: Vec<rhema_content::ItemInput> = items
+                .iter()
+                .cloned()
+                .map(serde_json::from_value)
+                .collect::<Result<_, _>>()
+                .map_err(|e| PlanError::Invalid(format!("an item is not one Rhema knows: {e}")))?;
+            let saved = rhema_content::as_actor(&by.name, || db.replace_items(id, *expected_revision, &items)).map_err(failed)?;
+            log::info!("Plan {id} saved at revision {} by {}", saved.program.revision, by.name);
+            let _ = app.emit_to("main", "remote:plan_saved", serde_json::json!({ "id": id, "revision": saved.program.revision, "by": by.name }));
+            json(&saved)
+        }
+        PlanRequest::Submit { id, revision, note } => {
+            let current = db.get_program(id).map_err(failed)?.ok_or(PlanError::NotFound)?;
+            if current.program.revision != *revision {
+                return Err(PlanError::Conflict { expected: *revision, actual: current.program.revision });
+            }
+            let request = db
+                .submit_approval_request(
+                    &rhema_content::Actor { id: by.id.clone(), name: by.name.clone() },
+                    &rhema_content::ApprovalRequestInput {
+                        kind: "plan_approve".into(),
+                        target_id: id.clone(),
+                        base_revision: Some(*revision),
+                        payload: serde_json::json!({ "title": current.program.title, "revision": revision, "items": current.items.len() }),
+                        reason: note.clone(),
+                        ttl_secs: None,
+                    },
+                )
+                .map_err(failed)?;
+            log::info!("Plan {id} revision {revision} submitted for review by {}", by.name);
+            let _ = app.emit_to("main", "remote:plan_submitted", serde_json::json!({ "id": id, "revision": revision, "requestId": request.id, "by": by.name }));
+            json(&request)
         }
     }
 }
