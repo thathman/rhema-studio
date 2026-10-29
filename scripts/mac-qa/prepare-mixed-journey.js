@@ -223,7 +223,7 @@ async function runScenario() {
     const headers = qa.queue.getState().headers.map((header) => header.id === event.id ? { ...header, at: 1 } : header)
     qa.queue.setState({ items: [baseline], headers, activeIndex: null, addTarget: null })
     await waitFor(() => qa.service.getState().dirty, "baseline plan change to be marked unsaved")
-    await clickButton("Present service")
+    await clickButton("Open Live")
     const baselineRow = await waitFor(
       () => [...document.querySelectorAll('ol[aria-label="Service rundown"] button[title^="Click to preview"]')]
         .find((button) => normal(button.innerText).includes(baseline.reference)),
@@ -625,7 +625,7 @@ async function runScenario() {
     }
 
     stage = "verify primary Scripture Preview and bilingual render state after explicit Take"
-    await clickButton("Present service")
+    await clickButton("Open Live")
     const previewPanel = await waitFor(() => document.querySelector('[data-slot="preview-panel"]'), "Live Preview panel")
     const previewCanvas = await waitFor(() => previewPanel.querySelector('canvas[role="img"]'), "accessible Live Preview canvas")
     const previewLabel = await waitFor(

@@ -11,7 +11,7 @@ const waitFor = async (predicate, label, timeoutMs = 10000) => {
 const stores = await waitFor(() => window.__rhemaQa?.(), "isolated QA stores")
 await waitFor(() => document.querySelector("#root")?.childElementCount, "Rhema Studio window")
 await waitFor(
-  () => [...document.querySelectorAll("button")].some((button) => button.innerText.replace(/\s+/g, " ").trim() === "Production"),
+  () => [...document.querySelectorAll("button")].some((button) => button.innerText.replace(/\s+/g, " ").trim() === "Live"),
   "workspace navigation",
 )
 await waitFor(() => document.querySelector("[data-setup-welcome]"), "first-run setup prompt")

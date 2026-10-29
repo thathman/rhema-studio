@@ -43,10 +43,11 @@ const setInput = async (selector, value) => {
 async function runScenario() {
   await waitFor(() => document.querySelector("#root")?.childElementCount, "Rhema Studio window")
   const qaStores = await waitFor(() => window.__rhemaQa?.(), "isolated QA stores")
-  let stage = "open Production scenes"
+  let stage = "open Live scene tools"
   try {
-    await clickButton("Production")
-    await waitFor(() => buttons().some((button) => button.getAttribute("role") === "tab" && normal(button.innerText) === "Scenes"), "Production tabs")
+    await clickButton("Live")
+    await clickButton("Open production tools")
+    await waitFor(() => buttons().some((button) => button.getAttribute("role") === "tab" && normal(button.innerText) === "Scenes"), "Live production tool tabs")
     await clickButton("Scenes")
     await waitFor(() => document.querySelector('[aria-label="Scene preview"]'), "Scene Composer")
 

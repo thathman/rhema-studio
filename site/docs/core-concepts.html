@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Understand Prepare, Design, private Preview, Program, independent outputs, language choices, and host permissions in Rhema Studio.">
+  <link rel="icon" href="../assets/rhema-studio-mark.svg" type="image/svg+xml"><link rel="stylesheet" href="./docs.css">
+  <title>Core concepts — Rhema Studio</title>
+</head>
+<body>
+  <a class="skip-link" href="#docs-content">Skip to documentation</a>
+  <header class="docs-header"><a class="docs-brand" href="../index.html"><img src="../assets/rhema-studio-mark.svg" width="34" height="34" alt=""><span>Rhema Studio</span></a><nav class="docs-top-links" aria-label="Site navigation"><a href="../index.html">Website</a><a href="./roadmap.html">Roadmap</a><a class="docs-home-link" href="https://github.com/thathman/rhema-studio" rel="noopener noreferrer">GitHub ↗</a></nav></header>
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation navigation"><p class="docs-sidebar-title">Documentation</p><button class="docs-nav-toggle" type="button" aria-controls="docs-navigation" aria-expanded="false">Browse documentation</button><nav class="docs-sidebar-nav" id="docs-navigation" data-docs-nav aria-label="Documentation pages"></nav><noscript><p><a href="./index.html">Docs home and full page index</a></p></noscript></aside>
+    <main class="docs-main" id="docs-content">
+      <div class="docs-breadcrumb"><a href="../index.html">Rhema Studio</a><span aria-hidden="true">›</span><a href="./index.html">Docs & wiki</a></div>
+      <header class="article-header"><p class="article-kicker">FOUNDATIONS</p><h1>Core concepts</h1><p>The product separates service preparation, reusable design, private review, and explicit production actions.</p></header>
+      <article class="prose">
+        <div class="notice"><p><strong>Current behavior and approved direction:</strong> the concepts below come from the repository and owner-approved contracts. The integrated six-destination experience and end-to-end acceptance are still in progress.</p></div>
+
+        <h2>Prepare the service</h2>
+        <p>Prepare is for building the service plan: phases, moments, content, timing, and related notes. It is the place to arrange what the team expects to do. Saving that plan should not itself take a scene, activate a source, or change what an audience sees.</p>
+        <figure class="docs-figure"><img src="../assets/screenshots/prepare.png" width="1440" height="900" loading="lazy" decoding="async" alt="Historical Prepare interface capture showing service phases, an event list, an editor, and a private preview using synthetic sample data."><figcaption><strong>Historical Prepare frontend capture.</strong> Browser-shim screenshot from repository documentation, October 25, 2026. Service and operator labels are synthetic; this is not native saved-service acceptance.</figcaption></figure>
+
+        <h2>Design Library</h2>
+        <p>Design is the workspace for reusable looks and graphics. The current interface has gallery cards and separate Use and Use-and-edit actions. The broader owner-approved goal is to make Library, Design, and service moments connect without duplicate asset repositories; the complete integrated journey still needs verification.</p>
+        <figure class="docs-figure"><img src="../assets/screenshots/design-library.png" width="1440" height="900" loading="lazy" decoding="async" alt="Design Library frontend capture showing reusable Scripture and hymn look cards with preview artwork and actions."><figcaption><strong>Design Library frontend capture.</strong> Card content is synthetic, captured in browser-shim development mode; it is not evidence that every asset type is connected.</figcaption></figure>
+
+        <h2>Live, Preview, and Program</h2>
+        <ul>
+          <li><strong>Preview</strong> is private preparation for the operator. It should be clearly marked as private.</li>
+          <li><strong>Program</strong> is the content currently being rendered to a specific output.</li>
+          <li><strong>Take</strong> is an explicit, authorized action that changes an output. Selecting content or saving a design is not a Take.</li>
+          <li>A successful command does not by itself prove that a receiver displayed the change; output status must be checked separately.</li>
+        </ul>
+        <figure class="docs-figure"><img src="../assets/screenshots/live-console.png" width="1440" height="900" loading="lazy" decoding="async" alt="Historical Live console UI capture with a private Preview panel beside a separate Live panel; the synthetic example has nothing on air."><figcaption><strong>Earlier Present console frontend capture.</strong> Captured before the current single Live route. Synthetic browser-shim state; no live output or receiver is connected in this image.</figcaption></figure>
+
+        <h2>Outputs and screens</h2>
+        <p>Rhema Studio models named outputs with distinct roles. A congregation display, Stage confidence monitor, browser feed, signage display, and OBS program do not all show the same material by default. Output assignment and host permissions determine which content a device may receive.</p>
+        <p>Scene selection and source activation are separate actions. Bible, song, hymn, ticker, timer, and camera sources can be rendered through audience-specific output choices. OBS remains an independent online production path; it is not the congregation display.</p>
+        <figure class="docs-figure"><img src="../assets/screenshots/output-setup.png" width="1440" height="900" loading="lazy" decoding="async" alt="Output setup frontend capture showing a congregation display and browser feed configuration using example values."><figcaption><strong>Output settings frontend capture.</strong> Example output names and values; no physical screen, NDI receiver, or browser viewer is proven by this image.</figcaption></figure>
+
+        <h2>Roles and permissions</h2>
+        <p>Host pairing assigns a role to a connected desk. The host service checks commands and scopes; a browser cannot grant itself more access. The role is a boundary for what an operator may read or request, not a claim that a complete standalone page exists for every role.</p>
+        <p>Output scope limits which congregation outputs a Screens desk may act on. Multi-output actions require the appropriate host grant and target checks. Persistent reusable scene changes are separate from temporary service drafts and need delegated authority or an approved request.</p>
+        <p>See the <a href="./operators.html">operator overview</a> for role guides and <a href="./connected-operators.html">connected operator access</a> for host authorization details.</p>
+      </article>
+      <nav class="page-nav" aria-label="Page navigation"><a href="./getting-started.html">← Getting started</a><a href="./operators.html">Operator pages →</a></nav>
+    </main>
+  </div>
+  <footer class="docs-footer"><span>Rhema Studio · independent project · in development</span><a href="https://github.com/thathman/rhema-studio" rel="noopener noreferrer">Repository ↗</a></footer>
+  <script src="./docs.js" defer></script>
+</body>
+</html>
