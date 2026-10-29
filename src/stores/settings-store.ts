@@ -33,6 +33,8 @@ export interface RemoteDevice {
   paused?: boolean
   /** Host-assigned congregation output IDs for individual Screens Takes; absent/empty denies Takes. */
   outputScope?: string[]
+  /** Separate host grant for group Takes; always a subset of outputScope. */
+  groupTakeScope?: string[]
 }
 
 /** A host's https link, kept at pairing (see `joinSecure`). */
@@ -47,6 +49,12 @@ export function isJoinSecure(v: unknown): v is JoinSecure {
 }
 
 let remoteKeysPush: Promise<void> = Promise.resolve()
+let remotePolicyWritesPending = 0
+
+/** A local mutation gate keeps already-dispatched host commands from applying during ACL updates. */
+export function hasPendingRemotePolicyUpdate(): boolean {
+  return remotePolicyWritesPending > 0
+}
 
 /**
  * The backend checks keys; the settings store owns the list. Called after
@@ -83,7 +91,7 @@ export function pushRemoteKeys(): Promise<void> {
   const write = remoteKeysPush.then(async () => {
     const s = useSettingsStore.getState()
     try {
-      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure", paused: d.paused === true, output_scope: d.outputScope ?? [] })), requireAuth: s.remoteAuthRequired })
+      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure", paused: d.paused === true, output_scope: d.outputScope ?? [], group_take_scope: d.groupTakeScope ?? [] })), requireAuth: s.remoteAuthRequired })
     } catch (e) {
       if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
         const { toast } = await import("sonner")
@@ -99,6 +107,9 @@ type RemotePolicyPatch = Partial<Pick<SettingsState, "remoteDevices" | "remoteAu
 
 /** Apply access changes only after the host confirms the new policy. */
 function updateRemotePolicy(change: (current: SettingsState) => RemotePolicyPatch | null): Promise<boolean> {
+  // Raise the gate at call time, before the serialized native write begins. Group Takes that have
+  // already reached the webview will fail closed while a role, scope, pause, or revoke is pending.
+  remotePolicyWritesPending += 1
   const write = remoteKeysPush.then(async () => {
     const current = useSettingsStore.getState()
     const patch = change(current)
@@ -108,7 +119,7 @@ function updateRemotePolicy(change: (current: SettingsState) => RemotePolicyPatc
     try {
       await invoke("remote_set_keys", {
         shared: next.remoteSecret.trim() || null,
-        devices: next.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure", paused: d.paused === true, output_scope: d.outputScope ?? [] })),
+        devices: next.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure", paused: d.paused === true, output_scope: d.outputScope ?? [], group_take_scope: d.groupTakeScope ?? [] })),
         requireAuth: next.remoteAuthRequired,
       })
       useSettingsStore.setState(patch)
@@ -123,7 +134,9 @@ function updateRemotePolicy(change: (current: SettingsState) => RemotePolicyPatc
     }
   })
   remoteKeysPush = write.then(() => undefined, () => undefined)
-  return write.then((applied) => applied, () => false)
+  return write.then((applied) => applied, () => false).finally(() => {
+    remotePolicyWritesPending = Math.max(0, remotePolicyWritesPending - 1)
+  })
 }
 /** A camera on the church network (#209): one phone or IP camera, one name in the camera router. */
 export interface CameraSource {
@@ -331,6 +344,7 @@ export interface SettingsState {
   revokeRemoteDevice: (hash: string) => Promise<boolean>
   setRemoteDeviceRole: (hash: string, role: RemoteRole) => Promise<boolean>
   setRemoteDeviceOutputScope: (hash: string, outputScope: string[]) => Promise<boolean>
+  setRemoteDeviceGroupTakeScope: (hash: string, groupTakeScope: string[]) => Promise<boolean>
   /** Take back control from a paired desk (true) or give it back (false); see src/lib/desk-control.ts. */
   setRemoteDevicePaused: (hash: string, paused: boolean) => Promise<boolean>
   setOperatorName: (name: string) => void
@@ -472,8 +486,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const remoteDevices = s.remoteDevices.map((x) => {
       if (x.hash !== hash) return x
       const next = { ...x, role }
-      if (role === "screens") next.outputScope = []
-      else delete next.outputScope
+      if (role === "screens") {
+        next.outputScope = []
+        next.groupTakeScope = []
+      } else {
+        delete next.outputScope
+        delete next.groupTakeScope
+      }
       return next
     })
     return { remoteDevices }
@@ -483,7 +502,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     if (!device || device.role !== "screens") return null
     const normalized = [...new Set(outputScope)].sort()
     if (JSON.stringify(device.outputScope ?? []) === JSON.stringify(normalized)) return {}
-    return { remoteDevices: s.remoteDevices.map((x) => x.hash === hash ? { ...x, outputScope: normalized } : x) }
+    return { remoteDevices: s.remoteDevices.map((x) => x.hash === hash ? { ...x, outputScope: normalized, groupTakeScope: (x.groupTakeScope ?? []).filter((id) => normalized.includes(id)) } : x) }
+  }),
+  setRemoteDeviceGroupTakeScope: (hash, groupTakeScope) => updateRemotePolicy((s) => {
+    const device = s.remoteDevices.find((x) => x.hash === hash)
+    if (!device || device.role !== "screens") return null
+    const normalized = [...new Set(groupTakeScope.filter((id) => typeof id === "string" && (device.outputScope ?? []).includes(id)))].sort()
+    if (JSON.stringify(device.groupTakeScope ?? []) === JSON.stringify(normalized)) return {}
+    return { remoteDevices: s.remoteDevices.map((x) => x.hash === hash ? { ...x, groupTakeScope: normalized } : x) }
   }),
   setRemoteDevicePaused: (hash, paused) => updateRemotePolicy((s) => {
     const device = s.remoteDevices.find((x) => x.hash === hash)
@@ -610,7 +636,7 @@ function acceptable(key: string, value: unknown): boolean {
     case "joinSecure":
       return isJoinSecure(value)
     case "remoteDevices":
-      return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
+      return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string" && ((d as { outputScope?: unknown }).outputScope === undefined || (Array.isArray((d as { outputScope?: unknown }).outputScope) && ((d as { outputScope: unknown[] }).outputScope).every((id) => typeof id === "string"))) && ((d as { groupTakeScope?: unknown }).groupTakeScope === undefined || (Array.isArray((d as { groupTakeScope?: unknown }).groupTakeScope) && ((d as { groupTakeScope: unknown[] }).groupTakeScope).every((id) => typeof id === "string"))))
     case "openedFrom":
       return typeof value === "object" && value !== null && !Array.isArray(value)
     case "capacityLimits":

@@ -340,7 +340,6 @@ pub fn new_feed_hub() -> SharedFeeds {
 #[derive(Debug)]
 pub struct LiveHub {
     current: std::sync::RwLock<Option<String>>,
-    service: std::sync::RwLock<Option<String>>,
     tx: broadcast::Sender<String>,
     revisions: std::sync::Mutex<Revisions>,
 }
@@ -390,7 +389,21 @@ impl Revisions {
         }
         for o in v["outputs"].as_array().into_iter().flatten() {
             if let Some(id) = o["id"].as_str() {
-                out.push((format!("output:{id}"), serde_json::json!([o["sceneId"], o["sceneRevision"]]).to_string()));
+                // Group Take reviews the current Program plus the output-specific rendering
+                // context. A language, theme, frame, or source-subscription change must invalidate
+                // that review just as a different current scene does.
+                out.push((
+                    format!("output:{id}"),
+                    serde_json::json!([
+                        o["name"],
+                        o["type"],
+                        o["role"],
+                        o["sceneId"],
+                        o["sceneRevision"],
+                        o["impact"],
+                    ])
+                    .to_string(),
+                ));
             }
         }
         // Each scene's arrangement (#243 SC.16): whether it is on a screen is not a change to it.
@@ -433,11 +446,20 @@ impl Revisions {
         self.parts.get(part).map(|(n, _)| *n)
     }
 
-    /// A command for this part was accepted: anyone still acting on the old revision is too late.
-    fn bump(&mut self, part: &str) {
-        if let Some((n, _)) = self.parts.get_mut(part) {
-            *n += 1;
+    /// Reserve a set of parts together, without exposing a partially advanced group to readers.
+    fn bump_many(&mut self, parts: &[String]) -> bool {
+        if parts.is_empty() || parts.iter().any(|part| !self.parts.contains_key(part)) {
+            return false;
         }
+        let mut seen = std::collections::HashSet::with_capacity(parts.len());
+        for part in parts {
+            if seen.insert(part) {
+                if let Some((revision, _)) = self.parts.get_mut(part) {
+                    *revision += 1;
+                }
+            }
+        }
+        true
     }
 
     fn to_json(&self) -> serde_json::Value {
@@ -468,6 +490,97 @@ fn revision_part(cmd: &RemoteCommand) -> Option<String> {
     })
 }
 
+/// Every revision a group Take was previewed against: its scene plus each target Program.
+fn group_take_revision_parts(take: &crate::command::GroupSceneTake) -> Vec<String> {
+    std::iter::once(format!("scene:{}", take.scene))
+        .chain(take.outputs.iter().map(|output| format!("output:{output}")))
+        .collect()
+}
+
+fn command_revision_parts(cmd: &RemoteCommand) -> Vec<String> {
+    match cmd {
+        RemoteCommand::GroupTakeScene(take) => group_take_revision_parts(take),
+        _ => revision_part(cmd).into_iter().collect(),
+    }
+}
+
+fn changed_revision_parts(cmd: &RemoteCommand) -> Vec<String> {
+    match cmd {
+        RemoteCommand::GroupTakeScene(take) => take
+            .outputs
+            .iter()
+            .map(|output| format!("output:{output}"))
+            .collect(),
+        _ => revision_part(cmd).into_iter().collect(),
+    }
+}
+
+/// Validate against the current host snapshot before dispatch; the command gate repeats this check.
+fn validate_group_take_live(
+    live_json: Option<&str>,
+    take: &crate::command::GroupSceneTake,
+) -> Result<(), (StatusCode, &'static str)> {
+    take.validate()
+        .map_err(|why| (StatusCode::UNPROCESSABLE_ENTITY, why))?;
+    let Some(live_json) = live_json else {
+        return Err((
+            StatusCode::CONFLICT,
+            "The host Live State is not ready; refresh before a group Take",
+        ));
+    };
+    let Ok(live) = serde_json::from_str::<serde_json::Value>(live_json) else {
+        return Err((
+            StatusCode::CONFLICT,
+            "The host Live State could not be checked; refresh before a group Take",
+        ));
+    };
+    let live_service = live
+        .pointer("/service/id")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    if take.service.as_deref() != Some(live_service) {
+        return Err((
+            StatusCode::CONFLICT,
+            "The host has changed services; refresh before a group Take",
+        ));
+    }
+    if live
+        .pointer("/program/rehearsal")
+        .and_then(serde_json::Value::as_bool)
+        == Some(true)
+    {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Group Take is unavailable during rehearsal",
+        ));
+    }
+    let scene_exists = live
+        .get("scenes")
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|scenes| {
+            scenes.iter().any(|scene| {
+                scene.get("id").and_then(serde_json::Value::as_str) == Some(&take.scene)
+            })
+        });
+    if !scene_exists {
+        return Err((
+            StatusCode::CONFLICT,
+            "That scene is no longer available; refresh before a group Take",
+        ));
+    }
+    if take
+        .outputs
+        .iter()
+        .any(|output| !crate::keys::KeyEntry::is_congregation_output(Some(live_json), output))
+    {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Group Take is limited to current congregation outputs",
+        ));
+    }
+    Ok(())
+}
+
 /// The one part of a Live State the server reads: `service.id` ("" when no saved service is open).
 #[derive(Deserialize)]
 struct LiveService {
@@ -490,22 +603,24 @@ fn service_of(json: &str) -> Option<String> {
 
 impl LiveHub {
     pub fn publish(&self, json: String) {
-        *self.service.write().unwrap_or_else(std::sync::PoisonError::into_inner) = service_of(&json);
         // The revisions go in with it, so a desk acts on, and sends back, what it saw.
-        // The app's own text is kept as it is, with them in front.
+        // Keep revision observation, the readable snapshot, and its stream event under the same
+        // lock. Concurrent publishers therefore cannot send an older snapshot after a newer one.
+        let mut revisions = self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let json = match serde_json::from_str::<serde_json::Value>(&json) {
-            Ok(v) if v.is_object() => {
-                let mut revs = self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                revs.observe(&v);
-                let rest = json.trim_start().strip_prefix('{').unwrap_or("}");
-                let sep = if v.as_object().is_some_and(serde_json::Map::is_empty) { "" } else { "," };
-                format!(r#"{{"revisions":{}{sep}{rest}"#, revs.to_json())
+            Ok(mut value) if value.is_object() => {
+                revisions.observe(&value);
+                if let Some(object) = value.as_object_mut() {
+                    object.insert("revisions".into(), revisions.to_json());
+                }
+                serde_json::to_string(&value).unwrap_or(json)
             }
             _ => json,
         };
         *self.current.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(json.clone());
         // No one following is fine.
         let _ = self.tx.send(json);
+        drop(revisions);
     }
 
     /// The revision of one part of the live service now (see `Revisions`), None before the host
@@ -515,8 +630,33 @@ impl LiveHub {
         self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner).get(part)
     }
 
+    fn bump_many(&self, parts: &[String]) -> bool {
+        let mut revisions = self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(current) = self.current.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone() else {
+            return false;
+        };
+        let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&current) else {
+            return false;
+        };
+        let Some(object) = value.as_object_mut() else {
+            return false;
+        };
+        if !revisions.bump_many(parts) {
+            return false;
+        }
+        object.insert("revisions".into(), revisions.to_json());
+        let updated = serde_json::to_string(&value).unwrap_or(current);
+        *self.current.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(updated.clone());
+        // A reserved command revision is part of the Live State immediately, including when the
+        // dispatcher or a later native preflight refuses the operation. Keep the send within the
+        // revision lock so concurrent Live snapshots cannot overtake it.
+        let _ = self.tx.send(updated);
+        drop(revisions);
+        true
+    }
+
     fn bump(&self, part: &str) {
-        self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner).bump(part);
+        let _ = self.bump_many(&[part.to_string()]);
     }
 
     #[must_use]
@@ -527,7 +667,9 @@ impl LiveHub {
     /// The service the host is running now ("" for none), or None before it has said.
     #[must_use]
     pub fn service(&self) -> Option<String> {
-        self.service.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+        self.current()
+            .as_deref()
+            .and_then(service_of)
     }
 }
 
@@ -570,10 +712,15 @@ pub fn live_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String {
     if !matches!(reader.role, crate::keys::Role::Present | crate::keys::Role::Configure | crate::keys::Role::Screens) {
         hidden.push("graphicsQueue");
     }
+    if reader.role != crate::keys::Role::Screens {
+        hidden.push("groupTakeResults");
+    }
     hidden.retain(|k| filtered.contains(&format!("\"{k}\"")));
     let scopes_outputs = reader.role == crate::keys::Role::Screens
         && (filtered.contains("\"outputs\"") || filtered.contains("\"outputMap\""));
-    if !scenes && hidden.is_empty() && !scopes_outputs {
+    let scopes_group_results =
+        reader.role == crate::keys::Role::Screens && filtered.contains("\"groupTakeResults\"");
+    if !scenes && hidden.is_empty() && !scopes_outputs && !scopes_group_results {
         return filtered;
     }
     let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&filtered) else { return filtered };
@@ -604,6 +751,35 @@ pub fn live_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String {
                     *value = serde_json::Value::Array(Vec::new());
                 }
             }
+        }
+        if let Some(results) = v
+            .get_mut("groupTakeResults")
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            results.retain(|result| {
+                result
+                    .get("outputs")
+                    .and_then(serde_json::Value::as_array)
+                    .is_some_and(|outputs| {
+                        !outputs.is_empty()
+                            && outputs.iter().all(|output| {
+                                output
+                                    .get("id")
+                                    .and_then(serde_json::Value::as_str)
+                                    .is_some_and(|id| {
+                                        reader.output_scope.iter().any(|allowed| allowed == id)
+                                            && reader
+                                                .group_take_scope
+                                                .iter()
+                                                .any(|allowed| allowed == id)
+                                            && crate::keys::KeyEntry::is_congregation_output(
+                                                Some(&filtered),
+                                                id,
+                                            )
+                                    })
+                            })
+                    })
+            });
         }
     }
     v.to_string()
@@ -671,7 +847,7 @@ fn notice_is_for(n: &serde_json::Value, reader: &crate::keys::KeyEntry) -> bool 
 
 #[must_use]
 pub fn new_live_hub() -> SharedLive {
-    Arc::new(LiveHub { current: std::sync::RwLock::new(None), service: std::sync::RwLock::new(None), tx: broadcast::channel(32).0, revisions: std::sync::Mutex::new(Revisions::default()) })
+    Arc::new(LiveHub { current: std::sync::RwLock::new(None), tx: broadcast::channel(32).0, revisions: std::sync::Mutex::new(Revisions::default()) })
 }
 
 /// Handle to a running HTTP server. Call `stop()` to shut it down.
@@ -1103,36 +1279,87 @@ const OTHER_SERVICE_MESSAGE: &str = "That desk is looking at a different service
 /// What a desk acting on what it saw is told when someone changed that part of the service first.
 pub const STALE_MESSAGE: &str = "Someone changed this first \u{2014} look again";
 
-/// Command ids seen recently, so a retried press is not carried out twice.
+/// Command ids seen recently, so an exact retry is not carried out twice and a reused id is refused.
 #[derive(Default)]
-struct RecentIds(std::sync::Mutex<std::collections::VecDeque<(String, std::time::Instant)>>);
+struct RecentIds(std::sync::Mutex<std::collections::VecDeque<(String, String, std::time::Instant)>>);
+
+#[derive(Debug, PartialEq, Eq)]
+enum RecentIdStatus {
+    New,
+    Replay,
+    Conflict,
+}
 
 impl RecentIds {
     const KEEP: std::time::Duration = std::time::Duration::from_secs(60);
     const MAX: usize = 256;
 
-    /// This id was carried out within the last minute (a retry), without recording it.
-    fn seen(&self, id: &str) -> bool {
-        let Ok(seen) = self.0.lock() else { return false };
-        let id: String = id.chars().take(64).collect();
+    /// Check whether this is a first request, an exact retry, or a conflicting reuse.
+    fn status(&self, id: &str, fingerprint: &str) -> RecentIdStatus {
+        let mut seen = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let now = std::time::Instant::now();
-        seen.iter().any(|(s, at)| *s == id && now.duration_since(*at) <= Self::KEEP)
-    }
-
-    /// True the first time an id is seen within the last minute.
-    fn first_time(&self, id: &str) -> bool {
-        let Ok(mut seen) = self.0.lock() else { return true };
-        let id: String = id.chars().take(64).collect();
-        let now = std::time::Instant::now();
-        while seen.front().is_some_and(|(_, at)| now.duration_since(*at) > Self::KEEP) || seen.len() >= Self::MAX {
+        while seen
+            .front()
+            .is_some_and(|(_, _, at)| now.duration_since(*at) > Self::KEEP)
+        {
             seen.pop_front();
         }
-        if seen.iter().any(|(s, _)| *s == id) {
-            return false;
-        }
-        seen.push_back((id, now));
-        true
+        seen.iter()
+            .find(|(saved, _, _)| saved == id)
+            .map_or(RecentIdStatus::New, |(_, saved_fingerprint, _)| {
+                if saved_fingerprint == fingerprint {
+                    RecentIdStatus::Replay
+                } else {
+                    RecentIdStatus::Conflict
+                }
+            })
     }
+
+    /// Remember a successfully dispatched id and its complete request identity.
+    fn record(&self, id: &str, fingerprint: &str) {
+        let mut seen = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let now = std::time::Instant::now();
+        while seen
+            .front().is_some_and(|(_, _, at)| now.duration_since(*at) > Self::KEEP)
+        {
+            seen.pop_front();
+        }
+        if let Some(index) = seen.iter().position(|(saved, _, _)| saved == id) {
+            seen.remove(index);
+        }
+        while seen.len() >= Self::MAX {
+            seen.pop_front();
+        }
+        seen.push_back((id.to_string(), fingerprint.to_string(), now));
+    }
+}
+
+fn command_fingerprint(
+    command: &RemoteCommand,
+    by: &str,
+    by_id: Option<&str>,
+    service: Option<&str>,
+    seen: Option<&std::collections::HashMap<String, u64>>,
+    why: Option<&str>,
+) -> String {
+    use sha2::Digest;
+    let seen = seen.map(|revisions| {
+        revisions
+            .iter()
+            .map(|(part, revision)| (part.clone(), *revision))
+            .collect::<std::collections::BTreeMap<_, _>>()
+    });
+    let payload = serde_json::to_vec(&(by, by_id, service, seen, command, why)).unwrap_or_default();
+    sha2::Sha256::digest(payload)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 #[derive(Serialize, Default)]
@@ -1238,7 +1465,14 @@ fn live_reader<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers: &
             state.presence.saw(&entry, peer.ip());
             Ok(entry)
         }
-        Ok(None) if peer.ip().is_loopback() => Ok(crate::keys::KeyEntry { hash: String::new(), name: "This computer".into(), role: crate::keys::Role::Configure, paused: false, output_scope: Vec::new() }),
+        Ok(None) if peer.ip().is_loopback() => Ok(crate::keys::KeyEntry {
+            hash: String::new(),
+            name: "This computer".into(),
+            role: crate::keys::Role::Configure,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        }),
         Ok(None) => Err(StatusCode::FORBIDDEN),
         Err(_) => Err(StatusCode::UNAUTHORIZED),
     }
@@ -1259,13 +1493,29 @@ async fn me_handler<S: CommandSink + 'static>(
 ) -> axum::response::Response {
     match live_reader(&state, peer, &headers) {
         Ok(e) => {
+            let live = state.live.current();
             let output_scope = if e.role == crate::keys::Role::Screens {
-                let live = state.live.current();
-                serde_json::json!(e.output_scope.into_iter().filter(|id| crate::keys::KeyEntry::is_congregation_output(live.as_deref(), id)).collect::<Vec<_>>())
+                serde_json::json!(e
+                    .output_scope
+                    .iter()
+                    .filter(|id| crate::keys::KeyEntry::is_congregation_output(live.as_deref(), id))
+                    .cloned()
+                    .collect::<Vec<_>>())
             } else {
                 serde_json::Value::Null
             };
-            Json(serde_json::json!({ "name": e.name, "role": e.role, "paused": e.paused, "outputScope": output_scope })).into_response()
+            let group_take_scope = if e.role == crate::keys::Role::Screens {
+                serde_json::json!(e
+                    .group_take_scope
+                    .iter()
+                    .filter(|id| e.output_scope.contains(id)
+                        && crate::keys::KeyEntry::is_congregation_output(live.as_deref(), id))
+                    .cloned()
+                    .collect::<Vec<_>>())
+            } else {
+                serde_json::Value::Null
+            };
+            Json(serde_json::json!({ "name": e.name, "role": e.role, "paused": e.paused, "outputScope": output_scope, "groupTakeScope": group_take_scope })).into_response()
         }
         Err(code) => code.into_response(),
     }
@@ -1854,13 +2104,23 @@ async fn command_handler<S: CommandSink + 'static>(
         Err((status, reason)) => return command_key_refusal(status, reason),
         Ok(entry) => entry,
     };
-    let by = match entry {
+    if let RemoteCommand::GroupTakeScene(take) = &request.command {
+        if let Err(why) = take.validate() {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                CommandResponse::refused(why),
+            );
+        }
+    }
+    let by = match entry.clone() {
         Some(entry) if entry.paused_for(&request.command) => {
             log::info!("HTTP command refused for {}: the main desk has taken back control", entry.name);
             return (StatusCode::LOCKED, CommandResponse::refused(crate::keys::PAUSED_MESSAGE));
         }
         Some(entry) if !entry.allows(&request.command) => {
-            let why = if entry.role.allows(&request.command) {
+            let why = if matches!(&request.command, RemoteCommand::GroupTakeScene(_)) {
+                "The host has not granted group Take for all selected outputs"
+            } else if entry.role.allows(&request.command) {
                 "This output is not assigned to this Screens desk by the host"
             } else {
                 refusal_for(entry.role, &request.command)
@@ -1875,15 +2135,73 @@ async fn command_handler<S: CommandSink + 'static>(
         {
             return (StatusCode::FORBIDDEN, CommandResponse::refused("Screens desks can only take current congregation outputs"));
         }
+        Some(entry)
+            if entry.role == crate::keys::Role::Screens
+                && crate::keys::KeyEntry::group_scene_outputs(&request.command).is_some_and(
+                    |outputs| {
+                        outputs.iter().any(|output| {
+                            !crate::keys::KeyEntry::is_congregation_output(
+                                state.live.current().as_deref(),
+                                output,
+                            )
+                        })
+                    },
+                ) =>
+        {
+            return (
+                StatusCode::FORBIDDEN,
+                CommandResponse::refused(
+                    "Screens group Takes can only target current congregation outputs",
+                ),
+            );
+        }
         Some(entry) => {
             state.presence.saw(&entry, peer.ip());
             (entry.name, Some(entry.hash), entry.role)
         }
-        // An open remote (no keys) may do everything, as before.
-        None => ("an open remote".to_string(), None, crate::keys::Role::Configure),
+        None if matches!(&request.command, RemoteCommand::GroupTakeScene(_)) => {
+            return (
+                StatusCode::FORBIDDEN,
+                CommandResponse::refused(
+                    "Group Take requires a paired Screens desk and a separate host grant",
+                ),
+            );
+        }
+        // An open remote (no keys) may do everything, as before, except group Take needs an identified grant.
+        None => (
+            "an open remote".to_string(),
+            None,
+            crate::keys::Role::Configure,
+        ),
     };
     let (by, by_id, role) = by;
     let mut command = request.command;
+    let group_take = matches!(&command, RemoteCommand::GroupTakeScene(_));
+    if let RemoteCommand::GroupTakeScene(take) = &mut command {
+        let Some(id) = request
+            .id
+            .as_deref()
+            .filter(|id| !id.trim().is_empty() && id.trim() == *id && id.len() <= 128)
+        else {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                CommandResponse::refused("A group Take needs a unique command id"),
+            );
+        };
+        if request.service.is_none() {
+            return (
+                StatusCode::CONFLICT,
+                CommandResponse::refused("Refresh the service before requesting a group Take"),
+            );
+        }
+        take.request_id = Some(id.to_string());
+        take.seen = request.seen.clone().unwrap_or_default();
+        take.service = request.service.clone();
+        if let Err((status, why)) = validate_group_take_live(state.live.current().as_deref(), take)
+        {
+            return (status, CommandResponse::refused(why));
+        }
+    }
     // Several services must never share state (#246 C16): a desk still showing the 9 AM service
     // cannot move the 11 AM one. Crew talk is not about a service.
     if !command.is_comms() {
@@ -1910,16 +2228,135 @@ async fn command_handler<S: CommandSink + 'static>(
         return (StatusCode::UNPROCESSABLE_ENTITY, CommandResponse::refused(NO_LYRICS_MESSAGE));
     }
     // From here one command at a time, so two desks pressing at once are checked one after the other.
-    let _turn = state.gate.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    if request.id.as_deref().is_some_and(|id| state.recent.seen(id)) {
-        log::info!("HTTP command {command:?} already carried out (a retry); not repeated");
-        return (StatusCode::OK, Json(CommandResponse { success: true, ..Default::default() }));
+    let _turn = state
+        .gate
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if group_take {
+        if request.service.as_deref() != state.live.service().as_deref() {
+            return (
+                StatusCode::CONFLICT,
+                Json(CommandResponse {
+                    success: false,
+                    error: Some(OTHER_SERVICE_MESSAGE.into()),
+                    code: Some("other-service"),
+                    note: None,
+                }),
+            );
+        }
+        let current = match check_http_command_key(&state.keys, &headers, peer) {
+            Ok(current) if current.as_ref() == entry.as_ref() => current,
+            Ok(_) => {
+                return (
+                    StatusCode::FORBIDDEN,
+                    CommandResponse::refused("Group Take access changed; refresh the desk"),
+                )
+            }
+            Err((status, reason)) => return command_key_refusal(status, reason),
+        };
+        if current.is_none() {
+            return (
+                StatusCode::FORBIDDEN,
+                CommandResponse::refused(
+                    "Group Take requires a paired Screens desk and a separate host grant",
+                ),
+            );
+        }
     }
+    let request_fingerprint = if let Some(id) = request.id.as_deref() {
+        if id.trim().is_empty() || id.len() > 128 {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                CommandResponse::refused("Choose a valid command id"),
+            );
+        }
+        let fingerprint = command_fingerprint(
+            &command,
+            &by,
+            by_id.as_deref(),
+            request.service.as_deref(),
+            request.seen.as_ref(),
+            request.why.as_deref(),
+        );
+        match state.recent.status(id, &fingerprint) {
+            RecentIdStatus::Replay => {
+                log::info!("HTTP command {command:?} already carried out (an exact retry); not repeated");
+                return (
+                    StatusCode::OK,
+                    Json(CommandResponse {
+                        success: true,
+                        ..Default::default()
+                    }),
+                );
+            }
+            RecentIdStatus::Conflict => {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(CommandResponse {
+                        success: false,
+                        error: Some("This command id was already used for a different request".into()),
+                        code: Some("id-conflict"),
+                        note: None,
+                    }),
+                );
+            }
+            RecentIdStatus::New => {}
+        }
+        Some(fingerprint)
+    } else {
+        None
+    };
     // Acting on what it saw (#196 R7): if someone changed that part of the service since, the desk
     // looks again rather than undo or repeat their change. A scene a desk edits is one such part.
-    let part = revision_part(&command);
-    if let (Some(part), Some(seen)) = (part.as_deref(), request.seen.as_ref()) {
-        if let (Some(sent), Some(now)) = (seen.get(part), state.live.revision(part)) {
+    if group_take {
+        if let RemoteCommand::GroupTakeScene(take) = &command {
+            if let Err((status, why)) =
+                validate_group_take_live(state.live.current().as_deref(), take)
+            {
+                let code = if status == StatusCode::CONFLICT {
+                    Some("stale")
+                } else {
+                    None
+                };
+                return (
+                    status,
+                    Json(CommandResponse {
+                        success: false,
+                        error: Some(why.into()),
+                        code,
+                        note: None,
+                    }),
+                );
+            }
+            let Some(seen) = request.seen.as_ref() else {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(CommandResponse {
+                        success: false,
+                        error: Some(STALE_MESSAGE.into()),
+                        code: Some("stale"),
+                        note: None,
+                    }),
+                );
+            };
+            for part in command_revision_parts(&command) {
+                if !matches!((seen.get(&part), state.live.revision(&part)), (Some(sent), Some(now)) if sent == &now)
+                {
+                    log::info!("HTTP group Take from {by} refused: {part} is missing or changed since (revision was {:?}, now {:?})", seen.get(&part), state.live.revision(&part));
+                    return (
+                        StatusCode::CONFLICT,
+                        Json(CommandResponse {
+                            success: false,
+                            error: Some(STALE_MESSAGE.into()),
+                            code: Some("stale"),
+                            note: None,
+                        }),
+                    );
+                }
+            }
+        }
+    } else if let (Some(part), Some(seen)) = (revision_part(&command), request.seen.as_ref()) {
+        if let (Some(sent), Some(now)) = (seen.get(&part), state.live.revision(&part)) {
             if *sent != now {
                 log::info!("HTTP command {command:?} from {by} refused: {part} changed since (revision {sent}, now {now})");
                 return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(STALE_MESSAGE.into()), code: Some("stale"), note: None }));
@@ -1932,7 +2369,7 @@ async fn command_handler<S: CommandSink + 'static>(
     if let RemoteCommand::SaveScene(sc) = &mut command {
         crate::scene_edits::strip(&mut sc.scene);
     }
-    let mut note = None;
+    let mut note = group_take.then(|| "The host accepted this request for processing. Receiver delivery is not confirmed.".to_string());
     let mut waits = false;
     match crate::scene_edits::judge(state.live.current().as_deref(), role, &command) {
         Err(r) => {
@@ -1953,18 +2390,34 @@ async fn command_handler<S: CommandSink + 'static>(
         Ok(_) => {}
     }
     let why = request.why.as_deref().map(|w| w.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(200).collect::<String>()).filter(|w| !w.is_empty());
+    // Reserve all target output revisions together before emitting the accepted command. The
+    // frontend's native preflight must see exactly this one server-owned bump; any later change
+    // moves a revision again and makes the operation stale. If dispatch fails, the extra revisions
+    // are conservative: desks refresh, while no output is changed.
+    let reserve_group_outputs = group_take && !waits;
+    if reserve_group_outputs {
+        let parts = changed_revision_parts(&command);
+        if !state.live.bump_many(&parts) {
+            return (
+                StatusCode::CONFLICT,
+                CommandResponse::refused("Output revisions are unavailable; refresh before requesting a group Take"),
+            );
+        }
+    }
     let done = match (&command, why) {
         (RemoteCommand::NoticeAck(_), Some(why)) => CommandDispatcher::dispatch_from(&command, &WithWhy { inner: &*state.sink, why: &why }, &by, by_id.as_deref()),
         _ => CommandDispatcher::dispatch_from(&command, &*state.sink, &by, by_id.as_deref()),
     };
     match done {
         Ok(()) => {
-            if let Some(id) = request.id.as_deref() {
-                state.recent.first_time(id);
+            if let (Some(id), Some(fingerprint)) = (request.id.as_deref(), request_fingerprint.as_deref()) {
+                state.recent.record(id, fingerprint);
             }
             // A change that waits for the main desk has not changed the scene yet: another desk may still act on it.
-            if let Some(part) = part.as_deref().filter(|_| !waits) {
-                state.live.bump(part);
+            if !waits && !reserve_group_outputs {
+                for part in changed_revision_parts(&command) {
+                    state.live.bump(&part);
+                }
             }
             (StatusCode::OK, Json(CommandResponse { success: true, note, ..Default::default() }))
         }
@@ -2020,9 +2473,26 @@ mod tests {
     #[test]
     fn a_retried_press_is_not_repeated() {
         let recent = RecentIds::default();
-        assert!(recent.first_time("press-1"));
-        assert!(!recent.first_time("press-1"), "the same press again (a retry)");
-        assert!(recent.first_time("press-2"), "a new press");
+        assert_eq!(recent.status("press-1", "first"), RecentIdStatus::New);
+        recent.record("press-1", "first");
+        assert_eq!(recent.status("press-1", "first"), RecentIdStatus::Replay);
+        assert_eq!(recent.status("press-1", "different"), RecentIdStatus::Conflict);
+        assert_eq!(recent.status("press-2", "first"), RecentIdStatus::New);
+    }
+
+    #[test]
+    fn refreshing_an_id_moves_it_to_the_end_of_the_bounded_retry_window() {
+        let recent = RecentIds::default();
+        recent.record("press-0", "old");
+        recent.record("press-1", "same");
+        recent.record("press-0", "new");
+        for index in 0..(RecentIds::MAX - 2) {
+            recent.record(&format!("press-{index}-filler"), "same");
+        }
+        assert_eq!(recent.status("press-0", "new"), RecentIdStatus::Replay);
+        recent.record("last", "same");
+        assert_eq!(recent.status("press-0", "new"), RecentIdStatus::Replay);
+        assert_eq!(recent.status("press-1", "same"), RecentIdStatus::New);
     }
     use super::*;
     use crate::keys::{hash_key, key_set_from};
@@ -2058,6 +2528,8 @@ mod tests {
         notice: Mutex<Option<String>>,
         /// The last scene change's event payload.
         scene: Mutex<Option<String>>,
+        /// The last group Take event and server-stamped metadata.
+        group_take: Mutex<Option<String>>,
     }
 
     impl MockSink {
@@ -2066,6 +2538,7 @@ mod tests {
                 commands: Mutex::new(Vec::new()),
                 notice: Mutex::new(None),
                 scene: Mutex::new(None),
+                group_take: Mutex::new(None),
             }
         }
 
@@ -2076,6 +2549,22 @@ mod tests {
 
     struct FailOnceSink {
         event_attempts: std::sync::atomic::AtomicUsize,
+    }
+
+    struct FailGroupTakeSink;
+
+    impl CommandSink for FailGroupTakeSink {
+        fn emit_event(&self, event: &str, _payload: &str) -> Result<(), CommandError> {
+            if event == "remote:group_take_scene" {
+                Err(CommandError::DispatchFailed("group Take dispatch failed".into()))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn invoke_backend(&self, _action: &str, _args: &str) -> Result<(), CommandError> {
+            Ok(())
+        }
     }
 
     impl CommandSink for FailOnceSink {
@@ -2141,6 +2630,9 @@ mod tests {
             }
             if event == "remote:save_scene" || event == "remote:delete_scene" {
                 *self.scene.lock().unwrap() = Some(payload.to_string());
+            }
+            if event == "remote:group_take_scene" {
+                *self.group_take.lock().unwrap() = Some(payload.to_string());
             }
             // Commands only: the service log's record of each (remote:audit) is not a command.
             if event != "remote:audit" {
@@ -2236,7 +2728,17 @@ mod tests {
 
     #[tokio::test]
     async fn live_state_needs_a_paired_key_and_streams_each_change() {
-        let keys: KeySet = Arc::new(std::sync::RwLock::new(crate::keys::Keys { require_auth: true, entries: vec![crate::keys::KeyEntry { hash: crate::keys::hash_key("tok"), name: "Femi's laptop".into(), role: crate::keys::Role::Timekeeper, paused: false, output_scope: Vec::new() }] }));
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(crate::keys::Keys {
+            require_auth: true,
+            entries: vec![crate::keys::KeyEntry {
+                hash: crate::keys::hash_key("tok"),
+                name: "Femi's laptop".into(),
+                role: crate::keys::Role::Timekeeper,
+                paused: false,
+                output_scope: Vec::new(),
+                group_take_scope: Vec::new(),
+            }],
+        }));
         let live = new_live_hub();
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
         let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
@@ -2272,7 +2774,14 @@ mod tests {
             "femi" => "h-femi",
             _ => "h-other",
         };
-        crate::keys::KeyEntry { hash: hash.into(), name: name.into(), role, paused: false, output_scope: Vec::new() }
+        crate::keys::KeyEntry {
+            hash: hash.into(),
+            name: name.into(),
+            role,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        }
     }
 
     const NOTICES: &str = r#"{"v":1,"notices":[
@@ -2311,20 +2820,55 @@ mod tests {
     fn a_desk_named_like_the_main_desk_gets_none_of_its_private_notices() {
         use crate::keys::{KeyEntry, Role};
         // Paired before names were checked, or named to look like it: matched by key, not name.
-        let mimic = KeyEntry { hash: "h-mimic".into(), name: "Tolu (main desk)".into(), role: Role::Screens, paused: false, output_scope: Vec::new() };
+        let mimic = KeyEntry {
+            hash: "h-mimic".into(),
+            name: "Tolu (main desk)".into(),
+            role: Role::Screens,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
         assert_eq!(ids(&notices_for(NOTICES, Some(&mimic))), ["all"]);
-        let named_like_ade = KeyEntry { hash: "h-mimic".into(), name: "Ade's phone".into(), role: Role::Screens, paused: false, output_scope: Vec::new() };
-        assert_eq!(ids(&notices_for(NOTICES, Some(&named_like_ade))), ["all"], "a copied name gets neither Ade's notice nor what Ade sent");
+        let named_like_ade = KeyEntry {
+            hash: "h-mimic".into(),
+            name: "Ade's phone".into(),
+            role: Role::Screens,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
+        assert_eq!(
+            ids(&notices_for(NOTICES, Some(&named_like_ade))),
+            ["all"],
+            "a copied name gets neither Ade's notice nor what Ade sent"
+        );
         // A key whose hash is literally "host" cannot exist (hashes are 64 hex characters), and an empty one matches nothing.
-        let empty = KeyEntry { hash: String::new(), name: "x".into(), role: Role::Screens, paused: false, output_scope: Vec::new() };
+        let empty = KeyEntry {
+            hash: String::new(),
+            name: "x".into(),
+            role: Role::Screens,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
         assert_eq!(ids(&notices_for(NOTICES, Some(&empty))), ["all"]);
     }
 
     #[test]
     fn a_renamed_desk_keeps_what_it_sent_and_what_is_for_it() {
         use crate::keys::{KeyEntry, Role};
-        let renamed = KeyEntry { hash: "h-ade".into(), name: "Ade at the back".into(), role: Role::Screens, paused: false, output_scope: Vec::new() };
-        assert_eq!(ids(&notices_for(NOTICES, Some(&renamed))), ["all", "ade", "mine"]);
+        let renamed = KeyEntry {
+            hash: "h-ade".into(),
+            name: "Ade at the back".into(),
+            role: Role::Screens,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
+        assert_eq!(
+            ids(&notices_for(NOTICES, Some(&renamed))),
+            ["all", "ade", "mine"]
+        );
         // Notices from before ids: only their group; a name alone reaches no one.
         let old = r#"{"v":1,"notices":[{"id":"o1","from":"Ade's phone","to":"host","text":"x"},{"id":"o2","from":"Main desk","to":{"name":"Ade's phone"},"text":"y"},{"id":"o3","from":"Main desk","to":"screens","text":"z"}]}"#;
         assert_eq!(ids(&notices_for(old, Some(&renamed))), ["o3"]);
@@ -2333,8 +2877,21 @@ mod tests {
     #[tokio::test]
     async fn the_live_endpoints_filter_notices_per_key() {
         use crate::keys::{hash_key, KeyEntry, Keys, Role};
-        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false, output_scope: Vec::new() };
-        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("bib", "Ade's phone", Role::Bible), entry("tim", "Femi", Role::Timekeeper)] }));
+        let entry = |tok: &str, name: &str, role| KeyEntry {
+            hash: hash_key(tok),
+            name: name.into(),
+            role,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
+            require_auth: true,
+            entries: vec![
+                entry("bib", "Ade's phone", Role::Bible),
+                entry("tim", "Femi", Role::Timekeeper),
+            ],
+        }));
         let live = new_live_hub();
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
         let sink = Arc::new(MockSink::new());
@@ -2487,8 +3044,22 @@ mod tests {
     async fn a_desk_joins_the_talk_channel_with_its_key_and_gets_the_host_answer() {
         let voice = new_voice_hub();
         let keys = new_key_set();
-        keys.write().unwrap().entries.push(crate::keys::KeyEntry { hash: crate::keys::hash_key("k1"), name: "Ade bible".into(), role: crate::keys::Role::Bible, paused: false, output_scope: Vec::new() });
-        keys.write().unwrap().entries.push(crate::keys::KeyEntry { hash: crate::keys::hash_key("k2"), name: "\u{410}de bible".into(), role: crate::keys::Role::Present, paused: false, output_scope: Vec::new() });
+        keys.write().unwrap().entries.push(crate::keys::KeyEntry {
+            hash: crate::keys::hash_key("k1"),
+            name: "Ade bible".into(),
+            role: crate::keys::Role::Bible,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        });
+        keys.write().unwrap().entries.push(crate::keys::KeyEntry {
+            hash: crate::keys::hash_key("k2"),
+            name: "\u{410}de bible".into(),
+            role: crate::keys::Role::Present,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        });
         keys.write().unwrap().require_auth = true;
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, voice: voice.clone(), ..Default::default() };
         let result = start_http_server(config, Arc::new(VoiceSink(voice.clone())), new_shared_status()).await.expect("bind");
@@ -2935,8 +3506,33 @@ mod tests {
         assert_eq!(live.revision("event"), Some(initial_revision + 1), "only successful dispatch advances the revision");
 
         let duplicate = raw_http_request(port, "POST", "/api/v1/command", Some(press)).await;
-        assert!(duplicate.contains("200 OK"), "a successful retry remains idempotent: {duplicate}");
-        assert_eq!(sink.event_attempts.load(std::sync::atomic::Ordering::SeqCst), 2, "a completed press is not dispatched twice");
+        assert!(
+            duplicate.contains("200 OK"),
+            "a successful retry remains idempotent: {duplicate}"
+        );
+        assert_eq!(
+            sink.event_attempts
+                .load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "a completed press is not dispatched twice"
+        );
+        let conflicting = raw_http_request(
+            port,
+            "POST",
+            "/api/v1/command",
+            Some(r#"{"command":"hold","value":"Wait","id":"retry-after-failure"}"#),
+        )
+        .await;
+        assert!(
+            conflicting.contains("409 Conflict") && conflicting.contains("id-conflict"),
+            "the same id cannot acknowledge a different command: {conflicting}"
+        );
+        assert_eq!(
+            sink.event_attempts
+                .load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "a conflicting id reuse is not dispatched"
+        );
         let mut handle = result.handle;
         handle.stop();
     }
@@ -2947,8 +3543,21 @@ mod tests {
     async fn an_obs_companion_reads_the_cameras_with_its_own_sign_in() {
         use crate::keys::{hash_key, KeyEntry, Keys, Role};
         let sink = Arc::new(MockSink::new());
-        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false, output_scope: Vec::new() };
-        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("comp", "Media desk", Role::ObsCompanion), entry("pres", "Phone", Role::Present)] }));
+        let entry = |tok: &str, name: &str, role| KeyEntry {
+            hash: hash_key(tok),
+            name: name.into(),
+            role,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
+            require_auth: true,
+            entries: vec![
+                entry("comp", "Media desk", Role::ObsCompanion),
+                entry("pres", "Phone", Role::Present),
+            ],
+        }));
         let cameras = crate::cameras::new_camera_hub();
         cameras.set(&[("pulpit".into(), "0123456789abcdef0123".into())]);
         cameras.sync_readers(&[(hash_key("comp"), "Media desk".into())]);
@@ -3038,8 +3647,22 @@ mod tests {
     async fn a_desk_saves_scenes_through_the_host_with_its_revision() {
         use crate::keys::{hash_key, KeyEntry, Keys, Role};
         let sink = Arc::new(MockSink::new());
-        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false, output_scope: Vec::new() };
-        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("scr", "Screens desk", Role::Screens), entry("bib", "Bible desk", Role::Bible), entry("obs", "OBS desk", Role::Obs)] }));
+        let entry = |tok: &str, name: &str, role| KeyEntry {
+            hash: hash_key(tok),
+            name: name.into(),
+            role,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
+            require_auth: true,
+            entries: vec![
+                entry("scr", "Screens desk", Role::Screens),
+                entry("bib", "Bible desk", Role::Bible),
+                entry("obs", "OBS desk", Role::Obs),
+            ],
+        }));
         let live = new_live_hub();
         let state = |welcome: &str| format!(r#"{{"v":1,"program":{{"onAir":true,"rehearsal":false}},"scenes":[{{"id":"off","name":"{welcome}","onScreen":false,"layers":[]}},{{"id":"on","name":"Sermon","onScreen":true,"layers":[{{"id":"b","kind":"feed"}}]}}]}}"#);
         live.publish(state("Welcome"));
@@ -3349,12 +3972,54 @@ mod tests {
         // An accepted command moves its part at once, before the app's next Live State.
         live.bump("hold");
         assert_eq!(live.revision("hold"), first[2].map(|n| n + 1));
+        let after_bump: serde_json::Value = serde_json::from_str(&live.current().unwrap()).unwrap();
+        assert_eq!(after_bump["revisions"]["hold"].as_u64(), live.revision("hold"), "accepted revisions are immediately visible in the Live State");
         assert_eq!(live.revision("camera:nowhere"), None);
         live.bump("camera:nowhere");
         assert_eq!(live.revision("camera:nowhere"), None, "a part the host never showed is not checked");
         // Not JSON (a test, a broken build): passed on as it is.
         live.publish("not json".into());
         assert_eq!(live.current().as_deref(), Some("not json"));
+    }
+
+    #[test]
+    fn group_output_revisions_are_reserved_and_published_together_with_the_current_service() {
+        let live = new_live_hub();
+        let mut events = live.tx.subscribe();
+        live.publish(serde_json::json!({
+            "v": 1,
+            "service": { "id": "service-a", "title": "Sunday" },
+            "outputs": [
+                { "id": "main", "name": "Sanctuary", "sceneId": null },
+                { "id": "overflow", "name": "Overflow", "sceneId": null }
+            ]
+        }).to_string());
+        let first: serde_json::Value = serde_json::from_str(&events.try_recv().unwrap()).unwrap();
+        assert_eq!(live.service().as_deref(), Some("service-a"));
+
+        let parts = ["output:main".to_string(), "output:overflow".to_string()];
+        let before_main = live.revision(&parts[0]).unwrap();
+        let before_overflow = live.revision(&parts[1]).unwrap();
+        assert!(live.bump_many(&parts));
+
+        let reserved_json = events.try_recv().unwrap();
+        assert!(matches!(events.try_recv(), Err(broadcast::error::TryRecvError::Empty)));
+        let reserved: serde_json::Value = serde_json::from_str(&reserved_json).unwrap();
+        assert_eq!(reserved["revisions"]["output:main"].as_u64(), Some(before_main + 1));
+        assert_eq!(reserved["revisions"]["output:overflow"].as_u64(), Some(before_overflow + 1));
+        assert_eq!(live.current().as_deref(), Some(reserved_json.as_str()));
+        assert_eq!(reserved["service"]["id"], first["service"]["id"]);
+
+        live.publish(serde_json::json!({
+            "v": 1,
+            "service": { "id": "service-b", "title": "Evening" },
+            "outputs": []
+        }).to_string());
+        let next_json = events.try_recv().unwrap();
+        let next: serde_json::Value = serde_json::from_str(&next_json).unwrap();
+        assert_eq!(live.service().as_deref(), Some("service-b"));
+        assert_eq!(live.current().as_deref(), Some(next_json.as_str()));
+        assert_eq!(next["service"]["id"], "service-b");
     }
 
     #[test]
@@ -3781,8 +4446,18 @@ mod tests {
     #[tokio::test]
     async fn pausing_revoking_or_changing_a_desk_ends_its_live_stream_at_once() {
         use crate::keys::{KeyEntry, Keys, Role};
-        let desk = KeyEntry { hash: hash_key("tok"), name: "Desk C".into(), role: Role::Present, paused: false, output_scope: Vec::new() };
-        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![desk.clone()] }));
+        let desk = KeyEntry {
+            hash: hash_key("tok"),
+            name: "Desk C".into(),
+            role: Role::Present,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
+            require_auth: true,
+            entries: vec![desk.clone()],
+        }));
         let live = new_live_hub();
         live.publish(r#"{"v":1,"now":"Sermon"}"#.into());
         let presence = crate::presence::new_presence();
@@ -3877,7 +4552,14 @@ mod tests {
 
     fn console_keys() -> KeySet {
         use crate::keys::{hash_key, KeyEntry, Keys, Role};
-        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false, output_scope: Vec::new() };
+        let entry = |tok: &str, name: &str, role| KeyEntry {
+            hash: hash_key(tok),
+            name: name.into(),
+            role,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
         Arc::new(std::sync::RwLock::new(Keys {
             require_auth: true,
             entries: vec![entry("dir", "Director", Role::Present), entry("bib", "Bible desk", Role::Bible), entry("wor", "Worship desk", Role::Worship), entry("stg", "Stage desk", Role::Stage), entry("vie", "Pastor's phone", Role::Viewer)],
@@ -3923,6 +4605,7 @@ mod tests {
             role: Role::Screens,
             paused: false,
             output_scope: vec!["sanctuary".into(), "stage".into()],
+            group_take_scope: Vec::new(),
         };
         let json = r#"{"v":1,"outputs":[{"id":"sanctuary","name":"Sanctuary"},{"id":"overflow","name":"Overflow"},{"id":"stage","name":"Stage","role":"stage"},{"id":"lobby","name":"Lobby","role":"signage"}],"outputMap":[{"id":"sanctuary","name":"Sanctuary","role":"congregation"},{"id":"overflow","name":"Overflow","role":"congregation"},{"id":"stage","name":"Stage","role":"stage"},{"id":"lobby","name":"Lobby","role":"signage"}]}"#;
         let live: serde_json::Value = serde_json::from_str(&live_for(json, Some(&entry))).unwrap();
@@ -3942,6 +4625,32 @@ mod tests {
             Some(&entry),
         )).unwrap();
         assert!(malformed_map["outputMap"].as_array().unwrap().is_empty(), "a non-array map is never passed through unfiltered");
+    }
+
+    #[test]
+    fn group_take_results_are_only_visible_to_screens_with_every_target_granted() {
+        use crate::keys::{KeyEntry, Role};
+        let json = r#"{"v":1,"outputs":[{"id":"sanctuary","name":"Sanctuary"},{"id":"overflow","name":"Overflow"}],"groupTakeResults":[{"requestId":"r1","scene":"sermon","outputs":[{"id":"sanctuary","name":"Sanctuary","status":"host-applied"},{"id":"overflow","name":"Overflow","status":"host-applied"}]}]}"#;
+        let mut screens = KeyEntry {
+            hash: "screen-key".into(),
+            name: "Screens desk".into(),
+            role: Role::Screens,
+            paused: false,
+            output_scope: vec!["sanctuary".into(), "overflow".into()],
+            group_take_scope: vec!["sanctuary".into(), "overflow".into()],
+        };
+        let allowed: serde_json::Value =
+            serde_json::from_str(&live_for(json, Some(&screens))).unwrap();
+        assert_eq!(allowed["groupTakeResults"].as_array().unwrap().len(), 1);
+
+        screens.group_take_scope.pop();
+        let partial: serde_json::Value =
+            serde_json::from_str(&live_for(json, Some(&screens))).unwrap();
+        assert!(partial["groupTakeResults"].as_array().unwrap().is_empty());
+
+        let present: serde_json::Value =
+            serde_json::from_str(&live_for(json, Some(&desk("Present", Role::Present)))).unwrap();
+        assert!(present.get("groupTakeResults").is_none());
     }
 
     #[test]
@@ -4043,11 +4752,26 @@ mod tests {
     async fn round_two_commands_are_checked_for_role_staleness_and_rehearsal() {
         use crate::keys::{hash_key, KeyEntry, Keys, Role};
         let sink = Arc::new(MockSink::new());
-        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false, output_scope: Vec::new() };
-        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![
-            entry("dir", "Director", Role::Present), entry("phn", "Ade's phone", Role::Present), entry("edt", "Editor", Role::Editor), entry("wor", "Worship desk", Role::Worship),
-            entry("obs", "OBS desk", Role::Obs), entry("scr", "Screens desk", Role::Screens), entry("vie", "Pastor's phone", Role::Viewer),
-        ] }));
+        let entry = |tok: &str, name: &str, role| KeyEntry {
+            hash: hash_key(tok),
+            name: name.into(),
+            role,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
+            require_auth: true,
+            entries: vec![
+                entry("dir", "Director", Role::Present),
+                entry("phn", "Ade's phone", Role::Present),
+                entry("edt", "Editor", Role::Editor),
+                entry("wor", "Worship desk", Role::Worship),
+                entry("obs", "OBS desk", Role::Obs),
+                entry("scr", "Screens desk", Role::Screens),
+                entry("vie", "Pastor's phone", Role::Viewer),
+            ],
+        }));
         let live = new_live_hub();
         let state = |rehearsal: bool, recording: bool| format!(r#"{{"v":1,"program":{{"onAir":true,"rehearsal":{rehearsal}}},"rundown":[{{"id":"a","reference":"Welcome"}}],"obs":{{"connected":true,"recording":{recording},"transition":"Fade"}},"sources":[{{"id":"ticker","on":true,"revision":1}},{{"id":"lowerThird","on":true,"revision":1}}]}}"#);
         live.publish(state(false, false));
@@ -4112,8 +4836,22 @@ mod tests {
         let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
             require_auth: true,
             entries: vec![
-                KeyEntry { hash: hash_key("scoped"), name: "Screens desk".into(), role: Role::Screens, paused: false, output_scope: vec!["sanctuary".into(), "stage".into(), "lobby".into()] },
-                KeyEntry { hash: hash_key("legacy"), name: "Legacy Screens".into(), role: Role::Screens, paused: false, output_scope: Vec::new() },
+                KeyEntry {
+                    hash: hash_key("scoped"),
+                    name: "Screens desk".into(),
+                    role: Role::Screens,
+                    paused: false,
+                    output_scope: vec!["sanctuary".into(), "stage".into(), "lobby".into()],
+                    group_take_scope: Vec::new(),
+                },
+                KeyEntry {
+                    hash: hash_key("legacy"),
+                    name: "Legacy Screens".into(),
+                    role: Role::Screens,
+                    paused: false,
+                    output_scope: Vec::new(),
+                    group_take_scope: Vec::new(),
+                },
             ],
         }));
         let live = new_live_hub();
@@ -4135,6 +4873,351 @@ mod tests {
         assert!(me.contains(r#""outputScope":["sanctuary"]"#), "{me}");
         let state = get_with(port, "/api/v1/live", "X-Rhema-Key: scoped\r\n", None).await;
         assert!(state.contains("Sanctuary") && !state.contains("Stage") && !state.contains("Lobby"), "{state}");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[tokio::test]
+    async fn screens_group_take_is_one_scoped_revision_checked_and_idempotent_request() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+
+        let sink = Arc::new(MockSink::new());
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
+            require_auth: true,
+            entries: vec![
+                KeyEntry {
+                    hash: hash_key("group"),
+                    name: "Screens desk".into(),
+                    role: Role::Screens,
+                    paused: false,
+                    output_scope: vec![
+                        "lobby".into(),
+                        "overflow".into(),
+                        "sanctuary".into(),
+                        "stage".into(),
+                    ],
+                    group_take_scope: vec![
+                        "lobby".into(),
+                        "overflow".into(),
+                        "sanctuary".into(),
+                        "stage".into(),
+                    ],
+                },
+                KeyEntry {
+                    hash: hash_key("individual-only"),
+                    name: "Individual Screens desk".into(),
+                    role: Role::Screens,
+                    paused: false,
+                    output_scope: vec!["overflow".into(), "sanctuary".into()],
+                    group_take_scope: Vec::new(),
+                },
+            ],
+        }));
+        let live = new_live_hub();
+        let initial = serde_json::json!({
+            "v": 1,
+            "service": { "id": "service-1", "title": "Sunday" },
+            "program": { "onAir": true, "rehearsal": false },
+            "scenes": [{ "id": "sermon", "name": "Sermon", "layers": [] }],
+            "outputs": [
+                { "id": "sanctuary", "name": "Sanctuary", "type": "ndi", "role": "congregation", "sceneId": null,
+                  "impact": { "language": "both", "aspectRatio": "16:9", "themeId": "default", "themeFor": {}, "shows": [], "themeNames": { "default": "Default" }, "themeRevisions": { "default": 1 } } },
+                { "id": "overflow", "name": "Overflow", "type": "display", "role": "congregation", "sceneId": null,
+                  "impact": { "language": "both", "aspectRatio": "16:9", "themeId": "default", "themeFor": {}, "shows": [], "themeNames": { "default": "Default" }, "themeRevisions": { "default": 1 } } },
+                { "id": "stage", "name": "Stage", "role": "stage", "sceneId": null },
+                { "id": "lobby", "name": "Lobby", "role": "signage", "sceneId": null }
+            ]
+        });
+        live.publish(initial.to_string());
+        let config = HttpConfig {
+            port: 0,
+            host: "127.0.0.1".into(),
+            keys,
+            live: live.clone(),
+            ..Default::default()
+        };
+        let result = start_http_server(config, sink.clone(), new_shared_status())
+            .await
+            .unwrap();
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let old_seen = read_revisions(port, "group").await;
+        let request = |id: &str, outputs: Vec<&str>, seen: Option<serde_json::Value>| {
+            let mut body = serde_json::json!({
+                "command": "group_take_scene",
+                "value": { "outputs": outputs, "scene": "sermon" },
+                "service": "service-1",
+                "id": id,
+            });
+            if let Some(seen) = seen {
+                body["seen"] = seen;
+            }
+            body
+        };
+
+        assert_eq!(
+            press(
+                port,
+                "individual-only",
+                request(
+                    "no-grant",
+                    vec!["sanctuary", "overflow"],
+                    Some(old_seen.clone())
+                )
+            )
+            .await
+            .0,
+            403
+        );
+        assert_eq!(
+            press(
+                port,
+                "group",
+                request(
+                    "protected-stage",
+                    vec!["sanctuary", "stage"],
+                    Some(old_seen.clone())
+                )
+            )
+            .await
+            .0,
+            403
+        );
+        assert_eq!(
+            press(
+                port,
+                "group",
+                request(
+                    "protected-lobby",
+                    vec!["sanctuary", "lobby"],
+                    Some(old_seen.clone())
+                )
+            )
+            .await
+            .0,
+            403
+        );
+        assert_eq!(
+            press(
+                port,
+                "group",
+                request(
+                    "duplicate",
+                    vec!["sanctuary", "sanctuary"],
+                    Some(old_seen.clone())
+                )
+            )
+            .await
+            .0,
+            422
+        );
+        assert_eq!(
+            press(
+                port,
+                "group",
+                request("single", vec!["sanctuary"], Some(old_seen.clone()))
+            )
+            .await
+            .0,
+            422
+        );
+        assert_eq!(
+            press(
+                port,
+                "group",
+                request("missing-seen", vec!["sanctuary", "overflow"], None)
+            )
+            .await
+            .0,
+            409
+        );
+        let mut missing_service = request(
+            "missing-service",
+            vec!["sanctuary", "overflow"],
+            Some(old_seen.clone()),
+        );
+        missing_service.as_object_mut().unwrap().remove("service");
+        assert_eq!(press(port, "group", missing_service).await.0, 409);
+        let mut rehearsal = initial.clone();
+        rehearsal["program"]["rehearsal"] = serde_json::json!(true);
+        live.publish(rehearsal.to_string());
+        let rehearsal_seen = read_revisions(port, "group").await;
+        assert_eq!(
+            press(
+                port,
+                "group",
+                request(
+                    "during-rehearsal",
+                    vec!["sanctuary", "overflow"],
+                    Some(rehearsal_seen)
+                )
+            )
+            .await
+            .0,
+            403
+        );
+        live.publish(initial.to_string());
+
+        let mut changed_output = initial.clone();
+        changed_output["outputs"][0]["impact"]["language"] = serde_json::json!("first");
+        live.publish(changed_output.to_string());
+        assert_eq!(
+            press(
+                port,
+                "group",
+                request(
+                    "stale-output",
+                    vec!["sanctuary", "overflow"],
+                    Some(old_seen.clone())
+                )
+            )
+            .await
+            .0,
+            409
+        );
+        let changed_scene = serde_json::json!({
+            "v": 1,
+            "service": { "id": "service-1", "title": "Sunday" },
+            "program": { "onAir": true, "rehearsal": false },
+            "scenes": [{ "id": "sermon", "name": "Sermon updated", "layers": [] }],
+            "outputs": [
+                { "id": "sanctuary", "name": "Sanctuary", "sceneId": "sermon" },
+                { "id": "overflow", "name": "Overflow", "sceneId": null },
+                { "id": "stage", "name": "Stage", "role": "stage", "sceneId": null },
+                { "id": "lobby", "name": "Lobby", "role": "signage", "sceneId": null }
+            ]
+        });
+        live.publish(changed_scene.to_string());
+        assert_eq!(
+            press(
+                port,
+                "group",
+                request("stale-scene", vec!["sanctuary", "overflow"], Some(old_seen))
+            )
+            .await
+            .0,
+            409
+        );
+
+        let current_seen = read_revisions(port, "group").await;
+        let me = get_with(port, "/api/v1/me", "X-Rhema-Key: group\r\n", None).await;
+        assert!(
+            me.contains(r#""groupTakeScope":["overflow","sanctuary"]"#),
+            "{me}"
+        );
+        let accepted = request("group-1", vec!["sanctuary", "overflow"], Some(current_seen.clone()));
+        assert_eq!(press(port, "group", accepted.clone()).await.0, 200);
+        assert_eq!(
+            live.revision("scene:sermon"), current_seen["scene:sermon"].as_u64(),
+            "acceptance reserves output revisions without changing the reviewed scene"
+        );
+        for id in ["sanctuary", "overflow"] {
+            let part = format!("output:{id}");
+            assert_eq!(
+                live.revision(&part),
+                current_seen[&part].as_u64().and_then(|revision| revision.checked_add(1)),
+                "the API reserves exactly one revision for {id} before dispatch"
+            );
+        }
+        let published_reservation = read_revisions(port, "group").await;
+        for id in ["sanctuary", "overflow"] {
+            let part = format!("output:{id}");
+            assert_eq!(published_reservation[&part].as_u64(), live.revision(&part));
+        }
+        assert_eq!(
+            press(port, "group", accepted).await.0,
+            200,
+            "a retry gets the accepted result without dispatching again"
+        );
+        for id in ["sanctuary", "overflow"] {
+            let part = format!("output:{id}");
+            assert_eq!(
+                live.revision(&part),
+                current_seen[&part].as_u64().and_then(|revision| revision.checked_add(1)),
+                "an exact retry does not reserve another revision for {id}"
+            );
+            assert_eq!(published_reservation[&part].as_u64(), live.revision(&part));
+        }
+        assert_eq!(sink.command_count(), 1);
+        let payload: serde_json::Value =
+            serde_json::from_str(&sink.group_take.lock().unwrap().clone().unwrap()).unwrap();
+        assert_eq!(
+            payload["outputs"],
+            serde_json::json!(["sanctuary", "overflow"])
+        );
+        assert_eq!(payload["scene"], "sermon");
+        assert_eq!(payload["requestId"], "group-1");
+        assert_eq!(payload["service"], "service-1");
+        assert_eq!(payload["byId"], crate::keys::hash_key("group"));
+        assert!(payload["seen"]["scene:sermon"].is_number());
+
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[tokio::test]
+    async fn failed_group_take_dispatch_publishes_the_reserved_output_revisions() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+
+        let sink = Arc::new(FailGroupTakeSink);
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
+            require_auth: true,
+            entries: vec![KeyEntry {
+                hash: hash_key("group"),
+                name: "Screens desk".into(),
+                role: Role::Screens,
+                paused: false,
+                output_scope: vec!["overflow".into(), "sanctuary".into()],
+                group_take_scope: vec!["overflow".into(), "sanctuary".into()],
+            }],
+        }));
+        let live = new_live_hub();
+        live.publish(serde_json::json!({
+            "v": 1,
+            "service": { "id": "service-1", "title": "Sunday" },
+            "program": { "onAir": true, "rehearsal": false },
+            "scenes": [{ "id": "sermon", "name": "Sermon", "layers": [] }],
+            "outputs": [
+                { "id": "sanctuary", "name": "Sanctuary", "type": "ndi", "role": "congregation", "sceneId": null,
+                  "impact": { "language": "both", "aspectRatio": "16:9", "themeId": "default", "themeFor": {}, "shows": [], "themeNames": { "default": "Default" }, "themeRevisions": { "default": 1 } } },
+                { "id": "overflow", "name": "Overflow", "type": "display", "role": "congregation", "sceneId": null,
+                  "impact": { "language": "both", "aspectRatio": "16:9", "themeId": "default", "themeFor": {}, "shows": [], "themeNames": { "default": "Default" }, "themeRevisions": { "default": 1 } } },
+            ]
+        }).to_string());
+        let config = HttpConfig {
+            port: 0,
+            host: "127.0.0.1".into(),
+            keys,
+            live: live.clone(),
+            ..Default::default()
+        };
+        let result = start_http_server(config, sink, new_shared_status()).await.unwrap();
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let reviewed = read_revisions(port, "group").await;
+        let mut request = serde_json::json!({
+            "command": "group_take_scene",
+            "value": { "outputs": ["sanctuary", "overflow"], "scene": "sermon" },
+            "service": "service-1",
+            "id": "failed-group-take",
+            "seen": reviewed.clone(),
+        });
+        assert_eq!(press(port, "group", request.clone()).await.0, 500);
+
+        let refreshed = read_revisions(port, "group").await;
+        for id in ["sanctuary", "overflow"] {
+            let part = format!("output:{id}");
+            assert_eq!(
+                refreshed[&part].as_u64(),
+                reviewed[&part].as_u64().and_then(|revision| revision.checked_add(1)),
+                "the failed reservation remains visible so a desk can safely refresh"
+            );
+        }
+        request["id"] = serde_json::json!("stale-after-failure");
+        assert_eq!(press(port, "group", request).await.0, 409);
+
         let mut handle = result.handle;
         handle.stop();
     }

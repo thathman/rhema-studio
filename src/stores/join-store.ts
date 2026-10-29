@@ -16,7 +16,7 @@ interface JoinState {
   status: JoinStatus
   error: string | null
   /** The name and role the host gives this computer. */
-  me: { name: string; role: string; outputScope?: string[] } | null
+  me: { name: string; role: string; outputScope?: string[]; groupTakeScope?: string[] } | null
   /** The main desk has taken back control (#243): this desk still follows and talks, its commands wait. */
   paused: boolean
   /** A passing note that is not an error (the host moved to another service and this desk refreshed). */
@@ -45,7 +45,7 @@ interface JoinState {
    * main desk has taken back control, or if it is for another service. Says whether the host did it,
    * and if not, why in the host's words.
    */
-  send: (command: { command: string; value?: string | number | Record<string, unknown>; seen?: Record<string, number> }) => Promise<SendResult>
+  send: (command: { command: string; value?: string | number | Record<string, unknown>; seen?: Record<string, number>; id?: string }) => Promise<SendResult>
 }
 
 /** `note`: what the host said about a command it took (a scene change sent to the main desk to accept). `stale`: the desk's copy of a scene was older than the host's. */
@@ -59,7 +59,7 @@ export const STALE_MESSAGE = "Someone changed this first — look again"
  * R7), so the host can refuse it if someone changed that part first, and, for an Unable answer, the
  * reason this desk could not do what was asked (Comms, #251). Older hosts ignore both.
  */
-export function withWhatWasSeen(command: { command: string; value?: unknown; seen?: Record<string, number> }, live: LiveStateV1 | null): Record<string, unknown> {
+export function withWhatWasSeen(command: { command: string; value?: unknown; seen?: Record<string, number>; id?: string }, live: LiveStateV1 | null): Record<string, unknown> {
   const out: Record<string, unknown> = { ...command }
   // What a command says it saw itself wins: a scene editor sends the scene's revision from when it
   // was opened, not from the Live State now (#243 SC.16).
@@ -112,11 +112,20 @@ async function listenOnce() {
   })
   await listen<string>("join:state", (e) => {
     try {
-      const p = JSON.parse(e.payload) as { state: string; error?: string; secure?: boolean; me?: { name?: unknown; role?: unknown; paused?: unknown; outputScope?: unknown } | null }
+      const p = JSON.parse(e.payload) as { state: string; error?: string; secure?: boolean; me?: { name?: unknown; role?: unknown; paused?: unknown; outputScope?: unknown; groupTakeScope?: unknown } | null }
       const status: JoinStatus = p.state === "connected" ? "connected" : p.state === "reconnecting" ? "reconnecting" : p.state === "refused" ? "refused" : "off"
       // Each (re)connection says what the host makes of this desk now: the main desk may have
       // changed its role or taken back control while it was away (the host ends the stream then).
-      const me = p.me && typeof p.me.name === "string" && typeof p.me.role === "string" ? { me: { name: p.me.name, role: p.me.role, ...(Array.isArray(p.me.outputScope) && p.me.outputScope.every((id) => typeof id === "string") ? { outputScope: p.me.outputScope } : {}) }, paused: p.me.paused === true } : {}
+      const outputScope = p.me && Array.isArray(p.me.outputScope) && p.me.outputScope.every((id) => typeof id === "string") ? p.me.outputScope : undefined
+      const groupTakeScope = p.me && Array.isArray(p.me.groupTakeScope) && p.me.groupTakeScope.every((id) => typeof id === "string") && outputScope
+        ? p.me.groupTakeScope.filter((id) => outputScope.includes(id))
+        : undefined
+      const me = p.me && typeof p.me.name === "string" && typeof p.me.role === "string" ? { me: {
+        name: p.me.name,
+        role: p.me.role,
+        ...(outputScope ? { outputScope } : {}),
+        ...(groupTakeScope ? { groupTakeScope } : {}),
+      }, paused: p.me.paused === true } : {}
       useJoin.setState({ status, error: p.error ?? null, ...(typeof p.secure === "boolean" ? { secure: p.secure } : {}), ...me })
     } catch {
       // ignore
@@ -154,8 +163,10 @@ export const useJoin = create<JoinState>((set, get) => ({
     try {
       // How this host is reached, as kept at pairing: https with its certificate authority, or http.
       await invoke("join_secure", { address, secure: joinSecure ? { port: joinSecure.port, fingerprint: joinSecure.fingerprint } : null })
-      const me = await invoke<{ name: string; role: string; paused?: boolean; outputScope?: string[] | null }>("join_me", { address, token })
-      set({ me: { name: me.name, role: me.role, ...(Array.isArray(me.outputScope) ? { outputScope: me.outputScope } : {}) }, paused: me.paused === true })
+      const me = await invoke<{ name: string; role: string; paused?: boolean; outputScope?: string[] | null; groupTakeScope?: string[] | null }>("join_me", { address, token })
+      const outputScope = Array.isArray(me.outputScope) ? me.outputScope : undefined
+      const groupTakeScope = Array.isArray(me.groupTakeScope) && outputScope ? me.groupTakeScope.filter((id) => outputScope.includes(id)) : undefined
+      set({ me: { name: me.name, role: me.role, ...(outputScope ? { outputScope } : {}), ...(groupTakeScope ? { groupTakeScope } : {}) }, paused: me.paused === true })
       await invoke("join_connect", { address, token })
     } catch (e) {
       set({ status: String(e).includes("pair again") ? "refused" : "reconnecting", error: String(e) })

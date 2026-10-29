@@ -127,7 +127,16 @@ pub async fn join_lookup(state: State<'_, JoinRuntime>, address: String, token: 
 fn command_body(command: serde_json::Value, service: Option<String>) -> serde_json::Value {
     let mut body = command;
     if let Some(o) = body.as_object_mut() {
-        o.insert("id".into(), serde_json::Value::String(uuid::Uuid::new_v4().to_string()));
+        if !o
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|id| !id.trim().is_empty() && id.trim() == id && id.len() <= 128)
+        {
+            o.insert(
+                "id".into(),
+                serde_json::Value::String(uuid::Uuid::new_v4().to_string()),
+            );
+        }
         if let Some(s) = service {
             o.insert("service".into(), serde_json::Value::String(s));
         }
@@ -437,6 +446,14 @@ mod tests {
         let tagged = command_body(serde_json::json!({ "command": "event_next" }), Some("s1".into()));
         assert_eq!((tagged["command"].as_str(), tagged["service"].as_str()), (Some("event_next"), Some("s1")));
         assert_eq!(tagged["id"].as_str().map(str::len), Some(36));
+        let reviewed = command_body(
+            serde_json::json!({ "command": "group_take_scene", "id": "group-review-1" }),
+            Some("s1".into()),
+        );
+        assert_eq!(
+            reviewed["id"], "group-review-1",
+            "a group Take keeps its retry identity through the join transport"
+        );
         let untagged = command_body(serde_json::json!({ "command": "event_next" }), None);
         assert!(untagged.get("service").is_none(), "an unknown service is left out, as before");
         assert_eq!(command_body(serde_json::json!({ "command": "next" }), Some(String::new()))["service"], "", "no service open is said as \"\"");

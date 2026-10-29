@@ -29,6 +29,8 @@ import { useTimeChange } from "@/stores/time-change-store"
 import { deskConsoleState, upcomingGraphicsQueue, watchDeskConsoles, type HeardVerse, type LiveLyrics, type OutputMapRow, type SharedReadiness, type UpcomingGraphicsQueue, type WorshipSetItem } from "@/lib/desk-consoles"
 import { recordWords, streamWords, type ObsLine } from "@/lib/obs-status"
 import { useTakeAttemptStore, type TakeAttempt } from "@/stores/take-attempt-store"
+import { aspectRatioLabel, type GroupTakeImpact, type GroupTakeResult } from "@/lib/group-take"
+import type { BroadcastOutputRole, BroadcastOutputType } from "@/types"
 
 /**
  * The host's Live State for joined computers (Host/Join, ARCH-004; ADR 0001): what is on the
@@ -45,6 +47,8 @@ export interface LiveStateV1 {
   program: { onAir: boolean; reference: string | null; rehearsal: boolean }
   /** The host's latest Take attempts. Optional on older hosts; separate from on-air content and event time. */
   takeAttempts?: Omit<TakeAttempt, "error">[]
+  /** Recent Screens group Take host outcomes; no receiver acknowledgement is implied. */
+  groupTakeResults?: GroupTakeResult[]
   /**
    * Each live source; `activatedAt` and `by` (who activated it) are absent from older hosts. After the
    * content sources: "ticker", "timer", "lowerThird", "stage" and each "camera:<name>" (reference: the
@@ -86,7 +90,7 @@ export interface LiveStateV1 {
    * `revisions` ("scene:<id>"). Both absent from older hosts.
    */
   scenes: ({ id: string; name: string } & Partial<Omit<DeskScene, "id" | "name">>)[]
-  outputs: { id: string; name: string; sceneId: string | null; sceneName?: string; sceneNeedsUpdate?: boolean; sceneRevision?: number; sceneBy?: string; sceneAt?: number; sceneLiveDesignRevision?: number; sceneLiveDesignBy?: string | null; sceneSavedRevision?: number; sceneSavedBy?: string | null; sceneApprovedServiceId?: string; sceneApprovedRevision?: number; sceneApprovedAppearanceComplete?: boolean; sceneApprovedAt?: string | null; sceneApprovedBy?: string | null }[]
+  outputs: { id: string; name: string; type?: BroadcastOutputType; role?: BroadcastOutputRole; sceneId: string | null; sceneName?: string; sceneNeedsUpdate?: boolean; sceneRevision?: number | null; sceneBy?: string; sceneAt?: number; sceneLiveDesignRevision?: number; sceneLiveDesignBy?: string | null; sceneSavedRevision?: number; sceneSavedBy?: string | null; sceneApprovedServiceId?: string; sceneApprovedRevision?: number; sceneApprovedAppearanceComplete?: boolean; sceneApprovedAt?: string | null; sceneApprovedBy?: string | null; impact?: GroupTakeImpact }[]
   /**
    * Production notices (Rhema Comms), newest first. The host's server passes each paired desk only
    * those for it (everyone, its role, its name, or sent by it); the main desk has them all.
@@ -254,6 +258,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
       ...(outcome ? { outcome } : {}),
       ...(by ? { by } : {}),
     })),
+    groupTakeResults: b.groupTakeResults,
     sources: [
       ...[...CONTENT_TYPES, "quick" as const].flatMap((id) => {
         const s = b.sources[id]
@@ -287,13 +292,26 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
       const saved = b.scenes.find((scene) => scene.id === o.sceneId)
       const showing = sceneForOutput(o, b.scenes)
       const changed = sceneNeedsRefresh(o, b.scenes, b.themes, useSettingsStore.getState().brandKit.logoUrl)
+      const outputTheme = b.themes.find((theme) => theme.id === o.themeId) ?? b.themes[0]
       return {
         id: o.id,
         name: o.name,
+        type: o.type,
+        role: o.role ?? "congregation",
         sceneId: o.sceneId ?? null,
+        sceneRevision: take?.revision ?? null,
+        impact: {
+          language: o.language ?? "both",
+          aspectRatio: aspectRatioLabel(outputTheme?.resolution),
+          themeId: o.themeId,
+          themeFor: { ...(o.themeFor ?? {}) },
+          shows: [...(o.shows ?? [])],
+          themeNames: Object.fromEntries(b.themes.map((theme) => [theme.id, theme.name])),
+          themeRevisions: Object.fromEntries(b.themes.map((theme) => [theme.id, theme.updatedAt])),
+        } satisfies GroupTakeImpact,
         ...(showing ? { sceneName: showing.name } : {}),
         ...(changed ? { sceneNeedsUpdate: true } : {}),
-        ...(take ? { sceneRevision: take.revision, sceneAt: take.at, ...(take.by ? { sceneBy: take.by } : {}) } : {}),
+        ...(take ? { sceneAt: take.at, ...(take.by ? { sceneBy: take.by } : {}) } : {}),
         ...(showing ? { sceneLiveDesignRevision: showing.updatedAt, sceneLiveDesignBy: showing.updatedBy } : {}),
         ...(saved ? { sceneSavedRevision: saved.updatedAt, sceneSavedBy: saved.updatedBy } : {}),
         ...(o.sceneAppearanceSnapshot?.approved ? { sceneApprovedServiceId: o.sceneAppearanceSnapshot.approved.programId, sceneApprovedRevision: o.sceneAppearanceSnapshot.approved.revision, sceneApprovedAppearanceComplete: o.sceneAppearanceSnapshot.approved.appearanceComplete !== false, sceneApprovedAt: o.sceneAppearanceSnapshot.approved.approvedAt, sceneApprovedBy: o.sceneAppearanceSnapshot.approved.approvedBy } : {}),
@@ -364,7 +382,7 @@ export function refreshLiveState(now = Date.now()): void {
 export function startLiveStatePublisher(): () => void {
   const subs = [
     useBroadcastStore.subscribe((s, p) => {
-      if (s.isLive !== p.isLive || s.liveVerse !== p.liveVerse || s.sources !== p.sources || s.stateSources !== p.stateSources || s.rehearsal !== p.rehearsal || s.stageMessage !== p.stageMessage || s.scenes !== p.scenes || s.outputs !== p.outputs || s.themes !== p.themes) soon()
+      if (s.isLive !== p.isLive || s.liveVerse !== p.liveVerse || s.sources !== p.sources || s.stateSources !== p.stateSources || s.rehearsal !== p.rehearsal || s.stageMessage !== p.stageMessage || s.scenes !== p.scenes || s.outputs !== p.outputs || s.themes !== p.themes || s.groupTakeResults !== p.groupTakeResults) soon()
     }),
     useEventClock.subscribe(soon),
     useQueueStore.subscribe((s, p) => { if (s.items !== p.items || s.headers !== p.headers) soon() }),

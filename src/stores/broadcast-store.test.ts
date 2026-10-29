@@ -18,6 +18,69 @@ const ndiDefaults = {
   alphaMode: "straightAlpha",
 } as const
 
+async function groupTakeFixture() {
+  const [{ useBroadcastStore }, { hasPendingRemotePolicyUpdate, useSettingsStore }, { useServiceStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
+    import("./broadcast-store"),
+    import("@/stores/settings-store"),
+    import("@/stores/service-store"),
+    import("@/lib/scenes"),
+  ])
+  const scene = newScene("Sermon", SCENE_PRESETS[0])
+  useBroadcastStore.getState().saveScene(scene)
+  const main = useBroadcastStore.getState().outputs[0]!
+  useBroadcastStore.setState({
+    outputs: [main, { ...main, id: "overflow", name: "Overflow" }, { ...main, id: "stage", name: "Stage", role: "stage" }],
+  })
+  useSettingsStore.setState({
+    remoteDevices: [{
+      hash: "screens-hash",
+      name: "Screens desk",
+      paired_at: "2026-10-29T10:00:00.000Z",
+      role: "screens",
+      paused: false,
+      outputScope: ["main", "overflow"],
+      groupTakeScope: ["main", "overflow"],
+    }],
+  })
+  useServiceStore.setState({ current: { id: "service-1", title: "Sunday" } as never })
+
+  const outputIds = ["main", "overflow"]
+  const revisionParts = [`scene:${scene.id}`, ...outputIds.map((id) => `output:${id}`)]
+  const requestedRevisions = Object.fromEntries(revisionParts.map((part, index) => [part, index + 1]))
+  const hostCheck = () => {
+    const state = useBroadcastStore.getState()
+    const savedScene = state.scenes.find((candidate) => candidate.id === scene.id)!
+    const themeNames = Object.fromEntries(state.themes.map((theme) => [theme.id, theme.name]))
+    return {
+      service: "service-1",
+      sceneUpdatedAt: savedScene.updatedAt ?? 0,
+      revisions: Object.fromEntries(revisionParts.map((part) => [
+        part,
+        requestedRevisions[part]! + (part.startsWith("output:") ? 1 : 0),
+      ])),
+      outputs: Object.fromEntries(outputIds.map((id) => {
+        const output = state.outputs.find((candidate) => candidate.id === id)!
+        return [id, {
+          name: output.name,
+          type: output.type,
+          role: output.role ?? "congregation",
+          sceneId: output.sceneId ?? null,
+          sceneRevision: state.sceneTakes[id]?.revision ?? null,
+          language: output.language ?? "both",
+          aspectRatio: "16:9" as const,
+          themeId: output.themeId,
+          themeFor: output.themeFor ?? {},
+          shows: output.shows ?? [],
+          themeNames,
+          themeRevisions: Object.fromEntries(state.themes.map((theme) => [theme.id, theme.updatedAt])),
+        }]
+      })),
+    }
+  }
+
+  return { useBroadcastStore, hasPendingRemotePolicyUpdate, useSettingsStore, useServiceStore, scene, outputIds, requestedRevisions, hostCheck }
+}
+
 describe("broadcast store sync", () => {
   beforeEach(async () => {
     emitToMock.mockReset()
@@ -193,6 +256,133 @@ describe("broadcast store sync", () => {
 
     useBroadcastStore.getState().takeScene("main", scene.id)
     expect(useBroadcastStore.getState().outputFrames.main.scene?.background).toBe(edited.background)
+  })
+
+  it("applies a group Take to all valid outputs in one host state update and fails closed", async () => {
+    const { useBroadcastStore, scene, outputIds, requestedRevisions, hostCheck } = await groupTakeFixture()
+    expect(useBroadcastStore.getState().recordGroupTakePending("request-1", outputIds, scene.id, "service-1", "screens-hash", "Screens desk")).toBe(true)
+    const reviewCheck = hostCheck()
+
+    let programUpdates = 0
+    const unlisten = useBroadcastStore.subscribe((next, previous) => {
+      if (next.outputs !== previous.outputs) programUpdates += 1
+    })
+    expect(useBroadcastStore.getState().takeGroupScene("request-1", outputIds, scene.id, "screens-hash", reviewCheck, requestedRevisions, "Screens desk")).toBe(true)
+    unlisten()
+
+    const applied = useBroadcastStore.getState()
+    expect(programUpdates).toBe(1)
+    expect(applied.outputs.filter((output) => ["main", "overflow"].includes(output.id)).map((output) => output.sceneId)).toEqual([scene.id, scene.id])
+    expect(applied.sceneReturn).toMatchObject({ main: scene.id, overflow: scene.id })
+    expect(applied.sceneTakes.main).toMatchObject({ sceneId: scene.id, by: "Screens desk" })
+    expect(applied.sceneTakes.overflow).toMatchObject({ sceneId: scene.id, by: "Screens desk" })
+    expect(applied.groupTakeResults[0]).toMatchObject({ requestId: "request-1", outputs: [
+      { id: "main", status: "host-applied" },
+      { id: "overflow", status: "host-applied" },
+    ] })
+
+    const beforeRefusal = applied.outputs
+    useBroadcastStore.getState().recordGroupTakePending("request-stage", ["main", "stage"], scene.id, "service-1", "screens-hash", "Screens desk")
+    const stageCheck = hostCheck()
+    expect(useBroadcastStore.getState().takeGroupScene("request-stage", ["main", "stage"], scene.id, "screens-hash", stageCheck, requestedRevisions, "Screens desk")).toBe(false)
+    expect(useBroadcastStore.getState().outputs).toBe(beforeRefusal)
+    useBroadcastStore.getState().setRehearsal(true)
+    const inRehearsal = useBroadcastStore.getState().outputs
+    useBroadcastStore.getState().recordGroupTakePending("request-rehearsal", outputIds, scene.id, "service-1", "screens-hash", "Screens desk")
+    const rehearsalCheck = hostCheck()
+    expect(useBroadcastStore.getState().takeGroupScene("request-rehearsal", outputIds, scene.id, "screens-hash", rehearsalCheck, requestedRevisions, "Screens desk")).toBe(false)
+    expect(useBroadcastStore.getState().outputs).toBe(inRehearsal)
+  })
+
+  it("refuses a dispatched group Take while a host permission update is pending", async () => {
+    const { useBroadcastStore, hasPendingRemotePolicyUpdate, useSettingsStore, scene, outputIds, requestedRevisions, hostCheck } = await groupTakeFixture()
+    expect(useBroadcastStore.getState().recordGroupTakePending("pending-revoke", outputIds, scene.id, "service-1", "screens-hash", "Screens desk")).toBe(true)
+    const reviewed = hostCheck()
+
+    const revoke = useSettingsStore.getState().setRemoteDevicePaused("screens-hash", true)
+    expect(hasPendingRemotePolicyUpdate()).toBe(true)
+    expect(useBroadcastStore.getState().takeGroupScene("pending-revoke", outputIds, scene.id, "screens-hash", reviewed, requestedRevisions, "Screens desk")).toBe(false)
+    expect(useBroadcastStore.getState().outputs.filter((output) => outputIds.includes(output.id)).every((output) => output.sceneId === undefined)).toBe(true)
+    await revoke
+    expect(hasPendingRemotePolicyUpdate()).toBe(false)
+  })
+
+  it("refuses a group Take when service, scene, output, or grant changes after review", async () => {
+    const { useBroadcastStore, useSettingsStore, useServiceStore, scene, outputIds, requestedRevisions, hostCheck } = await groupTakeFixture()
+    const attempt = (requestId: string) => {
+      expect(useBroadcastStore.getState().recordGroupTakePending(requestId, outputIds, scene.id, "service-1", "screens-hash", "Screens desk")).toBe(true)
+      return hostCheck()
+    }
+
+    const advancedRevisionCheck = attempt("advanced-revision")
+    const advancedRevision = advancedRevisionCheck.revisions["output:overflow"]! + 1
+    const beforeAdvancedRevision = useBroadcastStore.getState().outputs
+    expect(useBroadcastStore.getState().takeGroupScene("advanced-revision", outputIds, scene.id, "screens-hash", {
+      ...advancedRevisionCheck,
+      revisions: { ...advancedRevisionCheck.revisions, "output:overflow": advancedRevision },
+    }, requestedRevisions, "Screens desk")).toBe(false)
+    expect(useBroadcastStore.getState().outputs).toBe(beforeAdvancedRevision)
+
+    const missingBumpCheck = attempt("missing-bump")
+    const beforeMissingBump = useBroadcastStore.getState().outputs
+    expect(useBroadcastStore.getState().takeGroupScene("missing-bump", outputIds, scene.id, "screens-hash", {
+      ...missingBumpCheck,
+      revisions: { ...missingBumpCheck.revisions, "output:overflow": requestedRevisions["output:overflow"]! },
+    }, requestedRevisions, "Screens desk")).toBe(false)
+    expect(useBroadcastStore.getState().outputs).toBe(beforeMissingBump)
+
+    const staleSceneCheck = attempt("stale-scene")
+    useBroadcastStore.getState().saveScene({ ...scene, background: "#123456" })
+    const beforeStaleScene = useBroadcastStore.getState().outputs
+    expect(useBroadcastStore.getState().takeGroupScene("stale-scene", outputIds, scene.id, "screens-hash", staleSceneCheck, requestedRevisions, "Screens desk")).toBe(false)
+    expect(useBroadcastStore.getState().outputs).toBe(beforeStaleScene)
+
+    const revokedGrantCheck = attempt("revoked-grant")
+    useSettingsStore.setState({ remoteDevices: useSettingsStore.getState().remoteDevices.map((device) => ({ ...device, groupTakeScope: [] })) })
+    const beforeRevokedGrant = useBroadcastStore.getState().outputs
+    expect(useBroadcastStore.getState().takeGroupScene("revoked-grant", outputIds, scene.id, "screens-hash", revokedGrantCheck, requestedRevisions, "Screens desk")).toBe(false)
+    expect(useBroadcastStore.getState().outputs).toBe(beforeRevokedGrant)
+
+    useSettingsStore.setState({ remoteDevices: useSettingsStore.getState().remoteDevices.map((device) => ({ ...device, groupTakeScope: outputIds })) })
+    const changedOutputCheck = attempt("changed-output")
+    useBroadcastStore.setState({ outputs: useBroadcastStore.getState().outputs.map((output) => output.id === "overflow" ? { ...output, language: "first" } : output) })
+    const beforeChangedOutput = useBroadcastStore.getState().outputs
+    expect(useBroadcastStore.getState().takeGroupScene("changed-output", outputIds, scene.id, "screens-hash", changedOutputCheck, requestedRevisions, "Screens desk")).toBe(false)
+    expect(useBroadcastStore.getState().outputs).toBe(beforeChangedOutput)
+
+    const changedThemeCheck = attempt("changed-theme")
+    useBroadcastStore.setState({ themes: useBroadcastStore.getState().themes.map((theme, index) => index === 0 ? { ...theme, updatedAt: theme.updatedAt + 1 } : theme) })
+    const beforeChangedTheme = useBroadcastStore.getState().outputs
+    expect(useBroadcastStore.getState().takeGroupScene("changed-theme", outputIds, scene.id, "screens-hash", changedThemeCheck, requestedRevisions, "Screens desk")).toBe(false)
+    expect(useBroadcastStore.getState().outputs).toBe(beforeChangedTheme)
+
+    const changedServiceCheck = attempt("changed-service")
+    useServiceStore.setState({ current: { id: "service-2", title: "Evening" } as never })
+    const beforeChangedService = useBroadcastStore.getState().outputs
+    expect(useBroadcastStore.getState().takeGroupScene("changed-service", outputIds, scene.id, "screens-hash", changedServiceCheck, requestedRevisions, "Screens desk")).toBe(false)
+    expect(useBroadcastStore.getState().outputs).toBe(beforeChangedService)
+  })
+
+  it("refuses a group Take when a target output is renamed, retargeted, or changes role after review", async () => {
+    const { useBroadcastStore, scene, outputIds, requestedRevisions, hostCheck } = await groupTakeFixture()
+    const originalOutputs = useBroadcastStore.getState().outputs
+    const attempts = [
+      ["rename", { name: "Overflow renamed" }],
+      ["change-type", { type: "browser" }],
+      ["change-role", { role: "stage" }],
+    ] as const
+
+    for (const [requestId, change] of attempts) {
+      expect(useBroadcastStore.getState().recordGroupTakePending(requestId, outputIds, scene.id, "service-1", "screens-hash", "Screens desk")).toBe(true)
+      const reviewed = hostCheck()
+      useBroadcastStore.setState({
+        outputs: originalOutputs.map((output) => output.id === "overflow" ? { ...output, ...change } : output),
+      })
+      const beforeRefusal = useBroadcastStore.getState().outputs
+      expect(useBroadcastStore.getState().takeGroupScene(requestId, outputIds, scene.id, "screens-hash", reviewed, requestedRevisions, "Screens desk")).toBe(false)
+      expect(useBroadcastStore.getState().outputs).toBe(beforeRefusal)
+      useBroadcastStore.setState({ outputs: originalOutputs })
+    }
   })
 
   it("lets rehearsal preview an edited scene while the public screen keeps its pinned revision", async () => {

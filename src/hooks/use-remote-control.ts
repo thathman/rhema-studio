@@ -10,6 +10,7 @@ import { useQueueStore } from "@/stores/queue-store"
 import { pushRemoteKeys, useSettingsStore } from "@/stores/settings-store"
 import { stepLiveSection } from "@/lib/desk-consoles"
 import { REMOTE_EVENTS, REMOTE_PAIR_CLOSED_EVENT, REMOTE_PAIRED_EVENT } from "@/lib/remote-events"
+import type { GroupTakeHostCheck } from "@/lib/group-take"
 import { toast } from "sonner"
 import { runMacro } from "@/lib/cues"
 import { useJournalStore } from "@/stores/journal-store"
@@ -177,6 +178,34 @@ export function useRemoteControl() {
         const b = useBroadcastStore.getState()
         const output = b.outputs.find((o) => o.id === p.output && (o.role ?? "congregation") === "congregation")
         if (output && typeof p.scene === "string") b.takeScene(output.id, p.scene)
+      })
+      await withPayload(REMOTE_EVENTS.group_take_scene, (p) => {
+        const requestId = typeof p.requestId === "string" && p.requestId.trim() === p.requestId && p.requestId.length <= 128 ? p.requestId : ""
+        const outputIds = Array.isArray(p.outputs) && p.outputs.every((id) => typeof id === "string") ? p.outputs as string[] : []
+        const scene = typeof p.scene === "string" ? p.scene : ""
+        const by = senderOf(p)
+        if (!requestId || !Array.isArray(p.outputs) || outputIds.length < 2 || outputIds.length > 32 || new Set(outputIds).size !== outputIds.length || !scene || typeof p.byId !== "string" || typeof p.service !== "string" || !p.seen || typeof p.seen !== "object" || Array.isArray(p.seen)) {
+          if (requestId) useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds.slice(0, 32), scene, "The host could not verify this group Take request.", by)
+          return
+        }
+        const seen = p.seen as Record<string, unknown>
+        const parts = [`scene:${scene}`, ...outputIds.map((id) => `output:${id}`)]
+        if (parts.some((part) => !Number.isSafeInteger(seen[part]) || (seen[part] as number) < 0)) {
+          useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds, scene, "A scene or output changed during review. Refresh before trying again.", by)
+          return
+        }
+        const revisions = Object.fromEntries(parts.map((part) => [part, seen[part] as number]))
+        const pending = useBroadcastStore.getState().recordGroupTakePending(requestId, outputIds, scene, p.service, p.byId, by)
+        if (!pending) return
+        void (async () => {
+          try {
+            const check = await invoke<GroupTakeHostCheck>("remote_group_take_preflight", { byId: p.byId, scene, outputs: outputIds, service: p.service, seen: revisions })
+            const applied = useBroadcastStore.getState().takeGroupScene(requestId, outputIds, scene, p.byId as string, check, revisions, by)
+            if (!applied) useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds, scene, "Host state changed after review; nothing was applied.", by)
+          } catch (error) {
+            useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds, scene, error instanceof Error ? error.message : String(error), by)
+          }
+        })()
       })
       // Production notices (Rhema Comms): who sent it (name and key id) comes from the host's server, not the message.
       keep(

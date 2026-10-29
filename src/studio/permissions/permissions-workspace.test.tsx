@@ -54,9 +54,15 @@ describe("Permissions workspace", () => {
     expect(el.querySelector<HTMLInputElement>('input[aria-label="Overflow output access for Screens tablet"]')).not.toBeNull()
     expect(el.querySelector<HTMLInputElement>('input[aria-label="Stage Confidence output access for Screens tablet"]')).toBeNull()
     expect(el.querySelector<HTMLInputElement>('input[aria-label="Lobby output access for Screens tablet"]')).toBeNull()
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Sanctuary group Take access for Screens tablet"]')).toBeNull()
+    expect(el.textContent).toContain("No separate group Take grant is saved")
 
     await act(async () => el.querySelector<HTMLInputElement>('input[aria-label="Sanctuary output access for Screens tablet"]')!.click())
     expect(useSettingsStore.getState().remoteDevices[0]?.outputScope).toEqual(["main"])
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Sanctuary group Take access for Screens tablet"]')).not.toBeNull()
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Overflow group Take access for Screens tablet"]')).toBeNull()
+    await act(async () => el.querySelector<HTMLInputElement>('input[aria-label="Sanctuary group Take access for Screens tablet"]')!.click())
+    expect(useSettingsStore.getState().remoteDevices[0]?.groupTakeScope).toEqual(["main"])
     await act(async () => root.unmount())
   })
 

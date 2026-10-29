@@ -181,6 +181,7 @@ pub fn run() {
             commands::ai_drafts::ai_draft_mark_opened,
             commands::ai_drafts::ai_drafts_restore,
             commands::remote::publish_live_state,
+            commands::remote::remote_group_take_preflight,
             commands::remote::feeds_set,
             commands::remote::feed_publish,
             commands::remote::voice_answer,

@@ -33,6 +33,8 @@ pub trait CommandSink: Send + Sync {
 struct Signed<'a> {
     inner: &'a dyn CommandSink,
     by: &'a str,
+    by_id: Option<&'a str>,
+    group_take: Option<&'a crate::command::GroupSceneTake>,
 }
 
 impl CommandSink for Signed<'_> {
@@ -40,7 +42,19 @@ impl CommandSink for Signed<'_> {
         match serde_json::from_str::<serde_json::Value>(payload) {
             Ok(serde_json::Value::Object(mut m)) => {
                 m.insert("by".into(), self.by.into());
-                self.inner.emit_event(event, &serde_json::Value::Object(m).to_string())
+                if event == "remote:group_take_scene" {
+                    if let Some(take) = self.group_take {
+                        m.insert(
+                            "requestId".into(),
+                            serde_json::json!(take.request_id.as_deref()),
+                        );
+                        m.insert("seen".into(), serde_json::json!(&take.seen));
+                        m.insert("service".into(), serde_json::json!(take.service.as_deref()));
+                        m.insert("byId".into(), serde_json::json!(self.by_id));
+                    }
+                }
+                self.inner
+                    .emit_event(event, &serde_json::Value::Object(m).to_string())
             }
             _ => self.inner.emit_event(event, payload),
         }
@@ -103,7 +117,8 @@ impl CommandDispatcher {
             other => {
                 // Who sent it rides along in the command's own event, so the host can say who
                 // activated a source ("Bible · Romans 8:28 · by Femi's laptop").
-                let done = Self::dispatch(other, &Signed { inner: sink, by: &by });
+                let group_take = match other { RemoteCommand::GroupTakeScene(take) => Some(take), _ => None };
+                let done = Self::dispatch(other, &Signed { inner: sink, by: &by, by_id, group_take });
                 // The service log's record of it, with who sent it (#246 C17): one self-contained
                 // event, so concurrent requests can never swap their names.
                 if done.is_ok() {
@@ -168,6 +183,7 @@ impl CommandDispatcher {
             RemoteCommand::ClearSource(id) => sink.emit_event("remote:clear_source", &serde_json::json!({ "id": id }).to_string()),
             RemoteCommand::RestoreSource(id) => sink.emit_event("remote:restore_source", &serde_json::json!({ "id": id }).to_string()),
             RemoteCommand::TakeScene(t) => sink.emit_event("remote:take_scene", &serde_json::json!({ "output": t.output, "scene": t.scene }).to_string()),
+            RemoteCommand::GroupTakeScene(t) => sink.emit_event("remote:group_take_scene", &serde_json::json!({ "outputs": t.outputs, "scene": t.scene }).to_string()),
             RemoteCommand::ReleaseScene(output) => sink.emit_event("remote:release_scene", &serde_json::json!({ "output": output }).to_string()),
             // One line of at most 120 characters, as the main desk's own stage message box.
             RemoteCommand::StageMessage(text) => sink.emit_event("remote:stage_message", &serde_json::json!({ "text": text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(120).collect::<String>() }).to_string()),

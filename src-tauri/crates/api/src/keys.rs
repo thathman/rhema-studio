@@ -106,7 +106,10 @@ impl Role {
                 Role::Screens => id == "ticker" || id == "lowerThird",
                 _ => false,
             },
-            RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => matches!(self, Role::Present | Role::Configure | Role::Screens),
+            RemoteCommand::GroupTakeScene(_) => self == Role::Screens,
+            RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {
+                matches!(self, Role::Present | Role::Configure | Role::Screens)
+            }
             // Making and changing scenes (#243 SC.16): the host still decides whether a change goes in
             // at once or waits for the main desk (crate::scene_edits); a camera desk only its camera boxes.
             RemoteCommand::SaveScene(_) => self.edits_scenes(),
@@ -149,6 +152,10 @@ pub struct KeyEntry {
     /// authority, including for older saved Screens entries, so they must be reviewed by the host.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub output_scope: Vec<String>,
+    /// Separate host-granted output IDs that may participate in a multi-output group Take.
+    /// Missing or empty stays denied for older saved keys.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub group_take_scope: Vec<String>,
 }
 
 /// What a paused desk is told when it sends a command.
@@ -162,8 +169,19 @@ impl KeyEntry {
             return false;
         }
         match cmd {
-            RemoteCommand::TakeScene(take) if self.role == Role::Screens => self.output_scope.iter().any(|id| id == &take.output),
-            RemoteCommand::ReleaseScene(output) if self.role == Role::Screens => self.output_scope.iter().any(|id| id == output),
+            RemoteCommand::TakeScene(take) if self.role == Role::Screens => {
+                self.output_scope.iter().any(|id| id == &take.output)
+            }
+            RemoteCommand::GroupTakeScene(take) if self.role == Role::Screens => {
+                take.validate().is_ok()
+                    && take.outputs.iter().all(|id| {
+                        self.output_scope.iter().any(|allowed| allowed == id)
+                            && self.group_take_scope.iter().any(|allowed| allowed == id)
+                    })
+            }
+            RemoteCommand::ReleaseScene(output) if self.role == Role::Screens => {
+                self.output_scope.iter().any(|id| id == output)
+            }
             _ => true,
         }
     }
@@ -174,6 +192,15 @@ impl KeyEntry {
         match cmd {
             RemoteCommand::TakeScene(take) => Some(&take.output),
             RemoteCommand::ReleaseScene(output) => Some(output),
+            _ => None,
+        }
+    }
+
+    /// Output IDs affected by a group scene command, if any.
+    #[must_use]
+    pub fn group_scene_outputs(cmd: &RemoteCommand) -> Option<&[String]> {
+        match cmd {
+            RemoteCommand::GroupTakeScene(take) => Some(&take.outputs),
             _ => None,
         }
     }
@@ -228,7 +255,17 @@ pub fn hash_key(key: &str) -> String {
 pub fn key_set_from(keys: &[(&str, &str)]) -> KeySet {
     Arc::new(RwLock::new(Keys {
         require_auth: true,
-        entries: keys.iter().map(|(k, name)| KeyEntry { hash: hash_key(k), name: (*name).to_string(), role: Role::Configure, paused: false, output_scope: Vec::new() }).collect(),
+        entries: keys
+            .iter()
+            .map(|(k, name)| KeyEntry {
+                hash: hash_key(k),
+                name: (*name).to_string(),
+                role: Role::Configure,
+                paused: false,
+                output_scope: Vec::new(),
+                group_take_scope: Vec::new(),
+            })
+            .collect(),
     }))
 }
 
@@ -329,7 +366,14 @@ pub fn try_pair_as(window: &PairingWindow, keys: &KeySet, code: &str, name: &str
     let mut k = keys.write().unwrap_or_else(std::sync::PoisonError::into_inner);
     // A newly paired device may present, not change settings, until the operator says otherwise
     // (an OBS companion asks for less, and gets it).
-    let entry = KeyEntry { hash: hash_key(&token), name: unique_name(name, &k.entries), role: role_asked(asked), paused: false, output_scope: Vec::new() };
+    let entry = KeyEntry {
+        hash: hash_key(&token),
+        name: unique_name(name, &k.entries),
+        role: role_asked(asked),
+        paused: false,
+        output_scope: Vec::new(),
+        group_take_scope: Vec::new(),
+    };
     k.entries.push(entry.clone());
     k.require_auth = true;
     drop(k);
@@ -368,7 +412,14 @@ mod tests {
 
     #[test]
     fn paired_names_are_unique_and_never_the_main_desk() {
-        let e = |n: &str| KeyEntry { hash: n.into(), name: n.into(), role: Role::Present, paused: false, output_scope: Vec::new() };
+        let e = |n: &str| KeyEntry {
+            hash: n.into(),
+            name: n.into(),
+            role: Role::Present,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
         let have = [e("Femi's laptop"), e("Femi's laptop 2"), e("Phone")];
         assert_eq!(unique_name("Femi's laptop", &have), "Femi's laptop 3");
         assert_eq!(unique_name("  phone ", &have), "phone 2");
@@ -429,8 +480,18 @@ mod tests {
                 assert!(!role.allows(&cmd), "{role:?} {cmd}");
             }
         }
-        let paused = KeyEntry { hash: "h".into(), name: "Desk C".into(), role: Role::Timekeeper, paused: true, output_scope: Vec::new() };
-        assert!(paused.paused_for(&RemoteCommand::Hold(None)) && paused.paused_for(&RemoteCommand::Resume));
+        let paused = KeyEntry {
+            hash: "h".into(),
+            name: "Desk C".into(),
+            role: Role::Timekeeper,
+            paused: true,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
+        assert!(
+            paused.paused_for(&RemoteCommand::Hold(None))
+                && paused.paused_for(&RemoteCommand::Resume)
+        );
     }
 
     #[test]
@@ -468,8 +529,20 @@ mod tests {
     #[test]
     fn screens_take_only_assigned_outputs_and_legacy_scope_fails_closed() {
         use crate::command::SceneTake;
-        let take = |output: &str| RemoteCommand::TakeScene(SceneTake { output: output.into(), scene: "sermon".into() });
-        let scoped = KeyEntry { hash: "screen-key".into(), name: "Screens desk".into(), role: Role::Screens, paused: false, output_scope: vec!["sanctuary".into()] };
+        let take = |output: &str| {
+            RemoteCommand::TakeScene(SceneTake {
+                output: output.into(),
+                scene: "sermon".into(),
+            })
+        };
+        let scoped = KeyEntry {
+            hash: "screen-key".into(),
+            name: "Screens desk".into(),
+            role: Role::Screens,
+            paused: false,
+            output_scope: vec!["sanctuary".into()],
+            group_take_scope: Vec::new(),
+        };
         assert!(scoped.allows(&take("sanctuary")));
         assert!(scoped.allows(&RemoteCommand::ReleaseScene("sanctuary".into())));
         assert!(!scoped.allows(&take("overflow")));
@@ -479,6 +552,47 @@ mod tests {
         assert!(legacy.output_scope.is_empty());
         assert!(!legacy.allows(&take("sanctuary")));
         assert!(legacy.allows(&RemoteCommand::ClearSource("ticker".into())), "the new scope limits scene destinations only");
+    }
+
+    #[test]
+    fn screens_group_take_needs_a_distinct_host_grant_and_a_unique_target_set() {
+        use crate::command::GroupSceneTake;
+        let group = |outputs: &[&str]| {
+            RemoteCommand::GroupTakeScene(GroupSceneTake::new(
+                outputs.iter().map(|id| (*id).into()).collect(),
+                "sermon".into(),
+            ))
+        };
+        let mut key = KeyEntry {
+            hash: "screen-key".into(),
+            name: "Screens desk".into(),
+            role: Role::Screens,
+            paused: false,
+            output_scope: vec!["sanctuary".into(), "overflow".into()],
+            group_take_scope: Vec::new(),
+        };
+        assert!(
+            !key.allows(&group(&["sanctuary", "overflow"])),
+            "individual access does not grant group access"
+        );
+
+        key.group_take_scope = vec!["sanctuary".into(), "overflow".into()];
+        assert!(key.allows(&group(&["sanctuary", "overflow"])));
+        assert!(
+            !key.allows(&group(&["sanctuary", "sanctuary"])),
+            "duplicate targets fail closed"
+        );
+        assert!(
+            !key.allows(&group(&["sanctuary"])),
+            "a single output uses the individual Take path"
+        );
+
+        let legacy: KeyEntry = serde_json::from_str(r#"{"hash":"old","name":"Old Screens","role":"screens","output_scope":["sanctuary","overflow"]}"#).unwrap();
+        assert!(
+            legacy.group_take_scope.is_empty(),
+            "older keys receive no group grant"
+        );
+        assert!(!legacy.allows(&group(&["sanctuary", "overflow"])));
     }
 
     #[test]
@@ -636,9 +750,24 @@ mod tests {
             assert!(!role.allows(&step), "{role:?}");
         }
         // A Bible desk's chosen translation is still Bible activation: the same rights as before.
-        let chosen = RemoteCommand::BibleActivate(crate::command::BibleRef::With { reference: "John 3:16".into(), translation: Some("KJV".into()) });
-        assert!(Role::Bible.allows(&chosen) && Role::Present.allows(&chosen) && !Role::Editor.allows(&chosen) && !Role::Worship.allows(&chosen));
-        let paused = KeyEntry { hash: "h".into(), name: "Desk".into(), role: Role::Worship, paused: true, output_scope: Vec::new() };
+        let chosen = RemoteCommand::BibleActivate(crate::command::BibleRef::With {
+            reference: "John 3:16".into(),
+            translation: Some("KJV".into()),
+        });
+        assert!(
+            Role::Bible.allows(&chosen)
+                && Role::Present.allows(&chosen)
+                && !Role::Editor.allows(&chosen)
+                && !Role::Worship.allows(&chosen)
+        );
+        let paused = KeyEntry {
+            hash: "h".into(),
+            name: "Desk".into(),
+            role: Role::Worship,
+            paused: true,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
         assert!(paused.paused_for(&step), "a paused desk steps nothing");
     }
 
@@ -651,7 +780,14 @@ mod tests {
         for role in [Role::Timekeeper, Role::Bible, Role::Screens, Role::Worship, Role::Stage, Role::Camera, Role::Obs, Role::ObsCompanion, Role::Viewer] {
             assert!(!role.allows(&q), "{role:?}");
         }
-        let paused = KeyEntry { hash: "h".into(), name: "Phone".into(), role: Role::Present, paused: true, output_scope: Vec::new() };
+        let paused = KeyEntry {
+            hash: "h".into(),
+            name: "Phone".into(),
+            role: Role::Present,
+            paused: true,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
         assert!(paused.paused_for(&q), "a paused desk queues nothing");
     }
 
@@ -692,8 +828,20 @@ mod tests {
 
     #[test]
     fn a_paused_desk_keeps_talking_but_sends_no_service_command() {
-        let e = KeyEntry { hash: "h".into(), name: "Desk C".into(), role: Role::Present, paused: true, output_scope: Vec::new() };
-        for cmd in [RemoteCommand::Next, RemoteCommand::EventNext, RemoteCommand::BibleActivate("John 3:16".into()), RemoteCommand::ReleaseScene("main".into())] {
+        let e = KeyEntry {
+            hash: "h".into(),
+            name: "Desk C".into(),
+            role: Role::Present,
+            paused: true,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        };
+        for cmd in [
+            RemoteCommand::Next,
+            RemoteCommand::EventNext,
+            RemoteCommand::BibleActivate("John 3:16".into()),
+            RemoteCommand::ReleaseScene("main".into()),
+        ] {
             assert!(e.paused_for(&cmd), "{cmd}");
         }
         let notice = RemoteCommand::NoticeSend(crate::command::NoticeIn { text: "ready".into(), to: None, priority: None, event: None, action: None });

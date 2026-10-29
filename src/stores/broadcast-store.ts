@@ -18,6 +18,7 @@ import { applyBrandKit, type BrandKit } from "@/lib/brand-kit"
 import { buildStagePayload } from "@/lib/stage"
 import { applyStageStyle, DEFAULT_STAGE_STYLE, normalizeStageStyle } from "@/lib/stage-style"
 import { useQueueStore } from "@/stores/queue-store"
+import { useServiceStore } from "@/stores/service-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import type { TimerState } from "@/lib/timer"
 import { useSongStore } from "@/stores/song-store"
@@ -31,13 +32,14 @@ import { useMediaStore } from "@/stores/media-store"
 import { feedLost, overscanPct } from "@/lib/feed-receivers"
 import { cameraSourceId, feedFrame, followsLowerThird, followsOnlyOverlays, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
 import { captureSceneAppearance, normalizeScene, presetFromScene, sceneClock, sceneForOutput, sceneFrame, sceneHasLanguageFallback, sceneOwns } from "@/lib/scenes"
-import { useSettingsStore } from "@/stores/settings-store"
+import { hasPendingRemotePolicyUpdate, useSettingsStore } from "@/stores/settings-store"
 import { cameraDownState, cameraLabelOf, useRouterHealth } from "@/lib/cameras"
 import type { Scene, SceneAppearanceSnapshot, SceneFrame, SceneLayerKind } from "@/types"
 import type { CountdownTargets } from "@/lib/countdown"
 import { zoneCity } from "@/lib/stage-clock"
 import { countdownFrame, countsToTarget, DEFAULT_COUNTDOWN_LOOK, lookCounting, NO_COUNTDOWN_SOURCES, normalizeCountdownLook, type CountdownSources } from "@/lib/countdown-display"
 import { normalizeDesignDraft, normalizeDesignDrafts, type DesignDraft } from "@/lib/design-drafts"
+import { aspectRatioLabel, type GroupTakeHostCheck, type GroupTakeResult } from "@/lib/group-take"
 
 /** Heard verses (Settings → Display mode, the Live panel's Auto): wait, go live, or the Bible feeds only. */
 export type AutoMode = "manual" | "auto" | "bible"
@@ -199,6 +201,14 @@ interface BroadcastState {
   sceneReturn: Record<string, string>
   /** Each output's last scene Take or release outside rehearsal (#243 EX.1): which scene, who, when, its revision. Session state. */
   sceneTakes: Record<string, SceneTakeRecord>
+  /** Recent host-side group Take outcomes. Receiver confirmation is not inferred from host state. */
+  groupTakeResults: GroupTakeResult[]
+  /** Record an unresolved request before async host preflight so restart never implies success. */
+  recordGroupTakePending: (requestId: string, outputIds: string[], sceneId: string, service: string, byId: string, by?: string) => boolean
+  /** Apply only if authority, service, scene and every output still match the host check. */
+  takeGroupScene: (requestId: string, outputIds: string[], sceneId: string, byId: string, check: GroupTakeHostCheck, requestedRevisions: Record<string, number>, by?: string) => boolean
+  /** Keep a refusal visible to the requesting Screens desk without changing any output. */
+  recordGroupTakeFailure: (requestId: string, outputIds: string[], sceneId: string, reason: string, by?: string) => void
   /** The church's own scene presets (arrangements saved from scenes), beside the built-in ones. Saved. */
   scenePresets: Scene[]
   /** Save a scene's arrangement as a preset (replacing one of the same name). */
@@ -797,6 +807,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   scenes: [],
   sceneReturn: {},
   sceneTakes: {},
+  groupTakeResults: [],
   scenePresets: [],
   cleared: false,
   stageMessage: "",
@@ -1429,6 +1440,130 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     set({ sceneReturn: { ...s.sceneReturn, [outputId]: sceneId }, ...sceneTake(outputId, sceneId, by) })
     get().updateOutput(outputId, { sceneId, sceneSnapshot: structuredClone(normalizeScene(scene) ?? scene), sceneAppearanceSnapshot: appearance })
   },
+  recordGroupTakePending: (requestId, outputIds, sceneId, service, byId, by) => {
+    const s = get()
+    if (!requestId || !byId || s.groupTakeResults.some((result) => result.requestId === requestId)) return false
+    if (outputIds.length < 2 || outputIds.length > 32 || new Set(outputIds).size !== outputIds.length) return false
+    const result: GroupTakeResult = {
+      requestId,
+      scene: sceneId,
+      service,
+      at: Date.now(),
+      ...(by ? { by } : {}),
+      outputs: outputIds.map((id) => ({
+        id,
+        name: s.outputs.find((output) => output.id === id)?.name ?? id,
+        status: "pending" as const,
+      })),
+    }
+    const groupTakeResults = [result, ...s.groupTakeResults].slice(0, 10)
+    set({ groupTakeResults })
+    void persistGroupTakeResults(groupTakeResults)
+    return true
+  },
+  takeGroupScene: (requestId, outputIds, sceneId, byId, check, requestedRevisions, by = currentActor()) => {
+    if (hasPendingRemotePolicyUpdate()) return false
+    const s = get()
+    const pending = s.groupTakeResults.find((result) => result.requestId === requestId)
+    if (!requestId || !pending || pending.outputs.some((output) => output.status !== "pending")) return false
+    if (s.rehearsal || outputIds.length < 2 || outputIds.length > 32 || new Set(outputIds).size !== outputIds.length) return false
+    const serviceId = useServiceStore.getState().current?.id ?? ""
+    if (serviceId !== check.service || pending.service !== check.service) return false
+    const revisionParts = [`scene:${sceneId}`, ...outputIds.map((id) => `output:${id}`)].sort()
+    if (JSON.stringify(Object.keys(check.revisions).sort()) !== JSON.stringify(revisionParts)) return false
+    if (revisionParts.some((part) => {
+      const reviewed = requestedRevisions[part]
+      if (!Number.isSafeInteger(reviewed)) return true
+      const expected = part.startsWith("output:") ? reviewed + 1 : reviewed
+      return !Number.isSafeInteger(expected) || check.revisions[part] !== expected
+    })) return false
+    const scene = s.scenes.find((candidate) => candidate.id === sceneId)
+    const targets = outputIds.map((id) => s.outputs.find((output) => output.id === id))
+    if (!scene || targets.some((output) => !output || (output.role ?? "congregation") !== "congregation")) return false
+    if (scene.updatedAt !== check.sceneUpdatedAt) return false
+    const expectedIds = Object.keys(check.outputs).sort()
+    if (expectedIds.length !== outputIds.length || expectedIds.some((id, index) => id !== [...outputIds].sort()[index])) return false
+    const device = useSettingsStore.getState().remoteDevices.find((candidate) => candidate.hash === byId)
+    if (!device || device.role !== "screens" || device.paused || outputIds.some((id) => !device.outputScope?.includes(id) || !device.groupTakeScope?.includes(id))) return false
+    for (const output of targets) {
+      if (!output) return false
+      const expected = check.outputs[output.id]
+      if (!expected) return false
+      if (output.name !== expected.name || output.type !== expected.type || (output.role ?? "congregation") !== expected.role) return false
+      const themeFor = output.themeFor ?? {}
+      const expectedThemeFor = expected.themeFor ?? {}
+      const sameThemeFor = JSON.stringify(Object.entries(themeFor).sort()) === JSON.stringify(Object.entries(expectedThemeFor).sort())
+      const themeNames = Object.fromEntries(s.themes.map((theme) => [theme.id, theme.name]))
+      const sameThemeNames = JSON.stringify(Object.entries(themeNames).sort()) === JSON.stringify(Object.entries(expected.themeNames ?? {}).sort())
+      const themeRevisions = Object.fromEntries(s.themes.map((theme) => [theme.id, theme.updatedAt]))
+      const sameThemeRevisions = JSON.stringify(Object.entries(themeRevisions).sort()) === JSON.stringify(Object.entries(expected.themeRevisions ?? {}).sort())
+      const outputTheme = s.themes.find((theme) => theme.id === output.themeId) ?? s.themes[0]
+      if ((output.sceneId ?? null) !== expected.sceneId || (s.sceneTakes[output.id]?.revision ?? null) !== expected.sceneRevision) return false
+      if ((output.language ?? "both") !== expected.language || output.themeId !== expected.themeId || !sameThemeFor || !sameThemeNames || !sameThemeRevisions) return false
+      if ((output.shows ?? []).join("\u001f") !== (expected.shows ?? []).join("\u001f") || expected.aspectRatio !== aspectRatioLabel(outputTheme?.resolution)) return false
+    }
+    const snapshot = normalizeScene(scene)
+    if (!snapshot) return false
+
+    const at = Date.now()
+    const sceneReturn = { ...s.sceneReturn }
+    const sceneTakes = { ...s.sceneTakes }
+    const updates = new Map<string, { sceneSnapshot: Scene; sceneAppearanceSnapshot: SceneAppearanceSnapshot }>()
+    for (const output of targets) {
+      if (!output) return false
+      sceneReturn[output.id] = snapshot.id
+      sceneTakes[output.id] = { sceneId: snapshot.id, revision: ++activations, at, ...(by ? { by } : {}) }
+      updates.set(output.id, {
+        sceneSnapshot: structuredClone(snapshot),
+        sceneAppearanceSnapshot: captureSceneAppearance(snapshot, output, s.themes, useSettingsStore.getState().brandKit.logoUrl),
+      })
+    }
+    const outputs = s.outputs.map((output) => {
+      const update = updates.get(output.id)
+      return update ? { ...output, sceneId: snapshot.id, ...update } : output
+    })
+    const result: GroupTakeResult = {
+      requestId,
+      scene: snapshot.id,
+      service: check.service,
+      at,
+      ...(by ? { by } : {}),
+      outputs: targets.flatMap((output) => output ? [{ id: output.id, name: output.name, status: "host-applied" as const }] : []),
+    }
+    const groupTakeResults = [result, ...s.groupTakeResults.filter((item) => item.requestId !== requestId)].slice(0, 10)
+    set({ outputs, sceneReturn, sceneTakes, groupTakeResults })
+    void persistGroupTakeResults(groupTakeResults)
+    for (const id of outputIds) {
+      try {
+        get().syncBroadcastOutputFor(id)
+      } catch {
+        // Host state has already been applied atomically. Receiver delivery remains unconfirmed.
+      }
+    }
+    return true
+  },
+  recordGroupTakeFailure: (requestId, outputIds, sceneId, reason, by) => {
+    const s = get()
+    if (!requestId) return
+    const existing = s.groupTakeResults.find((result) => result.requestId === requestId)
+    if (existing && existing.outputs.some((output) => output.status !== "pending")) return
+    const outputs = (existing?.outputs ?? outputIds.map((id) => ({
+      id,
+      name: s.outputs.find((output) => output.id === id)?.name ?? id,
+      status: "pending" as const,
+    }))).map((output) => ({ ...output, status: "not-applied" as const, reason: reason.slice(0, 240) }))
+    const result: GroupTakeResult = {
+      requestId,
+      scene: existing?.scene ?? sceneId,
+      ...(existing?.service ? { service: existing.service } : {}),
+      at: existing?.at ?? Date.now(),
+      ...(by ? { by } : existing?.by ? { by: existing.by } : {}),
+      outputs,
+    }
+    const groupTakeResults = [result, ...s.groupTakeResults.filter((item) => item.requestId !== requestId)].slice(0, 10)
+    set({ groupTakeResults })
+    void persistGroupTakeResults(groupTakeResults)
+  },
   restoreSceneSnapshot: (outputId, scene, appearance, themeSelection, by = currentActor()) => {
     const s = get()
     const output = s.outputs.find((o) => o.id === outputId)
@@ -1600,6 +1735,34 @@ async function getThemeStore(): Promise<Store> {
   return tauriStore
 }
 
+function normalizeGroupTakeResults(raw: unknown): GroupTakeResult[] {
+  if (!Array.isArray(raw)) return []
+  return raw.slice(0, 10).flatMap((value): GroupTakeResult[] => {
+    if (typeof value !== "object" || value === null) return []
+    const row = value as Partial<GroupTakeResult>
+    if (typeof row.requestId !== "string" || !row.requestId || typeof row.scene !== "string" || typeof row.at !== "number" || !Array.isArray(row.outputs)) return []
+    const outputs = row.outputs.flatMap((item) => {
+      if (typeof item !== "object" || item === null) return []
+      const output = item as GroupTakeResult["outputs"][number]
+      if (typeof output.id !== "string" || typeof output.name !== "string" || !["pending", "host-applied", "not-applied"].includes(output.status)) return []
+      return [{ id: output.id, name: output.name, status: output.status, ...(typeof output.reason === "string" ? { reason: output.reason.slice(0, 240) } : {}) }]
+    })
+    if (!outputs.length) return []
+    return [{ requestId: row.requestId.slice(0, 128), scene: row.scene.slice(0, 128), ...(typeof row.service === "string" ? { service: row.service.slice(0, 128) } : {}), at: row.at, ...(typeof row.by === "string" ? { by: row.by.slice(0, 60) } : {}), outputs }]
+  })
+}
+
+async function persistGroupTakeResults(results: GroupTakeResult[]): Promise<void> {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return
+  try {
+    const store = await getThemeStore()
+    await store.set("groupTakeResults", results.slice(0, 10))
+    await store.save()
+  } catch {
+    console.warn("[broadcast] Failed to persist group Take results")
+  }
+}
+
 export function hydrateBroadcastThemes(): Promise<void> {
   if (hydrationPromise) return hydrationPromise
   hydrationPromise = (async () => {
@@ -1612,8 +1775,10 @@ export function hydrateBroadcastThemes(): Promise<void> {
       // A new key: builds before this one saved "autoLive" (default on) whenever a theme or
       // output changed, so that value is not a choice. Only a choice made here counts.
       const autoLive = (await store.get("autoLiveOptIn")) as boolean | undefined
+      const groupTakeResults = normalizeGroupTakeResults(await store.get("groupTakeResults"))
 
       const patch: Partial<BroadcastState> = {}
+      patch.groupTakeResults = groupTakeResults
       if (customThemes && Array.isArray(customThemes) && customThemes.length > 0) {
         patch.themes = [...BUILTIN_THEMES, ...customThemes.map(normalizeTheme)]
       }

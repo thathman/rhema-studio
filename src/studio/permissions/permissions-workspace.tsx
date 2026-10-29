@@ -104,7 +104,7 @@ export function PermissionsWorkspace() {
         <section aria-labelledby="paired-access-title" className="rounded-lg border border-border bg-card shadow-panel">
           <header className="flex items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
             <KeyRoundIcon aria-hidden className="size-4 text-muted-foreground" />
-            <div><h2 id="paired-access-title" className="font-semibold">Paired device access</h2><p className="text-xs text-muted-foreground">Saved pairing records. A device is shown as paired; this list does not claim that it is online now. Screens Takes apply to one assigned congregation output at a time; group Take is unavailable.</p></div>
+            <div><h2 id="paired-access-title" className="font-semibold">Paired device access</h2><p className="text-xs text-muted-foreground">Saved pairing records. A device is shown as paired; this list does not claim that it is online now. Individual Screens Takes remain the default. Group Take needs its own host grant and an exact target review on the desk.</p></div>
           </header>
           <div className="p-4">
             {remoteDevices.length === 0 ? <p className="text-sm text-muted-foreground">No devices are paired. The studio works on this computer without them.</p> : (
@@ -137,6 +137,27 @@ export function PermissionsWorkspace() {
                         />
                         <span>{output.name}</span>
                       </label>)}</div>}
+                  </fieldset>}
+                  {device.role === "screens" && <fieldset className="w-full rounded-md border border-border p-3">
+                    <legend className="px-1 text-xs font-semibold">Separate Group Take grant</legend>
+                    <p className="mb-2 text-xs text-muted-foreground">This grant only permits explicit group Take requests. The desk must review every selected output before sending one request; it cannot use this grant to Take an output individually.</p>
+                    {(device.outputScope ?? []).filter((id) => congregationOutputs.some((output) => output.id === id)).length === 0
+                      ? <p role="status" className="text-xs text-muted-foreground">Assign individual congregation output access above before granting group Take.</p>
+                      : <div className="flex flex-wrap gap-x-4 gap-y-2">{congregationOutputs.filter((output) => device.outputScope?.includes(output.id)).map((output) => <label key={output.id} className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          aria-label={`${output.name} group Take access for ${device.name}`}
+                          disabled={!isHost}
+                          checked={device.groupTakeScope?.includes(output.id) ?? false}
+                          onChange={(event) => {
+                            const current = device.groupTakeScope ?? []
+                            const next = event.target.checked ? [...current, output.id] : current.filter((id) => id !== output.id)
+                            void useSettingsStore.getState().setRemoteDeviceGroupTakeScope(device.hash, next)
+                          }}
+                        />
+                        <span>{output.name}</span>
+                      </label>)}</div>}
+                    {device.groupTakeScope === undefined && <p role="status" className="mt-2 text-xs text-confidence-mid">No separate group Take grant is saved; group Take stays blocked until the host reviews it here.</p>}
                   </fieldset>}
                   {isHost && <>
                     <Button size="sm" variant="outline" aria-label={device.paused ? `Give control back to ${device.name}` : `Take back control from ${device.name}`} aria-pressed={device.paused === true} onClick={() => void setDeskControl(device.hash, device.paused !== true)}>{device.paused ? "Give control back" : "Take back control"}</Button>

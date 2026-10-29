@@ -123,7 +123,14 @@ mod tests {
     use crate::keys::Role;
 
     fn key(hash: &str, name: &str) -> KeyEntry {
-        KeyEntry { hash: hash.into(), name: name.into(), role: Role::Present, paused: false, output_scope: Vec::new() }
+        KeyEntry {
+            hash: hash.into(),
+            name: name.into(),
+            role: Role::Present,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        }
     }
 
     #[test]

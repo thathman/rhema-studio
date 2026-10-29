@@ -308,7 +308,7 @@ describe("settings store", () => {
   })
 
   it("does not show a remote role change as applied until the host acknowledges it", async () => {
-    const { useSettingsStore } = await import("./settings-store")
+    const { hasPendingRemotePolicyUpdate, useSettingsStore } = await import("./settings-store")
     const device = { hash: "device-hash", name: "Graphics tablet", paired_at: "2026-10-27T10:00:00Z", role: "viewer" as const, outputScope: ["sanctuary"] }
     useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
     let acknowledge!: () => void
@@ -316,15 +316,17 @@ describe("settings store", () => {
 
     const changed = useSettingsStore.getState().setRemoteDeviceRole(device.hash, "screens")
 
+    expect(hasPendingRemotePolicyUpdate()).toBe(true)
     expect(useSettingsStore.getState().remoteDevices[0]?.role).toBe("viewer")
     await Promise.resolve()
     expect(mockRemoteInvoke).toHaveBeenCalledWith("remote_set_keys", {
       shared: null,
-      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false, output_scope: [] }],
+      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false, output_scope: [], group_take_scope: [] }],
       requireAuth: true,
     })
     acknowledge()
     await expect(changed).resolves.toBe(true)
+    expect(hasPendingRemotePolicyUpdate()).toBe(false)
     expect(useSettingsStore.getState().remoteDevices[0]?.role).toBe("screens")
     expect(useSettingsStore.getState().remoteDevices[0]?.outputScope).toEqual([])
   })
@@ -341,7 +343,7 @@ describe("settings store", () => {
     await Promise.resolve()
     expect(mockRemoteInvoke).toHaveBeenCalledWith("remote_set_keys", {
       shared: null,
-      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false, output_scope: ["overflow", "sanctuary"] }],
+      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false, output_scope: ["overflow", "sanctuary"], group_take_scope: [] }],
       requireAuth: true,
     })
     acknowledge()
@@ -349,13 +351,38 @@ describe("settings store", () => {
     expect(useSettingsStore.getState().remoteDevices[0]?.outputScope).toEqual(["overflow", "sanctuary"])
   })
 
-  it("keeps role, pause and revoke state unchanged when the host rejects access updates", async () => {
+  it("keeps group Take grants separate, scoped to individual access, and host acknowledged", async () => {
     const { useSettingsStore } = await import("./settings-store")
+    const device = { hash: "device-hash", name: "Screens tablet", paired_at: "2026-10-27T10:00:00Z", role: "screens" as const, outputScope: ["sanctuary", "overflow"] }
+    useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
+    let acknowledge!: () => void
+    mockRemoteInvoke.mockImplementation(() => new Promise<void>((resolve) => { acknowledge = resolve }))
+
+    const changed = useSettingsStore.getState().setRemoteDeviceGroupTakeScope(device.hash, ["overflow", "stage", "sanctuary", "overflow"])
+    expect(useSettingsStore.getState().remoteDevices[0]?.groupTakeScope).toBeUndefined()
+    await Promise.resolve()
+    expect(mockRemoteInvoke).toHaveBeenCalledWith("remote_set_keys", {
+      shared: null,
+      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false, output_scope: ["sanctuary", "overflow"], group_take_scope: ["overflow", "sanctuary"] }],
+      requireAuth: true,
+    })
+    acknowledge()
+    await expect(changed).resolves.toBe(true)
+    expect(useSettingsStore.getState().remoteDevices[0]?.groupTakeScope).toEqual(["overflow", "sanctuary"])
+
+    mockRemoteInvoke.mockResolvedValue(undefined)
+    await useSettingsStore.getState().setRemoteDeviceOutputScope(device.hash, ["overflow"])
+    expect(useSettingsStore.getState().remoteDevices[0]?.groupTakeScope).toEqual(["overflow"])
+  })
+
+  it("keeps role, pause and revoke state unchanged when the host rejects access updates", async () => {
+    const { hasPendingRemotePolicyUpdate, useSettingsStore } = await import("./settings-store")
     const device = { hash: "device-hash", name: "Graphics tablet", paired_at: "2026-10-27T10:00:00Z", role: "viewer" as const }
     useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
     mockRemoteInvoke.mockRejectedValue(new Error("host unavailable"))
 
     await expect(useSettingsStore.getState().setRemoteDeviceRole(device.hash, "screens")).resolves.toBe(false)
+    expect(hasPendingRemotePolicyUpdate()).toBe(false)
     expect(useSettingsStore.getState().remoteDevices).toEqual([device])
     await expect(useSettingsStore.getState().setRemoteDevicePaused(device.hash, true)).resolves.toBe(false)
     expect(useSettingsStore.getState().remoteDevices).toEqual([device])

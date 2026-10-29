@@ -44,6 +44,7 @@ export const REMOTE_EVENTS = {
   clear_source: "remote:clear_source",
   restore_source: "remote:restore_source",
   take_scene: "remote:take_scene",
+  group_take_scene: "remote:group_take_scene",
   release_scene: "remote:release_scene",
   save_scene: "remote:save_scene",
   delete_scene: "remote:delete_scene",

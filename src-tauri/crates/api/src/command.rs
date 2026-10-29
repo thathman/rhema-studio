@@ -65,6 +65,10 @@ pub enum RemoteCommand {
     RestoreSource(String),
     /// Put a scene on a congregation output, or send the output back to its own feed.
     TakeScene(SceneTake),
+    /// Take one scene to an explicitly named group of congregation outputs.
+    /// The server requires a separate host grant for every target; this is never inferred from
+    /// the individual output scope.
+    GroupTakeScene(GroupSceneTake),
     ReleaseScene(String),
     /// Make or change a scene from a joined desk (#243 SC.16): the whole scene as the desk has it.
     /// The host checks the revision the desk saw, the desk's role and its approval rule
@@ -334,6 +338,57 @@ pub struct SceneTake {
     pub scene: String,
 }
 
+/// A single group Take request with its complete, explicit target set.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupSceneTake {
+    pub outputs: Vec<String>,
+    pub scene: String,
+    /// Server-stamped command identity for host-side result reporting.
+    #[serde(skip)]
+    pub(crate) request_id: Option<String>,
+    /// Server-stamped revisions; request JSON cannot set these fields.
+    #[serde(skip)]
+    pub(crate) seen: std::collections::HashMap<String, u64>,
+    /// Server-stamped service identity, used for a second host-side check before applying.
+    #[serde(skip)]
+    pub(crate) service: Option<String>,
+}
+
+impl GroupSceneTake {
+    /// Build a group Take from its full target set and scene ID.
+    #[must_use]
+    pub fn new(outputs: Vec<String>, scene: String) -> Self {
+        Self {
+            outputs,
+            scene,
+            request_id: None,
+            seen: std::collections::HashMap::new(),
+            service: None,
+        }
+    }
+
+    /// Reject malformed target sets before authorization or dispatch.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.scene.trim().is_empty() || self.scene.trim() != self.scene || self.scene.len() > 128
+        {
+            return Err("Choose a valid scene before a group Take");
+        }
+        if self.outputs.len() < 2 || self.outputs.len() > 32 {
+            return Err("A group Take needs between two and 32 outputs");
+        }
+        let mut unique = std::collections::HashSet::with_capacity(self.outputs.len());
+        for output in &self.outputs {
+            if output.trim().is_empty() || output.trim() != output || output.len() > 128 {
+                return Err("Choose valid output names before a group Take");
+            }
+            if !unique.insert(output.as_str()) {
+                return Err("A group Take cannot include an output more than once");
+            }
+        }
+        Ok(())
+    }
+}
+
 impl RemoteCommand {
     /// Crew talk, not a service command (Rhema Comms, #251): notices, their answers and the talk
     /// channel. These keep working for a desk the main desk has taken back control from.
@@ -380,6 +435,12 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::ClearSource(id) => write!(f, "clear_source({id})"),
             RemoteCommand::RestoreSource(id) => write!(f, "restore_source({id})"),
             RemoteCommand::TakeScene(t) => write!(f, "take_scene({} → {})", t.scene, t.output),
+            RemoteCommand::GroupTakeScene(t) => write!(
+                f,
+                "group_take_scene({} → {})",
+                t.scene,
+                t.outputs.join(", ")
+            ),
             RemoteCommand::ReleaseScene(o) => write!(f, "release_scene({o})"),
             RemoteCommand::SaveScene(s) => write!(f, "save_scene({})", s.id()),
             RemoteCommand::DeleteScene(d) => write!(f, "delete_scene({})", d.id),
@@ -676,7 +737,14 @@ mod tests {
             RemoteCommand::SongSection(1.into()),
             RemoteCommand::ClearSource("bible".into()),
             RemoteCommand::RestoreSource("bible".into()),
-            RemoteCommand::TakeScene(SceneTake { output: "main".into(), scene: "s".into() }),
+            RemoteCommand::TakeScene(SceneTake {
+                output: "main".into(),
+                scene: "s".into(),
+            }),
+            RemoteCommand::GroupTakeScene(GroupSceneTake::new(
+                vec!["sanctuary".into(), "overflow".into()],
+                "s".into(),
+            )),
             RemoteCommand::ReleaseScene("main".into()),
             RemoteCommand::SaveScene(SceneSave { scene: serde_json::json!({ "id": "s1" }), request: false }),
             RemoteCommand::DeleteScene(SceneDelete { id: "s1".into(), request: false }),
@@ -712,19 +780,53 @@ mod tests {
                 RemoteCommand::BibleNext => {}
                 RemoteCommand::BiblePrev => {}
                 RemoteCommand::AddToQueue => {}
-                RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => {}
-                RemoteCommand::BibleActivate(_) | RemoteCommand::BiblePreview(_) | RemoteCommand::SongShow(_) | RemoteCommand::SongPreview(_) | RemoteCommand::SongSection(_) | RemoteCommand::ClearSource(_) | RemoteCommand::RestoreSource(_) | RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {}
-                RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_) | RemoteCommand::StageMessage(_) | RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) => {}
-                RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => {}
+                RemoteCommand::EventNext
+                | RemoteCommand::EventPrev
+                | RemoteCommand::EventStart(_)
+                | RemoteCommand::EventOffset(_)
+                | RemoteCommand::TimerStart
+                | RemoteCommand::TimerPause
+                | RemoteCommand::TimerAdjust(_)
+                | RemoteCommand::Hold(_)
+                | RemoteCommand::Resume => {}
+                RemoteCommand::BibleActivate(_)
+                | RemoteCommand::BiblePreview(_)
+                | RemoteCommand::SongShow(_)
+                | RemoteCommand::SongPreview(_)
+                | RemoteCommand::SongSection(_)
+                | RemoteCommand::ClearSource(_)
+                | RemoteCommand::RestoreSource(_)
+                | RemoteCommand::TakeScene(_)
+                | RemoteCommand::GroupTakeScene(_)
+                | RemoteCommand::ReleaseScene(_) => {}
+                RemoteCommand::SaveScene(_)
+                | RemoteCommand::DeleteScene(_)
+                | RemoteCommand::StageMessage(_)
+                | RemoteCommand::ObsPreview(_)
+                | RemoteCommand::ObsTake
+                | RemoteCommand::ObsProgram(_) => {}
+                RemoteCommand::NoticeSend(_)
+                | RemoteCommand::NoticeAck(_)
+                | RemoteCommand::VoiceTalk(_)
+                | RemoteCommand::VoiceLeave
+                | RemoteCommand::VoiceChannels(_) => {}
                 RemoteCommand::AuxTimer(_) => {}
                 RemoteCommand::QueueRequest(_) | RemoteCommand::ObsRecord(_) | RemoteCommand::ObsTransition(_) => {}
             }
         }
 
-        assert_eq!(cmds.len(), 48);
-        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_adjust","value":1}"#).unwrap(), RemoteCommand::TimerAdjust(1));
-        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_start"}"#).unwrap(), RemoteCommand::TimerStart);
-        let off: RemoteCommand = serde_json::from_str(r#"{"command":"event_offset","value":-5}"#).unwrap();
+        assert_eq!(cmds.len(), 49);
+        assert_eq!(
+            serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_adjust","value":1}"#)
+                .unwrap(),
+            RemoteCommand::TimerAdjust(1)
+        );
+        assert_eq!(
+            serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_start"}"#).unwrap(),
+            RemoteCommand::TimerStart
+        );
+        let off: RemoteCommand =
+            serde_json::from_str(r#"{"command":"event_offset","value":-5}"#).unwrap();
         assert_eq!(off, RemoteCommand::EventOffset(-5));
         let ch: RemoteCommand = serde_json::from_str(r#"{"command":"voice_channels","value":{"listen":["stage"],"talk":"to:Ade bible"}}"#).unwrap();
         assert!(matches!(ch, RemoteCommand::VoiceChannels(VoiceChannelsIn { ref talk, ref levels, .. }) if talk == "to:Ade bible" && levels.is_empty()), "levels are optional (older desks)");
@@ -758,6 +860,26 @@ mod tests {
         assert_eq!(RemoteCommand::Hold(Some("tech".into())).to_string(), "hold(tech)");
         assert_eq!(RemoteCommand::Hold(None).to_string(), "hold");
         assert!(!RemoteCommand::Hold(None).is_comms() && !RemoteCommand::Resume.is_comms(), "a paused desk cannot hold the service");
+    }
+
+    #[test]
+    fn group_take_command_has_an_explicit_scene_and_target_set() {
+        let parsed: Result<RemoteCommand, _> = serde_json::from_str(
+            r#"{"command":"group_take_scene","value":{"outputs":["sanctuary","overflow"],"scene":"sermon"}}"#,
+        );
+        assert!(
+            parsed.is_ok(),
+            "group Take is one typed request with explicit targets"
+        );
+        let parsed = parsed.unwrap();
+        assert_eq!(
+            serde_json::to_value(&parsed).unwrap(),
+            serde_json::json!({"command":"group_take_scene","value":{"outputs":["sanctuary","overflow"],"scene":"sermon"}})
+        );
+        assert_eq!(
+            parsed.to_string(),
+            "group_take_scene(sermon → sanctuary, overflow)"
+        );
     }
 
     #[test]

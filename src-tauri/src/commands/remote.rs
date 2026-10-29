@@ -30,25 +30,99 @@ impl Default for RemoteKeys {
 #[derive(Debug, PartialEq, Eq)]
 enum RemoteAccessChange {
     Revoked,
-    RoleChanged { from: Role, to: Role },
-    OutputScopeChanged { added: Vec<String>, removed: Vec<String> },
+    RoleChanged {
+        from: Role,
+        to: Role,
+    },
+    OutputScopeChanged {
+        added: Vec<String>,
+        removed: Vec<String>,
+    },
+    GroupTakeScopeChanged {
+        added: Vec<String>,
+        removed: Vec<String>,
+    },
 }
 
 /// Changes suitable for a local audit log. Credentials and operator-entered device names stay out.
 fn remote_access_changes(previous: &[KeyEntry], current: &[KeyEntry]) -> Vec<RemoteAccessChange> {
     previous
         .iter()
-        .filter_map(|old| match current.iter().find(|new| new.hash == old.hash) {
-            Some(new) if new.role != old.role => Some(RemoteAccessChange::RoleChanged {
-                from: old.role,
-                to: new.role,
-            }),
-            Some(new) if new.output_scope != old.output_scope => Some(RemoteAccessChange::OutputScopeChanged {
-                added: new.output_scope.iter().filter(|id| !old.output_scope.contains(id)).cloned().collect(),
-                removed: old.output_scope.iter().filter(|id| !new.output_scope.contains(id)).cloned().collect(),
-            }),
-            Some(_) => None,
-            None => Some(RemoteAccessChange::Revoked),
+        .flat_map(
+            |old| match current.iter().find(|new| new.hash == old.hash) {
+                Some(new) => {
+                    let mut changes = Vec::new();
+                    if new.role != old.role {
+                        changes.push(RemoteAccessChange::RoleChanged {
+                            from: old.role,
+                            to: new.role,
+                        });
+                    }
+                    if new.output_scope != old.output_scope {
+                        changes.push(RemoteAccessChange::OutputScopeChanged {
+                            added: new
+                                .output_scope
+                                .iter()
+                                .filter(|id| !old.output_scope.contains(id))
+                                .cloned()
+                                .collect(),
+                            removed: old
+                                .output_scope
+                                .iter()
+                                .filter(|id| !new.output_scope.contains(id))
+                                .cloned()
+                                .collect(),
+                        });
+                    }
+                    if new.group_take_scope != old.group_take_scope {
+                        changes.push(RemoteAccessChange::GroupTakeScopeChanged {
+                            added: new
+                                .group_take_scope
+                                .iter()
+                                .filter(|id| !old.group_take_scope.contains(id))
+                                .cloned()
+                                .collect(),
+                            removed: old
+                                .group_take_scope
+                                .iter()
+                                .filter(|id| !new.group_take_scope.contains(id))
+                                .cloned()
+                                .collect(),
+                        });
+                    }
+                    changes
+                }
+                None => vec![RemoteAccessChange::Revoked],
+            },
+        )
+        .collect()
+}
+
+fn normalize_scope(scope: Vec<String>) -> Vec<String> {
+    let mut scope: Vec<_> = scope
+        .into_iter()
+        .filter(|id| !id.trim().is_empty() && id.trim() == id && id.len() <= 128)
+        .collect();
+    scope.sort();
+    scope.dedup();
+    scope
+}
+
+fn normalize_key_entries(devices: Vec<KeyEntry>) -> Vec<KeyEntry> {
+    devices
+        .into_iter()
+        .filter(|device| device.hash.len() == 64)
+        .map(|mut device| {
+            device.output_scope = normalize_scope(device.output_scope);
+            device.group_take_scope = if device.role == Role::Screens {
+                normalize_scope(device.group_take_scope)
+                    .into_iter()
+                    .filter(|id| device.output_scope.contains(id))
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            device
         })
         .collect()
 }
@@ -58,10 +132,26 @@ fn remote_access_changes(previous: &[KeyEntry], current: &[KeyEntry]) -> Vec<Rem
 /// any key exists, and when on with no keys every command is refused.
 /// An OBS companion unpaired, paused or given another role loses its camera reading at once (#209).
 #[tauri::command]
-pub fn remote_set_keys(app: AppHandle, remote: State<'_, RemoteKeys>, shared: Option<String>, devices: Vec<KeyEntry>, require_auth: Option<bool>) -> Result<usize, String> {
-    let mut entries: Vec<KeyEntry> = devices.into_iter().filter(|d| d.hash.len() == 64).collect();
-    if let Some(s) = shared.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
-        entries.push(KeyEntry { hash: hash_key(&s), name: "Shared key".into(), role: Role::Configure, paused: false, output_scope: Vec::new() });
+pub fn remote_set_keys(
+    app: AppHandle,
+    remote: State<'_, RemoteKeys>,
+    shared: Option<String>,
+    devices: Vec<KeyEntry>,
+    require_auth: Option<bool>,
+) -> Result<usize, String> {
+    let mut entries = normalize_key_entries(devices);
+    if let Some(s) = shared
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+    {
+        entries.push(KeyEntry {
+            hash: hash_key(&s),
+            name: "Shared key".into(),
+            role: Role::Configure,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        });
     }
     let n = entries.len();
     let previous = remote.keys.read().map_err(|e| e.to_string())?.entries.clone();
@@ -78,7 +168,16 @@ pub fn remote_set_keys(app: AppHandle, remote: State<'_, RemoteKeys>, shared: Op
                 from.as_str(),
                 to.as_str()
             ),
-            RemoteAccessChange::OutputScopeChanged { added, removed } => log::info!("Remote device output scope changed: added {:?}, removed {:?}", added, removed),
+            RemoteAccessChange::OutputScopeChanged { added, removed } => log::info!(
+                "Remote device output scope changed: added {:?}, removed {:?}",
+                added,
+                removed
+            ),
+            RemoteAccessChange::GroupTakeScopeChanged { added, removed } => log::info!(
+                "Remote device group Take scope changed: added {:?}, removed {:?}",
+                added,
+                removed
+            ),
             RemoteAccessChange::Revoked => log::info!("Remote access credential revoked"),
         }
     }
@@ -680,6 +779,259 @@ pub fn publish_live_state(state: State<'_, Mutex<HttpRuntime>>, json: String) ->
     Ok(())
 }
 
+fn valid_group_take_aspect_ratio(value: &str) -> bool {
+    let mut parts = value.split(':');
+    matches!(
+        (parts.next(), parts.next(), parts.next()),
+        (Some(width), Some(height), None)
+            if width.parse::<u32>().is_ok_and(|dimension| dimension > 0)
+                && height.parse::<u32>().is_ok_and(|dimension| dimension > 0)
+    )
+}
+
+fn group_take_output_revision_is_reserved(reviewed: u64, current: u64) -> bool {
+    reviewed.checked_add(1) == Some(current)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupTakeHostCheck {
+    pub service: String,
+    pub scene_updated_at: u64,
+    pub revisions: std::collections::HashMap<String, u64>,
+    pub outputs: std::collections::HashMap<String, GroupTakeOutputCheck>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupTakeOutputCheck {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub output_type: String,
+    pub role: String,
+    pub scene_id: Option<String>,
+    pub scene_revision: Option<u64>,
+    pub language: String,
+    pub aspect_ratio: String,
+    pub theme_id: String,
+    pub theme_for: std::collections::BTreeMap<String, String>,
+    pub shows: Vec<String>,
+    pub theme_names: std::collections::BTreeMap<String, String>,
+    pub theme_revisions: std::collections::BTreeMap<String, u64>,
+}
+
+/// Recheck the accepted Screens command against current host authority and revisions immediately
+/// before the single atomic store update. The event's identity and requested targets are server
+/// stamped; this command never accepts a client supplied grant.
+#[tauri::command]
+pub fn remote_group_take_preflight(
+    state: State<'_, Mutex<HttpRuntime>>,
+    remote: State<'_, RemoteKeys>,
+    by_id: String,
+    scene: String,
+    outputs: Vec<String>,
+    service: String,
+    seen: std::collections::HashMap<String, u64>,
+) -> Result<GroupTakeHostCheck, String> {
+    if by_id.len() != 64 || !by_id.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("The requesting desk could not be verified".into());
+    }
+    if scene.trim().is_empty() || scene.trim() != scene || scene.len() > 128 {
+        return Err("Choose a valid scene before a group Take".into());
+    }
+    if !(2..=32).contains(&outputs.len())
+        || outputs
+            .iter()
+            .any(|id| id.trim().is_empty() || id.trim() != id || id.len() > 128)
+    {
+        return Err("A group Take needs between two and 32 valid outputs".into());
+    }
+    let unique: std::collections::HashSet<_> = outputs.iter().collect();
+    if unique.len() != outputs.len() {
+        return Err("A group Take cannot include an output more than once".into());
+    }
+
+    {
+        let keys = remote.keys.read().map_err(|e| e.to_string())?;
+        let entry = keys
+            .entries
+            .iter()
+            .find(|entry| entry.hash == by_id)
+            .ok_or_else(|| "The requesting desk is no longer paired".to_string())?;
+        if entry.role != Role::Screens || entry.paused {
+            return Err("The requesting desk no longer has Screens control".into());
+        }
+        if outputs
+            .iter()
+            .any(|id| !entry.output_scope.contains(id) || !entry.group_take_scope.contains(id))
+        {
+            return Err("The host no longer grants group Take for every selected output".into());
+        }
+    }
+
+    let live = state.lock().map_err(|e| e.to_string())?.live.clone();
+    if live.service().as_deref() != Some(service.as_str()) {
+        return Err("The host has changed services; refresh before a group Take".into());
+    }
+    let current = live
+        .current()
+        .ok_or_else(|| "The host Live State is not ready".to_string())?;
+    let value: serde_json::Value = serde_json::from_str(&current)
+        .map_err(|_| "The host Live State could not be checked".to_string())?;
+    let snapshot_service = value
+        .pointer("/service/id")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    if snapshot_service != service {
+        return Err("The host Live State changed services; refresh before a group Take".into());
+    }
+    if value
+        .pointer("/program/rehearsal")
+        .and_then(serde_json::Value::as_bool)
+        == Some(true)
+    {
+        return Err("Group Take is unavailable during rehearsal".into());
+    }
+    let scene_exists = value
+        .get("scenes")
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|scenes| {
+            scenes.iter().any(|candidate| {
+                candidate.get("id").and_then(serde_json::Value::as_str) == Some(scene.as_str())
+            })
+        });
+    if !scene_exists {
+        return Err("That scene is no longer available; refresh before a group Take".into());
+    }
+    let scene_updated_at = value
+        .get("scenes")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|scenes| {
+            scenes.iter().find(|candidate| {
+                candidate.get("id").and_then(serde_json::Value::as_str) == Some(scene.as_str())
+            })
+        })
+        .and_then(|candidate| candidate.get("updatedAt"))
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| "The scene revision is unavailable; refresh before a group Take".to_string())?;
+    if outputs
+        .iter()
+        .any(|id| !KeyEntry::is_congregation_output(Some(&current), id))
+    {
+        return Err("Group Take is limited to current congregation outputs".into());
+    }
+
+    let scene_part = format!("scene:{scene}");
+    let scene_seen = seen
+        .get(&scene_part)
+        .ok_or_else(|| "Scene revision is missing; refresh before a group Take".to_string())?;
+    if live.revision(&scene_part) != Some(*scene_seen) {
+        return Err("The scene changed since review; refresh before a group Take".into());
+    }
+    let mut revisions = std::collections::HashMap::with_capacity(outputs.len() + 1);
+    revisions.insert(scene_part, *scene_seen);
+    let live_outputs = value
+        .get("outputs")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "The host output list is unavailable; refresh before a group Take".to_string())?;
+    let mut output_checks = std::collections::HashMap::with_capacity(outputs.len());
+    for id in outputs {
+        let part = format!("output:{id}");
+        let seen_revision = seen.get(&part).ok_or_else(|| {
+            format!("Output {id} revision is missing; refresh before a group Take")
+        })?;
+        let current_revision = live.revision(&part).ok_or_else(|| {
+            format!("Output {id} revision is unavailable; refresh before a group Take")
+        })?;
+        if !group_take_output_revision_is_reserved(*seen_revision, current_revision) {
+            return Err(format!(
+                "Output {id} changed since review; refresh before a group Take"
+            ));
+        }
+        revisions.insert(part, current_revision);
+        let output = live_outputs
+            .iter()
+            .find(|candidate| candidate.get("id").and_then(serde_json::Value::as_str) == Some(id))
+            .ok_or_else(|| format!("Output {id} is no longer available; refresh before a group Take"))?;
+        let name = output
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| format!("Output {id} name is unavailable; refresh before a group Take"))?
+            .to_string();
+        let output_type = output
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| matches!(*value, "display" | "ndi" | "browser"))
+            .ok_or_else(|| format!("Output {id} type is unavailable; refresh before a group Take"))?
+            .to_string();
+        let role = output
+            .get("role")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| *value == "congregation")
+            .ok_or_else(|| format!("Output {id} is no longer a congregation output"))?
+            .to_string();
+        let impact = output
+            .get("impact")
+            .ok_or_else(|| format!("Output {id} impact is unavailable; refresh before a group Take"))?;
+        let language = impact
+            .get("language")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| matches!(*value, "both" | "first" | "second"))
+            .ok_or_else(|| format!("Output {id} language is unavailable; refresh before a group Take"))?
+            .to_string();
+        let aspect_ratio = impact
+            .get("aspectRatio")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| valid_group_take_aspect_ratio(value))
+            .ok_or_else(|| format!("Output {id} frame format is unavailable; refresh before a group Take"))?
+            .to_string();
+        let theme_id = impact
+            .get("themeId")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| format!("Output {id} look is unavailable; refresh before a group Take"))?
+            .to_string();
+        let theme_for = impact
+            .get("themeFor")
+            .cloned()
+            .and_then(|value| serde_json::from_value(value).ok())
+            .ok_or_else(|| format!("Output {id} content looks are unavailable; refresh before a group Take"))?;
+        let shows = impact
+            .get("shows")
+            .and_then(serde_json::Value::as_array)
+            .filter(|values| values.iter().all(serde_json::Value::is_string))
+            .map(|values| values.iter().filter_map(serde_json::Value::as_str).map(str::to_string).collect())
+            .ok_or_else(|| format!("Output {id} subscriptions are unavailable; refresh before a group Take"))?;
+        let theme_names = impact
+            .get("themeNames")
+            .cloned()
+            .and_then(|value| serde_json::from_value(value).ok())
+            .ok_or_else(|| format!("Output {id} look names are unavailable; refresh before a group Take"))?;
+        let theme_revisions = impact
+            .get("themeRevisions")
+            .cloned()
+            .and_then(|value| serde_json::from_value(value).ok())
+            .ok_or_else(|| format!("Output {id} look revisions are unavailable; refresh before a group Take"))?;
+        output_checks.insert(id.clone(), GroupTakeOutputCheck {
+            name,
+            output_type,
+            role,
+            scene_id: output.get("sceneId").and_then(serde_json::Value::as_str).map(str::to_string),
+            scene_revision: output.get("sceneRevision").and_then(serde_json::Value::as_u64),
+            language,
+            aspect_ratio,
+            theme_id,
+            theme_for,
+            shows,
+            theme_names,
+            theme_revisions,
+        });
+    }
+
+    Ok(GroupTakeHostCheck { service, scene_updated_at, revisions, outputs: output_checks })
+}
+
 #[derive(serde::Deserialize)]
 pub struct FeedEntry {
     id: String,
@@ -815,6 +1167,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn group_take_aspect_ratio_accepts_only_positive_dimensions() {
+        assert!(valid_group_take_aspect_ratio("16:9"));
+        assert!(valid_group_take_aspect_ratio("4:3"));
+        assert!(!valid_group_take_aspect_ratio("0:9"));
+        assert!(!valid_group_take_aspect_ratio("16:0"));
+        assert!(!valid_group_take_aspect_ratio("16:9:4"));
+        assert!(!valid_group_take_aspect_ratio("wide"));
+    }
+
+    #[test]
+    fn group_take_preflight_accepts_only_the_single_reserved_output_revision() {
+        assert!(group_take_output_revision_is_reserved(7, 8));
+        assert!(!group_take_output_revision_is_reserved(7, 7));
+        assert!(!group_take_output_revision_is_reserved(7, 9));
+        assert!(!group_take_output_revision_is_reserved(u64::MAX, u64::MAX));
+    }
+
+    #[test]
     fn remote_auth_health_reports_only_effective_gate_and_credential_count() {
         let keys = new_key_set();
         assert_eq!(
@@ -828,6 +1198,7 @@ mod tests {
             role: Role::Present,
             paused: false,
             output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
         });
         let status = remote_auth_status(&keys).unwrap();
         assert!(status.required);
@@ -842,6 +1213,7 @@ mod tests {
             role,
             paused: false,
             output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
         };
         let previous = [
             entry('a', "Private phone label", Role::Configure),
@@ -866,6 +1238,45 @@ mod tests {
             ]
         );
         assert!(remote_access_changes(&current, &current).is_empty());
+    }
+
+    #[test]
+    fn group_take_grants_are_normalized_and_audited_separately() {
+        let mut device = KeyEntry {
+            hash: "a".repeat(64),
+            name: "Screens desk".into(),
+            role: Role::Screens,
+            paused: false,
+            output_scope: vec!["sanctuary".into(), "sanctuary".into()],
+            group_take_scope: vec!["sanctuary".into(), "overflow".into(), "overflow".into()],
+        };
+        let prior = normalize_key_entries(vec![device.clone()]);
+        assert_eq!(prior[0].output_scope, ["sanctuary"]);
+        assert_eq!(prior[0].group_take_scope, ["sanctuary"]);
+
+        device.output_scope.push("overflow".into());
+        device.group_take_scope.push("overflow".into());
+        let next = normalize_key_entries(vec![device]);
+        assert_eq!(next[0].group_take_scope, ["overflow", "sanctuary"]);
+        assert_eq!(
+            remote_access_changes(&prior, &next),
+            [
+                RemoteAccessChange::OutputScopeChanged {
+                    added: vec!["overflow".into()],
+                    removed: vec![]
+                },
+                RemoteAccessChange::GroupTakeScopeChanged {
+                    added: vec!["overflow".into()],
+                    removed: vec![]
+                },
+            ]
+        );
+        assert!(normalize_key_entries(vec![KeyEntry {
+            role: Role::Viewer,
+            ..next[0].clone()
+        }])[0]
+            .group_take_scope
+            .is_empty());
     }
 
     #[test]

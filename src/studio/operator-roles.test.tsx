@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { invoke } from "@tauri-apps/api/core"
 import type { Verse } from "@/types"
 
 const verse = (b: number, c: number, v: number): Verse => ({ id: 0, translation_id: 1, book_number: b, book_name: "Romans", book_abbreviation: "", chapter: c, verse: v, text: `text ${c}:${v}` })
@@ -21,6 +22,7 @@ import type { LiveStateV1 } from "@/lib/live-state"
 const hymn = { kind: "lyric" as const, content: "hymn" as const, reference: "Amazing Grace · Verse 1", segments: [], lines: ["Amazing grace"] }
 
 beforeEach(() => {
+  vi.mocked(invoke).mockClear()
   useBibleStore.setState({ books: [{ id: 45, translation_id: 1, book_number: 45, name: "Romans", abbreviation: "Rom", testament: "NT" }], activeTranslationId: 1, secondaryTranslationId: null, overrideServiceTranslations: false, translations: [{ id: 1, abbreviation: "KJV", title: "", language: "en", is_copyrighted: false, is_downloaded: true }] })
   useBroadcastStore.setState({ isLive: false, liveVerse: null, liveItemId: null, sources: {}, rehearsal: false, rehearsalReturn: null, cleared: false, heldLive: null })
 })
@@ -95,5 +97,77 @@ describe("the main desk's operator list", () => {
     expect(useSettingsStore.getState().remoteDevices).toHaveLength(1)
     expect(useSettingsStore.getState().remoteDevices[0].paused).toBeUndefined()
     expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main desk gave control back to Desk C")
+  })
+})
+
+describe("a Screens group Take", () => {
+  it("keeps single Take as the default and sends one exact request only after review", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const live: LiveStateV1 = {
+      v: 1,
+      at: Date.now(),
+      church: "Grace Chapel",
+      service: { id: "service-1", title: "Sunday" },
+      program: { onAir: true, reference: "Welcome", rehearsal: false },
+      sources: [],
+      event: { mode: "screens", currentId: null },
+      rundown: [],
+      timing: null,
+      stageMessage: "",
+      revisions: { "scene:sermon": 4, "output:sanctuary": 8, "output:overflow": 3 },
+      scenes: [{ id: "sermon", name: "Sermon", layers: [{ id: "bible", name: "Bible", kind: "feed", shows: ["bible"], box: { x: 2, y: 65, w: 96, h: 30 }, opacity: 1, visible: true }] }, { id: "welcome", name: "Welcome" }],
+      outputs: [
+        { id: "sanctuary", name: "Sanctuary", sceneId: "welcome", sceneName: "Welcome", impact: { language: "first", aspectRatio: "16:9", themeId: "classic-dark", themeFor: { bible: "classic-dark" }, shows: ["bible"], themeNames: { "classic-dark": "Classic Dark" }, themeRevisions: { "classic-dark": 1 } } },
+        { id: "overflow", name: "Overflow", sceneId: null, impact: { language: "both", aspectRatio: "4:3", themeId: "classic-dark", themeFor: {}, shows: ["song"], themeNames: { "classic-dark": "Classic Dark" }, themeRevisions: { "classic-dark": 1 } } },
+      ],
+      notices: [],
+    }
+    useJoin.setState({ status: "connected", me: { name: "Screens desk", role: "screens", outputScope: ["sanctuary", "overflow"], groupTakeScope: ["sanctuary", "overflow"] }, live, error: null, paused: false, note: null })
+    const el = document.createElement("div")
+    const root = createRoot(el)
+    await act(async () => root.render(<OperatorsPanel />))
+
+    expect([...el.querySelectorAll("button")].some((button) => button.textContent?.includes("Take Sermon"))).toBe(true)
+    const groupToggle = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Choose group targets"))
+    expect(groupToggle).toBeDefined()
+    expect(groupToggle?.disabled).toBe(false)
+    await act(async () => groupToggle!.click())
+    await act(async () => el.querySelector<HTMLInputElement>('input[aria-label="Include Sanctuary in group Take"]')!.click())
+    await act(async () => el.querySelector<HTMLInputElement>('input[aria-label="Include Overflow in group Take"]')!.click())
+    expect(vi.mocked(invoke).mock.calls.some(([command]) => command === "join_command")).toBe(false)
+    await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Review 2 outputs"))!.click())
+
+    expect(document.body.textContent).toContain("Sanctuary · Current Program: Welcome → Take: Sermon")
+    expect(document.body.textContent).toContain("Overflow · Current Program: its own feed → Take: Sermon")
+    expect(document.body.textContent).toContain("Language: First language · Frame: 16:9")
+    expect(document.body.textContent).toContain("Looks: Default: Classic Dark · Bible: Classic Dark")
+    expect(document.body.textContent).toContain("Scene feed layers follow: Bible")
+    expect(document.body.textContent).toContain("Layout sketch only. Source frames and receiver status are separate.")
+    expect(vi.mocked(invoke).mock.calls.some(([command]) => command === "join_command")).toBe(false)
+    await act(async () => [...document.body.querySelectorAll("button")].find((button) => button.textContent?.includes("Take these 2 outputs"))!.click())
+
+    const calls = vi.mocked(invoke).mock.calls.filter(([command]) => command === "join_command")
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.[1]).toMatchObject({
+      command: {
+        command: "group_take_scene",
+        value: { outputs: ["sanctuary", "overflow"], scene: "sermon" },
+        id: expect.any(String),
+      },
+      service: "service-1",
+    })
+    const id = (calls[0]?.[1] as { command: { id: string } }).command.id
+    await act(async () => useJoin.setState({ live: { ...live, groupTakeResults: [{ requestId: id, scene: "sermon", at: Date.now(), outputs: [
+      { id: "sanctuary", name: "Sanctuary", status: "pending" },
+      { id: "overflow", name: "Overflow", status: "pending" },
+    ] }] } }))
+    expect(el.textContent).toContain("Waiting for the host result.")
+    expect(el.textContent).not.toContain("Not applied on host")
+    await act(async () => useJoin.setState({ live: { ...live, groupTakeResults: [{ requestId: id, scene: "sermon", at: Date.now(), by: "Screens desk", outputs: [
+      { id: "sanctuary", name: "Sanctuary", status: "host-applied" },
+      { id: "overflow", name: "Overflow", status: "host-applied" },
+    ] }] } }))
+    expect(el.textContent).toContain("Applied on host; receiver confirmation is not available.")
+    await act(async () => root.unmount())
   })
 })

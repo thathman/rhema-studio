@@ -4,6 +4,7 @@ import { validTimeZone } from "@/lib/church-time"
 import { PinIcon } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { formatMs } from "@/lib/timer"
 import { setDeskControl } from "@/lib/desk-control"
@@ -32,6 +33,7 @@ import { mayRunAuxTimer } from "@/stores/aux-timers-store"
 import { timeChangeWords } from "@/stores/time-change-store"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { openPermissions } from "@/studio/permissions/navigation"
+import { validAspectRatioLabel } from "@/lib/group-take"
 
 // The join form has its own module so Rhema Studio Companion (#209) shows it without the studio's desks.
 export { JoinForm }
@@ -287,7 +289,7 @@ function JoinedDesk() {
           {desks.includes("cameras") && <CameraDesk live={live} />}
           {desks.includes("outputs") && deskLive && <OutputMap live={deskLive} />}
           {desks.includes("outputs") && deskLive && <ScreenSources live={deskLive} />}
-          {desks.includes("scenes") && deskLive && <ScenesDesk live={deskLive} role={me?.role ?? "present"} outputScope={me?.outputScope ?? []} />}
+          {desks.includes("scenes") && deskLive && <ScenesDesk live={deskLive} role={me?.role ?? "present"} outputScope={me?.outputScope ?? []} groupTakeScope={me?.groupTakeScope ?? []} />}
           {desks.includes("stage") && <StageDesk live={live} />}
           {desks.includes("obs") && <ObsDesk live={live} />}
           <DeskAuxTimers live={live} role={me?.role ?? "present"} stale={fresh.stale} />
@@ -574,15 +576,24 @@ function PrepareDesk() {
  * operator); make or change a scene through the host (#243 SC.16) for a desk that may (a camera
  * desk: its camera boxes only).
  */
-function ScenesDesk({ live, role, outputScope }: { live: LiveStateV1; role: string; outputScope: string[] }) {
+function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveStateV1; role: string; outputScope: string[]; groupTakeScope: string[] }) {
   const ok = useCanSend()
+  const connectionStatus = useJoin((s) => s.status)
   const [outputId, setOutputId] = useState("")
+  const [groupMode, setGroupMode] = useState(false)
+  const [groupTargets, setGroupTargets] = useState<string[]>([])
+  const [groupSceneId, setGroupSceneId] = useState("")
+  const [reviewGroupTake, setReviewGroupTake] = useState(false)
   // The scene open in the editor: its id, "new", or none.
   const [editing, setEditing] = useState<string | null>(null)
   const [said, setSaid] = useState("")
   const congregationOutputs = live.outputs
   const outputs = role === "screens" ? congregationOutputs.filter((o) => outputScope.includes(o.id)) : congregationOutputs
   const output = outputs.find((o) => o.id === outputId) ?? outputs[0]
+  const groupOutputs = role === "screens" ? outputs.filter((o) => groupTakeScope.includes(o.id)) : []
+  const selectedGroupOutputs = groupOutputs.filter((o) => groupTargets.includes(o.id))
+  const groupImpactReady = selectedGroupOutputs.length >= 2 && selectedGroupOutputs.every((candidate) => !!candidate.impact && validAspectRatioLabel(candidate.impact.aspectRatio))
+  const groupScene = live.scenes.find((s) => s.id === groupSceneId) ?? live.scenes[0]
   const send = useJoin.getState().send
   // A camera desk and an editor change scenes but never put one on a screen.
   const takes = role !== "camera" && role !== "editor"
@@ -590,15 +601,47 @@ function ScenesDesk({ live, role, outputScope }: { live: LiveStateV1; role: stri
   const cameraOnly = role === "camera"
   const open = editing === "new" ? null : live.scenes.find((s) => s.id === editing)
   const done = (words: string) => { setEditing(null); setSaid(words) }
+  useEffect(() => {
+    setGroupMode(false)
+    setGroupTargets([])
+    setReviewGroupTake(false)
+  }, [connectionStatus, live.service?.id])
+  const askForGroupTake = () => {
+    if (selectedGroupOutputs.length < 2) {
+      setSaid("Select at least two granted outputs before reviewing a group Take.")
+      return
+    }
+    if (!groupScene) {
+      setSaid("The host has no scene available to Take.")
+      return
+    }
+    if (!groupImpactReady) {
+      setSaid("The host has not supplied current language, look, and frame details for every output. Refresh the desk before reviewing this Take.")
+      return
+    }
+    setReviewGroupTake(true)
+  }
+  const confirmGroupTake = async () => {
+    if (!groupScene || selectedGroupOutputs.length < 2) return
+    const requestId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `group-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const result = await send({ command: "group_take_scene", value: { outputs: selectedGroupOutputs.map((o) => o.id), scene: groupScene.id }, id: requestId })
+    if (result.ok) {
+      setSaid(result.note ?? "The host accepted the request. Waiting for per-output host results.")
+      setReviewGroupTake(false)
+      setGroupTargets([])
+    } else {
+      setSaid(`Group Take not sent: ${result.error}`)
+    }
+  }
   return (
     <section aria-label="Scenes desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
       {output ? (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold">Scenes on</span>
-          <select aria-label="Congregation output" value={output.id} onChange={(e) => setOutputId(e.target.value)} className="h-7 rounded-md border border-input bg-card px-1.5">
-            {outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
-          <span className="text-muted-foreground">shows {output.sceneName ?? live.scenes.find((s) => s.id === output.sceneId)?.name ?? "its own feed"}</span>
+          {!groupMode && <><span className="font-semibold">Scenes on</span>
+            <select aria-label="Congregation output" value={output.id} onChange={(e) => setOutputId(e.target.value)} className="h-7 rounded-md border border-input bg-card px-1.5">
+              {outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+            <span className="text-muted-foreground">shows {output.sceneName ?? live.scenes.find((s) => s.id === output.sceneId)?.name ?? "its own feed"}</span></>}
         </div>
       ) : (
         <p role={role === "screens" ? "status" : undefined} className="text-muted-foreground">{role === "screens" ? "No congregation output is assigned to this desk. Ask the main host to review output scope in Permissions." : "The host has no congregation output."}</p>
@@ -606,7 +649,7 @@ function ScenesDesk({ live, role, outputScope }: { live: LiveStateV1; role: stri
       <ul className="flex flex-wrap gap-1.5">
         {live.scenes.map((s) => (
           <li key={s.id} className="flex items-center gap-0.5">
-            {takes && output && <Button size="sm" variant={s.id === output.sceneId ? "default" : "outline"} disabled={!ok || (s.id === output.sceneId && !output.sceneNeedsUpdate)} onClick={() => void send({ command: "take_scene", value: { output: output.id, scene: s.id } })}>{s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} {s.name}</Button>}
+            {takes && output && !groupMode && <Button size="sm" variant={s.id === output.sceneId ? "default" : "outline"} disabled={!ok || (s.id === output.sceneId && !output.sceneNeedsUpdate)} onClick={() => void send({ command: "take_scene", value: { output: output.id, scene: s.id } })}>{s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} {s.name}</Button>}
             {!takes && <span className="px-1 font-medium">{s.name}</span>}
             {edits && deskEditable(s) && <Button size="sm" variant="ghost" aria-label={cameraOnly ? `Change the cameras in ${s.name}` : `Edit ${s.name}`} disabled={!ok} onClick={() => { setSaid(""); setEditing(s.id) }}>{cameraOnly ? "Cameras…" : "Edit…"}</Button>}
           </li>
@@ -614,12 +657,105 @@ function ScenesDesk({ live, role, outputScope }: { live: LiveStateV1; role: stri
         {live.scenes.length === 0 && <li className="text-muted-foreground">No scenes yet{edits && !cameraOnly ? "" : ": they are made on the host (Live → Production tools → Scenes)"}.</li>}
       </ul>
       <div className="flex flex-wrap gap-2">
-        {takes && output?.sceneId && <Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "release_scene", value: output.id })}>Back to its own feed</Button>}
+        {takes && output?.sceneId && !groupMode && <Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "release_scene", value: output.id })}>Back to its own feed</Button>}
         {/* An older host says nothing about approvals and takes no scenes from a desk. */}
         {edits && !cameraOnly && editing === null && live.requireApproval !== undefined && <Button size="sm" variant="outline" disabled={!ok} onClick={() => { setSaid(""); setEditing("new") }}>New scene…</Button>}
       </div>
+      {role === "screens" && <section aria-label="Group Take" className="flex flex-col gap-2 rounded-md border border-border bg-muted/20 p-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-semibold">Group Take</p>
+          <span className="text-xs text-muted-foreground">Individual Take is the default. Group mode is temporary and never carries across reconnects.</span>
+          <Button size="sm" variant={groupMode ? "default" : "outline"} disabled={groupOutputs.length < 2} aria-pressed={groupMode} onClick={() => { setGroupMode((value) => !value); setGroupTargets([]); setSaid("") }}>{groupMode ? "Exit group mode" : "Choose group targets…"}</Button>
+        </div>
+        {groupOutputs.length < 2 && <p role="status" className="text-xs text-muted-foreground">A separate host grant for at least two congregation outputs is required before group Take can be used.</p>}
+        {groupMode && groupOutputs.length >= 2 && <>
+          <fieldset className="flex flex-wrap gap-x-4 gap-y-2">
+            <legend className="mb-2 text-xs font-semibold">Choose exact outputs</legend>
+            {groupOutputs.map((candidate) => <label key={candidate.id} className="flex items-center gap-2 text-xs">
+              <input type="checkbox" aria-label={`Include ${candidate.name} in group Take`} checked={groupTargets.includes(candidate.id)} onChange={(event) => setGroupTargets((current) => event.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id))} />
+              <span>{candidate.name}</span>
+            </label>)}
+          </fieldset>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-xs"><span>Scene for selected outputs</span>
+              <select aria-label="Scene for group Take" value={groupScene?.id ?? ""} onChange={(event) => setGroupSceneId(event.target.value)} className="h-8 rounded-md border border-input bg-card px-2">
+                {live.scenes.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+              </select>
+            </label>
+            <Button size="sm" disabled={!ok || !groupScene || selectedGroupOutputs.length < 2} onClick={askForGroupTake}>Review {selectedGroupOutputs.length || "group"} outputs…</Button>
+            {selectedGroupOutputs.length < 2 && <span role="status" className="text-xs text-muted-foreground">Select at least two outputs.</span>}
+          </div>
+        </>}
+      </section>}
+      {role === "screens" && live.groupTakeResults && live.groupTakeResults.length > 0 && <section aria-label="Group Take results" className="rounded-md border border-border p-2.5">
+        <p className="mb-1 font-semibold">Recent group Take results</p>
+        <ul className="flex flex-col gap-2">{live.groupTakeResults.slice(0, 5).map((result) => <li key={result.requestId} className="rounded-sm bg-muted/30 p-2 text-xs">
+          <p className="font-semibold">{live.scenes.find((candidate) => candidate.id === result.scene)?.name ?? result.scene}{result.by ? ` · by ${result.by}` : ""}</p>
+          <ul className="mt-1 flex flex-col gap-1">{result.outputs.map((out) => <li key={out.id} role="status"><span className="font-medium">{out.name}:</span> {out.status === "pending" ? (Date.now() - result.at > 10_000 ? "No host result received yet. Check Current Program before retrying." : "Waiting for the host result.") : out.status === "host-applied" ? "Applied on host; receiver confirmation is not available." : `Not applied on host${out.reason ? `: ${out.reason}` : "."}`}</li>)}</ul>
+        </li>)}</ul>
+      </section>}
       {said && <p role="status" className="text-muted-foreground">{said}</p>}
+      <Dialog open={reviewGroupTake} onOpenChange={setReviewGroupTake}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Review this group Take</DialogTitle>
+            <DialogDescription>The host rechecks access, service, scene, and every output revision before applying one request. Review each output’s Current Program, language, look, source followers, and scene layout. The layout sketch does not show live source frames or receiver status.</DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border border-border bg-muted/30 p-3">
+            <p className="font-semibold">{groupScene?.name ?? "Scene"} to {selectedGroupOutputs.length} outputs</p>
+            <ul className="mt-2 grid gap-3">{selectedGroupOutputs.map((candidate) => <GroupTakeOutputReview key={candidate.id} output={candidate} scene={groupScene!} live={live} />)}</ul>
+          </div>
+          {said.startsWith("Group Take not sent:") && <p role="alert" className="text-destructive">{said}</p>}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setReviewGroupTake(false)}>Cancel</Button>
+            <Button type="button" disabled={!ok || !groupScene || !groupImpactReady} onClick={() => void confirmGroupTake()}>Take these {selectedGroupOutputs.length} outputs</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {editing !== null && (editing === "new" || open) && <DeskSceneEditor key={editing} live={live} scene={open ?? null} cameraOnly={cameraOnly} onDone={done} />}
     </section>
   )
+}
+
+function GroupTakeOutputReview({ output, scene, live }: { output: LiveStateV1["outputs"][number]; scene: LiveStateV1["scenes"][number]; live: LiveStateV1 }) {
+  const impact = output.impact
+  const ratio = impact && validAspectRatioLabel(impact.aspectRatio) ? impact.aspectRatio.replace(":", " / ") : "16 / 9"
+  const layers = scene.layers?.filter((layer) => layer.visible) ?? []
+  const currentProgram = output.sceneName ?? live.scenes.find((candidate) => candidate.id === output.sceneId)?.name ?? "its own feed"
+  const lookRows = impact ? [
+    ["Default", impact.themeId],
+    ...Object.entries(impact.themeFor).map(([content, id]) => [groupLabel(content), id]),
+    ...layers.flatMap((layer) => layer.themeId ? [[layer.name, layer.themeId]] : []),
+  ] as [string, string][] : []
+  const uniqueLooks = [...new Map(lookRows.map(([label, id]) => [`${label}:${id}`, [label, id] as [string, string]])).values()]
+  const sceneFollowers = [...new Set(layers.filter((layer) => layer.kind === "feed").flatMap((layer) => layer.shows?.length ? layer.shows : ["current program"]))]
+  const language = impact?.language === "both" ? "Both language variants" : impact?.language === "first" ? "First language" : impact?.language === "second" ? "Second language" : "Unavailable"
+
+  return (
+    <li className="grid gap-2 rounded-md border border-border bg-background p-3 md:grid-cols-[minmax(0,1fr)_minmax(180px,0.65fr)]">
+      <div className="flex min-w-0 flex-col gap-2 text-xs">
+        <p><span className="font-semibold">{output.name}</span> · <span className="font-medium">Current Program:</span> {currentProgram} → <span className="font-medium">Take:</span> {scene.name}</p>
+        <p><span className="font-medium">Language:</span> {language} · <span className="font-medium">Frame:</span> {impact?.aspectRatio ?? "Unavailable"}</p>
+        <p><span className="font-medium">Looks:</span> {uniqueLooks.length ? uniqueLooks.map(([label, id]) => `${label}: ${impact?.themeNames[id] ?? id}`).join(" · ") : "Unavailable"}</p>
+        <p><span className="font-medium">Output follows:</span> {impact?.shows.length ? impact.shows.map(groupLabel).join(", ") : "its current program"}</p>
+        <p><span className="font-medium">Scene feed layers follow:</span> {sceneFollowers.length ? sceneFollowers.map(groupLabel).join(", ") : "no source feed layers"}</p>
+        {output.sceneNeedsUpdate && <p className="text-amber-700">The current scene has a newer saved revision than this Program.</p>}
+      </div>
+      <div className="min-w-0">
+        <p className="mb-1 text-xs font-medium">Scene layout sketch</p>
+        <div role="img" aria-label={`Schematic layout of ${scene.name} for ${output.name}`} className="relative overflow-hidden rounded border border-border bg-slate-950" style={{ aspectRatio: ratio, backgroundColor: scene.background && scene.background !== "transparent" ? scene.background : undefined }}>
+          {layers.map((layer) => {
+            const box = layer.box ?? { x: 0, y: 0, w: 100, h: 100 }
+            return <div key={layer.id} className="absolute flex items-center justify-center overflow-hidden rounded border border-white/60 bg-black/45 px-1 text-center text-[9px] font-medium leading-tight text-white" style={{ left: `${box.x}%`, top: `${box.y}%`, width: `${box.w}%`, height: `${box.h}%`, opacity: layer.opacity ?? 1 }}><span>{layer.name}<br />{groupLabel(layer.kind)}</span></div>
+          })}
+          {layers.length === 0 && <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white">No layer layout supplied</span>}
+        </div>
+        <p className="mt-1 text-[10px] text-muted-foreground">Layout sketch only. Source frames and receiver status are separate.</p>
+      </div>
+    </li>
+  )
+}
+
+function groupLabel(value: string): string {
+  return value.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]/g, " ").replace(/\b\w/g, (character) => character.toUpperCase())
 }

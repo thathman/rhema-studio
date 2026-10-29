@@ -349,7 +349,14 @@ mod tests {
     }
 
     fn keys_for_role_test(keys: &KeySet, token: &str) {
-        keys.write().unwrap().entries.push(KeyEntry { hash: crate::keys::hash_key(token), name: "phone".into(), role: crate::keys::Role::Present, paused: false, output_scope: Vec::new() });
+        keys.write().unwrap().entries.push(KeyEntry {
+            hash: crate::keys::hash_key(token),
+            name: "phone".into(),
+            role: crate::keys::Role::Present,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+        });
     }
 
     #[test]
@@ -478,6 +485,7 @@ mod tests {
             role: crate::keys::Role::Screens,
             paused: false,
             output_scope: vec!["sanctuary".into(), "stage".into()],
+            group_take_scope: Vec::new(),
         });
         keys.write().unwrap().require_auth = true;
         let live = new_live_hub();
