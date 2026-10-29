@@ -217,11 +217,11 @@ mod tests {
     ]}"##;
 
     fn save(scene: serde_json::Value) -> RemoteCommand {
-        RemoteCommand::SaveScene(SceneSave { scene, request: false })
+        RemoteCommand::SaveScene(SceneSave { scene, request: false, base_revision: None })
     }
 
     fn delete(id: &str) -> RemoteCommand {
-        RemoteCommand::DeleteScene(SceneDelete { id: id.into(), request: false })
+        RemoteCommand::DeleteScene(SceneDelete { id: id.into(), request: false, base_revision: None })
     }
 
     fn scene_in(live: &str, id: &str) -> serde_json::Value {

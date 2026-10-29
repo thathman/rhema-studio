@@ -312,6 +312,10 @@ pub struct SceneSave {
     /// Set by the host's server only, never by a desk: the change waits for the main desk to accept it.
     #[serde(default, skip_deserializing)]
     pub request: bool,
+    /// Set by the host's server only: the scene's revision as the server tracked it when it made
+    /// this a request, so an approval is applied only to the scene it was made against.
+    #[serde(default, skip_deserializing)]
+    pub base_revision: Option<u64>,
 }
 
 /// A scene to delete, by id.
@@ -321,6 +325,8 @@ pub struct SceneDelete {
     /// As for `SceneSave`: set by the host's server only.
     #[serde(default, skip_deserializing)]
     pub request: bool,
+    #[serde(default, skip_deserializing)]
+    pub base_revision: Option<u64>,
 }
 
 impl SceneSave {
@@ -746,8 +752,8 @@ mod tests {
                 "s".into(),
             )),
             RemoteCommand::ReleaseScene("main".into()),
-            RemoteCommand::SaveScene(SceneSave { scene: serde_json::json!({ "id": "s1" }), request: false }),
-            RemoteCommand::DeleteScene(SceneDelete { id: "s1".into(), request: false }),
+            RemoteCommand::SaveScene(SceneSave { scene: serde_json::json!({ "id": "s1" }), request: false, base_revision: None }),
+            RemoteCommand::DeleteScene(SceneDelete { id: "s1".into(), request: false, base_revision: None }),
             RemoteCommand::StageMessage("Wrap up".into()),
             RemoteCommand::ObsPreview("Sermon".into()),
             RemoteCommand::ObsTake,
@@ -891,7 +897,7 @@ mod tests {
         assert!(matches!(asked, RemoteCommand::SaveScene(SceneSave { request: false, .. })), "only the host's server sets request");
         assert_eq!(save.to_string(), "save_scene(s1)");
         let del: RemoteCommand = serde_json::from_str(r#"{"command":"delete_scene","value":{"id":"s1"}}"#).unwrap();
-        assert_eq!(del, RemoteCommand::DeleteScene(SceneDelete { id: "s1".into(), request: false }));
+        assert_eq!(del, RemoteCommand::DeleteScene(SceneDelete { id: "s1".into(), request: false, base_revision: None }));
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"stage_message","value":"Wrap up"}"#).unwrap(), RemoteCommand::StageMessage("Wrap up".into()));
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"obs_take"}"#).unwrap(), RemoteCommand::ObsTake);
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"obs_preview","value":"Sermon"}"#).unwrap(), RemoteCommand::ObsPreview("Sermon".into()));

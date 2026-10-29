@@ -63,7 +63,8 @@ fn scene_request(event: &str, v: &serde_json::Value) -> Option<(Actor, ApprovalR
         ApprovalRequestInput {
             kind: kind.into(),
             target_id: target.to_string(),
-            base_revision: v.pointer("/scene/revision").and_then(serde_json::Value::as_i64),
+            // Set by the control server (never by the desk): what the scene was when this was asked.
+            base_revision: v.get("baseRevision").and_then(serde_json::Value::as_i64),
             payload: v.clone(),
             reason: text("why").map(str::to_string),
             ttl_secs: None,
@@ -95,7 +96,7 @@ mod tests {
 
     #[test]
     fn only_a_scene_change_the_server_marked_as_a_request_becomes_one() {
-        let save = serde_json::json!({ "scene": { "id": "s1", "revision": 4, "name": "Sermon" }, "request": true, "by": "Screens desk", "byId": "abc" });
+        let save = serde_json::json!({ "scene": { "id": "s1", "revision": 99, "name": "Sermon" }, "request": true, "baseRevision": 4, "by": "Screens desk", "byId": "abc" });
         let (who, input) = scene_request("remote:save_scene", &save).unwrap();
         assert_eq!((who.id.as_str(), who.name.as_str()), ("abc", "Screens desk"));
         assert_eq!((input.kind.as_str(), input.target_id.as_str(), input.base_revision), ("scene_save", "s1", Some(4)));

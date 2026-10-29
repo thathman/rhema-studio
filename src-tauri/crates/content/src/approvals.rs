@@ -219,7 +219,9 @@ impl ContentDb {
     }
 
     /// Record that an approved request was carried out. `current_revision` is the target's revision
-    /// now: if the request was based on another (`stale`), it is superseded instead and nothing is applied.
+    /// now: if it differs from the one the request was based on (`stale`), the request is superseded
+    /// instead and nothing is applied. Strict: a request made before the target existed (no base)
+    /// is stale once the target exists, so leaving the base out never skips the check.
     pub fn apply_approval_request(&self, id: &str, by: &Actor, current_revision: Option<i64>) -> Result<ApprovalRequest> {
         let by = checked_actor(by)?;
         let mut conn = self.lock()?;
@@ -228,7 +230,7 @@ impl ContentDb {
         if current.state != "approved" {
             return Err(refused("not-approved", format!("Only an approved request can be applied; this one is {}.", current.state.replace('_', " "))));
         }
-        if current.base_revision.is_some() && current.base_revision != current_revision {
+        if current.base_revision != current_revision {
             tx.execute("UPDATE approval_requests SET state = 'superseded' WHERE id = ?1", [id])?;
             event(&tx, id, &by, "superseded", Some("the target changed after the request was made"))?;
             tx.commit()?;
@@ -365,6 +367,17 @@ mod tests {
         assert_eq!(code(db.apply_approval_request(&r.id, &who("main-desk"), Some(4)).unwrap_err()), "stale");
         assert_eq!(db.list_approval_requests(Some("superseded"), None).unwrap().len(), 1);
         assert_eq!(code(db.apply_approval_request(&r.id, &who("main-desk"), Some(4)).unwrap_err()), "not-approved");
+    }
+
+    #[test]
+    fn a_request_without_a_base_is_stale_once_the_target_exists() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let r = ask(&db, "screens", "scene-new", None, None);
+        db.decide_approval_request(&r.id, &who("main-desk"), Decision::Approve, None).unwrap();
+        assert_eq!(code(db.apply_approval_request(&r.id, &who("main-desk"), Some(1)).unwrap_err()), "stale");
+        let fresh = ask(&db, "screens", "scene-new2", None, None);
+        db.decide_approval_request(&fresh.id, &who("main-desk"), Decision::Approve, None).unwrap();
+        assert_eq!(db.apply_approval_request(&fresh.id, &who("main-desk"), None).unwrap().state, "applied", "still new: applies");
     }
 
     #[test]

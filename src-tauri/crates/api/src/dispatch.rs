@@ -110,8 +110,8 @@ impl CommandDispatcher {
             // A scene from a joined desk (#243 SC.16) names the sending key, so a change that waits for
             // the main desk is a request from that desk, which it then sees answered. The host logs
             // what it did with it itself.
-            RemoteCommand::SaveScene(s) => sink.emit_event("remote:save_scene", &serde_json::json!({ "scene": s.scene, "request": s.request, "by": by, "byId": by_id }).to_string()),
-            RemoteCommand::DeleteScene(d) => sink.emit_event("remote:delete_scene", &serde_json::json!({ "id": d.id.chars().take(100).collect::<String>(), "request": d.request, "by": by, "byId": by_id }).to_string()),
+            RemoteCommand::SaveScene(s) => sink.emit_event("remote:save_scene", &serde_json::json!({ "scene": s.scene, "request": s.request, "baseRevision": s.base_revision, "by": by, "byId": by_id }).to_string()),
+            RemoteCommand::DeleteScene(d) => sink.emit_event("remote:delete_scene", &serde_json::json!({ "id": d.id.chars().take(100).collect::<String>(), "request": d.request, "baseRevision": d.base_revision, "by": by, "byId": by_id }).to_string()),
             // Levels: at most 32 people, each name short and each level at most 100 (percent).
             RemoteCommand::VoiceChannels(c) => sink.emit_event("remote:voice_channels", &serde_json::json!({ "listen": c.listen.iter().take(8).map(|s| s.chars().take(80).collect::<String>()).collect::<Vec<_>>(), "talk": c.talk.chars().take(84).collect::<String>(), "levels": c.levels.iter().take(32).map(|(k, v)| (k.chars().take(84).collect::<String>(), serde_json::json!((*v).min(100)))).collect::<serde_json::Map<_, _>>(), "by": by, "byId": by_id }).to_string()),
             other => {
@@ -455,14 +455,14 @@ mod tests {
     #[test]
     fn scene_edits_name_the_desk_and_the_new_commands_emit_events() {
         let sink = MockSink::new();
-        let save = RemoteCommand::SaveScene(crate::command::SceneSave { scene: serde_json::json!({ "id": "s1", "name": "Sermon" }), request: true });
+        let save = RemoteCommand::SaveScene(crate::command::SceneSave { scene: serde_json::json!({ "id": "s1", "name": "Sermon" }), request: true, base_revision: None });
         CommandDispatcher::dispatch_from(&save, &sink, "Ade screens", Some("k1")).unwrap();
         let (event, payload) = sink.last_event();
         assert_eq!(event, "remote:save_scene");
         let v: serde_json::Value = serde_json::from_str(&payload).unwrap();
         assert_eq!((v["scene"]["name"].as_str(), v["request"].as_bool(), v["by"].as_str(), v["byId"].as_str()), (Some("Sermon"), Some(true), Some("Ade screens"), Some("k1")));
         assert_eq!(sink.event_count(), 1, "the host logs scene edits itself: no separate audit line");
-        let del = RemoteCommand::DeleteScene(crate::command::SceneDelete { id: "s1".into(), request: false });
+        let del = RemoteCommand::DeleteScene(crate::command::SceneDelete { id: "s1".into(), request: false, base_revision: None });
         CommandDispatcher::dispatch(&del, &sink).unwrap();
         let v: serde_json::Value = serde_json::from_str(&sink.last_event().1).unwrap();
         assert_eq!((sink.last_event().0.as_str(), v["id"].as_str(), v["by"].as_str()), ("remote:delete_scene", Some("s1"), Some("a remote")));
