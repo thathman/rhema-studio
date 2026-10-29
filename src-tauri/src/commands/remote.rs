@@ -348,8 +348,11 @@ fn answer_plan(app: &AppHandle, by: &rhema_api::Desk, q: &rhema_api::PlanRequest
                 .map(serde_json::from_value)
                 .collect::<Result<_, _>>()
                 .map_err(|e| PlanError::Invalid(format!("an item is not one Rhema knows: {e}")))?;
-            let saved = rhema_content::as_actor(&by.name, || db.replace_items(id, *expected_revision, &items)).map_err(failed)?;
-            log::info!("Plan {id} saved at revision {} by {}", saved.program.revision, by.name);
+            // Recorded as the desk, marked by its key (never just the name it was paired with), so a desk
+            // named like an operator here can neither pass as that operator nor touch their comments.
+            let actor = format!("{} (desk {})", by.name, by.id.get(..12).unwrap_or(by.id.as_str()));
+            let saved = rhema_content::as_actor(&actor, || db.replace_items(id, *expected_revision, &items)).map_err(failed)?;
+            log::info!("Plan {id} saved at revision {} by {actor}", saved.program.revision);
             let _ = app.emit_to("main", "remote:plan_saved", serde_json::json!({ "id": id, "revision": saved.program.revision, "by": by.name }));
             json(&saved)
         }

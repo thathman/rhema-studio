@@ -30,7 +30,7 @@ Refusals: no key `401`; another role `403`; paused key `423` for PUT/submit (it 
 
 - A save never approves: `approved_revision` (what Live uses) is unchanged until the main desk approves.
 - A submit pins the exact revision the desk saw: it is refused (`409`) if the plan has moved since.
-- The revision and audit rows record the **desk's name** (`as_actor`), not the operator signed in at the host.
+- The revision and audit rows record the desk as `<device name> (desk <first 12 hex of its key hash>)` (`as_actor`), not the operator signed in at the host. The key part means a desk paired under an operator's name can neither pass as that operator in the history nor add or remove that operator's comments, which are checked against this name.
 - The main desk hears `remote:plan_saved {id, revision, by}` and `remote:plan_submitted {id, revision, requestId, by}`. Nothing here emits a Live command.
 - No self-approval: the requester is the desk's key hash; the main desk decides as `main-desk` (0017 rules).
 
