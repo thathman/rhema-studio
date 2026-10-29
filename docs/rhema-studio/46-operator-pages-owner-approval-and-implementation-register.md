@@ -1,5 +1,9 @@
 # 46 — Operator Pages 1–11: Owner Decision and Implementation Acceptance Register
 
+**CURRENT EXECUTION POLICY (29 October):** [Owner PR Workflow](../OWNER-PR-WORKFLOW-2026-10-29.md) authorizes new reviewable development PRs with a 3-active target/5 normal working limit and prompt merges. The older ZERO NEW PR instruction in this register is superseded; keep website PRs #352/#367 held. Design signoff is not implementation.
+
+
+
 **Updated:** 29 October 2026. **Status:** DESIGN DECISION REGISTER, **not** a shipped-feature report. The owner expressly approved the **overall structural/interaction hierarchies** for Pages **5–11** in sequence and previously made multiple binding functional decisions for Pages **1–4**. **Do not rewrite “function approved / visual details proposed” as “pixel-perfect accepted.”** Real host/web/device implementation remains separately verified. Source contracts: [34 — Browser Operators](34-browser-operators-connected-development.md), [36 — Original Pages 1–5 workshop](36-operator-page-layout-proposals.md), [37 — Permissions](37-permissions-sidebar-and-authority-design.md), [29 — Editor Language Library](29-editor-language-library-contract.md).
 
 ## 1. The complete page map and precise decision state
@@ -31,7 +35,7 @@
 
 ## 3. Codex implementation contract and acceptance sequence
 
-**Do not restart the design workshop or wait for further UI approvals before coding the independently approved features.** Owner explicitly ended the PR-merge work pause in [29 October Resume Order](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md); keep **ZERO NEW PRs** and leave website-publication PRs #352/#367 held. Use owner-required scoped subagents, one integrator and an existing approved integration workflow. Review current `main` before coding; re-use live components rather than building shadow versions of the product.
+**Do not restart the design workshop or wait for further UI approvals before coding the independently approved features.** Owner explicitly ended the PR-merge work pause in [29 October Resume Order](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md); keep **bounded active development PRs** and leave website-publication PRs #352/#367 held. Use owner-required scoped subagents, one integrator and an existing approved integration workflow. Review current `main` before coding; re-use live components rather than building shadow versions of the product.
 
 **Implement and prove by end-to-end service journeys rather than by isolated page count:**
 - **Church host connect and roles:** local main host + actual LAN paired browser on laptop/phone with secure identity, scope and revocation; no fake disconnected sample data represented as Live.
