@@ -100,7 +100,7 @@ export function HomeWorkspace() {
               <p className="text-xs text-muted-foreground">Sunday readiness</p>
               <p className="mt-1 text-[1.5625rem] leading-tight font-bold tracking-[-0.04em]">{ready ? "Ready." : warnings.length <= 2 ? "Almost ready." : "Not ready yet."}</p>
               <p className="mt-1 text-xs text-muted-foreground">{ready ? "Everything checks out" : `${warnings.length === 1 ? "One thing" : `${warnings.length} things`} to check before service`}</p>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#d7dbd8] dark:bg-muted" role="progressbar" aria-label="Readiness checks" aria-valuemin={0} aria-valuemax={counted} aria-valuenow={okCount}>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#d7dbd8] dark:bg-muted" role="progressbar" aria-label="Service readiness checks" aria-valuemin={0} aria-valuemax={counted} aria-valuenow={okCount}>
                 <div className="h-full rounded-full bg-primary" style={{ width: `${counted ? (okCount / counted) * 100 : 0}%` }} />
               </div>
               <p className="mt-2 text-[0.6875rem] text-muted-foreground">{okCount} of {counted} checks complete</p>
@@ -111,7 +111,7 @@ export function HomeWorkspace() {
         <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-1">
           <Stat icon={<CalendarDaysIcon />} label="Sunday plan" value={String(items.length)} unit={items.length === 1 ? "item" : "items"} detail={current ? `${current.title}${skippedCount ? ` · ${skippedCount} skipped` : ""}${minutes ? ` · ${formatMinutes(minutes * 60_000)} scheduled` : ""}${dirty ? " · unsaved changes" : ""}` : "No saved service open"} />
           {/* Checks counted, not a percentage (#298: no arbitrary percentages). */}
-          <Stat icon={<CheckIcon />} label="Content readiness" value={String(okCount)} unit={`of ${counted} check${counted === 1 ? "" : "s"}`} detail={ready ? "Ready to present" : `${warnings.length} to check`} />
+          <Stat icon={<CheckIcon />} label="Service readiness" value={String(okCount)} unit={`of ${counted} check${counted === 1 ? "" : "s"}`} detail={ready ? "Ready to present" : `${warnings.length} to check`} />
           <Stat icon={<MonitorIcon />} label="Screens" value={String(onAir)} unit={`of ${outputs.length} on`} detail={onAir ? "On air when you show something live" : "Turn them on in Outputs"} />
         </div>
 
