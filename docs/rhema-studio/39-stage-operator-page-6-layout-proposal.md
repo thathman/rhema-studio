@@ -1,6 +1,6 @@
 # 39 — Page 6 Stage Operator: Private Confidence and Cue Control (Visual Brainstorm Proposal)
 
-**Workshop date:** 29 October 2026. **State:** **PROPOSED, NOT OWNER-APPROVED PAGE 6 LAYOUT**. This is the starting design for discussion after the owner accepted Page 5's overall hierarchy. Do not treat the Stage Operator mockup as accepted, implemented or public-facing by default.
+**Workshop date:** 29 October 2026. **State:** **OWNER-APPROVED ROLE PERMISSION DECISION; PAGE 6 VISUAL LAYOUT STILL PROPOSED.** The owner approved direct Stage Operator sending to their **host-assigned private Stage monitors** when each cue complies with host policy; additional destinations or elevated privileges require separate authorization. The Stage UI remains a design proposal until individually accepted and tested.
 
 **Previously owner-approved functional authority:** [35 — Timekeeper and Timing Display Family](35-timekeeper-and-timing-view-family.md) already governs one authoritative host clock, automatic + manual reminders, per-display subtle/prominent Stage urgency, independent filtered Stage/Backstage/Control Room screen contents, offline behavior and private routing. [34 — Browser Operators](34-browser-operators-connected-development.md) defines Stage role as a scoped operator desk with private Stage messages and Comms, **not** congregation/OBS Take. [37 — Permissions](37-permissions-sidebar-and-authority-design.md) governs who may send/approve/receive. [Owner resumed major feature implementation](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md): no longer wait on PR consolidation or Page 6 design to build independently approved capabilities; zero-new-PR and safety gates remain.
 
@@ -98,11 +98,45 @@ For a design demo, sample `08:20 remaining` or `Pastor Confidence` must be label
 ## 7. Owner design decisions still OPEN
 
 These are **proposals**, not owner approval:
-1. **Stage Operator cue audience:** Should the default Stage Operator own only **Stage Confidence/pastor/speaker/choir** private cue destinations, with Backstage schedule separate read-only, or also send to host-authorized backstage room boards? **Recommended:** strictly Stage confidence recipients by default; allow explicit room-message privilege when needed.
-2. **Stage Operator message controls:** Should a Stage Operator send a permitted cue directly, or by default submit approval first? **Recommended:** host-delegated direct Send for their approved Stage recipient(s); request additional priority/destination through Permissions → Approval Requests.
-3. **Monitoring feedback:** Should Stage operator see a live receiver thumbnail or a host-rendered approximate preview? **Recommended:** show real receiver screenshot/ack when supported, with `Estimated preview` label if not; never fake on-air truth.
-4. **Cue placement:** Keep one small incoming Director/Timekeeper Requests strip beneath composer, expandable when needed; avoid a second full Comms workspace.
+**RESOLVED BY OWNER — 29 October 2026:** Questions **1 and 2** are now approved: Stage Operators **send compliant private cues directly to the Stage monitors the host has assigned them**, with no per-message approval required inside that scope. **Any additional destination (including backstage rooms) or privilege (including elevated urgency not permitted by host policy) requires explicit host authorization** using a reviewed delegation or a specific Approval Request. Being a Stage Operator does NOT implicitly grant every private receiver, Stage design administration, Timekeeper clock control, public output Take or OBS access. See §7A below.
+
+**Still OPEN for Page 6 visual review:**
+1. **Monitoring feedback:** Should the Stage operator see a real receiver thumbnail when available, alongside an honest `Estimated preview` fallback? **Recommended:** yes; never fake on-air or actual-human acknowledgment.
+2. **Cue placement:** Keep a compact Director/Timekeeper Requests strip below the composer, expandable when needed; avoid a duplicated full Comms workspace.
+3. **Default cue composition:** Which 2–4 quick cues should appear first for a novice? Candidate `Stand by`, `Please begin`, `5 minutes remaining`, `Please conclude`; host/role may configure church-specific wording; avoid making every participant see all messages.
+4. **Current monitor awareness:** should the Stage Operator see the current live cue **and its remaining expiry**, with a Restore Clock/Hide action? Suggested yes, based on real host state.
+
+### 7A. OWNER APPROVED — Stage direct-send authorization and escalation
+
+**Authority rule:** A joined Stage Operator, once paired, authenticated and given the Stage role, may **directly send host-policy-compliant private cues to that operator's individually assigned Stage Confidence recipient IDs**. This is a **bounded direct-send permission**, not an open broadcast tool.
+
+- For an **assigned recipient**, allow Send without asking the main host to reapprove every routine message. Host checks requester and device session, Stage role, service/event scope where applicable, receiver ID, allowed cue categories, priority ceiling, content/length limitations, expiry policy, current host state and rate limits **at the moment of Send**. The volunteer sees exact destination and host-determined presentation before confirming.
+- For an **unassigned receiver** or extra audience (e.g. backstage room, a different pastor/choir monitor, control-room display), provide `Request access` / `Request to send to [named receiver]` linking to **Permissions → Approval Requests**. An authorized host may explicitly grant a scoped and expiring additional destination where approved. Do not expose public/lobby/congregation/OBS destinations as an ordinary Stage message target, even via broad role selection.
+- For **higher urgency / protected priority / nonstandard message type** that the Stage operator's current host policy does not allow, prevent direct sending and require explicit delegated privilege or a specific approval request tied to recipient, priority, message/version, reason and duration. When there is no safe authorized path, show `Not permitted`; never optimistically send.
+- The main host can revoke, pause or reclaim permissions immediately. **A message already delivered is not automatically erased on role revocation** unless explicitly authorized/host policy requires it; further sends fail closed and host can Hide/Override. Don't turn Stage cue requests into uncontrolled emergency alert pathways.
+- Direct Send is **not** Stage scene Take, timer adjustment, global design update or permission administration. **Read-only pastor confidence receiver** never gets buttons to Send, Approve or Manage devices.
+- **Audit + truth:** record paired operator, receiver ID, cue content/revision or permitted redacted hash, priority, requested/accepted/display-ack/expired times, any recipient-side failure and whether a request/grant was used. Server ACK ≠ confirmed receiver rendered ≠ pastor/choir saw/read it. Never reveal other recipients' private messages in shared role state.
+- **Host controls lifecycle:** display expiry, routine/urgent priority, deduplication and idempotent reconnection behavior remain on the host. An operator browser crashing cannot leave an expired banner stuck or replay an old cue; pending fresh requests remain visible after reconnect. Avoid timer clock drift by using the authoritative host.
+
+**Example operator messaging:**
+
+```text
+TO: Pastor Confidence #1  [Assigned by host]
+Message: Please conclude in 2 minutes
+Priority: Routine              [Within your assigned allowance]
+[Private Preview]  →  [Send to Pastor Confidence #1]
+Host accepted → Receiver displayed at 11:42 (if acknowledged)
+
+TO: Backstage Room Screen       [Not assigned]
+Message: Choir ready
+[Request destination access] → Permissions → Approval Requests
+No Send until the host approves or explicitly delegates that scope.
+```
+
+**Acceptance gates for Codex:** authorized Stage sends direct; unassigned destination denied server-side even if client UI is forged; urgency above grant blocked; prior authorization invalidated after revoke; only named receiver gets cue; 2+ monitors with independent state; host/network loss and reconnect do not replay expired cue; Stage passive display has no controls; delivery audit shows actual receiver ACK vs unconfirmed; no public/OBS/Stage cross-class leaks.
+
+**This approval governs authority and message-send UX only.** Exact Page 6 pixel layout, quick cue defaults, cue preview proportions, receiver thumbnail fallback and Comms strip remain pending visual review.
 
 ## 8. Next visual approval
 
-When the owner confirms Page 6 structure, record `OWNER APPROVED — STRUCTURAL HIERARCHY` and update [34](34-browser-operators-connected-development.md), AGENTS and Codex handoff. Until then **Stage Operator Page 6 design is a proposal only**. Codex may implement already-approved Stage timing and privacy features under the owner resumed-build instruction but must not claim this new layout has owner sign-off.
+When the owner confirms Page 6 structure, record `OWNER APPROVED — STRUCTURAL HIERARCHY` and update [34](34-browser-operators-connected-development.md), AGENTS and Codex handoff. Until then **Stage Operator Page 6 visual layout is a proposal only**; the direct-send host-assigned-recipient **permissions in §7A are already owner-approved**. Codex may implement already-approved Stage timing and privacy features under the owner resumed-build instruction but must not claim this new layout has owner sign-off.
