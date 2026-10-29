@@ -216,6 +216,10 @@ See [41 — OBS Director Page 8](41-obs-director-page-8-layout-proposal.md) for 
 
 The first native Rhema recording captures **one named congregation output's final Live presentation video** (camera, Bible/lyrics, graphics, transitions, intentional blanks) plus a separately configured approved clean church audio feed. Pick the congregation output before Record (use church-configured primary where possible), pin its ID throughout that session and never follow another output merely because an operator changes the selected screen in their browser. OBS/Stage/private Preview/Comms and unrelated outputs stay separate. Recording does not Take or mutate the chosen physical output. See [42 — Owner-approved congregation output recording](42-rhema-native-service-recording.md#owner-approved--initial-recording-video-source-is-the-congregation-output-29-october-2026). Native recorder remains unimplemented until verified, and only host-authorized recorder roles control it.
 
+### Page 8 approval and Page 9 candidate (29 October 2026)
+
+Page 8's revised OBS Director hierarchy is **owner-approved** in [41 §10](41-obs-director-page-8-layout-proposal.md#10-owner-page-8-decision--approved-29-october-2026). Rhema-native recording is separate in Live. The initial **Page 9 Editor Operator** layout is preserved in [43](43-editor-operator-page-9-layout-proposal.md): assigned Running Order, contextual service editor, private Preview/Review, comments and revision-pinned submit-for-review. Page 9 layout remains **proposed**, not owner-approved. Continue resumed full feature implementation under existing safety and no-new-PR rules.
+
 ### Operator design review protocol: one page at a time, with owner sign-off
 
 **We have NOT completed the operator visual redesign together. Do not silently invent final approved page designs or count a generic console as accepted.** Implement shared safety/data foundations first, then present an individually reviewable page specification/screenshot/interactive demo to the owner for each step. Record feedback and approval, then continue to the next page. No automatic completion of 12 pages because their route exists.
