@@ -1,6 +1,6 @@
 # 44 — Page 10 Viewer Operator: Follow the Service (Read-Only Production Awareness)
 
-**Workshop date:** 29 October 2026. **State:** **PAGE 10 STRUCTURAL/UI PROPOSAL — NOT OWNER-APPROVED**. Page 9 Editor's three-part hierarchy and separate Save Draft / Submit for Review were owner-approved in [43 §9](43-editor-operator-page-9-layout-proposal.md#9-owner-page-9-sign-off--approved-29-october-2026). Next in [34](34-browser-operators-connected-development.md) is **Viewer** (then Page 11 main Presenter/Configure). This document proposes a simpler browser/mobile joined experience, not a new church website or another control application. Existing owner resume-build/no-new-PR and security requirements remain.
+**Workshop date:** 29 October 2026. **State: OWNER APPROVED — PAGE 10 VIEWER STRUCTURAL HIERARCHY.** The owner answered “yes” on 29 October 2026. Detailed pixels and real-world acceptance remain pending. Page 9 Editor's three-part hierarchy and separate Save Draft / Submit for Review were owner-approved in [43 §9](43-editor-operator-page-9-layout-proposal.md#9-owner-page-9-sign-off--approved-29-october-2026). Next in [34](34-browser-operators-connected-development.md) is **Viewer** (then Page 11 main Presenter/Configure). This document proposes a simpler browser/mobile joined experience, not a new church website or another control application. Existing owner resume-build/no-new-PR and security requirements remain.
 
 ## 1. Viewer role promise
 
@@ -97,8 +97,13 @@ Avoid the name `Watch` if it suggests a public congregational livestream app: ca
 6. Multiple language/output variants and pastor notes: viewer sees only authorized general service detail, not Stage/private layers or another operator's confidential payload.
 7. Mobile 390, tablet 768 and desktop 1440 maintain large event/clock and quick crew notices, no "technical production dashboard" overflow.
 
-## 8. Proposed owner decision — not yet approved
+## 8. Structural decision — owner approved
 
-**Proposed Page 10 structural hierarchy:** `Now & Next + large trusted service clock → compact Running Order / upcoming events → private role-filtered crew requests/notices → optionally permitted Rhema Comms`. The whole page is **read-only as to production state**, with explicitly allowed personal Comms/ACK as a separate capability. No default video playback or congregation-public website. On mobile, prioritize Now/Next and clock above every other panel.
+**OWNER APPROVED Page 10 structural hierarchy:** `Now & Next + large trusted service clock → compact Running Order / upcoming events → private role-filtered crew requests/notices → optionally permitted Rhema Comms`. The whole page is **read-only as to production state**, with explicitly allowed personal Comms/ACK as a separate capability. No default video playback or congregation-public website. On mobile, prioritize Now/Next and clock above every other panel.
 
 **Open nuances:** whether to show optional *named congregation output state* to every Viewer or only specifically assigned groups; whether small preview thumbnails are ever useful; default density of full cuesheet; which crew roles get Comms by default. Do not imply any of these privileges or UX pixels are approved without explicit owner signoff.
+
+
+## 9. Owner decision (29 October 2026)
+
+The owner approved the Page 10 Viewer **Now & Next + large host clock → compact Running Order → role-filtered crew messages → authorized Comms** structure. Viewer cannot mutate Live production; permitted Comms acknowledgment, reply and push-to-talk remain separately granted. No new access privileges, live video preview requirement, UI pixel signoff or implementation claim is implied. Proceed to Page 11 Main Presenter / Configure visual review.
