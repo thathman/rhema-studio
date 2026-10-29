@@ -36,7 +36,7 @@ beforeEach(() => {
   useEventClock.setState({ mode: "screens", currentId: null, currentMomentId: null })
   useQueueStore.setState({ items: [], headers: [], activeIndex: null })
   useTimerStore.getState().reset()
-  useRecovery.setState({ offer: null, dismissed: false, damaged: false, restoreError: null })
+  useRecovery.setState({ offer: null, dismissed: false, damaged: false, restoreError: null, durableRuns: [], durableRunsDismissed: false })
 })
 
 describe("live recovery", () => {
@@ -650,7 +650,7 @@ describe("live recovery", () => {
     expect(useRecovery.getState()).toMatchObject({ offer: snap, dismissed: true, restoreError: error })
     vi.mocked(getAllWindows).mockResolvedValue([{ label: outputWindowLabel(MAIN_OUTPUT_ID), isVisible: async () => true } as never])
     expect(await putBack(snap)).toBe(true)
-    expect(useRecovery.getState()).toEqual({ offer: null, dismissed: false, damaged: false, restoreError: null })
+    expect(useRecovery.getState()).toEqual({ offer: null, dismissed: false, damaged: false, restoreError: null, durableRuns: [], durableRunsDismissed: false })
   })
 
   it("puts the timer back, counting the time Rhema was closed while it ran", async () => {
@@ -719,6 +719,141 @@ describe("live recovery", () => {
     expect(useJournalStore.getState().entries).toHaveLength(6)
     useJournalStore.getState().clear()
     expect(restoreJournal(kept, at + 7 * 3_600_000, 1_000)).toBe(false)
+  })
+
+  it("offers all unfinished SQLite checkpoints in History when the local journal is missing", async () => {
+    const live = useBroadcastStore.getState()
+    const run = {
+      run_id: "saved-run",
+      program_id: "service-1",
+      program_revision: 4,
+      service_date: "2026-10-25",
+      title: "Sunday service",
+      time_zone: "Africa/Lagos",
+      started_at: "2026-10-25T08:00:00.000Z",
+      updated_at: "2026-10-25T09:00:00.000Z",
+      finished_at: null,
+      status: "active",
+    }
+    const secondRun = { ...run, run_id: "saved-run-2", title: "Midweek service", status: "interrupted" }
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "last_exit_unclean") return true
+      if (command === "content_list_service_runs") return [run, secondRun]
+      return null
+    })
+
+    const stop = await startLiveRecovery()
+
+    expect(useRecovery.getState().durableRuns).toEqual([run, secondRun])
+    expect(useJournalStore.getState().entries).toEqual([])
+    expect(useBroadcastStore.getState()).toBe(live)
+    const commands = vi.mocked(invoke).mock.calls.map(([command]) => command)
+    expect(commands).toContain("content_list_service_runs")
+    expect(commands).not.toContain("content_get_service_run")
+    expect(commands).not.toContain("content_checkpoint_service_run")
+    expect(commands).not.toContain("content_interrupt_service_run")
+    expect(commands).not.toContain("content_finalize_service_run")
+    stop()
+  })
+
+  it("treats an empty local journal as healthy while checking durable History", async () => {
+    kept.set("journal", { v: 2, at: Date.now(), entries: [], startItemIds: null, runStatus: "none", finalizedLogId: null, checkpointMono: 0 })
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "last_exit_unclean") return true
+      if (command === "content_list_service_runs") return []
+      return null
+    })
+
+    const stop = await startLiveRecovery()
+
+    expect(useRecovery.getState()).toMatchObject({ damaged: false, durableRuns: [] })
+    expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toContain("content_list_service_runs")
+    stop()
+  })
+
+  it("uses the SQLite History fallback when the saved local journal is malformed", async () => {
+    kept.set("journal", { v: 2, at: Date.now(), entries: "damaged" })
+    const run = {
+      run_id: "saved-run",
+      program_id: "service-1",
+      program_revision: 4,
+      service_date: "2026-10-25",
+      title: "Sunday service",
+      time_zone: "Africa/Lagos",
+      started_at: "2026-10-25T08:00:00.000Z",
+      updated_at: "2026-10-25T09:00:00.000Z",
+      finished_at: null,
+      status: "interrupted",
+    }
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "last_exit_unclean") return true
+      if (command === "content_list_service_runs") return [run]
+      return null
+    })
+
+    const stop = await startLiveRecovery()
+
+    expect(useRecovery.getState()).toMatchObject({ damaged: true, durableRuns: [run] })
+    expect(useJournalStore.getState().entries).toEqual([])
+    stop()
+  })
+
+  it("reconciles a locally active checkpoint with a finished SQLite run before interrupting", async () => {
+    const at = Date.now() - 60_000
+    kept.set("journal", {
+      v: 2,
+      at,
+      checkpointMono: 0,
+      entries: [{ at, mono: 0, kind: "event", label: "Opening", itemId: "opening" }],
+      startItemIds: ["opening"],
+      runStatus: "active",
+      finalizedLogId: null,
+      runContext: {
+        runId: "finished-run",
+        programId: "service-1",
+        programRevision: 4,
+        title: "Sunday service",
+        serviceDate: "2026-10-25",
+        timeZone: "Africa/Lagos",
+        startedAt: "2026-10-25T08:00:00.000Z",
+        operator: "Tolu",
+        plan: [{ id: "opening", label: "Opening" }],
+        plannedMs: {},
+        headers: [],
+        startItemIds: ["opening"],
+      },
+    })
+    const run = {
+      run_id: "finished-run",
+      program_id: "service-1",
+      program_revision: 4,
+      service_date: "2026-10-25",
+      title: "Sunday service",
+      time_zone: "Africa/Lagos",
+      started_at: "2026-10-25T08:00:00.000Z",
+      updated_at: "2026-10-25T09:00:00.000Z",
+      finished_at: "2026-10-25T09:00:00.000Z",
+      status: "finished",
+      checkpoint: { version: 2, entries: [], plan: [], plannedMs: {}, headers: [], operator: "Tolu" },
+    }
+    const broadcastBefore = useBroadcastStore.getState()
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "last_exit_unclean") return true
+      if (command === "content_get_service_run") return run
+      if (command === "content_finalize_service_run") return { id: "finished-log" }
+      return null
+    })
+
+    const stop = await startLiveRecovery()
+    await vi.waitFor(() => expect(useJournalStore.getState()).toMatchObject({ runStatus: "finished", finalizedLogId: "finished-log" }))
+
+    const commands = vi.mocked(invoke).mock.calls.map(([command]) => command)
+    expect(commands).toContain("content_get_service_run")
+    expect(commands).toContain("content_finalize_service_run")
+    expect(commands).not.toContain("content_checkpoint_service_run")
+    expect(commands).not.toContain("content_interrupt_service_run")
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    stop()
   })
 
   it("keeps the last 100 notices with their answers and brings them back once after a crash (Comms)", async () => {

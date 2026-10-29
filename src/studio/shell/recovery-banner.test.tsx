@@ -16,6 +16,7 @@ vi.mock("@tauri-apps/plugin-store", () => ({
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { useRecovery } from "@/lib/live-recovery"
+import { useShellStore } from "@/studio/shell-store"
 import { RecoveryBanner } from "./recovery-banner"
 
 let root: Root
@@ -25,7 +26,8 @@ beforeEach(async () => {
   ;(
     globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true
-  useRecovery.setState({ offer: null, dismissed: false, damaged: true, restoreError: null })
+  useRecovery.setState({ offer: null, dismissed: false, damaged: true, restoreError: null, durableRuns: [], durableRunsDismissed: false })
+  useShellStore.setState({ workspace: "home", goRequest: null })
   host = document.createElement("div")
   document.body.append(host)
   root = createRoot(host)
@@ -50,6 +52,22 @@ describe("recovery damage notice", () => {
     )
     expect(useRecovery.getState().damaged).toBe(false)
     expect(host.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it("opens History to review a durable run without offering to put it on a screen", async () => {
+    await act(async () => useRecovery.setState({
+      damaged: true,
+      durableRuns: [{ run_id: "run-1", program_id: "service-1", program_revision: 2, service_date: "2026-10-25", title: "Sunday service", time_zone: "Africa/Lagos", started_at: "2026-10-25T08:00:00.000Z", updated_at: "2026-10-25T09:00:00.000Z", finished_at: null, status: "active" }],
+      durableRunsDismissed: false,
+    }))
+
+    expect(host.textContent).toContain("Sunday service")
+    expect(host.textContent).toContain("Time after the last confirmed checkpoint is unknown")
+    expect(host.textContent).not.toContain("Put back on the screens")
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Open History")!.click())
+
+    expect(useShellStore.getState().goRequest).toBe("archive")
+    expect(useRecovery.getState().durableRunsDismissed).toBe(true)
   })
 
   it("shows the failed output, partial state, retry, and explicit continue choice", async () => {

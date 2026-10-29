@@ -201,7 +201,17 @@ export async function keepJournal(transcript = ""): Promise<void> {
 }
 
 function checkpointPayload(snapshot: ServiceRunSnapshot) {
-  return { version: 1, entries: snapshot.entries, startItemIds: snapshot.startItemIds, plan: snapshot.context.plan, plannedMs: snapshot.context.plannedMs, headers: snapshot.context.headers, operator: snapshot.context.operator }
+  return {
+    version: 2,
+    checkpointAt: Date.now(),
+    checkpointMono: monotonicNow(),
+    entries: snapshot.entries,
+    startItemIds: snapshot.startItemIds,
+    plan: snapshot.context.plan,
+    plannedMs: snapshot.context.plannedMs,
+    headers: snapshot.context.headers,
+    operator: snapshot.context.operator,
+  }
 }
 
 let checkpointChain: Promise<unknown> = Promise.resolve()
@@ -235,6 +245,18 @@ function interruptServiceRun(runId: string): Promise<unknown> {
 
 let checkpointTimer: ReturnType<typeof setTimeout> | null = null
 let pendingSnapshot: ServiceRunSnapshot | null = null
+let checkpointSchedulingPaused = 0
+
+/** Restore or reconcile journal state without treating it as a fresh operator change. */
+export function withoutAutomaticRunCheckpoints<T>(action: () => T): T {
+  checkpointSchedulingPaused++
+  try {
+    return action()
+  } finally {
+    checkpointSchedulingPaused--
+  }
+}
+
 function scheduleRunCheckpoint(snapshot: ServiceRunSnapshot) {
   pendingSnapshot = snapshot
   useJournalStore.setState((state) => state.runContext?.runId === snapshot.context.runId ? { checkpointStatus: "saving", checkpointError: null } : {})
@@ -248,6 +270,7 @@ function scheduleRunCheckpoint(snapshot: ServiceRunSnapshot) {
 }
 
 useJournalStore.subscribe((state, previous) => {
+  if (checkpointSchedulingPaused > 0) return
   if (state.entries !== previous.entries || state.runContext !== previous.runContext || state.startItemIds !== previous.startItemIds) {
     const snapshot = snapshotRun(state)
     if (snapshot && state.runStatus !== "finished") scheduleRunCheckpoint(snapshot)

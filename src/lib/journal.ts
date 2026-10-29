@@ -43,7 +43,7 @@ export function actualDurations(entries: JournalEntry[], nowMono: number): Actua
     .filter((e) => e.kind === "live" || e.kind === "quick" || e.kind === "restore")
     .map((e) => {
       const i = entries.indexOf(e)
-      const next = entries.slice(i + 1).find((n) => n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote" && n.kind !== "obs" && n.kind !== "sound" && n.kind !== "timing" && n.kind !== "event" && n.kind !== "moment" && n.kind !== "source" && n.kind !== "scene" && n.kind !== "shown" && n.kind !== "take")
+      const next = entries.slice(i + 1).find((n) => n.kind === "recovery" || (n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote" && n.kind !== "obs" && n.kind !== "sound" && n.kind !== "timing" && n.kind !== "event" && n.kind !== "moment" && n.kind !== "source" && n.kind !== "scene" && n.kind !== "shown" && n.kind !== "take"))
       return { entry: e, itemId: e.itemId ?? null, label: e.label, ms: Math.max(0, (next?.mono ?? nowMono) - e.mono) }
     })
 }

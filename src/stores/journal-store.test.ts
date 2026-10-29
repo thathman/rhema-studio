@@ -4,7 +4,7 @@ const mockInvoke = vi.fn<(...args: unknown[]) => Promise<unknown>>(async (comman
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}) }))
 
-import { useJournalStore } from "./journal-store"
+import { flushServiceRunCheckpoint, useJournalStore } from "./journal-store"
 import { useBroadcastStore } from "./broadcast-store"
 import { useQueueStore } from "./queue-store"
 import type { VerseRenderData } from "@/types"
@@ -127,6 +127,24 @@ describe("service log entries (AR-001)", () => {
     expect(finalCalls[0]?.[1]).toMatchObject({ transcript: null, finishedAt: expect.any(String) })
     expect(useJournalStore.getState()).toMatchObject({ runStatus: "finished", finalizedLogId: "the-run-log" })
     expect(useBroadcastStore.getState()).toBe(broadcastBeforeFinish)
+  })
+
+  it("stores a wall and monotonic anchor with each durable run checkpoint", async () => {
+    const { useServiceStore } = await import("./service-store")
+    useServiceStore.setState({ current: { id: "s1", title: "Sunday", revision: 2, service_date: "2026-10-25" } as never })
+    useJournalStore.getState().add({ kind: "event", label: "Opening", itemId: "opening" })
+
+    await flushServiceRunCheckpoint()
+
+    const checkpointCall = mockInvoke.mock.calls.find(([command]) => command === "content_checkpoint_service_run")
+    expect(checkpointCall?.[1]).toMatchObject({
+      checkpoint: {
+        version: 2,
+        checkpointAt: expect.any(Number),
+        checkpointMono: expect.any(Number),
+        entries: [expect.objectContaining({ kind: "event", label: "Opening" })],
+      },
+    })
   })
 })
 

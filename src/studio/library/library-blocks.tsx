@@ -1,4 +1,5 @@
 import { retentionWords, transcriptSection } from "@/lib/journal-transcript"
+import { parseServiceRunCheckpoint } from "@/lib/service-run-checkpoint"
 import { useTranscriptStore } from "@/stores/transcript-store"
 import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import { useEffect, useState } from "react"
@@ -21,7 +22,6 @@ import { describeError, reloadAfterRestore } from "@/studio/library/content-acti
 import { save } from "@tauri-apps/plugin-dialog"
 import { writeTextFile } from "@tauri-apps/plugin-fs"
 import type { ContentStatus, ImportMode, ServiceLog, ServiceLogSummary, ServiceRun, ServiceRunSummary } from "@/types"
-import type { JournalEntry } from "@/lib/journal"
 
 const MODE_LABEL: Record<ImportMode, string> = {
   skip: "Keep my copy of songs I already have",
@@ -464,10 +464,9 @@ function RecentServiceRuns({ programId }: { programId: string | null }) {
 }
 
 function RunCheckpoint({ run }: { run: ServiceRun }) {
-  const checkpoint = run.checkpoint && typeof run.checkpoint === "object" ? run.checkpoint as { entries?: JournalEntry[]; plan?: Array<{ id: string; label: string }>; plannedMs?: Record<string, number>; headers?: Array<{ id: string; name: string; type: string; at: number }>; operator?: string | null } : {}
-  const entries = Array.isArray(checkpoint.entries) ? checkpoint.entries : []
-  const plan = Array.isArray(checkpoint.plan) ? checkpoint.plan : []
-  const headers = Array.isArray(checkpoint.headers) ? checkpoint.headers : []
+  const checkpoint = parseServiceRunCheckpoint(run.checkpoint)
+  if (!checkpoint) return <p role="alert" className="mt-2 rounded border border-destructive/40 bg-destructive/10 p-2 text-xs">This saved checkpoint could not be read. Nothing was restored or sent to a screen.</p>
+  const { entries, plan, headers, operator } = checkpoint
   const orderedPlan: Array<{ key: string; kind: "header" | "item"; label: string }> = []
   for (let at = 0; at <= plan.length; at++) {
     headers.filter((header) => header.at === at).forEach((header) => orderedPlan.push({ key: header.id, kind: "header", label: `${header.type}: ${header.name}` }))
@@ -476,8 +475,8 @@ function RunCheckpoint({ run }: { run: ServiceRun }) {
   }
   return (
     <div className="mt-2 rounded border border-border bg-muted/30 p-2">
-      <p className="mb-1 text-muted-foreground">Captured run activity · {run.status === "interrupted" ? "time after the last confirmed checkpoint is unknown" : "review only; nothing was sent to a screen"}</p>
-      {checkpoint.operator && <p className="mb-1 text-muted-foreground">Operator: {checkpoint.operator}</p>}
+      <p className="mb-1 text-muted-foreground">Captured run activity · {run.status === "finished" ? "finished; review only, nothing was sent to a screen" : "time after the last confirmed checkpoint is unknown; review only, nothing was sent to a screen"}</p>
+      {operator && <p className="mb-1 text-muted-foreground">Operator: {operator}</p>}
       {entries.length === 0
         ? <p className="text-muted-foreground">No journal entries were captured.</p>
         : <ol className="max-h-44 list-inside list-decimal overflow-y-auto">

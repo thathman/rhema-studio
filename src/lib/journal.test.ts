@@ -11,6 +11,13 @@ describe("service journal", () => {
     expect(Object.fromEntries(actualByItem(entries, 260_000))).toEqual({ a: 120_000, b: 60_000 })
   })
 
+  it("stops on-air time at a recovery boundary when time after the checkpoint is unknown", () => {
+    const entries = [e(0, "live", "John 3:16", "a"), e(30_000, "message", "wrap up"), e(45_000, "recovery", "Time after this point is unknown")]
+    expect(actualDurations(entries, 180_000).map(({ label, ms }) => [label, ms])).toEqual([["John 3:16", 45_000]])
+    expect(formatJournal("Service", entries, 180_000)).toContain("John 3:16  (0:45)")
+    expect(formatJournal("Service", entries, 180_000)).not.toContain("John 3:16  (3:00)")
+  })
+
   it("prints a readable log with planned versus actual", () => {
     const entries = [e(0, "live", "John 3:16", "a"), e(120_000, "live", "Amazing Grace", "b")]
     const text = formatJournal("9 am service", entries, 300_000, new Map([["a", 60_000]]))

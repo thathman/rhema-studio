@@ -7,9 +7,10 @@ import { normalizeTheme } from "@/lib/theme-migrations"
 import { sourceOf, type LiveSources } from "@/lib/live-sources"
 import { outputOnAir } from "@/lib/output-on-air"
 import { validTimeZone } from "@/lib/church-time"
+import { isServiceRunJournalEntry } from "@/lib/service-run-checkpoint"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
-import { capJournal, finalizeServiceRun, interruptCurrentServiceRun, useJournalStore, type ServiceRunContext } from "@/stores/journal-store"
+import { capJournal, finalizeServiceRun, interruptCurrentServiceRun, useJournalStore, withoutAutomaticRunCheckpoints, type ServiceRunContext } from "@/stores/journal-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
@@ -18,6 +19,7 @@ import type { JournalEntry } from "@/lib/journal"
 import { useNotices, type Notice } from "@/stores/notices-store"
 import { useTimingTrust, whilePuttingBack } from "@/stores/timing-trust-store"
 import type { BroadcastOutput, BroadcastTheme, Scene, SceneAppearanceSnapshot, VerseRenderData } from "@/types"
+import type { ServiceRun, ServiceRunSummary } from "@/types"
 
 type RecoveryThemeSelection = Pick<BroadcastOutput, "themeId" | "themeFor">
 
@@ -313,7 +315,15 @@ const MAX_CHARS = 400_000
  * to put the screens back for the rest of this run, and saving starts again so a second crash is
  * covered by what is on the screens now.
  */
-export const useRecovery = create<{ offer: LiveSnapshot | null; dismissed: boolean; damaged: boolean; restoreError: string | null }>(() => ({ offer: null, dismissed: false, damaged: false, restoreError: null }))
+export const useRecovery = create<{
+  offer: LiveSnapshot | null
+  dismissed: boolean
+  damaged: boolean
+  restoreError: string | null
+  /** Unfinished durable runs are reviewable in History when the local journal is unavailable. */
+  durableRuns: ServiceRunSummary[]
+  durableRunsDismissed: boolean
+}>(() => ({ offer: null, dismissed: false, damaged: false, restoreError: null, durableRuns: [], durableRunsDismissed: false }))
 
 /** "Not now" on the banner: hide it, keep the offer for the Desk menu. */
 export function dismissRecovery(): void {
@@ -333,6 +343,11 @@ export function dismissRecoveryDamage(): void {
   useRecovery.setState({ damaged: false })
 }
 
+/** Hide the notice for durable run checkpoints; the rows remain available in History. */
+export function dismissDurableRunNotice(): void {
+  useRecovery.setState({ durableRunsDismissed: true })
+}
+
 /** The service log as kept for recovery (#196 R3): what happened, and when, survives a crash. */
 export interface KeptJournal {
   v: 1 | 2
@@ -344,6 +359,32 @@ export interface KeptJournal {
   runStatus?: "none" | "active" | "interrupted" | "finished"
   finalizedLogId?: string | null
   checkpointMono?: number
+}
+
+function parseKeptJournal(value: unknown): KeptJournal | null {
+  if (!isRecord(value) || (value.v !== 1 && value.v !== 2) || !isFiniteNumber(value.at) || !Array.isArray(value.entries)) return null
+  if (!value.entries.every(isServiceRunJournalEntry)) return null
+  if (value.startItemIds !== null && (!Array.isArray(value.startItemIds) || !value.startItemIds.every((id) => typeof id === "string"))) return null
+  if (value.v === 1) return value as unknown as KeptJournal
+  if (value.runStatus !== undefined && !["none", "active", "interrupted", "finished"].includes(value.runStatus as string)) return null
+  if (value.finalizedLogId !== undefined && value.finalizedLogId !== null && typeof value.finalizedLogId !== "string") return null
+  if (value.checkpointMono !== undefined && !isFiniteNumber(value.checkpointMono)) return null
+  if (value.runContext !== undefined) {
+    const context = value.runContext
+    if (!isRecord(context) || typeof context.runId !== "string" || !context.runId || (context.programId !== null && typeof context.programId !== "string") || (context.programRevision !== null && !isFiniteNumber(context.programRevision)) || typeof context.title !== "string" || (context.serviceDate !== null && typeof context.serviceDate !== "string") || typeof context.timeZone !== "string" || validTimeZone(context.timeZone) !== context.timeZone || typeof context.startedAt !== "string" || !Number.isFinite(Date.parse(context.startedAt)) || (context.operator !== null && typeof context.operator !== "string")) return null
+    if (!Array.isArray(context.plan) || !context.plan.every((item) => isRecord(item) && typeof item.id === "string" && typeof item.label === "string")) return null
+    if (!isRecord(context.plannedMs) || Object.values(context.plannedMs).some((duration) => !isFiniteNumber(duration) || duration < 0)) return null
+    if (!Array.isArray(context.headers) || !context.headers.every((header) => isRecord(header) && typeof header.id === "string" && typeof header.name === "string" && (header.type === "phase" || header.type === "group") && isFiniteNumber(header.at))) return null
+    if (!Array.isArray(context.startItemIds) || !context.startItemIds.every((id) => typeof id === "string")) return null
+  }
+  return value as unknown as KeptJournal
+}
+
+function parseServiceRunSummary(value: unknown): ServiceRunSummary | null {
+  if (!isRecord(value) || typeof value.run_id !== "string" || !value.run_id || typeof value.title !== "string" || !["active", "interrupted", "finished"].includes(value.status as string)) return null
+  if (typeof value.started_at !== "string" || typeof value.updated_at !== "string" || !Number.isFinite(Date.parse(value.started_at)) || !Number.isFinite(Date.parse(value.updated_at))) return null
+  if (value.program_id !== null && typeof value.program_id !== "string" || value.program_revision !== null && !isFiniteNumber(value.program_revision) || value.service_date !== null && typeof value.service_date !== "string" || value.time_zone !== null && typeof value.time_zone !== "string" || value.finished_at !== null && typeof value.finished_at !== "string") return null
+  return value as unknown as ServiceRunSummary
 }
 
 /**
@@ -393,15 +434,17 @@ export function restoreJournal(kept: KeptJournal | null | undefined, now = Date.
   const currentBase = j.entries[0]?.mono
   const currentShift = currentBase === undefined ? 0 : Math.max(0, boundary.mono - currentBase)
   const currentEntries = currentShift ? j.entries.map((entry) => ({ ...entry, mono: entry.mono + currentShift })) : j.entries
-  useJournalStore.setState({
-    entries: capJournal([...entries, boundary, ...currentEntries]),
-    startItemIds: j.startItemIds?.length ? j.startItemIds : kept.startItemIds,
-    added: j.added + entries.length + 1,
-    runContext: recoveredContext,
-    runStatus: durableRun && kept.runStatus === "finished" ? "finished" : "interrupted",
-    finalizedLogId: durableRun ? kept.finalizedLogId ?? null : null,
+  withoutAutomaticRunCheckpoints(() => {
+    useJournalStore.setState({
+      entries: capJournal([...entries, boundary, ...currentEntries]),
+      startItemIds: j.startItemIds?.length ? j.startItemIds : kept.startItemIds,
+      added: j.added + entries.length + 1,
+      runContext: recoveredContext,
+      runStatus: durableRun && kept.runStatus === "finished" ? "finished" : "interrupted",
+      finalizedLogId: durableRun ? kept.finalizedLogId ?? null : null,
+    })
+    j.add({ kind: "recovery", label: "Service journal restored for review; nothing was put on a screen" })
   })
-  j.add({ kind: "recovery", label: "Service journal restored for review; nothing was put on a screen" })
   // The item that was running then (#196 R3.8): its start is known, how long it has run is not,
   // until the operator confirms the time or takes it again. A finished service had none running.
   const lastEvent = [...kept.entries].reverse().find((e) => e.kind === "event")
@@ -654,13 +697,16 @@ function saveNotices() {
 
 /** Read the last snapshot (offer it after an unclean exit), then keep it up to date. */
 export async function startLiveRecovery(): Promise<() => void> {
-  useRecovery.setState({ offer: null, dismissed: false, damaged: false, restoreError: null })
+  useRecovery.setState({ offer: null, dismissed: false, damaged: false, restoreError: null, durableRuns: [], durableRunsDismissed: false })
+  store = null
   let unclean = false
   try {
     unclean = await invoke<boolean>("last_exit_unclean")
   } catch {
     // Not under Tauri: there is no confirmed crash recovery to offer.
   }
+  let localJournal: KeptJournal | null = null
+  let localJournalDamaged = false
   let recoveryReadable = true
   try {
     store = await load("recovery.json", { autoSave: false, defaults: {} })
@@ -673,32 +719,61 @@ export async function startLiveRecovery(): Promise<() => void> {
         useRecovery.setState({ offer: snapshot })
       }
     }
+    try {
+      const rawJournal = await store.get<unknown>("journal")
+      if (rawJournal != null) {
+        localJournal = parseKeptJournal(rawJournal)
+        localJournalDamaged = localJournal === null
+      }
+    } catch {
+      localJournalDamaged = true
+    }
   } catch {
     recoveryReadable = false
+    localJournalDamaged = true
   }
   if (unclean && !recoveryReadable) {
     useRecovery.setState({ offer: null, dismissed: false, damaged: true, restoreError: null })
   }
-  if (store) {
-    // History is independent from the visual snapshot. A damaged Live snapshot never suppresses
-    // recovery of the separate journal; restoring it cannot put anything on a screen.
+  let restored = false
+  const pendingRun = localJournal?.v === 2 && !!localJournal.runContext && !localJournal.finalizedLogId
+  if (localJournal && (unclean || pendingRun)) {
+    try { restored = restoreJournal(localJournal, Date.now(), monotonicNow(), unclean) } catch { localJournalDamaged = true }
+  }
+  const recovered = useJournalStore.getState()
+  if (restored && recovered.runContext) {
+    try { await flushJournalRecovery() } catch (error) {
+      useJournalStore.setState({ checkpointStatus: "error", checkpointError: `Recovered journal could not be kept locally: ${String(error)}` })
+    }
+    let sqliteFinished = false
+    if (recovered.runStatus !== "finished" || !recovered.finalizedLogId) {
+      try {
+        const durable = await invoke<ServiceRun | null>("content_get_service_run", { runId: recovered.runContext.runId })
+        sqliteFinished = durable?.status === "finished"
+      } catch { /* Keep recovery available if the content database is temporarily unavailable. */ }
+    }
+    const pendingFinish = recovered.runStatus === "finished" && !recovered.finalizedLogId
+    const work = sqliteFinished || pendingFinish
+      ? finalizeServiceRun()
+      : recovered.runStatus !== "finished" ? interruptCurrentServiceRun() : Promise.resolve()
+    void work.catch((error: unknown) => {
+      useJournalStore.setState({ checkpointStatus: "error", checkpointError: `Recovered service run could not be saved: ${String(error)}` })
+    })
+  }
+  if (unclean && !restored && !useJournalStore.getState().entries.some((entry) => entry.kind === "recovery")) {
     try {
-      const kept = await store.get<KeptJournal>("journal")
-      const pendingRun = kept?.v === 2 && !!kept.runContext && !kept.finalizedLogId
-      const restored = (unclean || pendingRun) ? restoreJournal(kept, Date.now(), monotonicNow(), unclean) : false
-      const recovered = useJournalStore.getState()
-      if (restored && recovered.runContext) {
-        try { await flushJournalRecovery() } catch (error) {
-          useJournalStore.setState({ checkpointStatus: "error", checkpointError: `Recovered journal could not be kept locally: ${String(error)}` })
-        }
-        const pendingFinish = recovered.runStatus === "finished" && !recovered.finalizedLogId
-        const work = pendingFinish ? finalizeServiceRun() : recovered.runStatus !== "finished" ? interruptCurrentServiceRun() : Promise.resolve()
-        void work.catch((error: unknown) => {
-          useJournalStore.setState({ checkpointStatus: "error", checkpointError: `Recovered service run could not be saved: ${String(error)}` })
-        })
-      }
-    } catch { /* Keep startup available if the journal is damaged. */ }
-    if (unclean) try { restoreNotices(await store.get<KeptNotices>("notices")) } catch { /* Keep startup available if notices are damaged. */ }
+      const rawRuns = await invoke<unknown>("content_list_service_runs", { programId: null, limit: 20 })
+      const durableRuns = Array.isArray(rawRuns)
+        ? rawRuns.map(parseServiceRunSummary).filter((run): run is ServiceRunSummary => !!run && run.status !== "finished")
+        : []
+      if (durableRuns.length) useRecovery.setState({ durableRuns, damaged: localJournalDamaged || !recoveryReadable })
+      else if (localJournalDamaged || !recoveryReadable) useRecovery.setState({ damaged: true })
+    } catch {
+      if (localJournalDamaged || !recoveryReadable) useRecovery.setState({ damaged: true })
+    }
+  }
+  if (unclean && store) {
+    try { restoreNotices(await store.get<KeptNotices>("notices")) } catch { /* Keep startup available if notices are damaged. */ }
   }
   const offs = [
     useBroadcastStore.subscribe((s, p) => {
