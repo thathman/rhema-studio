@@ -10,6 +10,7 @@ members = [
     "crates/notes",
     "crates/content",
     "crates/join",
+    "crates/recorder",
 ]
 resolver = "2"
 
@@ -63,6 +64,7 @@ rhema-audio = { path = "crates/audio" }
 rhema-bible = { path = "crates/bible" }
 rhema-stt = { path = "crates/stt" }
 rhema-broadcast = { path = "crates/broadcast" }
+rhema-recorder = { path = "crates/recorder" }
 rhema-detection = { path = "crates/detection", features = ["onnx", "vector-search"] }
 rhema-api = { path = "crates/api" }
 rhema-content = { path = "crates/content" }

@@ -14,6 +14,7 @@ pub mod host_advert;
 pub mod join;
 pub mod machine;
 pub mod media;
+pub mod recorder;
 pub mod remote;
 pub mod secrets;
 pub mod setup;
