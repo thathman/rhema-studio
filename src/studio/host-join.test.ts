@@ -163,7 +163,7 @@ describe("the main desk takes back control (#243)", () => {
     expect(useSettingsStore.getState().remoteDevices[0]).toMatchObject({ name: "Desk C", role: "bible", paused: true })
     await pushRemoteKeys()
     const pushed = calls.filter((c) => c.cmd === "remote_set_keys").at(-1)!.args.devices as { name: string; paused: boolean }[]
-    expect(pushed).toEqual([{ hash: device.hash, name: "Desk C", role: "bible", paused: true }])
+    expect(pushed).toEqual([{ hash: device.hash, name: "Desk C", role: "bible", paused: true, output_scope: [] }])
     expect(buildLiveState().paused).toEqual(["Desk C"])
     await setDeskControl(device.hash, true)
     expect(useJournalStore.getState().entries.map((e) => e.label)).toEqual(["Main desk took back control from Desk C"])

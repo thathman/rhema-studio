@@ -39,7 +39,7 @@ const live: LiveStateV1 = {
 
 const render = async (role: string, state: LiveStateV1 = live) => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  useJoin.setState({ status: "connected", me: { name: "Op", role }, live: state, error: null, paused: false, note: null })
+  useJoin.setState({ status: "connected", me: { name: "Op", role, ...(role === "screens" ? { outputScope: ["main"] } : {}) }, live: state, error: null, paused: false, note: null })
   const el = document.createElement("div")
   await act(async () => createRoot(el).render(<OperatorsPanel />))
   return el
@@ -108,7 +108,7 @@ describe("desk consoles on a joined computer (#197)", () => {
     const map = el.querySelector('[aria-label="Output map"]')!
     expect(map.textContent).toContain("Projector")
     expect(map.textContent).toContain("Sermon split")
-    expect(map.textContent).toContain("stage display")
+    expect(map.textContent).not.toContain("stage display")
     expect(map.querySelectorAll("button")).toHaveLength(0)
   })
 

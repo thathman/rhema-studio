@@ -44,7 +44,7 @@ const graphicsQueue: NonNullable<LiveStateV1["graphicsQueue"]> = {
 
 const render = async (role: string, state: LiveStateV1 = live) => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  useJoin.setState({ status: "connected", me: { name: "Op", role }, live: state, error: null, paused: false, note: null })
+  useJoin.setState({ status: "connected", me: { name: "Op", role, ...(role === "screens" ? { outputScope: ["main", "side"] } : {}) }, live: state, error: null, paused: false, note: null })
   const el = document.createElement("div")
   await act(async () => (roots.push(createRoot(el)), roots[roots.length - 1]).render(<OperatorsPanel />))
   return el
