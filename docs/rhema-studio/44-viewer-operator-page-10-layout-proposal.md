@@ -1,6 +1,8 @@
 # 44 — Page 10 Viewer Operator: Follow the Service (Read-Only Production Awareness)
 
-**Workshop date:** 29 October 2026. **State: OWNER APPROVED — PAGE 10 VIEWER STRUCTURAL HIERARCHY.** The owner answered “yes” on 29 October 2026. Detailed pixels and real-world acceptance remain pending. Page 9 Editor's three-part hierarchy and separate Save Draft / Submit for Review were owner-approved in [43 §9](43-editor-operator-page-9-layout-proposal.md#9-owner-page-9-sign-off--approved-29-october-2026). Next in [34](34-browser-operators-connected-development.md) is **Viewer** (then Page 11 main Presenter/Configure). This document proposes a simpler browser/mobile joined experience, not a new church website or another control application. Existing owner resume-build/no-new-PR and security requirements remain.
+**CURRENT PR EXECUTION POLICY (29 October):** The owner rescinded the blanket PR creation freeze. [New development PRs are allowed in a small continuously merged queue](../OWNER-PR-WORKFLOW-2026-10-29.md), subject to existing Live/security/review gates. Website-publishing PRs #352/#367 remain held. Any older PR-freeze phrase in this page is historical.
+
+**Workshop date:** 29 October 2026. **State: OWNER APPROVED — PAGE 10 VIEWER STRUCTURAL HIERARCHY.** The owner answered “yes” on 29 October 2026. Detailed pixels and real-world acceptance remain pending. Page 9 Editor's three-part hierarchy and separate Save Draft / Submit for Review were owner-approved in [43 §9](43-editor-operator-page-9-layout-proposal.md#9-owner-page-9-sign-off--approved-29-october-2026). Next in [34](34-browser-operators-connected-development.md) is **Viewer** (then Page 11 main Presenter/Configure). This document proposes a simpler browser/mobile joined experience, not a new church website or another control application. Existing owner resume-build/former PR freeze and security requirements remain.
 
 ## 1. Viewer role promise
 
