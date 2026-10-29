@@ -1,11 +1,10 @@
-name: Deploy web to GitHub Pages
+# The inherited OpenBezal web/ app is preserved for historical documentation.
+# It is no longer the Rhema Studio public site and MUST NOT publish to Pages.
+# The current branded site is site/ and the only deployment path is
+# .github/workflows/deploy-rhema-site.yml.
+name: Legacy web — build check only
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'web/**'
-      - '.github/workflows/deploy-web.yml'
   pull_request:
     branches: [main]
     paths:
@@ -16,61 +15,16 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
-  build:
+  verify-legacy-build:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Cache Next.js build
-        uses: actions/cache@v6
-        with:
-          path: web/.next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}-${{ hashFiles('web/**/*.ts', 'web/**/*.tsx') }}
-          restore-keys: |
-            nextjs-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}-
-
       - run: bun install --frozen-lockfile
-
       - run: bun run build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Pages artifact
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: web/out
-
-  deploy:
-    if: github.event_name != 'pull_request'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      # Do not try to raise `timeout` here: the action clamps it to 600000 ms
-      # and logs "timeout value is greater than the allowed maximum". Waiting
-      # longer is not an option this workflow controls.
-      #
-      # A Pages deployment is also keyed by commit SHA, and on timeout the
-      # action cancels the deployment it created — so a timed-out SHA can never
-      # deploy again. Re-running the job recreates the same id, reads back the
-      # cancelled state, and fails in seconds. Only a new commit can deploy.
-      - id: deployment
-        uses: actions/deploy-pages@v5
