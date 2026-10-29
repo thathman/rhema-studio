@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="How Rhema Studio's read-only History run review compares planned and journaled event timing, and where evidence remains unknown.">
+  <link rel="icon" href="../assets/rhema-studio-mark.svg" type="image/svg+xml"><link rel="stylesheet" href="./docs.css">
+  <title>History & run review — Rhema Studio</title>
+</head>
+<body>
+  <a class="skip-link" href="#docs-content">Skip to documentation</a>
+  <header class="docs-header"><a class="docs-brand" href="../index.html"><img src="../assets/rhema-studio-mark.svg" width="34" height="34" alt=""><span>Rhema Studio</span></a><nav class="docs-top-links" aria-label="Site navigation"><a href="../index.html">Website</a><a href="./roadmap.html">Roadmap</a><a class="docs-home-link" href="https://github.com/thathman/rhema-studio" rel="noopener noreferrer">GitHub ↗</a></nav></header>
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation navigation"><p class="docs-sidebar-title">Documentation</p><button class="docs-nav-toggle" type="button" aria-controls="docs-navigation" aria-expanded="false">Browse documentation</button><nav class="docs-sidebar-nav" id="docs-navigation" data-docs-nav aria-label="Documentation pages"></nav><noscript><p><a href="./index.html">Docs home and full page index</a></p></noscript></aside>
+    <main class="docs-main" id="docs-content">
+      <div class="docs-breadcrumb"><a href="../index.html">Rhema Studio</a><span aria-hidden="true">›</span><a href="./index.html">Docs & wiki</a></div>
+      <header class="article-header"><p class="article-kicker">SERVICE HISTORY</p><h1>History & run review</h1><p>Review a saved run checkpoint without restoring its plan or changing a live output.</p></header>
+      <article class="prose">
+        <p><span class="status-chip">Read-only timing review in current main</span><span class="status-chip pending">Physical output acceptance pending</span></p>
+        <p>To open a run review, go to <strong>History → What went live → Service log → Recent service runs</strong>, then choose <strong>Review</strong> for a saved run.</p>
+        <h2>Plan compared with actual timing</h2>
+        <p>When a saved service run has a readable checkpoint, History shows planned event durations beside elapsed time derived from the run journal. A difference appears only when both the estimate and a complete actual duration are available. A journaled event missing from the captured plan is labeled <strong>Not in captured plan</strong> and has no planned estimate; this label does not say when or why it was added.</p>
+        <h2>When a duration is not final or not known</h2>
+        <ul>
+          <li>For an active event, the elapsed time ends at the last saved checkpoint. The row says <strong>at last checkpoint</strong>, and its difference is marked <strong>Not final</strong>.</li>
+          <li>An event with no journal start mark is shown as <strong>Not started</strong>, not as zero minutes.</li>
+          <li>If the run was interrupted, recovered across a missing interval, lacks a valid timing anchor, or has no finish mark, the affected duration remains unknown.</li>
+          <li>Only complete, supported timing intervals receive a final difference. Missing evidence is not inferred.</li>
+        </ul>
+        <h2>What the review does not prove</h2>
+        <p>The journal timing summary does not prove that an audience screen rendered or acknowledged a particular event. Check output status and acknowledgements separately. Reading a checkpoint is a review action: it does not restore the captured rundown into Prepare, take a scene, or send content to Program.</p>
+        <div class="notice warning"><p><strong>Screenshot status:</strong> the repository's public captures predate this History review and do not show the current screen. This page uses no conceptual image as a substitute. Native persistence and physical output behavior require their own acceptance evidence.</p></div>
+        <h2>Implementation evidence</h2>
+        <ul>
+          <li><a href="https://github.com/thathman/rhema-studio/blob/main/src/studio/library/service-run-review.tsx" rel="noopener noreferrer">History timing review</a> builds the event rows and presents their evidence state.</li>
+          <li><a href="https://github.com/thathman/rhema-studio/blob/main/src/lib/service-run-checkpoint.ts" rel="noopener noreferrer">Saved run checkpoint parser</a> includes supported event timing metadata.</li>
+          <li><a href="https://github.com/thathman/rhema-studio/blob/main/src/studio/library/service-run-review.test.ts" rel="noopener noreferrer">Focused review tests</a> cover complete, active, unstarted, interrupted, recovered, and unplanned events.</li>
+        </ul>
+      </article>
+      <nav class="page-nav" aria-label="Page navigation"><a href="./comms-and-timing.html">← Comms & timing</a><a href="./devices.html">Devices & companion apps →</a></nav>
+    </main>
+  </div>
+  <footer class="docs-footer"><span>Rhema Studio · independent project · in development</span><a href="https://github.com/thathman/rhema-studio" rel="noopener noreferrer">Repository ↗</a></footer>
+  <script src="./docs.js" defer></script>
+</body>
+</html>
