@@ -276,7 +276,10 @@ mod tests {
         assert!(matches!(db.save_design_draft(&d.id, 1, &input("three")), Err(ContentError::Conflict { expected: 1, actual: 2 })));
         assert_eq!(db.get_design(&d.id).unwrap().unwrap().document, doc("two"));
         assert_eq!(db.list_designs(Some("serm"), Some("scene"), 10).unwrap().len(), 1);
-        assert!(db.list_designs(None, Some("template"), 10).unwrap().is_empty());
+        assert_eq!(
+            db.list_designs(None, Some("template"), 10).unwrap(),
+            Vec::<DesignSummary>::new()
+        );
     }
 
     #[test]
