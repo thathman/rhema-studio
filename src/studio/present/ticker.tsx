@@ -27,7 +27,6 @@ export function TickerControl() {
   const pendingItems = ticker && pending?.startedAt === ticker.startedAt ? pending.items : null
   const editorItems = pendingItems ?? items
   const targets = outputs.filter((o) => followsTicker(o) && o.role !== "stage")
-  const hasWords = editorItems.some((i) => i.trim())
   const lastTickerStart = useRef<number | null>(null)
   useEffect(() => {
     // Stopping ends the public ticker. Keep any unapplied words as the saved
@@ -38,11 +37,6 @@ export function TickerControl() {
       useBroadcastStore.getState().setTickerItems(pending.items)
     }
   }, [ticker, pending])
-  const start = async () => {
-    const backing = await lowerThirdBacking(useBroadcastStore.getState().tickerStyle)
-    useBroadcastStore.getState().setTicker({ backing })
-    setPending(null)
-  }
   return (
     <>
       <Popover>
@@ -87,20 +81,13 @@ export function TickerControl() {
           />
           <TickerPreview items={editorItems} />
           <div className="mt-2 flex items-center gap-2">
-            {ticker ? (
-              <>
-                {ticker.pausedAt ? (
-                  <Button size="sm" onClick={() => useBroadcastStore.getState().pauseTicker(false)}><PlayIcon /> Resume</Button>
-                ) : (
-                  <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().pauseTicker(true)}><PauseIcon /> Pause</Button>
-                )}
-                {pendingItems && <Button size="sm" onClick={() => { useBroadcastStore.getState().setTickerItems(pendingItems); setPending(null) }}>Update running ticker</Button>}
-                {pendingItems && <Button size="sm" variant="outline" onClick={() => setPending(null)}>Discard edits</Button>}
-                <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().setTicker(null)}><SquareIcon /> Stop</Button>
-              </>
-            ) : (
-              <Button size="sm" disabled={!hasWords} onClick={() => void start()}><PlayIcon /> Start</Button>
-            )}
+            {ticker?.pausedAt ? (
+              <Button size="sm" onClick={() => useBroadcastStore.getState().pauseTicker(false)}><PlayIcon /> Resume</Button>
+            ) : ticker ? (
+              <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().pauseTicker(true)}><PauseIcon /> Pause</Button>
+            ) : null}
+            {ticker && pendingItems && <Button size="sm" onClick={() => { useBroadcastStore.getState().setTickerItems(pendingItems); setPending(null) }}>Update running ticker</Button>}
+            {ticker && pendingItems && <Button size="sm" variant="outline" onClick={() => setPending(null)}>Discard edits</Button>}
             <Button size="sm" variant="outline" className="ml-auto" onClick={() => useShellStore.getState().openDesign("ticker")} title="Design the ticker (Design page)"><PaletteIcon /> Design…</Button>
           </div>
         </PopoverContent>
@@ -109,7 +96,7 @@ export function TickerControl() {
   )
 }
 
-/** The ticker in the console: its state, its words (Edit) and Take / Stop in one row. */
+/** The ticker in the console: its state, words, and one canonical Take / Stop control. */
 export function TickerRow() {
   const ticker = useBroadcastStore((s) => s.ticker)
   const hasWords = useBroadcastStore((s) => s.tickerItems.some((i) => i.trim()))

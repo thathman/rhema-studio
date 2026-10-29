@@ -8,7 +8,7 @@ vi.mock("@tauri-apps/plugin-store", () => ({ load: vi.fn(async () => ({ get: asy
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { useBroadcastStore } from "@/stores/broadcast-store"
-import { TickerControl } from "./ticker"
+import { TickerControl, TickerRow } from "./ticker"
 
 let root: Root | null = null
 
@@ -39,6 +39,14 @@ async function renderTicker() {
   document.body.appendChild(element)
   root = createRoot(element)
   await act(async () => root!.render(<TickerControl />))
+  return element
+}
+
+async function renderTickerRow() {
+  const element = document.createElement("div")
+  document.body.appendChild(element)
+  root = createRoot(element)
+  await act(async () => root!.render(<TickerRow />))
   return element
 }
 
@@ -119,7 +127,7 @@ describe("Present ticker word edits", () => {
 
   it("keeps unapplied words for next use when the running ticker is stopped", async () => {
     useBroadcastStore.getState().setTicker({ backing: null })
-    const element = await renderTicker()
+    const element = await renderTickerRow()
     await openTicker(element)
     const textarea = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Ticker items, one per line"]')!
     await act(async () => editTextarea(textarea, "For the next ticker"))
@@ -130,5 +138,23 @@ describe("Present ticker word edits", () => {
     expect(useBroadcastStore.getState().ticker).toBeNull()
     expect(useBroadcastStore.getState().tickerItems).toEqual(["For the next ticker"])
     expect(useBroadcastStore.getState().outputFrames.main?.ticker ?? null).toBeNull()
+  })
+
+  it("keeps Take in the Live row as the single start control", async () => {
+    const element = await renderTickerRow()
+    await openTicker(element)
+
+    const takeControls = [...document.querySelectorAll("button")].filter((button) => button.textContent?.includes("Take") || button.textContent?.includes("Start"))
+    expect(takeControls).toHaveLength(1)
+    expect(takeControls[0].textContent).toContain("Take")
+  })
+
+  it("keeps Stop in the Live row as the single stop control", async () => {
+    useBroadcastStore.getState().setTicker({ backing: null })
+    const element = await renderTickerRow()
+    await openTicker(element)
+
+    const stopControls = [...document.querySelectorAll("button")].filter((button) => button.textContent?.includes("Stop"))
+    expect(stopControls).toHaveLength(1)
   })
 })
