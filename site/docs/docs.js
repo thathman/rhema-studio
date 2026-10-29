@@ -5,6 +5,7 @@ const docSections = [
       ["index.html", "Docs home"],
       ["getting-started.html", "Getting started"],
       ["core-concepts.html", "Core concepts"],
+      ["permissions.html", "Permissions & access"],
     ],
   },
   {
