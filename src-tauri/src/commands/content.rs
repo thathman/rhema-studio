@@ -8,7 +8,8 @@ use tauri::State;
 
 use rhema_content::{
     ContentDb, ContentError, Hymnbook, HymnbookInput, ImportMode, ImportReport, ItemInput, Program, ProgramWithItems,
-    Revision, RevisionSummary, SongExport, SongInput, SongSummary, SongWithSections, SongUsage, ServiceLog, ServiceLogSummary, MediaAsset,
+    Revision, RevisionSummary, SongExport, SongInput, SongSummary, SongWithSections, SongUsage, ServiceLog, ServiceLogSummary, ServiceRun,
+    ServiceRunCheckpoint, ServiceRunSummary, MediaAsset,
     ReusableSlide, ReusableSlideInput,
 };
 
@@ -76,6 +77,49 @@ pub fn content_save_service_log(state: State<'_, ContentState>, program_id: Opti
     with_db(&state, |db| db.save_service_log(program_id.as_deref(), &title, &body, transcript.as_deref()))
 }
 
+#[tauri::command]
+#[expect(clippy::too_many_arguments, reason = "Tauri exposes each stable service-run context field as a named IPC argument")]
+pub fn content_checkpoint_service_run(
+    state: State<'_, ContentState>,
+    run_id: String,
+    program_id: Option<String>,
+    program_revision: Option<i64>,
+    service_date: Option<String>,
+    title: String,
+    time_zone: Option<String>,
+    started_at: String,
+    checkpoint: serde_json::Value,
+) -> CmdResult<ServiceRun> {
+    let input = ServiceRunCheckpoint { run_id, program_id, program_revision, service_date, title, time_zone, started_at, checkpoint };
+    with_db(&state, |db| db.checkpoint_service_run(&input))
+}
+
+#[tauri::command]
+pub fn content_interrupt_service_run(state: State<'_, ContentState>, run_id: String) -> CmdResult<ServiceRun> {
+    with_db(&state, |db| db.interrupt_service_run(&run_id))
+}
+
+#[tauri::command]
+pub fn content_finalize_service_run(
+    state: State<'_, ContentState>,
+    run_id: String,
+    body: String,
+    finished_at: String,
+    transcript: Option<String>,
+) -> CmdResult<ServiceLogSummary> {
+    with_db(&state, |db| db.finalize_service_run(&run_id, &body, &finished_at, transcript.as_deref()))
+}
+
+#[tauri::command]
+pub fn content_list_service_runs(state: State<'_, ContentState>, program_id: Option<String>, limit: Option<usize>) -> CmdResult<Vec<ServiceRunSummary>> {
+    with_db(&state, |db| db.list_service_runs(program_id.as_deref(), limit.unwrap_or(100)))
+}
+
+#[tauri::command]
+pub fn content_get_service_run(state: State<'_, ContentState>, run_id: String) -> CmdResult<Option<ServiceRun>> {
+    with_db(&state, |db| db.get_service_run(&run_id))
+}
+
 /// Song usage between two ISO dates, for licence (CCLI) reports.
 #[tauri::command]
 pub fn content_song_usage(state: State<'_, ContentState>, from: String, to: String) -> CmdResult<Vec<SongUsage>> {
@@ -83,8 +127,13 @@ pub fn content_song_usage(state: State<'_, ContentState>, from: String, to: Stri
 }
 
 #[tauri::command]
-pub fn content_list_service_logs(state: State<'_, ContentState>, query: Option<String>, limit: Option<usize>) -> CmdResult<Vec<ServiceLogSummary>> {
-    with_db(&state, |db| db.list_service_logs(query.as_deref(), limit.unwrap_or(100)))
+pub fn content_list_service_logs(
+    state: State<'_, ContentState>,
+    query: Option<String>,
+    limit: Option<usize>,
+    program_id: Option<String>,
+) -> CmdResult<Vec<ServiceLogSummary>> {
+    with_db(&state, |db| db.list_service_logs_for_program(query.as_deref(), program_id.as_deref(), limit.unwrap_or(100)))
 }
 
 #[tauri::command]

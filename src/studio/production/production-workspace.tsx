@@ -38,7 +38,7 @@ import { CLAP_LISTEN_MS, TONE_DBFS, TONE_HZ, canChooseToneOutput, clapTest, clap
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { safeArea, safeAreaWords } from "@/lib/theme-look"
 import type { BroadcastOutput, BroadcastOutputStatus, BroadcastTheme, ReceiverTv, Scene } from "@/types"
-import { useJournalStore } from "@/stores/journal-store"
+import { finalizeServiceRun, useJournalStore } from "@/stores/journal-store"
 import { useMediaStore } from "@/stores/media-store"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceTiming } from "@/studio/use-service-timing"
@@ -1045,14 +1045,43 @@ function FinishService() {
   const { state } = useServiceTiming()
   const [armed, setArmed] = useState(false)
   const [refused, setRefused] = useState<string | null>(null)
+  const [savingHistory, setSavingHistory] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const runContext = useJournalStore((s) => s.runContext)
+  const checkpointStatus = useJournalStore((s) => s.checkpointStatus)
+  const finalizedLogId = useJournalStore((s) => s.finalizedLogId)
+  const saveFinishedRun = async () => {
+    setSavingHistory(true)
+    setHistoryError(null)
+    try {
+      await finalizeServiceRun()
+    } catch (error) {
+      setHistoryError(`Service finished, but its History record was not saved: ${String(error)}`)
+    } finally {
+      setSavingHistory(false)
+    }
+  }
   const me = useSettingsStore((s) => s.operatorName.trim()) || undefined
-  if (state === "finished") return <span className="font-semibold text-muted-foreground">Service finished</span>
+  if (state === "finished") return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="font-semibold text-muted-foreground">Service finished</span>
+      {runContext && (finalizedLogId
+        ? <span role="status" className="text-xs text-muted-foreground">Saved to History</span>
+        : <>
+          <span role="status" className="text-xs text-muted-foreground">{savingHistory || checkpointStatus === "saving" ? "Saving to History…" : "History save pending"}</span>
+          <Button size="sm" variant="outline" disabled={savingHistory} onClick={() => void saveFinishedRun()}>{savingHistory ? "Saving…" : "Retry History save"}</Button>
+        </>)}
+      {(historyError || (checkpointStatus === "error" && runContext)) && <span role="alert" className="basis-full text-xs text-destructive">{historyError ?? useJournalStore.getState().checkpointError}</span>}
+    </div>
+  )
   return (
     <>
       <Button size="sm" variant={armed ? "default" : "outline"} disabled={state === "idle"} onClick={() => {
         if (!armed) return setArmed(true)
         setArmed(false)
-        setRefused(useEventClock.getState().finish(me))
+        const reason = useEventClock.getState().finish(me)
+        setRefused(reason)
+        if (!reason) void saveFinishedRun()
       }} onBlur={() => setArmed(false)}>{armed ? "Finish now" : "Finish service"}</Button>
       {refused && <span className="text-muted-foreground" role="status">{refused}</span>}
     </>

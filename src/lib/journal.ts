@@ -37,13 +37,13 @@ export interface ActualDuration {
   ms: number
 }
 
-/** Time on air per entry: each entry lasts until the next entry (or `nowMono` for the last). */
+/** Time on air per entry: each lasts until the next change, recovery boundary, or `nowMono`. */
 export function actualDurations(entries: JournalEntry[], nowMono: number): ActualDuration[] {
   return entries
     .filter((e) => e.kind === "live" || e.kind === "quick" || e.kind === "restore")
     .map((e) => {
       const i = entries.indexOf(e)
-      const next = entries.slice(i + 1).find((n) => n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote" && n.kind !== "obs" && n.kind !== "sound" && n.kind !== "timing" && n.kind !== "event" && n.kind !== "moment" && n.kind !== "source" && n.kind !== "recovery" && n.kind !== "scene" && n.kind !== "shown" && n.kind !== "take")
+      const next = entries.slice(i + 1).find((n) => n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote" && n.kind !== "obs" && n.kind !== "sound" && n.kind !== "timing" && n.kind !== "event" && n.kind !== "moment" && n.kind !== "source" && n.kind !== "scene" && n.kind !== "shown" && n.kind !== "take")
       return { entry: e, itemId: e.itemId ?? null, label: e.label, ms: Math.max(0, (next?.mono ?? nowMono) - e.mono) }
     })
 }
@@ -73,15 +73,17 @@ export function eventPlanStarts(entries: JournalEntry[]): Map<string, number> {
 }
 
 /**
- * How long each event ran: until the next event started (or the service was finished), the last
- * one until `nowMono`.
+ * How long each event ran: until the next event, finish, recovery boundary, or `nowMono`.
  */
 export function eventTimes(entries: JournalEntry[], nowMono: number): Map<string, number> {
   const out = new Map<string, number>()
   const marks = entries.filter((e) => e.kind === "event" || e.kind === "moment")
+  const recoveries = entries.filter((e) => e.kind === "recovery")
   marks.forEach((e, i) => {
     const id = e.eventId ?? e.itemId
-    if (id) out.set(id, (out.get(id) ?? 0) + Math.max(0, (marks[i + 1]?.mono ?? nowMono) - e.mono))
+    const next = marks[i + 1]
+    const interruptedAt = recoveries.find((r) => r.mono >= e.mono && (!next || r.mono < next.mono))
+    if (id) out.set(id, (out.get(id) ?? 0) + Math.max(0, (interruptedAt?.mono ?? next?.mono ?? nowMono) - e.mono))
   })
   return out
 }
@@ -105,7 +107,7 @@ export function firstOnAir(entries: JournalEntry[]): Map<string, number> {
   return out
 }
 
-const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+const hhmm = (ms: number, timeZone = "") => new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", ...(timeZone ? { timeZone } : {}) })
 export const mmss = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}`
 
 /** A plain-text log a person can read or paste into a report. */
@@ -121,15 +123,15 @@ export interface RundownLine {
 // eslint-disable-next-line no-control-regex -- matching control characters is the point
 const oneLine = (s: string) => s.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ")
 
-export function formatJournal(title: string, entries: JournalEntry[], nowMono: number, planned: Map<string, number> = new Map(), rundown?: RundownLine[]): string {
-  const lines = [`${title}`, `Service log — ${entries[0] ? new Date(entries[0].at).toLocaleDateString() : ""}`, ""]
+export function formatJournal(title: string, entries: JournalEntry[], nowMono: number, planned: Map<string, number> = new Map(), rundown?: RundownLine[], timeZone = ""): string {
+  const lines = [`${title}`, `Service log — ${entries[0] ? new Date(entries[0].at).toLocaleDateString(undefined, timeZone ? { timeZone } : {}) : ""}`, ""]
   const durations = actualDurations(entries, nowMono)
   for (const e of entries) {
     const d = durations.find((x) => x.entry === e)
     const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote", obs: "OBS", sound: "sound", timing: "timer", event: "EVENT", moment: "MOMENT", source: "source", recovery: "RECOVERED", scene: "SCENE", shown: "shown", take: "TAKE" }[e.kind]
     const dur = d && (e.kind === "live" || e.kind === "quick" || e.kind === "restore") ? `  (${mmss(d.ms)})` : ""
     // One entry, one line: typed words (a notice, a hold reason, a scene name) never start a line of their own.
-    lines.push(`${hhmm(e.at)}  ${verb.padEnd(13)} ${oneLine(e.label)}${dur}${e.source && e.kind !== "source" ? `  · ${oneLine(e.source)}` : ""}`)
+    lines.push(`${hhmm(e.at, timeZone)}  ${verb.padEnd(13)} ${oneLine(e.label)}${dur}${e.source && e.kind !== "source" ? `  · ${oneLine(e.source)}` : ""}`)
   }
   const totals = actualByItem(entries, nowMono)
   const versus = (ms: number | undefined, plan: number | undefined) =>

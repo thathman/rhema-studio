@@ -8,7 +8,7 @@ import { sourceOf, type LiveSources } from "@/lib/live-sources"
 import { outputOnAir } from "@/lib/output-on-air"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
-import { capJournal, useJournalStore } from "@/stores/journal-store"
+import { capJournal, finalizeServiceRun, interruptCurrentServiceRun, useJournalStore, type ServiceRunContext } from "@/stores/journal-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
@@ -334,29 +334,47 @@ export function dismissRecoveryDamage(): void {
 
 /** The service log as kept for recovery (#196 R3): what happened, and when, survives a crash. */
 export interface KeptJournal {
-  v: 1
+  v: 1 | 2
   at: number
   entries: JournalEntry[]
   startItemIds: string[] | null
+  /** Version 2 captures service ownership and the time of its durable checkpoint. */
+  runContext?: ServiceRunContext
+  runStatus?: "none" | "active" | "interrupted" | "finished"
+  finalizedLogId?: string | null
+  checkpointMono?: number
 }
 
 /**
  * The service log from the run that closed unexpectedly, back in this run: history only, nothing
- * goes on a screen. Its monotonic times are moved onto this run's clock all by the same amount,
- * placed by the newest entry's wall-clock time, so the times between entries stay as measured and
- * the actual durations still add up, even if the computer's clock was corrected during the service.
+ * goes on a screen. Its monotonic times are moved onto this run's clock all by the same amount.
+ * Version 2 stops the last active duration at the saved checkpoint, so time spent offline is unknown.
  * Anything this run logged already (a scene put back at start-up) stays, after them. Only once,
  * and only if recent.
  */
-export function restoreJournal(kept: KeptJournal | null | undefined, now = Date.now(), nowMono = monotonicNow()): boolean {
+export function restoreJournal(kept: KeptJournal | null | undefined, now = Date.now(), nowMono = monotonicNow(), unclean = true): boolean {
   const j = useJournalStore.getState()
-  if (!kept || kept.v !== 1 || !kept.entries?.length || now - kept.at >= FRESH_MS || now < kept.at || j.entries.some((e) => e.kind === "recovery")) return false
+  const durableRun = kept?.v === 2 && !!kept.runContext
+  if (!kept || (kept.v !== 1 && kept.v !== 2) || !kept.entries?.length || (!durableRun && now - kept.at >= FRESH_MS) || now < kept.at || j.entries.some((e) => e.kind === "recovery")) return false
   const base = now - nowMono
   const last = kept.entries.at(-1)!
-  const shift = typeof last.mono === "number" ? last.at - base - last.mono : null
+  const shift = kept.v === 2 && typeof kept.checkpointMono === "number"
+    ? nowMono - kept.checkpointMono
+    : typeof last.mono === "number" ? last.at - base - last.mono : null
   const entries = kept.entries.map((e) => ({ ...e, mono: shift !== null && typeof e.mono === "number" ? e.mono + shift : e.at - base }))
-  useJournalStore.setState({ entries: capJournal([...entries, ...j.entries]), startItemIds: j.startItemIds?.length ? j.startItemIds : kept.startItemIds, added: j.added + entries.length })
-  j.add({ kind: "recovery", label: `Service log kept from before Rhema Studio closed unexpectedly at ${new Date(kept.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
+  const boundary: JournalEntry = {
+    kind: "recovery",
+    label: unclean
+      ? `Last confirmed service activity before Rhema Studio closed unexpectedly at ${new Date(kept.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}; time after this point is unknown`
+      : `Last confirmed service activity at ${new Date(kept.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}; the run ended without Finish, and later time is unknown`,
+    at: kept.at,
+    mono: kept.v === 2 && typeof kept.checkpointMono === "number" ? nowMono : entries.at(-1)?.mono ?? nowMono,
+  }
+  const currentBase = j.entries[0]?.mono
+  const currentShift = currentBase === undefined ? 0 : Math.max(0, boundary.mono - currentBase)
+  const currentEntries = currentShift ? j.entries.map((entry) => ({ ...entry, mono: entry.mono + currentShift })) : j.entries
+  useJournalStore.setState({ entries: capJournal([...entries, boundary, ...currentEntries]), startItemIds: j.startItemIds?.length ? j.startItemIds : kept.startItemIds, added: j.added + entries.length + 1, ...(kept.v === 2 && kept.runContext ? { runContext: kept.runContext, runStatus: kept.runStatus === "finished" ? "finished" as const : "interrupted" as const, finalizedLogId: kept.finalizedLogId ?? null } : {}) })
+  j.add({ kind: "recovery", label: "Service journal restored for review; nothing was put on a screen" })
   // The item that was running then (#196 R3.8): its start is known, how long it has run is not,
   // until the operator confirms the time or takes it again. A finished service had none running.
   const lastEvent = [...kept.entries].reverse().find((e) => e.kind === "event")
@@ -575,9 +593,26 @@ let journalTimer: ReturnType<typeof setTimeout> | null = null
 function saveJournal() {
   journalTimer = null
   if (!store) return
-  const { entries, startItemIds } = useJournalStore.getState()
-  const kept: KeptJournal = { v: 1, at: Date.now(), entries, startItemIds }
-  void store.set("journal", kept).then(() => store?.save()).catch(() => {})
+  void writeJournalRecovery().catch((error: unknown) => {
+    useJournalStore.setState({ checkpointStatus: "error", checkpointError: `Local recovery could not be written: ${String(error)}` })
+  })
+}
+
+async function writeJournalRecovery(): Promise<void> {
+  if (!store) throw new Error("Local recovery storage is not ready")
+  const { entries, startItemIds, runContext, runStatus, finalizedLogId } = useJournalStore.getState()
+  const kept: KeptJournal = { v: 2, at: Date.now(), checkpointMono: monotonicNow(), entries, startItemIds, runStatus, finalizedLogId, ...(runContext ? { runContext } : {}) }
+  await store.set("journal", kept)
+  await store.save()
+}
+
+/** Write the latest journal before closing or relying on offline recovery. */
+export async function flushJournalRecovery(): Promise<void> {
+  if (journalTimer) {
+    clearTimeout(journalTimer)
+    journalTimer = null
+  }
+  await writeJournalRecovery()
 }
 
 let noticesTimer: ReturnType<typeof setTimeout> | null = null
@@ -616,11 +651,27 @@ export async function startLiveRecovery(): Promise<() => void> {
   }
   if (unclean && !recoveryReadable) {
     useRecovery.setState({ offer: null, dismissed: false, damaged: true, restoreError: null })
-  } else if (unclean && store) {
-    // A malformed snapshot means none of this saved run is restored. With a valid or absent
-    // snapshot, the journal and notices retain their existing independent recovery behavior.
-    try { restoreJournal(await store.get<KeptJournal>("journal")) } catch { /* Keep startup available if the journal is damaged. */ }
-    try { restoreNotices(await store.get<KeptNotices>("notices")) } catch { /* Keep startup available if notices are damaged. */ }
+  }
+  if (store) {
+    // History is independent from the visual snapshot. A damaged Live snapshot never suppresses
+    // recovery of the separate journal; restoring it cannot put anything on a screen.
+    try {
+      const kept = await store.get<KeptJournal>("journal")
+      const pendingRun = kept?.v === 2 && !!kept.runContext && !kept.finalizedLogId
+      const restored = (unclean || pendingRun) ? restoreJournal(kept, Date.now(), monotonicNow(), unclean) : false
+      const recovered = useJournalStore.getState()
+      if (restored && recovered.runContext) {
+        try { await flushJournalRecovery() } catch (error) {
+          useJournalStore.setState({ checkpointStatus: "error", checkpointError: `Recovered journal could not be kept locally: ${String(error)}` })
+        }
+        const pendingFinish = recovered.runStatus === "finished" && !recovered.finalizedLogId
+        const work = pendingFinish ? finalizeServiceRun() : recovered.runStatus !== "finished" ? interruptCurrentServiceRun() : Promise.resolve()
+        void work.catch((error: unknown) => {
+          useJournalStore.setState({ checkpointStatus: "error", checkpointError: `Recovered service run could not be saved: ${String(error)}` })
+        })
+      }
+    } catch { /* Keep startup available if the journal is damaged. */ }
+    if (unclean) try { restoreNotices(await store.get<KeptNotices>("notices")) } catch { /* Keep startup available if notices are damaged. */ }
   }
   const offs = [
     useBroadcastStore.subscribe((s, p) => {
@@ -637,10 +688,18 @@ export async function startLiveRecovery(): Promise<() => void> {
     // Started, paused, reset or corrected (not every tick: a running timer is worked out from the time).
     useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) soon() }),
     useRecovery.subscribe((s, p) => { if ((p.offer && !s.offer) || (s.dismissed && !p.dismissed)) soon() }),
-    // The log, a few seconds after it changes (and when it is cleared for another service).
-    useJournalStore.subscribe((s, p) => { if (s.entries !== p.entries && !journalTimer) journalTimer = setTimeout(saveJournal, 3000) }),
+    // Keep the local recovery copy close to the last recorded change.
+    useJournalStore.subscribe((s, p) => { if ((s.entries !== p.entries || s.runContext !== p.runContext || s.runStatus !== p.runStatus || s.finalizedLogId !== p.finalizedLogId) && !journalTimer) journalTimer = setTimeout(saveJournal, 200) }),
     // Notices and their answers, the same way.
     useNotices.subscribe((s, p) => { if ((s.notices !== p.notices || s.read !== p.read) && !noticesTimer) noticesTimer = setTimeout(saveNotices, 3000) }),
   ]
-  return () => offs.forEach((off) => off())
+  return () => {
+    offs.forEach((off) => off())
+    if (timer) clearTimeout(timer)
+    if (journalTimer) clearTimeout(journalTimer)
+    if (noticesTimer) clearTimeout(noticesTimer)
+    timer = null
+    journalTimer = null
+    noticesTimer = null
+  }
 }

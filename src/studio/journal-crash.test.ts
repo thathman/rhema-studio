@@ -30,7 +30,7 @@ describe("the service log at its cap and after kill -9", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"] })
     vi.setSystemTime(new Date(2026, 9, 25, 9, 30))
     useBroadcastStore.setState({ rehearsal: false })
-    useJournalStore.setState({ entries: [], startItemIds: null, added: 0, keptAt: 0 })
+    useJournalStore.setState({ entries: [], startItemIds: null, added: 0, keptAt: 0, runContext: null, runStatus: "none", checkpointStatus: "idle", checkpointError: null, finalizedLogId: null })
     file.clear()
     unclean = false
   })
@@ -72,11 +72,13 @@ describe("the service log at its cap and after kill -9", () => {
     const before = useJournalStore.getState().entries
     const startsBefore = eventStarts(before)
     const timesBefore = eventTimes(before, crashMono)
+    const checkpointMono = (JSON.parse(file.get("journal")!) as { checkpointMono: number }).checkpointMono
+    const timesAtCheckpoint = eventTimes(before, checkpointMono)
     // kill -9: the process is gone. A new run starts 20 s later and logs a scene put back at start-up.
     stop()
     unclean = true
     vi.advanceTimersByTime(20 * SEC)
-    useJournalStore.setState({ entries: [], startItemIds: null, added: 0, keptAt: 0 })
+    useJournalStore.setState({ entries: [], startItemIds: null, added: 0, keptAt: 0, runContext: null, runStatus: "none", checkpointStatus: "idle", checkpointError: null, finalizedLogId: null })
     useJournalStore.getState().add({ kind: "scene", label: "Main Display: Pulpit camera" })
     const stop2 = await startLiveRecovery()
 
@@ -86,15 +88,16 @@ describe("the service log at its cap and after kill -9", () => {
     expect(entries.slice(-2).map((e) => e.kind)).toEqual(["scene", "recovery"])
     // At the cap, the two new ones push out the two oldest verse steps: nothing else moves.
     expect(before).toHaveLength(JOURNAL_MAX)
-    const pushedOut = before.filter((e) => e.kind !== "event").slice(0, 2)
-    expect(entries.slice(0, -2).map((e) => [e.kind, e.label, e.at])).toEqual(before.filter((e) => !pushedOut.includes(e)).map((e) => [e.kind, e.label, e.at]))
+    const pushedOut = before.filter((e) => e.kind !== "event").slice(0, 3)
+    expect(entries.slice(0, -3).map((e) => [e.kind, e.label, e.at])).toEqual(before.filter((e) => !pushedOut.includes(e)).map((e) => [e.kind, e.label, e.at]))
+    expect(entries.at(-3)).toMatchObject({ kind: "recovery", at: expect.any(Number) })
     expect(inOrder(entries)).toBe(true)
-    // Every item's start as before, and how long each ran, to the millisecond (the last one ran on
-    // until Rhema was killed, and its event carries on).
+    // Every item's start and confirmed duration remain; time after the durable checkpoint is unknown.
     expect(eventStarts(entries)).toEqual(startsBefore)
     const timesAfter = eventTimes(entries, monotonicNow())
     for (const id of ITEMS.slice(0, -1)) expect(timesAfter.get(id), id).toBe(timesBefore.get(id))
-    expect(timesAfter.get("benediction")!).toBeGreaterThanOrEqual(timesBefore.get("benediction")!)
+    expect(timesAfter.get("benediction")).toBe(timesAtCheckpoint.get("benediction"))
+    expect(timesAfter.get("benediction")!).toBeLessThan(timesBefore.get("benediction")!)
     // Only once.
     expect(restoreJournal(JSON.parse(file.get("journal")!))).toBe(false)
     stop2()
@@ -111,7 +114,7 @@ describe("the service log at its cap and after kill -9", () => {
     useJournalStore.setState({ entries: [], startItemIds: null, added: 0, keptAt: 0 })
     const stop2 = await startLiveRecovery()
     const labels = useJournalStore.getState().entries.map((e) => e.label)
-    expect(labels).toHaveLength(saved + 1)
+    expect(labels).toHaveLength(saved + 2)
     expect(labels).not.toContain("last press before the kill")
     expect(new Set(labels.filter((l) => ITEMS.includes(l))).size).toBe(ITEMS.length)
     stop2()

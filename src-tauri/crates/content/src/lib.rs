@@ -85,6 +85,7 @@ pub const MIGRATIONS: &[Migration] = &[
     ("0013_service_log_transcript", include_str!("../migrations/0013_service_log_transcript.sql")),
     ("0014_approved_design_snapshots", include_str!("../migrations/0014_approved_design_snapshots.sql")),
     ("0015_reusable_slides", include_str!("../migrations/0015_reusable_slides.sql")),
+    ("0016_service_runs", include_str!("../migrations/0016_service_runs.sql")),
 ];
 
 /// Item kinds this version can read and write. Future kinds arrive with a
@@ -1489,7 +1490,31 @@ mod tests {
     #[test]
     fn migrations_apply_once_and_in_order() {
         let db = ContentDb::open_in_memory().unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides", "0016_service_runs"]);
+    }
+
+    #[test]
+    fn migration_0016_preserves_existing_manual_service_logs() {
+        let tmp = TempDir::new();
+        let id = crate::new_id();
+        {
+            let db = ContentDb::open_with_migrations(&tmp.db(), &MIGRATIONS[..15]).unwrap();
+            // This is a row written by the pre-0016 schema. It has no run metadata.
+            db.lock().unwrap().execute(
+                "INSERT INTO service_logs (id, program_id, title, body, saved_at, transcript) VALUES (?1, 'deleted-service', 'Legacy', '09:00 LIVE Psalm 23', '2026-10-01T10:00:00.000Z', NULL)",
+                [id.as_str()],
+            ).unwrap();
+        }
+        let db = ContentDb::open(&tmp.db()).unwrap();
+        assert!(db.last_backup().unwrap().exists(), "file-backed migration takes a recoverable backup");
+        assert!(db.last_backup().unwrap().to_string_lossy().contains("before-0016_service_runs"));
+        let saved = db.get_service_log(&id).unwrap().expect("legacy log survives upgrade");
+        assert_eq!(saved.summary.program_id.as_deref(), Some("deleted-service"), "logs remain independent of deleted services");
+        assert_eq!(saved.summary.run_id, None);
+        assert_eq!(saved.summary.finished_at, None);
+        assert_eq!(saved.summary.time_zone, None);
+        assert_eq!(saved.body, "09:00 LIVE Psalm 23");
+        assert!(db.list_service_runs(None, 10).unwrap().is_empty(), "migration does not fabricate service runs");
     }
 
     #[test]
@@ -1927,7 +1952,7 @@ lines"}"#.to_string(), false),
         let older = &MIGRATIONS[..5];
         let err = ContentDb::open_with_migrations(&tmp.db(), older).unwrap_err();
         match &err {
-            ContentError::NewerSchema { versions } => assert_eq!(versions, &vec!["0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides"]),
+            ContentError::NewerSchema { versions } => assert_eq!(versions, &vec!["0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides", "0016_service_runs"]),
             other => panic!("{other:?}"),
         }
         assert!(err.to_string().contains("newer Rhema Studio"));
@@ -1976,7 +2001,7 @@ lines"}"#.to_string(), false),
             p.id
         };
         let db = ContentDb::open(&tmp.db()).unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides", "0016_service_runs"]);
         let backup = db.last_backup().expect("backup before migrating an existing file").to_path_buf();
         assert!(backup.exists());
         assert!(backup.to_string_lossy().contains("before-0002_item_identity"));

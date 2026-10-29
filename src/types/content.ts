@@ -198,9 +198,29 @@ export interface ServiceLogSummary {
   title: string
   saved_at: string
   bytes: number
+  run_id?: string | null
+  time_zone?: string | null
+  finished_at?: string | null
 }
 export interface ServiceLog extends ServiceLogSummary {
   body: string
+}
+
+export interface ServiceRunSummary {
+  run_id: string
+  program_id: string | null
+  program_revision: number | null
+  title: string
+  service_date: string | null
+  time_zone: string | null
+  started_at: string
+  updated_at: string
+  finished_at: string | null
+  status: "active" | "interrupted" | "finished"
+}
+
+export interface ServiceRun extends ServiceRunSummary {
+  checkpoint: unknown
 }
 
 /** One service with its songs and pictures, as a checksummed file (`rhema-service-v1`). */

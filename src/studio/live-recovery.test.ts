@@ -32,7 +32,7 @@ beforeEach(() => {
     isLive: false, liveVerse: null, sources: {}, rehearsal: false, scenes: [], outputStatus: {},
     outputs: [{ id: MAIN_OUTPUT_ID, name: "Projector", type: "display", themeId, monitorIndex: 0, ndi: defaultNdiSettings() }],
   })
-  useJournalStore.setState({ entries: [] })
+  useJournalStore.setState({ entries: [], startItemIds: null, added: 0, keptAt: 0, runContext: null, runStatus: "none", checkpointStatus: "idle", checkpointError: null, finalizedLogId: null })
   useEventClock.setState({ mode: "screens", currentId: null, currentMomentId: null })
   useQueueStore.setState({ items: [], headers: [], activeIndex: null })
   useTimerStore.getState().reset()
@@ -689,7 +689,7 @@ describe("live recovery", () => {
     expect(parseLiveSnapshot(impossible)).toBeNull()
   })
 
-  it("brings back the service log after a crash, with durations still adding up", () => {
+  it("restores the service journal after a crash without counting unknown outage time", () => {
     const at = 1_000_000_000
     const kept = { v: 1 as const, at: at + 600_000, startItemIds: ["a", "b"], entries: [
       { at, mono: 5, kind: "event" as const, label: "Welcome", itemId: "a" },
@@ -700,13 +700,13 @@ describe("live recovery", () => {
     expect(restoreJournal(kept, at + 700_000, 1_000)).toBe(true)
     const { entries, startItemIds } = useJournalStore.getState()
     expect(startItemIds).toEqual(["a", "b"])
-    expect(entries.map((e) => e.kind)).toEqual(["event", "event", "scene", "recovery"])
+    expect(entries.map((e) => e.kind)).toEqual(["event", "event", "recovery", "scene", "recovery"])
     // Rebased on this run's clock: 4 min apart as before.
     expect(entries[1].mono - entries[0].mono).toBe(240_000)
     expect(entries[0].mono).toBe(at - (at + 700_000 - 1_000))
     // Only once, never an old one.
     expect(restoreJournal(kept, at + 700_000, 1_000)).toBe(false)
-    expect(useJournalStore.getState().entries).toHaveLength(4)
+    expect(useJournalStore.getState().entries).toHaveLength(5)
     useJournalStore.setState({ entries: [] })
     expect(restoreJournal(kept, at + 7 * 3_600_000, 1_000)).toBe(false)
   })
@@ -750,7 +750,6 @@ describe("live recovery", () => {
     const live = { reference: "Keep the current Program", segments: [{ text: "Still on air" }], content: "bible" as const }
     useBroadcastStore.getState().setLiveVerse(live, null, { goLive: true })
     const broadcastBefore = useBroadcastStore.getState()
-    const journalBefore = useJournalStore.getState()
     const invalid = { ...takeSnapshot(), isLive: true, liveVerse: live, sources: "corrupt", outputsOn: "not-an-array" }
     kept.set("snapshot", invalid)
     kept.set("journal", { v: 1, at: Date.now() - 60_000, startItemIds: ["saved-event"], entries: [{ at: Date.now() - 60_000, mono: 1, kind: "event", label: "Must not be restored", itemId: "saved-event" }] })
@@ -761,13 +760,15 @@ describe("live recovery", () => {
     expect(useRecovery.getState().offer).toBeNull()
     expect(useRecovery.getState()).toMatchObject({ damaged: true })
     expect(useBroadcastStore.getState()).toBe(broadcastBefore)
-    expect(useJournalStore.getState()).toBe(journalBefore)
+    expect(useJournalStore.getState().entries.some((entry) => entry.kind === "event" && entry.label === "Must not be restored")).toBe(true)
+    const journalAfterHistoryRecovery = useJournalStore.getState()
 
     useRecovery.setState({ offer: invalid as never, damaged: false } as never)
     await putBack(invalid as never)
     expect(useBroadcastStore.getState()).toBe(broadcastBefore)
     expect(useRecovery.getState()).toMatchObject({ offer: null, damaged: true })
-    expect(useJournalStore.getState().entries.some((entry) => entry.kind === "recovery")).toBe(false)
+    expect(useJournalStore.getState()).toBe(journalAfterHistoryRecovery)
+    expect(useJournalStore.getState().entries.some((entry) => entry.kind === "event" && entry.label === "Must not be restored")).toBe(true)
     stop()
     vi.mocked(invoke).mockImplementation(async () => null)
   })

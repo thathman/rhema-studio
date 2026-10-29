@@ -8,20 +8,34 @@ import { useQueueStore } from "@/stores/queue-store"
 import { useUnsavedStore } from "@/stores/unsaved-store"
 import { flushThemeSave, themeDraftChanged, useBroadcastStore } from "@/stores/broadcast-store"
 import { flushSettingsSave } from "@/stores/settings-store"
-import { journalUnkept, keepJournal } from "@/stores/journal-store"
+import { finalizeServiceRun, interruptCurrentServiceRun, useJournalStore } from "@/stores/journal-store"
+import { flushJournalRecovery } from "@/lib/live-recovery"
 
 const anyUnsaved = () =>
   useServiceStore.getState().dirty || useUnsavedStore.getState().songEditor !== null || unsavedScratch(useQueueStore.getState().items, useServiceStore.getState().current) || themeDraftChanged()
 
 /**
- * Before the window goes: write settings and themes changed in the last
- * moment (their saves wait a fraction of a second) and keep the service log
- * in the library if something was logged since it was last kept. Bounded, so
- * a stuck write never traps the operator.
+ * Before the window goes: flush settings, themes, and the local recovery copy,
+ * then finalize an accepted Finish or mark an unfinished run interrupted.
  */
-async function beforeClose(): Promise<void> {
-  const work = Promise.allSettled([flushSettingsSave(), flushThemeSave(), journalUnkept() ? keepJournal() : Promise.resolve()])
-  await Promise.race([work, new Promise((r) => setTimeout(r, 3000))])
+async function beforeClose(): Promise<string | null> {
+  const state = useJournalStore.getState()
+  const local = flushJournalRecovery()
+  const run = state.runContext
+    ? state.runStatus === "finished" ? finalizeServiceRun() : interruptCurrentServiceRun()
+    : Promise.resolve()
+  const work = Promise.allSettled([flushSettingsSave(), flushThemeSave(), local, run])
+  const results = await Promise.race([
+    work,
+    new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 3000)),
+  ])
+  if (results === "timeout") return "Saving the local journal or settings is taking longer than expected. Keep working and retry, or close without saving."
+  const failures = results.flatMap((result) => result.status === "rejected" ? [String(result.reason)] : [])
+  if (failures.length === 0) return null
+  const localSaved = results[2].status === "fulfilled"
+  const runSaved = results[3].status === "fulfilled"
+  if (localSaved && !runSaved) return `The run remains in this computer's local recovery file, but History could not be updated: ${String((results[3] as PromiseRejectedResult).reason)}`
+  return `Some local data could not be saved: ${failures.join("; ")}`
 }
 
 /**
@@ -44,7 +58,13 @@ export function UnsavedCloseDialog() {
   useEffect(() => {
     void invoke("set_unsaved_work", { unsaved: true }).catch(() => {})
     const un = listen("app:close-requested", () => {
-      void beforeClose().then(() => {
+      void beforeClose().then((saveError) => {
+        if (saveError) {
+          setError(saveError)
+          setOpen(true)
+          void invoke("set_unsaved_work", { unsaved: true }).catch(() => {})
+          return
+        }
         if (!anyUnsaved()) return void invoke("close_main_window").catch(() => {})
         setError(null)
         setOpen(true)
@@ -53,7 +73,11 @@ export function UnsavedCloseDialog() {
     return () => void un.then((u) => u())
   }, [])
 
-  const quit = () => void beforeClose().then(() => invoke("close_main_window")).catch(() => {})
+  const quit = () => void beforeClose().then((saveError) => {
+    if (saveError) setError(saveError)
+    else void invoke("close_main_window").catch(() => {})
+  }).catch((e) => setError(`Could not finish saving before close: ${String(e)}`))
+  const closeWithoutSaving = () => void invoke("close_main_window").catch((e) => setError(`Could not close the window: ${String(e)}`))
   const keepWorking = () => {
     setOpen(false)
     // The close that asked cleared the hold; put it back.
@@ -89,7 +113,7 @@ export function UnsavedCloseDialog() {
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter>
           <Button variant="ghost" disabled={saving} onClick={keepWorking}>Keep working</Button>
-          <Button variant="outline" className="text-destructive" disabled={saving} onClick={quit}>Close without saving</Button>
+          <Button variant="outline" className="text-destructive" disabled={saving} onClick={closeWithoutSaving}>Close without saving</Button>
           {current && dirty && <Button disabled={saving} autoFocus onClick={() => void saveAndQuit()}>{saving ? "Saving…" : "Save and close"}</Button>}
         </DialogFooter>
       </DialogContent>

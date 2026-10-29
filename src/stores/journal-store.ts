@@ -4,7 +4,7 @@ import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { monotonicNow } from "@/stores/timer-store"
 import { invoke } from "@tauri-apps/api/core"
-import { formatJournal, type JournalEntry } from "@/lib/journal"
+import { formatJournal, serviceFinishedAt, type JournalEntry } from "@/lib/journal"
 import { plannedMs } from "@/lib/service-timing"
 import { useSettingsStore } from "@/stores/settings-store"
 import { CONTENT_NAMES } from "@/lib/content-names"
@@ -12,6 +12,9 @@ import { lowerThirdWords, tickerWords, type SourceId, type StateSource, type Sta
 import { cameraWords } from "@/lib/show-health"
 import { sceneForOutput } from "@/lib/scenes"
 import type { ContentType } from "@/types/broadcast"
+import { systemTimeZone } from "@/lib/setup-readiness"
+import { validTimeZone } from "@/lib/church-time"
+import type { OutlineHeader } from "@/lib/run-of-show"
 
 interface JournalState {
   entries: JournalEntry[]
@@ -20,22 +23,82 @@ interface JournalState {
   /** Entries ever added this run, and how many there were when the log was last kept. */
   added: number
   keptAt: number
+  /** Immutable service/run context, captured at the first event or live item. */
+  runContext: ServiceRunContext | null
+  runStatus: "none" | "active" | "interrupted" | "finished"
+  checkpointStatus: "idle" | "saving" | "saved" | "error"
+  checkpointError: string | null
+  finalizedLogId: string | null
   add: (entry: Omit<JournalEntry, "at" | "mono">) => void
   clear: () => void
 }
 
+export interface ServiceRunContext {
+  runId: string
+  programId: string | null
+  programRevision: number | null
+  title: string
+  serviceDate: string | null
+  timeZone: string
+  startedAt: string
+  operator: string | null
+  plan: Array<{ id: string; label: string }>
+  plannedMs: Record<string, number>
+  headers: OutlineHeader[]
+  startItemIds: string[]
+}
+
+interface ServiceRunSnapshot {
+  context: ServiceRunContext
+  entries: JournalEntry[]
+  startItemIds: string[] | null
+}
+
 /** The service journal for this run of the app. Not persisted (AR-001 first slice). */
-export const useJournalStore = create<JournalState>((set) => ({
+export const useJournalStore = create<JournalState>((set, get) => ({
   entries: [],
   startItemIds: null,
   added: 0,
   keptAt: 0,
+  runContext: null,
+  runStatus: "none",
+  checkpointStatus: "idle",
+  checkpointError: null,
+  finalizedLogId: null,
   // Rehearsal is a sandbox (ADR 0001): only its start and end are part of the service's history.
   add: (entry) => {
     if (entry.kind !== "rehearsal" && useBroadcastStore.getState().rehearsal) return
-    set((s) => ({ entries: capJournal([...s.entries, { ...entry, at: Date.now(), mono: monotonicNow() }]), added: s.added + 1 }))
+    const current = get()
+    const service = useServiceStore.getState().current
+    const startsRun = entry.kind === "live" || (entry.kind === "event" && Boolean(entry.eventId || entry.itemId))
+    const contextChanged = !!current.runContext && current.runContext.programId !== (service?.id ?? null)
+    const startsNewRun = startsRun && (!current.runContext || contextChanged || current.runStatus === "finished")
+    if (startsRun && contextChanged && current.runContext && current.runStatus !== "finished") {
+      const previous = snapshotRun(current)
+      // Persist and close the previous run before the new run's checkpoint is queued.
+      if (previous) void persistRunSnapshot(previous).then(() => interruptServiceRun(previous.context.runId)).catch((error: unknown) => {
+          useJournalStore.setState({ checkpointStatus: "error", checkpointError: `The previous service run could not be saved: ${String(error)}` })
+        })
+    }
+    const context = startsNewRun ? captureRunContext() : current.runContext
+    const runChange = startsNewRun ? {
+      entries: [] as JournalEntry[],
+      startItemIds: context?.startItemIds ?? null,
+      added: 0,
+      keptAt: 0,
+      runContext: context,
+      runStatus: "active" as const,
+      checkpointStatus: "idle" as const,
+      checkpointError: null,
+      finalizedLogId: null,
+    } : {}
+    set((s) => ({
+      ...runChange,
+      entries: capJournal([...(startsNewRun ? [] : s.entries), { ...entry, at: Date.now(), mono: monotonicNow() }]),
+      added: (startsNewRun ? 0 : s.added) + 1,
+    }))
   },
-  clear: () => set((s) => ({ entries: [], startItemIds: null, keptAt: s.added })),
+  clear: () => set((s) => ({ entries: [], startItemIds: null, keptAt: s.added, runContext: null, runStatus: "none", checkpointStatus: "idle", checkpointError: null, finalizedLogId: null })),
 }))
 
 /** The most entries the log keeps in this run. */
@@ -54,12 +117,60 @@ export function capJournal(entries: JournalEntry[]): JournalEntry[] {
   return kept.length > JOURNAL_MAX ? kept.slice(-JOURNAL_MAX) : kept
 }
 
-/** The log as text (no transcript): what Keep log and Save log write. */
+function captureRunContext(): ServiceRunContext {
+  const current = useServiceStore.getState().current
+  const { items, headers } = useQueueStore.getState()
+  const operator = useSettingsStore.getState().operatorName.trim()
+  const configured = useSettingsStore.getState().setup.timeZone
+  const timeZone = validTimeZone(configured) || validTimeZone(systemTimeZone())
+  return {
+    runId: crypto.randomUUID(),
+    programId: current?.id ?? null,
+    programRevision: current?.revision ?? null,
+    title: current?.title ?? "Service",
+    serviceDate: current?.service_date ?? null,
+    timeZone,
+    startedAt: new Date().toISOString(),
+    operator: operator || null,
+    plan: items.map((item) => ({ id: item.id, label: item.reference })),
+    plannedMs: Object.fromEntries(items.map((item) => [item.id, plannedMs(item)])),
+    headers: headers.map((header) => ({ ...header })),
+    startItemIds: items.map((item) => item.id),
+  }
+}
+
+function snapshotRun(state = useJournalStore.getState()): ServiceRunSnapshot | null {
+  return state.runContext ? {
+    context: state.runContext,
+    entries: state.entries,
+    startItemIds: state.startItemIds,
+  } : null
+}
+
+function runTitle(context: ServiceRunContext): string {
+  return `${context.title}${context.operator ? ` — operator: ${context.operator}` : ""}`
+}
+
+function formatRunJournal(context: ServiceRunContext, entries: JournalEntry[], nowMono = monotonicNow()): string {
+  return formatJournal(
+    runTitle(context),
+    entries,
+    nowMono,
+    new Map(Object.entries(context.plannedMs)),
+    context.plan.map((item) => ({ id: item.id, label: item.label })),
+    context.timeZone,
+  )
+}
+
+/** The log as text (no transcript): uses the captured run plan after service edits or switching. */
 export function journalText(): string {
+  const state = useJournalStore.getState()
+  const context = state.runContext ?? captureRunContext()
+  const { entries, startItemIds: start } = state
+  if (state.runContext) return formatRunJournal(context, entries)
   const current = useServiceStore.getState().current
   const operator = useSettingsStore.getState().operatorName.trim()
   const items = useQueueStore.getState().items
-  const { entries, startItemIds: start } = useJournalStore.getState()
   return formatJournal(
     `${current?.title ?? "Service"}${operator ? ` — operator: ${operator}` : ""}`,
     entries,
@@ -78,11 +189,139 @@ export const journalUnkept = () => useJournalStore.getState().added > useJournal
  * apart from the log, so the church's retention removes only it (#246 C17).
  */
 export async function keepJournal(transcript = ""): Promise<void> {
+  const state = useJournalStore.getState()
+  const context = state.runContext
   const current = useServiceStore.getState().current
-  const added = useJournalStore.getState().added
-  const title = `${current?.title ?? "Service"} — ${new Date().toLocaleDateString()}`
-  await invoke("content_save_service_log", { programId: current?.id ?? null, title, body: journalText(), transcript: transcript || null })
+  const added = state.added
+  const title = `${context?.title ?? current?.title ?? "Service"} — ${new Date().toLocaleDateString()}`
+  const programId = context ? context.programId : current?.id ?? null
+  const body = context ? formatRunJournal(context, state.entries) : journalText()
+  await invoke("content_save_service_log", { programId, title, body, transcript: transcript || null })
   useJournalStore.setState({ keptAt: added })
+}
+
+function checkpointPayload(snapshot: ServiceRunSnapshot) {
+  return { version: 1, entries: snapshot.entries, startItemIds: snapshot.startItemIds, plan: snapshot.context.plan, plannedMs: snapshot.context.plannedMs, headers: snapshot.context.headers, operator: snapshot.context.operator }
+}
+
+let checkpointChain: Promise<unknown> = Promise.resolve()
+function persistRunSnapshot(snapshot: ServiceRunSnapshot): Promise<void> {
+  const task = checkpointChain.catch(() => {}).then(() => invoke("content_checkpoint_service_run", {
+    runId: snapshot.context.runId,
+    programId: snapshot.context.programId,
+    programRevision: snapshot.context.programRevision,
+    title: snapshot.context.title,
+    serviceDate: snapshot.context.serviceDate,
+    timeZone: snapshot.context.timeZone,
+    startedAt: snapshot.context.startedAt,
+    checkpoint: checkpointPayload(snapshot),
+  }))
+  checkpointChain = task
+  return task.then(() => {
+    const latest = useJournalStore.getState()
+    if (latest.runContext?.runId === snapshot.context.runId) useJournalStore.setState({ checkpointStatus: "saved", checkpointError: null, runStatus: latest.runStatus === "interrupted" ? "active" : latest.runStatus })
+  }, (error: unknown) => {
+    const latest = useJournalStore.getState()
+    if (latest.runContext?.runId === snapshot.context.runId) useJournalStore.setState({ checkpointStatus: "error", checkpointError: String(error) })
+    throw error
+  })
+}
+
+function interruptServiceRun(runId: string): Promise<unknown> {
+  const task = checkpointChain.catch(() => {}).then(() => invoke("content_interrupt_service_run", { runId }))
+  checkpointChain = task
+  return task
+}
+
+let checkpointTimer: ReturnType<typeof setTimeout> | null = null
+let pendingSnapshot: ServiceRunSnapshot | null = null
+function scheduleRunCheckpoint(snapshot: ServiceRunSnapshot) {
+  pendingSnapshot = snapshot
+  useJournalStore.setState((state) => state.runContext?.runId === snapshot.context.runId ? { checkpointStatus: "saving", checkpointError: null } : {})
+  if (checkpointTimer) clearTimeout(checkpointTimer)
+  checkpointTimer = setTimeout(() => {
+    checkpointTimer = null
+    const pending = pendingSnapshot
+    pendingSnapshot = null
+    if (pending) void persistRunSnapshot(pending).catch(() => {})
+  }, 200)
+}
+
+useJournalStore.subscribe((state, previous) => {
+  if (state.entries !== previous.entries || state.runContext !== previous.runContext || state.startItemIds !== previous.startItemIds) {
+    const snapshot = snapshotRun(state)
+    if (snapshot && state.runStatus !== "finished") scheduleRunCheckpoint(snapshot)
+  }
+})
+
+/** Flush the latest journal to the local content database before Finish or clean close. */
+export async function flushServiceRunCheckpoint(): Promise<void> {
+  if (checkpointTimer) {
+    clearTimeout(checkpointTimer)
+    checkpointTimer = null
+    const pending = pendingSnapshot
+    pendingSnapshot = null
+    if (pending) await persistRunSnapshot(pending)
+  } else {
+    const snapshot = snapshotRun()
+    if (snapshot && useJournalStore.getState().runStatus !== "finished") await persistRunSnapshot(snapshot)
+  }
+}
+
+/** An accepted Finish is kept distinct from an archive failure; retry never repeats Take or Finish. */
+export async function finalizeServiceRun(transcript = ""): Promise<void> {
+  let state = useJournalStore.getState()
+  let snapshot = snapshotRun(state)
+  if (!snapshot || state.runStatus === "finished" && state.finalizedLogId) return
+  if (state.runStatus !== "finished") {
+    useJournalStore.setState({ runStatus: "finished" })
+    state = useJournalStore.getState()
+    snapshot = snapshotRun(state)
+  }
+  if (!snapshot) return
+  // A retry may follow a committed finalization whose response was lost. The finalizer itself is
+  // idempotent, so still call it if the now-finished run refuses another checkpoint.
+  const finishing = snapshot
+  try { await flushServiceRunCheckpoint() } catch { /* Continue to the idempotent finalizer. */ }
+  state = useJournalStore.getState()
+  const latest = snapshotRun(state)
+  // A new service can start while the local checkpoint is flushing. Finalize the run that received
+  // Finish; never let that delay redirect the archive write to the newly active service.
+  if (latest?.context.runId === finishing.context.runId) snapshot = latest
+  const body = formatRunJournal(snapshot.context, snapshot.entries)
+  let log: { id: string }
+  try {
+    log = await invoke<{ id: string }>("content_finalize_service_run", {
+      runId: snapshot.context.runId,
+      body,
+      finishedAt: new Date(serviceFinishedAt(snapshot.entries) ?? Date.now()).toISOString(),
+      transcript: transcript || null,
+    })
+  } catch (error) {
+    if (useJournalStore.getState().runContext?.runId === snapshot.context.runId) useJournalStore.setState({ checkpointStatus: "error", checkpointError: String(error) })
+    throw error
+  }
+  if (useJournalStore.getState().runContext?.runId === snapshot.context.runId) {
+    useJournalStore.setState({ runStatus: "finished", checkpointStatus: "saved", checkpointError: null, finalizedLogId: log.id })
+  }
+}
+
+/** Keep an unfinished run recoverable, without claiming the service was finished. */
+export async function interruptCurrentServiceRun(): Promise<void> {
+  const state = useJournalStore.getState()
+  const snapshot = snapshotRun(state)
+  if (!snapshot || state.runStatus === "finished") return
+  await flushServiceRunCheckpoint()
+  await interruptServiceRun(snapshot.context.runId)
+  if (useJournalStore.getState().runContext?.runId === snapshot.context.runId) useJournalStore.setState({ runStatus: "interrupted" })
+}
+
+/** Start a distinct log only after the previous run has been checkpointed. */
+export async function startNewJournal(): Promise<void> {
+  const state = useJournalStore.getState()
+  if (state.runStatus === "finished" && !state.finalizedLogId) await finalizeServiceRun()
+  else await interruptCurrentServiceRun()
+  useJournalStore.getState().clear()
 }
 
 /** What the congregation saw when rehearsal started: rehearsal ends by sending what is live now. */
@@ -233,7 +472,7 @@ function notePlan() {
 
 // Another service opened: its plan is taken when it first goes on air.
 useServiceStore.subscribe((s, prev) => {
-  if (s.current?.id !== prev.current?.id) useJournalStore.setState({ startItemIds: null })
+  if (s.current?.id !== prev.current?.id && !useJournalStore.getState().runContext) useJournalStore.setState({ startItemIds: null })
 })
 
 type Aired = { liveVerse: { reference: string; lines?: string[]; screen?: "black" | "logo"; quick?: boolean; content?: ContentType } | null; heldLive?: unknown; liveItemId?: string | null }

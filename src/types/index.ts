@@ -59,7 +59,7 @@ export type {
   BackupSummary,
   ServicePackage,
   ServiceLog,
-  ServiceLogSummary, RevisionSummary, Revision, MediaAsset, MediaAssetStatus, MediaImportResult, ImageItemPayload,
+  ServiceLogSummary, ServiceRun, ServiceRunSummary, RevisionSummary, Revision, MediaAsset, MediaAssetStatus, MediaImportResult, ImageItemPayload,
   ReusableSlide, ReusableSlideInput,
   AudioItemPayload,
 } from "./content"

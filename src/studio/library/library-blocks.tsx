@@ -15,12 +15,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useSongStore } from "@/stores/song-store"
 import { useShellStore } from "@/studio/shell-store"
 import { backupDatabaseToFile, contentStatus, exportServicePackageToFile, exportSongsToFile, importServicePackageFromFile, importSongsFromFiles, restoreDatabaseFromFile, type ImportOutcome } from "@/lib/song-files"
-import { journalText, keepJournal, useJournalStore } from "@/stores/journal-store"
+import { flushServiceRunCheckpoint, finalizeServiceRun, journalText, keepJournal, startNewJournal, useJournalStore } from "@/stores/journal-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { describeError, reloadAfterRestore } from "@/studio/library/content-actions"
 import { save } from "@tauri-apps/plugin-dialog"
 import { writeTextFile } from "@tauri-apps/plugin-fs"
-import type { ContentStatus, ImportMode, ServiceLog, ServiceLogSummary } from "@/types"
+import type { ContentStatus, ImportMode, ServiceLog, ServiceLogSummary, ServiceRun, ServiceRunSummary } from "@/types"
+import type { JournalEntry } from "@/lib/journal"
 
 const MODE_LABEL: Record<ImportMode, string> = {
   skip: "Keep my copy of songs I already have",
@@ -247,8 +248,14 @@ export function PackageBlock({ onClose = () => {} }: { onClose?: () => void }) {
 /** Today's service log: what went live and for how long, against the plan. */
 export function JournalBlock() {
   const entries = useJournalStore((s) => s.entries)
+  const runContext = useJournalStore((s) => s.runContext)
+  const runStatus = useJournalStore((s) => s.runStatus)
+  const checkpointStatus = useJournalStore((s) => s.checkpointStatus)
+  const checkpointError = useJournalStore((s) => s.checkpointError)
+  const programs = useServiceStore((s) => s.programs)
   const [busy, setBusy] = useState(false)
   const [archived, setArchived] = useState(0)
+  const [filterProgramId, setFilterProgramId] = useState("all")
   const segments = useTranscriptStore((s) => s.segments)
   const finalCount = segments.filter((s) => s.is_final && s.text.trim()).length
   // AR-004: the transcript goes into a log only when ticked for that log; never by default.
@@ -271,6 +278,25 @@ export function JournalBlock() {
       setBusy(false)
     }
   }
+  const retryRunSave = async () => {
+    setBusy(true)
+    try {
+      if (runStatus === "finished") await finalizeServiceRun()
+      else await flushServiceRunCheckpoint()
+      toast.success(runStatus === "finished" ? "Run saved to History" : "Run checkpoint saved")
+    } catch (e) {
+      toast.error("Run could not be saved", { description: describeError(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+  const newLog = async () => {
+    try {
+      await startNewJournal()
+    } catch (e) {
+      toast.error("The previous run could not be saved", { description: describeError(e) })
+    }
+  }
   const text = () => journalText() + (withTranscript ? transcriptSection(useTranscriptStore.getState().segments, provider) : "")
   const saveLog = async () => {
     setBusy(true)
@@ -289,7 +315,14 @@ export function JournalBlock() {
   return (
     <div className="rounded-lg border border-border p-3">
       <p className="mb-1 font-medium">Service log</p>
-      <p className="mb-2 text-xs text-muted-foreground">{entries.length ? `${entries.length} event${entries.length === 1 ? "" : "s"} since the app started: what went live and for how long, against the planned minutes.` : "Nothing has gone live yet in this run of the app."}</p>
+      <p className="mb-2 text-xs text-muted-foreground">{entries.length ? `${entries.length} journal entr${entries.length === 1 ? "y" : "ies"}${runContext ? ` for ${runContext.title}` : " in this session"}: what happened against the captured service plan.` : "Nothing has gone live yet in this run of the app."}</p>
+      {runContext && <p className="mb-2 text-xs text-muted-foreground" role="status">
+        {runStatus === "finished" ? "Finished run" : runStatus === "interrupted" ? "Interrupted run" : "Active run"} · {checkpointStatus === "saving" ? "saving checkpoint…" : checkpointStatus === "saved" ? "saved on this computer" : checkpointStatus === "error" ? "save needs attention" : "checkpoint pending"}
+      </p>}
+      {runContext && checkpointStatus === "error" && <div className="mb-2 flex flex-wrap items-center gap-2" role="alert">
+        <p className="text-xs text-destructive">{checkpointError}</p>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void retryRunSave()}>Retry save</Button>
+      </div>}
       {finalCount > 0 && (
         <label className="mb-2 flex items-start gap-2 text-xs">
           <input type="checkbox" className="mt-0.5" checked={withTranscript} onChange={(e) => setWithTranscript(e.target.checked)} />
@@ -304,24 +337,35 @@ export function JournalBlock() {
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" disabled={busy || entries.length === 0} onClick={() => void keepLog()}><ArchiveIcon /> Keep this log</Button>
         <Button size="sm" variant="outline" disabled={busy || entries.length === 0} onClick={() => void saveLog()}><DownloadIcon /> Save the log…</Button>
-        <Button size="sm" variant="ghost" disabled={entries.length === 0} onClick={() => useJournalStore.getState().clear()}>Start a new log</Button>
+        <Button size="sm" variant="ghost" disabled={entries.length === 0 || busy} onClick={() => void newLog()}>Start a new log</Button>
       </div>
-      <EarlierLogs refresh={archived} />
+      {programs.length > 0 && <label className="mt-3 flex items-center gap-2 text-xs">
+        <span>History for</span>
+        <Select value={filterProgramId} onValueChange={setFilterProgramId}>
+          <SelectTrigger className="h-7 w-56 text-xs" aria-label="Filter History by service"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All services</SelectItem>
+            {programs.filter((p) => !p.is_template).map((p) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </label>}
+      <RecentServiceRuns key={`${filterProgramId}:${archived}`} programId={filterProgramId === "all" ? null : filterProgramId} />
+      <EarlierLogs key={`${filterProgramId}:${archived}`} refresh={archived} programId={filterProgramId === "all" ? null : filterProgramId} onChanged={() => setArchived((count) => count + 1)} />
     </div>
   )
 }
 
 /** Logs kept in the database: newest first, searchable, each one saveable as a file. */
-function EarlierLogs({ refresh }: { refresh: number }) {
+function EarlierLogs({ refresh, programId, onChanged }: { refresh: number; programId: string | null; onChanged: () => void }) {
   const [query, setQuery] = useState("")
   const [logs, setLogs] = useState<ServiceLogSummary[]>([])
   useEffect(() => {
     let cancelled = false
-    invoke<ServiceLogSummary[]>("content_list_service_logs", { query: query.trim() || null, limit: 50 })
+    invoke<ServiceLogSummary[]>("content_list_service_logs", { query: query.trim() || null, limit: 50, programId })
       .then((l) => { if (!cancelled) setLogs(l) })
       .catch(() => { if (!cancelled) setLogs([]) })
     return () => { cancelled = true }
-  }, [query, refresh])
+  }, [query, refresh, programId])
   const [gone, setGone] = useState<string[]>([])
   const saveAs = async (l: ServiceLogSummary) => {
     try {
@@ -340,6 +384,7 @@ function EarlierLogs({ refresh }: { refresh: number }) {
     try {
       await invoke("content_delete_service_log", { id })
       setGone((g) => [...g, id])
+      onChanged()
     } catch (e) {
       toast.error(describeError(e))
     }
@@ -357,12 +402,96 @@ function EarlierLogs({ refresh }: { refresh: number }) {
         {shown.map((l) => (
           <li key={l.id} className="flex items-center gap-2 px-1 py-1 text-xs">
             <span className="min-w-0 flex-1 truncate">{l.title}</span>
-            <span className="shrink-0 text-muted-foreground">{new Date(l.saved_at).toLocaleDateString()}</span>
+            <span className="shrink-0 text-muted-foreground">{new Date(l.finished_at ?? l.saved_at).toLocaleDateString(undefined, l.time_zone ? { timeZone: l.time_zone } : {})}</span>
             <Button size="icon-xs" variant="ghost" aria-label={`Save ${l.title} as a file`} onClick={() => void saveAs(l)}><DownloadIcon /></Button>
             <ConfirmDelete label={`Delete ${l.title}`} onConfirm={() => void remove(l.id)} />
           </li>
         ))}
       </ul>
+    </div>
+  )
+}
+
+/** Interrupted/current run checkpoints are visible without putting their contents back on air. */
+function RecentServiceRuns({ programId }: { programId: string | null }) {
+  const [runs, setRuns] = useState<ServiceRunSummary[]>([])
+  const [opened, setOpened] = useState<string | null>(null)
+  const [detail, setDetail] = useState<ServiceRun | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    invoke<ServiceRunSummary[]>("content_list_service_runs", { programId, limit: 20 })
+      .then((result) => { if (!cancelled) { setRuns(result); setError(null) } })
+      .catch((e) => { if (!cancelled) { setRuns([]); setError(describeError(e)) } })
+    return () => { cancelled = true }
+  }, [programId])
+  const loadDetail = async (runId: string) => {
+    if (opened === runId) {
+      setOpened(null)
+      setDetail(null)
+      return
+    }
+    setOpened(runId)
+    setDetail(null)
+    try {
+      const result = await invoke<ServiceRun | null>("content_get_service_run", { runId })
+      setDetail(result)
+    } catch (e) {
+      setError(describeError(e))
+    }
+  }
+  if (!error && runs.length === 0) return null
+  return (
+    <section className="mt-3 border-t border-border pt-2" aria-label="Recent service runs">
+      <p className="mb-1 text-xs font-medium">Recent service runs</p>
+      {error && <p role="status" className="text-xs text-muted-foreground">Run history could not be loaded: {error}</p>}
+      <ul className="max-h-60 overflow-y-auto">
+        {runs.map((run) => (
+          <li key={run.run_id} className="border-b border-border/60 py-1.5 text-xs last:border-0">
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate">{run.title}</span>
+              <span className="shrink-0 text-muted-foreground">{run.status === "active" ? "Active" : run.status === "interrupted" ? "Interrupted" : "Finished"}</span>
+              {run.service_date && <span className="shrink-0 text-muted-foreground">{run.service_date}</span>}
+              <span className="shrink-0 text-muted-foreground">{new Date(run.finished_at ?? run.updated_at).toLocaleString(undefined, run.time_zone ? { timeZone: run.time_zone } : {})}</span>
+              <Button size="xs" variant="ghost" onClick={() => void loadDetail(run.run_id)}>{opened === run.run_id ? "Close" : "Review"}</Button>
+            </div>
+            {opened === run.run_id && detail?.run_id === run.run_id && <RunCheckpoint run={detail} />}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function RunCheckpoint({ run }: { run: ServiceRun }) {
+  const checkpoint = run.checkpoint && typeof run.checkpoint === "object" ? run.checkpoint as { entries?: JournalEntry[]; plan?: Array<{ id: string; label: string }>; plannedMs?: Record<string, number>; headers?: Array<{ id: string; name: string; type: string; at: number }>; operator?: string | null } : {}
+  const entries = Array.isArray(checkpoint.entries) ? checkpoint.entries : []
+  const plan = Array.isArray(checkpoint.plan) ? checkpoint.plan : []
+  const headers = Array.isArray(checkpoint.headers) ? checkpoint.headers : []
+  const orderedPlan: Array<{ key: string; kind: "header" | "item"; label: string }> = []
+  for (let at = 0; at <= plan.length; at++) {
+    headers.filter((header) => header.at === at).forEach((header) => orderedPlan.push({ key: header.id, kind: "header", label: `${header.type}: ${header.name}` }))
+    const item = plan[at]
+    if (item) orderedPlan.push({ key: item.id, kind: "item", label: item.label })
+  }
+  return (
+    <div className="mt-2 rounded border border-border bg-muted/30 p-2">
+      <p className="mb-1 text-muted-foreground">Captured run activity · {run.status === "interrupted" ? "time after the last confirmed checkpoint is unknown" : "review only; nothing was sent to a screen"}</p>
+      {checkpoint.operator && <p className="mb-1 text-muted-foreground">Operator: {checkpoint.operator}</p>}
+      {entries.length === 0
+        ? <p className="text-muted-foreground">No journal entries were captured.</p>
+        : <ol className="max-h-44 list-inside list-decimal overflow-y-auto">
+          {entries.slice(-100).map((entry, index) => <li key={`${entry.at}:${index}`} className="truncate">
+            <span className="text-muted-foreground">{new Date(entry.at).toLocaleTimeString(undefined, run.time_zone ? { timeZone: run.time_zone } : {})}</span> · {entry.kind.toUpperCase()} {entry.label}{entry.outputId ? ` · output ${entry.outputId}` : ""}{entry.by && !entry.label.includes(entry.by) ? ` · by ${entry.by}` : ""}
+          </li>)}
+        </ol>}
+      {orderedPlan.length > 0 && <div className="mt-2">
+        <p className="mb-1 text-muted-foreground">Captured plan</p>
+        <ol className="max-h-36 list-inside list-decimal overflow-y-auto">
+          {orderedPlan.slice(0, 200).map((row) => <li key={`${row.kind}:${row.key}`} className={row.kind === "header" ? "font-medium" : "pl-3 text-muted-foreground"}>{row.label}</li>)}
+          {orderedPlan.length > 200 && <li className="list-none text-muted-foreground">And {orderedPlan.length - 200} more plan rows.</li>}
+        </ol>
+      </div>}
     </div>
   )
 }
