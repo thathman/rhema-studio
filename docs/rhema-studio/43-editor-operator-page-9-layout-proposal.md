@@ -1,6 +1,8 @@
 # 43 — Page 9 Editor Operator: Service Contributions, Private Drafts and Review
 
-**Workshop date:** 29 October 2026. **Status:** **OWNER APPROVED — PAGE 9 EDITOR WORKSPACE STRUCTURAL HIERARCHY AND SEPARATE DRAFT/REVIEW ACTIONS**. Pixel styling, any expanded Editor privileges, the detailed sync mechanism and verified runtime behavior remain open. The owner approved Page 8's revised streaming-only OBS Director hierarchy on 29 October (recorded in [41 §10](41-obs-director-page-8-layout-proposal.md#10-owner-page-8-decision--approved-29-october-2026)). This Page 9 draft is presented for discussion. Codex may independently implement existing approved Editor/Prepare/Permissions functionality under [owner resume order](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md); zero new PRs and release/Live-safety rules remain.
+**CURRENT PR EXECUTION POLICY (29 October):** The owner rescinded the blanket PR creation freeze. [New development PRs are allowed in a small continuously merged queue](../OWNER-PR-WORKFLOW-2026-10-29.md), subject to existing Live/security/review gates. Website-publishing PRs #352/#367 remain held. Any older PR-freeze phrase in this page is historical.
+
+**Workshop date:** 29 October 2026. **Status:** **OWNER APPROVED — PAGE 9 EDITOR WORKSPACE STRUCTURAL HIERARCHY AND SEPARATE DRAFT/REVIEW ACTIONS**. Pixel styling, any expanded Editor privileges, the detailed sync mechanism and verified runtime behavior remain open. The owner approved Page 8's revised streaming-only OBS Director hierarchy on 29 October (recorded in [41 §10](41-obs-director-page-8-layout-proposal.md#10-owner-page-8-decision--approved-29-october-2026)). This Page 9 draft is presented for discussion. Codex may independently implement existing approved Editor/Prepare/Permissions functionality under [owner resume order](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md); new PRs now allowed and release/Live-safety rules remain.
 
 ## 1. Role promise and boundaries
 
