@@ -220,6 +220,10 @@ The first native Rhema recording captures **one named congregation output's fina
 
 Page 8's revised OBS Director hierarchy is **owner-approved** in [41 §10](41-obs-director-page-8-layout-proposal.md#10-owner-page-8-decision--approved-29-october-2026). Rhema-native recording is separate in Live. The initial **Page 9 Editor Operator** layout is preserved in [43](43-editor-operator-page-9-layout-proposal.md): assigned Running Order, contextual service editor, private Preview/Review, comments and revision-pinned submit-for-review. Page 9 layout remains **proposed**, not owner-approved. Continue resumed full feature implementation under existing safety and no-new-PR rules.
 
+### Page 9 Editor Operator structural approval — OWNER APPROVED (29 October 2026)
+
+Owner answered **yes** to [43 — Page 9 Editor Operator §9](43-editor-operator-page-9-layout-proposal.md#9-owner-page-9-sign-off--approved-29-october-2026): **My Assignments / Running Order** on left → **Contextual Event/Moment Editor** center → **Private Preview, Review and Comments** on right, with **Save Draft** and **Submit for Review** clearly separate. Draft submission does not approve, change Live or edit persistent reusable masters. Distinct reviewer authority, host revision pinning and actual sync/recovery still require engineering; this is approval of structure, not code/pixels or extra permissions. Next operator in the role order is **10. Viewer** followed by **11. Main Presenter / Configure**.
+
 ### Operator design review protocol: one page at a time, with owner sign-off
 
 **We have NOT completed the operator visual redesign together. Do not silently invent final approved page designs or count a generic console as accepted.** Implement shared safety/data foundations first, then present an individually reviewable page specification/screenshot/interactive demo to the owner for each step. Record feedback and approval, then continue to the next page. No automatic completion of 12 pages because their route exists.
