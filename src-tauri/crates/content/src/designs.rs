@@ -227,6 +227,9 @@ fn check_tree(nodes: &serde_json::Map<String, serde_json::Value>, root: &str) ->
     if !nodes.contains_key(root) {
         return invalid(format!("the design's root \"{root}\" is not one of its nodes"));
     }
+    if nodes[root].get("type").and_then(serde_json::Value::as_str) != Some("group") {
+        return invalid(format!("the design's root \"{root}\" must be a group"));
+    }
     let mut seen = std::collections::HashSet::new();
     let mut stack = vec![root];
     while let Some(id) = stack.pop() {
@@ -236,8 +239,11 @@ fn check_tree(nodes: &serde_json::Map<String, serde_json::Value>, root: &str) ->
         let Some(node) = nodes.get(id) else {
             return invalid(format!("a group lists \"{id}\", which is not one of the design's nodes"));
         };
-        if let Some(children) = node.get("children") {
-            let Some(children) = children.as_array() else { return invalid(format!("group \"{id}\" has children that are not a list")) };
+        let is_group = node.get("type").and_then(serde_json::Value::as_str) == Some("group");
+        if is_group || node.get("children").is_some() {
+            let Some(children) = node.get("children").and_then(serde_json::Value::as_array) else {
+                return invalid(format!("group \"{id}\" needs a list of children"));
+            };
             for child in children {
                 let Some(child) = child.as_str() else { return invalid(format!("group \"{id}\" lists a child that is not a node id")) };
                 stack.push(child);
@@ -374,5 +380,10 @@ mod tests {
             d["scene"]["nodes"]["root"]["children"] = serde_json::json!(["verse", "g"]);
         }));
         assert!(refused(&|d| d["scene"]["nodes"]["root"]["children"] = serde_json::json!("verse")));
+        assert!(refused(&|d| {
+            d["scene"]["nodes"]["g"] = serde_json::json!({ "type": "group" });
+            d["scene"]["nodes"]["root"]["children"] = serde_json::json!(["verse", "g"]);
+        }), "a group with no children list");
+        assert!(refused(&|d| d["scene"]["root"] = "verse".into()), "a root that is not a group");
     }
 }

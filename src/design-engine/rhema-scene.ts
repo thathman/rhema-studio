@@ -108,6 +108,7 @@ function layerEntries(scene: SaraswatiScene, issues: DesignIssue[] = []): LayerE
     const node = scene.nodes[id]
     if (!node) return void issues.push({ nodeId: id, message: `"${id}" is listed in the design but missing from it` })
     if (node.type === "group") {
+      if (!Array.isArray(node.children)) return void issues.push({ nodeId: id, message: `group "${id}" has no list of layers` })
       node.children.forEach((child) => walk(child, visible && node.visible, groupOpacity * node.opacity))
     } else {
       out.push({ node, visible: visible && node.visible, groupOpacity })

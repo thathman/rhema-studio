@@ -136,6 +136,8 @@ describe("a design whose node tree is broken", () => {
     const { scene, issues } = designToScene({ ...design, scene: looped })
     expect(scene.layers.map((l) => l.id)).toEqual(sermon.layers.map((l) => l.id))
     expect(issues.map((i) => i.nodeId)).toEqual(["ghost", SARASWATI_ROOT_ID])
+    const childless = { ...design.scene, nodes: { ...design.scene.nodes, [SARASWATI_ROOT_ID]: { ...root, children: undefined as unknown as string[] } } }
+    expect(designToScene({ ...design, scene: childless }).issues).toEqual([{ nodeId: SARASWATI_ROOT_ID, message: expect.stringContaining("no list") }])
   })
 })
 
