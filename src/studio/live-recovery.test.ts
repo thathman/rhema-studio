@@ -11,7 +11,7 @@ vi.mock("@tauri-apps/plugin-store", () => ({ load: vi.fn(async () => fakeStore) 
 
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { useEventClock } = await import("@/stores/event-clock-store")
-const { useJournalStore } = await import("@/stores/journal-store")
+const { flushServiceRunCheckpoint, useJournalStore } = await import("@/stores/journal-store")
 const { useQueueStore } = await import("@/stores/queue-store")
 const { useTimerStore } = await import("@/stores/timer-store")
 const { takeSnapshot, worthOffering, putBack, useRecovery, restoreJournal, restoreNotices, startLiveRecovery, dismissRecovery, acceptPartialRecovery, parseLiveSnapshot } = await import("@/lib/live-recovery")
@@ -689,7 +689,7 @@ describe("live recovery", () => {
     expect(parseLiveSnapshot(impossible)).toBeNull()
   })
 
-  it("restores the service journal after a crash without counting unknown outage time", () => {
+  it("restores the service journal after a crash without counting unknown outage time", async () => {
     const at = 1_000_000_000
     const kept = { v: 1 as const, at: at + 600_000, startItemIds: ["a", "b"], entries: [
       { at, mono: 5, kind: "event" as const, label: "Welcome", itemId: "a" },
@@ -704,10 +704,20 @@ describe("live recovery", () => {
     // Rebased on this run's clock: 4 min apart as before.
     expect(entries[1].mono - entries[0].mono).toBe(240_000)
     expect(entries[0].mono).toBe(at - (at + 700_000 - 1_000))
+    expect(useJournalStore.getState().runContext).toMatchObject({
+      programId: null,
+      title: "Recovered service activity (service identity unavailable)",
+      plan: [],
+    })
+    expect(useJournalStore.getState().runStatus).toBe("interrupted")
+    const legacyEntries = entries.slice(0, 2)
+    useJournalStore.getState().add({ kind: "event", label: "After restart", itemId: "b" })
+    expect(useJournalStore.getState().entries.slice(0, 2)).toEqual(legacyEntries)
+    await flushServiceRunCheckpoint()
     // Only once, never an old one.
     expect(restoreJournal(kept, at + 700_000, 1_000)).toBe(false)
-    expect(useJournalStore.getState().entries).toHaveLength(5)
-    useJournalStore.setState({ entries: [] })
+    expect(useJournalStore.getState().entries).toHaveLength(6)
+    useJournalStore.getState().clear()
     expect(restoreJournal(kept, at + 7 * 3_600_000, 1_000)).toBe(false)
   })
 

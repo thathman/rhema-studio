@@ -570,7 +570,10 @@ mod tests {
             Err(ContentError::Invalid(message)) if message.contains("context cannot change")
         ));
         assert_eq!(db.list_service_runs(Some(&program.id), 10).unwrap().len(), 1);
-        assert!(db.list_service_runs(Some(&other.id), 10).unwrap().is_empty());
+        assert_eq!(
+            db.list_service_runs(Some(&other.id), 10).unwrap(),
+            Vec::<ServiceRunSummary>::new()
+        );
 
         let interrupted = db.interrupt_service_run("run-1").unwrap();
         assert_eq!(interrupted.status, "interrupted");

@@ -6,6 +6,7 @@ import { captureSceneAppearance, normalizeScene, sceneForOutput } from "@/lib/sc
 import { normalizeTheme } from "@/lib/theme-migrations"
 import { sourceOf, type LiveSources } from "@/lib/live-sources"
 import { outputOnAir } from "@/lib/output-on-air"
+import { validTimeZone } from "@/lib/church-time"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { capJournal, finalizeServiceRun, interruptCurrentServiceRun, useJournalStore, type ServiceRunContext } from "@/stores/journal-store"
@@ -370,10 +371,36 @@ export function restoreJournal(kept: KeptJournal | null | undefined, now = Date.
     at: kept.at,
     mono: kept.v === 2 && typeof kept.checkpointMono === "number" ? nowMono : entries.at(-1)?.mono ?? nowMono,
   }
+  // Old v1 recovery files have no service identity. Keep them as an explicitly unassociated
+  // interrupted run so the first event after restart cannot clear the only surviving history or
+  // attribute those earlier entries to whichever service happens to be selected now.
+  const firstActivityAt = kept.entries.find((entry) => Number.isFinite(entry.at))?.at
+  const legacyRun: ServiceRunContext = {
+    runId: crypto.randomUUID(),
+    programId: null,
+    programRevision: null,
+    title: "Recovered service activity (service identity unavailable)",
+    serviceDate: null,
+    timeZone: validTimeZone(useSettingsStore.getState().setup.timeZone) || validTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone) || "UTC",
+    startedAt: new Date(firstActivityAt ?? (Number.isFinite(kept.at) ? kept.at : now)).toISOString(),
+    operator: null,
+    plan: [],
+    plannedMs: {},
+    headers: [],
+    startItemIds: kept.startItemIds ?? [],
+  }
+  const recoveredContext = durableRun ? kept.runContext! : legacyRun
   const currentBase = j.entries[0]?.mono
   const currentShift = currentBase === undefined ? 0 : Math.max(0, boundary.mono - currentBase)
   const currentEntries = currentShift ? j.entries.map((entry) => ({ ...entry, mono: entry.mono + currentShift })) : j.entries
-  useJournalStore.setState({ entries: capJournal([...entries, boundary, ...currentEntries]), startItemIds: j.startItemIds?.length ? j.startItemIds : kept.startItemIds, added: j.added + entries.length + 1, ...(kept.v === 2 && kept.runContext ? { runContext: kept.runContext, runStatus: kept.runStatus === "finished" ? "finished" as const : "interrupted" as const, finalizedLogId: kept.finalizedLogId ?? null } : {}) })
+  useJournalStore.setState({
+    entries: capJournal([...entries, boundary, ...currentEntries]),
+    startItemIds: j.startItemIds?.length ? j.startItemIds : kept.startItemIds,
+    added: j.added + entries.length + 1,
+    runContext: recoveredContext,
+    runStatus: durableRun && kept.runStatus === "finished" ? "finished" : "interrupted",
+    finalizedLogId: durableRun ? kept.finalizedLogId ?? null : null,
+  })
   j.add({ kind: "recovery", label: "Service journal restored for review; nothing was put on a screen" })
   // The item that was running then (#196 R3.8): its start is known, how long it has run is not,
   // until the operator confirms the time or takes it again. A finished service had none running.

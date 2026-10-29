@@ -43,14 +43,15 @@ describe("run of show timing: actual times", () => {
       items: [{ ...slide("Welcome", 3), assignees: ["Tolu", "Ade"], prepared_by: "Tolu, Ade" }, slide("Reading", 10)],
       headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }],
     })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "Reading" })
+    useEventClock.setState({ currentId: "Reading", currentMomentId: "Reading" })
+    // Start the run before seeding its expected journal history.
     useJournalStore.setState({
       entries: [
         { at: at(10, 4), mono: 0, kind: "event", label: "Welcome", itemId: "Welcome" },
         { at: at(10, 9), mono: 300_000, kind: "event", label: "Reading", itemId: "Reading" },
       ],
     })
-    useBroadcastStore.setState({ isLive: true, liveItemId: "Reading" })
-    useEventClock.setState({ currentId: "Reading", currentMomentId: "Reading" })
     const el = document.createElement("div")
     const root = createRoot(el)
     await act(async () => root.render(<TimingPanel />))
