@@ -101,7 +101,7 @@ function updateRemotePolicy(change: (current: SettingsState) => RemotePolicyPatc
     const current = useSettingsStore.getState()
     const patch = change(current)
     if (!patch) return false
-    if (Object.keys(patch).length === 0) return true
+    if (Object.keys(patch).length === 0) return false
     const next = { ...current, ...patch }
     try {
       await invoke("remote_set_keys", {

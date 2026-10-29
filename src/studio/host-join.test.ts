@@ -4,10 +4,12 @@ import type { QueueItem } from "@/types"
 const calls: { cmd: string; args: Record<string, unknown> }[] = []
 /** What the host answers the next join_command with, if it refuses (as join.rs marks it). */
 let refuseNext: string | null = null
+let rejectRemotePolicy = false
 const handlers = new Map<string, (e: { payload: string }) => void>()
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string, args: Record<string, unknown> = {}) => {
     calls.push({ cmd, args })
+    if (cmd === "remote_set_keys" && rejectRemotePolicy) throw new Error("remote policy update failed")
     if (cmd === "join_pair") return "token-123"
     if (cmd === "join_me") return { name: "Femi's laptop", role: "timekeeper" }
     if (cmd === "join_command" && refuseNext) {
@@ -42,6 +44,7 @@ const slide = (id: string, planned_minutes?: number): QueueItem => ({ id, kind: 
 
 beforeEach(() => {
   calls.length = 0
+  rejectRemotePolicy = false
   useQueueStore.setState({ items: [slide("Welcome", 5), slide("Sermon", 30)], headers: [] })
   useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "Romans 8:28", segments: [], content: "bible" }, rehearsal: false, stageMessage: "Wrap up", sources: { bible: { value: { reference: "Romans 8:28", segments: [], content: "bible" }, itemId: null, revision: 3, activatedAt: 0, on: true } } })
   useEventClock.setState({ mode: "screens", currentId: "Welcome", currentMomentId: "Welcome" })
@@ -156,21 +159,31 @@ describe("the main desk takes back control (#243)", () => {
 
   it("the toggle persists, reaches the backend and is logged; giving back leaves the entry as before", async () => {
     useSettingsStore.setState({ remoteDevices: [device], remoteSecret: "" })
-    setDeskControl(device.hash, true)
+    await setDeskControl(device.hash, true)
     expect(useSettingsStore.getState().remoteDevices[0]).toMatchObject({ name: "Desk C", role: "bible", paused: true })
     await pushRemoteKeys()
     const pushed = calls.filter((c) => c.cmd === "remote_set_keys").at(-1)!.args.devices as { name: string; paused: boolean }[]
     expect(pushed).toEqual([{ hash: device.hash, name: "Desk C", role: "bible", paused: true }])
     expect(buildLiveState().paused).toEqual(["Desk C"])
-    setDeskControl(device.hash, true)
+    await setDeskControl(device.hash, true)
     expect(useJournalStore.getState().entries.map((e) => e.label)).toEqual(["Main desk took back control from Desk C"])
 
-    setDeskControl(device.hash, false)
+    await setDeskControl(device.hash, false)
     expect(useSettingsStore.getState().remoteDevices[0]).toEqual(device)
     await pushRemoteKeys()
     expect((calls.filter((c) => c.cmd === "remote_set_keys").at(-1)!.args.devices as { paused: boolean }[])[0].paused).toBe(false)
     expect(buildLiveState().paused).toEqual([])
     expect(useJournalStore.getState().entries.at(-1)).toMatchObject({ kind: "remote", label: "Main desk gave control back to Desk C" })
+  })
+
+  it("does not change local access or log a host reclaim when the backend rejects it", async () => {
+    useSettingsStore.setState({ remoteDevices: [device], remoteSecret: "" })
+    rejectRemotePolicy = true
+
+    await expect(setDeskControl(device.hash, true)).resolves.toBe(false)
+
+    expect(useSettingsStore.getState().remoteDevices[0]).toEqual(device)
+    expect(useJournalStore.getState().entries).toEqual([])
   })
 
   it("a joined desk shows it is paused instead of an error, and follows the host when given back", async () => {
