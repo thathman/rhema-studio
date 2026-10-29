@@ -2,6 +2,12 @@
 **Effective:** 28 October 2026. **Authority:** latest owner directive, ahead of prior fast-build plans wherever those plans conflict.
 **Status:** active work instructions, not a claim of implementation, acceptance, or shipment.
 
+## OWNER AMENDMENT — MAJOR FEATURE BUILD RESUMED (29 October 2026)
+
+**This section has priority over the 28 October pause wording below.** On 29 October the owner explicitly instructed **"Codex should resume the previous work before we told it to pause to merge the PRs."** The working code and feature implementation pause is therefore **LIFTED NOW**. Only two open PRs remain (#352/#367), both **OWNER-GATED website publishing**; they do not block desktop, native editor, LAN browser operator, connected device or Page 5/6 feature development.
+
+**Read and execute [OWNER-RESUME-IMPLEMENTATION-2026-10-29.md](OWNER-RESUME-IMPLEMENTATION-2026-10-29.md).** Restore the comprehensive approved feature queue, prior acceleration/subagent protocol, cross-feature implementation and milestone integration **without another merge-queue-only cycle**. The older phrase "Temporarily stop unplanned feature development" applies to the historical 28 Oct backlog phase, **not** after this owner resumption order. **ZERO NEW PRS remains active** unless the owner explicitly permits creating them; continue with controlled main/existing branch integrations and risk-based review rather than recreating backlog. Do not merge or publish #352/#367 or bypass Live/security/release gates. Treat this as Phase B *active*, not pending.
+
 ## The goal
 
 **Clear the existing PR backlog, complete the major approved Rhema platform journeys, and fix all owner-reported defects before opening any more PRs or chasing extra features.** Optimize for finished, integrated, reliable application behavior. The previous focus on many small, continuously opened PRs produced too much integration debt. That approach is suspended.
