@@ -203,7 +203,7 @@ fn handle_message_from_live(msg: &OscMessage, sink: &dyn CommandSink, keys: &Key
     };
     match parse_osc(&msg.addr, args) {
         Ok(cmd) => {
-            if let Some(e) = entry {
+            if let Some(e) = &entry {
                 if e.paused_for(&cmd) {
                     log::warn!("OSC command refused for {}: {} ({})", msg.addr, crate::keys::PAUSED_MESSAGE, e.name);
                     return;
@@ -230,7 +230,10 @@ fn handle_message_from_live(msg: &OscMessage, sink: &dyn CommandSink, keys: &Key
                 }
             }
             log::debug!("OSC command: {cmd}");
-            if let Err(e) = CommandDispatcher::dispatch_as(&cmd, sink, "OSC") {
+            // Journalled as the device that sent it (its key's name and hash), like HTTP desks; plain
+            // "OSC" only when no key is set (open mode).
+            let (by, by_id) = entry.as_ref().map_or(("OSC".to_string(), None), |e| (format!("{} (OSC)", e.name), Some(e.hash.clone())));
+            if let Err(e) = CommandDispatcher::dispatch_from(&cmd, sink, &by, by_id.as_deref()) {
                 log::warn!("OSC dispatch error for {}: {e}", msg.addr);
             }
         }
@@ -502,5 +505,30 @@ mod tests {
         handle_message_from_live(&send("/rhema/take_scene", "stage"), &sink, &keys, Some(&live), None);
         handle_message_from_live(&send("/rhema/take_scene", "overflow"), &sink, &keys, Some(&live), None);
         assert_eq!(sink.command_count(), 1, "only the assigned current congregation output is accepted");
+    }
+
+    /// Records the journal event the host writes (`remote:audit`) with its payload.
+    struct AuditSink(Mutex<Vec<String>>);
+    impl CommandSink for AuditSink {
+        fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
+            if event == "remote:audit" {
+                self.0.lock().unwrap().push(payload.to_string());
+            }
+            Ok(())
+        }
+        fn invoke_backend(&self, _: &str, _: &str) -> Result<(), CommandError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn an_osc_command_is_journalled_as_the_device_that_sent_it() {
+        let sink = AuditSink(Mutex::new(Vec::new()));
+        let keys = crate::keys::key_set_from(&[("s3cret", "Stream Deck")]);
+        let msg = OscMessage { addr: "/rhema/next".into(), args: vec![rosc::OscType::String("s3cret".into())] };
+        handle_message(&msg, &sink, &keys);
+        let journal = sink.0.lock().unwrap().clone();
+        assert_eq!(journal.len(), 1, "{journal:?}");
+        assert!(journal[0].contains("\"by\":\"Stream Deck (OSC)\""), "{journal:?}");
     }
 }
