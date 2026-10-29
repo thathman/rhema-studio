@@ -224,6 +224,10 @@ Page 8's revised OBS Director hierarchy is **owner-approved** in [41 §10](41-ob
 
 Owner answered **yes** to [43 — Page 9 Editor Operator §9](43-editor-operator-page-9-layout-proposal.md#9-owner-page-9-sign-off--approved-29-october-2026): **My Assignments / Running Order** on left → **Contextual Event/Moment Editor** center → **Private Preview, Review and Comments** on right, with **Save Draft** and **Submit for Review** clearly separate. Draft submission does not approve, change Live or edit persistent reusable masters. Distinct reviewer authority, host revision pinning and actual sync/recovery still require engineering; this is approval of structure, not code/pixels or extra permissions. Next operator in the role order is **10. Viewer** followed by **11. Main Presenter / Configure**.
 
+### Page 10 Viewer role design proposal — UNAPPROVED (29 October 2026)
+
+[44 — Page 10 Viewer Operator](44-viewer-operator-page-10-layout-proposal.md) proposes a light, **read-only-production** `Follow Service` experience: host-authoritative **Now & Next** and clock first, compact Running Order, role-filtered private crew notices, and only the `Talk/ACK/Reply` capabilities specifically allowed by Rhema Comms permissions. It must not offer production Take, Prepare edits, OBS control, Stage cues or native recording commands. Actual host freshness and private-content filtering matter more than fake video preview; reuse the existing `viewer` role, `RunOfShowView`, `JoinedTalk` and `NoticesPanel`. **Page 10's hierarchy is only proposed**, awaiting owner visual approval; active build / no-new-PR policy continues.
+
 ### Operator design review protocol: one page at a time, with owner sign-off
 
 **We have NOT completed the operator visual redesign together. Do not silently invent final approved page designs or count a generic console as accepted.** Implement shared safety/data foundations first, then present an individually reviewable page specification/screenshot/interactive demo to the owner for each step. Record feedback and approval, then continue to the next page. No automatic completion of 12 pages because their route exists.
