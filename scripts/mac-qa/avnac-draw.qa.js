@@ -17,4 +17,21 @@ const ctx = last.getContext("2d")
 const px = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data)
 const small = await A.renderSceneToCanvas(scene, { maxCssPx: 960, awaitFonts: false })
 times.sort((a, b) => a - b)
-return { size: [last.width, last.height], layers: Object.keys(scene.nodes).length - 1, msMedian: +times[5].toFixed(2), msMax: +times[9].toFixed(2), backdropPixel: px(1900, 1060), textPixelRow: px(60, 60), png: small.toDataURL("image/png") }
+// Live-output case: one layer changes every frame (a lower third or ticker); the paint scheduler
+// redraws only what changed. Compare with a full redraw of the same change on the same canvas.
+const live = document.createElement("canvas"); live.width = 1920; live.height = 1080
+const lctx = live.getContext("2d")
+const paint = async (scheduler, s, key) => (await scheduler.paintContent({ target: lctx, commands: A.buildRenderCommands(s), artboardWidth: 1920, artboardHeight: 1080, presentationKey: key, backend: A.canvas2DRendererBackend })).stats
+const scheduler = A.createContentPaintScheduler()
+await paint(scheduler, scene, "live")
+const partial = [], full = []
+let modes = {}
+for (let i = 0; i < 30; i++) {
+  const s = A.applyCommand(scene, { type: "REPLACE_NODE", node: { ...scene.nodes.t99, text: "Lower third " + i } })
+  let t = performance.now(); const st = await paint(scheduler, s, "live"); partial.push(performance.now() - t)
+  modes[st.mode ?? st.status ?? "?"] = (modes[st.mode ?? st.status ?? "?"] ?? 0) + 1
+  const fresh = A.createContentPaintScheduler()
+  t = performance.now(); await paint(fresh, s, "live"); full.push(performance.now() - t)
+}
+partial.sort((a, b) => a - b); full.sort((a, b) => a - b)
+return { liveOneLayerChange: { partialMsMedian: +partial[15].toFixed(2), partialMsMax: +partial[29].toFixed(2), fullMsMedian: +full[15].toFixed(2), modes }, size: [last.width, last.height], layers: Object.keys(scene.nodes).length - 1, msMedian: +times[5].toFixed(2), msMax: +times[9].toFixed(2), backdropPixel: px(1900, 1060), textPixelRow: px(60, 60), png: small.toDataURL("image/png") }
