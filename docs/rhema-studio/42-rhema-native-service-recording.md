@@ -1,6 +1,6 @@
 # 42 — OWNER DECISION: Rhema Studio Is the Native Service Recording Application
 
-**Owner direction:** 29 October 2026. **Status:** **APPROVED PRODUCT OWNERSHIP AND CORE CAPABILITY**; technical media engine, exact recording formats, codec choices, ISO multitrack capability, finished UI styling and real-device performance **remain to be engineered and validated**. This supersedes the earlier assumption that **OBS recording** is the default or required service recorder. Owner's wording: "I want Rhema studio to be the recording app."
+**Owner direction:** 29 October 2026. **Status:** **OWNER APPROVED — RHEMA-NATIVE RECORDING OF A SELECTED CONGREGATION OUTPUT**; the video source choice is now **settled**. Technical media engine, exact formats/codecs, ISO/multitrack features, final UI and real-device performance remain to be engineered and validated. This supersedes the earlier assumption that OBS recording is required. The owner first said "I want Rhema studio to be the recording app," then explicitly confirmed **"yes... recording congregation output"**.
 
 **Priority:** First-party, reliable, **offline-capable** service recording must be provided by Rhema Studio itself. The OBS integration remains a separate optional online program / livestream integration and is **not a prerequisite for starting, continuing or finalizing a Rhema recording**. The output to pastor/Stage, Sanctuary and Overflow remains independent and is not implicitly changed by record or OBS actions. This is a product instruction for Codex, not a claim the native recorder exists yet.
 
@@ -14,7 +14,23 @@
 | **Timekeeper / Stage** | Authoritative clock, dedicated private stage timing/cues | Public output, record audio, private cue capture |
 | **History / Library** | Service metadata, actual run journal, recording archive/index, permitted playback/export | Silent public upload or mutation of source/plan |
 
-**Default model proposed for implementation:** `Rhema Record Program` is a named recording destination in Rhema's output/program architecture, able to **follow an explicitly selected service Program composition** by default without taking over the congregation output. It must be possible to configure a **separate recording scene/composition** as an advanced option, so the archive can differ from Sanctuary or OBS when the church intends it. This output routing detail is a *design proposal* to implement within the approved first-party recorder capability; verify it against existing Scenes/output renderer and host performance before treating all modes as feasible on every machine.
+### OWNER APPROVED — Initial recording video source is the congregation output (29 October 2026)
+
+**Recording mode for the first release is `Record selected congregation output`, not `Record OBS Program`, `Record raw camera`, or a separate independent recording composition.** The owner explicitly selected this mode. The operator chooses **one real, named congregation output** (usually the church-designated primary Sanctuary output when configured) in Rhema Live before recording. Do not hard-code Sanctuary or change to another output merely because the operator views or Takes something else. A church without a configured default selects its destination explicitly; if output is missing/unauthorized/unavailable, surface a clear preflight error.
+
+- **What the recording contains:** the **final rendered congregation picture** as that output is actually commanded during the service: camera/video layers, selected scenes and scene transitions, activated Scripture and lyrics in that output's language/look, lower thirds, title slides, tickers and timed graphics, intentional blank/holding visuals, and other expressly audience-visible layers. If another congregation display has a distinct EN/YO layout, its contents do **not** get blended with the selected one. Use this output's exact authorized source subscriptions and revisions.
+- **How to capture:** tee/subscribe to the **authoritative finalized compositor frames for the selected congregation output**, using an efficient safe path into the host encoder. **Do not require an external HDMI capture card, screen scraping, OBS Browser Source, OBS instance, NDI receiver loopback, or human-facing display mirroring** simply to record. When the actual receiver has lag/dropped frames, label separately **host-recorded output vs receiver-confirmed state**; do not claim the recorder caught a failure on a remote physical screen unless telemetry proves it. The recording should reproduce the host's target congregation output picture and transitions, with observed dropped-frame/error reporting.
+- **Track the output's actual Live changes:** explicit authorized scene Takes and source/layer Show/Hide/activation on this **same** output flow into the recording continuously. A new scene or Bible verse on **another** congregation output, OBS Program, Stage/Backstage, or an operator's **Private Preview** does not enter the recording and does not switch the recording source.
+- **Audio** is not assumed to be in the rendered video frames: synchronize one **approved clean house/mixer audio input** with the selected output video, with explicit device routing/meter and no private Comms or Stage talkback. If the congregation output carries intentionally routed media audio, the recording mix must respect the church's defined audio policy without duplicate/echoed capture; no silent guess that every TV output provides the full sermon audio.
+- **Recording start/stop is independent of screen Take:** starting a recording does not create/change/Take any congregation scene or start OBS. The recorder remains **pinned to the selected output ID for the whole session** even if the user switches the active operator UI selection. Source replacement mid-session would be an *additional explicit stop/new-session or reviewed change*, not accidental following of a control-selection dropdown. Disconnecting a TV/receiver does not necessarily stop host-side recording if the congregation program can still render; report receiver health independently.
+- **Respect privacy:** only what is legitimately on the chosen congregation output plus approved church audio is eligible. Never capture the Stage confidence monitor, private timekeeper messages, director/operator controls, raw room camera monitors, or OBS-only captions simply because they share the same service moment. Protect recording archive ACL.
+- **One congregation output per primary recording session initially.** Simultaneous different-language congregation outputs, isolated camera ISO, independent audio stems, custom record-only scenes and edit-suite capabilities are separate later design/engine decisions, not part of this approval.
+
+**Source acceptance example:** Sanctuary Main shows camera → Psalm 100 in its approved Yoruba/English view → Pastor lower third → Offering slide. A `Rhema Recording: Sanctuary Main` contains that same host-rendered visual sequence with clean mixed sermon audio; Overflow stays on a distinct hymn, Stage shows a private countdown, and OBS displays a separate online shot, **none of which appear in the recording** unless an authorized change puts them onto Sanctuary Main. If Sanctuary is intentionally black, its actual black output is recorded; do not silently substitute another scene.
+
+**Codex must validate** final compositor frame access, video/media synchronization, visual effects, frame timing, output-specific language/layout, privacy, offline operation and sustained resource budget with real output hardware before claiming exact fidelity. This is an **approved product mode**, not proof the engine is implemented.
+
+
 
 ## 2. Main Live workspace — first-class recording dock
 
@@ -22,7 +38,7 @@
 RHEMA STUDIO · LIVE
 ┌────────────────────────────────────────────────────────────────────────┐
 │ RECORD · Rhema native recorder                           ● Ready       │
-│ Video: [Record Program / follow Sanctuary Main ▼]                      │
+│ Video: [Congregation output · Sanctuary Main ▼]                       │
 │ Audio: [Approved church mixer / mic feed ▼]    Meter [■■■■■░░]          │
 │ Profile: [Standard HD ▼]                 Local folder [Choose ▾]         │
 │ [● START RECORDING]     Disk: 124 GB available    Preflight: ready       │
@@ -45,7 +61,7 @@ After start:
 - `Add marker` stores timestamp relative to **Rhema recording session** plus current service, event/moment, actor, clock reference, source revision and authorized note. Do **not** depend on OBS chapter API. Markers are optionally embedded on export if supported.
 - Recordings are saved locally under the selected church data/recordings folder, indexed by stable service and recording IDs, with authorized rename/preview/open-folder/export/archive and storage quota/retention policy; **no automatic internet upload**.
 - A church may intentionally start/stop independently of service event progression; **no auto-start, auto-stop or hidden Take** unless a specific host-configured automation is approved later. Rehearsal/test recordings are labeled and isolated from a production archive.
-- **One primary recording session first** with a clearly determined destination and approved audio mix. Multiple simultaneous recording outputs, isolated per-camera ISO recording, independent audio stems, instant replay, video editing and live streaming *inside Rhema* are **proposals/future capabilities, not automatically included in this owner decision**.
+- **One primary recording session, capturing one explicitly selected named congregation output**, first; audio from a separately approved house/mixer route. Multiple simultaneous congregation-output recordings, ISO-camera capture, independent audio stems, a custom record-only Scene, instant replay and editing are **unapproved later capabilities**.
 
 ## 3. Native recording engine — Codex architecture instructions
 
@@ -68,8 +84,8 @@ After start:
 | Wave | Observable user outcome | Gate |
 | --- | --- | --- |
 | 0 — Audit and engine choice | Capture/encode/audio constraints, dependency/license/install size, performance budget and concrete native recording source proven feasible | Hardware proof / actual constraints, no guessed engine |
-| 1 — Basic local recording | Rhema native host records one chosen Rhema program with synchronized church mixer audio to recoverable local file **with OBS OFF and WAN OFF** | Start → capture → stop → open file and play audio+video, 30+ min; correct program picture |
-| 2 — Service integration | Live Record dock, marker timestamp, event linkage, file archive/history, permissioned start/stop, recording status/space/error | Program changes reflected as intended; no Stage/Comms leak |
+| 1 — Basic local recording | Rhema host captures **one selected named congregation output's final composited frames** plus approved clean mixer audio into a recoverable local file **with OBS OFF and WAN OFF** | Start → camera/Scripture/lyrics/graphic transitions → stop → play synchronized file, 30+ min; exact selected-output language/look and no other output |
+| 2 — Service integration | Live Record dock with pinned congregation-output ID, marker timestamps, event linkage, file archive/history, permissioned start/stop, status/space/error | All authorized Show/Hide/scene Takes to **recorded output** appear; private Preview, other congregation outputs, OBS and Stage never leak |
 | 3 — Resilience | Recover interrupted segments, low disk/fault handling, permissions, reroute/audio recovery, user-friendly repair and export | Power/crash and drive fault tests; Live remains functioning |
 | 4 — Combined load | Rhema recording + independent Sanctuary/Overflow/Stage output + cameras + OBS streaming + browser operators all active | CPU/GPU/RAM/dropped frame/sync/receiver measurements on target hardware; no Live regressions |
 
@@ -77,6 +93,6 @@ After start:
 
 ## 6. Scope boundary / open owner choices
 
-**Approved:** first-party, OBS-independent, offline local service recording owned by Rhema with service-context awareness, first-class Live controls, files/history, safety/recovery and no accidental public content. **Proposed defaults for implementation review:** record a designated Rhema Program (often following main sermon/congregation composition), use one approved clean audio mix, offer crash-safe segments plus playable export, and start with one finished recording path. **Open choices:** record independent program vs follow selected output as default, quality target and OS support, operator control grant preset, and whether full ISO camera/audio multitrack recording belongs in v1. Codex should avoid speculative implementation, audit real render/audio APIs and drive the smallest safe native full recording slice.
+**Approved:** first-party, OBS-independent, offline Rhema recording of **one explicitly selected real congregation output's final composited video**, following all authorized Live source/scene/graphic changes on that **named** output; separate approved clean church audio; first-class Live controls; local files/History; safety/recovery and no private output leakage. **Proposed implementation choices:** efficient host compositor tee into recoverable segmented encoding plus playable export, with one finished recording path first. **Remaining open engineering choices:** exact profile/codecs/OS support, hardware encoder, resource ceilings, operator recorder grant preset, backup storage, whether later ISO/multi-output recording will be offered. **No separate record-only scene in initial mode.** Codex should audit the real renderer/audio APIs and build the smallest verifiable native capture slice.
 
 **Owner's Page 8 correction has priority over earlier Page 8 OBS recording proposals.** Keep OBS streaming as a separate integration until independently changed.
