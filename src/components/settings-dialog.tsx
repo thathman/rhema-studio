@@ -33,6 +33,7 @@ import {
   HelpCircleIcon,
   GraduationCapIcon,
   BrainCircuitIcon,
+  HardDriveIcon,
 } from "lucide-react"
 import { LevelMeter } from "@/components/ui/level-meter"
 import { TalkDevices, TalkRulesSettings } from "@/studio/talk"
@@ -50,6 +51,7 @@ import { ArrowUpRightIcon, EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, Search
 import { useShellStore } from "@/studio/shell-store"
 import type { DeviceInfo } from "@/types/audio"
 import { certificateWords } from "@/lib/host-certificate"
+import { ChurchFolderBlock, DatabaseBlock } from "@/studio/settings/data-sync-blocks"
 
 /* -------------------------------------------------------------------------- */
 /*  Nav definition                                                            */
@@ -88,6 +90,11 @@ const navItems: { name: string; id: NavSection; icon: React.ReactNode }[] = [
     name: "AI assistants",
     id: "assistants",
     icon: <SparklesIcon strokeWidth={2} />,
+  },
+  {
+    name: "Data & Sync",
+    id: "data",
+    icon: <HardDriveIcon strokeWidth={2} />,
   },
   {
     name: "Diagnostics",
@@ -579,6 +586,7 @@ function DisplayModeSection() {
 
 const sectionTitles: Record<NavSection, string> = {
   assistants: "AI assistants (MCP)",
+  data: "Data & Sync",
   screens: "Screens and NDI",
   audio: "Audio",
   speech: "Speech Recognition",
@@ -1120,6 +1128,7 @@ function StatusDot({ running }: { running: boolean }) {
 
 const sectionComponents: Record<NavSection, React.FC> = {
   assistants: AssistantsSection,
+  data: DataSyncSection,
   screens: ScreensSection,
   audio: AudioSection,
   speech: SpeechSection,
@@ -1140,7 +1149,7 @@ const GROUPS: Array<{ title: string; ids: NavSection[] }> = [
   { title: "Display and output", ids: ["screens", "display"] },
   { title: "Microphone and speech", ids: ["audio", "speech"] },
   { title: "Connections", ids: ["remote", "assistants"] },
-  { title: "Data and diagnostics", ids: ["diagnostics", "help"] },
+  { title: "Data and diagnostics", ids: ["data", "diagnostics", "help"] },
 ]
 
 const SEARCHABLE = navItems.map((n) => ({ id: n.id, name: n.name, title: sectionTitles[n.id] }))
@@ -1153,7 +1162,6 @@ const ELSEWHERE: Record<ElsewhereId, () => void> = {
   hosting: openConnectionsHub,
   permissions: () => { useSettingsDialogStore.getState().closeSettings(); useShellStore.getState().goTo("permissions") },
   "service-defaults": () => useShellStore.getState().goTo("team"),
-  backups: () => useShellStore.getState().goTo("archive"),
 }
 
 /** Settings as a page: a search and the sections down the side, the chosen one beside them. */
@@ -1186,7 +1194,7 @@ export function SettingsPage() {
       <header className="shrink-0 px-8 pt-6 pb-4 max-[1200px]:px-5">
         <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Control, without complexity</p>
         <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Settings, precisely organised.</h1>
-        <p className="mt-1 text-xs text-muted-foreground">No buried controls: every setting has a reason and a clear home. Everything stays on this computer and applies at once.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Preferences apply at once. Your data stays on this computer unless you choose a shared church folder.</p>
       </header>
       <div className="grid min-h-0 flex-1 grid-cols-[255px_minmax(0,1fr)] gap-5 px-8 pb-6 max-[1200px]:grid-cols-[220px_minmax(0,1fr)] max-[1200px]:px-5">
         <nav aria-label="Settings sections" className="min-h-0 overflow-y-auto rounded-lg border border-border bg-card p-1.5">
@@ -1265,6 +1273,20 @@ export function SettingsPage() {
           </div>
         </section>
       </div>
+    </div>
+  )
+}
+
+/** Local database backups and the optional folder used to share saved services. */
+function DataSyncSection() {
+  return (
+    <div className="flex max-w-2xl flex-col gap-4 text-sm">
+      <p className="text-xs text-muted-foreground">Back up this computer's services and songs, restore a previous copy, or choose a shared folder for versioned services.</p>
+      <ChurchFolderBlock />
+      <section className="rounded-lg border border-border bg-card p-4">
+        <h3 className="mb-1 font-medium">Database backup</h3>
+        <div className="mt-3"><DatabaseBlock /></div>
+      </section>
     </div>
   )
 }
