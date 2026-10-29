@@ -400,6 +400,10 @@ The owner explicitly answered **yes** to these four proposed defaults. They are 
 
 ---
 
+## Page 5 consolidated full-screen review candidate (29 October)
+
+The full one-page Screens & Graphics composition is now preserved as **[38 — Consolidated Page 5 Visual Review Candidate](38-screens-graphics-final-visual-review-candidate.md)**. It assembles the previously owner-approved output scope, Preview/Program truth, temporary service drafts, contextual design/graphics editor, compact 2–3 Upcoming queue, transitions/duration, Restore Previous Graphic and Director handoff into one coherent operator workspace with 1440px desktop, 768px tablet and ~390px mobile behavior. **This is a visual-review candidate, not yet signed off, implemented or production-ready**. The functional decisions in §5G–I remain approved regardless of any visual changes.
+
 ## Main Studio utility — Permissions sidebar page (NEW OWNER REQUEST)
 
 The owner requests that Permissions be a visible first-class route in the MAIN Rhema Studio sidebar, adjacent to Connections under Your Church. This is a **host governance page**, not a new browser volunteer operator desk, but its visual workflow belongs in our page-layout review index. The proposed layout consists of **People & Devices list → Selected identity's effective role and action capabilities → Output/service scopes → Change impact preview and host confirm → Audit / revoke**. Keep simple role presets as defaults, with advanced scope grants only where the host backend really enforces them; show live state and expiry, avoid a crowded checkbox matrix. See the comprehensive **[37 — Permissions route and proposed layout](37-permissions-sidebar-and-authority-design.md)**. **Approved:** sidebar destination and central permissions redesign. **Not yet approved:** final Permissions visual layout and precise advanced role/grant editor; **Screens temporary/permanent edit policy was approved 29 October**. **Not implemented by the doc.**
