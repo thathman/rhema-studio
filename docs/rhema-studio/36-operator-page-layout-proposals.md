@@ -279,6 +279,114 @@ UPCOMING GRAPHICS                                  [View all (8)]
 
 **Separate Page 5 proposals awaiting visual approval:** exact vertical placement of the compact strip, row typography, detailed drawer treatment, whether a separate `Graphics` tab improves access, animations/durations, and quick-graphics editor visuals. The **compact-visible-2-or-3 + expand-full-queue interaction itself is OWNER APPROVED**.
 
+
+### 5I. Graphics lifecycle, timed hide, previous graphic and Director handoff — WORKSHOP PROPOSAL (29 October 2026)
+
+**Status: PROPOSED FOR OWNER REVIEW; not explicitly approved and not implemented by this document.** Preserve this section alongside the already approved single/group Take, temporary-edit and compact Upcoming Graphics strip; none of the proposals below changes those signed-off decisions. Existing code includes `src/studio/production/scene-composer.tsx` output-scoped scene Restore, `src/stores/broadcast-store.ts` source/scene restore and ticker pause, and `src/stores/notices-store.ts` / `src/studio/notices-panel.tsx` Comms action notices/acknowledgments. This does **not** demonstrate a complete timed per-overlay lifecycle or typed Director graphics handoff.
+
+#### I1. Four-step operator mental model
+
+```text
+Choose named output(s) → Prepare graphic / approved look
+                       → Private Preview
+                       → Explicit Show / Hide / Restore
+   "Transitions" and "Duration" are small contextual settings, not another workspace.
+```
+
+**Visual arrangement:** while a lower-third, ticker or named overlay is selected, show one simple contextual **Graphic Controls** panel under/alongside Preview with `Entrance`, `Exit`, `Display for`, and `After it ends`. Keep actual Program visible as authoritative output state; the previously applied revision remains on-air while the next version is drafted. `Show Graphic on Sanctuary` is an explicit source/layer operation, **not** `Take entire Scene`. Group use requires the same separately approved host scope, per-target preview and result semantics as Scene group Take.
+
+#### I2. Transitions — clear novice presets, shared design engine
+
+- **Cut:** immediate, deterministic, no animation.
+- **Fade:** professional default proposal; modest entrance/exit duration (e.g. 250–400ms). Both timings and easing are design-presets, **not fixed owner-approved numbers**.
+- **Slide:** enter/leave from approved direction; avoid motion that obscures speaker/Scripture. Design-level advanced presets only in the same native shared editor, not an operator-facing wall of effects.
+- `Use design's transition` is first/default choice for an existing approved reusable look; operator may override for **this service draft only** as allowed. Never rewrite global library design due to an on-air adjustment.
+- Show private preview of the motion, and a reduced-motion/Cut fallback on incompatible receivers or user accessibility preference. Do not assume TV/browser/NDI/OBS players can all provide frame-exact synchrony; actual receiver acknowledgments remain per-output.
+- Transitions of **overlays** and transitions of **entire Scenes/OBS** are different commands. Output scope, host authority and on-air truth remain distinct.
+
+#### I3. Display duration and automatic hide — explicit per-graphic policy
+
+Proposed presets in contextual inspector:
+
+| Choice | Meaning |
+| --- | --- |
+| `Until I hide it` | Manual persistent overlay, safe no-surprise baseline/default proposal |
+| `5s / 10s / 20s / 30s` | Show for a bounded on-air interval, then apply the **configured exit** to this graphic only |
+| `Custom duration` | Validated duration (host bounds, optional long-running capability); show exact countdown in operator status |
+| `Until this event ends` | Conditional end tied to **host-authoritative event transition**; only after specific operator/host policy enables that behavior |
+| `Ticker loop / manual stop` | Ticker-specific policy; not treated like a short lower-third timer |
+
+**Safety:** the display timer begins only after the host has actually accepted/applied the graphic, not when the operator previews or clicks while approval is pending; if actual receiver timing differs, show `Host applied` versus `Receiver confirmed` truth and do not invent start/stop certainty. The main host, **not each browser client**, owns lifecycle and expiry, with event/revision/graphic instance IDs, output identity, host monotonic clock and recovery snapshot. If operator browser disconnects, the host finishes a valid auto-hide. If the host restarts, recover time policy deterministically or mark stale; do **not** unexpectedly resurrect an expired graphic. A late old expiry cannot hide a newer replacement in the same overlay slot; cancellation and re-show need revision/instance guards.
+
+**End semantics:** `Auto-hide` removes **only that overlay instance** and leaves camera, Bible, scene, other overlays and unrelated outputs untouched. `When finished: Hide` is the safest novice default; **Restore previous graphic after timeout** could be an optional explicitly configured advanced mode, not an inferred action. `Pause service / Hold` does not automatically pause overlay TTL unless that graphic is explicitly bound to the paused timing source. An expiry must not send an unauthorized scene Take.
+
+#### I4. Hide, restore and undo — do not conflate scope
+
+Provide clear separately scoped controls:
+- `Hide [graphic] from [output]`: cancel its pending expiry and remove this overlay without affecting the underlying composition.
+- `Restore last graphic on [output]`: when available, restore the last valid **previous on-air overlay snapshot** for this same named output and overlay slot, with the original/allowed design revision and text; do not globally restore all graphics or auto-re-Take an old scene.
+- `Back to previous Scene`: separate output-level scene history action, requiring a visible Program impact preview; not an overlay Undo.
+- `Discard my draft`: affects only private uncommitted edit, never current Program.
+- `Re-show recent graphic`: explicit new on-air action with duration policy applied freshly, not an accidental re-run of old timeout state.
+- Empty/expired/unavailable previous entry: disable Restore with a clear reason, especially after service change, revoked rights, missing assets, incompatible output, changed approved design revision, or Live host override.
+- Keep a bounded, host-managed output-specific overlay history with actor, when shown/hidden, target, source/design revision, fixed text vs Follow Live source policy, result/receiver state. A previous bound-to-Live graphic must not display an old verse deceptively; show `Follows Live Bible` and its current meaning, or require an explicit snapshot selection.
+
+#### I5. Director → Graphics Operator handoff — typed, private and actionable
+
+```text
+Director (Live / Comms)                Screens Operator (Page 5)
+[Prepare Lower Third]  ────────────→  [Request appears: Sermon / Sanctuary]
+   Request accepted/received      ←── [Acknowledge / Cannot do]
+                                    [Opens corresponding service Moment]
+                                    [Select look + text → Private Preview]
+   "Ready for Sanctuary"          ←── [Mark Ready]
+[Request Show now]   ─────────────→  [Confirm output and Show if permitted]
+   Host/receiver actual status     ←── [Shown / Awaiting receiver / Failed]
+```
+
+**Typed request fields:** request ID; target operator/session; source service/event/moment; `Prepare` or `Show requested`; graphic type/design revision/content/speaker; output IDs (authorized, no surprise group); priority/needed-by; requester and assignee; permission/review expectations; whether changes allowed; payload version and expiry. Keep messages **private** (never broadcast to congregation, stage, OBS or ticker) with role/source filtering.
+
+**Suggested handoff states:** `Requested` → `Received / Acknowledged` → `Preparing` → `Ready` → `Show requested` → `Applied / Receiver confirmed` or `Unable / Cancelled / Expired`. A Director may request `Prepare only`, including while another scene stays Live. `Ready` means prepared, **not on air**. `Request Show` requires an explicit authorized operator action or host-controlled Director act with actual target scope; it must not silently bypass Screens role permissions, Approval Requests, browser pairing or rehearsal isolation. `Approval` in Permissions is a separate authorizing decision, not a production Ready acknowledgment.
+
+**Operator UX:** on-screen request card says `Director requested: Prepare Pastor lower third for Sanctuary · Sermon` with `Open & Prepare`, `Acknowledge`, `Unable` (reason) and relevant deadlines. It deep-links into the **existing Page 5 Preview context**, preserving current on-air Program and any other private work as draft. If operator has an unsaved different draft, preserve both and ask which to focus rather than discarding. Director sees `Preparing / Ready / Unable` and subsequent *actual* graphic visibility per output; no false green when receiver not confirmed.
+
+**Connection and precedence:** the local host persists requested handoffs and state (idempotent dedup and sequence), respects role revocation, cancels/supersedes outdated requests on event changes or host overrides, and never makes a volunteer's browser an availability dependency for the live show. Offline-LAN operation remains available; reconnect resumes legitimate pending work. Private Comms may show a notification **linked** to the typed command, but a generic chat response is not sufficient for on-air authorization.
+
+#### I6. Proposed Page 5 UI micro-wireframe
+
+```text
+[Sanctuary Main ▼]  Live status: Current Sermon camera + Bible
+┌─────────────────────────────────┬────────────────────────────────┐
+│ PRIVATE PREVIEW                 │ ACTUAL PROGRAM                 │
+│ Pastor Samuel / Senior Pastor  │ Live Sermon camera             │
+│ NOT LIVE — edit safely          │ Graphic: Pastor lower third    │
+└─────────────────────────────────┴────────────────────────────────┘
+  GRAPHIC CONTROLS
+  Transition [Use Design ▾]       Duration [Until I hide it ▾]
+  [Hide this graphic] [Show on Sanctuary Main]
+  [Restore previous graphic]     [Save permanent → Request approval]
+  UPCOMING GRAPHICS [next 2–3]                     [View all]
+  ────────────────────────────────────────────────────────────────
+  DIRECTOR REQUEST: Prepare Pastor lower third for Sermon/Sanctuary
+  [Open & Prepare] [Acknowledge] [Unable]    Status: Requested
+```
+
+**At 390px:** single target selector + actual Program/Preview switching, one contextual graphics inspector, pinned explicit `Show on [output]` action, compact two-item Upcoming strip, and request card anchored in an accessible notification drawer with badge (not covering Take). At tablet width, preserve Prep/Live distinction and Director request context without tiny unreadable canvases.
+
+#### I7. Scenarios and open approval questions
+
+- Lower third shown with `Fade / 10s` then naturally hides while Camera + Bible remain; no stale timer from first instance hides a new re-show.
+- Browser disconnect during the 10s interval; local host still hides; reconnect sees truth and no duplicate show/hide.
+- Operator hides lower third then restores prior one **only on Sanctuary**; Overflow and OBS unchanged. Scene Restore is a separate command.
+- Ticker manual/loop mode persists independently of event clock; switching service events does not unexpectedly remove it unless explicitly event-bound.
+- Director requests a lower third, Screens acknowledges/prepares/marks Ready; Director sees Ready but **not Live**. Only named authorized Show (or approved group scope) mutates receiver.
+- Two Director requests conflict; display priority and `Superseded`, no automatic destruction of drafts.
+- Stage-private cue never appears on congregation or stream because a graphics template/Director request was misrouted.
+- Device cannot animate; use safe Cut fallback, report capabilities without claiming physical receiver ack.
+- Host restart/missed expiry and service ending cannot revive stale overlay on a new service.
+
+**Still for owner choice (proposal, not assumed):** (a) Should default lower-third duration inherit approved design settings or default to `Until I hide it` when none exists? (b) Is `Fade` the default transition for new graphics or only the suggested template design choice? (c) Should `Restore previous graphic` be one-tap or always require a short output preview? (d) Does a Director request `Show` ever automatically route to a permissioned host Take, or should the Screens operator confirm by default? Recommended safe responses: approved look inheritance → manual fallback, design-defined Fade, contextual restore with named target and safety preview when impact significant, Screens confirmation by default. **These are unapproved implementation defaults pending owner sign-off.**
+
 ---
 
 ## Main Studio utility — Permissions sidebar page (NEW OWNER REQUEST)
