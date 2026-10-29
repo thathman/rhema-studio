@@ -111,8 +111,9 @@ async function runScenario() {
     qa.settings.getState().setOperatorName("QA Operator")
     await window.__TAURI_INTERNALS__.invoke("content_set_actor", { name: "QA Operator" })
 
-    stage = "create and save the approved scene through Production"
-    await clickButton("Production")
+    stage = "open Live production tools and save the approved scene"
+    await clickButton("Live")
+    await clickButton("Open production tools")
     await clickButton("Scenes")
     await clickButton("Full screen")
     const sceneNameInput = await waitFor(() => document.querySelector('input[aria-label="Scene name"]'), "scene name field")
@@ -226,12 +227,12 @@ async function runScenario() {
     const programBeforePreview = programState(qa.broadcast)
 
     stage = "preview the approved event without changing Program"
-    await clickButton("Present")
+    await clickButton("Live")
     const row = await waitFor(
       () => [...document.querySelectorAll("button[title]")].find(
         (button) => button.title.includes("Click to preview") && normal(button.innerText).includes(savedItem.reference),
       ),
-      "approved event in the Present rundown",
+      "approved event in the Live rundown",
     )
     row.click()
     await waitFor(() => qa.bible.getState().selectedQueueItemId === savedItem.id, "approved event Preview")
@@ -253,7 +254,7 @@ async function runScenario() {
       expectedPixel: [86, 120, 154, 255],
     })
 
-    stage = "Take the approved event in Present"
+    stage = "Take the approved event in Live"
     await clickButton("Take live")
     await waitFor(() => {
       const state = qa.broadcast.getState()
