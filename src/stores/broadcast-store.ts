@@ -256,8 +256,8 @@ interface BroadcastState {
   setCountdownSources: (sources: CountdownSources) => void
   /** Saved sets of announcements. Saved. */
   tickerPresets: TickerPreset[]
-  /** Save the words now in the ticker as a set (replacing one of the same name). */
-  saveTickerPreset: (name: string) => void
+  /** Save supplied words, or the current ticker words, as a set with this name. */
+  saveTickerPreset: (name: string, items?: string[]) => void
   deleteTickerPreset: (id: string) => void
   setTickerItems: (items: string[]) => void
   /** Start the ticker with the saved items and style (`backing` resolved from the style's media), or stop it (null). */
@@ -861,9 +861,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (startMoved) for (const o of get().outputs) if (o.type === "browser" && o.hostLost?.mode === "countdown") resendLast(o.id)
   },
   tickerPresets: [],
-  saveTickerPreset: (name) => {
+  saveTickerPreset: (name, draftItems) => {
     const n = name.trim().slice(0, 60)
-    const items = get().tickerItems.filter((i) => i.trim())
+    const items = (draftItems ?? get().tickerItems).filter((i) => i.trim())
     if (!n || items.length === 0) return
     const others = get().tickerPresets.filter((p) => p.name.toLowerCase() !== n.toLowerCase())
     set({ tickerPresets: [...others, { id: crypto.randomUUID(), name: n, items }] })

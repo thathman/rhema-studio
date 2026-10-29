@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import type { Ticker } from "@/types"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useBroadcastStore } from "@/stores"
@@ -16,18 +16,32 @@ import { useShellStore } from "@/studio/shell-store"
 
 /**
  * The news ticker: announcements, one per line, crawling along the outputs
- * that show the ticker until stopped. Edits to the words reach a running
- * ticker at once.
+ * that show the ticker until stopped. While it is running, word changes stay
+ * private until the operator explicitly updates the ticker.
  */
 export function TickerControl() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const ticker = useBroadcastStore((s) => s.ticker)
   const items = useBroadcastStore((s) => s.tickerItems)
+  const [pending, setPending] = useState<{ startedAt: number; items: string[] } | null>(null)
+  const pendingItems = ticker && pending?.startedAt === ticker.startedAt ? pending.items : null
+  const editorItems = pendingItems ?? items
   const targets = outputs.filter((o) => followsTicker(o) && o.role !== "stage")
-  const hasWords = items.some((i) => i.trim())
+  const hasWords = editorItems.some((i) => i.trim())
+  const lastTickerStart = useRef<number | null>(null)
+  useEffect(() => {
+    // Stopping ends the public ticker. Keep any unapplied words as the saved
+    // next-use list, where they cannot change an output.
+    if (ticker) {
+      lastTickerStart.current = ticker.startedAt
+    } else if (pending && lastTickerStart.current === pending.startedAt) {
+      useBroadcastStore.getState().setTickerItems(pending.items)
+    }
+  }, [ticker, pending])
   const start = async () => {
     const backing = await lowerThirdBacking(useBroadcastStore.getState().tickerStyle)
     useBroadcastStore.getState().setTicker({ backing })
+    setPending(null)
   }
   return (
     <>
@@ -49,19 +63,29 @@ export function TickerControl() {
           {targets.length === 0 ? (
             <p className="mb-2 text-xs text-confidence-mid">No output shows the ticker yet. Turn on "Show the news ticker" for an output in Outputs.</p>
           ) : (
-            <p className="mb-2 text-xs text-muted-foreground">Crawls along {targets.map((o) => o.name).join(", ")} until you stop it. Changes to the words show at once.</p>
+            <p className="mb-2 text-xs text-muted-foreground">Crawls along {targets.map((o) => o.name).join(", ")} until you stop it. While on air, word edits stay private until you update the running ticker.</p>
           )}
           <Textarea
             aria-label="Ticker items, one per line"
             placeholder={"Youth meeting, Friday 6 pm\nChoir practice, Saturday 4 pm"}
-            value={items.join("\n")}
-            onChange={(e) => useBroadcastStore.getState().setTickerItems(e.target.value.split("\n"))}
+            value={editorItems.join("\n")}
+            onChange={(e) => {
+              const next = e.target.value.split("\n")
+              if (ticker) setPending({ startedAt: ticker.startedAt, items: next })
+              else useBroadcastStore.getState().setTickerItems(next)
+            }}
             rows={4}
             className="text-xs"
           />
           <p className="mt-1 text-xs text-muted-foreground">One announcement per line.</p>
-          <TickerPresets />
-          <TickerPreview />
+          <TickerPresets
+            items={editorItems}
+            onChoose={(next) => {
+              if (ticker) setPending({ startedAt: ticker.startedAt, items: next })
+              else useBroadcastStore.getState().setTickerItems(next)
+            }}
+          />
+          <TickerPreview items={editorItems} />
           <div className="mt-2 flex items-center gap-2">
             {ticker ? (
               <>
@@ -70,6 +94,8 @@ export function TickerControl() {
                 ) : (
                   <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().pauseTicker(true)}><PauseIcon /> Pause</Button>
                 )}
+                {pendingItems && <Button size="sm" onClick={() => { useBroadcastStore.getState().setTickerItems(pendingItems); setPending(null) }}>Update running ticker</Button>}
+                {pendingItems && <Button size="sm" variant="outline" onClick={() => setPending(null)}>Discard edits</Button>}
                 <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().setTicker(null)}><SquareIcon /> Stop</Button>
               </>
             ) : (
@@ -114,26 +140,25 @@ export function TickerRow() {
 }
 
 /** Load a saved set of announcements, or save these words as one. */
-function TickerPresets() {
+function TickerPresets({ items, onChoose }: { items: string[]; onChoose: (items: string[]) => void }) {
   const presets = useBroadcastStore((s) => s.tickerPresets)
   const [name, setName] = useState("")
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2">
       {presets.length > 0 && (
-        <Select value="" onValueChange={(id) => { const p = presets.find((x) => x.id === id); if (p) useBroadcastStore.getState().setTickerItems(p.items) }}>
+        <Select value="" onValueChange={(id) => { const p = presets.find((x) => x.id === id); if (p) onChoose(p.items) }}>
           <SelectTrigger aria-label="Load a saved set" className="h-8 flex-1 text-xs"><SelectValue placeholder="Load a saved set…" /></SelectTrigger>
           <SelectContent>{presets.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} ({p.items.length})</SelectItem>)}</SelectContent>
         </Select>
       )}
       <Input aria-label="Name for this set" placeholder="Save as… (e.g. Sunday notices)" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} className="h-8 flex-1 text-xs" />
-      <Button size="sm" variant="outline" disabled={!name.trim()} onClick={() => { useBroadcastStore.getState().saveTickerPreset(name); setName("") }}>Save</Button>
+      <Button size="sm" variant="outline" disabled={!name.trim()} onClick={() => { useBroadcastStore.getState().saveTickerPreset(name, items); setName("") }}>Save</Button>
     </div>
   )
 }
 
 /** The ticker as it will look with these words (over the main output's theme), before taking it live. */
-function TickerPreview() {
-  const items = useBroadcastStore((s) => s.tickerItems)
+function TickerPreview({ items }: { items: string[] }) {
   const style = useBroadcastStore((s) => s.tickerStyle)
   const theme = useBroadcastStore((s) => s.themes.find((t) => t.id === s.outputs.find((o) => o.ticker)?.themeId) ?? s.themes[0])
   const ticker = useMemo<Ticker>(() => ({ items, style, startedAt: 0 }), [items, style])
