@@ -8,6 +8,7 @@ type SettingsSection =
   | "display"
   | "remote"
   | "assistants"
+  | "data"
   | "diagnostics"
   | "help"
 

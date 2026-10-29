@@ -8,7 +8,7 @@ import { archiveMonthAt, formatServiceCalendarDate, serviceCalendarDate, service
 import { validTimeZone } from "@/lib/church-time"
 import { systemTimeZone } from "@/lib/setup-readiness"
 import { SongUsageBlock } from "@/studio/more/song-usage-block"
-import { ChurchFolderBlock, DatabaseBlock, JournalBlock, PackageBlock } from "@/studio/library/library-blocks"
+import { JournalBlock } from "@/studio/library/library-blocks"
 import { useSettingsStore } from "@/stores/settings-store"
 
 function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
@@ -21,7 +21,7 @@ function Card({ title, sub, children }: { title: string; sub?: string; children:
   )
 }
 
-/** Past services, what went live, song usage, sharing services, and backups. */
+/** Review service runs, saved plans and song usage. Data management lives in Settings. */
 export function ArchiveWorkspace() {
   const programs = useServiceStore((s) => s.programs)
   const current = useServiceStore((s) => s.current)
@@ -52,8 +52,8 @@ export function ArchiveWorkspace() {
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Every Sunday has a story</p>
-            <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Keep the good work.</h1>
-            <p className="mt-1 text-xs text-muted-foreground">Find your past services, open a favourite structure, and remember what actually went on screen.</p>
+            <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">History and records.</h1>
+            <p className="mt-1 text-xs text-muted-foreground">Review saved service plans and what happened during a run. Run records are private and read-only; reviewing them never changes an output.</p>
           </div>
         </header>
 
@@ -78,7 +78,7 @@ export function ArchiveWorkspace() {
 
         <section aria-labelledby="past" className="flex flex-col gap-3">
           <div className="flex items-baseline justify-between gap-3">
-            <h2 id="past" className="text-lg font-bold tracking-[-0.03em]">Past services</h2>
+            <h2 id="past" className="text-lg font-bold tracking-[-0.03em]">Saved services</h2>
             <p className="text-xs text-muted-foreground">{services.length} on this computer, newest first{dirty ? " · save or close the open one to open another" : ""}</p>
           </div>
           {services.length === 0 && <p className="rounded-lg border border-border bg-card px-5 py-6 text-center text-xs text-muted-foreground">None yet. Create one in Prepare.</p>}
@@ -105,20 +105,11 @@ export function ArchiveWorkspace() {
         </section>
 
         <div className="grid grid-cols-2 gap-5 max-[1100px]:grid-cols-1">
-          <Card title="What went live" sub="The service log: each item as it went on screen, with times.">
+          <Card title="Service runs and logs" sub="Review captured run activity and plan versus actual timing. A run record never restores a service or sends anything to a screen.">
             <JournalBlock />
           </Card>
           <Card title="Songs sung" sub="How often each song was used, for licence reports.">
             <SongUsageBlock />
-          </Card>
-          <Card title="Share services" sub="The church folder (another computer, a NAS) and service files.">
-            <div className="flex flex-col gap-3">
-              <ChurchFolderBlock />
-              <PackageBlock onClose={() => useShellStore.getState().goTo("prepare")} />
-            </div>
-          </Card>
-          <Card title="Backups" sub="Services, songs, settings, outputs and looks in one file (no saved keys or passwords), and back again.">
-            <DatabaseBlock />
           </Card>
         </div>
       </div>
