@@ -1,5 +1,5 @@
 /**
- * What the host card (Production → Operators) says about hosting: this computer's addresses, the
+ * What the host card (Live → Production tools → Operators) says about hosting: this computer's addresses, the
  * secure link, and each paired desk with whether it is connected now and when it was last seen.
  * The host's listener keeps the facts (src-tauri `host_status`); this only puts them in words.
  */

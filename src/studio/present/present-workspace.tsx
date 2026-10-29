@@ -1,8 +1,8 @@
 import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
-import { useEffect, useRef, useState, useSyncExternalStore } from "react"
-import { ArrowUpIcon, BookOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
+import { useEffect, useRef, useSyncExternalStore } from "react"
+import { ArrowUpIcon, BookOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { LiveOutputPanel } from "@/components/panels/live-output-panel"
@@ -31,12 +31,13 @@ import { LiveToolsDrawer, type LiveToolsTab } from "@/studio/present/live-tools-
 import { EngageHostControl } from "@/studio/engage/host-control"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
+import { useProductionTab } from "@/studio/production/production-tab"
 
 export function PresentWorkspace() {
-  const [toolsOpen, setToolsOpen] = useState(false)
-  const [toolsTab, setToolsTab] = useState<LiveToolsTab>("bible")
   const toolsButtonRef = useRef<HTMLButtonElement>(null)
-  const toolsOpenRef = useRef(false)
+  const productionToolsButtonRef = useRef<HTMLButtonElement>(null)
+  const toolsOpen = useProductionTab((s) => s.open)
+  const toolsTab = useProductionTab((s) => s.liveToolsTab)
   const openOutputs = useShellStore((s) => s.openOutputs)
   const isLive = useBroadcastStore((s) => s.isLive)
   // Verses carry a reference; quick screens and custom slides may only have lines.
@@ -55,20 +56,20 @@ export function PresentWorkspace() {
   const activeAbbrev = useBibleStore((s) => s.translations.find((t) => t.id === s.activeTranslationId)?.abbreviation ?? "active")
   const startsAt = useQueueStore((s) => (s.headers.find((h) => h.type === "phase" && h.role === "main") ?? s.headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at ?? null)
   const onAir = outputs.filter((o) => outputOnAir(o, outputStatus[o.id])).length
-  const updateToolsOpen = (open: boolean) => {
-    toolsOpenRef.current = open
-    setToolsOpen(open)
-  }
   const closeTools = () => {
-    updateToolsOpen(false)
-    queueMicrotask(() => toolsButtonRef.current?.focus())
+    useProductionTab.setState({ open: false, requested: null })
+    queueMicrotask(() => (toolsTab === "production" ? productionToolsButtonRef.current : toolsButtonRef.current)?.focus())
+  }
+
+  const selectToolsTab = (tab: LiveToolsTab) => {
+    useProductionTab.setState({ liveToolsTab: tab, open: true, requested: null })
   }
 
   // Register one keyboard map for the whole Live console. shouldIgnoreKeyboard
   // suppresses it while the tools drawer or another modal is open.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (toolsOpenRef.current || e.defaultPrevented || shouldIgnoreKeyboard(e.target, e.key)) return
+      if (useProductionTab.getState().open || e.defaultPrevented || shouldIgnoreKeyboard(e.target, e.key)) return
       const action = keyToPresentAction(e)
       if (!action) return
       e.preventDefault()
@@ -122,13 +123,37 @@ export function PresentWorkspace() {
             variant="outline"
             size="xs"
             data-tour="live-tools"
-            aria-label={toolsOpen ? "Hide Bible and listening tools" : "Open Bible and listening tools"}
+            aria-label={toolsOpen && toolsTab !== "production" ? "Close Bible and listening tools" : "Open Bible and listening tools"}
             aria-controls="live-tools-panel"
-            aria-expanded={toolsOpen}
+            aria-expanded={toolsOpen && toolsTab !== "production"}
             title="Search the Bible and review what listening has heard"
-            onClick={() => toolsOpen ? closeTools() : updateToolsOpen(true)}
+            onClick={() => {
+              if (toolsOpen && toolsTab !== "production") closeTools()
+              else {
+                const previousTab = useProductionTab.getState().liveToolsTab
+                useProductionTab.setState({ liveToolsTab: previousTab === "production" ? "bible" : previousTab, open: true, requested: null })
+              }
+            }}
           >
             <BookOpenIcon /> Bible &amp; listening
+          </Button>
+          <Button
+            ref={productionToolsButtonRef}
+            type="button"
+            variant="outline"
+            size="xs"
+            aria-label={toolsOpen && toolsTab === "production" ? "Close production tools" : "Open production tools"}
+            aria-controls="live-tools-panel"
+            aria-expanded={toolsOpen && toolsTab === "production"}
+            title="Open timing, scenes, cameras, OBS, operators and show health within Live"
+            onClick={() => {
+              if (toolsOpen && toolsTab === "production") closeTools()
+              else {
+                useProductionTab.setState({ liveToolsTab: "production", open: true })
+              }
+            }}
+          >
+            <MonitorCogIcon /> Production tools
           </Button>
           <StatusChip tone={listening ? "ok" : "off"} label={listening ? (cloudSpeechProvider ? `Listening (${cloudSpeechProvider === "openai" ? "OpenAI" : "Deepgram"})` : "Listening") : "Listening off"} title={listening && cloudSpeechProvider ? `Microphone sound is being sent to ${cloudSpeechProvider === "openai" ? "OpenAI" : "Deepgram"}` : undefined} />
           {listening && autoLive && (
@@ -174,7 +199,7 @@ export function PresentWorkspace() {
         <LiveConsoleSurface
           toolsOpen={toolsOpen}
           toolsTab={toolsTab}
-          onToolsTabChange={setToolsTab}
+          onToolsTabChange={selectToolsTab}
           onCloseTools={closeTools}
         />
       </div>

@@ -24,7 +24,7 @@ export const SCENES_REHEARSAL_NOTE = "Rehearsal: a Take here is practice. The sc
  * Scenes in Present (ADR 0001): change what a congregation screen is arranged to show (camera and
  * Bible, lyrics on a picture…) without leaving the live console. Taking a scene changes the
  * screen's layout, not what is live: the words come from the live sources either way. Scenes are
- * made and edited in Production → Scenes (a basic one here too: New / Edit scene); this takes them, goes back to the screen's own
+ * made and edited in Live → Production tools → Scenes (a basic one here too: New / Edit scene); this takes them, goes back to the screen's own
  * feed, and restores the last one. Shown only when there is a congregation screen and a saved scene.
  */
 export function ScenesStrip({ className }: { className?: string }) {

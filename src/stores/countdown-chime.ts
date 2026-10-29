@@ -5,7 +5,7 @@ import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { remainingMs } from "@/lib/timer"
 
 /**
- * Production → Timekeeper's chime (#196 R2): a short tone on this computer, the main desk, at the
+ * Live → Production tools → Timekeeper's chime (#196 R2): a short tone on this computer, the main desk, at the
  * chosen minutes before what Timekeeper counts down to and again at zero. Off until turned on.
  * It is played here only, through this window's own audio: no output window, NDI sender or
  * browser feed is ever sent it, so the congregation never hears it.

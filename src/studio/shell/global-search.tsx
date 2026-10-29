@@ -6,13 +6,15 @@ import { useShellStore, type DesignTab, type Workspace } from "@/studio/shell-st
 import { openSettings, type SettingsSection } from "@/lib/settings-dialog"
 import { presentActions } from "@/studio/present-actions"
 import { isImageItem, isSongItem, type QueueItem } from "@/types"
+import { openProductionTab } from "@/studio/production/production-tab"
 
 const PLACES: ReadonlyArray<readonly [Workspace, string, React.ReactNode, string]> = [
   ["home", "Home", <HouseIcon key="i" />, "overview readiness today"],
   ["prepare", "Prepare", <PencilRulerIcon key="i" />, "service builder rundown run of show plan edit history approve copy"],
-  ["present", "Present", <PlayIcon key="i" />, "live console show go live"],
+  ["present", "Live", <PlayIcon key="i" />, "live console present show go live"],
+  ["library", "Library", <LibraryBigIcon key="i" />, "songs hymns bible slides media files"],
   ["design", "Design", <PaletteIcon key="i" />, "themes looks studio"],
-  ["production", "Production", <MonitorCogIcon key="i" />, "production control timekeeper timers hold screens outputs ndi health preflight"],
+  ["archive", "History", <ArchiveIcon key="i" />, "past services execution records logs"],
   ["team", "Team", <UsersIcon key="i" />, "team approvals comments church folder remote"],
 ]
 
@@ -91,10 +93,9 @@ export function GlobalSearch() {
           {PLACES.map(([w, label, icon, words]) => (
             <CommandItem key={w} value={`${label} ${words}`} onSelect={() => run(() => useShellStore.getState().goTo(w))}>{icon} {label}</CommandItem>
           ))}
+          <CommandItem value="Live tools production control timekeeper timers hold screens outputs ndi health preflight cameras OBS operators" onSelect={() => run(() => openProductionTab("health"))}><MonitorCogIcon /> Live tools · Show health</CommandItem>
           {/* Services are built in Prepare only (#299): a new one starts there too. */}
           <CommandItem value="new service create sunday plan prepare" onSelect={() => run(() => { useShellStore.getState().setNewServiceOpen(true); useShellStore.getState().goTo("prepare") })}><PlusIcon /> New service</CommandItem>
-          <CommandItem value="library songs hymn book import export backup" onSelect={() => run(() => useShellStore.getState().goTo("library"))}><LibraryBigIcon /> Library</CommandItem>
-          <CommandItem value="archive past services logs" onSelect={() => run(() => useShellStore.getState().goTo("archive"))}><ArchiveIcon /> Archive</CommandItem>
           <CommandItem value="outputs screens projector ndi stage signage monitor" onSelect={() => run(() => useShellStore.getState().openOutputs())}><MonitorIcon /> Outputs</CommandItem>
         </CommandGroup>
         <CommandGroup heading="Design">

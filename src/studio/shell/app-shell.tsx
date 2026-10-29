@@ -5,7 +5,7 @@ import "@/stores/journal-store"
 import "@/stores/monitor-store"
 import "@/stores/obs-store"
 import { useCallback, useEffect, useMemo } from "react"
-import { useShellStore, type Workspace } from "@/studio/shell-store"
+import { canonicalWorkspace, useShellStore, type Workspace } from "@/studio/shell-store"
 import { bibleActions } from "@/hooks/use-bible"
 import { rememberedServiceId, useServiceStore } from "@/stores/service-store"
 import { useBroadcastStore, useQueueStore } from "@/stores"
@@ -20,7 +20,6 @@ import { SettingsPage } from "@/components/settings-dialog"
 import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { LibraryWorkspace } from "@/studio/library/library-workspace"
 import { ArchiveWorkspace } from "@/studio/archive/archive-workspace"
-import { ProductionWorkspace } from "@/studio/production/production-workspace"
 import { TeamWorkspace } from "@/studio/team/team-workspace"
 import { ConnectionsWorkspace } from "@/studio/connections/connections-workspace"
 import { openSettings } from "@/lib/settings-dialog"
@@ -50,7 +49,7 @@ import "@/lib/app-tick"
 import { removeOldTranscripts } from "@/lib/journal-transcript"
 
 /** What the top bar calls each page. */
-const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", production: "Production control", library: "Library", design: "Design studio", connections: "Connections", team: "Team", archive: "Archive", settings: "Settings", more: "More tools" }
+const TITLES: Record<Workspace, string> = { home: "Home", prepare: "Prepare", present: "Live", production: "Live", library: "Library", design: "Design", connections: "Connections", team: "Team", archive: "History", settings: "Settings", more: "More tools" }
 
 const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   home: () => <HomeWorkspace />,
@@ -59,7 +58,8 @@ const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   design: () => <DesignWorkspace />,
   library: () => <LibraryWorkspace />,
   archive: () => <ArchiveWorkspace />,
-  production: () => <ProductionWorkspace />,
+  // Legacy saved routes and deep links resolve to the same Live console.
+  production: () => <PresentWorkspace />,
   connections: () => <ConnectionsWorkspace />,
   team: () => <TeamWorkspace />,
   settings: () => <SettingsPage />,
@@ -68,6 +68,7 @@ const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
 
 export function AppShell() {
   const workspace = useShellStore((s) => s.workspace)
+  const activeWorkspace = canonicalWorkspace(workspace)
   const setWorkspace = useShellStore((s) => s.setWorkspace)
   const outputsOpen = useShellStore((s) => s.outputsDialogOpen)
   const setOutputsOpen = useShellStore((s) => s.setOutputsDialogOpen)
@@ -79,13 +80,18 @@ export function AppShell() {
   // Going anywhere from Design first settles an unsaved theme (keep editing, or discard it), as closing the designer did.
   const go = useCallback(async (next: Workspace) => {
     const from = useShellStore.getState().workspace
-    if (from === next) return
+    const target = canonicalWorkspace(next)
+    if (from === target) return
     if (from === "design") {
       if (!(await mayLeaveThemeDraft())) return
       useBroadcastStore.getState().setDesignerOpen(false)
     }
-    setWorkspace(next)
+    setWorkspace(target)
   }, [setWorkspace])
+  // Old saved shell preferences and deep links land on the single Live workspace.
+  useEffect(() => {
+    if (workspace !== activeWorkspace) setWorkspace(activeWorkspace)
+  }, [activeWorkspace, setWorkspace, workspace])
   // A request to open Design at a section (Present's Design… buttons, More tools).
   const designRequest = useShellStore((s) => s.designRequest)
   useEffect(() => {
@@ -176,7 +182,7 @@ export function AppShell() {
     <div className="fixed inset-0 grid grid-cols-[auto_minmax(0,1fr)] bg-background text-foreground">
       <a href="#main" className="fixed top-3 left-3 z-50 -translate-y-24 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground focus:translate-y-0">Skip to the page</a>
       <Sidebar
-        workspace={workspace}
+        workspace={activeWorkspace}
         isLive={isLive}
         church={church}
         onWorkspace={(w) => void go(w)}
@@ -184,14 +190,14 @@ export function AppShell() {
       />
 
       {/* The live console is always dark (its own deeper palette), top bar included. */}
-      <div className={cn("flex min-h-0 min-w-0 flex-col bg-background text-foreground", workspace === "present" && "dark present-surface")}>
-        <TopBar title={TITLES[workspace]} />
+      <div className={cn("flex min-h-0 min-w-0 flex-col bg-background text-foreground", activeWorkspace === "present" && "dark present-surface")}>
+        <TopBar title={TITLES[activeWorkspace]} />
         <RecoveryBanner />
         <SignalWatch />
         {paired && <ShareReadiness />}
         <main id="main" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 outline-none">
           {/* One view failing leaves the navigation, the remote, the outputs and the other views working. */}
-          <ErrorBoundary key={workspace} name={`the ${TITLES[workspace]} view`}>{WORKSPACE[workspace]()}</ErrorBoundary>
+          <ErrorBoundary key={activeWorkspace} name={`the ${TITLES[activeWorkspace]} view`}>{WORKSPACE[activeWorkspace]()}</ErrorBoundary>
         </main>
       </div>
 

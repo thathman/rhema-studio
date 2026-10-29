@@ -111,7 +111,7 @@ export function BroadcastOutputsDialog({
     return () => clearInterval(intervalId)
   }, [open])
 
-  // "Open output" elsewhere (Design → Used on…, Production → Screens): that output's editor, on top of the grid.
+  // "Open output" elsewhere (Design → Used on…, Live → Production tools → Screens): that output's editor, on top of the grid.
   const editRequest = useShellStore((s) => s.editOutputRequest)
   const [seenEditRequest, setSeenEditRequest] = useState(editRequest)
   if (editRequest !== seenEditRequest) {

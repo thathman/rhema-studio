@@ -5,7 +5,7 @@ import type { Scene, SceneBox, SceneLayer } from "@/types"
 /**
  * A basic scene, as Present's New/Edit scene sheet makes it (#243 SC.18): a background, one content
  * box, the lower third and a camera. Editing a fuller scene this way changes only those parts; its
- * other layers stay as they are (the full composer is in Production → Scenes).
+ * other layers stay as they are (the full composer is in Live → Production tools → Scenes).
  */
 export interface BasicScene {
   name: string

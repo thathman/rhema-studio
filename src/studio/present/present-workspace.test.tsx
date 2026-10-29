@@ -34,11 +34,15 @@ vi.mock("@/studio/present/sound-chip", () => ({ SoundChip: () => null }))
 vi.mock("@/studio/present/cue-menu", () => ({ CueMenu: () => null }))
 vi.mock("@/studio/present/transport-bar", () => ({ TransportBar: () => <div role="toolbar" aria-label="Presentation controls"><button>Take live</button></div> }))
 vi.mock("@/studio/present/scenes-strip", () => ({ ScenesStrip: () => null }))
+vi.mock("@/studio/production/production-workspace", () => ({
+  ProductionWorkspace: ({ embedded }: { embedded?: boolean }) => <section data-testid="production-tools" data-embedded={embedded ? "true" : "false"}>Production tools</section>,
+}))
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { useBibleStore, useBroadcastStore, useDetectionStore, useQueueStore, useTranscriptStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
+import { openProductionTab, useProductionTab } from "@/studio/production/production-tab"
 import type { QueueItem, TranscriptSegment, Verse } from "@/types"
 import { PresentWorkspace } from "./present-workspace"
 
@@ -103,6 +107,7 @@ beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   presentCalls.next.mockClear()
   useShellStore.setState({ presentView: "production" })
+  useProductionTab.setState({ requested: null, selected: "timekeeper", scene: null, open: false })
   useBibleStore.setState({ selectedVerse: verse, selectedSlide: null, selectedQueueItemId: "stable-item" })
   useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "Program item", segments: [] } })
   useQueueStore.setState({ items: [queueItem, secondQueueItem] })
@@ -119,6 +124,7 @@ afterEach(() => {
   useQueueStore.setState(initialQueue)
   useTranscriptStore.setState(initialTranscript)
   useDetectionStore.setState(initialDetections)
+  useProductionTab.setState(useProductionTab.getInitialState())
   vi.restoreAllMocks()
 })
 
@@ -143,6 +149,8 @@ describe("Present's unified Live console", () => {
 
     const openTools = element.querySelector<HTMLButtonElement>('[data-tour="live-tools"]')!
     await act(async () => openTools.click())
+    expect(openTools.getAttribute("aria-label")).toBe("Close Bible and listening tools")
+    expect(element.querySelectorAll('[aria-label="Close Live tools"]')).toHaveLength(1)
     expect(document.querySelector('[data-slot="live-tools-panel"]')).not.toBeNull()
     expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
     expect(document.querySelector("[data-testid='bible-search-panel']")).not.toBeNull()
@@ -159,7 +167,7 @@ describe("Present's unified Live console", () => {
     pressArrowRight()
     expect(presentCalls.next).toHaveBeenCalledTimes(1)
 
-    const close = document.querySelector<HTMLButtonElement>('[aria-label="Close Bible and listening tools"]')!
+    const close = document.querySelector<HTMLButtonElement>('[data-slot="live-tools-panel"] button[aria-label="Close Live tools"]')!
     await act(async () => close.click())
     expect(document.querySelector('[data-slot="live-tools-panel"]')).toBeNull()
     expect(document.activeElement).toBe(openTools)
@@ -180,5 +188,21 @@ describe("Present's unified Live console", () => {
     expect(useTranscriptStore.getState().segments).toEqual([transcript])
     expect(useDetectionStore.getState().detections[0]?.verse_ref).toBe("John 3:16")
     expect(useShellStore.getState().presentView).toBe("production")
+  })
+
+  it("opens Production tools inside the same Live console with one rundown, Preview, Program and Take", async () => {
+    await renderWorkspace()
+
+    await act(async () => openProductionTab("obs"))
+
+    expect(useShellStore.getState().goRequest).toBe("present")
+    expect(useProductionTab.getState().selected).toBe("obs")
+    expect(document.querySelector('[data-testid="production-tools"]')?.getAttribute("data-embedded")).toBe("true")
+    expect(element.querySelector<HTMLButtonElement>('[aria-label="Close production tools"]')).not.toBeNull()
+    expect(element.querySelectorAll('[aria-label="Close Live tools"]')).toHaveLength(1)
+    expect(element.querySelectorAll('[data-testid="rundown-list"]')).toHaveLength(1)
+    expect(element.querySelector('[aria-label="Preview"]')?.textContent).toContain("stays private")
+    expect(element.querySelector("[data-studio-live]")?.textContent).toContain("Program")
+    expect([...element.querySelectorAll('[role="toolbar"][aria-label="Presentation controls"] button')].filter((button) => button.textContent === "Take live")).toHaveLength(1)
   })
 })

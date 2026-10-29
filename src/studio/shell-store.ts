@@ -1,6 +1,10 @@
 import { create } from "zustand"
 
 export type Workspace = "home" | "prepare" | "present" | "production" | "library" | "design" | "connections" | "team" | "archive" | "settings" | "more"
+/** `production` is a saved-route/deep-link alias; Live is the single canonical workspace. */
+export function canonicalWorkspace(workspace: Workspace): Workspace {
+  return workspace === "production" ? "present" : workspace
+}
 /**
  * The Design page's sections: every design edit lives there. "outputs" was the old Output looks
  * table (#299 UX15-4 retired it); it is kept so old links still work and opens "used-on".
@@ -45,7 +49,7 @@ export function readShellPrefs(storage: StorageLike | null): ShellPrefs {
     const parsed = JSON.parse(raw) as Partial<ShellPrefs>
     return {
       workspace: WORKSPACES.includes(parsed.workspace as Workspace)
-        ? (parsed.workspace as Workspace)
+        ? canonicalWorkspace(parsed.workspace as Workspace)
         : DEFAULT_PREFS.workspace,
       presentView: VIEWS.includes(parsed.presentView as PresentView)
         ? (parsed.presentView as PresentView)
@@ -60,7 +64,7 @@ export function readShellPrefs(storage: StorageLike | null): ShellPrefs {
 export function writeShellPrefs(storage: StorageLike | null, prefs: ShellPrefs): void {
   if (!storage) return
   try {
-    storage.setItem(SHELL_PREFS_KEY, JSON.stringify(prefs))
+    storage.setItem(SHELL_PREFS_KEY, JSON.stringify({ ...prefs, workspace: canonicalWorkspace(prefs.workspace) }))
   } catch {
     // Private mode or quota: the preference is a convenience, not data.
   }
@@ -128,14 +132,14 @@ export const useShellStore = create<ShellState>((set) => ({
   deskMenuRequest: 0,
   openDeskMenu: () => set((s) => ({ deskMenuRequest: s.deskMenuRequest + 1 })),
   goRequest: null,
-  goTo: (goRequest) => set({ goRequest }),
+  goTo: (workspace) => set({ goRequest: canonicalWorkspace(workspace) }),
   newServiceOpen: false,
   setNewServiceOpen: (newServiceOpen) => set({ newServiceOpen }),
   searchOpen: false,
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   pendingFind: null,
   findInPresent: (pendingFind) => set({ pendingFind, goRequest: "present" }),
-  setWorkspace: (workspace) => set({ workspace }),
+  setWorkspace: (workspace) => set({ workspace: canonicalWorkspace(workspace) }),
   librarySection: "songs",
   setLibrarySection: (librarySection) => set({ librarySection }),
   openLibrarySection: (librarySection) => set({ workspace: "library", librarySection }),

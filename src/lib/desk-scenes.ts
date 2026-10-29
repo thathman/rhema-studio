@@ -67,7 +67,7 @@ const pick = <T extends string>(v: unknown, set: readonly T[]): T | undefined =>
 /** A scene background a desk may set: transparent, or one colour as #rrggbb. */
 export const deskBackground = (v: unknown): string | null => (v === "transparent" ? v : typeof v === "string" && HEX.test(v) ? v : null)
 
-/** The router addresses of the church's named cameras (Production → Cameras), the only ones a desk may choose. */
+/** The router addresses of the church's named cameras (Live → Production tools → Cameras), the only ones a desk may choose. */
 export function namedCameraUrls(): Set<string> {
   const r = useRouterHealth.getState().status
   if (!r?.running || !r.lanAddress) return new Set()

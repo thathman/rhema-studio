@@ -1,12 +1,14 @@
-import { BookOpenIcon, MicIcon, XIcon } from "lucide-react"
+import { BookOpenIcon, MicIcon, MonitorCogIcon, XIcon } from "lucide-react"
 import { DetectionsPanel } from "@/components/panels/detections-panel"
 import { SearchPanel } from "@/components/panels/search-panel"
 import { TranscriptPanel } from "@/components/panels/transcript-panel"
 import { Button } from "@/components/ui/button"
 import { EmbeddingWarningBanner } from "@/components/ui/embedding-warning-banner"
+import { ProductionWorkspace } from "@/studio/production/production-workspace"
+import type { LiveToolsTab } from "@/studio/production/production-tab"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-export type LiveToolsTab = "bible" | "listening"
+export type { LiveToolsTab } from "@/studio/production/production-tab"
 
 export function LiveToolsDrawer({
   tab,
@@ -34,10 +36,12 @@ export function LiveToolsDrawer({
         <div className="min-w-0">
           <h2 className="text-sm font-semibold tracking-tight">Live tools</h2>
           <p className="text-xs text-muted-foreground">
-            Bible search previews verses. Listening results stay here until you choose Queue, Bible feeds, or Show live.
+            {tab === "production"
+              ? "Timing, scenes, cameras, OBS and health tools share this Live state. Preview stays private until an explicit action."
+              : "Bible search previews verses. Listening results stay here until you choose Queue, Bible feeds, or Show live."}
           </p>
         </div>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Close Bible and listening tools" title="Close Live tools" onClick={onClose}>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Close Live tools" title="Close Live tools" onClick={onClose}>
           <XIcon />
         </Button>
       </div>
@@ -46,9 +50,10 @@ export function LiveToolsDrawer({
         onValueChange={(value) => onTabChange(value as LiveToolsTab)}
         className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-2"
       >
-        <TabsList aria-label="Bible and listening tools" className="mt-2 w-full">
+        <TabsList aria-label="Live tools" className="mt-2 w-full">
           <TabsTrigger value="bible"><BookOpenIcon /> Bible search</TabsTrigger>
           <TabsTrigger value="listening"><MicIcon /> Listening</TabsTrigger>
+          <TabsTrigger value="production"><MonitorCogIcon /> Production tools</TabsTrigger>
         </TabsList>
         <TabsContent value="bible" className="mt-2 min-h-0 flex-1 overflow-hidden">
           <div className="flex h-full min-h-0 flex-col gap-2">
@@ -61,6 +66,9 @@ export function LiveToolsDrawer({
             <TranscriptPanel />
             <DetectionsPanel />
           </div>
+        </TabsContent>
+        <TabsContent value="production" className="mt-2 min-h-0 flex-1 overflow-hidden">
+          <ProductionWorkspace embedded />
         </TabsContent>
       </Tabs>
     </section>

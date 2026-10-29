@@ -98,7 +98,7 @@ describe("Design → Templates (#299)", () => {
     expect(card(el, "Clean · Name strip").textContent).toContain("OBS overlay")
   })
 
-  it("Use and edit on a camera scene adds the copy and opens it in Production → Scenes", async () => {
+  it("Use and edit on a camera scene adds the copy and opens Live → Scenes", async () => {
     const el = await render()
     const scene = card(el, "Clean · Camera and scripture")
     const edit = [...scene.querySelectorAll("button")].find((b) => b.textContent?.includes("Use and edit")) as HTMLButtonElement
@@ -107,7 +107,7 @@ describe("Design → Templates (#299)", () => {
     expect(s.scenes).toHaveLength(1)
     expect(s.scenes[0].libraryLookId).toBe("look-clean-scene-bible")
     expect(useProductionTab.getState()).toMatchObject({ requested: "programs", scene: s.scenes[0].id })
-    expect(useShellStore.getState().goRequest).toBe("production")
+    expect(useShellStore.getState().goRequest).toBe("present")
     // The card now lists the church's copy, with Reset in its menu.
     expect(card(el, "Clean · Camera and scripture").textContent).toContain(`In your scenes: ${s.scenes[0].name}`)
     expect(card(el, "Clean · Camera and scripture").querySelector('[aria-label="More for Clean · Camera and scripture"]')).not.toBeNull()

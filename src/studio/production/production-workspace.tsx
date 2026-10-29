@@ -99,27 +99,27 @@ function Badge({ tone, children }: { tone: "ok" | "warn" | "live" | "off"; child
  * one place. What is not built yet (the two-program parts, #197, #208) says so rather than offer
  * controls that do nothing.
  */
-export function ProductionWorkspace() {
+export function ProductionWorkspace({ embedded = false }: { embedded?: boolean } = {}) {
   const requested = useProductionTab((s) => s.requested)
-  const [own, setOwn] = useState<Tab>("timekeeper")
-  // A page that sent the operator here at a tab (the setup's Join choice) wins until a tab is clicked.
-  const tab = requested ?? own
+  const selected = useProductionTab((s) => s.selected)
+  const tab = requested ?? selected
   const setTab = (t: Tab) => {
-    useProductionTab.setState({ requested: null })
-    setOwn(t)
+    useProductionTab.setState({ requested: null, selected: t })
   }
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-[29px] pt-[26px] pb-16 max-[1200px]:px-5">
-        <header className="flex flex-wrap items-end justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">One service · production control</p>
-            <h1 className="mt-1 text-2xl leading-tight font-bold tracking-[-0.035em]">Production control</h1>
-            <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Monitoring only reads device status. Scene edits and OBS preview stay private until the relevant Take. Taking a scene changes the selected room display; switching in OBS changes the online stream. In rehearsal, scene Takes do not reach room displays and OBS program switches are blocked.</p>
-          </div>
-          <div className="flex flex-wrap gap-2"><Badge tone="ok">This computer</Badge></div>
-        </header>
-        <nav role="tablist" aria-label="Production" className="flex flex-wrap gap-1 border-b border-border">
+    <div className={embedded ? "flex h-full min-h-0 flex-col overflow-hidden" : "h-full overflow-y-auto"}>
+      <div className={embedded ? "flex min-h-0 flex-1 flex-col gap-2" : "mx-auto flex max-w-[1600px] flex-col gap-4 px-[29px] pt-[26px] pb-16 max-[1200px]:px-5"}>
+        {!embedded && (
+          <header className="flex flex-wrap items-end justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">One service · production control</p>
+              <h1 className="mt-1 text-2xl leading-tight font-bold tracking-[-0.035em]">Production control</h1>
+              <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Monitoring only reads device status. Scene edits and OBS preview stay private until the relevant Take. Taking a scene changes the selected room display; switching in OBS changes the online stream. In rehearsal, scene Takes do not reach room displays and OBS program switches are blocked.</p>
+            </div>
+            <div className="flex flex-wrap gap-2"><Badge tone="ok">This computer</Badge></div>
+          </header>
+        )}
+        <nav role="tablist" aria-label={embedded ? "Live operation tools" : "Production"} className="flex shrink-0 flex-wrap gap-1 border-b border-border">
           {TABS.map(([id, label]) => (
             <button
               key={id}
@@ -133,8 +133,8 @@ export function ProductionWorkspace() {
             </button>
           ))}
         </nav>
-        <div role="tabpanel" aria-label={TABS.find(([id]) => id === tab)?.[1]}>
-          {tab === "timekeeper" && <Timekeeper />}
+        <div role="tabpanel" aria-label={TABS.find(([id]) => id === tab)?.[1]} className={embedded ? "min-h-0 flex-1 overflow-y-auto" : undefined}>
+          {tab === "timekeeper" && <Timekeeper embedded={embedded} />}
           {tab === "screens" && <Screens />}
           {tab === "health" && <Health />}
           {tab === "programs" && <SceneComposer />}
@@ -147,7 +147,7 @@ export function ProductionWorkspace() {
   )
 }
 
-function Timekeeper() {
+function Timekeeper({ embedded = false }: { embedded?: boolean }) {
   const timer = useTimerStore((s) => s.timer)
   useTimerStore((s) => s.tick)
   const now = monotonicNow()
@@ -168,7 +168,7 @@ function Timekeeper() {
         <div className="rounded-[10px] bg-[#182c32] px-[22px] py-5 text-[#eef6f0]">
           <p className="text-[0.625rem] font-extrabold tracking-[0.12em] text-[#b8cec6] uppercase">{timer.durationMs > 0 ? "Remaining" : "Elapsed"}</p>
           <p className={cn("font-mono text-[clamp(2.375rem,4.1vw,4rem)] leading-[1.15] font-semibold tracking-[-0.055em] tabular-nums", tone === "over" && "text-[#ff9b9d]", tone === "warn" && "text-[#ffd27a]")} role="timer">{formatMs(shown)}</p>
-          <p className="text-xs text-[#b8cec6]">The same timer as Present; the stage display shows it.</p>
+          <p className="text-xs text-[#b8cec6]">The same service clock as Live; the stage display shows it.</p>
         </div>
         <dl className="grid grid-cols-3 gap-2 text-center">
           {[["Planned finish", timing ? hhmm(timing.plannedEnd) : "—"], ["Projected", timing ? hhmm(timing.expectedEnd) : "—"], ["Offset", timing ? (late === 0 ? "On time" : `${late > 0 ? "+" : "−"}${Math.abs(late)} min`) : "—"]].map(([k, v]) => (
@@ -178,15 +178,19 @@ function Timekeeper() {
             </div>
           ))}
         </dl>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => (running ? useTimerStore.getState().pause() : useTimerStore.getState().start())}>{running ? <><PauseIcon /> Pause</> : <><PlayIcon /> Start</>}</Button>
-          <Button variant="outline" onClick={() => correct(-1)}>−1 min</Button>
-          <Button variant="outline" onClick={() => correct(1)}>+1 min</Button>
-          <Button variant="outline" onClick={() => resetTimerLogged()}><RotateCcwIcon /> Reset</Button>
-        </div>
+        {embedded ? (
+          <p className="text-xs text-muted-foreground">Use the service timer in Live’s top bar to start, adjust, hold or reset this clock.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => (running ? useTimerStore.getState().pause() : useTimerStore.getState().start())}>{running ? <><PauseIcon /> Pause</> : <><PlayIcon /> Start</>}</Button>
+            <Button variant="outline" onClick={() => correct(-1)}>−1 min</Button>
+            <Button variant="outline" onClick={() => correct(1)}>+1 min</Button>
+            <Button variant="outline" onClick={() => resetTimerLogged()}><RotateCcwIcon /> Reset</Button>
+          </div>
+        )}
         <RunningLate />
         <LastTimeChange />
-        <HoldControl />
+        {!embedded && <HoldControl />}
       </Card>
       <Card kicker="Planned vs expected" title="The run of show" badge={<div className="flex items-center gap-2"><Badge tone={state === "running" ? "ok" : state === "held" || state === "untrusted" ? "warn" : "off"}>{RUN_STATE_WORDS[state]}</Badge><Button size="sm" variant="ghost" onClick={() => useShellStore.getState().setWorkspace("prepare")}>Edit run of show</Button></div>}>
         <EventClockBar />
@@ -218,7 +222,7 @@ function Timekeeper() {
       </Card>
       <CountdownCard />
       <Card kicker="Independent" title="Other timers">
-        <AuxTimersPanel />
+        {embedded ? <p className="text-xs text-muted-foreground">Manage these from the Timers control in Live’s toolbar.</p> : <AuxTimersPanel />}
       </Card>
     </div>
   )
@@ -766,7 +770,7 @@ function CamerasHealth() {
   return (
     <Card kicker="Signal" title="Cameras" badge={ours.length > 0 && <Badge tone={sending === ours.length ? "ok" : "warn"}>{sending} of {ours.length} sending</Badge>}>
       {cams.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No cameras yet. Add a phone or camera for each angle in Production → Cameras.</p>
+        <p className="text-xs text-muted-foreground">No cameras yet. Add a phone or camera for each angle in Live → Production tools → Cameras.</p>
       ) : (
         <ul aria-label="Camera signals" className="flex flex-col divide-y divide-border">
           {cams.map((c) => {

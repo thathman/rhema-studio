@@ -125,7 +125,7 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
         <div className="mt-5 flex max-w-2xl flex-col gap-3 text-sm">
           <section aria-labelledby="restore-backup" className="rounded-lg border border-border bg-card p-4">
             <h3 id="restore-backup" className="font-semibold">A Rhema Studio backup file</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Every service and song, with the settings, outputs, looks and Brand Kit, as saved with Archive → Backups → Back up now (a .db file). Rhema Studio looks inside it first.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Every service and song, with the settings, outputs, looks and Brand Kit, as saved with History → Backups → Back up now (a .db file). Rhema Studio looks inside it first.</p>
             {!s && (
               <Button size="sm" variant="outline" className="mt-3" disabled={busy !== null} onClick={() => void choose()}>
                 <RotateCcwIcon /> {busy === "inspect" ? "Looking inside…" : "Choose a backup file…"}

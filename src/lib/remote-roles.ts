@@ -2,7 +2,7 @@ import type { RemoteRole } from "@/stores/settings-store"
 
 /**
  * What each paired desk may do (Host/Join; #215 G10, #243 VL.5), in plain words for Settings →
- * Remote control and Production → Operators. The host's server checks every command against the
+ * Remote control and Live → Production tools → Operators. The host's server checks every command against the
  * same list (src-tauri/crates/api/src/keys.rs `Role::allows`); keep the two in step.
  */
 export const REMOTE_ROLES: readonly { id: RemoteRole; name: string; may: string }[] = [

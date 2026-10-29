@@ -116,7 +116,7 @@ function ObsTransition({ held, reasonId, joined }: { held: boolean; reasonId: st
 
 /**
  * OBS's own scenes (#197): what the online stream and recording show, read from OBS and changed
- * there only by a deliberate click here. Separate from Rhema's congregation scenes (Production → Scenes):
+ * there only by a deliberate click here. Separate from Rhema's congregation scenes (Live → Production tools → Scenes):
  * nothing Rhema does on its screens ever changes OBS's program (#243). Main desk only for now.
  */
 export function ObsPanel() {
@@ -159,7 +159,7 @@ export function ObsPanel() {
           <Tag tone={connected ? "ok" : status === "connecting" ? "warn" : "off"}>{!enabled ? "Off" : connected ? "Connected" : status === "connecting" ? "Connecting" : "Not connected"}</Tag>
         </div>
         <p className="text-muted-foreground">
-          These are OBS's own scenes, the switcher for the stream. They are separate from Rhema Studio's congregation scenes in Production → Scenes, the {congregationProgramName(outputs)}: taking a scene to the screens, or a verse or song going live, never changes OBS. Only the buttons here do.
+          These are OBS's own scenes, the switcher for the stream. They are separate from Rhema Studio's congregation scenes in Live → Production tools → Scenes, the {congregationProgramName(outputs)}: taking a scene to the screens, or a verse or song going live, never changes OBS. Only the buttons here do.
         </p>
         {!enabled ? (
           <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted px-2.5 py-2">

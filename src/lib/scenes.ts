@@ -250,9 +250,9 @@ interface LiveState {
   overlay?: LowerThird | null
   /** The church's Brand Kit logo (a data URL), for logo layers. */
   logoUrl?: string | null
-  /** A camera's name (Production → Cameras) for its stream address, for the colour bars' ident; absent: the layer's name. */
+  /** A camera's name (Live → Production tools → Cameras) for its stream address, for the colour bars' ident; absent: the layer's name. */
   cameraLabel?: (url: string) => string | undefined
-  /** A camera's backup camera (Production → Cameras), by the router's names (#213). */
+  /** A camera's backup camera (Live → Production tools → Cameras), by the router's names (#213). */
   cameraBackup?: (name: string) => string | undefined
   /** What the router says of a camera that is down: not sending, frozen (connected, nothing arriving) or the router is off; undefined: sending, or not known. */
   cameraDown?: (name: string) => CameraDown | undefined

@@ -65,7 +65,7 @@ describe("the host card's words", () => {
   })
 })
 
-describe("Production → Operators while hosting", () => {
+describe("Live → Production tools → Operators while hosting", () => {
   it("shows this computer's addresses, the secure link, who is connected, and stops hosting after a confirm", async () => {
     useSettingsStore.setState({ remoteDevices: [{ hash: "h1", name: "Femi's laptop", paired_at: "2026-10-24T09:00:00Z", role: "timekeeper" }, { hash: "h2", name: "Ade's phone", paired_at: "2026-10-24T09:00:00Z", role: "viewer" }] })
     hostStatus = { running: true, lan: true, port: 8080, tlsPort: 8081, caFingerprint: FP, addresses: ["192.168.1.20:8080", "10.0.0.5:8080"], desks: [{ hash: "h1", name: "Femi's laptop", address: "192.168.1.31", connected: true, lastSeenMs: Date.now() }] }

@@ -38,7 +38,7 @@ describe("a camera's box while it is not sending", () => {
     expect([feed.noSignal, feed.noSignalName]).toEqual([undefined, undefined])
   })
 
-  it("the bars' ident shows the camera's name (Production → Cameras), else the layer's name, and only on bars", () => {
+  it("the bars' ident shows the camera's name (Live → Production tools → Cameras), else the layer's name, and only on bars", () => {
     const named = cameraScene({ noSignalName: true })
     expect(frameOf(named, { cameraLabel: (url: string) => (url.includes("/pulpit/") ? "Pulpit" : undefined) }).layers[0].ident).toBe("Pulpit")
     expect(frameOf(named).layers[0].ident).toBe("Pulpit camera")

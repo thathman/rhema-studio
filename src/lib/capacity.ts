@@ -31,7 +31,7 @@ export const CAPACITY_KINDS: ReadonlyArray<{ kind: CapacityKind; label: string; 
   { kind: "outputs", label: "Outputs on at once", hint: "Screens, NDI senders and browser feeds together" },
   { kind: "ndiSenders", label: "NDI senders", hint: "Each one draws and sends every frame" },
   { kind: "browserFeeds", label: "Browser feeds", hint: "Pages and Google TVs draw these themselves" },
-  { kind: "cameras", label: "Cameras in the camera router", hint: "Phones and cameras added in Production → Cameras" },
+  { kind: "cameras", label: "Cameras in the camera router", hint: "Phones and cameras added in Live → Production tools → Cameras" },
   { kind: "videoScenes", label: "Outputs showing a scene with live video", hint: "Each one plays its cameras itself" },
 ]
 

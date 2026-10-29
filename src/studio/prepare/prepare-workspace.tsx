@@ -50,7 +50,7 @@ function todayInChurchZone(now = new Date()): { date: string; label: string } {
  * Service builder: the order of service, the selected item's editor and the
  * preview, with the service's details above. Nothing here can present —
  * Prepare only edits; a click previews. It is the one place a service is
- * built (#299): Present runs it, Production routes it, Design styles it.
+ * built (#299): Live runs the service; Live tools manage screens and devices; Design styles it.
  */
 export function PrepareWorkspace() {
   const count = useQueueStore((s) => s.items.length)
@@ -199,7 +199,7 @@ export function PrepareWorkspace() {
             disabled={count === 0}
             title="Open this same service in the live console. Nothing goes live until you press Take live there."
           >
-            <MonitorPlayIcon /> Present service
+            <MonitorPlayIcon /> Open Live
           </Button>
         </div>
       </header>

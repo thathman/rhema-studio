@@ -17,7 +17,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { existingFeed, FEED_PRESETS, readyMadeFeed, type FeedPreset, type FeedTransport } from "@/lib/feed-presets"
 
 /**
- * Production → Screens: add a ready-made feed (Rhema Bible | Full, Rhema Ticker | Alpha, Rhema
+ * Live → Production tools → Screens: add a ready-made feed (Rhema Bible | Full, Rhema Ticker | Alpha, Rhema
  * Clock…). Each click adds one new output, off (the clock feed with its scene); nothing existing
  * changes and nothing goes on air.
  */

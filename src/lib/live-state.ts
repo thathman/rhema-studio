@@ -115,7 +115,7 @@ export interface LiveStateV1 {
    */
   obs?: { connected: boolean; studioMode: boolean | null; scenes: string[]; program: string | null; preview: string | null; recording?: boolean | null; stream?: ObsLine; record?: ObsLine; transitions?: string[]; transition?: string | null }
   /**
-   * The church's cameras (Production → Cameras) for a scene's camera box on a joined desk: name,
+   * The church's cameras (Live → Production tools → Cameras) for a scene's camera box on a joined desk: name,
    * label and the router address a screen plays (null while the router is off). Never a camera's
    * secret. Absent from older hosts.
    */

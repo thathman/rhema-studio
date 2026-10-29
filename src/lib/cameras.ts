@@ -189,7 +189,7 @@ export function cameraSending(health: { status: RouterStatus | null; checked: bo
 /**
  * A camera that cannot be shown now, as the router last said (#213): not sending, frozen (connected,
  * nothing arriving) or the router is off. Undefined while sending, before the first answer, or for
- * a camera that is not one of Rhema's (`known`: the cameras in Production → Cameras).
+ * a camera that is not one of Rhema's (`known`: the cameras in Live → Production tools → Cameras).
  */
 export function cameraDownState(health: { status: RouterStatus | null; checked: boolean }, name: string, known: readonly { name: string }[]): "not-sending" | "frozen" | "router-off" | undefined {
   if (!health.checked || !known.some((c) => c.name === name)) return undefined
@@ -249,7 +249,7 @@ export function startCameras(): () => void {
     if (s.cameraRouterAuto && s.cameras.length > 0) {
       listed.then(startRouter).catch((e) => {
         const why = e instanceof Error ? e.message : String(e)
-        if (!/not installed/i.test(why)) toast.error("The camera router did not start", { description: `${why} See Production → Cameras.` })
+        if (!/not installed/i.test(why)) toast.error("The camera router did not start", { description: `${why} See Live → Production tools → Cameras.` })
       })
     }
     off = useSettingsStore.subscribe((now, prev) => {

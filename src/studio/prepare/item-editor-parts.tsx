@@ -649,7 +649,7 @@ export function LookAndScene({ item }: { item: QueueItem }) {
           </select>
         </label>
       </div>
-      {scenes.length === 0 && cameras.length === 0 && <p className="text-muted-foreground">Scenes are made in Production → Scenes, cameras in Production → Cameras.</p>}
+      {scenes.length === 0 && cameras.length === 0 && <p className="text-muted-foreground">Scenes are made in Live → Production tools → Scenes, cameras in Live → Production tools → Cameras.</p>}
     </section>
   )
 }
@@ -770,7 +770,7 @@ export function TakeSteps({ item }: { item: QueueItem }) {
           aria-label={`OBS scene when ${item.reference} is taken`}
           list={listId}
           value={obsText ?? (obs?.kind === "obs" ? obs.scene : "")}
-          placeholder={obsOn ? "An OBS scene, e.g. Sermon" : "Connect OBS in Production → OBS first"}
+          placeholder={obsOn ? "An OBS scene, e.g. Sermon" : "Connect OBS in Live → Production tools → OBS first"}
           maxLength={180}
           className="h-7 text-xs"
           onChange={(e) => setObsText(e.target.value)}

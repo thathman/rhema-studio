@@ -65,7 +65,7 @@ export function SceneComposer() {
       {/* Which of the service's two programs this is (#215 G5.1): the screens in the room, not the stream. */}
       <header aria-label="Congregation program" className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="text-sm font-bold tracking-[-0.02em]">{congregationProgramName(outputs)}</h2>
-        <p className="text-xs text-muted-foreground">Rhema Studio's scenes for the screens in the room. The {onlineProgramName(obsVideo)} is OBS's, in Production → OBS; nothing here changes it.</p>
+        <p className="text-xs text-muted-foreground">Rhema Studio's scenes for the screens in the room. The {onlineProgramName(obsVideo)} is OBS's, in Live → Production tools → OBS; nothing here changes it.</p>
       </header>
       <div className="grid gap-3 lg:grid-cols-[13rem_minmax(0,1fr)_17rem]">
         <section aria-label="Scenes" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
@@ -522,7 +522,7 @@ export function VideoPicker({ layer, onChange }: { layer: SceneLayer; onChange: 
 }
 
 /**
- * The church's cameras (Production → Cameras) by name, for a camera layer; typing a stream address
+ * The church's cameras (Live → Production tools → Cameras) by name, for a camera layer; typing a stream address
  * stays possible under Advanced (a camera relayed somewhere else on the church network).
  */
 /**
@@ -583,7 +583,7 @@ export function CameraPicker({ layer, onChange }: { layer: SceneLayer; onChange:
           {value === "typed" && <option value="typed" disabled>An address typed under Advanced</option>}
         </select>
         <span className="text-muted-foreground">
-          {cameras.length === 0 ? "No cameras yet: add the phones or cameras for each angle in Production → Cameras." : !host ? "Turn on the camera router in Production → Cameras to choose a camera here." : "Each screen plays it straight from the camera router, without sound; until it connects its box shows what you choose under When the camera isn't sending."}
+          {cameras.length === 0 ? "No cameras yet: add the phones or cameras for each angle in Live → Production tools → Cameras." : !host ? "Turn on the camera router in Live → Production tools → Cameras to choose a camera here." : "Each screen plays it straight from the camera router, without sound; until it connects its box shows what you choose under When the camera isn't sending."}
         </span>
       </label>
       <details open={value === "typed"} className="text-xs">
@@ -623,7 +623,7 @@ function ProgramBar({ congregation, target, onTarget, draft, dirty, onSave, onTa
     actor: operatorName,
     rehearsal,
   }) : null
-  if (!target) return <p className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">Add a congregation output (Production → Screens) to take a scene to it.</p>
+  if (!target) return <p className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">Add a congregation output (Live → Production tools → Screens) to take a scene to it.</p>
   return (
     // The live console's own colours (dark ink, in every theme), from its tokens.
     <section aria-label="On the screen" className="dark present-surface flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 text-xs text-foreground">

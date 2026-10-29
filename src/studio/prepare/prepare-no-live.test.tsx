@@ -162,12 +162,12 @@ describe("Prepare never takes anything live (#299)", () => {
     goLive.forEach((s) => s.mockRestore())
   })
 
-  it("Present service opens the live console without showing anything", async () => {
+  it("Open Live opens the live console without showing anything", async () => {
     useQueueStore.setState({ items: [slide("Welcome")], headers: [], activeIndex: null })
     useBroadcastStore.setState({ isLive: false, liveVerse: null, liveItemId: null })
     useShellStore.setState({ workspace: "prepare" })
     const el = await renderPrepare()
-    const present = [...el.querySelectorAll("button")].find((b) => b.textContent?.includes("Present service"))!
+    const present = [...el.querySelectorAll("button")].find((b) => b.textContent?.includes("Open Live"))!
     await act(async () => present.click())
     expect(useShellStore.getState().workspace).toBe("present")
     expect(useBroadcastStore.getState().isLive).toBe(false)

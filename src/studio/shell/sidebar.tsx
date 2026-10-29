@@ -75,8 +75,8 @@ function Group({ label, children, first }: { label: string; children: React.Reac
 
 /**
  * The studio's navigation (approved design, issue #215): what you do on a Sunday (Home,
- * Prepare, Present), your church's things (Library, Design, Team, Archive), then who is at
- * this desk, with Settings, Light or dark and help in its menu (#299). It folds to icons
+ * Prepare, Live), the six shared workspaces (Library, Design, History), then church access and the desk menu.
+ * The desk menu includes Settings, Light or dark and help (#299). The sidebar folds to icons
  * (the button above the desk, Cmd/Ctrl+B), remembered on this computer; a narrow window
  * shows icons only whatever the choice.
  */
@@ -114,7 +114,7 @@ export function Sidebar({
       </div>
       <Group label="Workspace" first>
         {WORKSPACE_ITEMS.map((item) => (
-          <NavButton key={item.id} item={item} compact={compact} active={item.workspace === workspace} live={item.id === "present" && isLive} onSelect={() => item.workspace && onWorkspace(item.workspace)} />
+          <NavButton key={item.id} item={item} compact={compact} active={item.workspace === workspace || (workspace === "production" && item.workspace === "present")} live={item.workspace === "present" && isLive} onSelect={() => item.workspace && onWorkspace(item.workspace)} />
         ))}
       </Group>
       <Group label="Your church">

@@ -112,7 +112,7 @@ function HostCard({ secure }: { secure: boolean }) {
       {error && status !== "connected" && <p role="alert" className="text-destructive">{error}</p>}
       {wrongRole && <p role="alert" className="font-semibold">The host has this computer as {roleLabel(me.role)}. On the host: Settings → Remote control, set "{me.name}" to OBS companion, so it may read the cameras.</p>}
       {!wrongRole && hostError && <p role="alert" className="font-semibold">{hostError}</p>}
-      {status === "connected" && heard && !hostError && !router && <p className="font-semibold">The camera router is off on the host. Turn it on there: Production → Cameras.</p>}
+      {status === "connected" && heard && !hostError && !router && <p className="font-semibold">The camera router is off on the host. Turn it on there: Live → Production tools → Cameras.</p>}
       {secure && <PinnedCertificate />}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" onClick={() => void useJoin.getState().leave(true)}>Leave this host</Button>
@@ -157,7 +157,7 @@ function Cameras() {
       {status !== "connected" ? (
         <p className="text-muted-foreground">Join the main Rhema Studio computer above to see its cameras.</p>
       ) : cameras.length === 0 ? (
-        <p className="text-muted-foreground">No cameras on the host yet. They are added there: Production → Cameras.</p>
+        <p className="text-muted-foreground">No cameras on the host yet. They are added there: Live → Production tools → Cameras.</p>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">

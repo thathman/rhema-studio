@@ -291,7 +291,7 @@ export function itemWarnMs(item: unknown): number | undefined {
  * stores/countdown-sources.ts): the extra timers, the item on now and the service start.
  */
 export interface CountdownSources {
-  /** The extra timers (Production → Timekeeper), each as counting, labelled with its name. */
+  /** The extra timers (Live → Production tools → Timekeeper), each as counting, labelled with its name. */
   aux: Counting[]
   /** The item on now: its planned minutes from when it started (an "end by" cuts it short). */
   item: Counting | null
@@ -339,7 +339,7 @@ export function lookCounting(
       const name = look.auxLabel.trim().toLowerCase()
       const t = name ? sources.aux.find((a) => a.label.trim().toLowerCase() === name) : sources.aux[0]
       if (t) return t
-      return idle(look.auxLabel || "Extra timer", look.auxLabel ? `No extra timer called “${look.auxLabel}” (Production → Timekeeper)` : "Add an extra timer in Production → Timekeeper")
+      return idle(look.auxLabel || "Extra timer", look.auxLabel ? `No extra timer called “${look.auxLabel}” (Live → Production tools → Timekeeper)` : "Add an extra timer in Live → Production tools → Timekeeper")
     }
     case "until": {
       const at = untilInstant(look.until, wall, zone)

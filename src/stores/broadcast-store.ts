@@ -171,7 +171,7 @@ interface BroadcastState {
   restoreSource: (id: AnySourceId) => void
   /**
    * A camera's recovery controls (#213), on every screen whose scene has it: Retry (each screen
-   * starts its reader again), Switch to backup (its backup camera, chosen in Production → Cameras,
+   * starts its reader again), Switch to backup (its backup camera, chosen in Live → Production tools → Cameras,
    * plays in its place) and back, Freeze (hold the last frame) and Unfreeze. Recorded with who and
    * when like any source; never in rehearsal.
    */
@@ -1922,7 +1922,7 @@ useTimerStore.subscribe((t, prev) => {
   }
   if (running !== (prev.timer.startedAt !== null) || !s.stateSources.timer) markSource("timer", running)
 })
-// A camera's backup (Production → Cameras) and what the router says of each camera (#213): the
+// A camera's backup (Live → Production tools → Cameras) and what the router says of each camera (#213): the
 // scenes on air follow, so a frozen camera shows its fallback and an output's other camera steps in.
 let lastCameraKey = ""
 function syncCameraScenes(): void {

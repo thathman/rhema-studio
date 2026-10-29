@@ -82,7 +82,7 @@ export interface StateSource {
   lowerThird?: LowerThird
   /** Stage message: the one up, or cleared (for Restore). */
   message?: string
-  /** Camera (#213): switched to its backup camera (Production → Cameras); its scenes' camera layers play that one. */
+  /** Camera (#213): switched to its backup camera (Live → Production tools → Cameras); its scenes' camera layers play that one. */
   backup?: boolean
   /** Camera: frozen: the screens hold its last frame. */
   hold?: boolean

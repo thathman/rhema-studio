@@ -7,7 +7,7 @@ import { pairingLabel } from "@/lib/setup-readiness"
 import { useJoin } from "@/stores/join-store"
 import { useSettingsStore } from "@/stores/settings-store"
 
-/** A card in Production → Operators and on the OBS companion's join form. */
+/** A card in Live → Production tools → Operators and on the OBS companion's join form. */
 export function Card({ title, kicker, children }: { title: string; kicker: string; children: React.ReactNode }) {
   return (
     <section aria-label={title} className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 text-xs">

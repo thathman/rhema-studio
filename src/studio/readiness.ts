@@ -161,7 +161,7 @@ export function preflightChecks(i: ReadinessInput): ReadinessCheck[] {
   for (const c of i.countdownIdle ?? []) out.push({ id: `countdown-idle:${c.output}`, status: soon, label: `${c.output}: the countdown has nothing to count`, detail: `${c.why}. Until then it shows a dash. Or choose what it counts in Design → Countdown.`, fix: "outputs", fixLabel: "Open outputs" })
   if (i.timersOwnerAway?.length) {
     const t = i.timersOwnerAway
-    out.push({ id: "timers-owner-away", status: soon, label: t.length === 1 ? `Extra timer “${t[0].timer}”: no ${t[0].role} desk is connected` : `${t.length} extra timers have no desk connected to run them`, detail: `${t.map((x) => `“${x.timer}” belongs to the ${x.role} desk`).join("; ")}. The main desk and the Timekeeper desk can still run ${t.length === 1 ? "it" : "them"}, in Production → Timekeeper.` })
+    out.push({ id: "timers-owner-away", status: soon, label: t.length === 1 ? `Extra timer “${t[0].timer}”: no ${t[0].role} desk is connected` : `${t.length} extra timers have no desk connected to run them`, detail: `${t.map((x) => `“${x.timer}” belongs to the ${x.role} desk`).join("; ")}. The main desk and the Timekeeper desk can still run ${t.length === 1 ? "it" : "them"}, in Live → Production tools → Timekeeper.` })
   }
   if (i.overscan?.outputs.length) out.push({ id: "overscan", status: "info", label: `${i.overscan.outputs.join(", ")}: if the TV cuts off the edges, set Overscan in this output's settings (Edit output → Overscan)`, fix: "outputs", fixLabel: "Open outputs", dismiss: i.overscan.dismiss })
   if (i.internet) out.push({ id: "internet", status: "ok", label: "Works without the internet", detail: `The service runs on the church network alone: unplugging the router's internet is fine. Only OBS's stream to YouTube${i.internet.cloudSpeech ? " and cloud speech need" : " needs"} it.` })
@@ -227,7 +227,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
       : { id: "rundown", status: "info", label: "Nothing in the service yet", detail: "You can still find and show passages live.", fix: "prepare", fixLabel: "Prepare service" },
     i.listening
       ? { id: "listening", status: "ok", label: "Listening for verse references" }
-      : { id: "listening", status: "info", label: "Listening is off", detail: "Optional. Turn it on in Present's Bible and listening tools to detect verses from the sermon." },
+      : { id: "listening", status: "info", label: "Listening is off", detail: "Optional. Turn it on in Live tools to detect verses from the sermon." },
     ...(i.missingSongs
       ? [{ id: "missing-songs", status: "warn" as const, label: `${i.missingSongs} song${i.missingSongs === 1 ? "" : "s"} in the service ${i.missingSongs === 1 ? "is" : "are"} not in the library`, detail: "They cannot be shown. Remove them or import the songs again.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
       : []),
@@ -248,7 +248,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
           : [],
     ),
     ...(i.contentError
-      ? [{ id: "content", status: "warn" as const, label: "Saved services and songs are unavailable", detail: `${i.contentError}. Scripture still works. If the database file is damaged, restore a backup in Archive → Backups; save a log for whoever supports you.`, fix: "settings" as const, fixLabel: "Save a log" }]
+      ? [{ id: "content", status: "warn" as const, label: "Saved services and songs are unavailable", detail: `${i.contentError}. Scripture still works. If the database file is damaged, restore a backup in History → Backups; save a log for whoever supports you.`, fix: "settings" as const, fixLabel: "Save a log" }]
       : []),
     ...(i.monitors?.missing.length
       ? [{ id: "monitors-missing", status: "warn" as const, label: `${i.monitors.missing.join(", ")}: ${i.monitors.missing.length === 1 ? "its monitor is" : "their monitors are"} not connected`, detail: "Check the cable, or choose a connected monitor in Outputs.", fix: "outputs" as const, fixLabel: "Open outputs" }]
@@ -282,7 +282,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
           ? [{ id: "timing", status: "ok" as const, label: `Planned to end at ${i.timing.plannedEnd}` }]
           : []),
     ...(i.camerasWithoutAddress?.length
-      ? [{ id: "cameras", status: "info" as const, label: `${i.camerasWithoutAddress.join(", ")}: a camera layer has no stream address`, detail: "Its box shows colour bars (or what the scene says) instead. Add the camera's address (WHEP, e.g. from MediaMTX) in Production → Scenes." }]
+      ? [{ id: "cameras", status: "info" as const, label: `${i.camerasWithoutAddress.join(", ")}: a camera layer has no stream address`, detail: "Its box shows colour bars (or what the scene says) instead. Add the camera's address (WHEP, e.g. from MediaMTX) in Live → Production tools → Scenes." }]
       : []),
     ...(i.camerasNotSending?.length
       ? [{

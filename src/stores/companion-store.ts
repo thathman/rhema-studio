@@ -160,7 +160,7 @@ async function followObs(): Promise<void> {
     })
   }
   useCompanion.setState({ inputs })
-  // The tally: which cameras this OBS shows now, sent to the host for Production → Cameras.
+  // The tally: which cameras this OBS shows now, sent to the host for Live → Production tools → Cameras.
   try {
     const t = await obsTally(request, obs.program, obs.studioMode ? obs.preview : null, found)
     const receiving = Object.entries(inputs).filter(([, i]) => i.state === "playing").map(([n]) => n)

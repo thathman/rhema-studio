@@ -21,7 +21,7 @@ import type { BroadcastOutput, Scene, SceneLayer } from "@/types"
  * New scene / Edit scene from Present (#243 SC.18): a basic scene (a background, one content box,
  * the lower third and a camera) made or changed without leaving the live console. Nothing goes on
  * air until Take scene; saving a scene a screen shows changes that screen. The full composer is in
- * Production → Scenes.
+ * Live → Production tools → Scenes.
  */
 export function SceneSheetButton({ output, scene }: { output: BroadcastOutput; scene: Scene | null }) {
   const [open, setOpen] = useState(false)
@@ -159,7 +159,7 @@ function SceneSheetBody({ output, scene, onDone }: { output: BroadcastOutput; sc
       </div>
       <SheetFooter className="flex-row flex-wrap justify-end">
         <Button type="button" variant="ghost" onClick={onDone}>Cancel</Button>
-        <Button type="button" variant="outline" disabled={!b.name.trim()} title="Save, then arrange it in Production → Scenes" onClick={() => { const s = save(); onDone(); openProductionTab("programs", { sceneId: s.id }) }}>Open in the composer</Button>
+        <Button type="button" variant="outline" disabled={!b.name.trim()} title="Save, then arrange it in Live → Production tools → Scenes" onClick={() => { const s = save(); onDone(); openProductionTab("programs", { sceneId: s.id }) }}>Open in the composer</Button>
         <Button type="submit" disabled={!b.name.trim()}>Save scene</Button>
       </SheetFooter>
     </form>

@@ -186,7 +186,7 @@ describe("guided output setup and edit safety", () => {
   }, 60_000)
 })
 
-describe("an output's card in Production → Screens", () => {
+describe("an output's card in Live → Production tools → Screens", () => {
   it("says where it goes, what it follows and how it presents it, from what the output really does", () => {
     const scenes = [{ id: "scene-1", name: "Camera + Bible" }] as never
     expect(outputTransport(stream)).toBe("NDI")

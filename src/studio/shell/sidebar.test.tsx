@@ -9,7 +9,7 @@ const saved = vi.hoisted(() => {
 })
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
-vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn(async () => "0.3.3") }))
+vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn(async () => "0.4.0") }))
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -66,6 +66,19 @@ describe("the collapsible sidebar", () => {
     expect(selectedWorkspace).toBe("connections")
   })
 
+  it("shows one route for each primary workspace and opens History", async () => {
+    const labels = [...nav().querySelectorAll<HTMLButtonElement>("button")].map((button) => button.textContent?.trim())
+    expect(labels.filter((label) => ["Home", "Prepare", "Live", "Library", "Design", "History"].includes(label ?? ""))).toEqual([
+      "Home", "Prepare", "Live", "Library", "Design", "History",
+    ])
+    expect(labels).not.toContain("Present")
+    expect(labels).not.toContain("Production")
+    expect(labels).not.toContain("Archive")
+
+    await act(async () => navButton("History").click())
+    expect(selectedWorkspace).toBe("archive")
+  })
+
   it("opens expanded; its button folds it and opens it out, and the choice is remembered", async () => {
     expect(nav().dataset.collapsed).toBeUndefined()
     expect(toggle().getAttribute("aria-expanded")).toBe("true")
@@ -110,7 +123,7 @@ describe("the collapsible sidebar", () => {
     expect(document.querySelector("[role='tooltip']")).toBeNull()
 
     await act(async () => useShellStore.getState().setSidebarCollapsed(true))
-    for (const label of ["Home", "Prepare", "Present", "Production", "Library", "Design", "Team", "Archive"]) {
+    for (const label of ["Home", "Prepare", "Live", "Library", "Design", "History", "Team"]) {
       const b = navButton(label)
       expect(b.querySelector(".compact\\:sr-only")?.textContent).toBe(label)
       expect(b.title).toBe("")

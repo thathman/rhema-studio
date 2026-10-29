@@ -68,7 +68,7 @@ export function cameraWords(label: string): string {
 }
 
 /**
- * Every camera Rhema knows (#213): those added in Production → Cameras and every camera layer in a
+ * Every camera Rhema knows (#213): those added in Live → Production tools → Cameras and every camera layer in a
  * scene, with what the router says about each and where it is used. `router` undefined: no answer yet.
  */
 export function cameraHealth(cameras: CameraSource[], scenes: Scene[], outputs: BroadcastOutput[], status: Record<string, BroadcastOutputStatus | undefined>, router: RouterStatus | null | undefined, more: { screens?: ScreenPlayback[]; controls?: StateSources } = {}): CameraHealth[] {

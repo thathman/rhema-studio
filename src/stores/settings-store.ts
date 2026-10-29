@@ -109,7 +109,7 @@ function isCameraSource(c: unknown): c is CameraSource {
 }
 
 /** A church-defined cue: steps are cue action ids (validated when run, so a newer build's unknown step is skipped). */
-/** Production → Timekeeper's countdown (#196 R2): what it counts to, and a chime on this computer at `chimeMinutes` before and at zero. */
+/** Live → Production tools → Timekeeper's countdown (#196 R2): what it counts to, and a chime on this computer at `chimeMinutes` before and at zero. */
 export interface TimekeeperCountdown {
   to: CountdownTo
   chime: boolean
@@ -225,7 +225,7 @@ export interface SettingsState {
   /** Who may use each talk channel, and how quiet priority makes the others (the church's rules). */
   talkRules: TalkRules
   setTalkRules: (patch: Partial<TalkRules>) => void
-  /** Production → Timekeeper's countdown on this computer (#196 R2): what it counts to, and its chime (off unless turned on). */
+  /** Live → Production tools → Timekeeper's countdown on this computer (#196 R2): what it counts to, and its chime (off unless turned on). */
   timekeeperCountdown: TimekeeperCountdown
   setTimekeeperCountdown: (patch: Partial<TimekeeperCountdown>) => void
   /** Each saved service's extra timers, by service id (#196 R2.5), kept on this computer with its services. */

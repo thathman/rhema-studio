@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // jsdom has no ResizeObserver (the Screens cards' look previews size themselves with one).
 vi.hoisted(() => {
@@ -19,11 +19,12 @@ import { openProductionTab, useProductionTab } from "./production-tab"
 // Each test's page is taken down after it, so a composer left open does not answer the next test's request.
 const roots: Root[] = []
 const originalOperatorName = useSettingsStore.getState().operatorName
-const mount = (el: HTMLElement) => {
+const mount = (el: HTMLElement, embedded = false) => {
   const root = createRoot(el)
   roots.push(root)
-  root.render(<ProductionWorkspace />)
+  root.render(<ProductionWorkspace embedded={embedded} />)
 }
+beforeEach(() => useProductionTab.setState({ requested: null, selected: "timekeeper", scene: null, open: false }))
 afterEach(() => {
   act(() => { for (const r of roots.splice(0)) r.unmount() })
   useSettingsStore.setState({ operatorName: originalOperatorName })
@@ -56,6 +57,17 @@ describe("Production control", () => {
     expect(panel.textContent).toContain("Camera router")
     expect(panel.textContent).toContain("Add a camera")
     expect(panel.textContent).not.toContain("Not built yet")
+  })
+
+  it("keeps one service-clock control surface when Timekeeper is docked inside Live", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    await act(async () => mount(el, true))
+    expect(el.querySelector('[role="tablist"][aria-label="Live operation tools"]')).not.toBeNull()
+    expect(el.textContent).toContain("Use the service timer in Live’s top bar")
+    expect(el.textContent).toContain("Manage these from the Timers control in Live’s toolbar.")
+    expect([...el.querySelectorAll("button")].some((button) => /^(Start|Pause|Resume|Reset)$/.test(button.textContent?.trim() ?? ""))).toBe(false)
   })
 
   it("Scenes (once Programs) is the Scene Composer: a ready-made arrangement, Take, and back to the output's own feed", async () => {

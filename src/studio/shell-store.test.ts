@@ -21,12 +21,20 @@ describe("shell prefs", () => {
     expect(readShellPrefs(s)).toEqual({ workspace: "present", presentView: "production", sidebarCollapsed: true })
   })
 
-  it("reopens on Production; More (no way in since #218) reopens on Home", () => {
+  it("migrates the saved Production route to Live; More (no way in since #218) reopens on Home", () => {
     const s = fakeStorage()
     writeShellPrefs(s, { workspace: "production", presentView: "standard", sidebarCollapsed: false })
-    expect(readShellPrefs(s).workspace).toBe("production")
+    expect(readShellPrefs(s).workspace).toBe("present")
+    expect(JSON.parse(s.getItem(SHELL_PREFS_KEY)!).workspace).toBe("present")
     writeShellPrefs(s, { workspace: "more", presentView: "standard", sidebarCollapsed: false })
     expect(readShellPrefs(s).workspace).toBe("home")
+  })
+
+  it("routes legacy Production navigation requests to the canonical Live workspace", () => {
+    useShellStore.getState().setWorkspace("production")
+    expect(useShellStore.getState().workspace).toBe("present")
+    useShellStore.getState().goTo("production")
+    expect(useShellStore.getState().goRequest).toBe("present")
   })
 
   it("falls back per field on bad values", () => {

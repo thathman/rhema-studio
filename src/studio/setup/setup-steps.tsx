@@ -128,7 +128,7 @@ export function OperatorStep({ error, onJoin }: { error: string | null; onJoin: 
       <div className="rounded-lg border border-border bg-card p-4">
         <p className="text-sm font-semibold">Main desk, on its own</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          This computer runs the service with every control. Volunteers, phones and other computers are optional: they can join it later from Production → Operators, and if one drops out nothing here changes.
+          This computer runs the service with every control. Volunteers, phones and other computers are optional: they can join it later from Live → Production tools → Operators, and if one drops out nothing here changes.
         </p>
         <Button variant="link" className="mt-1 h-auto px-0" onClick={onJoin}>This computer should join another one instead</Button>
       </div>
@@ -288,7 +288,7 @@ function SoundSection({ onLeave }: { onLeave?: Leave }) {
           </div>
         )}
         <p className="mt-3 text-xs text-muted-foreground">
-          Nothing is recorded here. Test the level in Settings → Audio, and try the whole service with Rehearsal on in Present: nothing reaches the screens.
+          Nothing is recorded here. Test the level in Settings → Audio, and try the whole service with Rehearsal on in Live: nothing reaches the screens.
         </p>
         {onLeave && <Button variant="ghost" size="sm" className="mt-2" onClick={() => onLeave(() => openSettings("audio"))}>Audio settings</Button>}
       </div>
@@ -453,7 +453,7 @@ function SafetySection() {
           {churchFolder && <Button size="sm" variant="outline" disabled={test?.state === "testing"} onClick={() => void testFolder()}>{test?.state === "testing" ? "Testing…" : "Test the folder"}</Button>}
         </li>
       </ul>
-      <p className="text-xs text-muted-foreground">Restore a backup from Archive → Backups. Nothing is replaced without asking first.</p>
+      <p className="text-xs text-muted-foreground">Restore a backup from History → Backups. Nothing is replaced without asking first.</p>
     </section>
   )
 }
