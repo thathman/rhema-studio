@@ -112,6 +112,7 @@ pub fn run() {
         .manage(Mutex::new(rhema_detection::DetectionPipeline::new()))
         .manage(Mutex::new(rhema_broadcast::ndi::NdiRuntime::default()))
         .manage(commands::broadcast::OutputPacers::default())
+        .manage(commands::recorder::RecorderHost(std::sync::OnceLock::new()))
         .manage(Mutex::new(rhema_detection::DirectDetector::new()))
         .manage(Mutex::new(rhema_detection::DetectionMerger::new()))
         .manage(Mutex::new(rhema_detection::ReadingMode::new()))
@@ -122,7 +123,6 @@ pub fn run() {
         .manage(commands::content::ContentState(Mutex::new(None)))
         .manage(commands::content::ContentOpenError(Mutex::new(None)))
         .manage(commands::media::MediaState(std::sync::OnceLock::new()))
-        .manage(commands::recorder::RecorderHost(std::sync::OnceLock::new()))
         .invoke_handler(tauri::generate_handler![
             commands::bible::list_translations,
             commands::bible::list_books,
