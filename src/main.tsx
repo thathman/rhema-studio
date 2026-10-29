@@ -12,6 +12,7 @@ import { hydrateSettings, useSettingsStore } from "@/stores/settings-store"
 import { hydrateBibleStore, initBiblePersistence } from "@/stores/bible-store"
 import { hydrateBroadcastThemes } from "@/stores/broadcast-store"
 import { hydrateDesignPacks } from "@/lib/design-packs"
+import { markBrowserSimulation } from "@/lib/runtime-mode"
 
 // Frontend warnings, errors and uncaught rejections only exist in devtools
 // otherwise, so the logs a user sends us would say nothing about them.
@@ -20,6 +21,7 @@ forwardConsoleToLog()
 // Plain-browser dev runs (no Tauri window) get a stub IPC so layout and
 // workflows can be checked. Dead code in production builds.
 if (import.meta.env.DEV && !("__TAURI_INTERNALS__" in window)) {
+  markBrowserSimulation()
   await import("./dev/browser-shim")
 }
 

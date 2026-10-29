@@ -16,6 +16,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { runOfShowClockRows } from "@/lib/run-of-show"
+import { RuntimeSourceBadge } from "@/studio/shell/runtime-source-badge"
 
 const ICON = "flex size-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4"
 
@@ -42,9 +43,7 @@ export function TopBar({ title }: { title: string }) {
         <button type="button" className={ICON} aria-label="Keyboard shortcuts" title="Keyboard shortcuts" onClick={() => setShortcuts(true)}><InfoIcon /></button>
         <HostTalk />
         <HostNotices />
-        <span className="inline-flex items-center gap-1.5 rounded-[5px] bg-tone-green px-2.5 py-[7px] text-[0.6875rem] font-bold text-tone-green-foreground max-[600px]:hidden" title="Services, songs and Bibles are on this computer: no internet needed on Sunday">
-          <span aria-hidden className="size-1.5 rounded-full bg-[#2da78a]" /> Offline-ready
-        </span>
+        <RuntimeSourceBadge />
       </div>
       <ShortcutsDialog open={shortcuts} onOpenChange={setShortcuts} />
     </header>
