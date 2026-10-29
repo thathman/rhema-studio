@@ -1,6 +1,6 @@
 # 39 — Page 6 Stage Operator: Private Confidence and Cue Control (Visual Brainstorm Proposal)
 
-**Workshop date:** 29 October 2026. **State:** **OWNER-APPROVED ROLE PERMISSION DECISION; PAGE 6 VISUAL LAYOUT STILL PROPOSED.** The owner approved direct Stage Operator sending to their **host-assigned private Stage monitors** when each cue complies with host policy; additional destinations or elevated privileges require separate authorization. The Stage UI remains a design proposal until individually accepted and tested.
+**Workshop date:** 29 October 2026. **State:** **OWNER-APPROVED ROLE PERMISSIONS AND PAGE 6 SCREEN HIERARCHY; PIXEL STYLING / UNSETTLED DETAILED BEHAVIORS REMAIN PROPOSED.** The owner approved direct Stage Operator sending to their **host-assigned private Stage monitors** when each cue complies with host policy; additional destinations or elevated privileges require separate authorization. The owner also approved the overall Page 6 layout: **current real receiver status beside the large host-authoritative event clock**, contextual private cue composer underneath, and **compact expandable Director/Timekeeper request strip**. This is not a claim the UI or host functionality has been implemented or device-tested.
 
 **Previously owner-approved functional authority:** [35 — Timekeeper and Timing Display Family](35-timekeeper-and-timing-view-family.md) already governs one authoritative host clock, automatic + manual reminders, per-display subtle/prominent Stage urgency, independent filtered Stage/Backstage/Control Room screen contents, offline behavior and private routing. [34 — Browser Operators](34-browser-operators-connected-development.md) defines Stage role as a scoped operator desk with private Stage messages and Comms, **not** congregation/OBS Take. [37 — Permissions](37-permissions-sidebar-and-authority-design.md) governs who may send/approve/receive. [Owner resumed major feature implementation](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md): no longer wait on PR consolidation or Page 6 design to build independently approved capabilities; zero-new-PR and safety gates remain.
 
@@ -137,9 +137,21 @@ No Send until the host approves or explicitly delegates that scope.
 
 **This approval governs authority and message-send UX only.** Exact Page 6 pixel layout, quick cue defaults, cue preview proportions, receiver thumbnail fallback and Comms strip remain pending visual review.
 
+### 7B. OWNER APPROVED — Page 6 screen hierarchy (29 October 2026)
+
+The owner answered **"yes, proceed"** to the proposed Page 6 Stage Operator **screen composition and information priority**:
+
+1. **Pin the explicitly host-assigned private recipient and permission/status** at the top. Unassigned receivers are not silently selectable as send targets.
+2. Put the **host-authoritative large current-event timer** directly beside the selected receiver's **actual display/status**, as the main visual center. Real receiver telemetry/acknowledgment takes priority over editing tools. Clearly distinguish host-sent versus **receiver-confirmed**, and never infer what the human pastor has read.
+3. Place a **private cue composer underneath** with quick host-approved presets/custom text, allowed urgency, recipient-specific private preview, and an explicitly named **Send to [selected monitor]** action. Only assigned/allowed cues use direct Send; additional scopes use Permissions → Approval Requests.
+4. Keep **Director/Timekeeper requests in a compact, expandable strip** beneath the composer so they are accessible without displacing the primary task. A request acknowledgment or Comms Ready status is not display delivery.
+5. On phone/tablet, preserve the recipient, clock, current receiver truth and a safe named Send action, stacking/toggling panels without accidentally merging private preview and actual monitor state.
+
+**Scope of approval:** This is **structural visual / information-hierarchy approval**, similar to Page 5. Exact colors, spacing, font sizes, animations, preset choices, timer-expiry countdown treatment, receiver screenshot technical availability, component implementation and device acceptance remain open for refinement. Do not mislabel a simulated monitor preview as real output. The four suggested UX refinements in §9F remain proposals except where they express the approved broad structure.
+
 ## 8. Next visual approval
 
-When the owner confirms Page 6 structure, record `OWNER APPROVED — STRUCTURAL HIERARCHY` and update [34](34-browser-operators-connected-development.md), AGENTS and Codex handoff. Until then **Stage Operator Page 6 visual layout is a proposal only**; the direct-send host-assigned-recipient **permissions in §7A are already owner-approved**. Codex may implement already-approved Stage timing and privacy features under the owner resumed-build instruction but must not claim this new layout has owner sign-off.
+**Page 6 structural hierarchy is OWNER APPROVED in §7B, and its host-assigned direct-send authority is approved in §7A.** Individual pixel styling, optional quick cue defaults and receiver-thumbnail implementation require further technical/design review. Codex can implement the approved structure under the owner resumed-build order; do not claim runtime completion or physical receiver proof without evidence.
 
 
 ## 9. Next Stage Operator design exploration — cue workflow and operator attention (PROPOSED)
@@ -215,4 +227,4 @@ For visual review, recommend:
 3. **Compact incoming requests strip** at the bottom, expandable into the same event-linked Rhema Comms detail view, preserving the Stage composer draft.
 4. **No automatic Stage sends when a service event advances** unless Timekeeper/host has already configured its separately authorized automatic reminders; Stage operator actions are explicit by default.
 
-These are **proposals awaiting owner discussion**, not permissions changes. Continue the product-wide resumed build in parallel and do not claim this Page 6 visual layout is approved merely because §7A permissions are.
+These are **detailed proposals awaiting separate owner review**, except for the overall Page 6 screen composition already owner-approved in §7B and recipient permissions approved in §7A. Continue the product-wide resumed build in parallel. Do not infer pixel styling or real receiver implementation from structural approval.
