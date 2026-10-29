@@ -1,7 +1,11 @@
 # 34 — LAN Browser Operators, Connected Development Mode, and Role Workspace Redesign
+
+**LATEST OWNER PR WORKFLOW (29 October):** [New PRs allowed and continuously integrated](../OWNER-PR-WORKFLOW-2026-10-29.md). This supersedes dated prior PR freeze instructions in this document and earlier design brainstorms. Restore bounded feature PRs/subagents; do not merge website PRs #352/#367 without owner permission. No unsafe Live or unapproved release.
+
+
 **Owner directive:** 28 October 2026
 **Authority:** Approved product direction and implementation/acceptance contract; **not** evidence of implemented or shipped browser functionality.
-**Execution:** Read `docs/OWNER-FINISH-FIRST-2026-10-28.md` first. **ZERO NEW PRs** remains in force. Finish the existing integration backlog before new feature implementation, except work essential to an existing integration or a directly reported owner fix. This document adds to the already-approved Connected Apps / Comms / Collaboration scope; it does **not** waive the freeze, relax security, authorize deployment, or replace existing Live-output safeguards.
+**Execution:** Read `docs/OWNER-FINISH-FIRST-2026-10-28.md` first. **bounded active development PRs** remains in force. Finish the existing integration backlog before new feature implementation, except work essential to an existing integration or a directly reported owner fix. This document adds to the already-approved Connected Apps / Comms / Collaboration scope; it does **not** waive the freeze, relax security, authorize deployment, or replace existing Live-output safeguards.
 
 ## 1. Owner decision and user promise
 
@@ -218,7 +222,7 @@ The first native Rhema recording captures **one named congregation output's fina
 
 ### Page 8 approval and Page 9 candidate (29 October 2026)
 
-Page 8's revised OBS Director hierarchy is **owner-approved** in [41 §10](41-obs-director-page-8-layout-proposal.md#10-owner-page-8-decision--approved-29-october-2026). Rhema-native recording is separate in Live. The initial **Page 9 Editor Operator** layout is preserved in [43](43-editor-operator-page-9-layout-proposal.md): assigned Running Order, contextual service editor, private Preview/Review, comments and revision-pinned submit-for-review. Page 9 layout remains **proposed**, not owner-approved. Continue resumed full feature implementation under existing safety and no-new-PR rules.
+Page 8's revised OBS Director hierarchy is **owner-approved** in [41 §10](41-obs-director-page-8-layout-proposal.md#10-owner-page-8-decision--approved-29-october-2026). Rhema-native recording is separate in Live. The initial **Page 9 Editor Operator** layout is preserved in [43](43-editor-operator-page-9-layout-proposal.md): assigned Running Order, contextual service editor, private Preview/Review, comments and revision-pinned submit-for-review. Page 9 layout remains **proposed**, not owner-approved. Continue resumed full feature implementation under existing safety and prior PR freeze rules.
 
 ### Page 9 Editor Operator structural approval — OWNER APPROVED (29 October 2026)
 
@@ -226,7 +230,7 @@ Owner answered **yes** to [43 — Page 9 Editor Operator §9](43-editor-operator
 
 ### Page 10 Viewer role design proposal — UNAPPROVED (29 October 2026)
 
-[44 — Page 10 Viewer Operator](44-viewer-operator-page-10-layout-proposal.md) proposes a light, **read-only-production** `Follow Service` experience: host-authoritative **Now & Next** and clock first, compact Running Order, role-filtered private crew notices, and only the `Talk/ACK/Reply` capabilities specifically allowed by Rhema Comms permissions. It must not offer production Take, Prepare edits, OBS control, Stage cues or native recording commands. Actual host freshness and private-content filtering matter more than fake video preview; reuse the existing `viewer` role, `RunOfShowView`, `JoinedTalk` and `NoticesPanel`. **Page 10's hierarchy is only proposed**, awaiting owner visual approval; active build / no-new-PR policy continues.
+[44 — Page 10 Viewer Operator](44-viewer-operator-page-10-layout-proposal.md) proposes a light, **read-only-production** `Follow Service` experience: host-authoritative **Now & Next** and clock first, compact Running Order, role-filtered private crew notices, and only the `Talk/ACK/Reply` capabilities specifically allowed by Rhema Comms permissions. It must not offer production Take, Prepare edits, OBS control, Stage cues or native recording commands. Actual host freshness and private-content filtering matter more than fake video preview; reuse the existing `viewer` role, `RunOfShowView`, `JoinedTalk` and `NoticesPanel`. **Page 10's hierarchy is only proposed**, awaiting owner visual approval; active build / prior PR freeze policy continues.
 
 ### Page 10 Viewer hierarchy — OWNER APPROVED (29 October 2026)
 
@@ -234,7 +238,7 @@ The owner approved [44 — Viewer §9](44-viewer-operator-page-10-layout-proposa
 
 ### Page 11 Main Presenter / Configure — PROPOSED (29 October 2026)
 
-[45 — Page 11 Main Presenter / Configure](45-main-presenter-configure-page-11-layout-proposal.md) proposes one confident **Live service command desk**: Running Order/Now Next + crew readiness, named output-scoped private Preview/actual Program, one explicit Take and contextual Bible/Worship/Graphics/Scene controls, with compact Permissions/Comms requests and independently authorized Rhema-native recording awareness. **Configure** is a privilege boundary managed via existing Connections, Permissions and Settings routes, **not** a second all-powerful Live clone. The full Page 11 visual hierarchy is **NOT yet owner approved**. Preserve Rust `Role::Present` vs `Role::Configure`, host reclaim, no unauthorized group Take or independent recording controls, offline Live safety, no new PRs.
+[45 — Page 11 Main Presenter / Configure](45-main-presenter-configure-page-11-layout-proposal.md) proposes one confident **Live service command desk**: Running Order/Now Next + crew readiness, named output-scoped private Preview/actual Program, one explicit Take and contextual Bible/Worship/Graphics/Scene controls, with compact Permissions/Comms requests and independently authorized Rhema-native recording awareness. **Configure** is a privilege boundary managed via existing Connections, Permissions and Settings routes, **not** a second all-powerful Live clone. The full Page 11 visual hierarchy is **NOT yet owner approved**. Preserve Rust `Role::Present` vs `Role::Configure`, host reclaim, no unauthorized group Take or independent recording controls, offline Live safety, new PRs permitted under the owner policy.
 
 ### Page 11 Main Presenter / Configure hierarchy — OWNER APPROVED (29 October 2026)
 
@@ -272,7 +276,7 @@ Each page review must show: purpose and primary action; role-based navigation an
 
 **Wave 3 — extend browser parity:** Worship, Timekeeper, Screens, Stage, Camera, OBS, Editor, Present/Configure, Viewer; role-specific resource APIs as needed; per-output scene/render parity and editor approval; multiple simultaneous devices. Use existing roles/command handlers, not duplicative state engines.
 
-**Wave 4 — owner-led visual review and completion:** page-by-page redesign above. Record APPROVED / REVISE / NOT REVIEWED individually. Iterate under no-new-PR policy unless owner lifts it. Do not sacrifice previously approved main-app redesign or major fixes.
+**Wave 4 — owner-led visual review and completion:** page-by-page redesign above. Record APPROVED / REVISE / NOT REVIEWED individually. Iterate under prior PR freeze policy unless owner lifts it. Do not sacrifice previously approved main-app redesign or major fixes.
 
 **Technical release gates:** exact server-side RBAC and data redaction; pairing/revocation and cookie/CSRF; same-origin/DNS-rebinding; browser HTTPS and mic; concurrent edits and actor audit; Live output approval/Take and rehearsal isolation; reconnect/stale behavior; offline host with no browsers; output/device acceptance; performance on weak church Wi-Fi; cross-device accessibility and visual approval. Simulated ≠ connected ≠ native tested ≠ physically accepted ≠ shipped.
 
