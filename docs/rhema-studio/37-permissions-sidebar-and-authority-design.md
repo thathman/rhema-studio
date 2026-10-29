@@ -2,7 +2,7 @@
 
 **Owner direction:** 28 October 2026. **APPROVED PRODUCT DECISIONS:** Permissions must be an unmistakable, directly accessible **route in the MAIN Rhema Studio sidebar**, not solely a Settings subpage or an implicit part of Connections; **Approval Requests must be a first-class area within that Permissions route**, where authorized host approvers can review, decide and track delegated operator requests. The host remains the source of role assignment and delegated authority. This is a **requirement/UX design contract**, not a claim that the route, approval queue or fine-grained authorization is implemented.
 
-**Status boundary:** Main sidebar placement and need to modernize centralized permissions are owner-directed. Proposed layout, exact labels, grouping, preset/editing policies, fine-grained grant schemas and permanent scene/design-save rules below are **recommendations pending owner visual/security review** unless independently approved in linked contracts. Owner-approved Bible Direct/Request, Timekeeper host reminders and individual/group Screens Takes remain binding. Do not promote an unapproved permission proposal to a broad live capability.
+**Status boundary:** The main-sidebar route, Approval Requests inbox and **Screens editing policy (29 Oct: service-scoped temporary edits by default; permanent reusable scene/design saves only under explicit host delegation or a specific approved request; temporary drafts survive restarts for the same service)** are owner-approved requirements. Exact visual layout, per-capability schema, grant UI and implementation remain under technical and visual review; no claim of shipped functionality. Owner-approved Bible Direct/Request, Timekeeper host reminders and individual/group Screens Takes remain binding. Do not promote an unapproved permission proposal to a broad live capability.
 
 **Read with:** [28 — Unified workspace](28-unified-workspace-contract.md), [34 — Operator roles](34-browser-operators-connected-development.md), [35 — Timing](35-timekeeper-and-timing-view-family.md), [36 — Page layout proposals](36-operator-page-layout-proposals.md), [32 — Coverage](32-feature-coverage-inventory.md), [Owner Finish-First](../OWNER-FINISH-FIRST-2026-10-28.md).
 
@@ -194,7 +194,11 @@ Draft (private) → Submitted → Pending/Assigned → Under Review
 
 ## 5. Delegated grants and Screens editing policy
 
-**Design recommendation — pending owner sign-off on exact permanent-edit rules:** for ordinary Screens volunteers, prefer **temporary, service-scoped scene/graphic edits by default**; only host-approved privilege may save permanent reusable Scenes or Design documents. A named experienced operator may be granted persistent-save separately from Take permission. Permanent design changes must still honor document revision and content/approval policy. This refines the open question from [36, Page 5](36-operator-page-layout-proposals.md), but is not an owner-ratified default simply because this document describes it.
+**OWNER APPROVED, 29 October 2026:** **Temporary service-scoped graphics/scene editing is enabled by default for the Screens Operator**, confined to approved service/output/content boundaries. **Permanent reusable Design documents or Scenes may be created/updated only under either (1) an explicitly host-delegated persistent-save permission or (2) an authorized Approval Request permitting that specific versioned write**. A successfully applied Live lower third or Scene Take never grants persistence rights. See [36 — Page 5, §5G](36-operator-page-layout-proposals.md#5g-screens-editing-and-persistence--owner-approved-29-october-2026).
+
+**Draft durability is part of the approved policy:** temporary service edits must survive host restart, app crash, paired-browser disconnect/reconnect and reopening the same service. Persist keyed to stable service identity, actor, output scope and base design/scene revision, with secure local-first host ownership and conflict handling. Drafts remain drafts after reboot; the operator can resume, discard, preview or seek approval without silently modifying a currently Live scene or shared church library.
+
+**Effective access UI:** display `Edit temporarily for this service — Allowed`, `Save reusable designs — Requires host grant or request` and any actual standing persistent grant, output scope, expiry and reviewer. A grant may be revoked; no default full asset-edit authority. Keep service plan approval and Design versioning separate from permissions. These permissions require **new host-enforced capability semantics**; existing broad `Screens` edit commands must be audited/migrated so the policy is not merely a decorative frontend toggle.
 
 Host UI should express capability names, for example:
 - `Can preview visuals`
@@ -256,7 +260,7 @@ Permissions → Choose operator/device → See effective access
 2. Add a genuine sidebar Permissions workspace route/title and UI **with Approval Requests as a visible first-class section and actionable badge**, alongside safe read-only existing role/pairing data; preserve back-stack, unsaved draft guards and existing deep links.
 3. Consolidate the role/pair/revoke management surface: Permissions owns grants and access review; Connections owns transport/pairing discovery; Settings retains low-level network keys but links to central route; avoid two mutable copies.
 4. Add canonical **typed approval-request lifecycle and capability-scoped host policy** for previously approved Bible direct vs request, Screens group Take, Timekeeper reminders, content/plan revision and per-output scopes, coupled with strong server tests, request-state persistence, event audit and migration. Integrate existing Prepare approval and Rhema Comms notices as linked views of canonical requests, not parallel approval databases.
-5. Introduce service-temporary vs persistent design/scene-write grant only after owner ratifies the default policy; explicit named capability and tests for Settings/Design persistence.
+5. Implement the **owner-approved** default service-temporary edit capability for Screens, separate host-granted or approval-requested **persistent scene/design-save** privilege, and safe crash/reconnect/restart restoration for same-service drafts; enforce on native host + browser roles and test migration, conflicting revisions, Settings/Design persistence and zero unintended Live changes.
 6. Cover browser paired operator, timekeeper handoff, supervisor reclaim, stale/offline, failed revocation, group take disallowed, host changes concurrent with operator action, legacy role migration and mixed version host protocols.
 7. Record runtime/browser/native screenshots and run targeted tests; do not infer feature completion from this doc, screenshots or a markdown PR.
 
@@ -266,7 +270,7 @@ Permissions → Choose operator/device → See effective access
 
 - Confirm that the literal sidebar label should remain **Permissions** (this document follows owner's wording).
 - Confirm which role may administer access besides the main host; avoid treating any connected Director as an administrator by default.
-- Decide whether common service-only Screens edits are allowed by default, and how persistent asset saving is granted; proposal above remains open.
+- **Resolved (29 October):** Screens temporary service edits are default; permanent reusable writes require explicit host delegation or a specific approved request, and service drafts survive restarts. Visual presentation of effective access and advanced grant UI remains to be reviewed.
 - Confirm whether People+Devices are one list or separate tabs; one combined list with filters is the suggested default.
 - Review host-admin reauthentication / confirmation UX for elevated changes and credential revocation.
 
