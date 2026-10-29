@@ -38,10 +38,10 @@ const clickRundownItem = async (item) => {
 async function runScenario() {
   await waitFor(() => document.querySelector("#root")?.childElementCount, "Rhema Studio window")
   const qa = await waitFor(() => window.__rhemaQa?.(), "isolated QA stores")
-  let stage = "open Present"
+  let stage = "open Live"
   try {
-    await clickButton("Present")
-    await waitFor(() => document.querySelector('[data-studio-live]') || document.querySelector('[data-slot="preview-panel"]'), "Present workspace")
+    await clickButton("Live")
+    await waitFor(() => document.querySelector('[data-studio-live]') || document.querySelector('[data-slot="preview-panel"]'), "Live workspace")
 
     stage = "seed an isolated service rundown and missing image"
     const baseline = {
