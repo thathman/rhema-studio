@@ -32,6 +32,7 @@ Typed client: `src/design-engine/design-store.ts` (`designStore.*`).
 | A version is immutable (DB triggers refuse UPDATE/DELETE) | database error |
 | Document must have `scene.artboard`, `scene.root`, `scene.nodes`; every binding names a node; ≤ 4 MB; title 1–200 chars; kind one of four | `{kind:"invalid"}` |
 | A design with versions is never deleted (a service may pin one) | `{kind:"refused", code:"has-versions"}` |
+| A media file a design draft or version shows (image `src` carries the file's hash name) is never deleted | `media_delete` → in use, naming `design <title>` / `design <title> v<N>` |
 | Editing a template: duplicate it (`kind` becomes `design`) | — |
 | No command here emits to outputs or Live State | — |
 
