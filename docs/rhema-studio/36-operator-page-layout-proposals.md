@@ -1,11 +1,13 @@
 # 36 — Role Operator Page Layout Proposals (Pages 1–5)
 
+**CURRENT PR EXECUTION POLICY (29 October):** The owner rescinded the blanket PR creation freeze. [New development PRs are allowed in a small continuously merged queue](../OWNER-PR-WORKFLOW-2026-10-29.md), subject to existing Live/security/review gates. Website-publishing PRs #352/#367 remain held. Any older PR-freeze phrase in this page is historical.
+
 **Workshop state:** 28 October 2026.
 **Authority / important boundary:** This file captures the **proposed page layouts and interactive concepts shown in the owner brainstorming conversation**, for continuity and future review. **It does not constitute approval of pixel-level designs or evidence of code implementation.** Only explicitly ratified function/authority decisions listed below are owner-approved. Proposed default visual arrangements and example copy must remain editable during individual visual review.
 
 **Canonical decision references:** [34 — Browser Operator contract](34-browser-operators-connected-development.md), [35 — Timekeeper / Timing View Family](35-timekeeper-and-timing-view-family.md), [28 — Unified Workspace](28-unified-workspace-contract.md), [29 — Content / Design / Language](29-editor-language-library-contract.md), [32 — Feature Coverage](32-feature-coverage-inventory.md).
 
-**Execution precedence:** [Owner Finish-First / ZERO NEW PRs](../OWNER-FINISH-FIRST-2026-10-28.md). A design document does not authorize starting additional branches/PRs, a new website, app deployment or bypassing Live safety. Build atop existing scene composer, output editor, native host API, shared design library and roles when implementation is authorized.
+**Execution precedence:** [Owner Finish-First / previous PR freeze (now lifted)](../OWNER-FINISH-FIRST-2026-10-28.md). A design document does not authorize starting additional branches/PRs, a new website, app deployment or bypassing Live safety. Build atop existing scene composer, output editor, native host API, shared design library and roles when implementation is authorized.
 
 ## 0. Shared layout language and operator experience
 
