@@ -7,12 +7,18 @@ vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen:
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { OutputEditorDialog } from "@/components/broadcast/output-editor-dialog"
+import { defaultBrandKit } from "@/lib/brand-kit"
 import { BUILTIN_THEMES } from "@/lib/builtin-themes"
+import { DEFAULT_COUNTDOWN_LOOK } from "@/lib/countdown-display"
+import { DEFAULT_LOWER_THIRD_STYLE } from "@/lib/lower-third-style"
 import { outputDestination, outputEditPatch, outputFollows, outputPresentation, outputTransport } from "@/lib/output-summary"
+import { DEFAULT_STAGE_STYLE } from "@/lib/stage-style"
+import { DEFAULT_TICKER_STYLE } from "@/lib/ticker"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useSettingsStore } from "@/stores/settings-store"
 import { UsedOn } from "@/studio/design/design-workspace"
 import { useShellStore } from "@/studio/shell-store"
-import { defaultNdiSettings, type BroadcastOutput } from "@/types"
+import { defaultNdiSettings, type BroadcastOutput, type Scene } from "@/types"
 
 /** #299 UX15-4: Design shows where each look is used; each output keeps its per-content looks. */
 const [dark, light, l3] = BUILTIN_THEMES
@@ -46,7 +52,14 @@ beforeEach(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as never
   for (const root of mountedRoots.splice(0)) act(() => root.unmount())
   document.body.replaceChildren()
-  useBroadcastStore.setState({ themes: BUILTIN_THEMES, outputs: [main, stream], outputStatus: {} })
+  useBroadcastStore.setState({
+    themes: BUILTIN_THEMES, outputs: [main, stream], outputStatus: {}, scenes: [],
+    lowerThirdStyles: [DEFAULT_LOWER_THIRD_STYLE], lowerThird: null,
+    tickerStyle: DEFAULT_TICKER_STYLE, ticker: null,
+    stageStyle: DEFAULT_STAGE_STYLE, countdownLook: DEFAULT_COUNTDOWN_LOOK,
+    liveDesign: false, draftTheme: null, editingThemeId: null,
+  })
+  useSettingsStore.setState({ brandKit: defaultBrandKit() })
   useShellStore.setState({ outputsDialogOpen: false, editOutputRequest: null })
 })
 
@@ -55,14 +68,78 @@ describe("Design → Used on…", () => {
     const el = await render(<UsedOn />)
     const row = (name: string) => el.querySelector(`li[aria-label="${name}"]`)!.textContent
     expect(row(dark.name)).toContain("Main Display")
-    expect(row(dark.name)).toContain("main look")
+    expect(row(dark.name)).toContain("Main look")
     expect(row(light.name)).toContain("OBS Bible")
     expect(row(light.name)).toContain("Hymns only")
-    expect(row(l3.name)).toContain("main look · Bible only")
-    expect(row(BUILTIN_THEMES[3].name)).toContain("Not on any output")
-    await act(async () => (el.querySelector('button[aria-label="Open output OBS Bible"]') as HTMLButtonElement).click())
+    expect(row(l3.name)).toContain("Main look · Bible only")
+    expect(row(BUILTIN_THEMES[3].name)).toContain("Not assigned as an output or scene look")
+    await act(async () => (el.querySelector('button[aria-label="Open output OBS Bible from Modern Light"]') as HTMLButtonElement).click())
     expect(useShellStore.getState().editOutputRequest).toEqual({ id: "stream" })
     expect(useShellStore.getState().outputsDialogOpen).toBe(true)
+  })
+
+  it("shows connected scene, overlay, stage, countdown and Brand Kit output use", async () => {
+    const scene: Scene = {
+      id: "scene-1", name: "Sunday scene", background: "#000000", createdAt: 1, updatedAt: 1,
+      layers: [
+        { id: "bible", name: "Bible feed", kind: "feed", themeId: l3.id, box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true },
+        { id: "band", name: "Speaker band", kind: "lowerThird", box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true },
+        { id: "crawl", name: "Announcements", kind: "ticker", box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true },
+        { id: "mark", name: "Church logo", kind: "logo", box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true },
+      ],
+    }
+    const lowerThirdStyle = { ...DEFAULT_LOWER_THIRD_STYLE, id: "speaker-style", name: "Speaker band", libraryLookId: "look-clean-speaker" }
+    const tickerStyle = { ...DEFAULT_TICKER_STYLE, libraryLookId: "look-clean-ticker" }
+    const brandVariant = { ...dark, id: "brand-variant-youth", name: "Grace Chapel · Youth · Announcements", brandManaged: true }
+    const staleTheme = { ...l3, verseText: { ...l3.verseText, color: "#123456" } }
+    const colorOnlyScene: Scene = {
+      id: "scene-video-wall", name: "Video wall", background: "#000000", createdAt: 1, updatedAt: 1,
+      layers: [{ id: "wall-color", name: "Background", kind: "color", color: "#123456", box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true }],
+    }
+    const videoWall: BroadcastOutput = { ...stream, id: "video-wall", name: "Video wall", sceneId: colorOnlyScene.id, sceneSnapshot: colorOnlyScene }
+    const stage = { ...main, id: "stage", name: "Stage display", role: "stage" as const, stageLayout: "pastor" as const }
+    const countdown = { ...main, id: "countdown", name: "Countdown display", role: "stage" as const, stageLayout: "countdown" as const }
+    useBroadcastStore.setState({
+      themes: [...BUILTIN_THEMES, brandVariant],
+      outputs: [{ ...stream, themeFor: { ...stream.themeFor, slide: brandVariant.id }, shows: ["bible", "ticker", "lowerThird"], sceneSnapshot: scene, sceneAppearanceSnapshot: { themes: { [l3.id]: staleTheme }, logoUrl: "asset://old-logo" } }, videoWall, stage, countdown],
+      outputStatus: {
+        stream: { previewOpen: false, ndiActive: true },
+        "video-wall": { previewOpen: false, ndiActive: false },
+        stage: { previewOpen: false, ndiActive: false },
+        countdown: { previewOpen: true, ndiActive: false },
+      },
+      scenes: [scene, colorOnlyScene],
+      lowerThirdStyles: [lowerThirdStyle],
+      lowerThird: { line1: "Pastor Ade", line2: "Lead pastor", style: lowerThirdStyle },
+      tickerStyle,
+      ticker: { items: ["Sunday service"], style: tickerStyle, startedAt: 1 },
+      stageStyle: { ...DEFAULT_STAGE_STYLE, libraryLookId: "look-classic-stage" },
+      countdownLook: DEFAULT_COUNTDOWN_LOOK,
+      liveDesign: true,
+      draftTheme: { ...l3, name: "Private edit draft" },
+      editingThemeId: l3.id,
+    })
+    useSettingsStore.setState({ brandKit: { ...defaultBrandKit(), churchName: "Grace Chapel", logoUrl: "asset://brand-logo" } })
+    const usedOn = await render(<UsedOn />)
+    const sceneList = usedOn.querySelector('[aria-label="Scenes and the outputs that use them"]')
+    expect(sceneList?.textContent).toContain("Sunday scene")
+    expect(sceneList?.textContent).toContain("OBS Bible")
+    expect(sceneList?.textContent).toContain("Pinned appearance · refresh needed")
+    expect(usedOn.querySelector('[aria-label="Looks and the outputs that use them"] li[aria-label="Lower Thirds"]')?.textContent).toContain("Pinned appearance · refresh needed")
+    expect(usedOn.querySelector('[aria-label="Lower thirds and the outputs that use them"]')?.textContent).toContain("Speaker band")
+    expect(usedOn.querySelector('[aria-label="Ticker and the outputs that use them"]')?.textContent).toContain("Current ticker look")
+    expect(usedOn.querySelector('[aria-label="Stage and the outputs that use them"]')?.textContent).toContain("Current stage look")
+    expect(usedOn.querySelector('[aria-label="Countdown and the outputs that use them"]')?.textContent).toContain("Current countdown look")
+    expect(usedOn.querySelector('[aria-label="Brand Kit and the outputs that use them"]')?.textContent).toContain("Grace Chapel")
+    expect(usedOn.querySelector('[aria-label="Brand Kit and the outputs that use them"]')?.textContent).toContain("Grace Chapel · Youth · Announcements")
+    expect(usedOn.querySelector('[aria-label="Brand Kit and the outputs that use them"]')?.textContent).toContain("pinned appearance differs from Brand Kit")
+    expect(usedOn.querySelector('[role="status"]')?.textContent).toContain("Live Edit is on for “Private edit draft”")
+    expect(usedOn.querySelector('[role="status"]')?.textContent).toContain("Configured congregation outputs: OBS Bible (on), Video wall (off)")
+    expect(usedOn.querySelector('[role="status"]')?.textContent).toContain("Assigned scenes with layers that can render this draft: OBS Bible")
+    expect(usedOn.querySelector('[role="status"]')?.textContent).not.toContain("Assigned scenes with layers that can render this draft: OBS Bible, Video wall")
+    expect(usedOn.querySelector('[aria-label="Speaker band"]')?.textContent).toContain("From Templates · Clean · Name strip")
+    expect(usedOn.querySelector('[aria-label="Current ticker look"]')?.textContent).toContain("From Templates · Clean · News crawl")
+    expect(usedOn.querySelector('[aria-label="Current stage look"]')?.textContent).toContain("From Templates · Classic · Calm stage")
   })
 })
 

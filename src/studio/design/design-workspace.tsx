@@ -13,8 +13,11 @@ import { StageDesigner } from "@/studio/design/stage-designer"
 import { CountdownDesigner } from "@/studio/design/countdown-designer"
 import { BrandDesigner } from "@/studio/design/brand-designer"
 import { LookLibraryView } from "@/studio/design/look-library-view"
-import { CONTENT_NAMES } from "@/lib/content-names"
-import { themeIdsOf, themeUses } from "@/lib/output-themes"
+import { designUsage } from "@/lib/design-usage"
+import { themeIdsOf } from "@/lib/output-themes"
+import { outputOnAir } from "@/lib/output-on-air"
+import { sceneForOutput } from "@/lib/scenes"
+import { useSettingsStore } from "@/stores/settings-store"
 import { cn } from "@/lib/utils"
 
 const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
@@ -119,34 +122,80 @@ export function DesignWorkspace() {
  * keeps the looks and Production keeps where they go.
  */
 export function UsedOn() {
-  const outputs = useBroadcastStore((s) => s.outputs)
   const themes = useBroadcastStore((s) => s.themes)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const outputStatus = useBroadcastStore((s) => s.outputStatus)
+  const scenes = useBroadcastStore((s) => s.scenes)
+  const lowerThirdStyles = useBroadcastStore((s) => s.lowerThirdStyles)
+  const lowerThird = useBroadcastStore((s) => s.lowerThird)
+  const tickerStyle = useBroadcastStore((s) => s.tickerStyle)
+  const ticker = useBroadcastStore((s) => s.ticker)
+  const stageStyle = useBroadcastStore((s) => s.stageStyle)
+  const countdownLook = useBroadcastStore((s) => s.countdownLook)
+  const liveDesign = useBroadcastStore((s) => s.liveDesign)
+  const draftTheme = useBroadcastStore((s) => s.draftTheme)
+  const brandKit = useSettingsStore((s) => s.brandKit)
+  const usage = designUsage({
+    themes, outputs, outputStatus, scenes, lowerThirdStyles, lowerThird,
+    tickerStyle, ticker, stageStyle, countdownLook, brandKit,
+  })
+  const liveEditConfiguredOutputs = liveDesign && draftTheme
+    ? outputs.filter((output) => {
+      if ((output.role ?? "congregation") !== "congregation") return false
+      return themeIdsOf(output).includes(draftTheme.id)
+    })
+    : []
+  const liveEditSceneOutputs = liveDesign && draftTheme
+    ? outputs.filter((output) => {
+      if ((output.role ?? "congregation") !== "congregation") return false
+      const scene = sceneForOutput(output, scenes)
+      // Keep this condition aligned with the scene Live Edit branch in broadcast-store.
+      return !!scene?.layers.some((layer) =>
+        layer.themeId === draftTheme.id ||
+        (!layer.themeId && ["feed", "clock", "camera", "ticker", "lowerThird"].includes(layer.kind) && themeIdsOf(output).includes(draftTheme.id)),
+      )
+    })
+    : []
   return (
-    <div className="flex max-w-3xl flex-col gap-4">
-      <p className="text-sm text-muted-foreground">Which outputs show each look. To change an output's look, open the output: its main look is there, and a different look for some kinds of content is under <span className="font-semibold text-foreground">Advanced: content-specific looks</span>.</p>
-      <ul className="flex flex-col divide-y divide-border rounded-lg border border-border" aria-label="Looks and the outputs that use them">
-        {themes.map((t) => {
-          const uses = themeUses(outputs, t.id)
-          return (
-            <li key={t.id} aria-label={t.name} className="flex flex-wrap items-start gap-x-4 gap-y-1.5 px-3 py-2.5 text-sm">
-              <span className="w-48 shrink-0 font-semibold">{t.name}</span>
-              {uses.length === 0 ? (
-                <span className="text-xs text-muted-foreground">Not on any output</span>
-              ) : (
-                <ul className="flex min-w-0 flex-1 flex-col gap-1">
-                  {uses.map(({ output: o, main, kinds }) => (
-                    <li key={o.id} className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-medium">{o.name}</span>
-                      <span className="text-muted-foreground">{[main && "main look", kinds.length > 0 && `${kinds.map((k) => CONTENT_NAMES[k]).join(", ")} only`].filter(Boolean).join(" · ")}</span>
-                      <Button size="xs" variant="ghost" className="ml-auto" onClick={() => useShellStore.getState().editOutput(o.id)} aria-label={`Open output ${o.name}`}><ExternalLinkIcon /> Open output</Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          )
-        })}
-      </ul>
+    <div className="flex max-w-4xl flex-col gap-5">
+      <p className="text-sm text-muted-foreground">Saved assignments and output status are shown here. Name bands and the ticker appear only while their source is running; taken scenes pin their appearance until refreshed. Drafts in the other design tools stay private until their deliberate Apply or Take action. Theme Live Edit is the explicit exception.</p>
+      {liveDesign && (
+        <p role="status" className="rounded-md border border-on-air/30 bg-on-air/5 px-3 py-2 text-sm">
+          {draftTheme
+            ? `Theme Live Edit is on for “${draftTheme.name}”. Configured congregation outputs: ${liveEditConfiguredOutputs.length ? liveEditConfiguredOutputs.map((output) => `${output.name} (${outputOnAir(output, outputStatus[output.id]) ? "on" : "off"})`).join(", ") : "none"}. Assigned scenes with layers that can render this draft: ${liveEditSceneOutputs.length ? liveEditSceneOutputs.map((output) => output.name).join(", ") : "none"}.`
+            : "Theme Live Edit is on, but no theme draft is open."}
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground">To change an output's look, open it: its main look is there, and content-specific looks are under <span className="font-semibold text-foreground">Advanced: content-specific looks</span>.</p>
+      {usage.map((section) => (
+        <section key={section.id} aria-labelledby={`design-usage-${section.id}`}>
+          <h2 id={`design-usage-${section.id}`} className="mb-2 text-sm font-semibold">{section.title}</h2>
+          <ul className="flex flex-col divide-y divide-border rounded-lg border border-border" aria-label={section.id === "themes" ? "Looks and the outputs that use them" : `${section.title} and the outputs that use them`}>
+            {section.entries.map((entry) => (
+              <li key={entry.id} aria-label={entry.name} className="flex flex-wrap items-start gap-x-4 gap-y-1.5 px-3 py-2.5 text-sm">
+                <div className="w-48 min-w-0 shrink-0">
+                  <span className="font-semibold">{entry.name}</span>
+                  {entry.source && <span className="block text-xs font-normal text-muted-foreground">From {entry.source}</span>}
+                </div>
+                {entry.outputs.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">{section.emptyLabel}</span>
+                ) : (
+                  <ul className="flex min-w-0 flex-1 flex-col gap-1">
+                    {entry.outputs.map((output) => (
+                      <li key={output.outputId} className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-medium">{output.outputName}</span>
+                        <span className="text-muted-foreground">{output.detail}</span>
+                        <span className={cn("rounded px-1.5 py-0.5 font-semibold", output.on ? "bg-on-air/10 text-on-air" : "bg-muted text-muted-foreground")}>{output.on ? "Output on" : "Output off"}</span>
+                        <Button size="xs" variant="ghost" className="ml-auto" onClick={() => useShellStore.getState().editOutput(output.outputId)} aria-label={`Open output ${output.outputName} from ${entry.name}`}><ExternalLinkIcon /> Open output</Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </div>
   )
 }
