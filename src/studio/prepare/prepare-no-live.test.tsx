@@ -211,6 +211,54 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useBroadcastStore.getState().isLive).toBe(false)
   })
 
+  it("saves and reopens an event-only service with its zero-moment event in both rundown views", async () => {
+    localStorage.setItem("rhema.prepare.rundown-view.v1", "simple")
+    useQueueStore.setState({ items: [], headers: [], activeIndex: null, addTarget: null })
+    useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "currently-on-air", liveSlide: null, liveVerse: null })
+    const liveBefore = {
+      isLive: useBroadcastStore.getState().isLive,
+      liveItemId: useBroadcastStore.getState().liveItemId,
+      liveSlide: useBroadcastStore.getState().liveSlide,
+      liveVerse: useBroadcastStore.getState().liveVerse,
+      outputs: useBroadcastStore.getState().outputs,
+    }
+    const el = await renderPrepare()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Add event"]')!.click())
+    const sermon = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Sermon")!
+    await act(async () => sermon.click())
+    const event = useQueueStore.getState().headers.find((header) => header.name === "Sermon")!
+    expect(event).toBeDefined()
+    expect(el.querySelector('[aria-label="Event: Sermon"]')?.textContent).toContain("0 moments")
+    expect(el.textContent).not.toContain("Nothing in the service yet")
+
+    const save = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save")!
+    await act(async () => save.click())
+    expect(useServiceStore.getState().dirty).toBe(false)
+    await act(async () => expect(await useServiceStore.getState().closeProgram()).toBe("closed"))
+    await act(async () => expect(await useServiceStore.getState().openProgram("local-draft")).toBe("ok"))
+
+    const reopenedEvent = useQueueStore.getState().headers.find((header) => header.id === event.id)
+    expect(reopenedEvent).toMatchObject({
+      id: event.id,
+      type: "group",
+      name: "Sermon",
+      event: event.event,
+    })
+    expect(useQueueStore.getState().items).toHaveLength(0)
+    expect(el.querySelector('[aria-label="Event: Sermon"]')?.textContent).toContain("0 moments")
+    expect(el.querySelector('[aria-label="Event: Sermon"]')).not.toBeNull()
+    expect(el.textContent).not.toContain("Nothing in the service yet")
+
+    const grouped = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Grouped by phase")!
+    await act(async () => grouped.click())
+    expect(el.querySelector('[aria-label="Event: Sermon"]')).not.toBeNull()
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Sermon"]')!.click())
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Event title"]')?.value).toBe("Sermon")
+    expect(useBroadcastStore.getState()).toMatchObject(liveBefore)
+  }, 30_000)
+
   it("creates an event, adds and edits an exact moment, saves and reopens it, then previews without changing Live", async () => {
     useQueueStore.setState({ items: [], headers: [], activeIndex: null, addTarget: null })
     useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null })
