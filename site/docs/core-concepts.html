@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Understand Prepare, Design, private Preview, Program, independent outputs, language choices, and host permissions in Rhema Studio.">
+  <meta name="description" content="Understand Prepare, Design, private Preview, Program, History, independent outputs, and host permissions in Rhema Studio.">
   <link rel="icon" href="../assets/rhema-studio-mark.svg" type="image/svg+xml"><link rel="stylesheet" href="./docs.css">
   <title>Core concepts — Rhema Studio</title>
 </head>
@@ -15,7 +15,7 @@
       <div class="docs-breadcrumb"><a href="../index.html">Rhema Studio</a><span aria-hidden="true">›</span><a href="./index.html">Docs & wiki</a></div>
       <header class="article-header"><p class="article-kicker">FOUNDATIONS</p><h1>Core concepts</h1><p>The product separates service preparation, reusable design, private review, and explicit production actions.</p></header>
       <article class="prose">
-        <div class="notice"><p><strong>Current behavior and approved direction:</strong> the concepts below come from the repository and owner-approved contracts. The integrated six-destination experience and end-to-end acceptance are still in progress.</p></div>
+        <div class="notice"><p><strong>Current behavior and approved direction:</strong> the six primary destinations are present in the current application. Some combined workflows and connected-device acceptance are still in progress.</p></div>
 
         <h2>Prepare the service</h2>
         <p>Prepare is for building the service plan: phases, moments, content, timing, and related notes. It is the place to arrange what the team expects to do. Saving that plan should not itself take a scene, activate a source, or change what an audience sees.</p>
@@ -38,6 +38,11 @@
         <p>Rhema Studio models named outputs with distinct roles. A congregation display, Stage confidence monitor, browser feed, signage display, and OBS program do not all show the same material by default. Output assignment and host permissions determine which content a device may receive.</p>
         <p>Scene selection and source activation are separate actions. Bible, song, hymn, ticker, timer, and camera sources can be rendered through audience-specific output choices. OBS remains an independent online production path; it is not the congregation display.</p>
         <figure class="docs-figure"><img src="../assets/screenshots/output-setup.png" width="1440" height="900" loading="lazy" decoding="async" alt="Output setup frontend capture showing a congregation display and browser feed configuration using example values."><figcaption><strong>Output settings frontend capture.</strong> Example output names and values; no physical screen, NDI receiver, or browser viewer is proven by this image.</figcaption></figure>
+
+        <h2>History and service-run timing</h2>
+        <p>History includes a read-only review of a saved service-run checkpoint. When the journal has enough timing evidence, the review compares an event's planned duration with its actual elapsed duration and shows the difference. Journaled events absent from the captured plan are identified separately.</p>
+        <p>For an active run, an open event is measured only through the last saved checkpoint and marked as not final. If timing is unstarted, interrupted, truncated by recovery, or missing a valid anchor or finish mark, the review says the duration is unknown instead of showing zero. This timing summary does not prove that a physical screen displayed the event.</p>
+        <p>Opening the review does not restore the captured plan into Prepare or send anything to an output. See <a href="./history.html">History & run review</a> for the current behavior and its limits. The current screenshot set predates this review, so no illustrative image is used here.</p>
 
         <h2>Roles and permissions</h2>
         <p>Host pairing assigns a role to a connected desk. The host service checks commands and scopes; a browser cannot grant itself more access. The role is a boundary for what an operator may read or request, not a claim that a complete standalone page exists for every role.</p>
