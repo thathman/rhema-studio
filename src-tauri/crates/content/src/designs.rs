@@ -424,7 +424,7 @@ mod tests {
         let uses = db.design_used_on(&d.id).unwrap();
         assert_eq!(uses.len(), 1);
         assert_eq!((uses[0].program_id.as_str(), uses[0].reference.as_str(), uses[0].version, uses[0].revision), (p.id.as_str(), "Welcome", 1, saved.program.revision));
-        assert!(db.design_used_on("nobody").unwrap().is_empty());
+        assert_eq!(db.design_used_on("nobody").unwrap(), Vec::<DesignUse>::new());
     }
 
     #[test]
