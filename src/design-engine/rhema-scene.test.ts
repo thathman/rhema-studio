@@ -124,6 +124,23 @@ describe("Rhema scenes in the Avnac engine", () => {
   })
 })
 
+describe("a design whose node tree is broken", () => {
+  it("reports a missing root or child and survives a group inside itself, never an empty scene without a word", () => {
+    const design = sceneToDesign(sermon)
+    const missingRoot = designToScene({ ...design, scene: { ...design.scene, root: "nowhere" } })
+    expect(missingRoot.scene.layers).toEqual([])
+    expect(missingRoot.issues).toEqual([{ nodeId: "nowhere", message: expect.stringContaining("missing") }])
+    const root = design.scene.nodes[SARASWATI_ROOT_ID]
+    if (root.type !== "group") throw new Error("root")
+    const looped = { ...design.scene, nodes: { ...design.scene.nodes, [SARASWATI_ROOT_ID]: { ...root, children: [...root.children, "ghost", SARASWATI_ROOT_ID] } } }
+    const { scene, issues } = designToScene({ ...design, scene: looped })
+    expect(scene.layers.map((l) => l.id)).toEqual(sermon.layers.map((l) => l.id))
+    expect(issues.map((i) => i.nodeId)).toEqual(["ghost", SARASWATI_ROOT_ID])
+    const childless = { ...design.scene, nodes: { ...design.scene.nodes, [SARASWATI_ROOT_ID]: { ...root, children: undefined as unknown as string[] } } }
+    expect(designToScene({ ...design, scene: childless }).issues).toEqual([{ nodeId: SARASWATI_ROOT_ID, message: expect.stringContaining("no list") }])
+  })
+})
+
 describe("live layers in the editor's preview", () => {
   const live = (bible: string | null, ticker = "Welcome to service") => ({
     program: { onAir: true, reference: bible },
@@ -151,6 +168,16 @@ describe("live layers in the editor's preview", () => {
     const before = JSON.stringify(design)
     previewDesign(design, live("John 3:16"))
     expect(JSON.stringify(design)).toBe(before)
+    expect(designToScene(design).scene).toEqual(sermon)
+  })
+})
+
+describe("a design the host's store accepts", () => {
+  it("has the shape the host checks (artboard, root, nodes; every binding names a node) and survives JSON", () => {
+    const design = JSON.parse(JSON.stringify(sceneToDesign(sermon))) as ReturnType<typeof sceneToDesign>
+    expect(typeof design.scene.root).toBe("string")
+    expect(design.scene.artboard).toMatchObject({ width: 1920, height: 1080 })
+    expect(Object.keys(design.bindings).every((id) => id in design.scene.nodes)).toBe(true)
     expect(designToScene(design).scene).toEqual(sermon)
   })
 })
