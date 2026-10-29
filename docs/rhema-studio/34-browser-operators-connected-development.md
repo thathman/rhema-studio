@@ -204,6 +204,10 @@ The owner explicitly approved Page 6's **overall Stage Operator screen hierarchy
 
 The owner explicitly approved the **camera-grid-first Page 7 composition** in [40 — Camera Operator §7A](40-camera-operator-page-7-layout-proposal.md#7a-owner-approved--camera-grid-first-structural-hierarchy-29-october-2026): assigned camera cards with accurate health, selected larger actual camera preview, distinct OBS Program / OBS Preview / congregation tallies, framing **Ready / Unable** actions, scoped recovery and compact Director framing requests. Camera signal `Sending` ≠ volunteer `Ready` ≠ camera `On Air`. A camera card never Takes Live; `Hide from scenes` requires true source/scene impact review. **Structural layout approved, not expanded permissions, pixel-level styling or real-device implementation.** Codex resumes full feature building under 29 Oct instructions.
 
+### Page 8 OBS Director design workshop — PROPOSED (29 October 2026)
+
+See [41 — OBS Director Page 8](41-obs-director-page-8-layout-proposal.md) for the proposed secure, novice-readable **OBS Preview versus actual OBS Program** operator workspace, clear single OBS Take/Studio Mode OFF direct-switch confirmation, stream and recording health, scene picker, private Comms handoffs and read-only congregation/Stage independence. Reuse existing `ObsDesk`, native `ObsPanel` and OBS Companion rather than building an alternate OBS control app. **Page 8 visual hierarchy and any new authority remain UNAPPROVED** until owner review; no automatic congregation Take, recording stop or streaming start/stop through scene-selection UI.
+
 ### Operator design review protocol: one page at a time, with owner sign-off
 
 **We have NOT completed the operator visual redesign together. Do not silently invent final approved page designs or count a generic console as accepted.** Implement shared safety/data foundations first, then present an individually reviewable page specification/screenshot/interactive demo to the owner for each step. Record feedback and approval, then continue to the next page. No automatic completion of 12 pages because their route exists.
