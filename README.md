@@ -7,6 +7,9 @@
 
 <h1 align="center">Rhema Studio</h1>
 
+**Project website (Rhema Studio branding):** [https://thathman.github.io/rhema-studio/](https://thathman.github.io/rhema-studio/). Site source: [`site/`](site/README.md); deploys through GitHub Pages after enabling **Settings → Pages → GitHub Actions**. This is the project website, **not** the original `openrhema.com` marketing site. Published features and releases should always be verified against actual code/acceptance.
+
+
 **Rhema Studio** is a local-first church production platform: service preparation, live Scripture,
 songs and hymns, volunteer-friendly presenting, screens and feeds (NDI, browser feeds, OBS) and a crew
 on the church network. It is one family of apps:
