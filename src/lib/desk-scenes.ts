@@ -210,8 +210,11 @@ export function receiveDeskScene(p: Record<string, unknown>, deleting = false): 
 export function acceptSceneRequest(id: string): string | null {
   const r = useSceneRequests.getState().requests.find((x) => x.id === id)
   if (!r) return "that change was already answered, or Rhema Studio restarted since"
-  useSceneRequests.setState((s) => ({ requests: s.requests.filter((x) => x.id !== id) }))
   if (savedAt(r.sceneId) !== r.savedAt) return "the scene changed here since it was asked; they can make the change again"
+  // Deleting a saved scene also clears any output that uses it. Keep the approval pending until
+  // every real output has moved elsewhere so an approval can never change the public program.
+  if (!r.scene && scenesOnScreen().has(r.sceneId)) return "that scene is still on a screen; move each output to another scene before approving its deletion"
+  useSceneRequests.setState((s) => ({ requests: s.requests.filter((x) => x.id !== id) }))
   apply(r, true)
   return null
 }

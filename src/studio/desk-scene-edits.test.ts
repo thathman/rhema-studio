@@ -110,6 +110,16 @@ describe("the approval rule (the default until the owner chooses another)", () =
     expect(useBroadcastStore.getState().scenes.some((s) => s.id === "off")).toBe(false)
   })
 
+  it("does not let an approved scene deletion clear an active output", () => {
+    receiveDeskScene({ id: "on", by: "Ade screens" }, true)
+    const request = useNotices.getState().notices[0].action!.value
+
+    expect(acceptSceneRequest(request)).toContain("still on a screen")
+    expect(useBroadcastStore.getState().outputs[0]?.sceneId).toBe("on")
+    expect(useBroadcastStore.getState().scenes.some((s) => s.id === "on")).toBe(true)
+    expect(useSceneRequests.getState().requests.map((r) => r.id)).toEqual([request])
+  })
+
   it("with Approvals on every change waits, except in rehearsal for a scene on no real screen", () => {
     useSettingsStore.setState({ requireApproval: true })
     send("off")
