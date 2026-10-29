@@ -59,7 +59,7 @@ function NavButton({ item, active, live, compact, onSelect }: { item: NavItem; a
         {active && <span aria-hidden className="absolute top-[7px] bottom-[7px] left-0 w-0.5 rounded-r bg-sidebar-primary" />}
         {item.icon}
         <span className="truncate compact:sr-only">{item.label}</span>
-        {item.badge ? <span aria-hidden className="ml-auto flex min-w-4 items-center justify-center rounded-full bg-tone-amber px-1 text-[0.625rem] font-bold leading-4 text-tone-amber-foreground compact:absolute compact:top-1 compact:right-1">{item.badge}</span> : null}
+        {item.badge ? <span aria-hidden className="ml-auto flex min-w-4 items-center justify-center rounded-full bg-tone-amber px-1 text-xs font-bold leading-4 text-tone-amber-foreground compact:absolute compact:top-1 compact:right-1">{item.badge}</span> : null}
         {live && <span aria-label="Live" className="ml-auto size-2 shrink-0 animate-pulse rounded-full bg-on-air compact:absolute compact:top-2 compact:right-2" />}
       </button>
     </SideTip>
