@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { applyCommand, buildRenderCommands, SARASWATI_ROOT_ID, type SaraswatiRectNode } from "../vendor/avnac/saraswati"
+import { applyCommand, buildRenderCommands, SARASWATI_ROOT_ID, type SaraswatiGroupNode, type SaraswatiRectNode } from "../vendor/avnac/saraswati"
 import type { Scene, SceneLayer } from "../types/scene"
 import { designToScene, previewDesign, sceneToDesign } from "./rhema-scene"
 
@@ -66,6 +66,61 @@ describe("Rhema scenes in the Avnac engine", () => {
     const { scene, issues } = designToScene({ ...design, scene: s })
     expect(scene.layers.map((l) => l.id)).not.toContain("doodle")
     expect(issues).toEqual([{ nodeId: "doodle", message: expect.stringContaining("Doodle") }])
+  })
+
+  it("carries group visibility to its layers and blocks group opacity or rotation on save", () => {
+    const design = sceneToDesign(sermon)
+    const root = design.scene.nodes[SARASWATI_ROOT_ID]
+    if (root.type !== "group") throw new Error("root")
+    const group: SaraswatiGroupNode = {
+      id: "content-group", type: "group", parentId: SARASWATI_ROOT_ID, visible: false, opacity: 0.5,
+      rotation: 15, children: ["cam", "verse"],
+    }
+    const children = [...root.children]
+    const position = children.indexOf("cam")
+    const rootChildren = children.filter((id) => id !== "cam" && id !== "verse")
+    rootChildren.splice(position, 0, group.id)
+    const scene = {
+      ...design.scene,
+      nodes: {
+        ...design.scene.nodes,
+        [SARASWATI_ROOT_ID]: { ...root, children: rootChildren },
+        [group.id]: group,
+        cam: { ...design.scene.nodes.cam, parentId: group.id },
+        verse: { ...design.scene.nodes.verse, parentId: group.id },
+      },
+    }
+    const { scene: saved, issues } = designToScene({ ...design, scene })
+    const byId = Object.fromEntries(saved.layers.map((item) => [item.id, item]))
+    expect(byId.cam.visible).toBe(false)
+    expect(byId.verse.visible).toBe(false)
+    expect(issues).toEqual(expect.arrayContaining([
+      { nodeId: group.id, message: "Group opacity cannot be saved into a flat Rhema scene yet" },
+      { nodeId: group.id, message: "Group rotation cannot be saved into a Rhema scene yet" },
+    ]))
+  })
+
+  it("blocks saves that would drop gradients, layer rotation, or image crop", () => {
+    const design = sceneToDesign(sermon)
+    let scene = design.scene
+    scene = applyCommand(scene, {
+      type: "SET_ARTBOARD",
+      bg: { type: "gradient", css: "linear-gradient(90deg, #000, #fff)", stops: [{ color: "#000", offset: 0 }, { color: "#fff", offset: 1 }], angle: 90 },
+    })
+    scene = applyCommand(scene, {
+      type: "SET_NODE_FILL",
+      id: "bg",
+      fill: { type: "gradient", css: "linear-gradient(90deg, #202040, #ffffff)", stops: [{ color: "#202040", offset: 0 }, { color: "#ffffff", offset: 1 }], angle: 90 },
+    })
+    scene = applyCommand(scene, { type: "ROTATE_NODE", id: "pic", rotation: 20 })
+    scene = applyCommand(scene, { type: "SET_IMAGE_CROP", id: "pic", cropX: 12, cropY: 8, cropWidth: 180, cropHeight: 120 })
+    const { issues } = designToScene({ ...design, scene })
+    expect(issues).toEqual(expect.arrayContaining([
+      { nodeId: "__artboard__", message: "Rhema scenes cannot save gradient backgrounds yet" },
+      { nodeId: "bg", message: "Gradient layer fills cannot be saved into a Rhema scene yet" },
+      { nodeId: "pic", message: "Layer rotation cannot be saved into a Rhema scene yet" },
+      { nodeId: "pic", message: "Image crop and clipping cannot be saved into a Rhema scene yet" },
+    ]))
   })
 })
 

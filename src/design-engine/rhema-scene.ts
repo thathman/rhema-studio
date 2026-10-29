@@ -92,31 +92,60 @@ const round = (v: number) => Math.round(v * 1000) / 1000
  * list leaves out hidden nodes, and a hidden layer is still part of the scene). */
 type LayerNode = Exclude<SaraswatiNode, SaraswatiGroupNode>
 
-function layerNodes(scene: SaraswatiScene): LayerNode[] {
-  const out: LayerNode[] = []
-  const walk = (id: string) => {
+interface LayerEntry {
+  node: LayerNode
+  visible: boolean
+  groupOpacity: number
+}
+
+function layerEntries(scene: SaraswatiScene): LayerEntry[] {
+  const out: LayerEntry[] = []
+  const walk = (id: string, visible: boolean, groupOpacity: number) => {
     const node = scene.nodes[id]
     if (!node) return
-    if (node.type === "group") node.children.forEach(walk)
-    else out.push(node)
+    if (node.type === "group") {
+      node.children.forEach((child) => walk(child, visible && node.visible, groupOpacity * node.opacity))
+    } else {
+      out.push({ node, visible: visible && node.visible, groupOpacity })
+    }
   }
-  walk(scene.root)
+  walk(scene.root, true, 1)
   return out
 }
 
 /**
- * Back to a Rhema scene. Layers come back in the editor's order with the editor's position, size,
- * opacity, visibility and name; their bindings unchanged. A node with no binding (drawn in the
- * editor) cannot be a Rhema layer yet: it is left out and reported, never silently baked in.
+ * Back to a Rhema scene. Callers must refuse to save when `issues` is nonempty. Supported edits
+ * come back in the editor's order with its position, size, visibility and name; unsupported paint,
+ * crop and transform edits are reported instead of being silently dropped.
  */
 export function designToScene(design: RhemaDesign): { scene: Scene; issues: DesignIssue[] } {
   const issues: DesignIssue[] = []
   const layers: SceneLayer[] = []
-  for (const node of layerNodes(design.scene)) {
+  if (design.scene.artboard.width !== DESIGN_WIDTH || design.scene.artboard.height !== DESIGN_HEIGHT) {
+    issues.push({ nodeId: "__artboard__", message: "Rhema scenes must keep the 1920 × 1080 artboard size" })
+  }
+  if (design.scene.artboard.bg.type !== "solid") {
+    issues.push({ nodeId: "__artboard__", message: "Rhema scenes cannot save gradient backgrounds yet" })
+  }
+  for (const node of Object.values(design.scene.nodes)) {
+    if (node.type === "group" && Math.abs(node.opacity - 1) > 0.0001) {
+      issues.push({ nodeId: node.id, message: "Group opacity cannot be saved into a flat Rhema scene yet" })
+    }
+    if (node.type === "group" && Math.abs(node.rotation ?? 0) > 0.0001) {
+      issues.push({ nodeId: node.id, message: "Group rotation cannot be saved into a Rhema scene yet" })
+    }
+  }
+  for (const { node, visible } of layerEntries(design.scene)) {
     const binding = design.bindings[node.id]
     if (!binding) {
       issues.push({ nodeId: node.id, message: `"${node.name ?? node.id}" was drawn in the editor; Rhema scenes cannot show it yet` })
       continue
+    }
+    if (Math.abs(node.rotation) > 0.0001) {
+      issues.push({ nodeId: node.id, message: "Layer rotation cannot be saved into a Rhema scene yet" })
+    }
+    if (node.shadow || (node.blur ?? 0) > 0) {
+      issues.push({ nodeId: node.id, message: "Layer shadow and blur cannot be saved into a Rhema scene yet" })
     }
     const size = "width" in node && "height" in node ? { w: node.width as number, h: node.height as number } : { w: 0, h: 0 }
     const layer: SceneLayer = {
@@ -124,9 +153,32 @@ export function designToScene(design: RhemaDesign): { scene: Scene; issues: Desi
       name: node.name ?? node.id,
       box: { x: round((node.x / DESIGN_WIDTH) * 100), y: round((node.y / DESIGN_HEIGHT) * 100), w: round((size.w * node.scaleX / DESIGN_WIDTH) * 100), h: round((size.h * node.scaleY / DESIGN_HEIGHT) * 100) },
       opacity: node.opacity,
-      visible: node.visible,
+      visible,
     } as SceneLayer
-    if (binding.kind === "color" && node.type === "rect" && node.fill.type === "solid") layer.color = node.fill.color
+    if (node.type === "image") {
+      if (binding.kind !== "picture" || node.src !== binding.imageUrl) {
+        issues.push({ nodeId: node.id, message: "Image replacement cannot be saved into this Rhema layer yet" })
+      }
+      if (node.cropX !== 0 || node.cropY !== 0 || node.cropWidth !== undefined || node.cropHeight !== undefined || node.clipPath !== null || (node.clipPathStack?.length ?? 0) > 0 || (node.borderRadius ?? 0) > 0) {
+        issues.push({ nodeId: node.id, message: "Image crop and clipping cannot be saved into a Rhema scene yet" })
+      }
+    } else if (node.type === "rect") {
+      if (node.fill.type !== "solid") {
+        issues.push({ nodeId: node.id, message: "Gradient layer fills cannot be saved into a Rhema scene yet" })
+      } else if (binding.kind === "color") {
+        layer.color = node.fill.color
+      } else {
+        const originalFill = PLACEHOLDER[binding.kind] ?? "#333333"
+        if (node.fill.color !== originalFill) {
+          issues.push({ nodeId: node.id, message: "Edited fills on this live layer cannot be saved into a Rhema scene yet" })
+        }
+      }
+      if (node.stroke || node.strokeWidth !== 0 || node.radiusX !== 0 || node.radiusY !== 0 || node.clipPath || (node.clipPathStack?.length ?? 0) > 0) {
+        issues.push({ nodeId: node.id, message: "Layer stroke, clipping and corner styles cannot be saved into a Rhema scene yet" })
+      }
+    } else {
+      issues.push({ nodeId: node.id, message: "This Avnac shape cannot be saved as a Rhema scene layer yet" })
+    }
     layers.push(layer)
   }
   const bg = design.scene.artboard.bg
@@ -175,9 +227,9 @@ function liveWords(binding: RhemaBinding, live: LivePreviewInput): string | null
  */
 export function previewDesign(design: RhemaDesign, live: LivePreviewInput): SaraswatiScene {
   let preview = design.scene
-  for (const node of layerNodes(design.scene)) {
+  for (const { node, visible, groupOpacity } of layerEntries(design.scene)) {
     const binding = design.bindings[node.id]
-    if (!binding || !node.visible || node.type === "line") continue
+    if (!binding || !visible || node.type === "line") continue
     const words = liveWords(binding, live)
     if (!words) continue
     const width = "width" in node ? node.width : 0
@@ -187,7 +239,7 @@ export function previewDesign(design: RhemaDesign, live: LivePreviewInput): Sara
       type: "ADD_NODE",
       node: {
         id: `preview:${node.id}`, parentId: SARASWATI_ROOT_ID, name: `${node.name ?? node.id} (live)`, visible: true,
-        x: node.x, y: node.y + height / 2 - fontSize * 0.6, rotation: 0, scaleX: 1, scaleY: 1, opacity: 1, originX: "left", originY: "top",
+        x: node.x, y: node.y + height / 2 - fontSize * 0.6, rotation: 0, scaleX: 1, scaleY: 1, opacity: node.opacity * groupOpacity, originX: "left", originY: "top",
         type: "text", text: words, width, fontSize, fontFamily: "Helvetica", fontWeight: "600", fontStyle: "normal", textAlign: "center",
         lineHeight: 1.2, underline: false, color: { type: "solid", color: "#ffffff" }, stroke: null, strokeWidth: 0,
       },
