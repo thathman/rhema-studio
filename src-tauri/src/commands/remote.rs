@@ -951,7 +951,7 @@ pub fn remote_group_take_preflight(
         revisions.insert(part, current_revision);
         let output = live_outputs
             .iter()
-            .find(|candidate| candidate.get("id").and_then(serde_json::Value::as_str) == Some(id))
+            .find(|candidate| candidate.get("id").and_then(serde_json::Value::as_str) == Some(id.as_str()))
             .ok_or_else(|| format!("Output {id} is no longer available; refresh before a group Take"))?;
         let name = output
             .get("name")

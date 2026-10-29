@@ -289,7 +289,7 @@ function JoinedDesk() {
           {desks.includes("cameras") && <CameraDesk live={live} />}
           {desks.includes("outputs") && deskLive && <OutputMap live={deskLive} />}
           {desks.includes("outputs") && deskLive && <ScreenSources live={deskLive} />}
-          {desks.includes("scenes") && deskLive && <ScenesDesk live={deskLive} role={me?.role ?? "present"} outputScope={me?.outputScope ?? []} groupTakeScope={me?.groupTakeScope ?? []} />}
+          {desks.includes("scenes") && deskLive && <ScenesDesk key={`${status}:${live.service?.id ?? ""}`} live={deskLive} role={me?.role ?? "present"} outputScope={me?.outputScope ?? []} groupTakeScope={me?.groupTakeScope ?? []} />}
           {desks.includes("stage") && <StageDesk live={live} />}
           {desks.includes("obs") && <ObsDesk live={live} />}
           <DeskAuxTimers live={live} role={me?.role ?? "present"} stale={fresh.stale} />
@@ -578,7 +578,6 @@ function PrepareDesk() {
  */
 function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveStateV1; role: string; outputScope: string[]; groupTakeScope: string[] }) {
   const ok = useCanSend()
-  const connectionStatus = useJoin((s) => s.status)
   const [outputId, setOutputId] = useState("")
   const [groupMode, setGroupMode] = useState(false)
   const [groupTargets, setGroupTargets] = useState<string[]>([])
@@ -601,11 +600,6 @@ function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveSta
   const cameraOnly = role === "camera"
   const open = editing === "new" ? null : live.scenes.find((s) => s.id === editing)
   const done = (words: string) => { setEditing(null); setSaid(words) }
-  useEffect(() => {
-    setGroupMode(false)
-    setGroupTargets([])
-    setReviewGroupTake(false)
-  }, [connectionStatus, live.service?.id])
   const askForGroupTake = () => {
     if (selectedGroupOutputs.length < 2) {
       setSaid("Select at least two granted outputs before reviewing a group Take.")
@@ -623,7 +617,13 @@ function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveSta
   }
   const confirmGroupTake = async () => {
     if (!groupScene || selectedGroupOutputs.length < 2) return
-    const requestId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `group-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    let requestId: string
+    try {
+      requestId = groupTakeCommandId()
+    } catch {
+      setSaid("A secure command ID is unavailable in this browser. Reconnect using the host's secure link before requesting a group Take.")
+      return
+    }
     const result = await send({ command: "group_take_scene", value: { outputs: selectedGroupOutputs.map((o) => o.id), scene: groupScene.id }, id: requestId })
     if (result.ok) {
       setSaid(result.note ?? "The host accepted the request. Waiting for per-output host results.")
@@ -717,6 +717,11 @@ function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveSta
   )
 }
 
+function groupTakeCommandId(): string {
+  if (typeof globalThis.crypto?.randomUUID !== "function") throw new Error("secure random IDs are not supported")
+  return globalThis.crypto.randomUUID()
+}
+
 function GroupTakeOutputReview({ output, scene, live }: { output: LiveStateV1["outputs"][number]; scene: LiveStateV1["scenes"][number]; live: LiveStateV1 }) {
   const impact = output.impact
   const ratio = impact && validAspectRatioLabel(impact.aspectRatio) ? impact.aspectRatio.replace(":", " / ") : "16 / 9"
@@ -746,11 +751,11 @@ function GroupTakeOutputReview({ output, scene, live }: { output: LiveStateV1["o
         <div role="img" aria-label={`Schematic layout of ${scene.name} for ${output.name}`} className="relative overflow-hidden rounded border border-border bg-slate-950" style={{ aspectRatio: ratio, backgroundColor: scene.background && scene.background !== "transparent" ? scene.background : undefined }}>
           {layers.map((layer) => {
             const box = layer.box ?? { x: 0, y: 0, w: 100, h: 100 }
-            return <div key={layer.id} className="absolute flex items-center justify-center overflow-hidden rounded border border-white/60 bg-black/45 px-1 text-center text-[9px] font-medium leading-tight text-white" style={{ left: `${box.x}%`, top: `${box.y}%`, width: `${box.w}%`, height: `${box.h}%`, opacity: layer.opacity ?? 1 }}><span>{layer.name}<br />{groupLabel(layer.kind)}</span></div>
+            return <div key={layer.id} className="absolute flex items-center justify-center overflow-hidden rounded border border-white/60 bg-black/45 px-1 text-center text-[11px] font-medium leading-tight text-white" style={{ left: `${box.x}%`, top: `${box.y}%`, width: `${box.w}%`, height: `${box.h}%`, opacity: layer.opacity ?? 1 }}><span>{layer.name}<br />{groupLabel(layer.kind)}</span></div>
           })}
-          {layers.length === 0 && <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white">No layer layout supplied</span>}
+          {layers.length === 0 && <span className="absolute inset-0 flex items-center justify-center text-[11px] text-white">No layer layout supplied</span>}
         </div>
-        <p className="mt-1 text-[10px] text-muted-foreground">Layout sketch only. Source frames and receiver status are separate.</p>
+        <p className="mt-1 text-[11px] text-muted-foreground">Layout sketch only. Source frames and receiver status are separate.</p>
       </div>
     </li>
   )

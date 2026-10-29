@@ -37,6 +37,7 @@ const EXPECTED_EVENT_NAMES = [
   "remote:clear_source",
   "remote:restore_source",
   "remote:take_scene",
+  "remote:group_take_scene",
   "remote:release_scene",
   "remote:save_scene",
   "remote:delete_scene",
@@ -54,7 +55,7 @@ const EXPECTED_EVENT_NAMES = [
 
 describe("REMOTE_EVENTS", () => {
   it("has one entry per RemoteCommand variant", () => {
-    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(45)
+    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(46)
   })
 
   it("matches the event names the Rust dispatcher emits", () => {
