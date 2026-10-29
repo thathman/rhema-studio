@@ -29,6 +29,7 @@ const docSections = [
       ["connected-operators.html", "LAN browser access"],
       ["recording.html", "Recording"],
       ["comms-and-timing.html", "Comms & timing"],
+      ["history.html", "History & run review"],
       ["devices.html", "Devices & companion apps"],
     ],
   },

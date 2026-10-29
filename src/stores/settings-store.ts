@@ -27,7 +27,7 @@ export interface RemoteDevice {
   hash: string
   name: string
   paired_at: string
-  /** Absent on entries saved before roles existed: treated as configure (full access). */
+  /** Absent on older entries: treated as Viewer until the host assigns an explicit role. */
   role?: RemoteRole
   /** The main desk has taken back control (#243): its commands wait; it still sees the service and talks. Absent = not paused. */
   paused?: boolean
@@ -91,7 +91,7 @@ export function pushRemoteKeys(): Promise<void> {
   const write = remoteKeysPush.then(async () => {
     const s = useSettingsStore.getState()
     try {
-      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure", paused: d.paused === true, output_scope: d.outputScope ?? [], group_take_scope: d.groupTakeScope ?? [] })), requireAuth: s.remoteAuthRequired })
+      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "viewer", paused: d.paused === true, output_scope: d.outputScope ?? [], group_take_scope: d.groupTakeScope ?? [] })), requireAuth: s.remoteAuthRequired })
     } catch (e) {
       if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
         const { toast } = await import("sonner")
@@ -119,7 +119,7 @@ function updateRemotePolicy(change: (current: SettingsState) => RemotePolicyPatc
     try {
       await invoke("remote_set_keys", {
         shared: next.remoteSecret.trim() || null,
-        devices: next.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure", paused: d.paused === true, output_scope: d.outputScope ?? [], group_take_scope: d.groupTakeScope ?? [] })),
+        devices: next.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "viewer", paused: d.paused === true, output_scope: d.outputScope ?? [], group_take_scope: d.groupTakeScope ?? [] })),
         requireAuth: next.remoteAuthRequired,
       })
       useSettingsStore.setState(patch)

@@ -521,6 +521,15 @@ impl HttpRuntime {
     }
 }
 
+/// Snapshot the host's current output configuration for commands that must authorize a named
+/// destination. A missing runtime, poisoned lock, or absent Live snapshot leaves the caller with
+/// no authority to act on an output.
+pub(crate) fn current_live_state(app: &AppHandle) -> Option<String> {
+    let state = app.try_state::<Mutex<HttpRuntime>>()?;
+    let runtime = state.lock().ok()?;
+    runtime.live.current()
+}
+
 impl Default for HttpRuntime {
     fn default() -> Self {
         Self::new()

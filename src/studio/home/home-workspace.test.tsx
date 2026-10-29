@@ -27,7 +27,7 @@ const slide = (id: string, over: Partial<QueueItem> = {}): QueueItem => ({
   ...over,
 } as QueueItem)
 
-describe("Home: skipped rundown items", () => {
+describe("Home workspace", () => {
   let element: HTMLDivElement
   let root: Root
 
@@ -41,8 +41,13 @@ describe("Home: skipped rundown items", () => {
     element.remove()
   })
 
-  async function render(items: QueueItem[], headers: OutlineHeader[], activeIndex: number | null) {
-    vi.mocked(useReadiness).mockReturnValue({
+  function readinessValue(
+    items: QueueItem[],
+    headers: OutlineHeader[],
+    activeIndex: number | null,
+    readiness: Partial<Pick<ReturnType<typeof useReadiness>, "ready" | "checks" | "current">> = {},
+  ) {
+    return {
       ready: false,
       checks: [],
       onAir: 0,
@@ -56,12 +61,32 @@ describe("Home: skipped rundown items", () => {
       outputs: [],
       setWorkspace: vi.fn(),
       openOutputs: vi.fn(),
-    } as unknown as ReturnType<typeof useReadiness>)
+      ...readiness,
+    } as unknown as ReturnType<typeof useReadiness>
+  }
+
+  async function renderHome(
+    items: QueueItem[],
+    headers: OutlineHeader[],
+    activeIndex: number | null,
+    readiness: Partial<Pick<ReturnType<typeof useReadiness>, "ready" | "checks" | "current">> = {},
+  ) {
+    vi.mocked(useReadiness).mockReturnValue(readinessValue(items, headers, activeIndex, readiness))
     element = document.createElement("div")
     document.body.appendChild(element)
     root = createRoot(element)
     await act(async () => root.render(<HomeWorkspace />))
-    return element.querySelector('section[aria-labelledby="glance"]')!
+    return element
+  }
+
+  async function render(items: QueueItem[], headers: OutlineHeader[], activeIndex: number | null) {
+    const home = await renderHome(items, headers, activeIndex)
+    return home.querySelector('section[aria-labelledby="glance"]')!
+  }
+
+  function readinessTile(home: HTMLElement) {
+    const label = [...home.querySelectorAll<HTMLParagraphElement>("p")].find((paragraph) => paragraph.textContent?.trim() === "Service readiness")
+    return label?.parentElement ?? null
   }
 
   it("marks skipped items and phases, and puts Next on the next runnable item", async () => {
@@ -143,5 +168,76 @@ describe("Home: skipped rundown items", () => {
     expect(entries[1].textContent).toContain("Hidden for this service")
     expect(entries[2].querySelector('[title="Planned time"]')?.textContent).toBe("10:04")
     expect(rows.textContent).not.toContain(" · next")
+  })
+
+  it("labels operational warnings as service readiness and excludes optional information from the count", async () => {
+    const home = await renderHome([], [], null, {
+      ready: false,
+      checks: [
+        { id: "scripture", status: "ok", label: "Scripture is available" },
+        { id: "camera", status: "warn", label: "Camera is not sending" },
+        { id: "obs-unused", status: "info", label: "OBS is optional when unused" },
+      ],
+    })
+
+    expect(readinessTile(home)).not.toBeNull()
+    expect(readinessTile(home)?.textContent).toContain("1of 2 checks")
+    expect(readinessTile(home)?.textContent).toContain("1 to check")
+    expect(home.querySelector('[aria-label="Service readiness checks"]')?.getAttribute("aria-valuemax")).toBe("2")
+    expect(home.textContent).toContain("Camera is not sending")
+    expect(home.textContent).toContain("OBS is optional when unused")
+    expect(home.textContent).toContain("1 other check is fine.")
+  })
+
+  it("shows that an open service is missing without counting optional equipment as a warning", async () => {
+    const home = await renderHome([], [], null, {
+      ready: false,
+      current: null,
+      checks: [
+        { id: "service", status: "warn", label: "No saved service is open" },
+        { id: "obs-unused", status: "info", label: "OBS is optional when unused" },
+      ],
+    })
+
+    expect(readinessTile(home)?.textContent).toContain("0of 1 check")
+    expect(readinessTile(home)?.textContent).toContain("1 to check")
+    expect(readinessTile(home)?.textContent).not.toContain("Ready to present")
+    expect(home.textContent).toContain("No saved service open")
+    expect(home.textContent).toContain("OBS is optional when unused")
+  })
+
+  it("shows the all-clear service readiness state", async () => {
+    const home = await renderHome([], [], null, {
+      ready: true,
+      checks: [
+        { id: "library", status: "ok", label: "Church library is available" },
+        { id: "outputs", status: "ok", label: "Configured outputs are ready" },
+      ],
+    })
+
+    expect(readinessTile(home)).not.toBeNull()
+    expect(readinessTile(home)?.textContent).toContain("2of 2 checks")
+    expect(readinessTile(home)?.textContent).toContain("Ready to present")
+  })
+
+  it("clears a connection warning when its operational check reports recovery", async () => {
+    const home = await renderHome([], [], null, {
+      ready: false,
+      checks: [{ id: "camera", status: "warn", label: "Camera is not sending" }],
+    })
+
+    expect(readinessTile(home)?.textContent).toContain("1 to check")
+    expect(home.textContent).toContain("Camera is not sending")
+
+    vi.mocked(useReadiness).mockReturnValue(readinessValue([], [], null, {
+      ready: true,
+      checks: [{ id: "camera", status: "ok", label: "Camera is sending" }],
+    }))
+    await act(async () => root.render(<HomeWorkspace />))
+
+    expect(readinessTile(home)?.textContent).toContain("1of 1 check")
+    expect(readinessTile(home)?.textContent).toContain("Ready to present")
+    expect(home.textContent).not.toContain("Camera is not sending")
+    expect(home.textContent).toContain("Camera is sending")
   })
 })

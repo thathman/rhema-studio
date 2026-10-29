@@ -268,6 +268,22 @@ describe("settings store", () => {
     expect([s.talkInputId, s.talkOutputId]).toEqual(["headset-mic", "headset-ears"])
   })
 
+  it("treats a saved device without a role as Viewer until the host assigns one", async () => {
+    const device = { hash: "a".repeat(64), name: "Legacy phone", paired_at: "2026-10-20T20:00:00Z" }
+    mockGet.mockImplementation(async (key: string) => key === "remoteDevices" ? [device] : undefined)
+
+    const { hydrateSettings, pushRemoteKeys, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+    await pushRemoteKeys()
+
+    expect(useSettingsStore.getState().remoteDevices).toEqual([device])
+    expect(mockRemoteInvoke).toHaveBeenLastCalledWith("remote_set_keys", {
+      shared: null,
+      devices: [{ hash: device.hash, name: device.name, role: "viewer", paused: false, output_scope: [], group_take_scope: [] }],
+      requireAuth: true,
+    })
+  })
+
   it("a new install requires a key on the network; a church that saved it off keeps it off", async () => {
     const { useSettingsStore: fresh } = await import("./settings-store")
     expect(fresh.getState().remoteAuthRequired).toBe(true)

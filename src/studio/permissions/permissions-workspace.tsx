@@ -110,8 +110,8 @@ export function PermissionsWorkspace() {
             {remoteDevices.length === 0 ? <p className="text-sm text-muted-foreground">No devices are paired. The studio works on this computer without them.</p> : (
               <ul className="divide-y divide-border">
                 {remoteDevices.map((device) => <li key={device.hash} className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
-                  <div className="min-w-0 flex-1"><p className="font-semibold">{device.name}</p><p className="text-xs text-muted-foreground">{roleLabel(device.role ?? "configure")} · paired {new Date(device.paired_at).toLocaleDateString()} · {device.paused ? "control paused" : "control available"}</p></div>
-                  <label className="flex items-center gap-2 text-xs"><span>Role</span><select aria-label={`Role for ${device.name}`} disabled={!isHost} value={device.role ?? "configure"} onChange={(event) => { const role = asRemoteRole(event.target.value); if (role) void useSettingsStore.getState().setRemoteDeviceRole(device.hash, role) }} className="h-8 max-w-48 rounded-md border border-border bg-background px-2">
+                  <div className="min-w-0 flex-1"><p className="font-semibold">{device.name}</p><p className="text-xs text-muted-foreground">{roleLabel(device.role ?? "viewer")}{device.role === undefined ? " · needs a role" : ""} · paired {new Date(device.paired_at).toLocaleDateString()} · {device.paused ? "control paused" : "control available"}</p></div>
+                  <label className="flex items-center gap-2 text-xs"><span>Role</span><select aria-label={`Role for ${device.name}`} disabled={!isHost} value={device.role ?? "viewer"} onChange={(event) => { const role = asRemoteRole(event.target.value); if (role) void useSettingsStore.getState().setRemoteDeviceRole(device.hash, role) }} className="h-8 max-w-48 rounded-md border border-border bg-background px-2">
                     {REMOTE_ROLES.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
                   </select></label>
                   {device.role === "screens" && <fieldset className="w-full rounded-md border border-border p-3">
