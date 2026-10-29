@@ -101,6 +101,14 @@ export interface PresentOptions {
   sourceOnly?: boolean
   /** Who activates it ("Auto", a joined desk); default: whoever is acting now (see currentActor). */
   by?: string
+  /** A queue Take may be cancelled if its service or selected rundown item changes while loading. */
+  isTargetCurrent?: () => boolean
+}
+
+type TargetGuard = { isTargetCurrent?: () => boolean }
+
+function targetIsCurrent(opts: TargetGuard): boolean {
+  return opts.isTargetCurrent?.() ?? true
 }
 
 /** Data-URL fill for a background picture, or null (missing file → no background, text still shows). */
@@ -153,6 +161,7 @@ export type PresentOutcome = "presented" | "superseded" | "empty" | "missing_tra
  * only the preview unless the Auto toggle is on.
  */
 export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Promise<PresentOutcome> {
+  if (!targetIsCurrent(opts)) return "superseded"
   if (!opts.follow && !opts.sourceOnly && reachesScreen(opts) && approvalHolds(() => void presentVerse(verse, opts))) return "held_for_approval"
   if (!opts.follow) presentSeq += 1
   const ticket = presentSeq
@@ -201,7 +210,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
   )
 
   // A newer present (or a Clear) started while we were refetching — let it win.
-  if (ticket !== presentSeq) return "superseded"
+  if (ticket !== presentSeq || !targetIsCurrent(opts)) return "superseded"
   if (opts.follow) {
     // A newer follow, or a different verse reached the screen meanwhile: that wins.
     const live = useBroadcastStore.getState().liveSourceVerse
@@ -268,8 +277,9 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
 export async function presentSlide(
   item: SongQueueItem,
   index: number | "last",
-  opts: { goLive?: boolean; song?: SongWithSections } = {}
+  opts: { goLive?: boolean; song?: SongWithSections; isTargetCurrent?: () => boolean } = {}
 ): Promise<PresentOutcome> {
+  if (!targetIsCurrent(opts)) return "superseded"
   if (reachesScreen(opts) && approvalHolds(() => void presentSlide(item, index, opts))) return "held_for_approval"
   presentSeq += 1
   const ticket = presentSeq
@@ -283,7 +293,7 @@ export async function presentSlide(
   } catch (e) {
     console.warn("[broadcast] song load failed:", e)
   }
-  if (ticket !== presentSeq) return "superseded"
+  if (ticket !== presentSeq || !targetIsCurrent(opts)) return "superseded"
   if (!song) {
     warn(`${item.song.title} not shown: the song is no longer in the library.`)
     return "empty"
@@ -297,7 +307,7 @@ export async function presentSlide(
   const i = index === "last" ? slides.length - 1 : Math.min(Math.max(index, 0), slides.length - 1)
   const slide = slides[i]
   const layer = await backgroundLayer(item.background)
-  if (ticket !== presentSeq) return "superseded"
+  if (ticket !== presentSeq || !targetIsCurrent(opts)) return "superseded"
   useBibleStore.getState().selectSlide({ item, index: i })
   // Keep the planned hymn identity even if its library metadata changes after it was added.
   const libraryNumbers = hymnNumbersFromLibrary(song.numbers)
@@ -328,7 +338,8 @@ export function toCustomSlideRenderData(item: SlideQueueItem): VerseRenderData {
  * Present a custom slide. Nothing to fetch, so it lands in one update; it
  * still takes a ticket so a verse or song that was loading cannot overtake it.
  */
-export async function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: boolean } = {}): Promise<PresentOutcome> {
+export async function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: boolean; isTargetCurrent?: () => boolean } = {}): Promise<PresentOutcome> {
+  if (!targetIsCurrent(opts)) return "superseded"
   if (reachesScreen(opts) && approvalHolds(() => void presentCustomSlide(item, opts))) return "held_for_approval"
   presentSeq += 1
   const ticket = presentSeq
@@ -354,7 +365,7 @@ export async function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: 
   } else if (item.background) {
     render = { ...data, ...(await backgroundLayer(item.background)) }
   }
-  if (ticket !== presentSeq) return "superseded"
+  if (ticket !== presentSeq || !targetIsCurrent(opts)) return "superseded"
   useBibleStore.getState().selectSlide({ item, index: 0 })
   useBroadcastStore.getState().setLiveVerse({ ...render, content: "slide" }, null, { goLive: opts.goLive, itemId: item.id, by })
   return "presented"
@@ -372,10 +383,12 @@ export function toImageRenderData(item: ImageQueueItem, url: string): VerseRende
  * An audio cue only plays locally. It has no public-screen payload and does
  * not enter the visual-present sequence, so it cannot supersede a pending Take.
  */
-export async function presentAudioCue(item: AudioQueueItem): Promise<PresentOutcome> {
-  useBibleStore.getState().selectSlide({ item, index: 0 })
+export async function presentAudioCue(item: AudioQueueItem, opts: TargetGuard = {}): Promise<PresentOutcome> {
+  if (!targetIsCurrent(opts)) return "superseded"
   const media = useMediaStore.getState()
   const asset = media.assets.find((a) => a.id === item.audio.media_id) ?? (await media.list()).find((a) => a.id === item.audio.media_id)
+  if (!targetIsCurrent(opts)) return "superseded"
+  useBibleStore.getState().selectSlide({ item, index: 0 })
   if (!asset || asset.kind !== "audio") {
     useBroadcastStore.getState().setPresentWarning(item.audio.name + " not played: this audio cue is missing from the local media library.")
     return "empty"
@@ -417,7 +430,8 @@ export async function presentAudioCue(item: AudioQueueItem): Promise<PresentOutc
  * it, then put it on air in one update. A missing file is reported and the
  * output left alone; a newer present or Clear supersedes a slow read.
  */
-export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolean } = {}): Promise<PresentOutcome> {
+export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolean; isTargetCurrent?: () => boolean } = {}): Promise<PresentOutcome> {
+  if (!targetIsCurrent(opts)) return "superseded"
   const media = useMediaStore.getState()
   const cached = media.assets.find((a) => a.id === item.image.media_id)
   // A wrong kind reference must never turn a visual Take into local playback.
@@ -430,6 +444,7 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
   const ticket = presentSeq
   const by = currentActor()
   const asset = cached ?? (await media.list()).find((a) => a.id === item.image.media_id)
+  if (!targetIsCurrent(opts)) return "superseded"
   if (asset?.kind === "audio") {
     useBroadcastStore.getState().setPresentWarning(item.image.name + " is an audio file. Add it as an audio cue to play it locally.")
     return "empty"
@@ -437,7 +452,7 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
   // A video asset streams to the outputs; nothing is decoded here.
   if (asset?.kind === "video") {
     const videoUrl = asset.present ? await media.fileUrl(asset.id).catch(() => null) : null
-    if (ticket !== presentSeq) return "superseded"
+    if (ticket !== presentSeq || !targetIsCurrent(opts)) return "superseded"
     if (!videoUrl) {
       useBroadcastStore.getState().setPresentWarning(`${item.image.name} not shown: the video file is missing from the media folder.`)
       return "empty"
@@ -453,7 +468,7 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
   } catch (e) {
     console.warn("[broadcast] picture load failed:", e)
   }
-  if (ticket !== presentSeq) return "superseded"
+  if (ticket !== presentSeq || !targetIsCurrent(opts)) return "superseded"
   if (!url) {
     useBroadcastStore.getState().setPresentWarning(`${item.image.name} not shown: the picture file is missing from the media folder.`)
     return "empty"

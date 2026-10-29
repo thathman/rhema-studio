@@ -66,9 +66,9 @@ function finishTakeAttempt(id: number, itemId: string | null, reference: string,
 }
 
 /** A reading armed "Bible feeds only": its Take activates the Bible source; the main screens keep what they show. */
-async function takeOnBibleFeeds(item: QueueItem): Promise<PresentOutcome> {
+async function takeOnBibleFeeds(item: QueueItem, isTargetCurrent: () => boolean): Promise<PresentOutcome> {
   if (!isVerseItem(item)) return "empty"
-  const outcome = await presentVerse(item.verse, { sourceOnly: true, item, itemId: item.id, background: item.background })
+  const outcome = await presentVerse(item.verse, { sourceOnly: true, item, itemId: item.id, background: item.background, isTargetCurrent })
   if (outcome === "presented") {
     if (useBroadcastStore.getState().rehearsal) toast.info("Rehearsal: the Bible feeds were not changed")
     else toast.success(`${item.reference} is on the Bible feeds`, { description: "This item is set to Bible feeds only in Prepare: the main screens keep what they show." })
@@ -78,6 +78,17 @@ async function takeOnBibleFeeds(item: QueueItem): Promise<PresentOutcome> {
 
 function sameSnapshot(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
+}
+
+/** Verse text is cache-filled on open; that enrichment doesn't change which rundown item a Take targets. */
+function sameTakeItem(left: QueueItem, right: QueueItem): boolean {
+  if (isVerseItem(left) && isVerseItem(right)) {
+    return sameSnapshot(
+      { ...left, verse: { ...left.verse, text: "" } },
+      { ...right, verse: { ...right.verse, text: "" } },
+    )
+  }
+  return sameSnapshot(left, right)
 }
 
 function matchesVerse(item: QueueItem, verse: Pick<Verse, "book_number" | "chapter" | "verse">): boolean {
@@ -189,6 +200,12 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
   const item = useQueueStore.getState().items[index]
   if (!item) return
   const id = item.id
+  const serviceId = useServiceStore.getState().current?.id ?? null
+  const isTargetCurrent = () => {
+    const currentServiceId = useServiceStore.getState().current?.id ?? null
+    const currentItem = useQueueStore.getState().items.find((candidate) => candidate.id === id)
+    return currentServiceId === serviceId && currentItem !== undefined && sameTakeItem(currentItem, item)
+  }
   // A cue-only moment (#193) shows nothing: taking it fires its cues; the screens keep what they show.
   if (isCueItem(item)) return takeCueItem(item, index)
   const sourceOnly = takesSourceOnly(item)
@@ -213,13 +230,13 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
   const took = afterTake(item, !opts.automatic && !isUp(item))
   try {
     let outcome: PresentOutcome
-    if (isAudioItem(item)) outcome = await presentAudioCue(item)
-    else if (isSlideItem(item)) outcome = await presentCustomSlide(item, { goLive: true })
-    else if (isImageItem(item)) outcome = await presentImage(item, { goLive: true })
+    if (isAudioItem(item)) outcome = await presentAudioCue(item, { isTargetCurrent })
+    else if (isSlideItem(item)) outcome = await presentCustomSlide(item, { goLive: true, isTargetCurrent })
+    else if (isImageItem(item)) outcome = await presentImage(item, { goLive: true, isTargetCurrent })
     else if (isSongItem(item)) {
       // Stepping within the live song keeps the arrangement it went live with.
       const songItem = songAs ? { ...item, song: { ...item.song, arrangement_id: songAs.arrangement_id, languages: songAs.languages } } : item
-      outcome = await presentSlide(songItem, slide, { goLive: true, song: songAs?.song })
+      outcome = await presentSlide(songItem, slide, { goLive: true, song: songAs?.song, isTargetCurrent })
     } else {
       // Navigate the Bible panel to the presented verse, as detections do.
       useBibleStore.getState().setPendingNavigation({
@@ -228,8 +245,8 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
         verse: item.verse.verse,
       })
       outcome = sourceOnly
-        ? await takeOnBibleFeeds(item)
-        : await presentVerse(item.verse, { item, goLive: true, itemId: item.id, background: item.background })
+        ? await takeOnBibleFeeds(item, isTargetCurrent)
+        : await presentVerse(item.verse, { item, goLive: true, itemId: item.id, background: item.background, isTargetCurrent })
     }
     finishTakeAttempt(attemptId, id, item.reference, outcome, positionGeneration)
     took(outcome)
@@ -405,6 +422,9 @@ function sendToLivePreview(
   bible: ReturnType<typeof useBibleStore.getState>,
   queue: ReturnType<typeof useQueueStore.getState>,
 ): Promise<void> {
+  const serviceId = useServiceStore.getState().current?.id ?? null
+  const isTargetCurrent = () =>
+    (useServiceStore.getState().current?.id ?? null) === serviceId && sendToLivePreviewIsCurrent(bible, queue)
   // A cue-only moment in Preview: Take fires its cues and shows nothing, so approval is not asked (#193).
   const cue = bible.selectedSlide?.item
   if (cue && isCueItem(cue)) {
@@ -427,7 +447,7 @@ function sendToLivePreview(
         attemptId,
         idx === -1 ? null : item.id,
         queueItem.reference,
-        () => sendToLivePreviewIsCurrent(bible, queue),
+        isTargetCurrent,
         () => void sendToLivePreview(bible, queue),
       ))
     ) {
@@ -437,13 +457,13 @@ function sendToLivePreview(
     const positionGeneration = isSoundItem(item) || sourceOnly ? latestVisualTake : ++latestVisualTake
     const took = afterTake(queueItem, !isUp(item))
     const presenting: Promise<PresentOutcome> = isAudioItem(item)
-      ? presentAudioCue(item)
+      ? presentAudioCue(item, { isTargetCurrent })
       : isSlideItem(item)
-        ? presentCustomSlide(item, { goLive: true })
+        ? presentCustomSlide(item, { goLive: true, isTargetCurrent })
       : isImageItem(item)
-        ? presentImage(item, { goLive: true })
+        ? presentImage(item, { goLive: true, isTargetCurrent })
         : isSongItem(item)
-          ? presentSlide(item, index, { goLive: true, song: stillLive ? song : undefined })
+          ? presentSlide(item, index, { goLive: true, song: stillLive ? song : undefined, isTargetCurrent })
           : Promise.resolve<PresentOutcome>("empty")
     return presenting.then((outcome) => {
       finishTakeAttempt(attemptId, idx === -1 ? null : item.id, queueItem.reference, outcome, positionGeneration)
@@ -471,7 +491,7 @@ function sendToLivePreview(
       attemptId,
       itemId,
       reference,
-      () => sendToLivePreviewIsCurrent(bible, queue),
+      isTargetCurrent,
       () => void sendToLivePreview(bible, queue),
     ))
   ) {
@@ -481,7 +501,7 @@ function sendToLivePreview(
   const positionGeneration = sourceOnly ? latestVisualTake : ++latestVisualTake
   const took = rundownItem ? afterTake(rundownItem, !isUp(rundownItem)) : () => {}
   // A reading armed "Bible feeds only" in Prepare: Take live sends it there, in its own translations.
-  if (rundownItem && sourceOnly) return takeOnBibleFeeds(rundownItem).then((outcome) => {
+  if (rundownItem && sourceOnly) return takeOnBibleFeeds(rundownItem, isTargetCurrent).then((outcome) => {
     finishTakeAttempt(attemptId, itemId, reference, outcome, positionGeneration)
     took(outcome)
   }).catch((e) => {
@@ -498,6 +518,7 @@ function sendToLivePreview(
       translation: previewed,
       secondary_translation: rundownItem && isVerseItem(rundownItem) ? (rundownItem.secondary_translation ?? null) : null,
     },
+    isTargetCurrent,
   }).then((outcome) => {
     finishTakeAttempt(attemptId, itemId, reference, outcome, positionGeneration)
     took(outcome)

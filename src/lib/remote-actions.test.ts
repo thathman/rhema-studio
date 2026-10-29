@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { AudioQueueItem, QueueItem, SlideQueueItem, Verse } from "@/types"
+import type { AudioQueueItem, ProgramWithItems, QueueItem, SlideQueueItem, Verse } from "@/types"
 
 const mockInvoke = vi.fn()
 
@@ -152,6 +152,22 @@ describe("remoteActions.sendToLive", () => {
 
     expect(useBroadcastStore.getState().liveVerse).toBeNull()
     expect(mockInvoke).not.toHaveBeenCalledWith("get_verse", expect.anything())
+  })
+
+  it("does not take the old Preview after selection changes while Send to Live is loading", async () => {
+    useBibleStore.setState({ selectedVerse: johnThreeSixteen, selectedQueueItemId: null })
+    let resolveVerse!: (verse: Verse | null) => void
+    mockInvoke.mockImplementation((cmd: unknown) =>
+      cmd === "get_verse" ? new Promise<Verse | null>((resolve) => { resolveVerse = resolve }) : Promise.resolve(null),
+    )
+
+    const sending = remoteActions.sendToLive()
+    useBibleStore.setState({ selectedVerse: { ...johnThreeSixteen, verse: 17, text: "Preview changed" } })
+    resolveVerse(johnThreeSixteen)
+    await sending
+
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useTakeAttemptStore.getState().attempts.at(-1)).toMatchObject({ reference: "John 3:16", status: "superseded" })
   })
 
   it("does not require approval to Send to Live for a typed audio item", async () => {
@@ -715,6 +731,99 @@ describe("queue position follows successful Takes", () => {
 
     expect(useQueueStore.getState().items[useQueueStore.getState().activeIndex ?? -1]?.id).toBe(next.id)
     expect(useQueueStore.getState().activeIndex).toBe(0)
+  })
+
+  it("does not let an in-flight Take from the old service reach Program after another service opens", async () => {
+    const oldItem = queueItemFor(johnThreeSixteen)
+    const nextService: ProgramWithItems = {
+      program: {
+        id: "service-b",
+        title: "Next service",
+        service_date: null,
+        revision: 1,
+        created_at: "",
+        updated_at: "",
+        item_count: 1,
+      },
+      items: [{
+        id: "service-b-item",
+        program_id: "service-b",
+        position: 0,
+        kind: "verse",
+        reference: "Genesis 1:1",
+        book_number: 1,
+        chapter: 1,
+        verse: 1,
+        translation: null,
+        secondary_translation: null,
+        notes: null,
+        payload: null,
+      }],
+    }
+    useQueueStore.setState({ items: [oldItem], activeIndex: null })
+    useBroadcastStore.setState({ liveItemId: null, liveSlide: null })
+    useServiceStore.setState({
+      current: { id: "service-a", title: "Current service" } as never,
+      dirty: false,
+      loading: false,
+    })
+
+    let resolveOldVerse!: (verse: Verse | null) => void
+    mockInvoke.mockImplementation((cmd: unknown, args?: { verse?: number }) => {
+      if (cmd === "content_get_program") return Promise.resolve(nextService)
+      if (cmd !== "get_verse") return Promise.resolve(null)
+      if (args?.verse === 16) return new Promise<Verse | null>((resolve) => { resolveOldVerse = resolve })
+      return Promise.resolve({ ...genesisOneOne, text: "New service content" })
+    })
+
+    const taking = presentQueueItem(0)
+    await expect(useServiceStore.getState().openProgram("service-b")).resolves.toBe("ok")
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["service-b-item"])
+
+    resolveOldVerse(johnThreeSixteen)
+    await taking
+
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useBroadcastStore.getState().liveItemId).toBeNull()
+    expect(useTakeAttemptStore.getState().attempts.at(-1)).toMatchObject({ itemId: oldItem.id, status: "superseded" })
+  })
+
+  it("does not take an item removed from the rundown while its content is loading", async () => {
+    const removedItem = queueItemFor(johnThreeSixteen)
+    useQueueStore.setState({ items: [removedItem], activeIndex: null })
+    useBroadcastStore.setState({ liveItemId: null, liveSlide: null })
+    let resolveVerse!: (verse: Verse | null) => void
+    mockInvoke.mockImplementation((cmd: unknown) =>
+      cmd === "get_verse" ? new Promise<Verse | null>((resolve) => { resolveVerse = resolve }) : Promise.resolve(null),
+    )
+
+    const taking = presentQueueItem(0)
+    useQueueStore.getState().removeItem(removedItem.id)
+    resolveVerse(johnThreeSixteen)
+    await taking
+
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useBroadcastStore.getState().liveItemId).toBeNull()
+    expect(useTakeAttemptStore.getState().attempts.at(-1)).toMatchObject({ itemId: removedItem.id, status: "superseded" })
+  })
+
+  it("allows a pending Take when only the verse's cached text is backfilled", async () => {
+    const verseWithoutText = { ...johnThreeSixteen, text: "" }
+    const item = queueItemFor(verseWithoutText)
+    useQueueStore.setState({ items: [item], activeIndex: null })
+    let resolveVerse!: (verse: Verse | null) => void
+    mockInvoke.mockImplementation((cmd: unknown) =>
+      cmd === "get_verse" ? new Promise<Verse | null>((resolve) => { resolveVerse = resolve }) : Promise.resolve(null),
+    )
+
+    const taking = presentQueueItem(0)
+    useQueueStore.getState().backfillText(item.id, "Cached text from service open")
+    resolveVerse(johnThreeSixteen)
+    await taking
+
+    expect(useBroadcastStore.getState().isLive).toBe(true)
+    expect(useBroadcastStore.getState().liveItemId).toBe(item.id)
+    expect(useTakeAttemptStore.getState().attempts.at(-1)).toMatchObject({ itemId: item.id, status: "succeeded" })
   })
 
   it("publishes pending and completed Take status separately from the program and event clock", async () => {
