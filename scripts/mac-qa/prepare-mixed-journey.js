@@ -521,12 +521,45 @@ async function runScenario() {
     await waitFor(() => !qa.service.getState().dirty && !qa.service.getState().saving, "service save to finish")
     if (qa.service.getState().current?.id !== serviceId) throw new Error("Saving changed the service ID")
 
-    stage = "close and reopen the saved service"
+    stage = "continue the open service from Home"
+    await clickButton("Home")
+    const homeOpenService = await waitFor(
+      () => [...document.querySelectorAll("#services li")].find((row) => normal(row.innerText).startsWith(serviceTitle)),
+      "saved service summary on Home",
+    )
+    if (!normal(homeOpenService.innerText).includes(`${expectedIds.length} item${expectedIds.length === 1 ? "" : "s"}`)) {
+      throw new Error(`Home shows the wrong saved service item count: ${normal(homeOpenService.innerText)}`)
+    }
+    if (![...homeOpenService.querySelectorAll("span")].some((label) => normal(label.innerText) === "open")) {
+      throw new Error(`Home does not identify the current service as open: ${normal(homeOpenService.innerText)}`)
+    }
+    const continueFromHome = await waitFor(
+      () => buttons().find((button) => normal(button.innerText).includes(baseline.reference)),
+      "service rundown item to continue from Home",
+    )
+    await activateButton(continueFromHome)
+    await waitFor(() => qa.shell.getState().workspace === "prepare" && qa.service.getState().current?.id === serviceId, "Home continuation back to the open service in Prepare")
+    if (JSON.stringify(qa.queue.getState().items.map((item) => item.id)) !== JSON.stringify(expectedIds)) {
+      throw new Error("Continuing from Home changed the open service item IDs or order")
+    }
+
+    stage = "close the service and reopen it from Home's saved-services list"
     await clickButton("Close service")
     await waitFor(() => qa.service.getState().current === null, "service to close")
-    await clickButton("Service")
-    await chooseOption(serviceTitle)
-    await waitFor(() => qa.service.getState().current?.id === serviceId, "saved service to reopen")
+    await clickButton("Home")
+    const homeClosedService = await waitFor(
+      () => [...document.querySelectorAll("#services li")].find((row) => normal(row.innerText).startsWith(serviceTitle)),
+      "closed service in Home's saved-services list",
+    )
+    if (!normal(homeClosedService.innerText).includes(`${expectedIds.length} item${expectedIds.length === 1 ? "" : "s"}`)) {
+      throw new Error(`Home shows the wrong saved service item count after close: ${normal(homeClosedService.innerText)}`)
+    }
+    const openFromHome = [...homeClosedService.querySelectorAll("button")].find((button) => normal(button.innerText) === "Open")
+    if (!openFromHome) throw new Error(`Home has no Open action for the saved service: ${normal(homeClosedService.innerText)}`)
+    await activateButton(openFromHome)
+    await waitFor(() => qa.service.getState().current?.id === serviceId, "saved service to reopen from Home")
+    await clickButton("Prepare")
+    await waitFor(() => qa.shell.getState().workspace === "prepare" && qa.service.getState().current?.id === serviceId, "reopened service in Prepare")
     const reopened = qa.queue.getState()
     const reopenedIds = reopened.items.map((item) => item.id)
     if (JSON.stringify(reopenedIds) !== JSON.stringify(expectedIds)) throw new Error(`Saved service changed item IDs/order: ${JSON.stringify(reopenedIds)}`)
