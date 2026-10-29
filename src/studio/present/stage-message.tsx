@@ -1,10 +1,11 @@
-import { useState } from "react"
-import { MessageSquareIcon, SendIcon, XIcon } from "lucide-react"
+import { MessageSquareIcon, PaletteIcon, SendIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useBroadcastStore } from "@/stores"
 import { cn } from "@/lib/utils"
+import { useShellStore } from "@/studio/shell-store"
+import { usePresentDraftsStore } from "@/studio/present/present-drafts-store"
 
 const QUICK = ["Wrap up", "2 minutes left", "One more time", "Softer, please", "Mic is off"]
 
@@ -12,7 +13,8 @@ const QUICK = ["Wrap up", "2 minutes left", "One more time", "Softer, please", "
 export function StageMessage() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const message = useBroadcastStore((s) => s.stageMessage)
-  const [draft, setDraft] = useState("")
+  const draft = usePresentDraftsStore((s) => s.stageMessage)
+  const setDraft = usePresentDraftsStore((s) => s.setStageMessage)
   const hasStage = outputs.some((o) => o.role === "stage")
   if (!hasStage) return null
   const send = (text: string) => {
@@ -51,6 +53,16 @@ export function StageMessage() {
             <Button key={q} variant="outline" size="xs" onClick={() => send(q)}>{q}</Button>
           ))}
         </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-2 w-full"
+          title="Design the stage display"
+          onClick={() => useShellStore.getState().openDesign("stage")}
+        >
+          <PaletteIcon /> Design stage display…
+        </Button>
         {message && (
           <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={() => send("")}><XIcon /> Clear "{message}"</Button>
         )}

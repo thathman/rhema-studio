@@ -1,5 +1,4 @@
-import { useState } from "react"
-import { AlarmClockIcon, PauseIcon, PlayIcon, PlusIcon, RotateCcwIcon, XIcon } from "lucide-react"
+import { AlarmClockIcon, PaletteIcon, PauseIcon, PlayIcon, PlusIcon, RotateCcwIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -9,6 +8,12 @@ import { cn } from "@/lib/utils"
 import { MAX_AUX_TIMERS, useAuxTimers } from "@/stores/aux-timers-store"
 import { useServiceStore } from "@/stores/service-store"
 import { REMOTE_ROLES } from "@/lib/remote-roles"
+import { useShellStore } from "@/studio/shell-store"
+import {
+  EMPTY_AUX_TIMER_DRAFT,
+  NO_SERVICE_TIMER_DRAFT_KEY,
+  usePresentDraftsStore,
+} from "@/studio/present/present-drafts-store"
 
 /** Roles a timer can belong to: the specialist desks (the timekeeping desks run every timer anyway). */
 const OWNERS = REMOTE_ROLES.filter((r) => !["timekeeper", "present", "configure", "obs-companion"].includes(r.id))
@@ -52,15 +57,24 @@ export function AuxTimersPanel() {
   const timers = useAuxTimers((s) => s.timers)
   useAuxTimers((s) => s.tick)
   const now = monotonicNow()
-  const [label, setLabel] = useState("")
-  const [minutes, setMinutes] = useState("5")
-  const [owner, setOwner] = useState("")
+  const serviceId = useServiceStore((s) => s.current?.id ?? null)
+  const draft = usePresentDraftsStore(
+    (s) =>
+      s.auxTimerDrafts[
+        serviceId ?? NO_SERVICE_TIMER_DRAFT_KEY
+      ] ?? EMPTY_AUX_TIMER_DRAFT,
+  )
+  const { label, minutes, owner } = draft
+  const updateAuxTimer = usePresentDraftsStore((s) => s.updateAuxTimer)
   const service = useServiceStore((s) => s.current?.title ?? null)
   const add = () => {
     const m = Number(minutes)
     if (!label.trim() || !(m > 0)) return
+    const countBeforeAdd = useAuxTimers.getState().timers.length
     useAuxTimers.getState().add(label, m, owner)
-    setLabel("")
+    if (useAuxTimers.getState().timers.length > countBeforeAdd) {
+      usePresentDraftsStore.getState().updateAuxTimer(serviceId, { label: "" })
+    }
   }
   return (
     <>
@@ -88,15 +102,27 @@ export function AuxTimersPanel() {
     )}
     {timers.length < MAX_AUX_TIMERS ? (
       <form className="flex items-center gap-1.5" onSubmit={(e) => { e.preventDefault(); add() }}>
-        <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Communion prep" maxLength={40} aria-label="New timer name" className="h-8 flex-1 text-xs" />
-        <Input value={minutes} onChange={(e) => setMinutes(e.target.value)} type="number" min={0.5} max={600} step={0.5} aria-label="Minutes" className="h-8 w-16 text-xs" />
+        <Input value={label} onChange={(e) => updateAuxTimer(serviceId, { label: e.target.value })} placeholder="Communion prep" maxLength={40} aria-label="New timer name" className="h-8 flex-1 text-xs" />
+        <Input value={minutes} onChange={(e) => updateAuxTimer(serviceId, { minutes: e.target.value })} type="number" min={0.5} max={600} step={0.5} aria-label="Minutes" className="h-8 w-16 text-xs" />
         <span className="text-xs text-muted-foreground">min</span>
-        <OwnerSelect label="Who runs the new timer" value={owner} onChange={setOwner} />
+        <OwnerSelect label="Who runs the new timer" value={owner} onChange={(value) => updateAuxTimer(serviceId, { owner: value })} />
         <Button size="sm" type="submit" disabled={!label.trim() || !(Number(minutes) > 0)}><PlusIcon /> Add</Button>
       </form>
     ) : (
       <p className="text-xs text-muted-foreground">Up to {MAX_AUX_TIMERS} timers; remove one to add another.</p>
     )}
+    <div className="mt-3 border-t border-border pt-3">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="w-full"
+        title="Design the countdown display"
+        onClick={() => useShellStore.getState().openDesign("countdown")}
+      >
+        <PaletteIcon /> Design countdown display…
+      </Button>
+    </div>
     </>
   )
 }
