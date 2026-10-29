@@ -213,6 +213,7 @@ impl ContentDb {
             // Accept only the exact manifest stored as the immediately following approved
             // revision; all other stale approvals remain conflicts.
             if let Some(program) = approved_refresh_retry(&tx, program_id, expected_revision, actual_revision, current_approved_revision, designs)? {
+                check_design_pins(&tx, program_id, designs)?;
                 tx.commit()?;
                 return Ok(program);
             }
@@ -232,6 +233,7 @@ impl ContentDb {
                     ContentError::Corrupt(format!("approved designs for {program_id} v{expected_revision}: {e}"))
                 })?;
                 if &captured == designs {
+                    check_design_pins(&tx, program_id, designs)?;
                     let program = load_program(&tx, program_id)?.ok_or_else(|| ContentError::NotFound(program_id.into()))?;
                     tx.commit()?;
                     return Ok(program);
@@ -514,6 +516,18 @@ mod tests {
         let err = db.approve_program_with_designs(&q.program.id, q.program.revision, &manifest(serde_json::json!({}))).unwrap_err();
         assert!(matches!(&err, ContentError::Invalid(m) if m.contains("item \"Welcome\"") && m.contains("v3")), "{err:?}");
         assert_eq!(db.get_program(&q.program.id).unwrap().unwrap().program.approved_revision, None);
+
+        // A repeated or retried approval never reports success once a pinned version is gone
+        // (e.g. a partial restore).
+        let same = manifest(scenes(serde_json::json!(1)));
+        let p = db.get_program(&p.id).unwrap().unwrap().program;
+        let approved = db.approve_program_with_designs(&p.id, p.revision, &same).unwrap();
+        {
+            let conn = db.lock().unwrap();
+            conn.execute_batch(&format!("DROP TRIGGER design_versions_immutable_delete; DELETE FROM design_versions WHERE design_id = '{}';", design.id)).unwrap();
+        }
+        let err = db.approve_program_with_designs(&p.id, approved.revision, &same).unwrap_err();
+        assert!(matches!(&err, ContentError::Invalid(m) if m.contains("does not have")), "{err:?}");
     }
 
     #[test]
