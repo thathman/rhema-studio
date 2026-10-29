@@ -31,6 +31,7 @@ impl Default for RemoteKeys {
 enum RemoteAccessChange {
     Revoked,
     RoleChanged { from: Role, to: Role },
+    OutputScopeChanged { added: Vec<String>, removed: Vec<String> },
 }
 
 /// Changes suitable for a local audit log. Credentials and operator-entered device names stay out.
@@ -41,6 +42,10 @@ fn remote_access_changes(previous: &[KeyEntry], current: &[KeyEntry]) -> Vec<Rem
             Some(new) if new.role != old.role => Some(RemoteAccessChange::RoleChanged {
                 from: old.role,
                 to: new.role,
+            }),
+            Some(new) if new.output_scope != old.output_scope => Some(RemoteAccessChange::OutputScopeChanged {
+                added: new.output_scope.iter().filter(|id| !old.output_scope.contains(id)).cloned().collect(),
+                removed: old.output_scope.iter().filter(|id| !new.output_scope.contains(id)).cloned().collect(),
             }),
             Some(_) => None,
             None => Some(RemoteAccessChange::Revoked),
@@ -56,7 +61,7 @@ fn remote_access_changes(previous: &[KeyEntry], current: &[KeyEntry]) -> Vec<Rem
 pub fn remote_set_keys(app: AppHandle, remote: State<'_, RemoteKeys>, shared: Option<String>, devices: Vec<KeyEntry>, require_auth: Option<bool>) -> Result<usize, String> {
     let mut entries: Vec<KeyEntry> = devices.into_iter().filter(|d| d.hash.len() == 64).collect();
     if let Some(s) = shared.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
-        entries.push(KeyEntry { hash: hash_key(&s), name: "Shared key".into(), role: Role::Configure, paused: false });
+        entries.push(KeyEntry { hash: hash_key(&s), name: "Shared key".into(), role: Role::Configure, paused: false, output_scope: Vec::new() });
     }
     let n = entries.len();
     let previous = remote.keys.read().map_err(|e| e.to_string())?.entries.clone();
@@ -73,6 +78,7 @@ pub fn remote_set_keys(app: AppHandle, remote: State<'_, RemoteKeys>, shared: Op
                 from.as_str(),
                 to.as_str()
             ),
+            RemoteAccessChange::OutputScopeChanged { added, removed } => log::info!("Remote device output scope changed: added {:?}, removed {:?}", added, removed),
             RemoteAccessChange::Revoked => log::info!("Remote access credential revoked"),
         }
     }
@@ -243,6 +249,7 @@ impl Default for OscRuntime {
 pub async fn start_osc(
     app: AppHandle,
     state: State<'_, Mutex<OscRuntime>>,
+    http: State<'_, Mutex<HttpRuntime>>,
     remote: State<'_, RemoteKeys>,
     port: Option<u16>,
     lan: Option<bool>,
@@ -254,10 +261,12 @@ pub async fn start_osc(
     }
 
     let lan = lan.unwrap_or(true);
+    let live = http.lock().map_err(|e| e.to_string())?.live.clone();
     let config = OscConfig {
         port: port.unwrap_or(8000),
         host: bind_host(Some(lan)).into(),
         keys: remote.keys.clone(),
+        live,
     };
 
     let sink = Arc::new(TauriSink { app });
@@ -818,6 +827,7 @@ mod tests {
             name: "private label".into(),
             role: Role::Present,
             paused: false,
+            output_scope: Vec::new(),
         });
         let status = remote_auth_status(&keys).unwrap();
         assert!(status.required);
@@ -831,13 +841,16 @@ mod tests {
             name: name.into(),
             role,
             paused: false,
+            output_scope: Vec::new(),
         };
         let previous = [
             entry('a', "Private phone label", Role::Configure),
-            entry('b', "Another device", Role::Present),
+            KeyEntry { output_scope: vec!["sanctuary".into()], ..entry('b', "Another device", Role::Screens) },
+            entry('d', "Revoked device", Role::Present),
         ];
         let current = [
             entry('a', "Private phone label", Role::Screens),
+            KeyEntry { output_scope: vec!["overflow".into()], ..entry('b', "Another device", Role::Screens) },
             entry('c', "New device", Role::Present),
         ];
 
@@ -848,6 +861,7 @@ mod tests {
                     from: Role::Configure,
                     to: Role::Screens,
                 },
+                RemoteAccessChange::OutputScopeChanged { added: vec!["overflow".into()], removed: vec!["sanctuary".into()] },
                 RemoteAccessChange::Revoked,
             ]
         );

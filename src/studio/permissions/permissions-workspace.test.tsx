@@ -40,6 +40,26 @@ beforeEach(async () => {
 })
 
 describe("Permissions workspace", () => {
+  it("requires host review for legacy Screens scopes and allows only congregation output grants", async () => {
+    useSettingsStore.setState({ remoteDevices: [{ hash: "screen-hash", name: "Screens tablet", paired_at: "2026-10-01T00:00:00Z", role: "screens" }] })
+    useBroadcastStore.setState({ outputs: [
+      { id: "main", name: "Sanctuary", type: "display", themeId: "classic-dark", monitorIndex: 0 },
+      { id: "overflow", name: "Overflow", type: "ndi", themeId: "classic-dark", monitorIndex: 0 },
+      { id: "stage", name: "Stage Confidence", type: "display", role: "stage", themeId: "classic-dark", monitorIndex: 0 },
+      { id: "lobby", name: "Lobby", type: "display", role: "signage", themeId: "classic-dark", monitorIndex: 0 },
+    ] as never })
+    const el = await mount()
+    expect(el.textContent).toContain("Legacy Screens access needs scope review")
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Sanctuary output access for Screens tablet"]')).not.toBeNull()
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Overflow output access for Screens tablet"]')).not.toBeNull()
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Stage Confidence output access for Screens tablet"]')).toBeNull()
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Lobby output access for Screens tablet"]')).toBeNull()
+
+    await act(async () => el.querySelector<HTMLInputElement>('input[aria-label="Sanctuary output access for Screens tablet"]')!.click())
+    expect(useSettingsStore.getState().remoteDevices[0]?.outputScope).toEqual(["main"])
+    await act(async () => root.unmount())
+  })
+
   it("accepts a saved request on the host and applies the scene without taking it live", async () => {
     await createSceneEditApproval({
       scene: { id: "remote-scene", name: "Remote scene", background: "#000000", createdAt: 1, updatedAt: 2, layers: [] },

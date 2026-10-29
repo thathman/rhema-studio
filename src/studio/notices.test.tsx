@@ -8,11 +8,13 @@ import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { invoke } from "@tauri-apps/api/core"
 import { buildLiveState, type LiveStateV1 } from "@/lib/live-state"
-import { asAction, asTarget, isFor, sceneTargets, useNotices } from "@/stores/notices-store"
+import { asAction, asTarget, isFor, useNotices } from "@/stores/notices-store"
 import { useJoin } from "@/stores/join-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { OperatorsPanel } from "@/studio/production/operators-panel"
 import { NoticesPanel } from "./notices-panel"
+import { runSceneNoticeAction } from "./notice-scene-action"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 
 const buttonNamed = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === text)!
 
@@ -20,6 +22,20 @@ const buttonNamed = (el: HTMLElement, text: string) => [...el.querySelectorAll("
 beforeEach(() => useNotices.setState({ notices: [], read: [] }))
 
 describe("production notices", () => {
+  it("never expands a scene notice into multiple output Takes", async () => {
+    const previous = useBroadcastStore.getState()
+    const takeScene = vi.fn()
+    useBroadcastStore.setState({
+      scenes: [{ id: "split", name: "Sermon split", layers: [] } as never],
+      outputs: [{ id: "main", name: "Sanctuary", sceneId: "welcome" }, { id: "overflow", name: "Overflow", sceneId: "welcome" }] as never,
+      takeScene: takeScene as never,
+    })
+    const reason = runSceneNoticeAction("split")
+    expect(reason).toContain("choose one output")
+    expect(takeScene).not.toHaveBeenCalled()
+    useBroadcastStore.setState(previous, true)
+  })
+
   it("are addressed, bounded and answered once per person", () => {
     const n = useNotices.getState().send({ from: "Femi (timekeeper)", to: "host", priority: "urgent", text: "  Five minutes over  " })!
     expect(n).toMatchObject({ to: "host", priority: "urgent", text: "Five minutes over" })
@@ -77,8 +93,6 @@ describe("production notices", () => {
     expect(onAction).toHaveBeenCalledWith({ kind: "bible", value: "Romans 8:28" }, "show")
     expect(onAnswer).toHaveBeenCalledWith(n.id, "ready")
     // A scene request switches the outputs already showing a scene, else the main output.
-    expect(sceneTargets([{ id: "main", sceneId: null }, { id: "obs", sceneId: "s1" }])).toEqual(["obs"])
-    expect(sceneTargets([{ id: "side" }, { id: "main" }])).toEqual(["main"])
   })
 
   it("a refused action request answers Unable and shows the host's reason, not Ready", async () => {
@@ -88,7 +102,7 @@ describe("production notices", () => {
       v: 1, at: 0, church: "CAC", service: null, program: { onAir: false, reference: null, rehearsal: false }, sources: [], event: { mode: "own", currentId: null }, rundown: [], timing: null, stageMessage: "",
       scenes: [{ id: "split", name: "Sermon split" }], outputs: [{ id: "main", name: "Projector", sceneId: null }], notices: [n],
     }
-    const why = "this device runs the Bible: it may activate, step and clear the Bible only"
+    const why = "This request did not change any output. The host must choose one output in Scenes; group Take is unavailable."
     const sent: { command: string; value?: unknown }[] = []
     vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
       if (cmd !== "join_command") return null
@@ -104,17 +118,11 @@ describe("production notices", () => {
     await act(async () => buttonNamed(el, "Take Sermon split").click())
     // The reason goes with the answer, for whoever asked (#251).
     await vi.waitFor(() => expect(sent.at(-1)).toEqual({ command: "notice_ack", value: { id: n.id, state: "unable" }, why: `“Take Sermon split”: ${why}` }))
-    expect(sent.map((c) => c.command)).toEqual(["take_scene", "notice_ack"])
+    expect(sent.map((c) => c.command)).toEqual(["notice_ack"])
     expect(el.querySelector('[aria-label="Notices desk"] [role="alert"]')?.textContent).toContain(why)
 
-    // Done by the host: Ready, and the reason goes.
-    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
-      if (cmd === "join_command") sent.push((args as { command: { command: string } }).command)
-      return null
-    })
-    await act(async () => buttonNamed(el, "Take Sermon split").click())
-    await vi.waitFor(() => expect(sent.at(-1)).toEqual({ command: "notice_ack", value: { id: n.id, state: "ready" } }))
-    expect(el.querySelector('[aria-label="Notices desk"] [role="alert"]')).toBeNull()
+    expect(sent.some((c) => c.command === "take_scene")).toBe(false)
+    expect(el.querySelector('[aria-label="Notices desk"] [role="alert"]')?.textContent).toContain("group Take is unavailable")
     vi.mocked(invoke).mockImplementation(async () => null)
     useJoin.setState({ status: "off", live: null, me: null })
   })

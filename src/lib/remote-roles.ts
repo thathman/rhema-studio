@@ -9,7 +9,7 @@ export const REMOTE_ROLES: readonly { id: RemoteRole; name: string; may: string 
   { id: "timekeeper", name: "Timekeeper", may: "Moves the event clock and the service timer, and holds or resumes the service. Never a screen." },
   { id: "bible", name: "Bible", may: "Activates, steps through and takes off the Bible only." },
   { id: "worship", name: "Worship", may: "Shows or previews songs and hymns from the host's library, and takes the lyrics off and back." },
-  { id: "screens", name: "Screens", may: "Takes and releases congregation scenes, and makes or changes scenes. A change to a scene on a screen waits for the main desk." },
+  { id: "screens", name: "Screens", may: "Takes and releases only host-assigned congregation outputs, one output at a time, and makes or changes scenes. Group Take is unavailable; a change to an on-screen scene waits for the main desk." },
   { id: "stage", name: "Stage", may: "Writes, takes off and puts back the stage message. Nothing the congregation sees." },
   { id: "camera", name: "Camera", may: "Answers camera-ready requests, hides a camera from scenes or shows it again, and changes the camera boxes in scenes." },
   { id: "obs", name: "OBS director", may: "Switches OBS scenes through the host's own OBS connection (Preview, Take or switch). Never in rehearsal." },

@@ -571,7 +571,9 @@ pub fn live_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String {
         hidden.push("graphicsQueue");
     }
     hidden.retain(|k| filtered.contains(&format!("\"{k}\"")));
-    if !scenes && hidden.is_empty() {
+    let scopes_outputs = reader.role == crate::keys::Role::Screens
+        && (filtered.contains("\"outputs\"") || filtered.contains("\"outputMap\""));
+    if !scenes && hidden.is_empty() && !scopes_outputs {
         return filtered;
     }
     let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&filtered) else { return filtered };
@@ -584,6 +586,23 @@ pub fn live_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String {
         for scene in v.get_mut("scenes").and_then(serde_json::Value::as_array_mut).into_iter().flatten() {
             if let Some(o) = scene.as_object_mut() {
                 o.retain(|k, _| matches!(k.as_str(), "id" | "name" | "onScreen"));
+            }
+        }
+    }
+    if reader.role == crate::keys::Role::Screens {
+        for field in ["outputs", "outputMap"] {
+            if let Some(value) = v.get_mut(field) {
+                if let Some(outputs) = value.as_array_mut() {
+                    outputs.retain(|output| {
+                        output.get("id").and_then(serde_json::Value::as_str).is_some_and(|id| {
+                            reader.output_scope.iter().any(|allowed| allowed == id)
+                                && output.get("role").and_then(serde_json::Value::as_str).unwrap_or("congregation") == "congregation"
+                                && crate::keys::KeyEntry::is_congregation_output(Some(&filtered), id)
+                        })
+                    });
+                } else {
+                    *value = serde_json::Value::Array(Vec::new());
+                }
             }
         }
     }
@@ -1219,7 +1238,7 @@ fn live_reader<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers: &
             state.presence.saw(&entry, peer.ip());
             Ok(entry)
         }
-        Ok(None) if peer.ip().is_loopback() => Ok(crate::keys::KeyEntry { hash: String::new(), name: "This computer".into(), role: crate::keys::Role::Configure, paused: false }),
+        Ok(None) if peer.ip().is_loopback() => Ok(crate::keys::KeyEntry { hash: String::new(), name: "This computer".into(), role: crate::keys::Role::Configure, paused: false, output_scope: Vec::new() }),
         Ok(None) => Err(StatusCode::FORBIDDEN),
         Err(_) => Err(StatusCode::UNAUTHORIZED),
     }
@@ -1239,7 +1258,15 @@ async fn me_handler<S: CommandSink + 'static>(
     headers: HeaderMap,
 ) -> axum::response::Response {
     match live_reader(&state, peer, &headers) {
-        Ok(e) => Json(serde_json::json!({ "name": e.name, "role": e.role, "paused": e.paused })).into_response(),
+        Ok(e) => {
+            let output_scope = if e.role == crate::keys::Role::Screens {
+                let live = state.live.current();
+                serde_json::json!(e.output_scope.into_iter().filter(|id| crate::keys::KeyEntry::is_congregation_output(live.as_deref(), id)).collect::<Vec<_>>())
+            } else {
+                serde_json::Value::Null
+            };
+            Json(serde_json::json!({ "name": e.name, "role": e.role, "paused": e.paused, "outputScope": output_scope })).into_response()
+        }
         Err(code) => code.into_response(),
     }
 }
@@ -1832,10 +1859,21 @@ async fn command_handler<S: CommandSink + 'static>(
             log::info!("HTTP command refused for {}: the main desk has taken back control", entry.name);
             return (StatusCode::LOCKED, CommandResponse::refused(crate::keys::PAUSED_MESSAGE));
         }
-        Some(entry) if !entry.role.allows(&request.command) => {
-            let why = refusal_for(entry.role, &request.command);
+        Some(entry) if !entry.allows(&request.command) => {
+            let why = if entry.role.allows(&request.command) {
+                "This output is not assigned to this Screens desk by the host"
+            } else {
+                refusal_for(entry.role, &request.command)
+            };
             log::warn!("HTTP command refused for {}: {why}", entry.name);
             return (StatusCode::FORBIDDEN, CommandResponse::refused(why));
+        }
+        Some(entry) if entry.role == crate::keys::Role::Screens
+            && crate::keys::KeyEntry::scene_output(&request.command).is_some_and(|output| {
+                !crate::keys::KeyEntry::is_congregation_output(state.live.current().as_deref(), output)
+            }) =>
+        {
+            return (StatusCode::FORBIDDEN, CommandResponse::refused("Screens desks can only take current congregation outputs"));
         }
         Some(entry) => {
             state.presence.saw(&entry, peer.ip());
@@ -2198,7 +2236,7 @@ mod tests {
 
     #[tokio::test]
     async fn live_state_needs_a_paired_key_and_streams_each_change() {
-        let keys: KeySet = Arc::new(std::sync::RwLock::new(crate::keys::Keys { require_auth: true, entries: vec![crate::keys::KeyEntry { hash: crate::keys::hash_key("tok"), name: "Femi's laptop".into(), role: crate::keys::Role::Timekeeper, paused: false }] }));
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(crate::keys::Keys { require_auth: true, entries: vec![crate::keys::KeyEntry { hash: crate::keys::hash_key("tok"), name: "Femi's laptop".into(), role: crate::keys::Role::Timekeeper, paused: false, output_scope: Vec::new() }] }));
         let live = new_live_hub();
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
         let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
@@ -2234,7 +2272,7 @@ mod tests {
             "femi" => "h-femi",
             _ => "h-other",
         };
-        crate::keys::KeyEntry { hash: hash.into(), name: name.into(), role, paused: false }
+        crate::keys::KeyEntry { hash: hash.into(), name: name.into(), role, paused: false, output_scope: Vec::new() }
     }
 
     const NOTICES: &str = r#"{"v":1,"notices":[
@@ -2273,19 +2311,19 @@ mod tests {
     fn a_desk_named_like_the_main_desk_gets_none_of_its_private_notices() {
         use crate::keys::{KeyEntry, Role};
         // Paired before names were checked, or named to look like it: matched by key, not name.
-        let mimic = KeyEntry { hash: "h-mimic".into(), name: "Tolu (main desk)".into(), role: Role::Screens, paused: false };
+        let mimic = KeyEntry { hash: "h-mimic".into(), name: "Tolu (main desk)".into(), role: Role::Screens, paused: false, output_scope: Vec::new() };
         assert_eq!(ids(&notices_for(NOTICES, Some(&mimic))), ["all"]);
-        let named_like_ade = KeyEntry { hash: "h-mimic".into(), name: "Ade's phone".into(), role: Role::Screens, paused: false };
+        let named_like_ade = KeyEntry { hash: "h-mimic".into(), name: "Ade's phone".into(), role: Role::Screens, paused: false, output_scope: Vec::new() };
         assert_eq!(ids(&notices_for(NOTICES, Some(&named_like_ade))), ["all"], "a copied name gets neither Ade's notice nor what Ade sent");
         // A key whose hash is literally "host" cannot exist (hashes are 64 hex characters), and an empty one matches nothing.
-        let empty = KeyEntry { hash: String::new(), name: "x".into(), role: Role::Screens, paused: false };
+        let empty = KeyEntry { hash: String::new(), name: "x".into(), role: Role::Screens, paused: false, output_scope: Vec::new() };
         assert_eq!(ids(&notices_for(NOTICES, Some(&empty))), ["all"]);
     }
 
     #[test]
     fn a_renamed_desk_keeps_what_it_sent_and_what_is_for_it() {
         use crate::keys::{KeyEntry, Role};
-        let renamed = KeyEntry { hash: "h-ade".into(), name: "Ade at the back".into(), role: Role::Screens, paused: false };
+        let renamed = KeyEntry { hash: "h-ade".into(), name: "Ade at the back".into(), role: Role::Screens, paused: false, output_scope: Vec::new() };
         assert_eq!(ids(&notices_for(NOTICES, Some(&renamed))), ["all", "ade", "mine"]);
         // Notices from before ids: only their group; a name alone reaches no one.
         let old = r#"{"v":1,"notices":[{"id":"o1","from":"Ade's phone","to":"host","text":"x"},{"id":"o2","from":"Main desk","to":{"name":"Ade's phone"},"text":"y"},{"id":"o3","from":"Main desk","to":"screens","text":"z"}]}"#;
@@ -2295,7 +2333,7 @@ mod tests {
     #[tokio::test]
     async fn the_live_endpoints_filter_notices_per_key() {
         use crate::keys::{hash_key, KeyEntry, Keys, Role};
-        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false, output_scope: Vec::new() };
         let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("bib", "Ade's phone", Role::Bible), entry("tim", "Femi", Role::Timekeeper)] }));
         let live = new_live_hub();
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
@@ -2449,8 +2487,8 @@ mod tests {
     async fn a_desk_joins_the_talk_channel_with_its_key_and_gets_the_host_answer() {
         let voice = new_voice_hub();
         let keys = new_key_set();
-        keys.write().unwrap().entries.push(crate::keys::KeyEntry { hash: crate::keys::hash_key("k1"), name: "Ade bible".into(), role: crate::keys::Role::Bible, paused: false });
-        keys.write().unwrap().entries.push(crate::keys::KeyEntry { hash: crate::keys::hash_key("k2"), name: "\u{410}de bible".into(), role: crate::keys::Role::Present, paused: false });
+        keys.write().unwrap().entries.push(crate::keys::KeyEntry { hash: crate::keys::hash_key("k1"), name: "Ade bible".into(), role: crate::keys::Role::Bible, paused: false, output_scope: Vec::new() });
+        keys.write().unwrap().entries.push(crate::keys::KeyEntry { hash: crate::keys::hash_key("k2"), name: "\u{410}de bible".into(), role: crate::keys::Role::Present, paused: false, output_scope: Vec::new() });
         keys.write().unwrap().require_auth = true;
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, voice: voice.clone(), ..Default::default() };
         let result = start_http_server(config, Arc::new(VoiceSink(voice.clone())), new_shared_status()).await.expect("bind");
@@ -2909,7 +2947,7 @@ mod tests {
     async fn an_obs_companion_reads_the_cameras_with_its_own_sign_in() {
         use crate::keys::{hash_key, KeyEntry, Keys, Role};
         let sink = Arc::new(MockSink::new());
-        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false, output_scope: Vec::new() };
         let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("comp", "Media desk", Role::ObsCompanion), entry("pres", "Phone", Role::Present)] }));
         let cameras = crate::cameras::new_camera_hub();
         cameras.set(&[("pulpit".into(), "0123456789abcdef0123".into())]);
@@ -3000,7 +3038,7 @@ mod tests {
     async fn a_desk_saves_scenes_through_the_host_with_its_revision() {
         use crate::keys::{hash_key, KeyEntry, Keys, Role};
         let sink = Arc::new(MockSink::new());
-        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false, output_scope: Vec::new() };
         let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("scr", "Screens desk", Role::Screens), entry("bib", "Bible desk", Role::Bible), entry("obs", "OBS desk", Role::Obs)] }));
         let live = new_live_hub();
         let state = |welcome: &str| format!(r#"{{"v":1,"program":{{"onAir":true,"rehearsal":false}},"scenes":[{{"id":"off","name":"{welcome}","onScreen":false,"layers":[]}},{{"id":"on","name":"Sermon","onScreen":true,"layers":[{{"id":"b","kind":"feed"}}]}}]}}"#);
@@ -3743,7 +3781,7 @@ mod tests {
     #[tokio::test]
     async fn pausing_revoking_or_changing_a_desk_ends_its_live_stream_at_once() {
         use crate::keys::{KeyEntry, Keys, Role};
-        let desk = KeyEntry { hash: hash_key("tok"), name: "Desk C".into(), role: Role::Present, paused: false };
+        let desk = KeyEntry { hash: hash_key("tok"), name: "Desk C".into(), role: Role::Present, paused: false, output_scope: Vec::new() };
         let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![desk.clone()] }));
         let live = new_live_hub();
         live.publish(r#"{"v":1,"now":"Sermon"}"#.into());
@@ -3769,7 +3807,7 @@ mod tests {
         // Another role: ends too (it is served by its new role when it comes back).
         let stream = follow();
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-        keys.write().unwrap().entries[0].role = Role::Viewer;
+        keys.write().unwrap().entries[0].role = Role::Screens;
         assert!(ended(stream).await.contains("event: rejoin"));
         // Nothing changed for this desk (the list pushed again as it was): the stream stays open.
         let stream = follow();
@@ -3778,7 +3816,18 @@ mod tests {
         keys.write().unwrap().entries = same;
         tokio::time::sleep(std::time::Duration::from_millis(600)).await;
         assert!(!stream.is_finished(), "an unchanged key keeps its stream");
+        // A scope change is also an immediate rejoin, so the desk receives only its new output list.
+        let stream = follow();
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        keys.write().unwrap().entries[0].output_scope = vec!["sanctuary".into()];
+        assert!(ended(stream).await.contains("event: rejoin"));
+        let stream = follow();
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        keys.write().unwrap().entries[0].output_scope = vec!["overflow".into()];
+        assert!(ended(stream).await.contains("event: rejoin"));
         // Revoked: ends, and it cannot come back.
+        let stream = follow();
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
         keys.write().unwrap().entries.clear();
         assert!(ended(stream).await.contains("event: rejoin"));
         assert!(get_with(port, "/api/v1/live/events", "X-Rhema-Key: tok\r\n", None).await.contains("401"));
@@ -3828,7 +3877,7 @@ mod tests {
 
     fn console_keys() -> KeySet {
         use crate::keys::{hash_key, KeyEntry, Keys, Role};
-        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false, output_scope: Vec::new() };
         Arc::new(std::sync::RwLock::new(Keys {
             require_auth: true,
             entries: vec![entry("dir", "Director", Role::Present), entry("bib", "Bible desk", Role::Bible), entry("wor", "Worship desk", Role::Worship), entry("stg", "Stage desk", Role::Stage), entry("vie", "Pastor's phone", Role::Viewer)],
@@ -3863,6 +3912,36 @@ mod tests {
         assert_eq!(live_for(json, None), json, "this computer itself gets all of it");
         assert!(sees_crew(None) && sees_crew(Some(&desk("D", Role::Present))) && sees_crew(Some(&desk("D", Role::Configure))));
         assert!(!sees_crew(Some(&desk("D", Role::Bible))) && !sees_crew(Some(&desk("D", Role::Viewer))));
+    }
+
+    #[test]
+    fn screens_live_state_contains_only_assigned_current_congregation_outputs() {
+        use crate::keys::{KeyEntry, Role};
+        let entry = KeyEntry {
+            hash: "screen-key".into(),
+            name: "Screens desk".into(),
+            role: Role::Screens,
+            paused: false,
+            output_scope: vec!["sanctuary".into(), "stage".into()],
+        };
+        let json = r#"{"v":1,"outputs":[{"id":"sanctuary","name":"Sanctuary"},{"id":"overflow","name":"Overflow"},{"id":"stage","name":"Stage","role":"stage"},{"id":"lobby","name":"Lobby","role":"signage"}],"outputMap":[{"id":"sanctuary","name":"Sanctuary","role":"congregation"},{"id":"overflow","name":"Overflow","role":"congregation"},{"id":"stage","name":"Stage","role":"stage"},{"id":"lobby","name":"Lobby","role":"signage"}]}"#;
+        let live: serde_json::Value = serde_json::from_str(&live_for(json, Some(&entry))).unwrap();
+        let ids: Vec<_> = live["outputs"].as_array().unwrap().iter().filter_map(|output| output["id"].as_str()).collect();
+        assert_eq!(ids, ["sanctuary"], "unassigned and protected outputs are not sent to the desk");
+        let map_ids: Vec<_> = live["outputMap"].as_array().unwrap().iter().filter_map(|output| output["id"].as_str()).collect();
+        assert_eq!(map_ids, ["sanctuary"], "the status map is scoped too");
+
+        let map_only: serde_json::Value = serde_json::from_str(&live_for(
+            r#"{"outputMap":[{"id":"sanctuary","role":"congregation"}]}"#,
+            Some(&entry),
+        )).unwrap();
+        assert!(map_only["outputMap"].as_array().unwrap().is_empty(), "a map without a current output inventory fails closed");
+
+        let malformed_map: serde_json::Value = serde_json::from_str(&live_for(
+            r#"{"outputMap":{"sanctuary":{"role":"congregation"}}}"#,
+            Some(&entry),
+        )).unwrap();
+        assert!(malformed_map["outputMap"].as_array().unwrap().is_empty(), "a non-array map is never passed through unfiltered");
     }
 
     #[test]
@@ -3964,7 +4043,7 @@ mod tests {
     async fn round_two_commands_are_checked_for_role_staleness_and_rehearsal() {
         use crate::keys::{hash_key, KeyEntry, Keys, Role};
         let sink = Arc::new(MockSink::new());
-        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false, output_scope: Vec::new() };
         let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![
             entry("dir", "Director", Role::Present), entry("phn", "Ade's phone", Role::Present), entry("edt", "Editor", Role::Editor), entry("wor", "Worship desk", Role::Worship),
             entry("obs", "OBS desk", Role::Obs), entry("scr", "Screens desk", Role::Screens), entry("vie", "Pastor's phone", Role::Viewer),
@@ -4022,6 +4101,40 @@ mod tests {
 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         assert_eq!(sink.commands.lock().unwrap().clone(), ["remote:queue_request", "remote:queue_request", "remote:obs_record", "remote:obs_transition", "remote:clear_source", "remote:restore_source"]);
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[tokio::test]
+    async fn screens_http_takes_require_assigned_current_congregation_outputs() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        let sink = Arc::new(MockSink::new());
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
+            require_auth: true,
+            entries: vec![
+                KeyEntry { hash: hash_key("scoped"), name: "Screens desk".into(), role: Role::Screens, paused: false, output_scope: vec!["sanctuary".into(), "stage".into(), "lobby".into()] },
+                KeyEntry { hash: hash_key("legacy"), name: "Legacy Screens".into(), role: Role::Screens, paused: false, output_scope: Vec::new() },
+            ],
+        }));
+        let live = new_live_hub();
+        live.publish(r#"{"v":1,"program":{"onAir":true,"rehearsal":false},"outputs":[{"id":"sanctuary","name":"Sanctuary"},{"id":"stage","name":"Stage","role":"stage"},{"id":"lobby","name":"Lobby","role":"signage"}]}"#.into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let take = |output: &str| serde_json::json!({ "command": "take_scene", "value": { "output": output, "scene": "sermon" } });
+
+        assert_eq!(press(port, "scoped", take("sanctuary")).await.0, 200);
+        assert_eq!(press(port, "scoped", take("overflow")).await.0, 403, "unassigned output denied");
+        assert_eq!(press(port, "scoped", take("stage")).await.0, 403, "stage output denied even if a stale scope names it");
+        assert_eq!(press(port, "scoped", take("lobby")).await.0, 403, "signage output denied even if a stale scope names it");
+        assert_eq!(press(port, "legacy", take("sanctuary")).await.0, 403, "legacy role without reviewed scope fails closed");
+        assert_eq!(sink.command_count(), 1, "refused targets never dispatch");
+
+        let me = get_with(port, "/api/v1/me", "X-Rhema-Key: scoped\r\n", None).await;
+        assert!(me.contains(r#""outputScope":["sanctuary"]"#), "{me}");
+        let state = get_with(port, "/api/v1/live", "X-Rhema-Key: scoped\r\n", None).await;
+        assert!(state.contains("Sanctuary") && !state.contains("Stage") && !state.contains("Lobby"), "{state}");
         let mut handle = result.handle;
         handle.stop();
     }

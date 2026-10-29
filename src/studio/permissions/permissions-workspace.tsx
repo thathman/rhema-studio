@@ -9,6 +9,7 @@ import { useJoin } from "@/stores/join-store"
 import { useNotices } from "@/stores/notices-store"
 import { useSceneApprovalsStore, hydrateSceneApprovals, reloadSceneApprovals, type SceneEditApproval } from "@/stores/scene-approvals-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 
 const dateWords = (at: number) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
 
@@ -19,6 +20,8 @@ export function PermissionsWorkspace() {
   const hydrated = useSceneApprovalsStore((s) => s.hydrated)
   const loadError = useSceneApprovalsStore((s) => s.error)
   const remoteDevices = useSettingsStore((s) => s.remoteDevices)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const congregationOutputs = outputs.filter((output) => (output.role ?? "congregation") === "congregation")
   const [busy, setBusy] = useState<string | null>(null)
   const [reloading, setReloading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -101,7 +104,7 @@ export function PermissionsWorkspace() {
         <section aria-labelledby="paired-access-title" className="rounded-lg border border-border bg-card shadow-panel">
           <header className="flex items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
             <KeyRoundIcon aria-hidden className="size-4 text-muted-foreground" />
-            <div><h2 id="paired-access-title" className="font-semibold">Paired device access</h2><p className="text-xs text-muted-foreground">Saved pairing records. A device is shown as paired; this list does not claim that it is online now.</p></div>
+            <div><h2 id="paired-access-title" className="font-semibold">Paired device access</h2><p className="text-xs text-muted-foreground">Saved pairing records. A device is shown as paired; this list does not claim that it is online now. Screens Takes apply to one assigned congregation output at a time; group Take is unavailable.</p></div>
           </header>
           <div className="p-4">
             {remoteDevices.length === 0 ? <p className="text-sm text-muted-foreground">No devices are paired. The studio works on this computer without them.</p> : (
@@ -111,6 +114,30 @@ export function PermissionsWorkspace() {
                   <label className="flex items-center gap-2 text-xs"><span>Role</span><select aria-label={`Role for ${device.name}`} disabled={!isHost} value={device.role ?? "configure"} onChange={(event) => { const role = asRemoteRole(event.target.value); if (role) void useSettingsStore.getState().setRemoteDeviceRole(device.hash, role) }} className="h-8 max-w-48 rounded-md border border-border bg-background px-2">
                     {REMOTE_ROLES.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
                   </select></label>
+                  {device.role === "screens" && <fieldset className="w-full rounded-md border border-border p-3">
+                    <legend className="px-1 text-xs font-semibold">Individual scene Take outputs</legend>
+                    {device.outputScope === undefined
+                      ? <p role="status" className="mb-2 text-xs text-confidence-mid">Legacy Screens access needs scope review. Scene Takes are blocked until the host assigns outputs.</p>
+                      : device.outputScope.length === 0
+                        ? <p role="status" className="mb-2 text-xs text-muted-foreground">No outputs assigned; scene Takes are blocked.</p>
+                        : <p className="mb-2 text-xs text-muted-foreground">Only the selected output can be taken or released from this desk.</p>}
+                    {congregationOutputs.length === 0
+                      ? <p className="text-xs text-muted-foreground">No congregation outputs are configured on this host.</p>
+                      : <div className="flex flex-wrap gap-x-4 gap-y-2">{congregationOutputs.map((output) => <label key={output.id} className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          aria-label={`${output.name} output access for ${device.name}`}
+                          disabled={!isHost}
+                          checked={device.outputScope?.includes(output.id) ?? false}
+                          onChange={(event) => {
+                            const current = device.outputScope ?? []
+                            const next = event.target.checked ? [...current, output.id] : current.filter((id) => id !== output.id)
+                            void useSettingsStore.getState().setRemoteDeviceOutputScope(device.hash, next)
+                          }}
+                        />
+                        <span>{output.name}</span>
+                      </label>)}</div>}
+                  </fieldset>}
                   {isHost && <>
                     <Button size="sm" variant="outline" aria-label={device.paused ? `Give control back to ${device.name}` : `Take back control from ${device.name}`} aria-pressed={device.paused === true} onClick={() => void setDeskControl(device.hash, device.paused !== true)}>{device.paused ? "Give control back" : "Take back control"}</Button>
                     <Button size="sm" variant="ghost" className="text-destructive" aria-label={`Revoke ${device.name}`} onClick={() => void useSettingsStore.getState().revokeRemoteDevice(device.hash)}>Revoke</Button>

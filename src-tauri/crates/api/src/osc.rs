@@ -11,6 +11,7 @@ use crate::dispatch::{CommandDispatcher, CommandSink};
 use crate::error::CommandError;
 use crate::keys::{check_key, new_key_set, KeyEntry, KeySet};
 use crate::peer::check_remote_key;
+use crate::http::{new_live_hub, SharedLive};
 
 /// Configuration for the OSC listener.
 #[derive(Debug, Clone)]
@@ -20,6 +21,8 @@ pub struct OscConfig {
     /// Paired devices and the shared key; empty means open to local/private peers only. Otherwise
     /// every message must carry a token as its first string argument.
     pub keys: KeySet,
+    /// Current host state, used to refuse Screens commands for removed/protected destinations.
+    pub live: SharedLive,
 }
 
 impl Default for OscConfig {
@@ -28,6 +31,7 @@ impl Default for OscConfig {
             port: 8000,
             host: "0.0.0.0".into(),
             keys: new_key_set(),
+            live: new_live_hub(),
         }
     }
 }
@@ -97,6 +101,7 @@ where
     let active = Arc::new(AtomicBool::new(true));
     let thread_active = active.clone();
     let keys = config.keys.clone();
+    let live = config.live.clone();
     let rate = crate::rate::RateLimiter::default();
 
     let thread = std::thread::Builder::new()
@@ -129,7 +134,7 @@ where
                     }
                 };
 
-                handle_packet(&packet, &*sink, &keys, Some((&rate, src.ip())));
+                handle_packet(&packet, &*sink, &keys, &live, Some((&rate, src.ip())));
             }
 
             log::info!("OSC listener stopped");
@@ -149,12 +154,12 @@ where
 /// Rate limit and sender, when the message came off the network.
 type Limit<'a> = Option<(&'a crate::rate::RateLimiter, std::net::IpAddr)>;
 
-fn handle_packet(packet: &OscPacket, sink: &dyn CommandSink, keys: &KeySet, limit: Limit<'_>) {
+fn handle_packet(packet: &OscPacket, sink: &dyn CommandSink, keys: &KeySet, live: &SharedLive, limit: Limit<'_>) {
     match packet {
-        OscPacket::Message(msg) => handle_message_from(msg, sink, keys, limit),
+        OscPacket::Message(msg) => handle_message_from_live(msg, sink, keys, Some(live), limit),
         OscPacket::Bundle(bundle) => {
             for content in &bundle.content {
-                handle_packet(content, sink, keys, limit);
+                handle_packet(content, sink, keys, live, limit);
             }
         }
     }
@@ -173,7 +178,12 @@ fn handle_message(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet) {
 /// from a controller's address without the key cannot use up its
 /// allowance; fader values (confidence, opacity) are exempt, since a fader
 /// sends dozens a second and the last one must land.
+#[cfg(test)]
 fn handle_message_from(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet, limit: Limit<'_>) {
+    handle_message_from_live(msg, sink, keys, None, limit)
+}
+
+fn handle_message_from_live(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet, live: Option<&SharedLive>, limit: Limit<'_>) {
     let presented = match msg.args.first() {
         Some(rosc::OscType::String(k)) => Some(k.as_str()),
         _ => None,
@@ -198,8 +208,17 @@ fn handle_message_from(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet, 
                     log::warn!("OSC command refused for {}: {} ({})", msg.addr, crate::keys::PAUSED_MESSAGE, e.name);
                     return;
                 }
-                if !e.role.allows(&cmd) {
-                    log::warn!("OSC command refused for {}: {} may present but not change settings", msg.addr, e.name);
+                if !e.allows(&cmd) {
+                    let why = if e.role.allows(&cmd) { "output is outside the host-assigned Screens scope" } else { "role may present but not change settings" };
+                    log::warn!("OSC command refused for {}: {} ({})", msg.addr, e.name, why);
+                    return;
+                }
+                if e.role == crate::keys::Role::Screens
+                    && KeyEntry::scene_output(&cmd).is_some_and(|output| {
+                        !KeyEntry::is_congregation_output(live.and_then(|hub| hub.current()).as_deref(), output)
+                    })
+                {
+                    log::warn!("OSC scene command refused for {}: output is missing or not a congregation output", e.name);
                     return;
                 }
             }
@@ -277,7 +296,7 @@ mod tests {
     #[test]
     fn osc_listener_requires_the_key_when_one_is_set() {
         let sink = Arc::new(MockSink::new());
-        let config = OscConfig { port: 0, host: "127.0.0.1".into(), keys: crate::keys::key_set_from(&[("s3cret", "Shared key")]) };
+        let config = OscConfig { port: 0, host: "127.0.0.1".into(), keys: crate::keys::key_set_from(&[("s3cret", "Shared key")]), live: new_live_hub() };
         let result_keys = config.keys.clone();
         let result = start_osc_listener(config, sink.clone()).expect("should bind");
         let port = result.bound_port;
@@ -330,7 +349,7 @@ mod tests {
     }
 
     fn keys_for_role_test(keys: &KeySet, token: &str) {
-        keys.write().unwrap().entries.push(KeyEntry { hash: crate::keys::hash_key(token), name: "phone".into(), role: crate::keys::Role::Present, paused: false });
+        keys.write().unwrap().entries.push(KeyEntry { hash: crate::keys::hash_key(token), name: "phone".into(), role: crate::keys::Role::Present, paused: false, output_scope: Vec::new() });
     }
 
     #[test]
@@ -444,7 +463,36 @@ mod tests {
                 }),
             ],
         });
-        handle_packet(&bundle, &sink, &new_key_set(), None);
+        handle_packet(&bundle, &sink, &new_key_set(), &new_live_hub(), None);
         assert_eq!(sink.command_count(), 2);
+    }
+
+    #[test]
+    fn screens_osc_commands_obey_output_scope_and_protected_destination_rules() {
+        let sink = MockSink::new();
+        let keys = new_key_set();
+        let hash = crate::keys::hash_key("screen-token");
+        keys.write().unwrap().entries.push(KeyEntry {
+            hash,
+            name: "Screens desk".into(),
+            role: crate::keys::Role::Screens,
+            paused: false,
+            output_scope: vec!["sanctuary".into(), "stage".into()],
+        });
+        keys.write().unwrap().require_auth = true;
+        let live = new_live_hub();
+        live.publish(r#"{"outputs":[{"id":"sanctuary"},{"id":"stage","role":"stage"}]}"#.into());
+        let send = |address: &str, output: &str| OscMessage {
+            addr: address.into(),
+            args: vec![
+                rosc::OscType::String("screen-token".into()),
+                rosc::OscType::String(output.into()),
+                rosc::OscType::String("sermon".into()),
+            ],
+        };
+        handle_message_from_live(&send("/rhema/take_scene", "sanctuary"), &sink, &keys, Some(&live), None);
+        handle_message_from_live(&send("/rhema/take_scene", "stage"), &sink, &keys, Some(&live), None);
+        handle_message_from_live(&send("/rhema/take_scene", "overflow"), &sink, &keys, Some(&live), None);
+        assert_eq!(sink.command_count(), 1, "only the assigned current congregation output is accepted");
     }
 }

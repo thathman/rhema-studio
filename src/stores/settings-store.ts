@@ -31,6 +31,8 @@ export interface RemoteDevice {
   role?: RemoteRole
   /** The main desk has taken back control (#243): its commands wait; it still sees the service and talks. Absent = not paused. */
   paused?: boolean
+  /** Host-assigned congregation output IDs for individual Screens Takes; absent/empty denies Takes. */
+  outputScope?: string[]
 }
 
 /** A host's https link, kept at pairing (see `joinSecure`). */
@@ -81,7 +83,7 @@ export function pushRemoteKeys(): Promise<void> {
   const write = remoteKeysPush.then(async () => {
     const s = useSettingsStore.getState()
     try {
-      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure", paused: d.paused === true })), requireAuth: s.remoteAuthRequired })
+      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure", paused: d.paused === true, output_scope: d.outputScope ?? [] })), requireAuth: s.remoteAuthRequired })
     } catch (e) {
       if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
         const { toast } = await import("sonner")
@@ -106,7 +108,7 @@ function updateRemotePolicy(change: (current: SettingsState) => RemotePolicyPatc
     try {
       await invoke("remote_set_keys", {
         shared: next.remoteSecret.trim() || null,
-        devices: next.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure", paused: d.paused === true })),
+        devices: next.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure", paused: d.paused === true, output_scope: d.outputScope ?? [] })),
         requireAuth: next.remoteAuthRequired,
       })
       useSettingsStore.setState(patch)
@@ -328,6 +330,7 @@ export interface SettingsState {
   addRemoteDevice: (d: { hash: string; name: string; role?: RemoteRole }) => void
   revokeRemoteDevice: (hash: string) => Promise<boolean>
   setRemoteDeviceRole: (hash: string, role: RemoteRole) => Promise<boolean>
+  setRemoteDeviceOutputScope: (hash: string, outputScope: string[]) => Promise<boolean>
   /** Take back control from a paired desk (true) or give it back (false); see src/lib/desk-control.ts. */
   setRemoteDevicePaused: (hash: string, paused: boolean) => Promise<boolean>
   setOperatorName: (name: string) => void
@@ -466,7 +469,21 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setRemoteDeviceRole: (hash, role) => updateRemotePolicy((s) => {
     if (!s.remoteDevices.some((x) => x.hash === hash)) return null
     if (s.remoteDevices.find((x) => x.hash === hash)?.role === role) return {}
-    return { remoteDevices: s.remoteDevices.map((x) => (x.hash === hash ? { ...x, role } : x)) }
+    const remoteDevices = s.remoteDevices.map((x) => {
+      if (x.hash !== hash) return x
+      const next = { ...x, role }
+      if (role === "screens") next.outputScope = []
+      else delete next.outputScope
+      return next
+    })
+    return { remoteDevices }
+  }),
+  setRemoteDeviceOutputScope: (hash, outputScope) => updateRemotePolicy((s) => {
+    const device = s.remoteDevices.find((x) => x.hash === hash)
+    if (!device || device.role !== "screens") return null
+    const normalized = [...new Set(outputScope)].sort()
+    if (JSON.stringify(device.outputScope ?? []) === JSON.stringify(normalized)) return {}
+    return { remoteDevices: s.remoteDevices.map((x) => x.hash === hash ? { ...x, outputScope: normalized } : x) }
   }),
   setRemoteDevicePaused: (hash, paused) => updateRemotePolicy((s) => {
     const device = s.remoteDevices.find((x) => x.hash === hash)

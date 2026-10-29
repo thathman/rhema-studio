@@ -15,7 +15,8 @@ use crate::command::{same_key, RemoteCommand};
 /// service, show/hide, the event clock); `Configure` adds theme, opacity,
 /// confidence, the on-air switch and editing scenes; `Timekeeper` may only move the event
 /// clock, the service timer and a hold (Host/Join, ARCH-004), never a screen; `Bible` activates, steps and
-/// clears the Bible source only; `Screens` takes, makes and changes congregation scenes. The
+/// clears the Bible source only; `Screens` takes only host-assigned congregation outputs and
+/// makes or changes scenes. The
 /// specialist roles (#215 G10, #243 VL.5): `Worship` shows songs and hymns and takes the lyrics off
 /// and back; `Stage` writes the stage message; `Camera` hides a camera from scenes and changes the
 /// camera boxes of scenes; `Obs` (OBS director) switches OBS scenes through the host's OBS
@@ -144,12 +145,53 @@ pub struct KeyEntry {
     /// notices. Absent (entries saved before this) = not paused.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub paused: bool,
+    /// Output IDs the host explicitly assigned to this Screens desk. Missing or empty is no
+    /// authority, including for older saved Screens entries, so they must be reviewed by the host.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub output_scope: Vec<String>,
 }
 
 /// What a paused desk is told when it sends a command.
 pub const PAUSED_MESSAGE: &str = "The main desk has taken back control";
 
 impl KeyEntry {
+    /// Role permission plus resource scope. A Screens role alone never grants every output.
+    #[must_use]
+    pub fn allows(&self, cmd: &RemoteCommand) -> bool {
+        if !self.role.allows(cmd) {
+            return false;
+        }
+        match cmd {
+            RemoteCommand::TakeScene(take) if self.role == Role::Screens => self.output_scope.iter().any(|id| id == &take.output),
+            RemoteCommand::ReleaseScene(output) if self.role == Role::Screens => self.output_scope.iter().any(|id| id == output),
+            _ => true,
+        }
+    }
+
+    /// The output affected by a single-output scene command, if any.
+    #[must_use]
+    pub fn scene_output(cmd: &RemoteCommand) -> Option<&str> {
+        match cmd {
+            RemoteCommand::TakeScene(take) => Some(&take.output),
+            RemoteCommand::ReleaseScene(output) => Some(output),
+            _ => None,
+        }
+    }
+
+    /// Whether an output exists in the current host state and is a congregation destination.
+    /// Older saved outputs with no role are congregation outputs; unknown or protected roles fail closed.
+    #[must_use]
+    pub fn is_congregation_output(live_json: Option<&str>, output_id: &str) -> bool {
+        let Some(json) = live_json else { return false };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(json) else { return false };
+        value.get("outputs").and_then(serde_json::Value::as_array).is_some_and(|outputs| {
+            outputs.iter().any(|output| {
+                output.get("id").and_then(serde_json::Value::as_str) == Some(output_id)
+                    && output.get("role").and_then(serde_json::Value::as_str).unwrap_or("congregation") == "congregation"
+            })
+        })
+    }
+
     /// True when the main desk has taken back control and this is a service command (not crew talk).
     #[must_use]
     pub fn paused_for(&self, cmd: &RemoteCommand) -> bool {
@@ -186,7 +228,7 @@ pub fn hash_key(key: &str) -> String {
 pub fn key_set_from(keys: &[(&str, &str)]) -> KeySet {
     Arc::new(RwLock::new(Keys {
         require_auth: true,
-        entries: keys.iter().map(|(k, name)| KeyEntry { hash: hash_key(k), name: (*name).to_string(), role: Role::Configure, paused: false }).collect(),
+        entries: keys.iter().map(|(k, name)| KeyEntry { hash: hash_key(k), name: (*name).to_string(), role: Role::Configure, paused: false, output_scope: Vec::new() }).collect(),
     }))
 }
 
@@ -287,7 +329,7 @@ pub fn try_pair_as(window: &PairingWindow, keys: &KeySet, code: &str, name: &str
     let mut k = keys.write().unwrap_or_else(std::sync::PoisonError::into_inner);
     // A newly paired device may present, not change settings, until the operator says otherwise
     // (an OBS companion asks for less, and gets it).
-    let entry = KeyEntry { hash: hash_key(&token), name: unique_name(name, &k.entries), role: role_asked(asked), paused: false };
+    let entry = KeyEntry { hash: hash_key(&token), name: unique_name(name, &k.entries), role: role_asked(asked), paused: false, output_scope: Vec::new() };
     k.entries.push(entry.clone());
     k.require_auth = true;
     drop(k);
@@ -326,7 +368,7 @@ mod tests {
 
     #[test]
     fn paired_names_are_unique_and_never_the_main_desk() {
-        let e = |n: &str| KeyEntry { hash: n.into(), name: n.into(), role: Role::Present, paused: false };
+        let e = |n: &str| KeyEntry { hash: n.into(), name: n.into(), role: Role::Present, paused: false, output_scope: Vec::new() };
         let have = [e("Femi's laptop"), e("Femi's laptop 2"), e("Phone")];
         assert_eq!(unique_name("Femi's laptop", &have), "Femi's laptop 3");
         assert_eq!(unique_name("  phone ", &have), "phone 2");
@@ -387,7 +429,7 @@ mod tests {
                 assert!(!role.allows(&cmd), "{role:?} {cmd}");
             }
         }
-        let paused = KeyEntry { hash: "h".into(), name: "Desk C".into(), role: Role::Timekeeper, paused: true };
+        let paused = KeyEntry { hash: "h".into(), name: "Desk C".into(), role: Role::Timekeeper, paused: true, output_scope: Vec::new() };
         assert!(paused.paused_for(&RemoteCommand::Hold(None)) && paused.paused_for(&RemoteCommand::Resume));
     }
 
@@ -421,6 +463,32 @@ mod tests {
             assert!(Role::Present.allows(&cmd) && Role::Configure.allows(&cmd), "{cmd}");
             assert!(!Role::Bible.allows(&cmd) && !Role::Screens.allows(&cmd) && !Role::Timekeeper.allows(&cmd), "{cmd}");
         }
+    }
+
+    #[test]
+    fn screens_take_only_assigned_outputs_and_legacy_scope_fails_closed() {
+        use crate::command::SceneTake;
+        let take = |output: &str| RemoteCommand::TakeScene(SceneTake { output: output.into(), scene: "sermon".into() });
+        let scoped = KeyEntry { hash: "screen-key".into(), name: "Screens desk".into(), role: Role::Screens, paused: false, output_scope: vec!["sanctuary".into()] };
+        assert!(scoped.allows(&take("sanctuary")));
+        assert!(scoped.allows(&RemoteCommand::ReleaseScene("sanctuary".into())));
+        assert!(!scoped.allows(&take("overflow")));
+        assert!(!scoped.allows(&RemoteCommand::ReleaseScene("overflow".into())));
+
+        let legacy: KeyEntry = serde_json::from_str(r#"{"hash":"legacy","name":"Old Screens","role":"screens","paused":false}"#).unwrap();
+        assert!(legacy.output_scope.is_empty());
+        assert!(!legacy.allows(&take("sanctuary")));
+        assert!(legacy.allows(&RemoteCommand::ClearSource("ticker".into())), "the new scope limits scene destinations only");
+    }
+
+    #[test]
+    fn screens_scene_targets_must_be_current_congregation_outputs() {
+        let live = r#"{"outputs":[{"id":"sanctuary"},{"id":"stage","role":"stage"},{"id":"lobby","role":"signage"}]}"#;
+        assert!(KeyEntry::is_congregation_output(Some(live), "sanctuary"));
+        assert!(!KeyEntry::is_congregation_output(Some(live), "stage"));
+        assert!(!KeyEntry::is_congregation_output(Some(live), "lobby"));
+        assert!(!KeyEntry::is_congregation_output(Some(live), "missing"));
+        assert!(!KeyEntry::is_congregation_output(None, "sanctuary"));
     }
 
     #[test]
@@ -570,7 +638,7 @@ mod tests {
         // A Bible desk's chosen translation is still Bible activation: the same rights as before.
         let chosen = RemoteCommand::BibleActivate(crate::command::BibleRef::With { reference: "John 3:16".into(), translation: Some("KJV".into()) });
         assert!(Role::Bible.allows(&chosen) && Role::Present.allows(&chosen) && !Role::Editor.allows(&chosen) && !Role::Worship.allows(&chosen));
-        let paused = KeyEntry { hash: "h".into(), name: "Desk".into(), role: Role::Worship, paused: true };
+        let paused = KeyEntry { hash: "h".into(), name: "Desk".into(), role: Role::Worship, paused: true, output_scope: Vec::new() };
         assert!(paused.paused_for(&step), "a paused desk steps nothing");
     }
 
@@ -583,7 +651,7 @@ mod tests {
         for role in [Role::Timekeeper, Role::Bible, Role::Screens, Role::Worship, Role::Stage, Role::Camera, Role::Obs, Role::ObsCompanion, Role::Viewer] {
             assert!(!role.allows(&q), "{role:?}");
         }
-        let paused = KeyEntry { hash: "h".into(), name: "Phone".into(), role: Role::Present, paused: true };
+        let paused = KeyEntry { hash: "h".into(), name: "Phone".into(), role: Role::Present, paused: true, output_scope: Vec::new() };
         assert!(paused.paused_for(&q), "a paused desk queues nothing");
     }
 
@@ -624,7 +692,7 @@ mod tests {
 
     #[test]
     fn a_paused_desk_keeps_talking_but_sends_no_service_command() {
-        let e = KeyEntry { hash: "h".into(), name: "Desk C".into(), role: Role::Present, paused: true };
+        let e = KeyEntry { hash: "h".into(), name: "Desk C".into(), role: Role::Present, paused: true, output_scope: Vec::new() };
         for cmd in [RemoteCommand::Next, RemoteCommand::EventNext, RemoteCommand::BibleActivate("John 3:16".into()), RemoteCommand::ReleaseScene("main".into())] {
             assert!(e.paused_for(&cmd), "{cmd}");
         }

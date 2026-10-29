@@ -255,18 +255,12 @@
   const ANSWERS = { seen: "Seen", ready: "Ready", unable: "Unable" }
   // Why a request this phone tried could not be done, by notice id (shown on its card).
   const failed = {}
-  // What a request asks, in words; the outputs a scene request takes (those showing a scene, else the main one).
+  // What a request asks, in words.
   const actionName = (a, live) => a.kind === "bible" || a.kind === "song" ? "Show " + a.value
     : a.kind === "wrap" ? "Put \u201c" + a.value + "\u201d on the stage"
       : a.kind === "scene" ? "Take " + ((((live && live.scenes) || []).find((x) => x.id === a.value) || {}).name || "the scene")
         : a.kind === "event" ? "Start " + ((((live && live.rundown) || []).find((x) => x.id === a.value) || {}).reference || "the item")
           : a.kind === "camera" ? "Is " + a.value + " framed?" : a.value
-  const sceneTargets = (outputs) => {
-    const showing = outputs.filter((o) => o.sceneId).map((o) => o.id)
-    if (showing.length) return showing
-    const main = outputs.find((o) => o.id === "main") || outputs[0]
-    return main ? [main.id] : []
-  }
   // Do what a request asks, from this phone (the computer checks its role), then answer Ready, or
   // Unable with the reason for whoever sent it. Preview puts a verse or song in the main desk's Preview only.
   async function doRequest(n, mode, btn) {
@@ -277,9 +271,7 @@
       // Into the run of show for later, nothing shown; acting on the run of show this phone saw.
       why = await attempt("queue_request", { kind: a.kind, value: a.value }, live.revisions && live.revisions.queue !== undefined ? { seen: { queue: live.revisions.queue } } : undefined)
     } else if (a.kind === "scene") {
-      const targets = sceneTargets(live.outputs || [])
-      if (!targets.length) why = "the host has no congregation output"
-      else why = (await Promise.all(targets.map((o) => attempt("take_scene", { output: o, scene: a.value })))).find(Boolean) || null
+      why = "This request did not change any output. Choose one output on the host; group Take is unavailable."
     } else {
       const cmd = { bible: mode === "preview" ? "bible_preview" : "bible_activate", song: mode === "preview" ? "song_preview" : "song_show", event: "event_start", wrap: "stage_message" }[a.kind]
       why = cmd ? await attempt(cmd, a.kind === "wrap" ? a.value.slice(0, 120) : a.value) : "this phone cannot do that"

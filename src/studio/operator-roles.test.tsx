@@ -43,7 +43,7 @@ describe("the desks a joined computer gets", () => {
     event: { mode: "own", currentId: null }, rundown: [{ id: "w", reference: "Welcome", plannedMinutes: 5 }], timing: null, stageMessage: "",
     scenes: [{ id: "split", name: "Sermon split" }], outputs: [{ id: "main", name: "Projector", sceneId: null }], notices: [],
   }
-  const render = async (role: string) => {
+    const render = async (role: string) => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     useJoin.setState({ status: "connected", me: { name: "Op", role }, live, error: null, paused: false, note: null })
     const el = document.createElement("div")
@@ -59,7 +59,7 @@ describe("the desks a joined computer gets", () => {
     expect(bible.textContent).toContain("Romans 8:28")
     const screens = await render("screens")
     expect([has(screens, "Event clock desk"), has(screens, "Bible desk"), has(screens, "Scenes desk")]).toEqual([false, false, true])
-    expect(screens.textContent).toContain("Take Sermon split")
+    expect(screens.textContent).toContain("No congregation output is assigned")
     const all = await render("present")
     expect([has(all, "Event clock desk"), has(all, "Bible desk"), has(all, "Scenes desk")]).toEqual([true, true, true])
   })

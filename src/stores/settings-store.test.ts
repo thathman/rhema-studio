@@ -309,7 +309,7 @@ describe("settings store", () => {
 
   it("does not show a remote role change as applied until the host acknowledges it", async () => {
     const { useSettingsStore } = await import("./settings-store")
-    const device = { hash: "device-hash", name: "Graphics tablet", paired_at: "2026-10-27T10:00:00Z", role: "viewer" as const }
+    const device = { hash: "device-hash", name: "Graphics tablet", paired_at: "2026-10-27T10:00:00Z", role: "viewer" as const, outputScope: ["sanctuary"] }
     useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
     let acknowledge!: () => void
     mockRemoteInvoke.mockImplementation(() => new Promise<void>((resolve) => { acknowledge = resolve }))
@@ -320,12 +320,33 @@ describe("settings store", () => {
     await Promise.resolve()
     expect(mockRemoteInvoke).toHaveBeenCalledWith("remote_set_keys", {
       shared: null,
-      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false }],
+      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false, output_scope: [] }],
       requireAuth: true,
     })
     acknowledge()
     await expect(changed).resolves.toBe(true)
     expect(useSettingsStore.getState().remoteDevices[0]?.role).toBe("screens")
+    expect(useSettingsStore.getState().remoteDevices[0]?.outputScope).toEqual([])
+  })
+
+  it("applies a Screens output scope only after the host acknowledges it", async () => {
+    const { useSettingsStore } = await import("./settings-store")
+    const device = { hash: "device-hash", name: "Graphics tablet", paired_at: "2026-10-27T10:00:00Z", role: "screens" as const }
+    useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
+    let acknowledge!: () => void
+    mockRemoteInvoke.mockImplementation(() => new Promise<void>((resolve) => { acknowledge = resolve }))
+
+    const changed = useSettingsStore.getState().setRemoteDeviceOutputScope(device.hash, ["overflow", "sanctuary", "overflow"])
+    expect(useSettingsStore.getState().remoteDevices[0]?.outputScope).toBeUndefined()
+    await Promise.resolve()
+    expect(mockRemoteInvoke).toHaveBeenCalledWith("remote_set_keys", {
+      shared: null,
+      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false, output_scope: ["overflow", "sanctuary"] }],
+      requireAuth: true,
+    })
+    acknowledge()
+    await expect(changed).resolves.toBe(true)
+    expect(useSettingsStore.getState().remoteDevices[0]?.outputScope).toEqual(["overflow", "sanctuary"])
   })
 
   it("keeps role, pause and revoke state unchanged when the host rejects access updates", async () => {

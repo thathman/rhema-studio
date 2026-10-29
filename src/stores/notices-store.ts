@@ -163,14 +163,3 @@ export function asAction(a: unknown): NoticeAction | null {
   if (!k || typeof value !== "string" || !value.trim()) return null
   return { kind: k, value: value.trim().slice(0, 120) }
 }
-
-/**
- * The congregation outputs a "take this scene" request switches: those already showing a scene (the
- * program), else the main output, else the first.
- */
-export function sceneTargets(outputs: { id: string; sceneId?: string | null }[]): string[] {
-  const showing = outputs.filter((o) => o.sceneId).map((o) => o.id)
-  if (showing.length) return showing
-  const main = outputs.find((o) => o.id === "main") ?? outputs[0]
-  return main ? [main.id] : []
-}

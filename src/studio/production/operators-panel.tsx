@@ -13,7 +13,7 @@ import { activatedLabel } from "@/lib/live-sources"
 import { sourceName } from "@/lib/content-names"
 import { NoticesPanel } from "@/studio/notices-panel"
 import { JoinedTalk } from "@/studio/talk"
-import { sceneTargets, type NoticeAction } from "@/stores/notices-store"
+import type { NoticeAction } from "@/stores/notices-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { deskFreshness, skewWords } from "@/lib/desk-freshness"
 import { backstageRows, pauseWords } from "@/lib/cuesheet"
@@ -231,6 +231,13 @@ function JoinedDesk() {
   const secure = useJoin((s) => s.secure)
   const fingerprint = useSettingsStore((s) => s.joinSecure?.fingerprint)
   const desks = DESKS[me?.role ?? "present"] ?? []
+  const deskLive = live && me?.role === "screens"
+    ? {
+      ...live,
+      outputs: live.outputs.filter((output) => (me.outputScope ?? []).includes(output.id)),
+      outputMap: live.outputMap?.filter((output) => output.role === "congregation" && (me.outputScope ?? []).includes(output.id)),
+    }
+    : live
   const fresh = useFreshness()
   return (
     <Card kicker={`Joined ${live?.church || address}`} title={live?.service?.title ?? "The host's service"}>
@@ -278,9 +285,9 @@ function JoinedDesk() {
           {desks.includes("bible") && <BibleConsole live={live} />}
           {desks.includes("songs") && <SongsDesk live={live} />}
           {desks.includes("cameras") && <CameraDesk live={live} />}
-          {desks.includes("outputs") && <OutputMap live={live} />}
-          {desks.includes("outputs") && <ScreenSources live={live} />}
-          {desks.includes("scenes") && <ScenesDesk live={live} role={me?.role ?? "present"} />}
+          {desks.includes("outputs") && deskLive && <OutputMap live={deskLive} />}
+          {desks.includes("outputs") && deskLive && <ScreenSources live={deskLive} />}
+          {desks.includes("scenes") && deskLive && <ScenesDesk live={deskLive} role={me?.role ?? "present"} outputScope={me?.outputScope ?? []} />}
           {desks.includes("stage") && <StageDesk live={live} />}
           {desks.includes("obs") && <ObsDesk live={live} />}
           <DeskAuxTimers live={live} role={me?.role ?? "present"} stale={fresh.stale} />
@@ -303,12 +310,14 @@ function JoinedDesk() {
                 // reason. Preview puts a verse or a song in the main desk's Preview only.
                 if (a.kind === "camera") return null // answering is the action
                 if (a.kind === "sceneEdit") return "only the main desk answers a scene change"
+                if (a.kind === "scene") return "This request did not change any output. The host must choose one output in Scenes; group Take is unavailable."
                 const send = useJoin.getState().send
                 const results = a.kind === "bible" ? [await send({ command: mode === "preview" ? "bible_preview" : "bible_activate", value: a.value })]
                   : a.kind === "song" ? [await send({ command: mode === "preview" ? "song_preview" : "song_show", value: a.value })]
                     : a.kind === "event" ? [await send({ command: "event_start", value: a.value })]
-                      : await Promise.all(sceneTargets(live.outputs).map((output) => send({ command: "take_scene", value: { output, scene: a.value } })))
-                if (results.length === 0) return "the host has no congregation output"
+                      : a.kind === "wrap" ? [await send({ command: "stage_message", value: a.value.slice(0, 120) })]
+                      : []
+                if (results.length === 0) return "this action needs the main desk"
                 const refused = results.find((r) => !r.ok)
                 return refused && !refused.ok ? refused.error : null
               }}
@@ -565,13 +574,15 @@ function PrepareDesk() {
  * operator); make or change a scene through the host (#243 SC.16) for a desk that may (a camera
  * desk: its camera boxes only).
  */
-function ScenesDesk({ live, role }: { live: LiveStateV1; role: string }) {
+function ScenesDesk({ live, role, outputScope }: { live: LiveStateV1; role: string; outputScope: string[] }) {
   const ok = useCanSend()
-  const [outputId, setOutputId] = useState(live.outputs[0]?.id ?? "")
+  const [outputId, setOutputId] = useState("")
   // The scene open in the editor: its id, "new", or none.
   const [editing, setEditing] = useState<string | null>(null)
   const [said, setSaid] = useState("")
-  const output = live.outputs.find((o) => o.id === outputId) ?? live.outputs[0]
+  const congregationOutputs = live.outputs
+  const outputs = role === "screens" ? congregationOutputs.filter((o) => outputScope.includes(o.id)) : congregationOutputs
+  const output = outputs.find((o) => o.id === outputId) ?? outputs[0]
   const send = useJoin.getState().send
   // A camera desk and an editor change scenes but never put one on a screen.
   const takes = role !== "camera" && role !== "editor"
@@ -585,12 +596,12 @@ function ScenesDesk({ live, role }: { live: LiveStateV1; role: string }) {
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold">Scenes on</span>
           <select aria-label="Congregation output" value={output.id} onChange={(e) => setOutputId(e.target.value)} className="h-7 rounded-md border border-input bg-card px-1.5">
-            {live.outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            {outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
           <span className="text-muted-foreground">shows {output.sceneName ?? live.scenes.find((s) => s.id === output.sceneId)?.name ?? "its own feed"}</span>
         </div>
       ) : (
-        <p className="text-muted-foreground">The host has no congregation output.</p>
+        <p role={role === "screens" ? "status" : undefined} className="text-muted-foreground">{role === "screens" ? "No congregation output is assigned to this desk. Ask the main host to review output scope in Permissions." : "The host has no congregation output."}</p>
       )}
       <ul className="flex flex-wrap gap-1.5">
         {live.scenes.map((s) => (

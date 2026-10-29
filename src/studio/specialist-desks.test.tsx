@@ -43,13 +43,13 @@ const live: LiveStateV1 = {
   cameraFeeds: [{ name: "pulpit", label: "Pulpit", url: "http://192.168.1.20:8889/pulpit/whep" }, { name: "choir", label: "Choir", url: "http://192.168.1.20:8889/choir/whep" }],
 }
 
-const render = async (role: string, state: LiveStateV1 = live) => {
+const render = async (role: string, state: LiveStateV1 = live, outputScope?: string[]) => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   const el = document.createElement("div")
   const root = createRoot(el)
   roots.push(root)
   await act(async () => {
-    useJoin.setState({ status: "connected", me: { name: "Op", role }, live: state, error: null, paused: false, note: null })
+    useJoin.setState({ status: "connected", me: { name: "Op", role, ...(outputScope ? { outputScope } : {}) }, live: state, error: null, paused: false, note: null })
     root.render(<OperatorsPanel />)
   })
   return el
@@ -136,6 +136,32 @@ describe("each specialist desk sees only its part", () => {
 })
 
 describe("editing a scene from a Screens desk", () => {
+  it("shows Takes only for assigned congregation outputs and never offers group Take", async () => {
+    const state: LiveStateV1 = {
+      ...live,
+      outputs: [
+        { id: "main", name: "Sanctuary", sceneId: "split" },
+        { id: "overflow", name: "Overflow", sceneId: null },
+      ] as never,
+      outputMap: [
+        { id: "main", name: "Sanctuary", kind: "display", role: "congregation", on: true, scene: "Sermon split" },
+        { id: "overflow", name: "Overflow", kind: "ndi", role: "congregation", on: true, scene: null },
+        { id: "stage", name: "Stage Confidence", kind: "display", role: "stage", on: true, scene: null },
+        { id: "lobby", name: "Lobby", kind: "display", role: "signage", on: true, scene: null },
+      ],
+    }
+    const el = await render("screens", state, ["overflow"])
+    expect(el.querySelector('[aria-label="Congregation output"]')?.textContent).toBe("Overflow")
+    expect(el.textContent).toContain("Take Welcome")
+    const map = el.querySelector('[aria-label="Output map"]')
+    expect(map?.textContent).toContain("Overflow")
+    expect(map?.textContent).not.toContain("Sanctuary")
+    expect(map?.textContent).not.toContain("Stage Confidence")
+    expect(map?.textContent).not.toContain("Lobby")
+    await click(button(el, "Take Welcome"))
+    expect(sent).toEqual([{ command: "take_scene", value: { output: "overflow", scene: "welcome" } }])
+  })
+
   it("saves through the host with the revision it started from, and says when it waits for the main desk", async () => {
     const el = await render("screens")
     await click(button(el, "Edit Sermon split"))

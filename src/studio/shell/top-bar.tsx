@@ -7,10 +7,11 @@ import { NoticesPanel } from "@/studio/notices-panel"
 import { PersonLevels, TalkButton, TalkTo } from "@/studio/talk"
 import { hostTalk, setHostChannels, setHostLevel, setVoiceVolume, speakerName, useVoice } from "@/lib/voice"
 import { queueRequest } from "@/lib/queue-request"
-import { sceneTargets, useNotices, type ActionMode, type NoticeAction } from "@/stores/notices-store"
+import { useNotices, type ActionMode, type NoticeAction } from "@/stores/notices-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { activateBibleReference, previewBibleReference } from "@/lib/bible-activate"
 import { songRequest } from "@/lib/song-request"
+import { runSceneNoticeAction } from "@/studio/notice-scene-action"
 import { acceptSceneRequest, declineSceneRequest } from "@/lib/desk-scenes"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useEventClock } from "@/stores/event-clock-store"
@@ -143,12 +144,8 @@ async function runNoticeAction(a: NoticeAction, mode: ActionMode = "show"): Prom
     useEventClock.getState().start(a.value)
     return null
   }
-  const b = useBroadcastStore.getState()
-  if (!b.scenes.some((x) => x.id === a.value)) return "that scene is no longer there"
-  const targets = sceneTargets(b.outputs.filter((o) => (o.role ?? "congregation") === "congregation"))
-  if (targets.length === 0) return "there is no congregation output"
-  for (const id of targets) b.takeScene(id, a.value)
-  return null
+  if (a.kind === "scene") return runSceneNoticeAction(a.value)
+  return "this request is not available on the main desk"
 }
 
 /** The main desk's Talk (Rhema Comms voice): hold to talk; who is speaking shows beside it. */
