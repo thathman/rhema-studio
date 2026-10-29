@@ -251,8 +251,10 @@ impl CommandSink for TauriSink {
     }
 
     fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
+        // A scene change that must wait for the main desk becomes a host approval request first.
+        let payload = super::approvals::record_scene_request(&self.app, event, payload);
         self.app
-            .emit(event, payload.to_string())
+            .emit(event, payload)
             .map_err(|e| CommandError::DispatchFailed(format!("Tauri emit failed: {e}")))
     }
 
