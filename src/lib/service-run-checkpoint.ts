@@ -1,4 +1,5 @@
 import type { JournalEntry } from "@/lib/journal"
+import { parseRunOfShowEvent, type RunOfShowEventPlan } from "@/lib/run-of-show"
 
 export interface ServiceRunCheckpointView {
   entries: JournalEntry[]
@@ -9,6 +10,7 @@ export interface ServiceRunCheckpointView {
     name: string
     type: "phase" | "group"
     at: number
+    event?: RunOfShowEventPlan
   }>
   operator: string | null
   checkpointAt?: number
@@ -119,7 +121,17 @@ export function parseServiceRunCheckpoint(
     entries: value.entries as JournalEntry[],
     plan: value.plan as Array<{ id: string; label: string }>,
     plannedMs: value.plannedMs as Record<string, number>,
-    headers: value.headers as ServiceRunCheckpointView["headers"],
+    headers: value.headers.map((header) => {
+      const raw = header as Record<string, unknown>
+      const event = parseRunOfShowEvent(raw.event)
+      return {
+        id: raw.id as string,
+        name: raw.name as string,
+        type: raw.type as "phase" | "group",
+        at: raw.at as number,
+        ...(event ? { event } : {}),
+      }
+    }) as ServiceRunCheckpointView["headers"],
     operator: value.operator as string | null,
     ...(value.version === 2
       ? {
