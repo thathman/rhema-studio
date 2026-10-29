@@ -1220,3 +1220,15 @@ describe("slideLabel", () => {
     expect(slideLabel({ title: "a".repeat(300), body: "" }, " (1/2)").endsWith(" (1/2)")).toBe(true)
   })
 })
+
+describe("a designed moment saved in a service", () => {
+  it("keeps the design version it pins through save and reopen, and drops a malformed pin", () => {
+    const moment = { id: "m1", kind: "slide", slide: { title: "Welcome", body: "", designRef: { id: "d1", version: 3 } }, reference: "Welcome", confidence: 1, source: "manual", added_at: 0 } as QueueItem
+    const [input] = toItemInputs([moment], () => "KJV")
+    expect(JSON.parse(String(input.payload)).designRef).toEqual({ id: "d1", version: 3 })
+    const stored = (payload: string): ProgramItem => ({ id: "m1", program_id: program.id, position: 0, kind: "slide", reference: "Welcome", book_number: null, chapter: null, verse: null, translation: null, secondary_translation: null, notes: null, payload } as ProgramItem)
+    const reopen = (payload: string) => toQueueItems({ program, items: [stored(payload)] }, 1, [KJV]).items[0] as Extract<QueueItem, { kind: "slide" }>
+    expect(reopen(String(input.payload)).slide.designRef).toEqual({ id: "d1", version: 3 })
+    expect(reopen(JSON.stringify({ title: "Welcome", body: "", designRef: { id: "../x", version: 0 } })).slide.designRef).toBeUndefined()
+  })
+})

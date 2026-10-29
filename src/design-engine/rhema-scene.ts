@@ -207,6 +207,29 @@ export function pinStatus(scene: Scene, latestVersion: number | null): { pin: De
   return { pin: scene.design, update: latestVersion !== null && latestVersion > scene.design.version ? latestVersion : null }
 }
 
+/**
+ * What a designed moment shows: the scene from the version it pins. `scene: null` means show the
+ * moment's own slide (its title and body) as before, with `issues` saying why: the version is
+ * missing (a partial restore), or it cannot be drawn. Never another version.
+ */
+export async function resolveDesignedMoment(
+  slide: { title: string; designRef?: DesignPin },
+  getVersion: (id: string, version: number) => Promise<{ designId: string; version: number; document: RhemaDesign | null } | null>,
+): Promise<{ scene: Scene | null; issues: DesignIssue[] }> {
+  const ref = slide.designRef
+  if (!ref) return { scene: null, issues: [] }
+  const missing = (why: string) => ({ scene: null, issues: [{ nodeId: "__design__", message: `"${slide.title}" shows its text instead: ${why}` }] })
+  let found
+  try {
+    found = await getVersion(ref.id, ref.version)
+  } catch {
+    return missing(`design ${ref.id} version ${ref.version} could not be read`)
+  }
+  if (!found?.document) return missing(`design ${ref.id} version ${ref.version} is not in this computer's designs`)
+  const { scene, issues } = sceneFromVersion({ designId: ref.id, version: ref.version, document: found.document })
+  return issues.length ? { scene: null, issues } : { scene, issues }
+}
+
 /** What a live layer would show now, from the host's Live State (the parts a preview needs). */
 export interface LivePreviewInput {
   program: { onAir: boolean; reference: string | null }
