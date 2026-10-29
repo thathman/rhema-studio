@@ -19,9 +19,14 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useShellStore } from "@/studio/shell-store"
 import { useProductionTab } from "@/studio/production/production-tab"
 import { resetDesignPacksForTests, useDesignPackStore } from "@/lib/design-packs"
+import { SceneDesignPicker } from "@/studio/prepare/scene-design-picker"
+import { useQueueStore } from "@/stores/queue-store"
+import { useServiceStore } from "@/stores/service-store"
+import type { QueueItem } from "@/types"
 import pack from "../../../design-packs/rhema-worship-expressions.rhema-design.json?raw"
 
 let root: Root | null = null
+const defaultTakeScene = useBroadcastStore.getState().takeScene
 
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -29,7 +34,10 @@ beforeEach(() => {
   HTMLCanvasElement.prototype.getContext = (() => null) as never
   document.body.replaceChildren()
   useBroadcastStore.setState({ themes: BUILTIN_THEMES, scenes: [], designDrafts: [], stageStyle: { ...DEFAULT_STAGE_STYLE }, tickerStyle: { ...DEFAULT_TICKER_STYLE }, ticker: null })
-  useProductionTab.setState({ requested: null, scene: null })
+  useProductionTab.setState({ requested: null, scene: null, selected: "timekeeper", open: false, liveToolsTab: "bible" })
+  useShellStore.setState({ prepareDesignReturn: null, goRequest: null })
+  useQueueStore.setState({ items: [], headers: [], activeIndex: null })
+  useServiceStore.setState({ current: null })
   resetDesignPacksForTests()
   toasts.length = 0
 })
@@ -51,10 +59,21 @@ async function renderDesignWorkspace() {
   return el
 }
 
+async function renderScenePicker(onSceneSelected: (sceneId: string) => void) {
+  const el = document.createElement("div")
+  document.body.appendChild(el)
+  root = createRoot(el)
+  await act(async () => root!.render(<SceneDesignPicker eventId="event-1" eventTitle="Sunday service" momentId="moment-1" momentTitle="Opening Scripture" onSceneSelected={onSceneSelected} />))
+  return el
+}
+
 afterEach(() => {
   act(() => root?.unmount())
   root = null
   document.body.replaceChildren()
+  useBroadcastStore.setState({ takeScene: defaultTakeScene })
+  useShellStore.setState({ prepareDesignReturn: null, goRequest: null })
+  useServiceStore.setState({ current: null })
 })
 const card = (el: HTMLElement, name: string) => [...el.querySelectorAll("li")].find((li) => li.querySelector("h4")?.textContent === name) as HTMLLIElement
 
@@ -77,7 +96,7 @@ describe("Design → Templates (#299)", () => {
 
     const before = useBroadcastStore.getState()
     const scene = card(el, "Midnight Blue · Camera + Bible band")
-    const use = [...scene.querySelectorAll("button")].find((b) => b.textContent?.includes("Use and edit")) as HTMLButtonElement
+    const use = [...scene.querySelectorAll("button")].find((b) => b.textContent?.includes("Customize a copy")) as HTMLButtonElement
     await act(async () => use.click())
 
     const after = useBroadcastStore.getState()
@@ -98,10 +117,10 @@ describe("Design → Templates (#299)", () => {
     expect(card(el, "Clean · Name strip").textContent).toContain("OBS overlay")
   })
 
-  it("Use and edit on a camera scene adds the copy and opens Live → Scenes", async () => {
+  it("Customize a copy on a camera scene adds the copy and opens Live → Scenes", async () => {
     const el = await render()
     const scene = card(el, "Clean · Camera and scripture")
-    const edit = [...scene.querySelectorAll("button")].find((b) => b.textContent?.includes("Use and edit")) as HTMLButtonElement
+    const edit = [...scene.querySelectorAll("button")].find((b) => b.textContent?.includes("Customize a copy")) as HTMLButtonElement
     await act(async () => edit.click())
     const s = useBroadcastStore.getState()
     expect(s.scenes).toHaveLength(1)
@@ -120,7 +139,7 @@ describe("Design → Templates (#299)", () => {
     useBroadcastStore.setState({ stageStyle, outputs: [output], outputFrames: frame })
     const el = await render()
     const look = card(el, "Classic · Calm stage")
-    const choose = [...look.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use and edit"))!
+    const choose = [...look.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Customize a copy"))!
 
     await act(async () => choose.click())
 
@@ -148,7 +167,7 @@ describe("Design → Templates (#299)", () => {
     useBroadcastStore.setState({ tickerStyle, ticker, tickerItems: ticker.items })
     const el = await render()
     const look = card(el, "Classic · Notices")
-    const choose = [...look.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use and edit"))!
+    const choose = [...look.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Customize a copy"))!
 
     await act(async () => choose.click())
 
@@ -199,7 +218,7 @@ describe("Design → Templates (#299)", () => {
     const after = useBroadcastStore.getState()
     expect([after.outputs, after.scenes, after.themes, after.isLive]).toEqual([before.outputs, before.scenes, before.themes, before.isLive])
 
-    const use = [...card(el, "Midnight Blue · Camera + Bible band").querySelectorAll("button")].find((b) => b.textContent?.includes("Use")) as HTMLButtonElement
+    const use = [...card(el, "Midnight Blue · Camera + Bible band").querySelectorAll("button")].find((b) => b.textContent?.includes("Add a copy")) as HTMLButtonElement
     await act(async () => use.click())
     expect(useBroadcastStore.getState().scenes[0]?.libraryLookId).toBe("local-worship-expressions/midnight-camera-bible")
 
@@ -210,5 +229,56 @@ describe("Design → Templates (#299)", () => {
     expect(useBroadcastStore.getState().scenes).toHaveLength(1)
     expect(el.querySelector('section[aria-label="Church Classic"]')).not.toBeNull()
     expect(el.querySelector('section[aria-label="Rhema Studio · Worship Expressions"]')).not.toBeNull()
+  })
+
+  it("searches accented scene descriptions without accents", async () => {
+    const el = await render()
+    const search = el.querySelector<HTMLInputElement>('input[type="search"]')!
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!
+    await act(async () => {
+      setValue.call(search, "yoruba")
+      search.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    expect(card(el, "Aurora Teal · Scripture full")).toBeTruthy()
+    expect(el.querySelectorAll("li").length).toBeLessThan(120)
+  })
+
+  it("attaches a copied Design scene to the same stable event moment without changing Live", async () => {
+    const moment = { id: "moment-1", kind: "slide", slide: { title: "Opening Scripture", body: "Read together" }, reference: "Opening Scripture", confidence: 1, source: "manual", added_at: 0 } as QueueItem
+    useQueueStore.setState({ items: [moment], activeIndex: null })
+    const takeScene = vi.fn()
+    useBroadcastStore.setState({ takeScene })
+    const before = useBroadcastStore.getState()
+    const onSceneSelected = (sceneId: string) => useQueueStore.getState().updateItem("moment-1", (item) => ({ ...item, scene_id: sceneId }))
+    const el = await renderScenePicker(onSceneSelected)
+    await act(async () => (el.querySelector("button[aria-label='Choose a scene design for Opening Scripture']") as HTMLButtonElement).click())
+    const scene = card(document.body, "Clean · Camera and scripture")
+    const use = [...scene.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use for this moment"))!
+    await act(async () => use.click())
+
+    const after = useBroadcastStore.getState()
+    const chosen = after.scenes[0]
+    expect(chosen?.libraryLookId).toBe("look-clean-scene-bible")
+    expect(useQueueStore.getState().items[0]).toMatchObject({ id: "moment-1", scene_id: chosen?.id })
+    expect(useQueueStore.getState().activeIndex).toBeNull()
+    expect(after.outputs).toBe(before.outputs)
+    expect(after.isLive).toBe(before.isLive)
+    expect(after.liveItemId).toBe(before.liveItemId)
+    expect(takeScene).not.toHaveBeenCalled()
+    expect(useProductionTab.getState().requested).toBeNull()
+  })
+
+  it("keeps a return path when a service scene copy is customized", async () => {
+    const moment = { id: "moment-1", kind: "slide", slide: { title: "Opening Scripture", body: "Read together" }, reference: "Opening Scripture", confidence: 1, source: "manual", added_at: 0 } as QueueItem
+    useQueueStore.setState({ items: [moment], activeIndex: null })
+    const el = await renderScenePicker(() => {})
+    await act(async () => (el.querySelector("button[aria-label='Choose a scene design for Opening Scripture']") as HTMLButtonElement).click())
+    const scene = card(document.body, "Clean · Camera and scripture")
+    const customize = [...scene.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Customize a copy"))!
+    await act(async () => customize.click())
+    const copy = useBroadcastStore.getState().scenes[0]
+    expect(useShellStore.getState().prepareDesignReturn).toMatchObject({ eventId: "event-1", momentId: "moment-1", sceneId: copy.id })
+    expect(useProductionTab.getState()).toMatchObject({ requested: "programs", scene: copy.id })
+    expect(useShellStore.getState().goRequest).toBe("present")
   })
 })

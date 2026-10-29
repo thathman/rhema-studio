@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ask } from "@tauri-apps/plugin-dialog"
 import { HeartIcon, MoreHorizontalIcon, PaletteIcon, PencilIcon, PlusIcon, RotateCcwIcon, Trash2Icon, UploadIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -60,11 +61,19 @@ const LANGUAGES: ReadonlyArray<readonly [LookLanguage | "both" | "all", string]>
 
 const storage = typeof localStorage === "undefined" ? null : localStorage
 
+export interface ContextualScenePickerOptions {
+  /** The caller creates a church-owned copy, attaches it to the selected moment, then optionally opens its editor. */
+  onChoose: (look: Extract<LibraryLook, { kind: "scene" }>, customize: boolean) => void
+}
+
 /**
- * Design → Templates: ready-made looks to start from. Use adds the church's own
+ * Design → Templates: ready-made looks to start from. Adding a copy creates the church's own
  * copy; nothing on a screen changes until that copy is chosen for an output.
  */
-export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: string) => void }) {
+export function LookLibraryView({ onOpen, scenePicker }: { onOpen: (tab: DesignTab, id?: string) => void; scenePicker?: ContextualScenePickerOptions }) {
+  const [query, setQuery] = useState("")
+  const searchId = useId()
+  const contextualScenePicker = !!scenePicker
   const [layout, setLayout] = useState<LookLayout | "obs-overlay" | "all">("all")
   const [aspect, setAspect] = useState<LookAspect | "all">("all")
   const [family, setFamily] = useState<LookFamilyId | "all">("all")
@@ -74,13 +83,22 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
   const [favourites, setFavourites] = useState(() => readLookFavourites(storage))
   // The built-in looks, then each imported design pack's, as one library: the same filters, Use and Reset.
   const packs = useDesignPackStore((s) => s.packs)
-  const all = useMemo(() => libraryLooks(packs), [packs])
-  const families = useMemo(() => libraryFamilies(packs), [packs])
+  const library = useMemo(() => libraryLooks(packs), [packs])
+  const all = useMemo(() => contextualScenePicker ? library.filter((look) => look.kind === "scene") : library, [library, contextualScenePicker])
+  const families = useMemo(() => libraryFamilies(packs).filter((family) => all.some((look) => look.family === family.id)), [all, packs])
   // The aspect filter shows once the library has looks in more than one frame shape.
   const aspects = useMemo(() => lookAspects(all), [all])
   // A pack taken out while it was the family chosen: every family again.
   const familyShown = family === "all" || families.some((f) => f.id === family) ? family : "all"
-  const looks = useMemo(() => filterLooks(all, { layout, family: familyShown, background, language, aspect, favouritesOnly, favourites }), [all, layout, familyShown, background, language, aspect, favouritesOnly, favourites])
+  const normalizedQuery = normalizeLookQuery(query).trim()
+  const searchWords = useMemo(() => normalizedQuery.split(/\s+/).filter(Boolean), [normalizedQuery])
+  const looks = useMemo(() => filterLooks(all, { layout, family: familyShown, background, language, aspect, favouritesOnly, favourites })
+    .filter((look) => {
+      if (!searchWords.length) return true
+      const familyName = families.find((family) => family.id === look.family)?.name ?? ""
+      const searchable = normalizeLookQuery([look.name, look.purpose, familyName, LAYOUT_NAMES[look.layout], CONTENT_LABELS[look.content], look.background, look.aspect].join(" "))
+      return searchWords.every((word) => searchable.includes(word))
+    }), [all, layout, familyShown, background, language, aspect, favouritesOnly, favourites, searchWords, families])
   const groups = families.map((f) => ({ family: f, looks: looks.filter((l) => l.family === f.id) })).filter((g) => g.looks.length > 0)
 
   const toggleFavourite = (id: string) => {
@@ -89,18 +107,23 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
     setFavourites(next)
     writeLookFavourites(storage, next)
   }
-  const clear = () => { setLayout("all"); setFamily("all"); setBackground("all"); setLanguage("all"); setAspect("all"); setFavouritesOnly(false) }
+  const clear = () => { setQuery(""); setLayout("all"); setFamily("all"); setBackground("all"); setLanguage("all"); setAspect("all"); setFavouritesOnly(false) }
 
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Ready-made looks, made for Rhema Studio and fully offline. <strong className="font-semibold text-foreground">Use</strong> adds your own copy to your looks, to change as you like.
-          Nothing on the screens changes until you choose the copy for an output in its settings.
+          {scenePicker
+            ? <>Choose a scene for this service moment. Each choice creates a church-owned copy and updates the plan; it does not change an output.</>
+            : <>Ready-made looks, made for Rhema Studio and fully offline. <strong className="font-semibold text-foreground">Add a copy</strong> to keep an editable version in your Designs. Nothing on the screens changes until you deliberately apply or Take it.</>}
         </p>
-        <ImportPackButton onImported={(pack) => { clear(); setFamily(pack.family.id) }} />
+        {!scenePicker && <ImportPackButton onImported={(pack) => { clear(); setFamily(pack.family.id) }} />}
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+        <label htmlFor={searchId} className="relative min-w-52 flex-1 basis-64">
+          <span className="sr-only">{scenePicker ? "Search scene designs" : "Search Design templates"}</span>
+          <Input id={searchId} type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={scenePicker ? "Search scene designs" : "Search looks by name or purpose"} className="h-8 text-xs" />
+        </label>
         <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Layout">
           {LAYOUTS.map((l) => (
             <Chip key={l} on={layout === l} onClick={() => setLayout(l)} title={l === "obs-overlay" ? "Lower thirds and tickers with nothing behind them, to lay over the camera in OBS" : undefined}>{layoutLabel(l)}</Chip>
@@ -136,7 +159,7 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
       </div>
       {groups.length === 0 ? (
         <div className="flex flex-col items-start gap-2 py-8 text-sm text-muted-foreground">
-          {favouritesOnly && favourites.size === 0 ? "No favourites yet: mark a look with the heart to keep it here." : "No looks match these filters."}
+          {favouritesOnly && favourites.size === 0 ? "No favourites yet: mark a look with the heart to keep it here." : query.trim() ? "No looks match this search and these filters." : "No looks match these filters."}
           <Button size="sm" variant="outline" onClick={clear}>Show every look</Button>
         </div>
       ) : (
@@ -158,7 +181,7 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
               })()}
             </header>
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
-              {g.looks.map((l) => <LookCard key={l.id} look={l} favourite={favourites.has(l.id)} onFavourite={() => toggleFavourite(l.id)} onOpen={onOpen} />)}
+              {g.looks.map((l) => <LookCard key={l.id} look={l} favourite={favourites.has(l.id)} onFavourite={() => toggleFavourite(l.id)} onOpen={onOpen} scenePicker={scenePicker} />)}
             </ul>
           </section>
         ))
@@ -265,7 +288,7 @@ function useLookCopies(look: LibraryLook): LookCopy[] {
 
 const COPIES_WHERE: Record<LibraryLook["kind"], string> = { theme: "In your themes", "lower-third": "In your lower-third styles", scene: "In your scenes", ticker: "In use", stage: "In use" }
 
-function LookCard({ look, favourite, onFavourite, onOpen }: { look: LibraryLook; favourite: boolean; onFavourite: () => void; onOpen: (tab: DesignTab, id?: string) => void }) {
+function LookCard({ look, favourite, onFavourite, onOpen, scenePicker }: { look: LibraryLook; favourite: boolean; onFavourite: () => void; onOpen: (tab: DesignTab, id?: string) => void; scenePicker?: ContextualScenePickerOptions }) {
   const copies = useLookCopies(look)
   return (
     <li className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
@@ -281,10 +304,19 @@ function LookCard({ look, favourite, onFavourite, onOpen }: { look: LibraryLook;
         <p className="text-xs text-muted-foreground">{look.purpose}</p>
         {copies.length > 0 && <p className="text-[0.6875rem] text-muted-foreground">{COPIES_WHERE[look.kind]}: {copies.map((c) => c.name).join(", ")}</p>}
         <div className="mt-auto flex flex-wrap items-center gap-1 pt-1.5">
-          <Button size="xs" onClick={() => void addLook(look, false, onOpen)} title="Add your own copy to your looks"><PlusIcon /> Use</Button>
-          <Button size="xs" variant="outline" onClick={() => void addLook(look, true, onOpen)} title={look.kind === "scene" ? "Add your own copy and open it in Live → Production tools → Scenes" : "Add your own copy and open it to edit"}><PencilIcon /> Use and edit</Button>
-          {brandable(look) && <ChurchColoursButton look={look} onOpen={onOpen} />}
-          {copies.length > 0 && <ResetMenu look={look} copies={copies} />}
+          {scenePicker && look.kind === "scene" ? (
+            <>
+              <Button size="xs" onClick={() => scenePicker.onChoose(look, false)}><PlusIcon /> Use for this moment</Button>
+              <Button size="xs" variant="outline" onClick={() => scenePicker.onChoose(look, true)} title="Create and attach a copy, then customize it without taking it live"><PencilIcon /> Customize a copy…</Button>
+            </>
+          ) : !scenePicker ? (
+            <>
+              <Button size="xs" onClick={() => void addLook(look, false, onOpen)} title="Add an editable copy to your Designs"><PlusIcon /> Add a copy</Button>
+              <Button size="xs" variant="outline" onClick={() => void addLook(look, true, onOpen)} title="Create a copy and open its editor"><PencilIcon /> Customize a copy</Button>
+              {brandable(look) && <ChurchColoursButton look={look} onOpen={onOpen} />}
+              {copies.length > 0 && <ResetMenu look={look} copies={copies} />}
+            </>
+          ) : null}
         </div>
       </div>
     </li>
@@ -292,7 +324,7 @@ function LookCard({ look, favourite, onFavourite, onOpen }: { look: LibraryLook;
 }
 
 /**
- * Use with church colours: the copy takes the Brand Kit's colours and fonts. Before the church has
+ * Add with church colours: the copy takes the Brand Kit's colours and fonts. Before the church has
  * set any, it says where to set them instead.
  */
 function ChurchColoursButton({ look, onOpen }: { look: LibraryLook; onOpen: (tab: DesignTab, id?: string) => void }) {
@@ -304,8 +336,8 @@ function ChurchColoursButton({ look, onOpen }: { look: LibraryLook; onOpen: (tab
     toast("Set your church colours in Design → Brand Kit first.", { description: "Then this adds a copy of the look in those colours and fonts.", action: { label: "Open Brand Kit", onClick: () => onOpen("brand") } })
   }
   return (
-    <Button size="xs" variant="outline" onClick={click} title={ready ? "Add your own copy in your Brand Kit colours and fonts" : "Set your church colours in Design → Brand Kit"}>
-      <PaletteIcon /> Use with church colours
+    <Button size="xs" variant="outline" onClick={click} title={ready ? "Add a copy in your Brand Kit colours and fonts" : "Set your church colours in Design → Brand Kit"}>
+      <PaletteIcon /> Add with church colours
     </Button>
   )
 }
@@ -464,6 +496,10 @@ async function confirm(title: string, message: string, okLabel = "Use it"): Prom
   } catch {
     return false
   }
+}
+
+function normalizeLookQuery(value: string): string {
+  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase()
 }
 
 /** A realistic preview, drawn by the same code the outputs use. */

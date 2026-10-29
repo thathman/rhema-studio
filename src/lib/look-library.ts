@@ -192,7 +192,7 @@ export function showsTwoLanguages(look: LibraryLook, library: readonly LibraryLo
   }
 }
 
-/** The library looks "Use with church colours" works for: ones Use copies (not the church's one ticker or stage look). */
+/** The library's "Add with church colours" works for: copied looks (not the church's one ticker or stage look). */
 export function brandable(look: LibraryLook): boolean {
   return look.kind === "theme" || look.kind === "lower-third" || look.kind === "scene"
 }

@@ -18,6 +18,16 @@ export function designTabOf(tab: DesignTab): DesignTab {
 export type PresentView = "standard" | "production"
 export type LibrarySection = "bible" | "songs" | "hymns" | "slides" | "media" | "files"
 
+/** In-memory return path for customizing a copied Design from a Prepare event. Never persisted as a service preference. */
+export interface PrepareDesignReturnContext {
+  serviceId: string | null
+  eventId: string
+  momentId: string
+  eventTitle: string
+  momentTitle: string
+  sceneId: string
+}
+
 export interface ShellPrefs {
   workspace: Workspace
   presentView: PresentView
@@ -110,6 +120,10 @@ interface ShellState extends ShellPrefs {
   historyOpen: boolean
   setHistoryOpen: (open: boolean) => void
   openHistory: () => void
+  /** Context preserved while a service-linked scene copy is edited in Live → Scenes. */
+  prepareDesignReturn: PrepareDesignReturnContext | null
+  setPrepareDesignReturn: (context: PrepareDesignReturnContext) => void
+  clearPrepareDesignReturn: () => void
   /** Setup status (#298): the church's setup, the equipment and this service, on one page. */
   setupStatusOpen: boolean
   setSetupStatusOpen: (open: boolean) => void
@@ -155,6 +169,9 @@ export const useShellStore = create<ShellState>((set) => ({
   historyOpen: false,
   setHistoryOpen: (historyOpen) => set({ historyOpen }),
   openHistory: () => set({ historyOpen: true, goRequest: "prepare" }),
+  prepareDesignReturn: null,
+  setPrepareDesignReturn: (prepareDesignReturn) => set({ prepareDesignReturn }),
+  clearPrepareDesignReturn: () => set({ prepareDesignReturn: null }),
   setupStatusOpen: false,
   setSetupStatusOpen: (setupStatusOpen) => set({ setupStatusOpen }),
 }))

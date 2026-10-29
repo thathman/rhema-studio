@@ -15,10 +15,13 @@ import { ProductionWorkspace } from "./production-workspace"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { openProductionTab, useProductionTab } from "./production-tab"
+import { useShellStore } from "@/studio/shell-store"
+import { newScene } from "@/lib/scenes"
 
 // Each test's page is taken down after it, so a composer left open does not answer the next test's request.
 const roots: Root[] = []
 const originalOperatorName = useSettingsStore.getState().operatorName
+const originalTakeScene = useBroadcastStore.getState().takeScene
 const mount = (el: HTMLElement, embedded = false) => {
   const root = createRoot(el)
   roots.push(root)
@@ -28,6 +31,8 @@ beforeEach(() => useProductionTab.setState({ requested: null, selected: "timekee
 afterEach(() => {
   act(() => { for (const r of roots.splice(0)) r.unmount() })
   useSettingsStore.setState({ operatorName: originalOperatorName })
+  useBroadcastStore.setState({ takeScene: originalTakeScene })
+  useShellStore.setState({ workspace: "home", goRequest: null, prepareDesignReturn: null })
 })
 
 describe("Production control", () => {
@@ -106,7 +111,7 @@ describe("Production control", () => {
     expect(button("Restore Bible and lyrics").getAttribute("aria-label")).toBe(`Restore Bible and lyrics to ${main.name}`)
   })
 
-  it("opens Scenes at the scene another page asked for (Design → Library's Use and edit)", async () => {
+  it("opens Scenes at the scene another page asked for (Design → Templates' Customize a copy)", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const scene = (id: string, name: string) => ({ id, name, background: "#000000", layers: [], createdAt: 0, updatedAt: 0 })
     useBroadcastStore.setState({ scenes: [scene("a", "First scene"), scene("b", "Clean · Camera and scripture")], sceneReturn: {} })
@@ -117,6 +122,49 @@ describe("Production control", () => {
     expect((el.querySelector('[aria-label="Scene name"]') as HTMLInputElement).value).toBe("Clean · Camera and scripture")
     expect(useProductionTab.getState().scene).toBeNull()
     useProductionTab.setState({ requested: null })
+  })
+
+  it("customizes a Prepare scene copy in private and saves back without Take or Restore", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const scene = newScene("Opening scene")
+    const before = useBroadcastStore.getState()
+    const takeScene = vi.fn()
+    useBroadcastStore.setState({ scenes: [scene], sceneReturn: {}, takeScene, isLive: true, liveItemId: "live-item" })
+    useShellStore.setState({
+      workspace: "present",
+      prepareDesignReturn: {
+        serviceId: "service-1",
+        eventId: "event-1",
+        momentId: "moment-1",
+        eventTitle: "Sunday service",
+        momentTitle: "Opening Scripture",
+        sceneId: scene.id,
+      },
+    })
+    openProductionTab("programs", { sceneId: scene.id })
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    await act(async () => mount(el))
+
+    expect(el.querySelector('[aria-label="Private scene preview"]')?.textContent).toContain("Sunday service · Opening Scripture")
+    expect(el.querySelector('[aria-label="Scene name"]')).not.toBeNull()
+    expect([...el.querySelectorAll("button")].some((button) => button.textContent?.trim().startsWith("Take "))).toBe(false)
+    expect([...el.querySelectorAll("button")].some((button) => /^(Restore|Back to its own feed)/.test(button.textContent?.trim() ?? ""))).toBe(false)
+
+    const name = el.querySelector<HTMLInputElement>('[aria-label="Scene name"]')!
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!
+    await act(async () => { setValue.call(name, "Opening scene · adjusted"); name.dispatchEvent(new Event("input", { bubbles: true })) })
+    const saveAndReturn = el.querySelector<HTMLButtonElement>('[aria-label="Save scene and return to Prepare"]')!
+    await act(async () => saveAndReturn.click())
+
+    const after = useBroadcastStore.getState()
+    expect(after.scenes.find((item) => item.id === scene.id)?.name).toBe("Opening scene · adjusted")
+    expect(after.outputs).toBe(before.outputs)
+    expect(after.sceneReturn).toEqual({})
+    expect(after.isLive).toBe(true)
+    expect(after.liveItemId).toBe("live-item")
+    expect(takeScene).not.toHaveBeenCalled()
+    expect(useShellStore.getState().goRequest).toBe("prepare")
   })
 
   it("names the two programs (#215 G5.1): the congregation's from its NDI senders, the online one's usual format while OBS is off", async () => {

@@ -6,7 +6,7 @@ export type LiveToolsTab = "bible" | "listening" | "production"
 
 /**
  * Another page asking Production to open at a tab (the setup's "Join an existing church host" opens
- * Operators), and, for Scenes (id "programs"), at a scene (Design → Library's "Use and edit" on a camera scene).
+ * Operators), and, for Scenes (id "programs"), at a scene (Design → Templates' "Customize a copy").
  */
 export const useProductionTab = create<{
   requested: ProductionTab | null
@@ -26,5 +26,7 @@ useShellStore.subscribe((s, p) => {
   const r = useProductionTab.getState()
   const wasLive = p.workspace === "present" || p.workspace === "production"
   const isLive = s.workspace === "present" || s.workspace === "production"
-  if (wasLive && !isLive && (r.requested || r.scene || r.open)) useProductionTab.setState({ requested: null, scene: null, open: false })
+  if (!wasLive || isLive) return
+  if (s.workspace !== "prepare") useShellStore.getState().clearPrepareDesignReturn()
+  if (r.requested || r.scene || r.open) useProductionTab.setState({ requested: null, scene: null, open: false })
 })

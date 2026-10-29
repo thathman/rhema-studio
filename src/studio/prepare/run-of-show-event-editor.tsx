@@ -13,14 +13,27 @@ import { RunOfShowEventPreview } from "@/studio/prepare/run-of-show-event-previe
 import { LookAndScene, TakeSteps } from "@/studio/prepare/item-editor-parts"
 import type { QueueItem } from "@/types"
 
+type RunOfShowEventTab = "content" | "plan" | "scenes" | "preview" | "signals"
+
 /** Editable plan metadata for one event. Plan edits never activate content or alter a live screen. */
-export function RunOfShowEventEditor({ header, onOpenMoment }: { header: OutlineHeader; onOpenMoment: (item: QueueItem) => void }) {
+export function RunOfShowEventEditor({
+  header,
+  onOpenMoment,
+  defaultTab = "content",
+  focusMomentId,
+}: {
+  header: OutlineHeader
+  onOpenMoment: (item: QueueItem) => void
+  defaultTab?: RunOfShowEventTab
+  focusMomentId?: string | null
+}) {
   const items = useQueueStore((state) => state.items)
   const headers = useQueueStore((state) => state.headers)
   const service = useServiceStore((state) => state.current)
   const serviceDirty = useServiceStore((state) => state.dirty)
   const approval = eventPlanApprovalState(service, serviceDirty)
   const moments = projectRunOfShowEvents(items, headers).find((event) => event.id === header.id)?.moments ?? []
+  const [activeTab, setActiveTab] = useState<RunOfShowEventTab>(defaultTab)
   const [durationDraft, setDurationDraft] = useState(header.event?.duration_minutes?.toString() ?? "")
   const draftMinutes = durationDraft.trim() ? Number(durationDraft) : null
   const durationError = draftMinutes !== null && (!Number.isFinite(draftMinutes) || draftMinutes <= 0 || draftMinutes > 600)
@@ -35,6 +48,13 @@ export function RunOfShowEventEditor({ header, onOpenMoment }: { header: Outline
     }
     return useQueueStore.subscribe(sync)
   }, [header.id])
+
+  useEffect(() => {
+    if (activeTab !== "scenes" || !focusMomentId) return
+    const target = document.getElementById(`event-scene-moment-${focusMomentId}`)
+    target?.scrollIntoView?.({ block: "nearest" })
+    target?.focus({ preventScroll: true })
+  }, [activeTab, focusMomentId, header.id])
 
   const update = (patch: Partial<NonNullable<OutlineHeader["event"]>>) => {
     const current = useQueueStore.getState().headers.find((candidate) => candidate.id === header.id)
@@ -80,7 +100,7 @@ export function RunOfShowEventEditor({ header, onOpenMoment }: { header: Outline
         />
       </header>
 
-      <Tabs defaultValue="content" className="flex min-h-0 flex-1 flex-col">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as RunOfShowEventTab)} className="flex min-h-0 flex-1 flex-col">
         <TabsList className="mx-5 mt-3 grid w-[calc(100%-2.5rem)] grid-cols-5">
           <TabsTrigger value="content" aria-label="Event content">Content</TabsTrigger>
           <TabsTrigger value="plan" aria-label="Event plan">Plan</TabsTrigger>
@@ -201,9 +221,15 @@ export function RunOfShowEventEditor({ header, onOpenMoment }: { header: Outline
               <p className="mt-1 text-xs text-muted-foreground">Plan only. Choose a scene and audience for each moment. These choices are saved with the service; event timing never takes a scene. A moment's scene runs only when an operator deliberately Takes it.</p>
             </div>
             {moments.length > 0 ? moments.map((moment) => (
-              <article key={moment.id} aria-label={`Scene plan for ${moment.reference}`} className="rounded-md border border-border px-3 py-2">
+              <article
+                key={moment.id}
+                id={`event-scene-moment-${moment.id}`}
+                aria-label={`Scene plan for ${moment.reference}`}
+                tabIndex={focusMomentId === moment.id ? -1 : undefined}
+                className={`rounded-md border border-border px-3 py-2${focusMomentId === moment.id ? " ring-2 ring-primary/50" : ""}`}
+              >
                 <h4 className="text-sm font-medium">{moment.reference}</h4>
-                <LookAndScene item={moment} />
+                <LookAndScene item={moment} eventId={header.id} eventTitle={header.name} />
                 <TakeSteps item={moment} />
               </article>
             )) : (

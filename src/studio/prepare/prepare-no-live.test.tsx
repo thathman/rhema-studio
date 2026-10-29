@@ -110,6 +110,7 @@ afterEach(() => {
   mockService.items = []
   document.body.replaceChildren()
   useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false, unsupportedItems: [], corruptItems: [] })
+  useShellStore.setState({ prepareDesignReturn: null, goRequest: null })
 })
 
 async function renderPrepare(withLiveControls = false) {
@@ -1256,6 +1257,25 @@ describe("Prepare never takes anything live (#299)", () => {
     const el = await renderPrepare()
     expect(el.textContent).toContain("Items not saved as a service")
     expect(el.textContent).toContain("Not saved as a service")
+  })
+
+  it("returns from scene customization to the same event and focused moment", async () => {
+    useQueueStore.setState({
+      items: [slide("Opening Scripture")],
+      headers: [{ id: "event-1", type: "group", name: "Opening", at: 0, event: { schema_version: 1, role: "Welcome" } }],
+      activeIndex: null,
+    })
+    useServiceStore.setState({ current: { id: "service-1", title: "Sunday service", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 1 }, dirty: false, saving: false })
+    useShellStore.setState({ prepareDesignReturn: { serviceId: "service-1", eventId: "event-1", momentId: "Opening Scripture", eventTitle: "Opening", momentTitle: "Opening Scripture", sceneId: "scene-1" } })
+
+    const el = await renderPrepare()
+    const scenesTab = el.querySelector<HTMLButtonElement>('[aria-label="Event scenes"]')!
+    const focusedMoment = el.querySelector<HTMLElement>('[aria-label="Scene plan for Opening Scripture"]')!
+    expect(scenesTab.getAttribute("aria-selected")).toBe("true")
+    expect(focusedMoment.className).toContain("ring-2")
+    expect(focusedMoment.id).toBe("event-scene-moment-Opening Scripture")
+    expect(document.activeElement).toBe(focusedMoment)
+    expect(useShellStore.getState().prepareDesignReturn).toBeNull()
   })
 })
 

@@ -19,8 +19,10 @@ import { useMediaStore } from "@/stores/media-store"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { CountdownSelect } from "@/studio/production/countdown-select"
 import { useProductionTab } from "@/studio/production/production-tab"
+import { useShellStore, type PrepareDesignReturnContext } from "@/studio/shell-store"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import type { BroadcastOutput, BroadcastOutputLanguage, NoSignal, Scene, SceneBox, SceneLayer, SceneLayerKind } from "@/types"
+import { toast } from "sonner"
 
 /**
  * The congregation Scene Composer (ADR 0001, ARCH-002): arrange live sources, colours, pictures and
@@ -32,12 +34,16 @@ export function SceneComposer() {
   const scenes = useBroadcastStore((s) => s.scenes)
   const outputs = useBroadcastStore((s) => s.outputs)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
+  const prepareReturn = useShellStore((s) => s.prepareDesignReturn)
   const obsVideo = useObsStore((s) => (s.status === "connected" ? s.video : null))
   const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation")
   const [targetId, setTargetId] = useState(congregation[0]?.id ?? "")
   const target = congregation.find((o) => o.id === targetId) ?? congregation[0]
   // A scene another page asked for (a library scene just copied) opens first, once.
-  const [draft, setDraft] = useState<Scene | null>(() => scenes.find((s) => s.id === useProductionTab.getState().scene) ?? scenes[0] ?? null)
+  const [draft, setDraft] = useState<Scene | null>(() => {
+    const requestedId = prepareReturn?.sceneId ?? useProductionTab.getState().scene
+    return (requestedId ? scenes.find((scene) => scene.id === requestedId) : undefined) ?? (prepareReturn ? null : scenes[0] ?? null)
+  })
   useEffect(() => {
     if (useProductionTab.getState().scene) useProductionTab.setState({ scene: null })
   }, [])
@@ -45,6 +51,13 @@ export function SceneComposer() {
   const saved = draft ? scenes.find((s) => s.id === draft.id) : undefined
   const dirty = !!draft && (!saved || JSON.stringify({ ...saved, updatedAt: 0 }) !== JSON.stringify({ ...draft, updatedAt: 0 }))
   const layer = draft?.layers.find((l) => l.id === layerId) ?? null
+
+  useEffect(() => {
+    if (prepareReturn && !scenes.some((scene) => scene.id === prepareReturn.sceneId)) {
+      toast.error("The scene copy is no longer available", { description: "Return to Prepare and choose a scene for this moment again." })
+      useShellStore.getState().goTo("prepare")
+    }
+  }, [prepareReturn, scenes])
 
   const edit = (patch: Partial<Scene>) => draft && setDraft({ ...draft, ...patch })
   const editLayer = (id: string, patch: Partial<SceneLayer>) => draft && setDraft({ ...draft, layers: draft.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)) })
@@ -58,6 +71,13 @@ export function SceneComposer() {
     save()
     useBroadcastStore.getState().takeScene(target.id, draft.id)
   }
+  const returnToPrepare = () => {
+    if (dirty) {
+      save()
+      toast.success("Scene saved to Designs", { description: "The service moment keeps this scene. No output was changed." })
+    }
+    useShellStore.getState().goTo("prepare")
+  }
   const onAir = (id: string) => outputs.filter((o) => o.sceneId === id)
 
   return (
@@ -69,24 +89,36 @@ export function SceneComposer() {
       </header>
       <div className="grid gap-3 lg:grid-cols-[13rem_minmax(0,1fr)_17rem]">
         <section aria-label="Scenes" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
-          <h3 className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Scenes</h3>
-          <ul className="flex flex-col gap-1">
-            {scenes.map((s) => (
-              <li key={s.id}>
-                <button type="button" aria-current={draft?.id === s.id ? "true" : undefined} onClick={() => open(s)} className={cn("flex w-full flex-col rounded-md px-2.5 py-1.5 text-left text-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50", draft?.id === s.id ? "bg-primary/10 text-primary-text" : "hover:bg-muted")}>
-                  <span className="truncate font-semibold">{s.name}</span>
-                  {onAir(s.id).length > 0 && <span className={cn("text-[0.625rem] font-bold uppercase", rehearsal ? "text-tone-amber-foreground" : "text-live-pulse")}>{rehearsal ? "Rehearsal on" : "On"} {onAir(s.id).map((o) => o.name).join(", ")}</span>}
-                </button>
-              </li>
-            ))}
-            {scenes.length === 0 && <li className="text-xs text-muted-foreground">No scenes yet. Start from one below.</li>}
-          </ul>
-          <NewFrom onNew={(p) => open(newScene(p.name, p))} />
+          {prepareReturn ? (
+            <>
+              <h3 className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Prepare scene copy</h3>
+              <p className="text-xs font-semibold">{prepareReturn.momentTitle}</p>
+              <p className="text-xs text-muted-foreground">{prepareReturn.eventTitle}</p>
+              <p className="rounded-md bg-tone-neutral px-2 py-1.5 text-xs text-tone-neutral-foreground">Draft for this service moment. It stays private until an operator Takes it in Live.</p>
+            </>
+          ) : (
+            <>
+              <h3 className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Scenes</h3>
+              <ul className="flex flex-col gap-1">
+                {scenes.map((s) => (
+                  <li key={s.id}>
+                    <button type="button" aria-current={draft?.id === s.id ? "true" : undefined} onClick={() => open(s)} className={cn("flex w-full flex-col rounded-md px-2.5 py-1.5 text-left text-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50", draft?.id === s.id ? "bg-primary/10 text-primary-text" : "hover:bg-muted")}>
+                      <span className="truncate font-semibold">{s.name}</span>
+                      {onAir(s.id).length > 0 && <span className={cn("text-[0.625rem] font-bold uppercase", rehearsal ? "text-tone-amber-foreground" : "text-live-pulse")}>{rehearsal ? "Rehearsal on" : "On"} {onAir(s.id).map((o) => o.name).join(", ")}</span>}
+                    </button>
+                  </li>
+                ))}
+                {scenes.length === 0 && <li className="text-xs text-muted-foreground">No scenes yet. Start from one below.</li>}
+              </ul>
+              <NewFrom onNew={(p) => open(newScene(p.name, p))} />
+            </>
+          )}
         </section>
 
         <section aria-label="Scene preview" className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card p-3">
           {draft ? (
             <>
+              {prepareReturn && <p className="rounded-md border border-primary/30 bg-primary/5 px-2.5 py-2 text-xs text-muted-foreground">Private preview for {target?.name ?? "a congregation output"}. Saving this copy will not change Program or any output.</p>}
               <div className="flex flex-wrap items-center gap-2">
                 <input aria-label="Scene name" value={draft.name} maxLength={80} onChange={(e) => edit({ name: e.target.value })} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-sm font-semibold" />
                 <label className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
@@ -105,9 +137,9 @@ export function SceneComposer() {
                     <option value={1000}>Fade 1 s</option>
                   </select>
                 </label>
-                <Button size="sm" variant="outline" onClick={() => open(copyScene(draft, `${draft.name} copy`))}><CopyIcon /> Duplicate</Button>
-                <SaveAsPreset key={draft.id} scene={draft} />
-                {saved && <ConfirmDelete label={`Delete ${draft.name}`} onConfirm={() => { useBroadcastStore.getState().deleteScene(draft.id); open(null) }} />}
+                {!prepareReturn && <Button size="sm" variant="outline" onClick={() => open(copyScene(draft, `${draft.name} copy`))}><CopyIcon /> Duplicate</Button>}
+                {!prepareReturn && <SaveAsPreset key={draft.id} scene={draft} />}
+                {!prepareReturn && saved && <ConfirmDelete label={`Delete ${draft.name}`} onConfirm={() => { useBroadcastStore.getState().deleteScene(draft.id); open(null) }} />}
               </div>
               {target && <ScenePreview scene={draft} output={target} selected={layerId} onSelect={setLayerId} onMove={(id, box) => editLayer(id, { box })} />}
               <AddLayer onAdd={(kind) => { const l = newLayer(kind, { box: kind === "feed" ? { x: 10, y: 60, w: 80, h: 35 } : layerBox(kind) }); setDraft({ ...draft, layers: [...draft.layers, l] }); setLayerId(l.id) }} />
@@ -133,8 +165,40 @@ export function SceneComposer() {
         </section>
       </div>
 
-      <ProgramBar congregation={congregation} target={target} onTarget={setTargetId} draft={draft} dirty={dirty} onSave={save} onTake={take} />
+      {prepareReturn
+        ? <PrivateSceneBar context={prepareReturn} congregation={congregation} target={target} onTarget={setTargetId} draft={draft} dirty={dirty} onReturn={returnToPrepare} />
+        : <ProgramBar congregation={congregation} target={target} onTarget={setTargetId} draft={draft} dirty={dirty} onSave={save} onTake={take} />}
     </div>
+  )
+}
+
+function PrivateSceneBar({ context, congregation, target, onTarget, draft, dirty, onReturn }: {
+  context: PrepareDesignReturnContext
+  congregation: BroadcastOutput[]
+  target: BroadcastOutput | undefined
+  onTarget: (id: string) => void
+  draft: Scene | null
+  dirty: boolean
+  onReturn: () => void
+}) {
+  return (
+    <section aria-label="Private scene preview" className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 text-xs">
+      <span className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Private preview</span>
+      {target ? (
+        <>
+          <label className="flex items-center gap-1.5 text-muted-foreground">
+            Preview for
+            <select aria-label="Preview output" value={target.id} onChange={(event) => onTarget(event.target.value)} className="h-8 rounded-md border border-input bg-secondary px-1.5 text-foreground">
+              {congregation.map((output) => <option key={output.id} value={output.id}>{output.name}</option>)}
+            </select>
+          </label>
+          <span className="min-w-0 flex-1 truncate text-muted-foreground">{context.eventTitle} · {context.momentTitle}</span>
+        </>
+      ) : <span className="min-w-0 flex-1 text-muted-foreground">No congregation output is configured. You can still save the scene copy for {context.momentTitle}.</span>}
+      <Button size="sm" onClick={onReturn} disabled={!draft} aria-label={dirty ? "Save scene and return to Prepare" : "Return to Prepare"}>
+        {dirty ? <><SaveIcon /> Save and return to Prepare</> : "Return to Prepare"}
+      </Button>
+    </section>
   )
 }
 

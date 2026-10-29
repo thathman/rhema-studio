@@ -24,6 +24,7 @@ import { useObsStore } from "@/stores/obs-store"
 import { formatDuration, parseDuration } from "@/lib/run-of-show"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useSoundStore } from "@/stores/sound-store"
+import { SceneDesignPicker } from "@/studio/prepare/scene-design-picker"
 
 /** Prepare-only: how the picture fills the screen. */
 const commentTime = (at: string) => new Date(at).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })
@@ -605,15 +606,17 @@ function setTakeStep(itemId: string, kind: ParsedTakeStep["kind"], step: TakeSte
  * camera, chosen from the church's own. Present shows them under Preview as the plan; none is taken
  * by itself (Signals → When you Take it can arm the scene for your Take).
  */
-export function LookAndScene({ item }: { item: QueueItem }) {
+export function LookAndScene({ item, eventId, eventTitle }: { item: QueueItem; eventId?: string; eventTitle?: string }) {
   const scenes = useBroadcastStore((s) => s.scenes)
   const looks = useBroadcastStore((s) => s.themes)
   const cameras = useSettingsStore((s) => s.cameras)
   const update = (patch: Partial<Pick<QueueItem, "scene_id" | "look_id" | "camera">>) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, ...patch }))
   const setScene = (id: string | null) => {
+    const current = useQueueStore.getState().items.find((candidate) => candidate.id === item.id)
+    if (!current) return
     update({ scene_id: id })
     // A scene armed for the Take follows the item's scene (and goes when it has none).
-    const shared = takeSteps(item).find((s) => s.kind === "scene" && s.outputId === null)
+    const shared = takeSteps(current).find((s) => s.kind === "scene" && s.outputId === null)
     if (shared?.kind === "scene") setTakeStep(item.id, "scene", id ? sceneStep(id) : null, null)
   }
   const pick = (value: string) => (value === "" ? null : value)
@@ -649,7 +652,12 @@ export function LookAndScene({ item }: { item: QueueItem }) {
           </select>
         </label>
       </div>
-      {scenes.length === 0 && cameras.length === 0 && <p className="text-muted-foreground">Scenes are made in Live → Production tools → Scenes, cameras in Live → Production tools → Cameras.</p>}
+      {eventId && eventTitle && <SceneDesignPicker eventId={eventId} eventTitle={eventTitle} momentId={item.id} momentTitle={item.reference} onSceneSelected={setScene} />}
+      {scenes.length === 0 && cameras.length === 0 && (
+        <p className="text-muted-foreground">
+          {eventId ? "Choose from Design above to add a scene to this moment, or create a custom scene in Live → Scenes. Cameras are managed in Live → Production tools → Cameras." : "Scenes are made in Live → Production tools → Scenes, cameras in Live → Production tools → Cameras."}
+        </p>
+      )}
     </section>
   )
 }
