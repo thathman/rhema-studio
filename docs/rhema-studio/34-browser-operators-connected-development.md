@@ -178,7 +178,11 @@ The main host's new **Permissions sidebar route must contain a first-class Appro
 
 ### Page 5 unified layout candidate — AWAITING VISUAL APPROVAL (29 October 2026)
 
-Read **[38 — Screens & Graphics consolidated final visual review candidate](38-screens-graphics-final-visual-review-candidate.md)** before changing the Page 5 Screens/Graphics workspace. It provides a proposed single coherent page layout, real-service interactions, 2–3 graphics queue strip, context-based transition/timer/restore controls, Director Comms handoffs, per-target Preview vs Program, actual verified output status and mobile composition. **All four behavior defaults and previous Page 5 decisions are approved; the final visual composition is a candidate only, awaiting owner review**, and native/browsers still require verified implementation and physical acceptance.
+Read **[38 — Screens & Graphics consolidated screen hierarchy approved by owner](38-screens-graphics-final-visual-review-candidate.md)** before changing the Page 5 Screens/Graphics workspace. It provides a proposed single coherent page layout, real-service interactions, 2–3 graphics queue strip, context-based transition/timer/restore controls, Director Comms handoffs, per-target Preview vs Program, actual verified output status and mobile composition. **All four behavior defaults and the Page 5 overall structural screen layout are owner-approved; pixel-level styling remains to be refined**, and native/browsers still require verified implementation and physical acceptance.
+
+### Page 5 structural hierarchy — OWNER APPROVED (29 October 2026)
+
+The owner approved the **consolidated overall Screens & Graphics screen arrangement** in [38 — Page 5](38-screens-graphics-final-visual-review-candidate.md): selected named output; side-by-side **Private Preview and actual Current Program**; contextual Graphic Controls below; compact 2–3 Upcoming queue; private Director Requests card; separate explicit group-Take impact review. Record this as **conceptual/structural visual approval**, not a completed implementation or approval of final pixel styling/breakpoints. Codex may proceed implementing and verifying the agreed layout under [owner build resumption](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md) while preserving all host permissions and output safety.
 
 ### Operator design review protocol: one page at a time, with owner sign-off
 
