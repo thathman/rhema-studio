@@ -14,6 +14,7 @@ export default defineConfig([
     '.remember',
     'web',
     'data/build-bible-db.ts',
+    'scripts/mac-qa/avnac-draw.qa.js',
     'scripts/mac-qa/prepare-mixed-journey.js',
   ]),
   {
