@@ -1914,20 +1914,22 @@ async fn command_handler<S: CommandSink + 'static>(
         }
         Ok(_) => {}
     }
-    if let Some(id) = request.id.as_deref() {
-        state.recent.first_time(id);
-    }
-    // A change that waits for the main desk has not changed the scene yet: another desk may still act on it.
-    if let Some(part) = part.as_deref().filter(|_| !waits) {
-        state.live.bump(part);
-    }
     let why = request.why.as_deref().map(|w| w.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(200).collect::<String>()).filter(|w| !w.is_empty());
     let done = match (&command, why) {
         (RemoteCommand::NoticeAck(_), Some(why)) => CommandDispatcher::dispatch_from(&command, &WithWhy { inner: &*state.sink, why: &why }, &by, by_id.as_deref()),
         _ => CommandDispatcher::dispatch_from(&command, &*state.sink, &by, by_id.as_deref()),
     };
     match done {
-        Ok(()) => (StatusCode::OK, Json(CommandResponse { success: true, note, ..Default::default() })),
+        Ok(()) => {
+            if let Some(id) = request.id.as_deref() {
+                state.recent.first_time(id);
+            }
+            // A change that waits for the main desk has not changed the scene yet: another desk may still act on it.
+            if let Some(part) = part.as_deref().filter(|_| !waits) {
+                state.live.bump(part);
+            }
+            (StatusCode::OK, Json(CommandResponse { success: true, note, ..Default::default() }))
+        }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, CommandResponse::refused(e.to_string())),
     }
 }
@@ -2031,6 +2033,25 @@ mod tests {
 
         fn command_count(&self) -> usize {
             self.commands.lock().unwrap().len()
+        }
+    }
+
+    struct FailOnceSink {
+        event_attempts: std::sync::atomic::AtomicUsize,
+    }
+
+    impl CommandSink for FailOnceSink {
+        fn emit_event(&self, event: &str, _payload: &str) -> Result<(), CommandError> {
+            if event == "remote:event_next"
+                && self.event_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0
+            {
+                return Err(CommandError::DispatchFailed("first dispatch fails".into()));
+            }
+            Ok(())
+        }
+
+        fn invoke_backend(&self, _action: &str, _args: &str) -> Result<(), CommandError> {
+            Ok(())
         }
     }
 
@@ -2850,6 +2871,34 @@ mod tests {
         assert!(old.contains("200 OK"), "a client without ids still works: {old}");
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         assert_eq!(sink.command_count(), 2, "the retried press once, the old client's once");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[tokio::test]
+    async fn a_failed_dispatch_can_be_retried_without_advancing_live_revision() {
+        let sink = Arc::new(FailOnceSink { event_attempts: std::sync::atomic::AtomicUsize::new(0) });
+        let live = new_live_hub();
+        live.publish(r#"{"event":{"mode":"own","currentId":"prayer"}}"#.into());
+        let initial_revision = live.revision("event").unwrap();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let press = r#"{"command":"event_next","id":"retry-after-failure"}"#;
+
+        let first = raw_http_request(port, "POST", "/api/v1/command", Some(press)).await;
+        assert!(first.contains("500 Internal Server Error"), "failed dispatch should be reported: {first}");
+        assert_eq!(live.revision("event"), Some(initial_revision), "failure must not make other desks stale");
+
+        let retry = raw_http_request(port, "POST", "/api/v1/command", Some(press)).await;
+        assert!(retry.contains("200 OK"), "a retry should be dispatched successfully: {retry}");
+        assert_eq!(sink.event_attempts.load(std::sync::atomic::Ordering::SeqCst), 2, "the failed request must not be mistaken for an already carried-out press");
+        assert_eq!(live.revision("event"), Some(initial_revision + 1), "only successful dispatch advances the revision");
+
+        let duplicate = raw_http_request(port, "POST", "/api/v1/command", Some(press)).await;
+        assert!(duplicate.contains("200 OK"), "a successful retry remains idempotent: {duplicate}");
+        assert_eq!(sink.event_attempts.load(std::sync::atomic::Ordering::SeqCst), 2, "a completed press is not dispatched twice");
         let mut handle = result.handle;
         handle.stop();
     }
