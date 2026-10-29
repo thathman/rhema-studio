@@ -524,7 +524,7 @@ async function runScenario() {
     stage = "continue the open service from Home"
     await clickButton("Home")
     const homeOpenService = await waitFor(
-      () => [...document.querySelectorAll("#services li")].find((row) => normal(row.innerText).startsWith(serviceTitle)),
+      () => [...document.querySelectorAll('[aria-labelledby="services"] li')].find((row) => normal(row.innerText).startsWith(serviceTitle)),
       "saved service summary on Home",
     )
     if (!normal(homeOpenService.innerText).includes(`${expectedIds.length} item${expectedIds.length === 1 ? "" : "s"}`)) {
@@ -548,7 +548,7 @@ async function runScenario() {
     await waitFor(() => qa.service.getState().current === null, "service to close")
     await clickButton("Home")
     const homeClosedService = await waitFor(
-      () => [...document.querySelectorAll("#services li")].find((row) => normal(row.innerText).startsWith(serviceTitle)),
+      () => [...document.querySelectorAll('[aria-labelledby="services"] li')].find((row) => normal(row.innerText).startsWith(serviceTitle)),
       "closed service in Home's saved-services list",
     )
     if (!normal(homeClosedService.innerText).includes(`${expectedIds.length} item${expectedIds.length === 1 ? "" : "s"}`)) {
