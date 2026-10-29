@@ -40,6 +40,15 @@ beforeEach(async () => {
 })
 
 describe("Permissions workspace", () => {
+  it("shows role-less paired devices as read-only Viewer until the host assigns a role", async () => {
+    useSettingsStore.setState({ remoteDevices: [{ hash: "legacy-hash", name: "Legacy phone", paired_at: "2026-10-01T00:00:00Z" }] })
+    const el = await mount()
+
+    expect(el.textContent).toContain("View only · needs a role")
+    expect(el.querySelector<HTMLSelectElement>('select[aria-label="Role for Legacy phone"]')?.value).toBe("viewer")
+    await act(async () => root.unmount())
+  })
+
   it("requires host review for legacy Screens scopes and allows only congregation output grants", async () => {
     useSettingsStore.setState({ remoteDevices: [{ hash: "screen-hash", name: "Screens tablet", paired_at: "2026-10-01T00:00:00Z", role: "screens" }] })
     useBroadcastStore.setState({ outputs: [

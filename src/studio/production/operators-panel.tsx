@@ -123,7 +123,7 @@ function MainDirectorBoard() {
     const t = setInterval(look, 5000)
     return () => { alive = false; clearInterval(t) }
   }, [])
-  const crew: CrewRow[] = presenceRows(devices, seen?.desks ?? []).filter((r) => r.device).map(({ device: d, seen: p }) => ({ name: d!.name, role: d!.role ?? "configure", connected: !!seen?.running && p?.connected === true, lastSeenMs: p?.lastSeenMs ?? null, ...(d!.paused ? { paused: true } : {}) }))
+  const crew: CrewRow[] = presenceRows(devices, seen?.desks ?? []).filter((r) => r.device).map(({ device: d, seen: p }) => ({ name: d!.name, role: d!.role ?? "viewer", connected: !!seen?.running && p?.connected === true, lastSeenMs: p?.lastSeenMs ?? null, ...(d!.paused ? { paused: true } : {}) }))
   return <div className="lg:col-span-2"><DirectorBoard readiness={{ ready, checks }} crew={crew} /></div>
 }
 
@@ -193,7 +193,7 @@ function HostCard() {
               {hosting ? seenWords(seen, now, (ms) => hhmm(ms)) : "Not connected"}{seen && hosting ? ` · ${seen.address}` : ""}
             </span>
             {d?.paused === true && <span className="rounded-full bg-muted px-2 py-0.5 text-[0.625rem] font-bold text-muted-foreground uppercase">Paused</span>}
-            {d && <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === (d.role ?? "configure"))?.may}>{roleLabel(d.role ?? "configure")}</span>}
+            {d && <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === (d.role ?? "viewer"))?.may}>{roleLabel(d.role ?? "viewer")}</span>}
             {d && <DeskControlButton hash={d.hash} name={d.name} paused={d.paused === true} />}
           </li>
         ))}
