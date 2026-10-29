@@ -338,6 +338,53 @@ pub fn content_delete_reusable_slide(state: State<'_, ContentState>, id: String,
     with_db(&state, |db| db.delete_reusable_slide(&id, expected_revision))
 }
 
+// Avnac design documents (C2, docs/contracts/design-documents-v1.md). Saving is never a Take.
+
+#[tauri::command]
+pub fn design_list(state: State<'_, ContentState>, query: Option<String>, kind: Option<String>, limit: Option<usize>) -> CmdResult<Vec<rhema_content::DesignSummary>> {
+    with_db(&state, |db| db.list_designs(query.as_deref(), kind.as_deref(), limit.unwrap_or(500)))
+}
+
+#[tauri::command]
+pub fn design_get(state: State<'_, ContentState>, id: String) -> CmdResult<Option<rhema_content::DesignDocument>> {
+    with_db(&state, |db| db.get_design(&id))
+}
+
+#[tauri::command]
+pub fn design_create(state: State<'_, ContentState>, input: rhema_content::DesignInput) -> CmdResult<rhema_content::DesignDocument> {
+    with_db(&state, |db| db.create_design(&input))
+}
+
+#[tauri::command]
+pub fn design_save_draft(state: State<'_, ContentState>, id: String, expected_revision: i64, input: rhema_content::DesignInput) -> CmdResult<rhema_content::DesignDocument> {
+    with_db(&state, |db| db.save_design_draft(&id, expected_revision, &input))
+}
+
+#[tauri::command]
+pub fn design_create_version(state: State<'_, ContentState>, id: String, expected_revision: i64, note: Option<String>, saved_by: Option<String>) -> CmdResult<rhema_content::DesignVersion> {
+    with_db(&state, |db| db.create_design_version(&id, expected_revision, note.as_deref(), saved_by.as_deref().unwrap_or("")))
+}
+
+#[tauri::command]
+pub fn design_get_version(state: State<'_, ContentState>, id: String, version: i64) -> CmdResult<Option<rhema_content::DesignVersion>> {
+    with_db(&state, |db| db.get_design_version(&id, version))
+}
+
+#[tauri::command]
+pub fn design_list_versions(state: State<'_, ContentState>, id: String) -> CmdResult<Vec<rhema_content::DesignVersion>> {
+    with_db(&state, |db| db.list_design_versions(&id))
+}
+
+#[tauri::command]
+pub fn design_duplicate(state: State<'_, ContentState>, id: String, version: Option<i64>, title: Option<String>) -> CmdResult<rhema_content::DesignDocument> {
+    with_db(&state, |db| db.duplicate_design(&id, version, title.as_deref()))
+}
+
+#[tauri::command]
+pub fn design_delete(state: State<'_, ContentState>, id: String, expected_revision: i64) -> CmdResult<()> {
+    with_db(&state, |db| db.delete_design(&id, expected_revision))
+}
+
 #[tauri::command]
 pub fn content_list_hymnbooks(state: State<'_, ContentState>) -> CmdResult<Vec<Hymnbook>> {
     with_db(&state, ContentDb::list_hymnbooks)

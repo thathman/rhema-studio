@@ -154,3 +154,13 @@ describe("live layers in the editor's preview", () => {
     expect(designToScene(design).scene).toEqual(sermon)
   })
 })
+
+describe("a design the host's store accepts", () => {
+  it("has the shape the host checks (artboard, root, nodes; every binding names a node) and survives JSON", () => {
+    const design = JSON.parse(JSON.stringify(sceneToDesign(sermon))) as ReturnType<typeof sceneToDesign>
+    expect(typeof design.scene.root).toBe("string")
+    expect(design.scene.artboard).toMatchObject({ width: 1920, height: 1080 })
+    expect(Object.keys(design.bindings).every((id) => id in design.scene.nodes)).toBe(true)
+    expect(designToScene(design).scene).toEqual(sermon)
+  })
+})
