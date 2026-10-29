@@ -60,6 +60,8 @@ interface DesignedMomentPayload { designRef: { id: string; version: number } }
 - **Live bindings:** the pinned version holds the subscriptions (`bindings`); live words come from the Live State through `previewDesign` / the output renderer, never stored in the design.
 - **Used On (host):** `design_used_on({id})` returns the services whose items pin a version, with title, revision and approved revision. Scenes live in the desk's scene store, so the UI adds those it holds.
 - **Delete:** already refused once a version exists (`has-versions`). Pins add nothing to that rule.
+- **Stale revisions:** re-pinning ("Update to v N") is a scene save, checked against the scene's current revision like any other (`409`/`conflict` when someone changed it since); a draft save or version uses the design's `expectedRevision` (`conflict`). A pin is never moved by a design save, only by a scene or plan save that names the new version.
+- **Offline approved snapshots:** versions live in the local `studio.db` (no network), are immutable and travel in backups. Reopening an approved service resolves each pin from that store; a pin whose version is missing (e.g. a partial restore) is reported by name and version and the approved scene JSON in the snapshot is shown, never another version substituted.
 
 ## Not in this slice
 
