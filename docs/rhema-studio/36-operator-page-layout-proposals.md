@@ -242,9 +242,23 @@ The screens operator sees **"Add to Scene"**, not five disconnected creators. On
 - Private confidence display/OBS is never included merely because it is connected.
 - No generic "Save" allowed to change an on-air look inadvertently; no broad "Go Live" when actual scope is one output.
 
-### 5G. One important owner decision still OPEN (do not silently approve)
+### 5G. Screens editing and persistence — OWNER APPROVED (29 October 2026)
 
-**Permanent graphic/scene editing permission for Screens role:** proposed choices are (A) temporary service-only changes, permanent save requires Editor/Presenter; (B) **recommended** temporary default with host-delegated permanent save when appropriate; or (C) full permanent edit for all Screens operators. The owner has **not yet selected one**. Do not widen existing server scene-edit ACL or infer permission for Design/asset persistence from the owner-approved group Take. Preserve this question for next brainstorm.
+**Owner accepted the recommended editing policy:**
+- **Temporary service-scoped scene and graphic edits are available to the Screens & Graphics role by default**, but only within explicitly authorized service, output and graphic boundaries. Examples: adjust a speaker's lower-third name/title or approved style, prepare temporary ticker text, adapt a scene draft for today's service. This does **not** grant unrelated Bible/Worship/OBS, other output or approved-plan authority.
+- **Permanent reusable scene/design/library saving is separate.** A Screens Operator may permanently create/update reusable visual assets **only if the main host explicitly delegates that persistence capability, or an authorized approver grants a specific scoped Approval Request**. No standing persistent-save permission is inferred from a successful Live scene Take or from temporary editing access.
+- **Temporary drafts must survive app crashes, host restarts, client reconnects and reopening the same service**. Keep them securely associated with stable service, operator identity, output scope and source/design revision. The main host can inspect/reclaim these drafts. They must not overwrite global library templates or already approved service-plan revisions; offer explicit discard or cleanup at service end after retention policy.
+- A **temporary edit is not a Live change**: always show `Draft only`, `Private Preview`, `Approved to Apply` and `Actually visible on output` distinctly. Separate `Show/Hide Graphic` from `Take Scene`, apply only to authorized destinations, and preserve camera/Scripture layers when hiding an overlay.
+- Permanent-save request carries before/after design diff, destination and source references, base revision, proposed library identity, intended effect and requester. Approval authorizes the specific write/version operation; it **must not also Take the graphic Live**. The host checks roles, expiry, scope and revision at approval and on apply. A scoped persistent grant can be revoked or expire without corrupting existing drafts.
+- This decision **supersedes** the earlier three-option brainstorm; no longer present temporary editing as unapproved. It does not expand the currently shipped fixed `Screens` server ACL automatically: Codex must add a secure distinction between service drafts and persistent saves, enforce it on the host, migrate existing behavior thoughtfully, and validate it with native/browser recovery and permission tests.
+
+### 5H. Additional Page 5 layout ideas — PROPOSED, not yet individually owner approved
+
+**Quick graphics editor:** `Target screen → Add Graphic → Lower Third / Ticker / Countdown / Scene → Choose saved approved look → Edit contextual content → Private Preview vs Actual Program → authorized Show/Hide or Take`. A live lower third continues showing its previously applied revision while the operator prepares a new draft. For a fixed Scripture graphic, indicate that text stays fixed; for a `Follow Live Bible` graphic, explicitly disclose that later Bible source activation can update subscribed outputs without another scene Take.
+
+**Graphics Queue proposal:** a service-moment-linked **Upcoming Graphics** strip (e.g. Pastor lower third for Sermon, offering details for Offering, announcements ticker) with `Draft / Prepared / Ready / Live / Completed` states, clear target outputs and source/design revisions; no second competing running order and no automatic Take merely because the item becomes Next. Director's private Comms "Prepare Pastor lower third" creates/links a preparation cue; operator marks Ready, which is **not** publishing.
+
+**Unsettled visual details:** whether Graphics Queue is a visible bottom rail or contextual drawer, whether graphical overlays use a separate `Graphics` tab, exact animations/durations and page-specific typographic style. Retain these as workshop proposals.
 
 ---
 
@@ -264,6 +278,6 @@ Within the dedicated main-sidebar **Permissions** route, expose a first-class **
 | 2 — Bible | Host-controlled direct/request, no involuntary Take | **No** | **Yes, this document** |
 | 3 — Worship | Temporary set changes without permanent plan rewrite | **No** | **Yes, this document** |
 | 4 — Timekeeper | Dual reminder modes, urgency presentation, host clock and filtered views | **No** | **Yes + detailed doc 35** |
-| 5 — Screens & Graphics | Single Take by default; explicitly authorized group Take | **No** | **Yes, detailed section 5** |
+| 5 — Screens & Graphics | Single Take by default; explicit authorized group Take; **temporary service edits by default and permanent reusable saves only by host delegation or approved request; service drafts survive restart** | **No** | **Yes, detailed section 5** |
 
 **What is and isn't in Git:** These are repository Markdown **proposed wireframe and interaction specifications**, not exported images of chat UI, actual pixel-accurate Figma components, native React implementation, or screenshots from physical devices. When the owner approves a page appearance, add explicit approval/date/revision and implementation acceptance screenshots separately. Keep these concepts available to Codex without misrepresenting them as a final mandate for visual details.
