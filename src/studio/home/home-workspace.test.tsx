@@ -41,13 +41,13 @@ describe("Home workspace", () => {
     element.remove()
   })
 
-  async function renderHome(
+  function readinessValue(
     items: QueueItem[],
     headers: OutlineHeader[],
     activeIndex: number | null,
     readiness: Partial<Pick<ReturnType<typeof useReadiness>, "ready" | "checks" | "current">> = {},
   ) {
-    vi.mocked(useReadiness).mockReturnValue({
+    return {
       ready: false,
       checks: [],
       onAir: 0,
@@ -62,7 +62,16 @@ describe("Home workspace", () => {
       setWorkspace: vi.fn(),
       openOutputs: vi.fn(),
       ...readiness,
-    } as unknown as ReturnType<typeof useReadiness>)
+    } as unknown as ReturnType<typeof useReadiness>
+  }
+
+  async function renderHome(
+    items: QueueItem[],
+    headers: OutlineHeader[],
+    activeIndex: number | null,
+    readiness: Partial<Pick<ReturnType<typeof useReadiness>, "ready" | "checks" | "current">> = {},
+  ) {
+    vi.mocked(useReadiness).mockReturnValue(readinessValue(items, headers, activeIndex, readiness))
     element = document.createElement("div")
     document.body.appendChild(element)
     root = createRoot(element)
@@ -209,5 +218,26 @@ describe("Home workspace", () => {
     expect(readinessTile(home)).not.toBeNull()
     expect(readinessTile(home)?.textContent).toContain("2of 2 checks")
     expect(readinessTile(home)?.textContent).toContain("Ready to present")
+  })
+
+  it("clears a connection warning when its operational check reports recovery", async () => {
+    const home = await renderHome([], [], null, {
+      ready: false,
+      checks: [{ id: "camera", status: "warn", label: "Camera is not sending" }],
+    })
+
+    expect(readinessTile(home)?.textContent).toContain("1 to check")
+    expect(home.textContent).toContain("Camera is not sending")
+
+    vi.mocked(useReadiness).mockReturnValue(readinessValue([], [], null, {
+      ready: true,
+      checks: [{ id: "camera", status: "ok", label: "Camera is sending" }],
+    }))
+    await act(async () => root.render(<HomeWorkspace />))
+
+    expect(readinessTile(home)?.textContent).toContain("1of 1 check")
+    expect(readinessTile(home)?.textContent).toContain("Ready to present")
+    expect(home.textContent).not.toContain("Camera is not sending")
+    expect(home.textContent).toContain("Camera is sending")
   })
 })
