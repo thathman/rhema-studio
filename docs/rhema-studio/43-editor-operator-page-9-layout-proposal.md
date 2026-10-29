@@ -1,6 +1,6 @@
 # 43 — Page 9 Editor Operator: Service Contributions, Private Drafts and Review
 
-**Workshop date:** 29 October 2026. **Status:** **PAGE 9 SCREEN / WORKFLOW PROPOSAL; NOT YET OWNER-APPROVED**. The owner approved Page 8's revised streaming-only OBS Director hierarchy on 29 October (recorded in [41 §10](41-obs-director-page-8-layout-proposal.md#10-owner-page-8-decision--approved-29-october-2026)). This Page 9 draft is presented for discussion. Codex may independently implement existing approved Editor/Prepare/Permissions functionality under [owner resume order](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md); zero new PRs and release/Live-safety rules remain.
+**Workshop date:** 29 October 2026. **Status:** **OWNER APPROVED — PAGE 9 EDITOR WORKSPACE STRUCTURAL HIERARCHY AND SEPARATE DRAFT/REVIEW ACTIONS**. Pixel styling, any expanded Editor privileges, the detailed sync mechanism and verified runtime behavior remain open. The owner approved Page 8's revised streaming-only OBS Director hierarchy on 29 October (recorded in [41 §10](41-obs-director-page-8-layout-proposal.md#10-owner-page-8-decision--approved-29-october-2026)). This Page 9 draft is presented for discussion. Codex may independently implement existing approved Editor/Prepare/Permissions functionality under [owner resume order](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md); zero new PRs and release/Live-safety rules remain.
 
 ## 1. Role promise and boundaries
 
@@ -111,12 +111,17 @@ Not Started → Editing Draft → Saved Draft → Submitted for Review
 7. Narrow 390px and tablet flows preserve selection, Preview and review without confusing future/public/live change labels.
 8. Security: forged editor Live Take/OBS/record/stage/permission commands denied host-side; private contributions filtered by authorized audience.
 
-## 8. Owner decisions to review (NOT YET APPROVED)
+## 8. Owner decisions: structural signoff versus details
 
-1. **Page hierarchy (recommended):** left Running Order / My Assignments → central Event/Moment contextual editor → right Private Preview/Review/Comments, with clear Draft/Submitted/Approved status and role scope in header.
-2. **Draft review workflow (recommended):** `Save draft` locally/host persistence first; distinct `Submit for review` to typed central Permissions inbox; `Approved` never equals Live; Reviewer and Editor not the same authority. Revision pinning and conflicts mandatory.
+1. **OWNER APPROVED — Page hierarchy:** left Running Order / My Assignments → central Event/Moment contextual editor → right Private Preview/Review/Comments, with distinct Draft/Submitted/Approved status and visible role scope.
+2. **OWNER APPROVED — Separate user actions:** `Save Draft` is private/persistent; `Submit for Review` is a separate explicit revision-pinned request routed through the central Permissions approval workflow; `Approved` never equals Live. Safe revisions, authority checks and conflict controls remain essential engineering constraints.
 3. **Contribution scope default (recommended):** Editor may edit only **assigned service Events/Moments** as service-only drafts by default. Reusable Library/Design master edits require separate host-granted permission or a specific Approval Request. Host may delegate wider service scope when required.
 4. **Review panel (recommended):** keep actual preview + before/after diff and reviewer comments in one contextual right pane; replies/comments stay linked to selected Moment; don't fragment into another Team or Chat screen.
 5. **Connected collaborative mode:** support editing and review from home via authenticated opt-in sync, while remaining safe if the church PC is offline. No reliance on a remote cloud for the physical Sunday Live program.
 
-**Awaiting owner structural design review.** Approving this page layout does not automatically approve broader editing rights, specific synchronization infrastructure or implementation completion.
+**Owner confirmed “yes” to the proposed three-part Editor hierarchy and separate Save Draft / Submit for Review controls.** Approved structure does **not** grant additional editing/approver roles or independently approve a particular sync/cloud implementation. Styling, technical feasibility and production/browser acceptance remain outstanding.
+
+
+## 9. Owner Page 9 sign-off — APPROVED (29 October 2026)
+
+The owner replied **“yes”** to the proposed Page 9 **My Assignments → Contextual Editor → Private Preview & Review** arrangement, with **separate Save Draft and Submit for Review actions**. A contributor's draft must remain separate from the approved service and from the current Live output; submission is not approval, and approval is not a physical Take. The editor should display truthful draft status and review feedback, using existing Prepare/Library/Design/Permissions data models. **This sign-off is structural and interaction-level only**; the detailed permissions and service-only master-edit boundary remain governed by explicit host authorization and previously approved safety architecture. No final pixel styling, unapproved privileged edit access or finished runtime is implied.
