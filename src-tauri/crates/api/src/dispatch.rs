@@ -27,6 +27,10 @@ pub trait CommandSink: Send + Sync {
     fn lookup(&self, _q: &crate::lookup::Lookup) -> Result<serde_json::Value, String> {
         Err("this host cannot look that up".into())
     }
+    /// Answer a desk's plan request (`crate::plans`), already checked for its role and shape.
+    fn plans(&self, _by: &crate::plans::Desk, _q: &crate::plans::PlanRequest) -> Result<serde_json::Value, crate::plans::PlanError> {
+        Err(crate::plans::PlanError::Unavailable("this host keeps no service plans".into()))
+    }
 }
 
 /// A sink that adds `"by"` (the sender) to every frontend event it carries.

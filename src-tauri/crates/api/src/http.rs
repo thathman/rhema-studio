@@ -977,6 +977,9 @@ where
         .route("/api/v1/live", get(live_handler::<S>))
         .route("/api/v1/live/events", get(live_events_handler::<S>))
         .route("/api/v1/lookup", post(lookup_handler::<S>))
+        .route("/api/v1/plans", get(plans_list_handler::<S>))
+        .route("/api/v1/plans/{id}", get(plan_get_handler::<S>).put(plan_save_handler::<S>))
+        .route("/api/v1/plans/{id}/submit", post(plan_submit_handler::<S>))
         .route("/feed/{id}", get(feed_page_handler::<S>))
         .route("/api/v1/feed/{id}/events", get(feed_events_handler::<S>))
         .route("/api/v1/voice", post(voice_handler::<S>))
@@ -1665,6 +1668,77 @@ async fn lookup_handler<S: CommandSink + 'static>(
         Ok(Err(why)) => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": why }))).into_response(),
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
+}
+
+/// `GET/PUT /api/v1/plans…` (C5, `crate::plans`): a desk reads the service plan, saves its draft at
+/// the revision it opened, or submits that revision for the main desk's review. Reading is allowed
+/// to a paused desk; saving and submitting wait (423) like its commands.
+async fn plan_request<S: CommandSink + 'static>(state: Arc<AppState<S>>, peer: SocketAddr, headers: HeaderMap, asked: crate::plans::PlanRequest) -> axum::response::Response {
+    use crate::plans::{PlanError, PlanRequest};
+    let entry = match live_reader(&state, peer, &headers) {
+        Ok(entry) => entry,
+        Err(code) => return code.into_response(),
+    };
+    if !asked.allowed(entry.role) {
+        log::info!("Plan request from {} refused: its role", entry.name);
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "This desk's role does not work on the service plan" }))).into_response();
+    }
+    let writes = matches!(asked, PlanRequest::Save { .. } | PlanRequest::Submit { .. });
+    if writes && entry.paused {
+        return (StatusCode::LOCKED, Json(serde_json::json!({ "error": crate::keys::PAUSED_MESSAGE }))).into_response();
+    }
+    let asked = match asked.checked() {
+        Ok(asked) => asked,
+        Err(PlanError::Invalid(why)) => return (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!({ "error": why }))).into_response(),
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+    let desk = crate::plans::Desk { id: entry.hash.clone(), name: entry.name.clone(), role: entry.role };
+    let sink = state.sink.clone();
+    match tokio::task::spawn_blocking(move || sink.plans(&desk, &asked)).await {
+        Ok(Ok(v)) => ([(axum::http::header::CACHE_CONTROL, "no-store")], Json(v)).into_response(),
+        Ok(Err(PlanError::NotFound)) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Err(PlanError::Conflict { expected, actual })) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "error": "The plan changed since you opened it: reopen it, then make your change again", "expected": expected, "actual": actual })),
+        )
+            .into_response(),
+        Ok(Err(PlanError::Invalid(why))) => (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!({ "error": why }))).into_response(),
+        Ok(Err(PlanError::Unavailable(why))) => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": why }))).into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+async fn plans_list_handler<S: CommandSink + 'static>(AxumState(state): AxumState<Arc<AppState<S>>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap) -> axum::response::Response {
+    plan_request(state, peer, headers, crate::plans::PlanRequest::List).await
+}
+
+async fn plan_get_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    plan_request(state, peer, headers, crate::plans::PlanRequest::Get { id }).await
+}
+
+async fn plan_save_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<crate::plans::SaveBody>,
+) -> axum::response::Response {
+    plan_request(state, peer, headers, crate::plans::PlanRequest::Save { id, expected_revision: body.expected_revision, items: body.items }).await
+}
+
+async fn plan_submit_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<crate::plans::SubmitBody>,
+) -> axum::response::Response {
+    plan_request(state, peer, headers, crate::plans::PlanRequest::Submit { id, revision: body.revision, note: body.note }).await
 }
 
 type Query = axum::extract::Query<std::collections::HashMap<String, String>>;
@@ -2641,6 +2715,23 @@ mod tests {
     }
 
     impl CommandSink for MockSink {
+        /// A plan at revision 3: a save or submit at another revision is stale.
+        fn plans(&self, by: &crate::plans::Desk, q: &crate::plans::PlanRequest) -> Result<serde_json::Value, crate::plans::PlanError> {
+            use crate::plans::{PlanError, PlanRequest};
+            match q {
+                PlanRequest::List => Ok(serde_json::json!([{ "id": "p1", "revision": 3 }])),
+                PlanRequest::Get { id } if id == "p1" => Ok(serde_json::json!({
+                    "id": "p1",
+                    "revision": 3,
+                    "role": by.role.as_str()
+                })),
+                PlanRequest::Save { expected_revision: 3, items, .. } => Ok(serde_json::json!({ "revision": 4, "savedBy": by.name, "items": items.len() })),
+                PlanRequest::Submit { revision: 3, .. } => Ok(serde_json::json!({ "requestId": "r1", "requester": by.id })),
+                PlanRequest::Save { expected_revision: e, .. } | PlanRequest::Submit { revision: e, .. } => Err(PlanError::Conflict { expected: *e, actual: 3 }),
+                PlanRequest::Get { .. } => Err(PlanError::NotFound),
+            }
+        }
+
         fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
             if event == "remote:notice_send" {
                 *self.notice.lock().unwrap() = Some(payload.to_string());
@@ -5327,6 +5418,50 @@ mod tests {
         let down = ask(r#"{"what":"songs","query":"broken"}"#, "X-Rhema-Key: dir\r\n").await;
         assert!(down.contains("503") && down.contains("Songs are unavailable"), "{down}");
         assert!(sink.commands.lock().unwrap().is_empty(), "a lookup is never a command");
+    }
+
+    #[tokio::test]
+    async fn an_editor_saves_and_submits_a_plan_only_at_the_revision_it_opened() {
+        use crate::keys::{KeyEntry, Role};
+        let entry = |tok: &str, name: &str, role, paused| KeyEntry { hash: crate::keys::hash_key(tok), name: name.into(), role, paused, output_scope: vec![], group_take_scope: vec![], record: false };
+        let keys = Arc::new(std::sync::RwLock::new(crate::keys::Keys {
+            require_auth: true,
+            entries: vec![entry("edi", "Ada (Editor)", Role::Editor, false), entry("pre", "Director", Role::Present, false), entry("vie", "Pastor's phone", Role::Viewer, false), entry("hld", "Paused editor", Role::Editor, true)],
+        }));
+        let sink = Arc::new(MockSink::new());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let req = |method: &'static str, path: &'static str, body: Option<&'static str>, key: &'static str| async move {
+            let key = format!("X-Rhema-Key: {key}\r\n");
+            if method == "GET" { get_with(port, path, &key, None).await } else { raw_http_request_with(port, method, path, body, &key).await }
+        };
+        let listed = req("GET", "/api/v1/plans", None, "edi").await;
+        assert!(listed.contains("200 OK"), "{listed}");
+        let present_plan = req("GET", "/api/v1/plans/p1", None, "pre").await;
+        assert!(
+            present_plan.contains("200 OK") && present_plan.contains(r#""role":"present""#),
+            "the authenticated Present role reaches the host for response redaction: {present_plan}"
+        );
+        assert!(req("GET", "/api/v1/plans/p1", None, "vie").await.contains("403"), "view only does not read the plan");
+        assert!(req("GET", "/api/v1/plans/nope", None, "edi").await.contains("404"));
+        assert!(get_with(port, "/api/v1/plans", "", None).await.contains("401"), "never without a key");
+        let save = r#"{"expectedRevision":3,"items":[{"kind":"verse","reference":"John 3:16"}]}"#;
+        let saved = req("PUT", "/api/v1/plans/p1", Some(save), "edi").await;
+        assert!(saved.contains("200 OK") && saved.contains("Ada (Editor)"), "{saved}");
+        let stale = req("PUT", "/api/v1/plans/p1", Some(r#"{"expectedRevision":2,"items":[]}"#), "edi").await;
+        assert!(stale.contains("409") && stale.contains(r#""actual":3"#), "{stale}");
+        assert!(req("PUT", "/api/v1/plans/p1", Some(save), "pre").await.contains("403"), "the Present desk does not edit the plan");
+        assert!(req("PUT", "/api/v1/plans/p1", Some(save), "hld").await.contains("423"), "a paused desk waits");
+        assert!(req("GET", "/api/v1/plans/p1", None, "hld").await.contains("200 OK"), "but still reads");
+        let submitted = req("POST", "/api/v1/plans/p1/submit", Some(r#"{"revision":3,"note":"ready"}"#), "edi").await;
+        assert!(submitted.contains("200 OK") && submitted.contains(&crate::keys::hash_key("edi")), "{submitted}");
+        assert!(req("POST", "/api/v1/plans/p1/submit", Some(r#"{"revision":2}"#), "edi").await.contains("409"));
+        assert!(req("POST", "/api/v1/plans/p1/submit", Some(r#"{"revision":0}"#), "edi").await.contains("422"));
+        assert!(sink.commands.lock().unwrap().is_empty(), "a plan change is never a Live command");
+        let mut handle = result.handle;
+        handle.stop();
     }
 
     #[tokio::test]

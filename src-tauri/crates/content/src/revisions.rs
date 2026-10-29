@@ -776,6 +776,19 @@ mod tests {
     }
 
     #[test]
+    fn a_desk_saving_over_the_lan_is_recorded_as_that_desk() {
+        let _actor_guard = crate::TEST_ACTOR_LOCK.lock().unwrap();
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        crate::set_actor(Some("Tolu"));
+        let saved = crate::as_actor("Ada's laptop (Editor)", || db.replace_items(&p.id, p.revision, &[])).unwrap();
+        let latest = db.list_revisions(&p.id).unwrap().into_iter().next().unwrap();
+        assert_eq!((latest.revision, latest.saved_by.as_deref()), (saved.program.revision, Some("Ada's laptop (Editor)")));
+        assert_eq!(crate::actor().as_deref(), Some("Tolu"), "the desk's name lasts only for its call");
+        crate::set_actor(None);
+    }
+
+    #[test]
     fn the_operator_name_is_recorded_on_audit_rows() {
         let _actor_guard = crate::TEST_ACTOR_LOCK.lock().unwrap();
         let db = ContentDb::open_in_memory().unwrap();
