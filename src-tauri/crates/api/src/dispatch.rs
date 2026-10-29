@@ -114,6 +114,15 @@ impl CommandDispatcher {
             RemoteCommand::DeleteScene(d) => sink.emit_event("remote:delete_scene", &serde_json::json!({ "id": d.id.chars().take(100).collect::<String>(), "request": d.request, "by": by, "byId": by_id }).to_string()),
             // Levels: at most 32 people, each name short and each level at most 100 (percent).
             RemoteCommand::VoiceChannels(c) => sink.emit_event("remote:voice_channels", &serde_json::json!({ "listen": c.listen.iter().take(8).map(|s| s.chars().take(80).collect::<String>()).collect::<Vec<_>>(), "talk": c.talk.chars().take(84).collect::<String>(), "levels": c.levels.iter().take(32).map(|(k, v)| (k.chars().take(84).collect::<String>(), serde_json::json!((*v).min(100)))).collect::<serde_json::Map<_, _>>(), "by": by, "byId": by_id }).to_string()),
+            // Rhema's own recorder runs on the host: the backend does it, with who asked (doc 42).
+            RemoteCommand::Record(r) => {
+                let label = r.label.as_deref().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ").chars().take(60).collect::<String>();
+                let done = sink.invoke_backend("recorder", &serde_json::json!({ "action": r.action.as_str(), "label": label, "by": by }).to_string());
+                if done.is_ok() {
+                    let _ = sink.emit_event("remote:audit", &serde_json::json!({ "command": cmd.to_string(), "by": by }).to_string());
+                }
+                done
+            }
             other => {
                 // Who sent it rides along in the command's own event, so the host can say who
                 // activated a source ("Bible · Romans 8:28 · by Femi's laptop").
@@ -134,7 +143,7 @@ impl CommandDispatcher {
         sink: &dyn CommandSink,
     ) -> Result<(), CommandError> {
         match cmd {
-            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) | RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume | RemoteCommand::AuxTimer(_) => Self::dispatch_as(cmd, sink, "a remote"),
+            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) | RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume | RemoteCommand::AuxTimer(_) | RemoteCommand::Record(_) => Self::dispatch_as(cmd, sink, "a remote"),
             RemoteCommand::Next => sink.emit_event("remote:next", "{}"),
             RemoteCommand::Prev => sink.emit_event("remote:prev", "{}"),
             RemoteCommand::Theme(name) => {

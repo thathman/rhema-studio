@@ -130,6 +130,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         }
     }
 

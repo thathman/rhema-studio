@@ -103,6 +103,9 @@ pub enum RemoteCommand {
     ObsRecord(ObsRecordIn),
     /// Choose OBS's scene transition (OBS director): how OBS's next switch looks. Never in rehearsal.
     ObsTransition(String),
+    /// Rhema's own recorder (C1): start (the main desk's last recording setup), stop, or a marker.
+    /// Only for a desk the host granted the recorder (`KeyEntry::record`).
+    Record(ObsRecordIn),
 }
 
 /// Where a section step goes: one section on or back, or the chorus again.
@@ -456,6 +459,7 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::AuxTimer(t) => write!(f, "aux_timer({} {})", t.action, t.id),
             RemoteCommand::QueueRequest(q) => write!(f, "queue_request({} {})", q.kind.as_str(), q.value),
             RemoteCommand::ObsRecord(r) => write!(f, "obs_record({})", r.action.as_str()),
+            RemoteCommand::Record(r) => write!(f, "record({})", r.action.as_str()),
             RemoteCommand::ObsTransition(t) => write!(f, "obs_transition({t})"),
         }
     }
@@ -811,7 +815,7 @@ mod tests {
                 | RemoteCommand::VoiceLeave
                 | RemoteCommand::VoiceChannels(_) => {}
                 RemoteCommand::AuxTimer(_) => {}
-                RemoteCommand::QueueRequest(_) | RemoteCommand::ObsRecord(_) | RemoteCommand::ObsTransition(_) => {}
+                RemoteCommand::QueueRequest(_) | RemoteCommand::ObsRecord(_) | RemoteCommand::ObsTransition(_) | RemoteCommand::Record(_) => {}
             }
         }
 
