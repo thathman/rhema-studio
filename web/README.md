@@ -1,35 +1,22 @@
-# Rhema marketing site
+# Legacy inherited Rhema marketing site — not Rhema Studio's public website
 
-Next.js 16 marketing site for [Rhema](https://openrhema.com). Static-only — no API routes, no server actions. Deployed to GitHub Pages on push to `main`.
+This `web/` Next.js application belongs to the original Rhema/OpenBezal website codebase. It is retained for reference and existing historical documentation, **not** deployed by Rhema Studio.
 
-## Develop
+**Current Rhema Studio website source:** [`site/`](../site/README.md). **GitHub Pages destination:** https://thathman.github.io/rhema-studio/.
+
+The previous `openrhema.com` CNAME has been removed. The legacy `.github/workflows/deploy-web.yml` workflow is now **build-verification-only** and cannot publish a site. No ordinary change to `web/` should deploy to the old domain.
+
+If future work migrates any of these pages into the canonical site, rewrite unsupported historical Built/Checked status claims, reuse approved brand assets, and implement it through the `site/` deployment workflow with independent review.
+
+## Local legacy build
 
 ```bash
 cd web
 bun install
 bun run dev
-```
-
-Opens [http://localhost:3029](http://localhost:3029).
-
-## Build
-
-```bash
 bun run build
 ```
 
-Outputs a static site to `web/out/`.
+This does not publish a site.
 
-## Deploy
-
-Pushes to `main` that touch `web/**` trigger `.github/workflows/deploy-web.yml`, which builds the static export and publishes it to GitHub Pages at [https://openrhema.com](https://openrhema.com).
-
-To trigger a deploy without code changes (e.g., to refresh the GitHub stars count baked into the page), use the **Run workflow** button on the *Deploy web to GitHub Pages* action in the GitHub UI.
-
-PRs touching `web/**` run the build job only (no deploy) as a smoke test.
-
-## Notes
-
-- `output: "export"` in `next.config.ts` — static export is required for GitHub Pages. Anything that needs a Node server (route handlers, server actions, ISR, `next/image` optimization) will fail the build.
-- Self-hosted fonts under `public/fonts/`. Referenced from `app/globals.css` via absolute paths — do not introduce a `basePath`, it does not rewrite CSS `url()` values.
-- `getGitHubStars()` runs at build time. Authenticated via `GITHUB_TOKEN` in CI to avoid the 60/hr unauthenticated rate limit; falls back to a hardcoded count if the API call fails.
+Based on [Rhema by OpenBezal](https://github.com/openbezal/rhema).
