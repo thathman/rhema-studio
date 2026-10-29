@@ -5,6 +5,7 @@
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
+use rhema_api::KeyEntry;
 use rhema_broadcast::ndi::NdiRuntime;
 use rhema_recorder::{ProblemCode, Recorder, RecorderMarker, RecorderProblem, RecorderStartRequest, RecorderState, RecorderStatus, RecordingManifest};
 use serde::Serialize;
@@ -35,6 +36,30 @@ fn frame_size(ndi: &Mutex<NdiRuntime>, req: &RecorderStartRequest) -> (u32, u32)
     ndi.map_or_else(|| { let (w, h, _) = req.profile.size(); (w, h) }, |i| (i.width, i.height))
 }
 
+/// The serialized role is supplied by the caller, so replace it with the role in the host's
+/// current Live snapshot. Missing or unrecognized outputs receive an invalid role and fail closed.
+fn host_scoped_request(request: RecorderStartRequest, live_state: Option<&str>) -> RecorderStartRequest {
+    let output_role = if KeyEntry::is_congregation_output(live_state, &request.output_id) {
+        "congregation"
+    } else {
+        ""
+    };
+    RecorderStartRequest { output_role: output_role.to_string(), ..request }
+}
+
+/// Run recorder startup only after the host confirms the named output is a current congregation output.
+fn start_for_current_congregation<T>(
+    request: RecorderStartRequest,
+    live_state: Option<&str>,
+    start: impl FnOnce(RecorderStartRequest) -> Res<T>,
+) -> Res<T> {
+    let request = host_scoped_request(request, live_state);
+    if request.output_role != "congregation" {
+        return Err(RecorderProblem::new(ProblemCode::OutputNotRecordable, "Only a current congregation output can be recorded."));
+    }
+    start(request)
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecorderPreflight {
@@ -49,6 +74,8 @@ pub struct RecorderPreflight {
 #[tauri::command]
 pub fn recorder_preflight(app: AppHandle, host: State<'_, RecorderHost>, ndi: State<'_, Mutex<NdiRuntime>>, request: RecorderStartRequest) -> Res<RecorderPreflight> {
     let rec = recorder(&host)?;
+    let live_state = super::remote::current_live_state(&app);
+    let request = host_scoped_request(request, live_state.as_deref());
     let mut problems = rec.preflight(&request);
     if window_label(&request.output_id).ok().and_then(|l| app.get_webview_window(&l)).is_none() {
         problems.push(RecorderProblem::new(ProblemCode::OutputWindowMissing, "Open this screen first: Rhema records what its window shows."));
@@ -60,16 +87,22 @@ pub fn recorder_preflight(app: AppHandle, host: State<'_, RecorderHost>, ndi: St
 #[tauri::command]
 pub fn recorder_start(app: AppHandle, window: WebviewWindow, host: State<'_, RecorderHost>, ndi: State<'_, Mutex<NdiRuntime>>, request: RecorderStartRequest) -> Res<RecorderStatus> {
     main_desk_only(&window)?;
-    let rec = recorder(&host)?;
-    let label = window_label(&request.output_id).map_err(|e| RecorderProblem::new(ProblemCode::OutputNotRecordable, e))?;
-    if app.get_webview_window(&label).is_none() {
-        return Err(RecorderProblem::new(ProblemCode::OutputWindowMissing, "Open this screen first: Rhema records what its window shows."));
-    }
-    let (width, height) = frame_size(&ndi, &request);
-    let status = rec.start(&request, width, height)?;
-    log::info!("recorder: started {} on output {} at {width}x{height}", status.session_id.as_deref().unwrap_or("?"), request.output_id);
+    let live_state = super::remote::current_live_state(&app);
+    let output_id = request.output_id.clone();
+    let output_label = window_label(&output_id).map_err(|e| RecorderProblem::new(ProblemCode::OutputNotRecordable, e))?;
+    let mut dimensions = (0, 0);
+    let status = start_for_current_congregation(request, live_state.as_deref(), |request| {
+        let rec = recorder(&host)?;
+        if app.get_webview_window(&output_label).is_none() {
+            return Err(RecorderProblem::new(ProblemCode::OutputWindowMissing, "Open this screen first: Rhema records what its window shows."));
+        }
+        dimensions = frame_size(&ndi, &request);
+        rec.start(&request, dimensions.0, dimensions.1)
+    })?;
+    let (width, height) = dimensions;
+    log::info!("recorder: started {} on output {} at {width}x{height}", status.session_id.as_deref().unwrap_or("?"), output_id);
     // The output's window starts handing its frames to the host (if NDI isn't already making it).
-    let _ = app.emit_to(tauri::EventTarget::webview_window(label.as_str()), "broadcast:record-tee", tee(true, width, height, status.video.fps));
+    let _ = app.emit_to(tauri::EventTarget::webview_window(output_label.as_str()), "broadcast:record-tee", tee(true, width, height, status.video.fps));
     spawn_status_beat(app, status.session_id.clone());
     Ok(status)
 }
@@ -118,4 +151,55 @@ fn spawn_status_beat(app: AppHandle, session_id: Option<String>) {
         }
         let _ = app.emit_to("main", "recorder:status", &rec);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rhema_recorder::RecorderProfile;
+
+    fn request(output_id: &str, output_role: &str) -> RecorderStartRequest {
+        RecorderStartRequest {
+            output_id: output_id.into(),
+            output_name: output_id.into(),
+            output_role: output_role.into(),
+            audio_device_id: None,
+            allow_silent: true,
+            profile: RecorderProfile::Standard720p30,
+            service_run_id: None,
+            program_id: None,
+            rehearsal: false,
+        }
+    }
+
+    #[test]
+    fn caller_cannot_make_a_stage_output_recordable_by_claiming_congregation_role() {
+        let live = r#"{"outputs":[{"id":"sanctuary","role":"congregation"},{"id":"stage","role":"stage"}]}"#;
+        let mut start_called = false;
+        let result = start_for_current_congregation(request("stage", "congregation"), Some(live), |_| {
+            start_called = true;
+            Ok(())
+        });
+        assert_eq!(result.unwrap_err().code, ProblemCode::OutputNotRecordable);
+        assert!(!start_called, "a forged Stage target must not reach recorder startup");
+    }
+
+    #[test]
+    fn caller_cannot_make_a_congregation_output_unrecordable_by_changing_its_role_claim() {
+        let live = r#"{"outputs":[{"id":"sanctuary","role":"congregation"}]}"#;
+        let mut scoped_role = String::new();
+        let result = start_for_current_congregation(request("sanctuary", "stage"), Some(live), |trusted| {
+            scoped_role = trusted.output_role;
+            Ok(())
+        });
+        assert!(result.is_ok());
+        assert_eq!(scoped_role, "congregation");
+    }
+
+    #[test]
+    fn absent_or_unknown_host_output_state_fails_closed() {
+        let absent_request = request("sanctuary", "congregation");
+        assert!(start_for_current_congregation(absent_request, None, |_| Ok(())).is_err());
+        assert!(start_for_current_congregation(request("sanctuary", "congregation"), Some(r#"{"outputs":[]}"#), |_| Ok(())).is_err());
+    }
 }
