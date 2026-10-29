@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="How Rhema Studio host-assigned roles, output scopes, and separate access grants work.">
+  <link rel="icon" href="../assets/rhema-studio-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./docs.css">
+  <title>Permissions & access — Rhema Studio</title>
+</head>
+<body>
+  <a class="skip-link" href="#docs-content">Skip to documentation</a>
+  <header class="docs-header">
+    <a class="docs-brand" href="../index.html"><img src="../assets/rhema-studio-mark.svg" width="34" height="34" alt=""><span>Rhema Studio</span></a>
+    <nav class="docs-top-links" aria-label="Site navigation"><a href="../index.html">Website</a><a href="./index.html">Docs</a><a class="docs-home-link" href="https://github.com/thathman/rhema-studio" rel="noopener noreferrer">GitHub ↗</a></nav>
+  </header>
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation navigation">
+      <p class="docs-sidebar-title">Documentation</p>
+      <button class="docs-nav-toggle" type="button" aria-controls="docs-navigation" aria-expanded="false">Browse documentation</button>
+      <nav class="docs-sidebar-nav" id="docs-navigation" data-docs-nav aria-label="Documentation pages"></nav>
+      <noscript><p><a href="./index.html">Docs home and full page index</a></p></noscript>
+    </aside>
+    <main class="docs-main" id="docs-content">
+      <div class="docs-breadcrumb"><a href="../index.html">Rhema Studio</a><span aria-hidden="true">›</span><a href="./index.html">Docs & wiki</a></div>
+      <header class="article-header"><p class="article-kicker">HOST-CONTROLLED ACCESS</p><h1>Permissions & access</h1><p>The main host assigns roles and limits connected desks to the actions and outputs they need.</p></header>
+      <article class="prose">
+        <div class="notice warning"><p><strong>Implementation status:</strong> the desktop Permissions workspace, paired-device role controls, selected output scopes, a separate Recorder grant, and saved scene-change requests exist in the repository. Complete browser workspaces for every role and the wider approval-request system are still in development. A visible control does not prove every role/device workflow has been accepted.</p></div>
+
+        <h2>Who decides access?</h2>
+        <p>The Rhema host is the authority for its paired devices. The host pairs a device, assigns or changes its role, limits the outputs it can affect where applicable, and can pause or revoke its control. The host checks protected commands; changing a browser screen or local setting cannot grant additional access.</p>
+        <p>A paired device without an explicit role is treated as <strong>Viewer</strong>. Viewer access is read-only for production changes. Comms functions that are available to all paired team members follow their own host rules.</p>
+
+        <h2>Roles in the current access model</h2>
+        <p>Role names describe host-authorized responsibilities. They do not mean that a finished browser page exists for every role.</p>
+        <ul>
+          <li><strong>Presenter:</strong> host-approved service presentation and production controls.</li>
+          <li><strong>Configure:</strong> additional host setup, scene, and configuration controls under the command policy. Recorder access is still a separate grant.</li>
+          <li><strong>Bible:</strong> Scripture preview and the Bible actions allowed by host policy.</li>
+          <li><strong>Worship:</strong> song and hymn preview or presentation actions allowed by host policy.</li>
+          <li><strong>Screens:</strong> scene actions only for assigned outputs. Group Take has a separate grant and requires reviewing the selected target outputs.</li>
+          <li><strong>Timekeeper:</strong> permitted event and timer controls.</li>
+          <li><strong>Stage:</strong> private Stage messages within host-assigned Stage recipient policy.</li>
+          <li><strong>Camera:</strong> camera-related scene visibility and actions available under host policy.</li>
+          <li><strong>OBS Director:</strong> controls for OBS's own Preview, Program, stream, and recording; this does not control Rhema's congregation outputs.</li>
+          <li><strong>OBS Companion:</strong> a separate connected tool for OBS on another computer.</li>
+          <li><strong>Editor:</strong> permitted service and scene editing actions.</li>
+          <li><strong>Viewer:</strong> read-only access to permitted show information.</li>
+        </ul>
+        <p>For task-specific responsibilities and current limits, use the <a href="./operators.html">operator overview</a> and individual operator guides.</p>
+
+        <h2>Output and action scopes</h2>
+        <ul>
+          <li>A Screens role does not automatically include every screen. The host must assign the output IDs that desk can control.</li>
+          <li>Group Take is separate from a single-output Take and remains denied until the host grants it for the relevant outputs.</li>
+          <li>Approval of a saved scene-change request does not itself Take that scene live.</li>
+          <li>Rhema's native recorder is separate from OBS recording and from every role. A paired desk can control it only when the host gives that device the explicit Recorder grant.</li>
+          <li>Private Stage information and operator Preview must stay out of congregation and OBS outputs unless a distinct, authorized action places appropriate content there.</li>
+        </ul>
+
+        <h2>Pairing and revocation</h2>
+        <ol>
+          <li>The main host opens pairing and shares the temporary pairing instructions with the intended desk on the trusted local network.</li>
+          <li>The host identifies the paired device, chooses its role, and assigns any required output scope or separate grant.</li>
+          <li>The host can pause or revoke a device. Existing connections do not make the device a host or allow it to change its own access.</li>
+          <li>Keep pairing codes, QR images, keys, certificate details, and private host addresses out of public screenshots and messages.</li>
+        </ol>
+        <p>The current complete browser operator application is not ready to claim. See <a href="./connected-operators.html">Connected operators & LAN browser access</a> for what runs in the browser and what remains in development.</p>
+
+        <h2>Requests and approvals</h2>
+        <p>The desktop Permissions workspace includes saved scene-change requests. Accepting one authorizes that scene change under host policy; it does not publish the scene. Other proposed requests, such as expanded role grants or a broad approval inbox for all operator actions, remain in development until their typed host-side behavior and review history are complete.</p>
+        <p>Read the repository's <a href="https://github.com/thathman/rhema-studio/blob/main/docs/rhema-studio/37-permissions-sidebar-and-authority-design.md" rel="noopener noreferrer">Permissions and authority design</a> for the approved direction and <a href="https://github.com/thathman/rhema-studio/blob/main/docs/contracts/host-permissions-v1.md" rel="noopener noreferrer">host permission contract</a> for current server-side checks.</p>
+      </article>
+      <nav class="page-nav" aria-label="Page navigation"><a href="./core-concepts.html">← Core concepts</a><a href="./operators.html">Operator pages →</a></nav>
+    </main>
+  </div>
+  <footer class="docs-footer"><span>Rhema Studio · independent project · in development</span><a href="https://github.com/thathman/rhema-studio" rel="noopener noreferrer">Repository ↗</a></footer>
+  <script src="./docs.js" defer></script>
+</body>
+</html>
