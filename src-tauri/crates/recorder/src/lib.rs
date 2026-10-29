@@ -422,6 +422,8 @@ fn run_writer(
     ready: &Sender<Result<Instant, String>>,
     folder: &Path,
 ) -> Result<(), String> {
+    // Awake for the whole recording: a napping app's frame ticks stall (see `macos::Awake`).
+    let _awake = macos::Awake::hold();
     let t0 = Instant::now();
     let mut writer = match macos::Writer::start(path, width, height, fps, bitrate, audio_rate) {
         Ok(w) => {
@@ -464,15 +466,22 @@ fn run_writer(
         }
         let now_us = t0.elapsed().as_micros() as i64;
         if failed.is_none() && now_us >= tick * period_us {
-            // Late (a busy computer): skip to the current tick rather than burst; the gap is counted.
+            // Late (a busy computer): fill every missed tick with the latest picture, so the file's
+            // timeline never has a gap (fragmented MPEG-4 fails on one); past 2 s the oldest are skipped.
             let current = now_us / period_us;
-            if current > tick {
-                shared.frames_dropped.fetch_add((current - tick) as u64, Ordering::Relaxed);
+            let first = tick.max(current - i64::from(fps) * 2);
+            if first > tick {
+                shared.frames_dropped.fetch_add((first - tick) as u64, Ordering::Relaxed);
             }
-            match writer.tick(current * period_us) {
-                Ok(true) => _ = shared.frames_written.fetch_add(1, Ordering::Relaxed),
-                Ok(false) => {}
-                Err(e) => failed = Some(e),
+            for t in first..=current {
+                match writer.tick(t * period_us) {
+                    Ok(true) => _ = shared.frames_written.fetch_add(1, Ordering::Relaxed),
+                    Ok(false) => {}
+                    Err(e) => {
+                        failed = Some(e);
+                        break;
+                    }
+                }
             }
             tick = current + 1;
         }

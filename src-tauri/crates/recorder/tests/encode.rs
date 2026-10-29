@@ -127,3 +127,49 @@ fn a_still_screen_with_continuous_sound_closes_properly() {
     assert_eq!((p.video_tracks, p.audio_tracks), (1, 1), "{p:?}");
     assert!(p.duration_s >= 7.5, "{p:?}");
 }
+
+#[test]
+fn a_silent_recording_of_moving_pictures_closes_properly() {
+    // Recording without sound (allowSilent): no audio track at all, a new picture on every tick.
+    let _one = ONE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("recording.mp4");
+    let mut w = Writer::start(&path, W, H, 30, 5_000_000, None).expect("writer starts");
+    let t0 = Instant::now();
+    let (mut written, mut busy) = (0, 0);
+    for i in 0..30 * 8u32 {
+        let due = Duration::from_millis(u64::from(i) * 1000 / 30);
+        if let Some(wait) = due.checked_sub(t0.elapsed()) {
+            std::thread::sleep(wait);
+        }
+        w.set_frame(&frame(i)).expect("picture converts");
+        if w.tick(i64::from(i) * 1_000_000 / 30).expect("video appends") { written += 1 } else { busy += 1 }
+    }
+    w.finish().expect("file closes");
+    let p = probe(&path);
+    assert_eq!((p.video_tracks, p.audio_tracks), (1, 0), "{p:?}");
+    assert!(p.duration_s >= 7.5, "{p:?} written {written} busy {busy}");
+}
+
+#[test]
+fn a_silent_recording_whose_first_picture_is_late_closes_properly() {
+    // The output window needs a moment before its first frame; with no sound nothing else fills it.
+    let _one = ONE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("recording.mp4");
+    let mut w = Writer::start(&path, W, H, 30, 5_000_000, None).expect("writer starts");
+    let t0 = Instant::now();
+    for i in 0..30 * 6u32 {
+        let due = Duration::from_millis(u64::from(i) * 1000 / 30);
+        if let Some(wait) = due.checked_sub(t0.elapsed()) {
+            std::thread::sleep(wait);
+        }
+        if i >= 45 {
+            w.set_frame(&frame(i)).expect("picture converts");
+        }
+        w.tick(i64::from(i) * 1_000_000 / 30).expect("video appends");
+    }
+    w.finish().expect("file closes");
+    let p = probe(&path);
+    assert!(p.duration_s >= 5.5, "{p:?}");
+}

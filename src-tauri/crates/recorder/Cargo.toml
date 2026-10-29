@@ -21,7 +21,7 @@ libc = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSDictionary", "NSValue", "NSError", "NSArray", "NSObject"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSDictionary", "NSValue", "NSError", "NSArray", "NSObject", "NSProcessInfo"] }
 objc2-av-foundation = { version = "0.3", features = ["AVAssetWriter", "AVAssetWriterInput", "AVMediaFormat", "AVVideoSettings", "AVAudioSettings", "AVAsset", "AVAssetTrack", "AVAssetExportSession", "AVError", "objc2-core-media", "objc2-core-video", "block2"] }
 objc2-core-media = { version = "0.3", features = ["CMTime", "CMSampleBuffer", "CMFormatDescription", "CMBlockBuffer", "CMBase", "objc2-core-audio-types"] }
 objc2-core-video = { version = "0.3", features = ["CVPixelBuffer", "CVPixelBufferPool", "CVBuffer", "CVImageBuffer", "CVReturn", "CVBase"] }

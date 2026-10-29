@@ -253,6 +253,28 @@ fn pcm_format(rate: u32) -> Result<CFRetained<CMFormatDescription>, String> {
     Ok(unsafe { CFRetained::from_raw(out) })
 }
 
+/// Keeps macOS from napping or idle-sleeping the app while it records. Without it a hidden or
+/// background Rhema (the display asleep, another app in front) has its timers throttled to seconds,
+/// the frame ticks stop, and fragmented MPEG-4 fails on the gap (-16341); with sound the audio
+/// callback happened to keep it awake. A service recording must not stall, nor the Mac sleep.
+pub struct Awake(Retained<objc2::runtime::ProtocolObject<dyn objc2::runtime::NSObjectProtocol>>);
+
+impl Awake {
+    #[must_use]
+    pub fn hold() -> Self {
+        use objc2_foundation::{NSActivityOptions, NSProcessInfo};
+        let token = NSProcessInfo::processInfo()
+            .beginActivityWithOptions_reason(NSActivityOptions::UserInitiated | NSActivityOptions::LatencyCritical, objc2_foundation::ns_string!("Recording the service"));
+        Self(token)
+    }
+}
+
+impl Drop for Awake {
+    fn drop(&mut self) {
+        unsafe { objc2_foundation::NSProcessInfo::processInfo().endActivity(&self.0) };
+    }
+}
+
 /// What a finished file holds, read back through AVFoundation (tests and the archive's "playable" check).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Probe {
