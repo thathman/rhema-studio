@@ -7,10 +7,12 @@ import { HymnBook } from "@/studio/prepare/hymn-book"
 import { MediaLibrary } from "@/studio/prepare/media-library"
 import { SongFiles } from "@/studio/library/library-blocks"
 import { SlideLibrary } from "@/studio/library/slide-library"
+import { BibleLibrary } from "@/studio/library/bible-library"
 import type { LibrarySection } from "@/studio/shell-store"
 import { useShellStore } from "@/studio/shell-store"
 
 const SECTIONS: ReadonlyArray<readonly [LibrarySection, string]> = [
+  ["bible", "Bible"],
   ["songs", "Songs & ministrations"],
   ["hymns", "Hymn book"],
   ["slides", "Slides & announcements"],
@@ -34,7 +36,7 @@ export function LibraryWorkspace() {
         <div className="min-w-0">
           <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Everything in its place</p>
           <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Your creative library.</h1>
-          <p className="mt-1 text-xs text-muted-foreground">One searchable home for songs, choir ministrations, the hymn book, pictures and videos, on this computer. Adding from here puts an item in the open service.</p>
+          <p className="mt-1 text-xs text-muted-foreground">One searchable home for saved Scripture passages, songs, choir ministrations, the hymn book, slides, pictures and videos, on this computer. Use adds an item to Prepare; nothing here goes live.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => setSection("files")}><UploadIcon /> Import files</Button>
@@ -62,8 +64,9 @@ export function LibraryWorkspace() {
         ))}
       </div>
       <div role="tabpanel" aria-label={SECTIONS.find(([id]) => id === section)?.[1]} className="mx-[29px] mb-6 flex min-h-0 flex-1 flex-col max-[1200px]:mx-5">
+        {section === "bible" && <BibleLibrary />}
         {section === "songs" && <SongLibrary layout="cards" newRequest={newSong} />}
-        {section !== "songs" && (
+        {section !== "songs" && section !== "bible" && (
           <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-card p-4">
             {section === "hymns" && <HymnBook />}
             {section === "slides" && <SlideLibrary key={newSlide} />}

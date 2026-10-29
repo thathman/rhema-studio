@@ -16,7 +16,7 @@ export function designTabOf(tab: DesignTab): DesignTab {
   return tab === "outputs" ? "used-on" : tab
 }
 export type PresentView = "standard" | "production"
-export type LibrarySection = "songs" | "hymns" | "slides" | "media" | "files"
+export type LibrarySection = "bible" | "songs" | "hymns" | "slides" | "media" | "files"
 
 export interface ShellPrefs {
   workspace: Workspace

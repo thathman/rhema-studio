@@ -55,8 +55,9 @@ export const presentActions = {
     void bibleActions
       .fetchVerse(book_number, chapter, verse, choice.primary)
       .then((fresh) => {
-        const still = useBibleStore.getState().selectedVerse
-        if (fresh?.text && still && still.book_number === book_number && still.chapter === chapter && still.verse === verse) {
+        const current = useBibleStore.getState()
+        const still = current.selectedVerse
+        if (fresh?.text && fresh.translation_id === choice.primary && fresh.book_number === book_number && fresh.chapter === chapter && fresh.verse === verse && current.selectedQueueItemId === item.id && still && still.translation_id === choice.primary && still.book_number === book_number && still.chapter === chapter && still.verse === verse) {
           bibleActions.selectVerse(fresh)
           useBibleStore.getState().setSelectedQueueItemId(item.id)
         }

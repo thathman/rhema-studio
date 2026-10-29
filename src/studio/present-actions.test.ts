@@ -191,6 +191,30 @@ describe("presentActions live safety", () => {
     expect(useQueueStore.getState().activeIndex).toBe(0)
   })
 
+  it("ignores a late Preview lookup after another saved edition is selected", async () => {
+    const english = { ...item(verse(43, 3, 16, "saved English")), translation: "KJV", secondary_translation: null }
+    const yoruba = { ...item(verse(43, 3, 16, "saved Yoruba")), translation: "OYCB", secondary_translation: null }
+    useQueueStore.setState({ items: [english, yoruba] })
+    const pending: Array<{ translationId: number; resolve: (value: Verse) => void }> = []
+    mockInvoke.mockImplementation((cmd: string, args: Record<string, number>) =>
+      cmd === "get_verse" ? new Promise<Verse>((resolve) => pending.push({ translationId: args.translationId, resolve })) : Promise.resolve(null)
+    )
+
+    presentActions.previewItem(english)
+    presentActions.previewItem(yoruba)
+    expect(pending.map((lookup) => lookup.translationId)).toEqual([1, 7])
+
+    pending[0].resolve({ ...verse(43, 3, 16, "late English"), translation_id: 1 })
+    await flush()
+    expect(useBibleStore.getState().selectedQueueItemId).toBe(yoruba.id)
+    expect(useBibleStore.getState().selectedVerse?.translation_id).toBe(7)
+
+    pending[1].resolve({ ...verse(43, 3, 16, "fresh Yoruba"), translation_id: 7 })
+    await flush()
+    expect(useBibleStore.getState().selectedQueueItemId).toBe(yoruba.id)
+    expect(useBibleStore.getState().selectedVerse).toMatchObject({ translation_id: 7, text: "fresh Yoruba" })
+  })
+
   it("a rundown item saved for a translation that is not installed warns instead of showing another one", async () => {
     useQueueStore.setState({ items: [{ ...item(verse(43, 3, 16)), translation: "NIV", secondary_translation: null }] })
     presentActions.next()

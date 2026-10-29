@@ -48,6 +48,16 @@ describe("bible store persistence", () => {
       expect(useBibleStore.getState().secondaryTranslationId).toBeNull()
     })
 
+    it("restores valid saved references and ignores malformed entries", async () => {
+      const saved = { id: "4:43:3:16", translationId: 4, bookNumber: 43, chapter: 3, verse: 16, reference: "John 3:16" }
+      mockGet.mockImplementation((key: string) => Promise.resolve(key === "activeTranslationId" ? 5 : key === "savedPassages" ? [saved, { ...saved, id: "bad" }, { ...saved, reference: "Jude 4:5" }, null] : null))
+      const { hydrateBibleStore, useBibleStore } = await import("./bible-store")
+
+      await hydrateBibleStore()
+
+      expect(useBibleStore.getState().savedPassages).toEqual([saved])
+    })
+
     it("restores a distinct secondary translation", async () => {
       mockGet.mockImplementation((key: string) =>
         Promise.resolve(key === "activeTranslationId" ? 5 : 8)
@@ -167,6 +177,26 @@ describe("bible store persistence", () => {
       vi.useRealTimers()
     })
 
+    it("persists saved Scripture references through bible.json", async () => {
+      const { initBiblePersistence, useBibleStore } = await import("./bible-store")
+      await initBiblePersistence()
+      const saved = await useBibleStore.getState().savePassage({ id: 1, translation_id: 4, book_number: 43, book_name: "John", book_abbreviation: "John", chapter: 3, verse: 16, text: "For God so loved the world." })
+
+      expect(saved).toBe(true)
+      expect(mockSet).toHaveBeenCalledWith("savedPassages", [{ id: "4:43:3:16", translationId: 4, bookNumber: 43, chapter: 3, verse: 16, reference: "John 3:16" }])
+      expect(mockSave).toHaveBeenCalled()
+    })
+
+    it("does not claim a saved passage when bible.json cannot write it", async () => {
+      mockSet.mockRejectedValue(new Error("disk full"))
+      const { useBibleStore } = await import("./bible-store")
+
+      const saved = await useBibleStore.getState().savePassage({ id: 1, translation_id: 4, book_number: 43, book_name: "John", book_abbreviation: "John", chapter: 3, verse: 16, text: "For God so loved the world." })
+
+      expect(saved).toBe(false)
+      expect(useBibleStore.getState().savedPassages).toEqual([])
+    })
+
     it("handles store load failure gracefully without throwing", async () => {
       mockLoad.mockRejectedValue(new Error("disk error"))
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
@@ -201,6 +231,37 @@ describe("requestVerseReveal", () => {
     useBibleStore.getState().requestVerseReveal("nearest")
 
     expect(useBibleStore.getState().revealRequest).toBe(2)
+  })
+})
+
+describe("saved Bible passages", () => {
+  beforeEach(() => {
+    mockSet.mockReset()
+    mockSave.mockReset()
+    mockLoad.mockReset()
+    mockLoad.mockResolvedValue({ get: mockGet, set: mockSet, save: mockSave })
+    vi.resetModules()
+  })
+
+  it("saves a translation-specific passage once and removes it from the library", async () => {
+    const { useBibleStore } = await import("./bible-store")
+    const passage = { id: 12, translation_id: 4, book_number: 43, book_name: "John", book_abbreviation: "John", chapter: 3, verse: 16, text: "For God so loved the world." }
+
+    expect(await useBibleStore.getState().savePassage(passage)).toBe(true)
+    expect(await useBibleStore.getState().savePassage(passage)).toBe(true)
+
+    expect(useBibleStore.getState().savedPassages).toHaveLength(1)
+    expect(useBibleStore.getState().savedPassages[0]).toMatchObject({
+      id: "4:43:3:16",
+      translationId: 4,
+      bookNumber: 43,
+      chapter: 3,
+      verse: 16,
+      reference: "John 3:16",
+    })
+
+    expect(await useBibleStore.getState().removeSavedPassage("4:43:3:16")).toBe(true)
+    expect(useBibleStore.getState().savedPassages).toEqual([])
   })
 })
 

@@ -13,9 +13,14 @@ async function loadTranslations() {
   return translations
 }
 
+async function fetchBooks(translationId?: number) {
+  const id = translationId ?? useBibleStore.getState().activeTranslationId
+  return invoke<Book[]>("list_books", { translationId: id })
+}
+
 async function loadBooks(translationId?: number) {
   const id = translationId ?? useBibleStore.getState().activeTranslationId
-  const books = await invoke<Book[]>("list_books", { translationId: id })
+  const books = await fetchBooks(id)
   useBibleStore.getState().setBooks(books)
   return books
 }
@@ -252,6 +257,7 @@ async function resolveChapter(
 // Exported stable references — these never change between renders
 export const bibleActions = {
   loadTranslations,
+  fetchBooks,
   loadBooks,
   loadChapter,
   fetchChapter,

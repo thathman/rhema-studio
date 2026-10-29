@@ -5,6 +5,62 @@ import type {
   SongWithSections, Translation, Book, Verse, CrossReference, SongQueueItem, SlideQueueItem, ImageQueueItem, AudioQueueItem, CueQueueItem } from "@/types"
 import type { SemanticSearchResult } from "@/types/detection"
 
+/** A saved Bible library entry keeps a local Scripture reference, not a copied verse body. */
+export interface SavedBiblePassage {
+  id: string
+  translationId: number
+  bookNumber: number
+  chapter: number
+  verse: number
+  reference: string
+}
+
+function savedPassageId(passage: Pick<SavedBiblePassage, "translationId" | "bookNumber" | "chapter" | "verse">): string {
+  return `${passage.translationId}:${passage.bookNumber}:${passage.chapter}:${passage.verse}`
+}
+
+function isSavedBiblePassage(value: unknown): value is SavedBiblePassage {
+  if (typeof value !== "object" || value === null) return false
+  const passage = value as Partial<SavedBiblePassage>
+  const reference = typeof passage.reference === "string" ? passage.reference.trim() : ""
+  const canonicalSuffix = typeof passage.chapter === "number" && typeof passage.verse === "number" ? ` ${passage.chapter}:${passage.verse}` : ""
+  return typeof passage.id === "string" && typeof passage.translationId === "number" && Number.isSafeInteger(passage.translationId) && passage.translationId > 0 &&
+    typeof passage.bookNumber === "number" && Number.isSafeInteger(passage.bookNumber) && passage.bookNumber > 0 && passage.bookNumber <= 66 &&
+    typeof passage.chapter === "number" && Number.isSafeInteger(passage.chapter) && passage.chapter > 0 &&
+    typeof passage.verse === "number" && Number.isSafeInteger(passage.verse) && passage.verse > 0 &&
+    reference.length > canonicalSuffix.length && reference.length <= 160 && reference.endsWith(canonicalSuffix) &&
+    passage.id === savedPassageId(passage as Pick<SavedBiblePassage, "translationId" | "bookNumber" | "chapter" | "verse">)
+}
+
+function savedPassagesFrom(value: unknown): SavedBiblePassage[] {
+  if (!Array.isArray(value)) return []
+  const valid = value.filter(isSavedBiblePassage)
+  return [...new Map(valid.map((passage) => [passage.id, passage])).values()]
+}
+
+let savedPassageWriteQueue: Promise<void> = Promise.resolve()
+
+/** Persist one saved-reference update before exposing it as saved in the UI. */
+function updateSavedPassages(change: (current: SavedBiblePassage[]) => SavedBiblePassage[]): Promise<boolean> {
+  const result = savedPassageWriteQueue.then(async () => {
+    const current = useBibleStore.getState().savedPassages
+    const next = change(current)
+    if (next === current) return true
+    try {
+      const store = await load("bible.json", { autoSave: false, defaults: {} })
+      await store.set("savedPassages", next)
+      await store.save()
+      useBibleStore.setState({ savedPassages: next })
+      return true
+    } catch (error) {
+      console.warn("[bible] Failed to persist saved passages", error)
+      return false
+    }
+  })
+  savedPassageWriteQueue = result.then(() => undefined, () => undefined)
+  return result
+}
+
 interface PendingNavigation {
   bookNumber: number
   chapter: number
@@ -60,6 +116,8 @@ interface BibleState {
    * they were saved with. A deliberate per-session choice; never persisted.
    */
   overrideServiceTranslations: boolean
+  /** Reusable local Scripture references; bodies are looked up from their saved editions when used. */
+  savedPassages: SavedBiblePassage[]
 
   setTranslations: (translations: Translation[]) => void
   setActiveTranslation: (id: number) => void
@@ -78,6 +136,8 @@ interface BibleState {
   setPendingNavigation: (nav: PendingNavigation | null) => void
   requestVerseReveal: (block: ScrollLogicalPosition) => void
   setOverrideServiceTranslations: (on: boolean) => void
+  savePassage: (verse: Verse) => Promise<boolean>
+  removeSavedPassage: (id: string) => Promise<boolean>
 }
 
 export const useBibleStore = create<BibleState>((set) => ({
@@ -97,6 +157,7 @@ export const useBibleStore = create<BibleState>((set) => ({
   revealRequest: 0,
   revealBlock: "nearest",
   overrideServiceTranslations: false,
+  savedPassages: [],
 
   setTranslations: (translations) => set({ translations }),
   setActiveTranslation: (activeTranslationId) =>
@@ -128,6 +189,21 @@ export const useBibleStore = create<BibleState>((set) => ({
   requestVerseReveal: (revealBlock) =>
     set((s) => ({ revealRequest: s.revealRequest + 1, revealBlock })),
   setOverrideServiceTranslations: (overrideServiceTranslations) => set({ overrideServiceTranslations }),
+  savePassage: (verse) => updateSavedPassages((current) => {
+    const passage: SavedBiblePassage = {
+      id: savedPassageId({ translationId: verse.translation_id, bookNumber: verse.book_number, chapter: verse.chapter, verse: verse.verse }),
+      translationId: verse.translation_id,
+      bookNumber: verse.book_number,
+      chapter: verse.chapter,
+      verse: verse.verse,
+      reference: `${verse.book_name} ${verse.chapter}:${verse.verse}`,
+    }
+    const existing = current.find((saved) => saved.id === passage.id)
+    if (!existing) return [...current, passage]
+    if (existing.reference === passage.reference) return current
+    return current.map((saved) => saved.id === passage.id ? passage : saved)
+  }),
+  removeSavedPassage: (id) => updateSavedPassages((current) => current.some((passage) => passage.id === id) ? current.filter((passage) => passage.id !== id) : current),
 }))
 
 /**
@@ -148,12 +224,14 @@ export async function hydrateBibleStore(): Promise<void> {
       store.get<number>("activeTranslationId"),
       store.get<number | null>("secondaryTranslationId"),
     ])
+    const savedPassages = savedPassagesFrom(await store.get<unknown>("savedPassages").catch(() => []))
     const firstRun = typeof activeValue === "number" ? null : defaultTranslationId(await invoke<Translation[]>("list_translations").catch(() => []))
     const activeTranslationId =
       typeof activeValue === "number"
         ? activeValue
         : (firstRun ?? useBibleStore.getState().activeTranslationId)
     useBibleStore.getState().setActiveTranslation(activeTranslationId)
+    useBibleStore.setState({ savedPassages })
     useBibleStore
       .getState()
       .setSecondaryTranslation(
