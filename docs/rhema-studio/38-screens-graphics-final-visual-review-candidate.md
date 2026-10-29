@@ -1,9 +1,9 @@
 # 38 — Screens & Graphics Operator: Consolidated Page 5 Visual Review Candidate
 
 **Date:** 29 October 2026  
-**Review state:** **FINAL COMPOSITION CANDIDATE / AWAITING OWNER VISUAL SIGN-OFF.** This is one coherent screen design for review, consolidating the separately approved functionality in [34](34-browser-operators-connected-development.md), [36](36-operator-page-layout-proposals.md) and [37](37-permissions-sidebar-and-authority-design.md). **Do not conflate a review candidate with approved pixels, implemented interactions or completed device QA.**
+**Review state:** **OWNER APPROVED — OVERALL PAGE HIERARCHY AND WORKFLOW (29 October 2026).** The owner answered **“Yes”** when asked to approve the consolidated Page 5 hierarchy: side-by-side Private Preview/Current Program; pinned output selection; contextual Graphic Controls below; compact Upcoming Graphics strip; compact private Director Requests; explicit group impact review. This is structural/interaction acceptance, **not** pixel-perfect typography, styling or animation approval, and **not** proof that all commands, host APIs or real receivers have been implemented/tested. This consolidates previously approved functionality in [34](34-browser-operators-connected-development.md), [36](36-operator-page-layout-proposals.md) and [37](37-permissions-sidebar-and-authority-design.md).
 
-**Process:** Keep owner [Finish-First / ZERO NEW PRs](../OWNER-FINISH-FIRST-2026-10-28.md) in force. Do not start a new implementation PR. Codex may use this review document to reconcile existing modules and prepare acceptance evidence under the approved integration process.
+**Process:** Owner [Resume Implementation Order (29 October)](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md) **lifts the feature-work pause** and restores active full-building. **ZERO NEW PRs** remains, and #352/#367 website-publishing PRs remain held. Codex should implement this approved structural layout, reuse existing modules and produce runtime/device evidence without creating a new PR.
 
 ## 1. Product statement and visual intent
 
@@ -119,7 +119,7 @@ Don't make every user understand `Library` versus `Design` versus `Scene` versus
 - [Joined Screens editor](../../src/studio/production/joined-desks.tsx) still calls general `save_scene`; host-authoritative service-only temp draft versus permanently persisted reusable Design versions remains to be verified/implemented.
 - Review/CI/source alone does not prove real phone/TV/OBS physical parity.
 
-**Codex instruction:** Reuse/refactor these existing modules into this visual hierarchy under the approved process; don't build a parallel editor, separate graphics queue, or shadow permissions store. Every enabled action must be backed by an enforceable role-scoped host API and truthful physical output state. Preserve latest owner approvals in [36 §5G–I](36-operator-page-layout-proposals.md). Do **not** claim this page visually approved, production-ready or deployed until owner signs off and verification evidence exists.
+**Codex instruction:** **Owner has approved the page composition**. Resume feature implementation now under [29 October order](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md), reuse/refactor these existing modules, do not build parallel editors/queues/permission stores, and ensure every enabled action has real role-scoped host API and true per-output physical status. Preserve [36 §5G–I](36-operator-page-layout-proposals.md). **Do not claim pixel-level approval or production/device completion** before separate visual and runtime verification.
 
 ## 7. Visual-review outcomes to record
 
@@ -128,4 +128,4 @@ Owner may mark this page candidate:
 - **APPROVED WITH SPECIFIC CHANGES:** list exact differences and commit revised candidate.
 - **REVISE:** preserve functional approvals; revise screen hierarchy without undoing already ratified behavior.
 
-**As written: AWAITING OWNER VISUAL REVIEW.**
+**As of 29 October 2026: OWNER APPROVED THE STRUCTURAL HIERARCHY AND KEY INTERACTION FLOW. Detailed pixel styling, exact breakpoints/touch composition and physical/runtime acceptance remain open.**
