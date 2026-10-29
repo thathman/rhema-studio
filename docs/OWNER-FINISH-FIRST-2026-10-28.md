@@ -2,26 +2,30 @@
 **Effective:** 28 October 2026. **Authority:** latest owner directive, ahead of prior fast-build plans wherever those plans conflict.
 **Status:** active work instructions, not a claim of implementation, acceptance, or shipment.
 
+## LATEST OWNER AMENDMENT — NORMAL PR WORKFLOW RESTORED (29 October 2026)
+
+**The owner explicitly lifted the October 28 PR creation prohibition.** The operative policy is [OWNER-PR-WORKFLOW-2026-10-29.md](OWNER-PR-WORKFLOW-2026-10-29.md): new development PRs are allowed, aim for 3 active and normally no more than 5, merge safe reviewed changes continually, use scoped subagents. **The old 28 October freeze and Phase A paragraphs below are historical and no longer instructions to block PR creation.** Retain their safety/test and avoiding-backlog lessons. The two website-publication PRs #352/#367 **must still not be merged/published** without separate fresh owner permission.
+
 ## OWNER AMENDMENT — MAJOR FEATURE BUILD RESUMED (29 October 2026)
 
 **This section has priority over the 28 October pause wording below.** On 29 October the owner explicitly instructed **"Codex should resume the previous work before we told it to pause to merge the PRs."** The working code and feature implementation pause is therefore **LIFTED NOW**. Only two open PRs remain (#352/#367), both **OWNER-GATED website publishing**; they do not block desktop, native editor, LAN browser operator, connected device or Page 5/6 feature development.
 
-**Read and execute [OWNER-RESUME-IMPLEMENTATION-2026-10-29.md](OWNER-RESUME-IMPLEMENTATION-2026-10-29.md).** Restore the comprehensive approved feature queue, prior acceleration/subagent protocol, cross-feature implementation and milestone integration **without another merge-queue-only cycle**. The older phrase "Temporarily stop unplanned feature development" applies to the historical 28 Oct backlog phase, **not** after this owner resumption order. **ZERO NEW PRS remains active** unless the owner explicitly permits creating them; continue with controlled main/existing branch integrations and risk-based review rather than recreating backlog. Do not merge or publish #352/#367 or bypass Live/security/release gates. Treat this as Phase B *active*, not pending.
+**Read and execute [OWNER-RESUME-IMPLEMENTATION-2026-10-29.md](OWNER-RESUME-IMPLEMENTATION-2026-10-29.md).** Restore the comprehensive approved feature queue, prior acceleration/subagent protocol, cross-feature implementation and milestone integration **without another merge-queue-only cycle**. The older phrase "Temporarily stop unplanned feature development" applies to the historical 28 Oct backlog phase, **not** after this owner resumption order. **The owner has now explicitly permitted new PRs** under [the bounded owner workflow](OWNER-PR-WORKFLOW-2026-10-29.md); continue merging safe PRs promptly instead of recreating backlog. Do not merge or publish #352/#367 or bypass Live/security/release gates. Treat this as Phase B *active*, not pending.
 
 ## The goal
 
-**Clear the existing PR backlog, complete the major approved Rhema platform journeys, and fix all owner-reported defects before opening any more PRs or chasing extra features.** Optimize for finished, integrated, reliable application behavior. The previous focus on many small, continuously opened PRs produced too much integration debt. That approach is suspended.
+**HISTORICAL OCTOBER 28 goal (superseded as a PR restriction):** Clear the existing PR backlog, complete the major approved Rhema platform journeys, and fix all owner-reported defects. New feature PRs are now allowed under the later owner workflow. Optimize for finished, integrated, reliable application behavior. The previous focus on many small, continuously opened PRs produced too much integration debt. That approach is suspended.
 
 ### Non-negotiable process
-- **ZERO NEW PRs** for now: no feature, fix, docs, cleanup, tests, CI, migration, or replacement PR. Do not create new issues as a workaround. You may add commits to **already-open PR branches**, retarget/rebase existing PRs (after coordinating with branch writers), and integrate reviewed changes into `main`. The owner alone lifts the freeze.
+- **PR FREEZE RESCINDED:** The owner lifted this restriction on 29 October; new feature/fix/documentation PRs are permitted under the small-queue [Owner PR Workflow](OWNER-PR-WORKFLOW-2026-10-29.md). This is a historical rule only.
 - Treat the open PRs as a **finite queue** to process until every entry is either safely merged, demonstrably superseded/closed, or explicitly blocked with a real reason and next action. Do **not** artificially close work that the app still needs.
 - Temporarily **stop unplanned feature development** while clearing existing candidate changes. Continue work only if needed to make an existing PR safe to integrate or to fix a direct owner-reported problem. Do not confuse this pause with removing major capabilities from the final scope.
 - Lead Codex owns an accurate backlog board, subagent coordination and proof. If installed, use `codex-tasklist` to track the current merge wave, not 52 new implementation tasks. Use PR comments/issue comments for owner-visible remote progress. Report explicitly if the plugin was not installed.
 - No real church data mutation, public website publishing, app release/deployment, destructive migrations, force push of shared branches, or silent change to licensing/security requirements.
 
-## Phase A — Backlog integration freeze (START NOW)
+## Historical Phase A — Backlog integration freeze (COMPLETED; NOT CURRENT)
 
-At time of owner override the repo had **52 open PRs**; this is a dated baseline, not a permanently fixed count. Re-fetch current data and main SHA before each batch. Do not open another PR.
+At the historical 28 October override the repo had **52 open PRs**; this is a dated baseline, not a current count. On 29 October the two remaining open PRs were owner-gated website publication. **New development PRs are now permitted**; the following Phase A steps are retained as historical audit context, not current required work.
 
 1. Use the `pr-auditor` subagent for read-only current PR inventory/DAG/overlap; `qa-reviewer` for P0 safety; `ci-profiler` for the minimal safe test strategy. Parallelize only independent read-only work. The lead makes decisions and performs integration. For tightly coupled merges, keep one writer.
 2. Make a backlog table with **PR, target/base, CI state, duplicate owner, unique capability, blocker, decision**: `MERGE`, `RECONCILE`, `CLOSE SUPERSEDED`, `BLOCKED`, `OWNER-GATED`, or `KEEP FOR MAJOR FEATURE`. Post a compact authoritative summary on an existing PR thread rather than opening a tracking PR.
@@ -74,6 +78,6 @@ At the end of each merge wave, report on the existing GitHub PR/issue thread and
 `OPENED: 0 | MERGED: X | SUPERSEDED/CLOSED: Y | STILL OPEN: Z | BLOCKED: ... | ACTIVE MAJOR FIX: ...`.
 Include evidence links and identify remaining owner-gated PRs. Each session should show a **net decrease in actionable backlog**. A PR count reduction alone is not sufficient if unique features are lost.
 
-**Exit the PR freeze only with explicit owner instruction.** If the backlog contains owner-gated publishing PRs or irreducible blockers, record them distinctly; do not merge them merely to force the number to zero.
+**The owner explicitly lifted the PR creation freeze on 29 October.** If the backlog contains owner-gated publishing PRs or irreducible blockers, record them distinctly; do not merge them merely to force the number to zero.
 
 **Definition of final goal:** all existing reviewable changes are reconciled, owner-reported fixes are working and accepted, major contracted Rhema workflows are integrated and tested, and the final build is ready for the owner's real-device acceptance (with clear outstanding hardware limitations). This task is not satisfied by planning, writing reports, or accumulating green but unmerged PRs.
