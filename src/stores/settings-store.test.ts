@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const mockRemoteInvoke = vi.hoisted(() => vi.fn())
 const mockGet = vi.fn()
 const mockSet = vi.fn()
 const mockSave = vi.fn()
 const mockDelete = vi.fn()
 const mockLoad = vi.fn()
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockRemoteInvoke(...args) }))
 
 vi.mock("@tauri-apps/plugin-store", () => ({
   load: (...args: unknown[]) => mockLoad(...args),
@@ -26,6 +29,7 @@ describe("settings store", () => {
     mockSave.mockReset()
     mockDelete.mockReset()
     mockLoad.mockReset()
+    mockRemoteInvoke.mockReset().mockResolvedValue(null)
     mockLoad.mockResolvedValue({
       get: mockGet,
       set: mockSet,
@@ -299,8 +303,43 @@ describe("settings store", () => {
 
     const phone = { hash: "phone-hash", name: "Phone", paired_at: "2026-10-27T10:00:00Z" }
     useSettingsStore.setState({ remoteAuthRequired: false, remoteSecret: "", remoteDevices: [phone] as never })
-    useSettingsStore.getState().revokeRemoteDevice(phone.hash)
+    await useSettingsStore.getState().revokeRemoteDevice(phone.hash)
     expect(useSettingsStore.getState().remoteAuthRequired).toBe(true)
+  })
+
+  it("does not show a remote role change as applied until the host acknowledges it", async () => {
+    const { useSettingsStore } = await import("./settings-store")
+    const device = { hash: "device-hash", name: "Graphics tablet", paired_at: "2026-10-27T10:00:00Z", role: "viewer" as const }
+    useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
+    let acknowledge!: () => void
+    mockRemoteInvoke.mockImplementation(() => new Promise<void>((resolve) => { acknowledge = resolve }))
+
+    const changed = useSettingsStore.getState().setRemoteDeviceRole(device.hash, "screens")
+
+    expect(useSettingsStore.getState().remoteDevices[0]?.role).toBe("viewer")
+    await Promise.resolve()
+    expect(mockRemoteInvoke).toHaveBeenCalledWith("remote_set_keys", {
+      shared: null,
+      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false }],
+      requireAuth: true,
+    })
+    acknowledge()
+    await expect(changed).resolves.toBe(true)
+    expect(useSettingsStore.getState().remoteDevices[0]?.role).toBe("screens")
+  })
+
+  it("keeps role, pause and revoke state unchanged when the host rejects access updates", async () => {
+    const { useSettingsStore } = await import("./settings-store")
+    const device = { hash: "device-hash", name: "Graphics tablet", paired_at: "2026-10-27T10:00:00Z", role: "viewer" as const }
+    useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
+    mockRemoteInvoke.mockRejectedValue(new Error("host unavailable"))
+
+    await expect(useSettingsStore.getState().setRemoteDeviceRole(device.hash, "screens")).resolves.toBe(false)
+    expect(useSettingsStore.getState().remoteDevices).toEqual([device])
+    await expect(useSettingsStore.getState().setRemoteDevicePaused(device.hash, true)).resolves.toBe(false)
+    expect(useSettingsStore.getState().remoteDevices).toEqual([device])
+    await expect(useSettingsStore.getState().revokeRemoteDevice(device.hash)).resolves.toBe(false)
+    expect(useSettingsStore.getState().remoteDevices).toEqual([device])
   })
 
   it("an old settings file without the setup section keeps everything and gets the setup defaults (#298)", async () => {

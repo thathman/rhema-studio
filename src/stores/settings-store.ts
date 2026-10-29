@@ -78,7 +78,7 @@ export function isObsProfile(v: unknown): v is ObsProfile {
 }
 
 export function pushRemoteKeys(): Promise<void> {
-  remoteKeysPush = remoteKeysPush.then(async () => {
+  const write = remoteKeysPush.then(async () => {
     const s = useSettingsStore.getState()
     try {
       await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure", paused: d.paused === true })), requireAuth: s.remoteAuthRequired })
@@ -89,7 +89,39 @@ export function pushRemoteKeys(): Promise<void> {
       }
     }
   })
+  remoteKeysPush = write.then(() => undefined, () => undefined)
   return remoteKeysPush
+}
+
+type RemotePolicyPatch = Partial<Pick<SettingsState, "remoteDevices" | "remoteAuthRequired">>
+
+/** Apply access changes only after the host confirms the new policy. */
+function updateRemotePolicy(change: (current: SettingsState) => RemotePolicyPatch | null): Promise<boolean> {
+  const write = remoteKeysPush.then(async () => {
+    const current = useSettingsStore.getState()
+    const patch = change(current)
+    if (!patch) return false
+    if (Object.keys(patch).length === 0) return true
+    const next = { ...current, ...patch }
+    try {
+      await invoke("remote_set_keys", {
+        shared: next.remoteSecret.trim() || null,
+        devices: next.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure", paused: d.paused === true })),
+        requireAuth: next.remoteAuthRequired,
+      })
+      useSettingsStore.setState(patch)
+      return true
+    } catch (e) {
+      if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+        toast.error("Remote access was not changed", {
+          description: `The host did not confirm the update. The device may still have its previous access. ${e instanceof Error ? e.message : String(e)}`,
+        })
+      }
+      return false
+    }
+  })
+  remoteKeysPush = write.then(() => undefined, () => undefined)
+  return write.then((applied) => applied, () => false)
 }
 /** A camera on the church network (#209): one phone or IP camera, one name in the camera router. */
 export interface CameraSource {
@@ -294,10 +326,10 @@ export interface SettingsState {
 
   setRemoteSecret: (secret: string) => void
   addRemoteDevice: (d: { hash: string; name: string; role?: RemoteRole }) => void
-  revokeRemoteDevice: (hash: string) => void
-  setRemoteDeviceRole: (hash: string, role: RemoteRole) => void
+  revokeRemoteDevice: (hash: string) => Promise<boolean>
+  setRemoteDeviceRole: (hash: string, role: RemoteRole) => Promise<boolean>
   /** Take back control from a paired desk (true) or give it back (false); see src/lib/desk-control.ts. */
-  setRemoteDevicePaused: (hash: string, paused: boolean) => void
+  setRemoteDevicePaused: (hash: string, paused: boolean) => Promise<boolean>
   setOperatorName: (name: string) => void
   setHymnFirstLanguage: (lang: "en" | "yo") => void
   setBrandKit: (kit: BrandKit) => void
@@ -420,7 +452,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     void pushRemoteKeys()
   },
   revokeRemoteDevice: (hash) => {
-    set((s) => {
+    return updateRemotePolicy((s) => {
+      if (!s.remoteDevices.some((x) => x.hash === hash)) return null
       const remoteDevices = s.remoteDevices.filter((x) => x.hash !== hash)
       return {
         remoteDevices,
@@ -429,24 +462,25 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         remoteAuthRequired: s.remoteAuthRequired || remoteDevices.length !== s.remoteDevices.length,
       }
     })
-    void pushRemoteKeys()
   },
-  setRemoteDeviceRole: (hash, role) => {
-    set((s) => ({ remoteDevices: s.remoteDevices.map((x) => (x.hash === hash ? { ...x, role } : x)) }))
-    void pushRemoteKeys()
-  },
-  setRemoteDevicePaused: (hash, paused) => {
+  setRemoteDeviceRole: (hash, role) => updateRemotePolicy((s) => {
+    if (!s.remoteDevices.some((x) => x.hash === hash)) return null
+    if (s.remoteDevices.find((x) => x.hash === hash)?.role === role) return {}
+    return { remoteDevices: s.remoteDevices.map((x) => (x.hash === hash ? { ...x, role } : x)) }
+  }),
+  setRemoteDevicePaused: (hash, paused) => updateRemotePolicy((s) => {
+    const device = s.remoteDevices.find((x) => x.hash === hash)
+    if (!device) return null
+    if ((device.paused === true) === paused) return {}
     // Not paused is written as absent, so a settings file stays as an older build wrote it.
-    set((s) => ({
-      remoteDevices: s.remoteDevices.map((x) => {
-        if (x.hash !== hash) return x
-        const next = { ...x, paused: true }
-        if (!paused) delete (next as RemoteDevice).paused
-        return next
-      }),
-    }))
-    void pushRemoteKeys()
-  },
+    const remoteDevices = s.remoteDevices.map((x) => {
+      if (x.hash !== hash) return x
+      const next = { ...x, paused: true }
+      if (!paused) delete (next as RemoteDevice).paused
+      return next
+    })
+    return { remoteDevices }
+  }),
   setCustomMacros: (customMacros) => set({ customMacros }),
   setCloudSpeechConsent: (provider, agreed) => set((state) => {
     const at = agreed ? new Date().toISOString() : ""
