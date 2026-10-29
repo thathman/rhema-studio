@@ -223,7 +223,7 @@ async function runScenario() {
     const headers = qa.queue.getState().headers.map((header) => header.id === event.id ? { ...header, at: 1 } : header)
     qa.queue.setState({ items: [baseline], headers, activeIndex: null, addTarget: null })
     await waitFor(() => qa.service.getState().dirty, "baseline plan change to be marked unsaved")
-    await clickButton("Present service")
+    await clickButton("Open Live")
     const baselineRow = await waitFor(
       () => [...document.querySelectorAll('ol[aria-label="Service rundown"] button[title^="Click to preview"]')]
         .find((button) => normal(button.innerText).includes(baseline.reference)),
@@ -355,7 +355,9 @@ async function runScenario() {
     const addEvent = async (label, title, duration) => {
       const before = new Set(qa.queue.getState().headers.map((header) => header.id))
       await clickButton("Add event")
-      await clickButton(label, { startsWith: true })
+      // The event menu's option reads "<label> Creates <event>" ("Worship" alone when the names match);
+      // a bare "Bible" would also match the Add-to-service picker's Bible tab, which stays in the page.
+      await clickButton(label === title ? label : `${label} Creates ${title}`, { startsWith: true })
       const header = await waitFor(
         () => qa.queue.getState().headers.find((candidate) => !before.has(candidate.id) && candidate.event && candidate.name === title),
         `${title} event`,
@@ -419,6 +421,8 @@ async function runScenario() {
     await clickButton("Edit event: Scripture")
     await clickTab("Content")
     await clickButton("Add content to Scripture")
+    // The Add picker opens on the tab used last (the hymn book, earlier in this journey).
+    await clickTab("Bible")
     await setInput('input[aria-label="Quick find"]', "John 3 16")
     const verseRow = await waitFor(
       () => [...document.querySelectorAll('ul[aria-live="polite"] li')].find((candidate) => normal(candidate.innerText).includes("John 3:16")),
@@ -625,7 +629,7 @@ async function runScenario() {
     }
 
     stage = "verify primary Scripture Preview and bilingual render state after explicit Take"
-    await clickButton("Present service")
+    await clickButton("Open Live")
     const previewPanel = await waitFor(() => document.querySelector('[data-slot="preview-panel"]'), "Live Preview panel")
     const previewCanvas = await waitFor(() => previewPanel.querySelector('canvas[role="img"]'), "accessible Live Preview canvas")
     const previewLabel = await waitFor(

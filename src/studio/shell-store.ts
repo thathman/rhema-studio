@@ -92,6 +92,8 @@ export function writeShellPrefs(storage: StorageLike | null, prefs: ShellPrefs):
 }
 
 interface ShellState extends ShellPrefs {
+  /** Monotonic in-memory identity for each visit to Library; rejects stale async Uses. */
+  libraryVisitId: number
   /** The outputs dialog is global so Home, Present and More can all open it. */
   outputsDialogOpen: boolean
   designTab: DesignTab
@@ -152,6 +154,7 @@ const storage: StorageLike | null =
 
 export const useShellStore = create<ShellState>((set) => ({
   ...readShellPrefs(storage),
+  libraryVisitId: 0,
   outputsDialogOpen: false,
   designTab: "themes",
   setDesignTab: (tab) => set({ designTab: designTabOf(tab) }),
@@ -167,10 +170,31 @@ export const useShellStore = create<ShellState>((set) => ({
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   pendingFind: null,
   findInPresent: (pendingFind) => set({ pendingFind, goRequest: "present" }),
-  setWorkspace: (workspace) => set({ workspace: canonicalWorkspace(workspace) }),
+  setWorkspace: (workspace) => set((state) => {
+    const target = canonicalWorkspace(workspace)
+    const enteringLibraryDirectly = target === "library" && state.workspace !== "library"
+    const leavingLibraryWithoutReturningToPrepare =
+      state.workspace === "library" && target !== "library" && target !== "prepare"
+    return {
+      workspace: target,
+      ...(enteringLibraryDirectly
+        ? { libraryVisitId: state.libraryVisitId + 1 }
+        : {}),
+      ...(enteringLibraryDirectly || leavingLibraryWithoutReturningToPrepare
+        ? { prepareLibraryReturn: null }
+        : {}),
+    }
+  }),
   librarySection: "songs",
   setLibrarySection: (librarySection) => set({ librarySection }),
-  openLibrarySection: (librarySection, prepareLibraryReturn = null) => set({ workspace: "library", librarySection, prepareLibraryReturn }),
+  openLibrarySection: (librarySection, prepareLibraryReturn = null) => set((state) => ({
+    workspace: "library",
+    librarySection,
+    prepareLibraryReturn,
+    ...(state.workspace !== "library"
+      ? { libraryVisitId: state.libraryVisitId + 1 }
+      : {}),
+  })),
   setPresentView: (presentView) => set({ presentView }),
   setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),

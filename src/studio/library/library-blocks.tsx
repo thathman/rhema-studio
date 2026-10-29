@@ -22,6 +22,7 @@ import { describeError, reloadAfterRestore } from "@/studio/library/content-acti
 import { save } from "@tauri-apps/plugin-dialog"
 import { writeTextFile } from "@tauri-apps/plugin-fs"
 import type { ContentStatus, ImportMode, ServiceLog, ServiceLogSummary, ServiceRun, ServiceRunSummary } from "@/types"
+import { ServiceRunReview } from "@/studio/library/service-run-review"
 
 const MODE_LABEL: Record<ImportMode, string> = {
   skip: "Keep my copy of songs I already have",
@@ -484,6 +485,7 @@ function RunCheckpoint({ run }: { run: ServiceRun }) {
             <span className="text-muted-foreground">{new Date(entry.at).toLocaleTimeString(undefined, run.time_zone ? { timeZone: run.time_zone } : {})}</span> · {entry.kind.toUpperCase()} {entry.label}{entry.outputId ? ` · output ${entry.outputId}` : ""}{entry.by && !entry.label.includes(entry.by) ? ` · by ${entry.by}` : ""}
           </li>)}
         </ol>}
+      <ServiceRunReview checkpoint={checkpoint} status={run.status} />
       {orderedPlan.length > 0 && <div className="mt-2">
         <p className="mb-1 text-muted-foreground">Captured plan</p>
         <ol className="max-h-36 list-inside list-decimal overflow-y-auto">

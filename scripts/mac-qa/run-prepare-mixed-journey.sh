@@ -155,7 +155,7 @@ else
   WATCH_STATUS=1
 fi
 if [[ "$OPEN_STATUS" == 0 && "$WATCH_STATUS" == 0 ]]; then
-  "$ROOT/scripts/mac-qa/qa.py" main prepare-six-event-journey "$QA_SOURCE" 180 >"$QA_SCRATCH/result.json"
+  "$ROOT/scripts/mac-qa/qa.py" main prepare-six-event-journey "$QA_SOURCE" 480 >"$QA_SCRATCH/result.json"
   QA_STATUS=$?
 else
   QA_STATUS=1

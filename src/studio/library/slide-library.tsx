@@ -13,12 +13,13 @@ import { useSlideStore } from "@/stores/slide-store"
 import { useShellStore } from "@/studio/shell-store"
 import { slideLabel } from "@/stores/service-store"
 import { isCurrentPrepareLibraryReturn } from "@/studio/prepare/library-return"
+import { captureLibraryUseInvocation, type LibraryItemUseHandler } from "@/studio/library/library-target-store"
 import type { ReusableSlide, ReusableSlideInput, SlideQueueItem } from "@/types"
 
 const empty: ReusableSlideInput = { kind: "slide", title: "", body: "", link: null, background_media_id: null }
 
 /** Reusable content sources. Adding copies content into a service occurrence; source edits never update that copy. */
-export function SlideLibrary() {
+export function SlideLibrary({ onUseItem }: { onUseItem?: LibraryItemUseHandler } = {}) {
   const slides = useSlideStore((s) => s.slides)
   const loading = useSlideStore((s) => s.loading)
   const error = useSlideStore((s) => s.error)
@@ -93,6 +94,7 @@ export function SlideLibrary() {
 
   const addToService = () => {
     if (!editing) return
+    const invocation = onUseItem ? captureLibraryUseInvocation() : null
     const prepareReturn = useShellStore.getState().prepareLibraryReturn
     if (prepareReturn && !isCurrentPrepareLibraryReturn(prepareReturn)) {
       toast.error("The service or Add target changed", { description: "Return to Prepare and choose where this reusable slide belongs." })
@@ -108,6 +110,10 @@ export function SlideLibrary() {
       slide: { title: editing.title, body: editing.body, ...(editing.link ? { link: editing.link } : {}), source_asset_id: editing.id, source_revision: editing.revision },
       reference: slideLabel({ title: editing.title, body: editing.body, ...(editing.link ? { link: editing.link } : {}) }), confidence: 1, source: "manual", added_at: Date.now(),
       ...(bg ? { background: { media_id: bg, name: media.find((asset) => asset.id === bg)?.name ?? "" } } : {}),
+    }
+    if (onUseItem && invocation) {
+      onUseItem(item, invocation)
+      return
     }
     const queue = useQueueStore.getState()
     if (prepareReturn) queue.setAddTarget(prepareReturn.targetHeaderId)

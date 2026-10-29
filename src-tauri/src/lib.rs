@@ -6,6 +6,7 @@ mod qa_bridge;
 mod events;
 mod memstats;
 mod state;
+mod window_acl;
 
 use std::sync::Mutex;
 
@@ -123,7 +124,7 @@ pub fn run() {
         .manage(commands::content::ContentState(Mutex::new(None)))
         .manage(commands::content::ContentOpenError(Mutex::new(None)))
         .manage(commands::media::MediaState(std::sync::OnceLock::new()))
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(window_acl::guard(tauri::generate_handler![
             commands::bible::list_translations,
             commands::bible::list_books,
             commands::bible::get_chapter,
@@ -277,7 +278,7 @@ pub fn run() {
             commands::media::media_list,
             commands::media::media_set_dimensions,
             commands::media::media_delete,
-        ])
+        ]))
         .setup(|app| {
             use tauri::Manager;
 

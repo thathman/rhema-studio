@@ -10,6 +10,7 @@ import { useBibleStore, useQueueStore } from "@/stores"
 import { useMediaStore } from "@/stores/media-store"
 import { isContentCommandError } from "@/types/content"
 import type { MediaAssetStatus } from "@/types"
+import { captureLibraryUseInvocation, type LibraryItemUseHandler } from "@/studio/library/library-target-store"
 import { soundType } from "@/lib/sound-type"
 import { imageQueueItem, mediaQueueItem } from "@/lib/media-items"
 
@@ -18,7 +19,7 @@ import { imageQueueItem, mediaQueueItem } from "@/lib/media-items"
  * app's media folder (named by content hash, so the same picture is never
  * stored twice); click to preview, Add to put it in the service.
  */
-export function MediaLibrary({ onAdded }: { onAdded?: (id: string) => void } = {}) {
+export function MediaLibrary({ onAdded, onUseItem }: { onAdded?: (id: string) => void; onUseItem?: LibraryItemUseHandler } = {}) {
   const assets = useMediaStore((s) => s.assets)
   const urls = useMediaStore((s) => s.urls)
   const loading = useMediaStore((s) => s.loading)
@@ -59,8 +60,13 @@ export function MediaLibrary({ onAdded }: { onAdded?: (id: string) => void } = {
   }
 
   const add = (a: MediaAssetStatus) => {
+    const item = mediaQueueItem(a)
+    if (onUseItem) {
+      onUseItem(item, captureLibraryUseInvocation())
+      return
+    }
     const queue = useQueueStore.getState()
-    const id = queue.addItem(mediaQueueItem(a), "end")
+    const id = queue.addItem(item, "end")
     if (id) onAdded?.(id)
   }
 

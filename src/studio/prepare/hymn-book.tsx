@@ -12,6 +12,7 @@ import { foldMarks } from "@/lib/quick-search"
 import { CAC_PARTS, cacNumber, importCacHymnbook, listCacHymns, searchCacHymns, type CacPart } from "@/lib/cac-hymnbook"
 import { SongEditor } from "@/studio/prepare/song-editor"
 import { isSongItem, type SongSummary } from "@/types"
+import { captureLibraryUseInvocation, type LibraryItemUseHandler } from "@/studio/library/library-target-store"
 
 interface Hymn {
   song: SongSummary
@@ -55,7 +56,7 @@ function hymnItem(song: SongSummary, first: "en" | "yo", id?: string) {
  * the service. The book is imported once from its file and stays on this
  * computer.
  */
-export function HymnBook({ onAdded }: { onAdded?: (id: string) => void } = {}) {
+export function HymnBook({ onAdded, onUseItem }: { onAdded?: (id: string) => void; onUseItem?: LibraryItemUseHandler } = {}) {
   const [hymns, setHymns] = useState<Hymn[] | null>(null)
   const [part, setPart] = useState<CacPart>(1)
   const [query, setQuery] = useState("")
@@ -144,8 +145,13 @@ export function HymnBook({ onAdded }: { onAdded?: (id: string) => void } = {}) {
     : selectedHymn?.song.languages ?? []
 
   const add = (song: SongSummary) => {
+    const item = hymnItem(song, first)
+    if (onUseItem) {
+      onUseItem(item, captureLibraryUseInvocation())
+      return
+    }
     const queue = useQueueStore.getState()
-    const id = queue.addItem(hymnItem(song, first), "end")
+    const id = queue.addItem(item, "end")
     if (id) onAdded?.(id)
   }
 

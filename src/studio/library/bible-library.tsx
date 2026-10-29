@@ -6,6 +6,7 @@ import { parseTypedReference } from "@/lib/quick-search"
 import { useBibleStore, useQueueStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
 import { presentActions } from "@/studio/present-actions"
+import { captureLibraryUseInvocation, type LibraryItemUseHandler } from "@/studio/library/library-target-store"
 import { toast } from "sonner"
 import type { Book } from "@/types"
 
@@ -27,7 +28,7 @@ function manualVerseItem(
 }
 
 /** Local Scripture references saved for reuse in future services. */
-export function BibleLibrary() {
+export function BibleLibrary({ onUseItem }: { onUseItem?: LibraryItemUseHandler } = {}) {
   const translations = useBibleStore((s) => s.translations)
   const activeTranslationId = useBibleStore((s) => s.activeTranslationId)
   const books = useBibleStore((s) => s.books)
@@ -219,6 +220,8 @@ export function BibleLibrary() {
     passage: (typeof savedPassages)[number]
   ) => {
     if (operationInFlight.current) return
+    // Capture the service and Prepare caller before Scripture verification awaits native data.
+    const invocation = onUseItem ? captureLibraryUseInvocation() : null
     const edition = translations.find(
       (translation) =>
         translation.id === passage.translationId &&
@@ -263,6 +266,10 @@ export function BibleLibrary() {
         return
       }
       const item = manualVerseItem(verse, actualReference, edition.abbreviation)
+      if (onUseItem && invocation) {
+        onUseItem(item, invocation)
+        return
+      }
       const id = useQueueStore.getState().addItem(item, "end")
       if (!id) {
         setMessage(`${passage.reference} was not added to the service.`)

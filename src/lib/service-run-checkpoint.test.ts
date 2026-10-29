@@ -17,7 +17,16 @@ const checkpoint = {
   startItemIds: ["verse-1"],
   plan: [{ id: "verse-1", label: "John 3:16" }],
   plannedMs: { "verse-1": 180_000 },
-  headers: [{ id: "phase-1", type: "phase", name: "Opening", at: 0 }],
+  headers: [
+    { id: "phase-1", type: "phase", name: "Opening", at: 0 },
+    {
+      id: "event-1",
+      type: "group",
+      name: "Welcome",
+      at: 0,
+      event: { schema_version: 1, duration_minutes: 4 },
+    },
+  ],
   operator: "Tolu",
 }
 
@@ -28,7 +37,16 @@ describe("saved service run checkpoints", () => {
       checkpointAt: checkpoint.checkpointAt,
       checkpointMono: checkpoint.checkpointMono,
       plan: checkpoint.plan,
+      headers: checkpoint.headers,
     })
+  })
+
+  it("keeps unknown event versions out of the typed History projection", () => {
+    const parsed = parseServiceRunCheckpoint({
+      ...checkpoint,
+      headers: [{ id: "future-event", type: "group", name: "Future", at: 0, event: { schema_version: 2 } }],
+    })
+    expect(parsed?.headers[0]).not.toHaveProperty("event")
   })
 
   it.each([
