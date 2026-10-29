@@ -32,6 +32,19 @@ export interface DesignVersion {
   createdAt: string
 }
 
+/** A service item that pins a version of this design (`payload.designRef`). */
+export interface DesignUse {
+  programId: string
+  title: string
+  serviceDate: string | null
+  revision: number
+  /** The revision Live uses. */
+  approvedRevision: number | null
+  itemId: string
+  reference: string
+  version: number
+}
+
 export interface DesignInput {
   title: string
   kind?: DesignKind
@@ -54,5 +67,6 @@ export const designStore = {
   getVersion: (id: string, version: number) => invoke<DesignVersion | null>("design_get_version", { id, version }),
   listVersions: (id: string) => invoke<DesignVersion[]>("design_list_versions", { id }),
   duplicate: (id: string, version?: number, title?: string) => invoke<DesignDocument>("design_duplicate", { id, version, title }),
+  usedOn: (id: string) => invoke<DesignUse[]>("design_used_on", { id }),
   remove: (id: string, expectedRevision: number) => invoke<void>("design_delete", { id, expectedRevision }),
 }

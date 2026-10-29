@@ -112,6 +112,15 @@ export interface Scene {
   updatedBy?: string | null
   /** The Design → Library look this was copied from (Reset puts it back as that look has it). */
   libraryLookId?: string
+  /** The design version this scene was made from (docs/contracts/design-documents-v1.md, Pinning).
+   * Versions never change, so a newer one never alters this scene until it is re-made from it. */
+  design?: DesignPin
+}
+
+/** One immutable version of a design in the host's design store. */
+export interface DesignPin {
+  id: string
+  version: number
 }
 
 /** One layer as an output draws it. */

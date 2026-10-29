@@ -108,6 +108,9 @@ export interface CustomSlide {
   /** The reusable library source this occurrence was copied from. The content above stays local to this service item. */
   source_asset_id?: string
   source_revision?: number
+  /** A designed moment: the design version it shows (docs/contracts/design-documents-v1.md, Pinning).
+   * The title and body above are what shows if that version cannot be drawn. */
+  designRef?: import("./scene").DesignPin
 }
 
 export interface SlideQueueItem extends QueueItemBase {

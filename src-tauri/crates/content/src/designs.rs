@@ -54,6 +54,21 @@ pub struct DesignVersion {
     pub created_at: String,
 }
 
+/// A service item that pins a version of a design (`payload.designRef`), for "Used On".
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignUse {
+    pub program_id: String,
+    pub title: String,
+    pub service_date: Option<String>,
+    pub revision: i64,
+    /// The revision Live uses: an approved service keeps the version it was approved with.
+    pub approved_revision: Option<i64>,
+    pub item_id: String,
+    pub reference: String,
+    pub version: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DesignInput {
@@ -163,6 +178,23 @@ impl ContentDb {
         };
         let title = title.map(str::trim).filter(|t| !t.is_empty()).map_or_else(|| format!("{src_title} (copy)"), str::to_string);
         self.create_design(&DesignInput { title, kind, document })
+    }
+
+    /// The services whose items pin a version of this design (`payload.designRef`), newest service
+    /// first. Scenes live in the desk's scene store, so the UI adds those it holds.
+    pub fn design_used_on(&self, id: &str) -> Result<Vec<DesignUse>> {
+        let conn = self.lock()?;
+        let mut stmt = conn.prepare(
+            "SELECT p.id, p.title, p.service_date, p.revision, p.approved_revision, i.id, i.reference, json_extract(i.payload, '$.designRef.version')
+             FROM program_items i JOIN programs p ON p.id = i.program_id
+             WHERE json_valid(i.payload) AND json_extract(i.payload, '$.designRef.id') = ?1
+               AND json_type(i.payload, '$.designRef.version') = 'integer' AND json_extract(i.payload, '$.designRef.version') > 0
+             ORDER BY p.service_date IS NULL, p.service_date DESC, p.updated_at DESC, i.position",
+        )?;
+        let rows = stmt.query_map(params![id], |r| {
+            Ok(DesignUse { program_id: r.get(0)?, title: r.get(1)?, service_date: r.get(2)?, revision: r.get(3)?, approved_revision: r.get(4)?, item_id: r.get(5)?, reference: r.get(6)?, version: r.get(7)? })
+        })?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 
     /// Only a design nobody can have pinned: one with versions stays (they are immutable).
@@ -352,6 +384,47 @@ mod tests {
         assert_eq!(copy.document, doc("look"));
         db.delete_design(&copy.id, 1).unwrap();
         assert!(db.get_design(&copy.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn used_on_lists_the_services_that_pin_a_version() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let d = db.create_design(&input("lower third")).unwrap();
+        db.create_design_version(&d.id, 1, None, "").unwrap();
+        let other = db.create_design(&input("other")).unwrap();
+        let p = db.create_program("Sunday", Some("2026-11-01")).unwrap();
+        let moment = |reference: &str, design: &str, version: i64| crate::ItemInput {
+            id: None,
+            kind: "slide".into(),
+            reference: reference.into(),
+            book_number: None,
+            chapter: None,
+            verse: None,
+            translation: None,
+            secondary_translation: None,
+            notes: None,
+            payload: Some(serde_json::json!({ "title": reference, "designRef": { "id": design, "version": version } }).to_string()),
+        };
+        // Pins written by hand or by an older build: a string, a zero, a missing or fractional version
+        // is not a pin. It never counts as "version 0" and never breaks the list for the good ones.
+        let malformed = |reference: &str, design_ref: serde_json::Value| crate::ItemInput {
+            payload: Some(serde_json::json!({ "title": reference, "designRef": design_ref }).to_string()),
+            ..moment(reference, &d.id, 1)
+        };
+        let saved = db
+            .replace_items(&p.id, p.revision, &[
+                moment("Welcome", &d.id, 1),
+                moment("Notices", &other.id, 1),
+                malformed("Text version", serde_json::json!({ "id": d.id, "version": "2" })),
+                malformed("Zero", serde_json::json!({ "id": d.id, "version": 0 })),
+                malformed("No version", serde_json::json!({ "id": d.id })),
+                malformed("Half", serde_json::json!({ "id": d.id, "version": 1.5 })),
+            ])
+            .unwrap();
+        let uses = db.design_used_on(&d.id).unwrap();
+        assert_eq!(uses.len(), 1);
+        assert_eq!((uses[0].program_id.as_str(), uses[0].reference.as_str(), uses[0].version, uses[0].revision), (p.id.as_str(), "Welcome", 1, saved.program.revision));
+        assert_eq!(db.design_used_on("nobody").unwrap(), Vec::<DesignUse>::new());
     }
 
     #[test]

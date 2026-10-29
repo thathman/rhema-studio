@@ -13,7 +13,7 @@ import {
   type SaraswatiRectNode,
   type SaraswatiScene,
 } from "../vendor/avnac/saraswati"
-import type { Scene, SceneLayer } from "../types/scene"
+import type { DesignPin, Scene, SceneLayer } from "../types/scene"
 
 /** The editing frame: a 1920×1080 artboard; layer boxes are kept in % of it, as Rhema keeps them. */
 export const DESIGN_WIDTH = 1920
@@ -189,6 +189,45 @@ export function designToScene(design: RhemaDesign): { scene: Scene; issues: Desi
   const bg = design.scene.artboard.bg
   const background = bg.type === "solid" ? (bg.color === "rgba(0,0,0,0)" ? "transparent" : bg.color) : "#000000"
   return { scene: { ...design.meta, background, layers }, issues }
+}
+
+/**
+ * A scene made from one version of a design, pinned to it (docs/contracts/design-documents-v1.md,
+ * Pinning). Saving it is the ordinary scene save and approval path: never a Take.
+ */
+export function sceneFromVersion(v: { designId: string; version: number; document: RhemaDesign }): { scene: Scene; issues: DesignIssue[] } {
+  const { scene, issues } = designToScene(v.document)
+  return { scene: { ...scene, design: { id: v.designId, version: v.version } }, issues }
+}
+
+/** A pinned scene and the design's newest version: `update` is the version to offer ("Update to v N"),
+ * which the operator chooses; nothing moves a pin by itself. `null` for a scene not made from a design. */
+export function pinStatus(scene: Scene, latestVersion: number | null): { pin: DesignPin; update: number | null } | null {
+  if (!scene.design) return null
+  return { pin: scene.design, update: latestVersion !== null && latestVersion > scene.design.version ? latestVersion : null }
+}
+
+/**
+ * What a designed moment shows: the scene from the version it pins. `scene: null` means show the
+ * moment's own slide (its title and body) as before, with `issues` saying why: the version is
+ * missing (a partial restore), or it cannot be drawn. Never another version.
+ */
+export async function resolveDesignedMoment(
+  slide: { title: string; designRef?: DesignPin },
+  getVersion: (id: string, version: number) => Promise<{ designId: string; version: number; document: RhemaDesign | null } | null>,
+): Promise<{ scene: Scene | null; issues: DesignIssue[] }> {
+  const ref = slide.designRef
+  if (!ref) return { scene: null, issues: [] }
+  const missing = (why: string) => ({ scene: null, issues: [{ nodeId: "__design__", message: `"${slide.title}" shows its text instead: ${why}` }] })
+  let found
+  try {
+    found = await getVersion(ref.id, ref.version)
+  } catch {
+    return missing(`design ${ref.id} version ${ref.version} could not be read`)
+  }
+  if (!found?.document) return missing(`design ${ref.id} version ${ref.version} is not in this computer's designs`)
+  const { scene, issues } = sceneFromVersion({ designId: ref.id, version: ref.version, document: found.document })
+  return issues.length ? { scene: null, issues } : { scene, issues }
 }
 
 /** What a live layer would show now, from the host's Live State (the parts a preview needs). */
