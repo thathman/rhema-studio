@@ -119,6 +119,21 @@ describe("production notices", () => {
     useJoin.setState({ status: "off", live: null, me: null })
   })
 
+  it("keeps a scene approval pending when Accept is blocked by a live output", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const n = useNotices.getState().send({ from: "Ade screens", fromId: "paired-device", to: "host", text: "Asks to delete a scene", action: { kind: "sceneEdit", value: "request-1" } })!
+    const onAnswer = vi.fn()
+    const el = document.createElement("div")
+    await act(async () => createRoot(el).render(<NoticesPanel notices={[n]} role="host" me="Main desk" onSend={vi.fn()} onAnswer={onAnswer} onAction={vi.fn(async () => "that scene is still on a screen")}/>))
+
+    await act(async () => buttonNamed(el, "Accept the scene change").click())
+
+    expect(onAnswer).not.toHaveBeenCalled()
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("still on a screen")
+    expect(el.textContent).not.toContain("Answered Unable")
+    expect([...el.querySelectorAll("button")].some((button) => button.textContent === "Decline")).toBe(true)
+  })
+
   it("can go to one person by name; only that desk (and the main desk) sees it", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     expect(asTarget({ name: "  Ade's phone " })).toEqual({ name: "Ade's phone" })

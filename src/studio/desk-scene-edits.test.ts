@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { BroadcastOutput, Scene } from "@/types"
 
+const approvalDisk = vi.hoisted(() => ({ values: new Map<string, unknown>(), failSave: false }))
+vi.mock("@tauri-apps/plugin-store", () => ({ load: async () => ({
+  get: async (key: string) => approvalDisk.values.get(key),
+  set: async (key: string, value: unknown) => { approvalDisk.values.set(key, value) },
+  save: async () => { if (approvalDisk.failSave) throw new Error("disk unavailable") },
+}) }))
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
 
@@ -12,6 +18,8 @@ const { useSettingsStore } = await import("@/stores/settings-store")
 const { useJournalStore } = await import("@/stores/journal-store")
 const { useQueueStore } = await import("@/stores/queue-store")
 const { useRouterHealth } = await import("@/lib/cameras")
+const { useJoin } = await import("@/stores/join-store")
+const { reloadSceneApprovals } = await import("@/stores/scene-approvals-store")
 
 /** Scenes made and changed from joined desks (#243 SC.16, SC.17): what the host shares and its approval rule. */
 const box = { x: 0, y: 0, w: 100, h: 100 }
@@ -25,13 +33,17 @@ const scene = (id: string, over: Partial<Scene> = {}): Scene => ({
 })
 const output = (id: string, sceneId?: string): BroadcastOutput => ({ id, name: id, role: "congregation", ...(sceneId ? { sceneId } : {}) }) as BroadcastOutput
 
-beforeEach(() => {
+beforeEach(async () => {
+  approvalDisk.values.clear()
+  approvalDisk.failSave = false
   useBroadcastStore.setState({ scenes: [scene("off"), scene("on")], outputs: [output("main", "on")], rehearsal: false, rehearsalReturn: null })
   useSettingsStore.setState({ requireApproval: false, cameras: [], remoteDevices: [] })
+  useJoin.setState({ status: "off" })
   useNotices.setState({ notices: [] })
   useSceneRequests.setState({ requests: [] })
   useJournalStore.setState({ entries: [] })
   useQueueStore.setState({ items: [], headers: [] })
+  await reloadSceneApprovals()
 })
 
 describe("what the host shares with a desk", () => {
@@ -79,72 +91,93 @@ describe("what the host shares with a desk", () => {
 describe("the approval rule (the default until the owner chooses another)", () => {
   const send = (id: string, over: Record<string, unknown> = {}) => receiveDeskScene({ scene: { ...sceneForDesk(scene(id), false), name: `${id} changed` }, by: "Ade screens", byId: "k-ade", ...over })
 
-  it("a change to a scene on no screen, or a new scene, goes in at once", () => {
-    send("off")
+  it("a change to a scene on no screen, or a new scene, goes in at once", async () => {
+    await send("off")
     expect(useBroadcastStore.getState().scenes.find((s) => s.id === "off")?.name).toBe("off changed")
-    receiveDeskScene({ scene: { id: "fresh", name: "Fresh", background: "#000000", layers: [] }, by: "Ade screens" })
+    await receiveDeskScene({ scene: { id: "fresh", name: "Fresh", background: "#000000", layers: [] }, by: "Ade screens" })
     expect(useBroadcastStore.getState().scenes.some((s) => s.id === "fresh")).toBe(true)
     expect(useNotices.getState().notices).toHaveLength(0)
     expect(useJournalStore.getState().entries.map((e) => e.label)).toEqual(["Scene off changed changed by Ade screens", "Scene Fresh made by Ade screens"])
   })
 
-  it("a change to a scene on a screen waits for the main desk; Accept puts it in", () => {
-    send("on")
+  it("a change to a scene on a screen waits for the main desk; Accept puts it in", async () => {
+    await send("on")
     expect(useBroadcastStore.getState().scenes.find((s) => s.id === "on")?.name).toBe("on")
     const n = useNotices.getState().notices[0]
     expect(n).toMatchObject({ from: "Ade screens", fromId: "k-ade", to: "host", action: { kind: "sceneEdit" } })
     expect(n.text).toContain("because that scene is on a screen")
-    expect(acceptSceneRequest(n.action!.value)).toBeNull()
+    expect(await acceptSceneRequest(n.action!.value)).toBeNull()
     expect(useBroadcastStore.getState().scenes.find((s) => s.id === "on")?.name).toBe("on changed")
     expect(useBroadcastStore.getState().scenes.find((s) => s.id === "on")?.layers[0].imageUrl).toBe("data:image/png;base64,AAAA")
-    expect(acceptSceneRequest(n.action!.value)).toContain("already answered")
+    expect(await acceptSceneRequest(n.action!.value)).toContain("already handled")
   })
 
-  it("Decline leaves the scene as it is; deleting a scene on a screen waits too", () => {
-    receiveDeskScene({ id: "on", by: "Ade screens" }, true)
+  it("Decline leaves the scene as it is; deleting a scene on a screen waits too", async () => {
+    await receiveDeskScene({ id: "on", by: "Ade screens" }, true)
     const req = useNotices.getState().notices[0].action!.value
-    declineSceneRequest(req)
+    expect(await declineSceneRequest(req)).toBe(true)
     expect(useBroadcastStore.getState().scenes.some((s) => s.id === "on")).toBe(true)
-    expect(useSceneRequests.getState().requests).toHaveLength(0)
-    receiveDeskScene({ id: "off", by: "Ade screens" }, true)
+    expect(useSceneRequests.getState().requests).toMatchObject([{ id: req, status: "declined" }])
+    await receiveDeskScene({ id: "off", by: "Ade screens" }, true)
     expect(useBroadcastStore.getState().scenes.some((s) => s.id === "off")).toBe(false)
   })
 
-  it("does not let an approved scene deletion clear an active output", () => {
-    receiveDeskScene({ id: "on", by: "Ade screens" }, true)
+  it("does not let an approved scene deletion clear an active output", async () => {
+    await receiveDeskScene({ id: "on", by: "Ade screens" }, true)
     const request = useNotices.getState().notices[0].action!.value
 
-    expect(acceptSceneRequest(request)).toContain("still on a screen")
+    expect(await acceptSceneRequest(request)).toContain("still on a screen")
     expect(useBroadcastStore.getState().outputs[0]?.sceneId).toBe("on")
     expect(useBroadcastStore.getState().scenes.some((s) => s.id === "on")).toBe(true)
     expect(useSceneRequests.getState().requests.map((r) => r.id)).toEqual([request])
   })
 
-  it("with Approvals on every change waits, except in rehearsal for a scene on no real screen", () => {
+  it("with Approvals on every change waits, except in rehearsal for a scene on no real screen", async () => {
     useSettingsStore.setState({ requireApproval: true })
-    send("off")
+    await send("off")
     expect(useNotices.getState().notices[0].text).toContain("Approvals is on")
     useNotices.setState({ notices: [] })
     // In rehearsal the output's scene is rehearsal's own; the real screen shows "on".
     useBroadcastStore.setState({ rehearsal: true, outputs: [output("main", "off")], rehearsalReturn: { outputScenes: { main: "on" } } as never })
-    send("off")
+    await send("off")
     expect(useBroadcastStore.getState().scenes.find((s) => s.id === "off")?.name).toBe("off changed")
-    send("on")
+    await send("on")
     expect(useNotices.getState().notices[0].text).toContain("on a screen")
   })
 
-  it("the host's server asking for approval is never overruled here", () => {
-    send("off", { request: true })
+  it("the host's server asking for approval is never overruled here", async () => {
+    await send("off", { request: true })
     expect(useBroadcastStore.getState().scenes.find((s) => s.id === "off")?.name).toBe("off")
     expect(useSceneRequests.getState().requests).toHaveLength(1)
   })
 
-  it("a waiting change is not put in once the scene changed here", () => {
-    send("on")
+  it("a waiting change is not put in once the scene changed here", async () => {
+    await send("on")
     const req = useNotices.getState().notices[0].action!.value
     useBroadcastStore.getState().saveScene({ ...scene("on"), name: "changed on the main desk" })
-    expect(acceptSceneRequest(req)).toContain("changed here since")
+    expect(await acceptSceneRequest(req)).toContain("changed here since")
     expect(useBroadcastStore.getState().scenes.find((s) => s.id === "on")?.name).toBe("changed on the main desk")
+    expect(useSceneRequests.getState().requests).toMatchObject([{ id: req, status: "needs-review" }])
+  })
+
+  it("keeps a request pending when its approval cannot be durably recorded", async () => {
+    await send("on")
+    const req = useNotices.getState().notices[0].action!.value
+    approvalDisk.failSave = true
+
+    expect(await acceptSceneRequest(req)).toContain("decision could not be saved")
+    expect(useBroadcastStore.getState().scenes.find((s) => s.id === "on")?.name).toBe("on")
+    expect(useSceneRequests.getState().requests).toMatchObject([{ id: req, status: "pending" }])
+  })
+
+  it("allows only the main host to approve or decline a persisted scene request", async () => {
+    await send("on")
+    const req = useNotices.getState().notices[0].action!.value
+    useJoin.setState({ status: "connected" })
+
+    expect(await acceptSceneRequest(req)).toContain("only the main host")
+    expect(await declineSceneRequest(req)).toBe(false)
+    expect(useSceneRequests.getState().requests).toMatchObject([{ id: req, status: "pending" }])
   })
 })
 

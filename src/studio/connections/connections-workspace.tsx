@@ -20,6 +20,7 @@ import { PairDeviceDialog } from "./pair-device-dialog"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useNearbyConnection } from "./connections-store"
 import { cn } from "@/lib/utils"
+import { openPermissions } from "@/studio/permissions/navigation"
 
 type NearbyDevice = { name: string; address: string }
 type Scan = { tvs: NearbyDevice[] | null; hosts: NearbyDevice[] | null; tvError: string | null; hostError: string | null }
@@ -217,7 +218,7 @@ export function ConnectionsWorkspace() {
                 </ul>
               )}
               <p className="text-muted-foreground">A role limits only the paired device. This computer can always operate the service and take control back.</p>
-              <Button size="sm" variant="outline" onClick={() => openSettings("remote")}>Advanced network settings and roles</Button>
+              <Button size="sm" variant="outline" onClick={openPermissions}>Permissions and roles</Button>
             </Card>
 
             <Card title="OBS computers" kicker="Online production · separate from room screens" icon={<RadioIcon />} count={obsComputers.length}>
@@ -228,7 +229,7 @@ export function ConnectionsWorkspace() {
                 </ul>
               )}
               <p className="text-muted-foreground">OBS changes never switch the congregation screens. The same named camera streams can be read by either production.</p>
-              <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => openProductionTab("obs")}><RadioIcon /> Manage OBS</Button><Button size="sm" variant="ghost" onClick={() => openSettings("remote")}>Advanced network settings and roles</Button></div>
+              <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => openProductionTab("obs")}><RadioIcon /> Manage OBS</Button><Button size="sm" variant="ghost" onClick={openPermissions}>Permissions and roles</Button></div>
             </Card>
           </div>
         </section>

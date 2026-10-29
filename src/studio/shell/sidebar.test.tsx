@@ -61,6 +61,11 @@ afterEach(async () => {
 const savedPrefs = () => JSON.parse(saved.get(SHELL_PREFS_KEY) ?? "{}") as { sidebarCollapsed?: boolean }
 
 describe("the collapsible sidebar", () => {
+  it("opens Permissions from the church navigation", async () => {
+    await act(async () => navButton("Permissions").click())
+    expect(selectedWorkspace).toBe("permissions")
+  })
+
   it("opens the single Connections workspace from the church navigation", async () => {
     await act(async () => navButton("Connections").click())
     expect(selectedWorkspace).toBe("connections")

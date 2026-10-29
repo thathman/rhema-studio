@@ -47,9 +47,11 @@ import "@/stores/stage-time-warnings"
 import "@/stores/stage-finish"
 import "@/lib/app-tick"
 import { removeOldTranscripts } from "@/lib/journal-transcript"
+import { hydrateSceneApprovals, useSceneApprovalsStore } from "@/stores/scene-approvals-store"
+import { PermissionsWorkspace } from "@/studio/permissions/permissions-workspace"
 
 /** What the top bar calls each page. */
-const TITLES: Record<Workspace, string> = { home: "Home", prepare: "Prepare", present: "Live", production: "Live", library: "Library", design: "Design", connections: "Connections", team: "Team", archive: "History", settings: "Settings", more: "More tools" }
+const TITLES: Record<Workspace, string> = { home: "Home", prepare: "Prepare", present: "Live", production: "Live", library: "Library", design: "Design", permissions: "Permissions", connections: "Connections", team: "Team", archive: "History", settings: "Settings", more: "More tools" }
 
 const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   home: () => <HomeWorkspace />,
@@ -61,6 +63,7 @@ const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   // Legacy saved routes and deep links resolve to the same Live console.
   production: () => <PresentWorkspace />,
   connections: () => <ConnectionsWorkspace />,
+  permissions: () => <PermissionsWorkspace />,
   team: () => <TeamWorkspace />,
   settings: () => <SettingsPage />,
   more: () => <MoreWorkspace />,
@@ -73,7 +76,8 @@ export function AppShell() {
   const outputsOpen = useShellStore((s) => s.outputsDialogOpen)
   const setOutputsOpen = useShellStore((s) => s.setOutputsDialogOpen)
   const isLive = useBroadcastStore((s) => s.isLive)
-  const church = useMemo(() => churchItems(), [])
+  const pendingApprovals = useSceneApprovalsStore((s) => s.requests.filter((request) => request.status === "pending" || request.status === "needs-review").length)
+  const church = useMemo(() => churchItems(pendingApprovals), [pendingApprovals])
   // A joined director sees this computer's readiness checks (desk consoles): worked out only while someone is paired.
   const paired = useSettingsStore((s) => s.remoteDevices.length > 0)
 
@@ -101,6 +105,8 @@ export function AppShell() {
   }, [designRequest, go])
   // Host/Join: keep this computer's Live State current for the computers that join it.
   useEffect(() => startLiveStatePublisher(), [])
+  // Load durable host approvals before rendering their pending badge or accepting decisions.
+  useEffect(() => { void hydrateSceneApprovals().catch((error) => toast.error("Saved approvals could not be loaded", { description: error instanceof Error ? error.message : String(error) })) }, [])
   // Timekeeper's chime (#196 R2): this computer only, off unless turned on there.
   useEffect(() => startCountdownChime(), [])
   // Browser feeds: the LAN listener knows each feed and its secret.

@@ -6,7 +6,6 @@ import { invoke } from "@tauri-apps/api/core"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { formatMs } from "@/lib/timer"
-import { openSettings } from "@/lib/settings-dialog"
 import { setDeskControl } from "@/lib/desk-control"
 import { useCanSend, useJoin } from "@/stores/join-store"
 import type { LiveStateV1 } from "@/lib/live-state"
@@ -32,6 +31,7 @@ import { presenceRows, readHostStatus, seenWords, type HostStatus } from "@/lib/
 import { mayRunAuxTimer } from "@/stores/aux-timers-store"
 import { timeChangeWords } from "@/stores/time-change-store"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
+import { openPermissions } from "@/studio/permissions/navigation"
 
 // The join form has its own module so Rhema Studio Companion (#209) shows it without the studio's desks.
 export { JoinForm }
@@ -198,7 +198,7 @@ function HostCard() {
       </ul>
       <p className="text-muted-foreground">Take back control stops a desk's commands at once without unpairing it; it still sees the service and stays on Talk. Give control back when it may help again.</p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" onClick={() => openSettings("remote")}>Pair an operator, set roles…</Button>
+        <Button size="sm" variant="outline" onClick={openPermissions}>Manage access and roles…</Button>
         {host?.running && !confirmStop && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirmStop(true)}>Stop hosting</Button>}
         {confirmStop && (
           <span role="group" aria-label="Stop hosting?" className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 px-2 py-1">

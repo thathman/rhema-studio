@@ -1,4 +1,4 @@
-import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, MonitorIcon, MusicIcon, PaletteIcon, PencilRulerIcon, PlayIcon, PlusIcon, PresentationIcon, SearchIcon, SettingsIcon, ArchiveIcon, MonitorCogIcon, UsersIcon } from "lucide-react"
+import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, MonitorIcon, MusicIcon, PaletteIcon, PencilRulerIcon, PlayIcon, PlusIcon, PresentationIcon, SearchIcon, SettingsIcon, ArchiveIcon, MonitorCogIcon, UsersIcon, ShieldCheckIcon } from "lucide-react"
 import { useState } from "react"
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { useQueueStore } from "@/stores"
@@ -14,6 +14,7 @@ const PLACES: ReadonlyArray<readonly [Workspace, string, React.ReactNode, string
   ["present", "Live", <PlayIcon key="i" />, "live console present show go live"],
   ["library", "Library", <LibraryBigIcon key="i" />, "songs hymns bible slides media files"],
   ["design", "Design", <PaletteIcon key="i" />, "themes looks studio"],
+  ["permissions", "Permissions", <ShieldCheckIcon key="i" />, "paired devices roles access approval requests"],
   ["archive", "History", <ArchiveIcon key="i" />, "past services execution records logs"],
   ["team", "Team", <UsersIcon key="i" />, "team approvals comments church folder remote"],
 ]

@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-export type Workspace = "home" | "prepare" | "present" | "production" | "library" | "design" | "connections" | "team" | "archive" | "settings" | "more"
+export type Workspace = "home" | "prepare" | "present" | "production" | "library" | "design" | "permissions" | "connections" | "team" | "archive" | "settings" | "more"
 /** `production` is a saved-route/deep-link alias; Live is the single canonical workspace. */
 export function canonicalWorkspace(workspace: Workspace): Workspace {
   return workspace === "production" ? "present" : workspace
@@ -41,7 +41,7 @@ export const SHELL_PREFS_KEY = "rhema-studio.shell"
 const DEFAULT_PREFS: ShellPrefs = { workspace: "home", presentView: "standard", sidebarCollapsed: false }
 
 // "more" has no way in since the sidebar dropped it (#218), so it is not restored.
-const WORKSPACES: readonly Workspace[] = ["home", "prepare", "present", "production", "library", "design", "connections", "team", "archive", "settings"]
+const WORKSPACES: readonly Workspace[] = ["home", "prepare", "present", "production", "library", "design", "permissions", "connections", "team", "archive", "settings"]
 const VIEWS: readonly PresentView[] = ["standard", "production"]
 
 /** Minimal Storage surface so tests can pass a Map-backed fake. */

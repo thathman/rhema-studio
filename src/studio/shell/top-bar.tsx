@@ -83,11 +83,13 @@ function HostNotices() {
           me={me}
           eventTitle={event?.reference ?? null}
           onSend={(n) => useNotices.getState().send({ ...n, from: me, fromId: "host", event: event ? { id: event.id, title: event.reference } : null })}
-          onAnswer={(id, state, why) => {
-            useNotices.getState().answer(id, me, state, why)
-            // Unable on a desk's scene change is Decline: the scene stays as it is.
+          onAnswer={async (id, state, why) => {
             const a = notices.find((n) => n.id === id)?.action
-            if (state === "unable" && a?.kind === "sceneEdit") declineSceneRequest(a.value)
+            // Persist an explicit Decline before answering the notice; if storage fails, keep both open.
+            if (state === "unable" && a?.kind === "sceneEdit" && !await declineSceneRequest(a.value)) {
+              throw new Error("The decline could not be saved on this host. The request remains open.")
+            }
+            useNotices.getState().answer(id, me, state, why)
           }}
           onAction={runNoticeAction}
           onQueue={queueRequest}

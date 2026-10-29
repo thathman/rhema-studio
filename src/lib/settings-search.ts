@@ -32,8 +32,7 @@ export const SETTINGS_SEARCH_INDEX: Record<SettingsSection, { labels: string[]; 
       "Secure page for phones (https)",
       "Require a key or a paired device",
       "Key the controller must send (optional)",
-      "Paired devices",
-      "Pair a device",
+      "Manage paired device access",
       "Connect to OBS (recording status, marks and OBS's scenes)",
       "OSC (Open Sound Control)",
       "HTTP API",
@@ -96,7 +95,7 @@ export function searchSettings(
 }
 
 /** Things people look for in Settings that live on their own page (#215): Settings search points there. */
-export type ElsewhereId = "church" | "appearance" | "cameras" | "hosting" | "service-defaults" | "backups"
+export type ElsewhereId = "church" | "appearance" | "cameras" | "hosting" | "permissions" | "service-defaults" | "backups"
 
 export interface ElsewhereEntry {
   id: ElsewhereId
@@ -111,7 +110,8 @@ export const SETTINGS_ELSEWHERE: readonly ElsewhereEntry[] = [
   { id: "church", name: "Church name, logo and colours", where: "Design → Brand kit", keywords: ["church", "church name", "identity", "logo", "brand", "brand kit", "colours", "colors", "fonts", "general"] },
   { id: "appearance", name: "Light, dark or system", where: "Desk menu, at the foot of the sidebar", keywords: ["appearance", "light", "dark", "dark mode", "light mode", "system", "theme", "night"] },
   { id: "cameras", name: "Cameras and the camera router", where: "Connections", keywords: ["camera", "cameras", "camera router", "mediamtx", "whep", "video", "pulpit", "phone camera"] },
-  { id: "hosting", name: "Host or join, roles and the talk channel", where: "Connections", keywords: ["host", "join", "hosting", "roles", "role", "operators", "volunteers", "desks", "another computer", "permissions", "crew"] },
+  { id: "hosting", name: "Host or join and the talk channel", where: "Connections", keywords: ["host", "join", "hosting", "talk channel", "operators", "volunteers", "desks", "another computer", "crew"] },
+  { id: "permissions", name: "Paired device access and scene requests", where: "Permissions", keywords: ["paired device", "paired devices", "roles", "role", "access", "permissions", "scene request", "scene changes"] },
   { id: "service-defaults", name: "Approvals before a service goes live", where: "Team → Approvals", keywords: ["service defaults", "approval", "approvals", "approve", "unapproved", "ask before", "defaults", "operator name", "your name"] },
   { id: "backups", name: "Backups and the church folder", where: "Archive", keywords: ["backup", "backups", "back up", "restore", "church folder", "archive", "export", "import", "data", "nas", "sync"] },
 ]

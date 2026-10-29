@@ -6,7 +6,7 @@ import { ObsSettingsBlock } from "@/components/settings/obs-settings-block"
 import { RemoteAuthSetting } from "@/components/settings/remote-auth-setting"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { transcriptionActions } from "@/hooks/use-transcription"
-import { Fragment, useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
 
 import { Button } from "@/components/ui/button"
@@ -45,10 +45,7 @@ import { useTutorialStore } from "@/stores/tutorial-store"
 import { useSettingsDialogStore, type SettingsSection } from "@/lib/settings-dialog"
 import { markSearchHits, searchElsewhere, searchSettings, searchWords, type ElsewhereId } from "@/lib/settings-search"
 import { openConnectionsHub } from "@/studio/connections/navigation"
-import { PairDeviceDialog } from "@/studio/connections/pair-device-dialog"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
-import { setDeskControl } from "@/lib/desk-control"
-import { asRemoteRole, REMOTE_ROLES } from "@/lib/remote-roles"
 import { ArrowUpRightIcon, EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SearchIcon, SparklesIcon } from "lucide-react"
 import { useShellStore } from "@/studio/shell-store"
 import type { DeviceInfo } from "@/types/audio"
@@ -762,8 +759,6 @@ function RemoteControlSection() {
   const remoteSecret = useSettingsStore((s) => s.remoteSecret)
   const setRemoteSecret = useSettingsStore((s) => s.setRemoteSecret)
   const remoteDevices = useSettingsStore((s) => s.remoteDevices)
-  const revokeRemoteDevice = useSettingsStore((s) => s.revokeRemoteDevice)
-  const setRemoteDeviceRole = useSettingsStore((s) => s.setRemoteDeviceRole)
   const remoteAuthRequired = useSettingsStore((s) => s.remoteAuthRequired)
   const setRemoteAuthRequired = useSettingsStore((s) => s.setRemoteAuthRequired)
   const anyKey = remoteSecret.trim().length > 0 || remoteDevices.length > 0
@@ -902,37 +897,9 @@ function RemoteControlSection() {
           HTTP: header <code>X-Rhema-Key: &lt;key&gt;</code>. OSC: the key as the first argument, e.g. <code>/rhema/next "&lt;key&gt;"</code>. Leave blank (and pair nothing) to accept anything, as before. Changes apply at once.
         </span>
       </label>
-      <div className="flex flex-col gap-2 text-xs">
-        <div className="flex items-center justify-between">
-          <span>Paired devices</span>
-          <PairDeviceDialog />
-        </div>
-        {remoteDevices.length === 0 ? (
-          <p className="text-xs text-muted-foreground">None yet. A paired device sends its own token instead of the shared key, can be revoked on its own, and starts as "Present only" (next, previous, show, hide, macros; not theme, opacity, confidence or the on-air switch).</p>
-        ) : (
-          <ul className="divide-y divide-border rounded-md border border-border">
-            {remoteDevices.map((d) => (
-              <li key={d.hash} className="flex items-center gap-2 px-2 py-1.5">
-                <span className="min-w-0 flex-1 truncate">{d.name}</span>
-                <select
-                  aria-label={`What ${d.name} may do`}
-                  value={d.role ?? "configure"}
-                  title={REMOTE_ROLES.find((r) => r.id === (d.role ?? "configure"))?.may}
-                  onChange={(e) => setRemoteDeviceRole(d.hash, asRemoteRole(e.target.value) ?? "configure")}
-                  className="h-6 max-w-44 rounded border border-border bg-background px-1 text-[0.6875rem]"
-                >
-                  {REMOTE_ROLES.map((r) => <option key={r.id} value={r.id} title={r.may}>{r.name}</option>)}
-                </select>
-                <span className="shrink-0 text-[0.6875rem] text-muted-foreground">{d.paused === true ? "paused" : `paired ${new Date(d.paired_at).toLocaleDateString()}`}</span>
-                <Button size="sm" variant="outline" className="text-xs" aria-pressed={d.paused === true} aria-label={d.paused === true ? `Give control back to ${d.name}` : `Take back control from ${d.name}`} onClick={() => setDeskControl(d.hash, d.paused !== true)}>
-                  {d.paused === true ? "Give control back" : "Take back control"}
-                </Button>
-                <Button size="sm" variant="ghost" className="text-xs text-destructive" aria-label={`Revoke ${d.name}`} onClick={() => revokeRemoteDevice(d.hash)}>Revoke</Button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {remoteDevices.length > 0 && <RoleGuide />}
+      <div className="flex flex-wrap items-center gap-3 rounded-md border border-border p-3 text-xs">
+        <div className="min-w-0 flex-1"><p className="font-semibold">Paired device access</p><p className="text-muted-foreground">Manage roles, pause control or revoke a device in Permissions. Pair new devices from Connections.</p></div>
+        <Button size="sm" variant="outline" onClick={() => { useSettingsDialogStore.getState().closeSettings(); useShellStore.getState().goTo("permissions") }}>Manage access</Button>
       </div>
       <ObsSettingsBlock />
       {/* OSC */}
@@ -1184,6 +1151,7 @@ const ELSEWHERE: Record<ElsewhereId, () => void> = {
   appearance: () => useShellStore.getState().openDeskMenu(),
   cameras: openConnectionsHub,
   hosting: openConnectionsHub,
+  permissions: () => { useSettingsDialogStore.getState().closeSettings(); useShellStore.getState().goTo("permissions") },
   "service-defaults": () => useShellStore.getState().goTo("team"),
   backups: () => useShellStore.getState().goTo("archive"),
 }
@@ -1376,23 +1344,5 @@ function CloudConsentLine({ provider = "deepgram" }: { provider?: "deepgram" | "
       </button>
       (stops cloud listening now; asks again next time)
     </p>
-  )
-}
-
-/** What each role may do, in plain words, under the paired devices (#215 G10). */
-function RoleGuide() {
-  return (
-    <details className="text-xs">
-      <summary className="cursor-pointer text-muted-foreground">What each role may do</summary>
-      <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
-        {REMOTE_ROLES.map((r) => (
-          <Fragment key={r.id}>
-            <dt className="font-semibold">{r.name}</dt>
-            <dd className="text-muted-foreground">{r.may}</dd>
-          </Fragment>
-        ))}
-      </dl>
-      <p className="mt-1 text-muted-foreground">The main desk can always do everything. A change from a desk to a scene that is on a screen, or any scene change while Approvals is on, waits in the main desk's notices for Accept or Decline.</p>
-    </details>
   )
 }

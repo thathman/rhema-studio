@@ -22,7 +22,7 @@ describe("searchSettings", () => {
     expect(searchSettings("gain", ALL)).toEqual([{ id: "audio", labels: ["Input Gain"] }])
     expect(searchSettings("microphone", ALL).map((h) => h.id)).toContain("audio")
     expect(searchSettings("cloud keys", ALL).map((h) => h.id)).toEqual(["speech"])
-    expect(searchSettings("  PAIRED   device ", ALL)).toEqual([{ id: "remote", labels: ["Require a key or a paired device", "Paired devices"] }])
+    expect(searchSettings("  PAIRED   device ", ALL)).toEqual([{ id: "remote", labels: ["Require a key or a paired device", "Manage paired device access"] }])
     expect(searchSettings("nothing like this", ALL)).toEqual([])
   })
 
@@ -42,13 +42,14 @@ describe("searchSettings", () => {
 })
 
 describe("searchElsewhere", () => {
-  it("points to the pages that hold what Settings does not (#215): church, appearance, cameras, host/join, service defaults, backups", () => {
+  it("points to the pages that hold what Settings does not (#215): church, appearance, cameras, host/join, permissions, service defaults, backups", () => {
     const where = (q: string) => searchElsewhere(q).map((e) => e.id)
     expect(where("church name")).toEqual(["church"])
     expect(where("dark mode")).toEqual(["appearance"])
     expect(where("camera router")).toEqual(["cameras"])
     expect(where("join")).toEqual(["hosting"])
-    expect(where("roles")).toEqual(["hosting"])
+    expect(where("roles")).toEqual(["permissions"])
+    expect(where("paired device")).toEqual(["permissions"])
     expect(where("approval")).toEqual(["service-defaults"])
     expect(where("backup")).toEqual(["backups"])
     expect(where("church folder")).toEqual(["backups"])
@@ -134,5 +135,17 @@ describe("Settings page search", () => {
     await press("Escape")
     expect(search().value).toBe("")
     expect(sections()).toHaveLength(9)
+  })
+
+  it("routes paired-device access searches to Permissions", async () => {
+    useSettingsDialogStore.setState({ isOpen: true })
+    useShellStore.setState({ goRequest: null })
+    await type("paired device")
+    const row = [...host.querySelectorAll<HTMLButtonElement>('[aria-label="Elsewhere in Rhema Studio"] button')].find((button) => button.textContent?.includes("Paired device access"))!
+
+    await act(async () => row.click())
+
+    expect(useShellStore.getState().goRequest).toBe("permissions")
+    expect(useSettingsDialogStore.getState().isOpen).toBe(false)
   })
 })

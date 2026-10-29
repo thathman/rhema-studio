@@ -35,7 +35,7 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
   me: string
   onSend: (n: { to: NoticeTarget; priority: "normal" | "urgent"; text: string; action: NoticeAction | null }) => void
   /** `why`: for Unable after a request could not be done, the reason (for whoever sent it). */
-  onAnswer: (id: string, state: NoticeAnswer, why?: string) => void
+  onAnswer: (id: string, state: NoticeAnswer, why?: string) => void | Promise<void>
   /**
    * Do what an action request asks (Comms C2), on this desk, when its button is pressed: null when
    * it was done, else why not (the host's reason, for a joined desk). `mode`: Show, or Preview only
@@ -102,9 +102,23 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
     const what = mode === "preview" ? `“Preview ${a.value}”` : mode === "queue" ? `“Queue ${a.value}”` : `“${actionName(a)}”`
     setFailed((f) => ({ ...f, [n.id]: why ? `${what} was not done: ${why}` : "" }))
     if (!why) return onAnswer(n.id, "ready")
+    // A refused Accept is not a Decline: scene requests must stay open when the host asks the
+    // operator to move an output or refresh the stale revision before trying again.
+    if (a.kind === "sceneEdit") return
     // The sender sees why too, with the Unable answer.
     noteUnableReason(n.id, `${what}: ${why}`)
     onAnswer(n.id, "unable", `${what}: ${why}`)
+  }
+  const answer = async (n: Notice, state: NoticeAnswer) => {
+    setBusy(n.id)
+    setFailed((f) => ({ ...f, [n.id]: "" }))
+    try {
+      await onAnswer(n.id, state)
+    } catch (error) {
+      setFailed((f) => ({ ...f, [n.id]: error instanceof Error ? error.message : String(error) }))
+    } finally {
+      setBusy(null)
+    }
   }
   return (
     <div className="flex flex-col gap-2 text-xs">
@@ -190,7 +204,7 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
               {n.answers.length > 0 && <p className="text-muted-foreground">{n.answers.map((a) => `${a.by}: ${answerName(n, a.state)}`).join(" · ")}</p>}
               {/* Whoever sent it sees why each Unable could not be done, in the answering desk's words. */}
               {!forMe && n.answers.filter((a) => a.state === "unable" && a.why).map((a) => <p key={a.by} role="alert" className="text-destructive">{a.by} could not do it: {a.why}</p>)}
-              {forMe && failed[n.id] && <p role="alert" className="text-destructive">{failed[n.id]}. Answered Unable.</p>}
+              {forMe && failed[n.id] && <p role="alert" className="text-destructive">{failed[n.id]}{n.action?.kind === "sceneEdit" ? "" : ". Answered Unable."}</p>}
               {forMe && !(n.action?.kind === "sceneEdit" && answered && answered.state !== "seen") && (
                 <div role="group" aria-label={`Answer ${n.from}`} className="flex flex-wrap gap-1">
                   {n.action && n.action.kind !== "camera" && <Button size="xs" disabled={busy === n.id} onClick={() => void act(n, "show")}>{actionName(n.action)}</Button>}
@@ -200,7 +214,7 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
                   {n.action && onQueue && canQueue(n.action) && <Button size="xs" variant="outline" disabled={busy === n.id} aria-label={`Queue ${n.action.value}`} title="Add it to the run of show for later: nothing is shown" onClick={() => void act(n, "queue")}>Queue</Button>}
                   {/* A scene change is accepted with its own button (above) or declined: no bare Ready. */}
                   {(n.action?.kind === "sceneEdit" ? (["unable"] as const) : (["seen", "ready", "unable"] as const)).map((s) => (
-                    <Button key={s} size="xs" variant={answered?.state === s ? "default" : "outline"} onClick={() => onAnswer(n.id, s)}>{n.action?.kind === "sceneEdit" ? "Decline" : ANSWER_NAMES[s]}</Button>
+                    <Button key={s} size="xs" disabled={busy === n.id} variant={answered?.state === s ? "default" : "outline"} onClick={() => void answer(n, s)}>{n.action?.kind === "sceneEdit" ? "Decline" : ANSWER_NAMES[s]}</Button>
                   ))}
                 </div>
               )}

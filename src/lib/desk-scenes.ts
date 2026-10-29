@@ -1,4 +1,3 @@
-import { create } from "zustand"
 import { toast } from "sonner"
 import { normalizeScene } from "@/lib/scenes"
 import { isCountdownTo } from "@/lib/countdown"
@@ -7,6 +6,8 @@ import { outputsForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useNotices } from "@/stores/notices-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useJoin } from "@/stores/join-store"
+import { createSceneEditApproval, decideSceneEditApproval, hydrateSceneApprovals, useSceneApprovalsStore, type SceneEditApproval } from "@/stores/scene-approvals-store"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import { NO_SIGNALS } from "@/types/scene"
 import type { Scene, SceneBox, SceneCrop, SceneLayer, SceneLayerKind } from "@/types"
@@ -30,6 +31,18 @@ import type { Scene, SceneBox, SceneCrop, SceneLayer, SceneLayerKind } from "@/t
 
 /** What a layer keeps only on the host: its picture, its video's address here and a held copy. */
 const HOST_ONLY = ["imageUrl", "videoUrl", "held"] as const
+
+/** Persist only the proposed arrangement; the unchanged host scene remains the source of local media. */
+function approvalScene(scene: Scene): Scene {
+  return {
+    ...scene,
+    layers: scene.layers.map((layer) => {
+      const copy = { ...layer }
+      for (const key of ["mediaId", "mediaFile", ...HOST_ONLY] as const) delete copy[key]
+      return copy
+    }),
+  }
+}
 
 /** A scene as the Live State carries it to joined desks. */
 export type DeskScene = Omit<Scene, "layers" | "createdAt" | "updatedAt" | "libraryLookId"> & { onScreen: boolean; layers: SceneLayer[] }
@@ -154,24 +167,12 @@ export function waitsForMainDesk(sceneId: string): string | null {
   return null
 }
 
-export interface SceneRequest {
-  id: string
-  /** The changed scene (already merged), or null to delete it. */
-  scene: Scene | null
-  sceneId: string
-  name: string
-  /** When the host's scene was last saved when this was asked (null: there was none), so Accept can tell it changed since. */
-  savedAt: number | null
-  by: string
-  at: number
-}
-
-/** Scene changes waiting for the main desk (session only: a restart drops them, and the desk asks again). */
-export const useSceneRequests = create<{ requests: SceneRequest[] }>(() => ({ requests: [] }))
+/** Compatibility name for the host-persisted, typed scene approval ledger. */
+export const useSceneRequests = useSceneApprovalsStore
 
 const savedAt = (sceneId: string): number | null => useBroadcastStore.getState().scenes.find((s) => s.id === sceneId)?.updatedAt ?? null
 
-function apply(r: Pick<SceneRequest, "scene" | "sceneId" | "name" | "by">, accepted: boolean) {
+function apply(r: Pick<SceneEditApproval, "scene" | "sceneId" | "name" | "by">, accepted: boolean) {
   const b = useBroadcastStore.getState()
   if (r.scene) b.saveScene(r.scene)
   else b.deleteScene(r.sceneId)
@@ -185,7 +186,7 @@ const asText = (v: unknown, n: number): string => (typeof v === "string" ? v.tri
  * A scene change from a desk, as the host's server passed it on (`remote:save_scene` or, with
  * `deleting`, `remote:delete_scene`): saved at once, or a request in the main desk's notices.
  */
-export function receiveDeskScene(p: Record<string, unknown>, deleting = false): void {
+export async function receiveDeskScene(p: Record<string, unknown>, deleting = false): Promise<void> {
   const by = asText(p.by, 60) || "a remote"
   const byId = asText(p.byId, 100)
   const sceneId = deleting ? asText(p.id, 100) : asText((p.scene as { id?: unknown } | null)?.id, 100)
@@ -200,29 +201,67 @@ export function receiveDeskScene(p: Record<string, unknown>, deleting = false): 
   const name = scene?.name ?? existing?.name ?? "the scene"
   const why = p.request === true ? waitsForMainDesk(sceneId) ?? "the host's server asked for it" : waitsForMainDesk(sceneId)
   if (!why) return apply({ scene, sceneId, name, by }, false)
-  const id = crypto.randomUUID()
-  useSceneRequests.setState((s) => ({ requests: [...s.requests.filter((r) => r.sceneId !== sceneId || r.by !== by), { id, scene, sceneId, name, savedAt: savedAt(sceneId), by, at: Date.now() }] }))
+  let request: Awaited<ReturnType<typeof createSceneEditApproval>>
+  try {
+    await hydrateSceneApprovals()
+    request = await createSceneEditApproval({ scene: scene ? approvalScene(scene) : null, sceneId, name, savedAt: savedAt(sceneId), by, at: Date.now() })
+  } catch (error) {
+    toast.error("Scene request was not saved", { description: error instanceof Error ? error.message : String(error) })
+    return
+  }
   const verb = deleting ? "delete" : existing ? "change" : "add"
-  useNotices.getState().send({ from: by, ...(byId ? { fromId: byId } : {}), to: "host", priority: "normal", text: `Asks to ${verb} the scene “${name}”, because ${why}. Accept puts it in; Decline leaves the scene as it is.`, action: { kind: "sceneEdit", value: id } })
+  useNotices.getState().send({ from: by, ...(byId ? { fromId: byId } : {}), to: "host", priority: "normal", text: `Asks to ${verb} the scene “${name}”, because ${why}. Accept puts it in; Decline leaves the scene as it is.`, action: { kind: "sceneEdit", value: request.id } })
 }
 
 /** Accept a waiting scene change (the main desk's notice button): null when done, else why not. */
-export function acceptSceneRequest(id: string): string | null {
+export async function acceptSceneRequest(id: string): Promise<string | null> {
+  if (useJoin.getState().status !== "off") return "only the main host can approve scene changes"
+  try {
+    await hydrateSceneApprovals()
+  } catch {
+    return "scene approvals could not be loaded from this host"
+  }
   const r = useSceneRequests.getState().requests.find((x) => x.id === id)
   if (!r) return "that change was already answered, or Rhema Studio restarted since"
-  if (savedAt(r.sceneId) !== r.savedAt) return "the scene changed here since it was asked; they can make the change again"
+  if (r.status !== "pending") return r.status === "needs-review" ? "that request needs a fresh review from the operator" : "that request was already handled"
+  if (savedAt(r.sceneId) !== r.savedAt) {
+    try {
+      await decideSceneEditApproval(id, "needs-review", useSettingsStore.getState().operatorName || "Main desk", "The host scene changed after this request was made.")
+    } catch {
+      return "the scene changed here since it was asked, and its review status could not be saved"
+    }
+    return "the scene changed here since it was asked; a fresh request is needed"
+  }
   // Deleting a saved scene also clears any output that uses it. Keep the approval pending until
   // every real output has moved elsewhere so an approval can never change the public program.
   if (!r.scene && scenesOnScreen().has(r.sceneId)) return "that scene is still on a screen; move each output to another scene before approving its deletion"
-  useSceneRequests.setState((s) => ({ requests: s.requests.filter((x) => x.id !== id) }))
-  apply(r, true)
+  const existing = useBroadcastStore.getState().scenes.find((scene) => scene.id === r.sceneId)
+  const proposed = r.scene ? mergeDeskScene(r.scene, existing) : null
+  if (r.scene && !proposed) return "that scene proposal could not be restored safely; ask the desk to send it again"
+  try {
+    if (!await decideSceneEditApproval(id, "approved", useSettingsStore.getState().operatorName || "Main desk")) return "that request was already handled"
+  } catch {
+    return "the decision could not be saved on this host; the scene was left unchanged"
+  }
+  apply({ ...r, scene: proposed }, true)
   return null
 }
 
 /** Decline a waiting scene change: the scene stays as it is. */
-export function declineSceneRequest(id: string): void {
-  const r = useSceneRequests.getState().requests.find((x) => x.id === id)
-  if (!r) return
-  useSceneRequests.setState((s) => ({ requests: s.requests.filter((x) => x.id !== id) }))
+export async function declineSceneRequest(id: string): Promise<boolean> {
+  if (useJoin.getState().status !== "off") return false
+  try {
+    await hydrateSceneApprovals()
+  } catch {
+    return false
+  }
+  const r = useSceneRequests.getState().requests.find((x) => x.id === id && (x.status === "pending" || x.status === "needs-review"))
+  if (!r) return false
+  try {
+    if (!await decideSceneEditApproval(id, "declined", useSettingsStore.getState().operatorName || "Main desk")) return false
+  } catch {
+    return false
+  }
   useJournalStore.getState().add({ kind: "scene", label: `Scene change to ${r.name} from ${r.by} declined on the main desk` })
+  return true
 }

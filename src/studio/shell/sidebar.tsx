@@ -49,6 +49,7 @@ function NavButton({ item, active, live, compact, onSelect }: { item: NavItem; a
         type="button"
         aria-current={active ? "page" : undefined}
         title={compact ? undefined : keys}
+        aria-label={item.badge ? `${item.label}, ${item.badge} pending approvals` : undefined}
         onClick={onSelect}
         className={cn(
           "relative flex min-h-[2.3125rem] w-full items-center gap-3 rounded-md px-[11px] text-xs font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/60 compact:justify-center compact:px-0 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:opacity-90",
@@ -58,6 +59,7 @@ function NavButton({ item, active, live, compact, onSelect }: { item: NavItem; a
         {active && <span aria-hidden className="absolute top-[7px] bottom-[7px] left-0 w-0.5 rounded-r bg-sidebar-primary" />}
         {item.icon}
         <span className="truncate compact:sr-only">{item.label}</span>
+        {item.badge ? <span aria-hidden className="ml-auto flex min-w-4 items-center justify-center rounded-full bg-tone-amber px-1 text-[0.625rem] font-bold leading-4 text-tone-amber-foreground compact:absolute compact:top-1 compact:right-1">{item.badge}</span> : null}
         {live && <span aria-label="Live" className="ml-auto size-2 shrink-0 animate-pulse rounded-full bg-on-air compact:absolute compact:top-2 compact:right-2" />}
       </button>
     </SideTip>
