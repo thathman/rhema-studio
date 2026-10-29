@@ -124,6 +124,24 @@ describe("broadcast store sync", () => {
     )
   })
 
+  it("saving the Stage style only resyncs Stage outputs", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const state = useBroadcastStore.getState()
+    const syncOutput = vi.fn()
+    useBroadcastStore.setState({
+      outputs: [
+        { ...state.outputs[0], id: "congregation", role: "congregation" },
+        { ...state.outputs[0], id: "stage-a", name: "Stage A", role: "stage" },
+        { ...state.outputs[0], id: "stage-b", name: "Stage B", role: "stage" },
+      ],
+      syncBroadcastOutputFor: syncOutput,
+    })
+
+    useBroadcastStore.getState().saveStageStyle({ ...state.stageStyle, showTimer: !state.stageStyle.showTimer })
+
+    expect(syncOutput.mock.calls).toEqual([["stage-a"], ["stage-b"]])
+  })
+
   it("removeOutput drops the output from the fan-out but never removes main", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const state = useBroadcastStore.getState()

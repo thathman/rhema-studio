@@ -845,7 +845,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   },
   saveStageStyle: (stageStyle) => {
     set({ stageStyle: normalizeStageStyle(stageStyle) })
-    get().syncBroadcastOutput()
+    for (const output of get().outputs) if (output.role === "stage") get().syncBroadcastOutputFor(output.id)
   },
   countdownLook: DEFAULT_COUNTDOWN_LOOK,
   saveCountdownLook: (look) => {
