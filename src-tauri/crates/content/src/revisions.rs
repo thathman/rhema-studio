@@ -258,6 +258,7 @@ impl ContentDb {
                 return Err(ContentError::Invalid(format!("approved design references missing media {id}")));
             }
         }
+        check_design_pins(&tx, program_id, designs)?;
         tx.execute(
             "INSERT INTO approved_design_snapshots (program_id, revision, snapshot) VALUES (?1, ?2, ?3)
              ON CONFLICT(program_id, revision) DO UPDATE SET snapshot = excluded.snapshot, created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
@@ -441,12 +442,78 @@ fn pin_songs(tx: &Transaction<'_>, program_id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Every design version this approval pins (a scene's `design`, an item's `designRef`) must be a
+/// whole positive version this computer holds, so the approved service reopens exactly as approved,
+/// offline, and never with another version (docs/contracts/design-documents-v1.md, Pinning).
+fn check_design_pins(tx: &Transaction<'_>, program_id: &str, designs: &ApprovedDesignSnapshot) -> Result<()> {
+    let mut pins: Vec<(String, serde_json::Value)> = designs.scenes.as_object().into_iter().flatten()
+        .filter_map(|(name, scene)| scene.get("design").map(|pin| (format!("scene {name}"), pin.clone())))
+        .collect();
+    let mut stmt = tx.prepare(
+        "SELECT reference, json_extract(payload, '$.designRef') FROM program_items
+         WHERE program_id = ?1 AND json_valid(payload) AND json_type(payload, '$.designRef') IS NOT NULL ORDER BY position",
+    )?;
+    let items = stmt.query_map(params![program_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, rusqlite::types::Value>(1)?)))?;
+    for item in items {
+        let (reference, raw) = item?;
+        let pin = match raw {
+            rusqlite::types::Value::Text(text) => serde_json::from_str(&text).unwrap_or(serde_json::Value::Null),
+            _ => serde_json::Value::Null,
+        };
+        pins.push((format!("item \"{reference}\""), pin));
+    }
+    for (place, pin) in pins {
+        let id = pin.get("id").and_then(serde_json::Value::as_str).filter(|id| {
+            !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        });
+        let version = pin.get("version").and_then(serde_json::Value::as_i64).filter(|v| *v > 0);
+        let (Some(id), Some(version)) = (id, version) else {
+            return Err(ContentError::Invalid(format!("{place} pins a design without a whole version number")));
+        };
+        let held: i64 = tx.query_row("SELECT COUNT(*) FROM design_versions WHERE design_id = ?1 AND version = ?2", params![id, version], |r| r.get(0))?;
+        if held == 0 {
+            return Err(ContentError::Invalid(format!("{place} pins design {id} v{version}, which this computer does not have")));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn verse(reference: &str, b: i64, c: i64, v: i64) -> ItemInput {
         ItemInput { reference: reference.into(), book_number: Some(b), chapter: Some(c), verse: Some(v), ..ItemInput::default() }
+    }
+
+    #[test]
+    fn approval_refuses_a_pin_to_a_design_version_this_computer_lacks() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let doc = serde_json::json!({
+            "scene": { "version": 1, "root": "root", "artboard": { "width": 1920, "height": 1080 },
+                       "nodes": { "root": { "type": "group", "children": [] } } },
+            "bindings": {}, "meta": {},
+        });
+        let design = db.create_design(&crate::designs::DesignInput { title: "Welcome".into(), kind: "design".into(), document: doc }).unwrap();
+        db.create_design_version(&design.id, design.revision, None, "tester").unwrap();
+        let scenes = |version: serde_json::Value| serde_json::json!({ "s": { "design": { "id": design.id, "version": version } } });
+        let manifest = |scenes| ApprovedDesignSnapshot { version: 1, scenes, looks: serde_json::json!({}), media_ids: vec![] };
+
+        let p = db.create_program("Pinned", None).unwrap();
+        let held = db.approve_program_with_designs(&p.id, p.revision, &manifest(scenes(serde_json::json!(1)))).unwrap();
+        assert_eq!(held.approved_revision, Some(held.revision));
+
+        for (version, says) in [(serde_json::json!(2), "does not have"), (serde_json::json!("1"), "whole version"), (serde_json::json!(1.5), "whole version")] {
+            let err = db.approve_program_with_designs(&p.id, held.revision, &manifest(scenes(version))).unwrap_err();
+            assert!(matches!(&err, ContentError::Invalid(m) if m.contains("scene s") && m.contains(says)), "{err:?}");
+        }
+
+        let q = db.create_program("Moment", None).unwrap();
+        let payload = format!(r#"{{"title":"Welcome","body":"","link":"","designRef":{{"id":"{}","version":3}}}}"#, design.id);
+        let q = db.replace_items(&q.id, q.revision, &[ItemInput { kind: "slide".into(), reference: "Welcome".into(), payload: Some(payload), ..ItemInput::default() }]).unwrap();
+        let err = db.approve_program_with_designs(&q.program.id, q.program.revision, &manifest(serde_json::json!({}))).unwrap_err();
+        assert!(matches!(&err, ContentError::Invalid(m) if m.contains("item \"Welcome\"") && m.contains("v3")), "{err:?}");
+        assert_eq!(db.get_program(&q.program.id).unwrap().unwrap().program.approved_revision, None);
     }
 
     #[test]
