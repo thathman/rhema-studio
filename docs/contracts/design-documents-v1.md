@@ -43,9 +43,27 @@ Typed client: `src/design-engine/design-store.ts` (`designStore.*`).
 
 Open: `designStore.get` → editor works on `document.scene`; keep `bindings` and `meta` untouched unless the user changes a layer's source. Save Draft: `saveDraft(id, revision, …)`; on `conflict`, show "changed on another desk" and reopen. Create Version: `createVersion(id, revision, note, operatorName)`. A service moment or scene pins `{designId, version}`. Use on a screen: `designToScene(version.document)` then the existing scene save (its approval path is unchanged).
 
+## Pinning (proposed, needs Codex's agreement before code; owner audit P0 "version pins")
+
+A design is used only through an immutable version; a newer version never changes what already uses an older one.
+
+```ts
+// src/types/scene.ts (shared type: one writer, agreed here first)
+interface Scene { /* existing fields */ design?: { id: string; version: number } }   // what this scene was made from
+// A service item that shows a design (a visual moment): in its existing `payload` JSON
+interface DesignedMomentPayload { designRef: { id: string; version: number } }
+```
+
+- **Use on a screen:** `designToScene(version.document)` and set `scene.design = {id, version}`. Saving the scene is the existing scene save and approval path; it is never a Take.
+- **A newer version exists:** the scene keeps its pin and the UI offers "Update to v N", an explicit, reviewable scene change. Nothing updates silently, Brand Kit included (doc 29 §2).
+- **Approved service:** `approved_design_snapshots` already freezes the scenes as they were. With pins, the snapshot also records `{designId, version}` per scene, and because versions are immutable the approved service reopens exactly as approved, offline.
+- **Live bindings:** the pinned version holds the subscriptions (`bindings`); live words come from the Live State through `previewDesign` / the output renderer, never stored in the design.
+- **Used On (host):** `design_used_on({id})` returns the services whose items pin a version, with title, revision and approved revision. Scenes live in the desk's scene store, so the UI adds those it holds.
+- **Delete:** already refused once a version exists (`has-versions`). Pins add nothing to that rule.
+
 ## Not in this slice
 
-Pinning from service items (needs a Prepare schema change, proposed with Codex), media reference index / offline media cache, multi-page artboards (engine supports one artboard per scene today), MCP draft authoring (C5).
+Pinning code (proposed above), media reference index / offline media cache, multi-page artboards (engine supports one artboard per scene today), MCP draft authoring (C5).
 
 ## Rollback
 
