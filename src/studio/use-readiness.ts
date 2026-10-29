@@ -234,7 +234,7 @@ export function useReadiness() {
     })(),
     timersOwnerAway: (() => {
       if (!watchDesks || !host?.running) return []
-      const here = new Set<string>(presenceRows(pairedDevices, host.desks).filter((r) => r.device && r.seen?.connected).map((r) => r.device!.role ?? "configure"))
+      const here = new Set<string>(presenceRows(pairedDevices, host.desks).filter((r) => r.device && r.seen?.connected).map((r) => r.device!.role ?? "viewer"))
       return ownedTimers.filter((t) => !here.has(t.owner)).map((t) => ({ timer: t.label, role: roleLabel(t.owner) }))
     })(),
     // TVs zoom the picture (#213 overscan): a reminder for on-air browser feeds with no Overscan set, once per service.

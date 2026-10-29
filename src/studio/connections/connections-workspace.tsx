@@ -214,7 +214,7 @@ export function ConnectionsWorkspace() {
               {joinedStatus !== "off" && <Row title="This computer" detail={joinedAddress || "Host address not saved"} state={joinedStatus === "connected" ? "Connected to host" : joinedStatus === "reconnecting" ? "Reconnecting" : joinedStatus === "refused" ? "Host refused" : "Connecting"} tone={joinedStatus === "connected" ? "ok" : "warn"} />}
               {operators.length === 0 ? <p className="text-muted-foreground">No phone remotes or operator computers are paired. Pairing is optional; the main desk keeps full control.</p> : (
                 <ul aria-label="Paired phones and operators">
-                  {operators.map(({ device, hash, name, seen }) => <Row key={hash} title={device?.name ?? name ?? "Shared key device"} detail={device ? roleLabel(device.role ?? "configure") : "Shared network key"} state={hostDeviceState(host, seen, now)} tone={seen?.connected ? "ok" : hostDeviceState(host, seen, now) === "Not connected" ? "warn" : "off"} />)}
+                  {operators.map(({ device, hash, name, seen }) => <Row key={hash} title={device?.name ?? name ?? "Shared key device"} detail={device ? roleLabel(device.role ?? "viewer") : "Shared network key"} state={hostDeviceState(host, seen, now)} tone={seen?.connected ? "ok" : hostDeviceState(host, seen, now) === "Not connected" ? "warn" : "off"} />)}
                 </ul>
               )}
               <p className="text-muted-foreground">A role limits only the paired device. This computer can always operate the service and take control back.</p>
