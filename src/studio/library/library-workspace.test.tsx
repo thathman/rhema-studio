@@ -28,6 +28,12 @@ import { useShellStore } from "@/studio/shell-store"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useServiceStore } from "@/stores/service-store"
+import {
+  LIBRARY_END_OF_RUN_TARGET,
+  libraryHeaderTarget,
+  useLibraryTargetStore,
+} from "@/studio/library/library-target-store"
 
 const john = {
   id: 1,
@@ -60,7 +66,8 @@ beforeEach(() => {
   )
   mockStoreSet.mockReset()
   mockStoreSave.mockReset()
-  useShellStore.setState({ workspace: "library", librarySection: "songs" })
+  useShellStore.setState({ workspace: "library", librarySection: "songs", prepareLibraryReturn: null, prepareDesignReturn: null })
+  useLibraryTargetStore.getState().clearAll()
   useBibleStore.setState({
     translations: [
       {
@@ -76,12 +83,25 @@ beforeEach(() => {
     secondaryTranslationId: null,
     books: [john],
     savedPassages: [],
+    selectedQueueItemId: null,
+    selectedSlide: null,
+    selectedVerse: null,
   })
   useQueueStore.setState({
     items: [],
     headers: [],
     activeIndex: null,
     addTarget: null,
+    highlightedId: null,
+    removedActive: null,
+    past: [],
+    future: [],
+  })
+  useServiceStore.setState({
+    current: { id: "service-a", title: "Sunday service A", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 0 },
+    dirty: false,
+    loading: false,
+    saving: false,
   })
   useBroadcastStore.setState({
     isLive: true,
@@ -98,6 +118,27 @@ afterEach(() => {
   root = null
   document.body.replaceChildren()
 })
+
+function button(label: string) {
+  return [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (candidate) => candidate.textContent?.includes(label) || candidate.getAttribute("aria-label") === label,
+  )!
+}
+
+async function chooseDestination(value: string) {
+  const select = document.querySelector<HTMLSelectElement>("[aria-label='Library destination']")!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, value)
+    select.dispatchEvent(new Event("change", { bubbles: true }))
+  })
+}
+
+async function clickButton(label: string) {
+  await act(async () => {
+    button(label).click()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
 
 describe("Library workspace", () => {
   it("offers saved Bible passages as a first-class Library section", async () => {
@@ -121,6 +162,24 @@ describe("Library workspace", () => {
 
   it("saves a reference locally and uses it in Prepare without changing Live", async () => {
     const onAirBefore = useBroadcastStore.getState().liveVerse
+    const programBefore = {
+      isLive: useBroadcastStore.getState().isLive,
+      liveVerse: useBroadcastStore.getState().liveVerse,
+      liveItemId: useBroadcastStore.getState().liveItemId,
+    }
+    useQueueStore.setState({
+      items: [
+        { id: "before", kind: "slide", slide: { title: "Before", body: "Before" }, reference: "Before", confidence: 1, source: "manual", added_at: 0 },
+        { id: "opening-moment", kind: "slide", slide: { title: "Opening", body: "Welcome" }, reference: "Opening", confidence: 1, source: "manual", added_at: 0 },
+        { id: "sermon-moment", kind: "slide", slide: { title: "Sermon", body: "Listen" }, reference: "Sermon", confidence: 1, source: "manual", added_at: 0 },
+      ],
+      headers: [
+        { id: "event-opening", type: "group", name: "Opening", at: 1, event: { schema_version: 1 } },
+        { id: "event-sermon", type: "group", name: "Sermon", at: 2, event: { schema_version: 1 } },
+      ],
+      activeIndex: 2,
+      addTarget: null,
+    })
     await act(async () => {
       root!.render(<LibraryWorkspace />)
     })
@@ -183,20 +242,255 @@ describe("Library workspace", () => {
     ].find((button) => button.textContent?.includes("Use in service"))!
     await act(async () => {
       use.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
     })
-    expect(useQueueStore.getState().items[0]).toMatchObject({
+
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual([
+      "before", "opening-moment", "sermon-moment",
+    ])
+    await chooseDestination(libraryHeaderTarget("event-opening"))
+    await clickButton("Cancel")
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual([
+      "before", "opening-moment", "sermon-moment",
+    ])
+    expect(useLibraryTargetStore.getState().byServiceId["service-a"]).toBeUndefined()
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
+    expect(useShellStore.getState().workspace).toBe("library")
+    expect(useBroadcastStore.getState()).toMatchObject(programBefore)
+
+    await clickButton("Use in service")
+    await chooseDestination(libraryHeaderTarget("event-opening"))
+    await clickButton("Add to service")
+
+    const queue = useQueueStore.getState()
+    expect(queue.items.map((item) => item.id)).toEqual([
+      "before", "opening-moment", expect.any(String), "sermon-moment",
+    ])
+    expect(queue.headers.map(({ id, at }) => [id, at])).toEqual([
+      ["event-opening", 1], ["event-sermon", 3],
+    ])
+    expect(queue.activeIndex).toBe(3)
+    expect(queue.items[2]).toMatchObject({
       source: "manual",
       reference: "John 3:16",
       verse: bibleVerse,
       translation: "KJV",
       secondary_translation: null,
     })
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(
-      useQueueStore.getState().items[0].id
-    )
+    expect(useBibleStore.getState().selectedQueueItemId).toBe(queue.items[2].id)
+    expect(useLibraryTargetStore.getState().byServiceId["service-a"]).toBe(libraryHeaderTarget("event-opening"))
+    expect(useShellStore.getState().prepareLibraryReturn).toMatchObject({
+      serviceId: "service-a",
+      targetHeaderId: "event-opening",
+      eventId: "event-opening",
+      momentId: queue.items[2].id,
+      momentTitle: "John 3:16",
+    })
     expect(useShellStore.getState().workspace).toBe("prepare")
     expect(useBroadcastStore.getState().liveVerse).toBe(onAirBefore)
-    expect(useBroadcastStore.getState().isLive).toBe(true)
+    expect(useBroadcastStore.getState()).toMatchObject(programBefore)
+  })
+
+  it("remembers different destinations per service and restores each on A → B → A", async () => {
+    await act(async () => root!.render(<LibraryWorkspace />))
+    useQueueStore.setState({
+      headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }],
+    })
+    await clickButton("Choose Library destination")
+    await chooseDestination(libraryHeaderTarget("event-a"))
+    await clickButton("Remember destination")
+    expect(useLibraryTargetStore.getState().byServiceId["service-a"]).toBe(libraryHeaderTarget("event-a"))
+
+    await act(async () => {
+      useServiceStore.setState({ current: { id: "service-b", title: "Sunday service B", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 0 } })
+      useQueueStore.setState({
+        items: [],
+        headers: [{ id: "event-b", type: "group", name: "Worship B", at: 0, event: { schema_version: 1 } }],
+        activeIndex: null,
+        addTarget: null,
+      })
+    })
+    expect(button("Choose Library destination")).toBeTruthy()
+    await clickButton("Choose Library destination")
+    await chooseDestination(libraryHeaderTarget("event-b"))
+    await clickButton("Remember destination")
+    expect(useLibraryTargetStore.getState().byServiceId["service-b"]).toBe(libraryHeaderTarget("event-b"))
+
+    await act(async () => {
+      useServiceStore.setState({ current: { id: "service-a", title: "Sunday service A", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 0 } })
+      useQueueStore.setState({
+        items: [],
+        headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }],
+        activeIndex: null,
+        addTarget: null,
+      })
+    })
+    expect(document.body.textContent).toContain("Library items go to End of event “Opening A”")
+  })
+
+  it("clears a contextual return when leaving Library and asks on a standalone re-entry", async () => {
+    useBibleStore.setState({
+      savedPassages: [{ id: "4:43:3:16", translationId: 4, bookNumber: 43, chapter: 3, verse: 16, reference: "John 3:16" }],
+    })
+    useQueueStore.setState({
+      items: [],
+      headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+      addTarget: null,
+    })
+    useShellStore.setState({
+      workspace: "library",
+      prepareLibraryReturn: {
+        serviceId: "service-a",
+        targetHeaderId: "event-a",
+        targetHeaderTitle: "Opening A",
+        eventId: "event-a",
+        momentId: null,
+        eventTitle: "Opening A",
+        momentTitle: null,
+      },
+    })
+
+    await act(async () => useShellStore.getState().setWorkspace("home"))
+    expect(useShellStore.getState().prepareLibraryReturn).toBeNull()
+    await act(async () => {
+      useShellStore.getState().setWorkspace("library")
+      root!.render(<LibraryWorkspace />)
+    })
+    expect(button("Choose Library destination")).toBeTruthy()
+
+    const tab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((candidate) => candidate.textContent === "Bible")!
+    await act(async () => tab.click())
+    await clickButton("Use in service")
+
+    expect(document.body.textContent).toContain("Choose where to add this item")
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  })
+
+  it("recovers a stale Prepare target by asking for a current Library destination", async () => {
+    useBibleStore.setState({
+      savedPassages: [{ id: "4:43:3:16", translationId: 4, bookNumber: 43, chapter: 3, verse: 16, reference: "John 3:16" }],
+    })
+    useQueueStore.setState({
+      items: [],
+      headers: [{ id: "event-current", type: "group", name: "Current event", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+      addTarget: null,
+    })
+    useShellStore.setState({
+      workspace: "library",
+      prepareLibraryReturn: {
+        serviceId: "service-a",
+        targetHeaderId: "event-removed",
+        targetHeaderTitle: "Removed event",
+        eventId: "event-removed",
+        momentId: null,
+        eventTitle: "Removed event",
+        momentTitle: null,
+      },
+    })
+    await act(async () => root!.render(<LibraryWorkspace />))
+    const tab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((candidate) => candidate.textContent === "Bible")!
+    await act(async () => tab.click())
+    await clickButton("Use in service")
+
+    expect(useShellStore.getState().prepareLibraryReturn).toBeNull()
+    expect(document.body.textContent).toContain("Choose where to add this item")
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+    expect(document.querySelector("[aria-label='Library destination']")?.textContent).toContain("Current event")
+  })
+
+  it("does not redirect a pending Library Add when the open service changes", async () => {
+    useBibleStore.setState({
+      savedPassages: [{ id: "4:43:3:16", translationId: 4, bookNumber: 43, chapter: 3, verse: 16, reference: "John 3:16" }],
+    })
+    useQueueStore.setState({
+      items: [],
+      headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+      addTarget: null,
+    })
+    await act(async () => root!.render(<LibraryWorkspace />))
+    const tab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((candidate) => candidate.textContent === "Bible")!
+    await act(async () => tab.click())
+    await clickButton("Use in service")
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+
+    await act(async () => {
+      useServiceStore.setState({ current: { id: "service-b", title: "Sunday service B", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 0 } })
+      useQueueStore.setState({ items: [], headers: [], activeIndex: null, addTarget: null })
+    })
+    await chooseDestination(LIBRARY_END_OF_RUN_TARGET)
+    await clickButton("Add to service")
+
+    expect(useQueueStore.getState().items).toEqual([])
+    expect(useLibraryTargetStore.getState().byServiceId["service-a"]).toBeUndefined()
+    expect(useLibraryTargetStore.getState().byServiceId["service-b"]).toBeUndefined()
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
+    expect(useShellStore.getState().workspace).toBe("library")
+    expect(document.body.textContent).toContain("The open service or Prepare caller changed")
+  })
+
+  it("rejects a Bible lookup that completes after the user switches services", async () => {
+    useBibleStore.setState({
+      savedPassages: [{ id: "4:43:3:16", translationId: 4, bookNumber: 43, chapter: 3, verse: 16, reference: "John 3:16" }],
+    })
+    let resolveVerse: ((value: typeof bibleVerse) => void) | null = null
+    mockInvoke.mockImplementation((command: string) => command === "get_verse"
+      ? new Promise((resolve) => { resolveVerse = resolve as (value: typeof bibleVerse) => void })
+      : Promise.resolve([]))
+    await act(async () => root!.render(<LibraryWorkspace />))
+    const tab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((candidate) => candidate.textContent === "Bible")!
+    await act(async () => tab.click())
+    await act(async () => button("Use in service").click())
+    expect(resolveVerse).not.toBeNull()
+
+    await act(async () => {
+      useServiceStore.setState({ current: { id: "service-b", title: "Sunday service B", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 0 } })
+    })
+    await act(async () => { resolveVerse!(bibleVerse) })
+    await vi.waitFor(() => expect(button("Use in service").disabled).toBe(false))
+
+    expect(useQueueStore.getState().items).toEqual([])
+    expect(useLibraryTargetStore.getState().byServiceId["service-b"]).toBeUndefined()
+    expect(useShellStore.getState().workspace).toBe("library")
+    expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Psalm 23:1")
+  })
+
+  it("rejects a Bible lookup that completes after leaving and reopening Library", async () => {
+    useBibleStore.setState({
+      savedPassages: [{ id: "4:43:3:16", translationId: 4, bookNumber: 43, chapter: 3, verse: 16, reference: "John 3:16" }],
+    })
+    useQueueStore.setState({
+      items: [],
+      headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+      addTarget: null,
+    })
+    useLibraryTargetStore.getState().remember("service-a", libraryHeaderTarget("event-a"))
+
+    let resolveVerse: ((value: typeof bibleVerse) => void) | null = null
+    mockInvoke.mockImplementation((command: string) => command === "get_verse"
+      ? new Promise((resolve) => { resolveVerse = resolve as (value: typeof bibleVerse) => void })
+      : Promise.resolve([]))
+    await act(async () => root!.render(<LibraryWorkspace />))
+    const tab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((candidate) => candidate.textContent === "Bible")!
+    await act(async () => tab.click())
+    await act(async () => button("Use in service").click())
+    expect(resolveVerse).not.toBeNull()
+
+    await act(async () => {
+      useShellStore.getState().setWorkspace("home")
+      useShellStore.getState().setWorkspace("library")
+    })
+    await act(async () => { resolveVerse!(bibleVerse) })
+    await vi.waitFor(() => expect(button("Use in service").disabled).toBe(false))
+
+    expect(useQueueStore.getState().items).toEqual([])
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
+    expect(useLibraryTargetStore.getState().byServiceId["service-a"]).toBe(libraryHeaderTarget("event-a"))
+    expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Psalm 23:1")
   })
 
   it("corrects a mismatched saved label and requires review before Use", async () => {

@@ -10,7 +10,8 @@ import { fuzzySongs } from "@/lib/fuzzy"
 import { presentActions } from "@/studio/present-actions"
 import { SongEditor } from "@/studio/prepare/song-editor"
 import { isChoir } from "@/lib/song-kind"
-import { isSongItem, type SongSummary } from "@/types"
+import { isSongItem, type QueueItem, type SongSummary } from "@/types"
+import { captureLibraryUseInvocation, type LibraryItemUseHandler } from "@/studio/library/library-target-store"
 
 const LICENCE_BADGE: Record<string, string> = { public_domain: "PD", ccli: "CCLI", custom: "Custom", unknown: "Licence?" }
 
@@ -19,7 +20,7 @@ const LICENCE_BADGE: Record<string, string> = { public_domain: "PD", ccli: "CCLI
  * to the service, or open it in the editor. "New song" opens the paste-first
  * editor.
  */
-export function SongLibrary({ layout = "list", newRequest = 0, onAdded }: { layout?: "list" | "cards"; newRequest?: number; onAdded?: (id: string) => void } = {}) {
+export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseItem }: { layout?: "list" | "cards"; newRequest?: number; onAdded?: (id: string) => void; onUseItem?: LibraryItemUseHandler } = {}) {
   const [query, setQuery] = useState("")
   const results = useSongStore((s) => s.results)
   const searching = useSongStore((s) => s.searching)
@@ -56,8 +57,13 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded }: { layo
   }
 
   const add = (song: SongSummary) => {
+    const item: QueueItem = songQueueItem(song)
+    if (onUseItem) {
+      onUseItem(item, captureLibraryUseInvocation())
+      return
+    }
     const queue = useQueueStore.getState()
-    const id = queue.addItem(songQueueItem(song), "end")
+    const id = queue.addItem(item, "end")
     if (id) onAdded?.(id)
   }
 

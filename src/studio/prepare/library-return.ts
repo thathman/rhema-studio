@@ -47,6 +47,34 @@ export function prepareLibraryReturnForMoment(
   }
 }
 
+/** Capture a standalone Library destination before the user confirms an Add. */
+export function prepareLibraryReturnForHeader(
+  targetHeaderId: string,
+): PrepareLibraryReturnContext | null {
+  const queue = useQueueStore.getState()
+  const target = queue.headers.find((header) => header.id === targetHeaderId)
+  if (!target) return null
+  const containingEventId = containingEventIdForHeader(
+    queue.items,
+    queue.headers,
+    target,
+  )
+  const event = containingEventId
+    ? projectRunOfShowEvents(queue.items, queue.headers).find(
+        (candidate) => candidate.id === containingEventId,
+      )
+    : null
+  return {
+    serviceId: useServiceStore.getState().current?.id ?? null,
+    targetHeaderId: target.id,
+    targetHeaderTitle: target.name,
+    eventId: containingEventId,
+    momentId: null,
+    eventTitle: event?.title ?? null,
+    momentTitle: null,
+  }
+}
+
 /** Capture an event-level Add target when its slide composer opens the shared Library. */
 export function prepareLibraryReturnForAddTarget(): PrepareLibraryReturnContext | null {
   const queue = useQueueStore.getState()
@@ -64,25 +92,7 @@ export function prepareLibraryReturnForAddTarget(): PrepareLibraryReturnContext 
       momentTitle: null,
     }
   }
-  const containingEventId = containingEventIdForHeader(
-    queue.items,
-    queue.headers,
-    target
-  )
-  const event = containingEventId
-    ? projectRunOfShowEvents(queue.items, queue.headers).find(
-        (candidate) => candidate.id === containingEventId
-      )
-    : null
-  return {
-    serviceId: useServiceStore.getState().current?.id ?? null,
-    targetHeaderId: target.id,
-    targetHeaderTitle: target.name,
-    eventId: containingEventId,
-    momentId: null,
-    eventTitle: event?.title ?? null,
-    momentTitle: null,
-  }
+  return prepareLibraryReturnForHeader(target.id)
 }
 
 /** The Library must fail closed if the caller's service, section, or moment changed while it was open. */
