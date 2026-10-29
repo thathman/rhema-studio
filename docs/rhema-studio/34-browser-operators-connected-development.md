@@ -200,6 +200,10 @@ The owner explicitly approved Page 6's **overall Stage Operator screen hierarchy
 
 [40 — Page 7 Camera Operator](40-camera-operator-page-7-layout-proposal.md) proposes an **actual camera picture/health grid**, selected larger private preview, separate camera Ready/Unable versus signal Sending/Frozen versus independent OBS/physical-output tally, precise impact review before hiding a camera from scenes, and compact Director framing request/Comms handoffs. Its visual hierarchy, recovery controls and proposal-level permission refinements are **NOT yet approved**. Preserve existing native camera panel/router telemetry and joined CameraDesk; don't fake real media previews, auto Take, or assume all native host functions are remote-allowed.
 
+### Page 7 camera-grid hierarchy — OWNER APPROVED (29 October 2026)
+
+The owner explicitly approved the **camera-grid-first Page 7 composition** in [40 — Camera Operator §7A](40-camera-operator-page-7-layout-proposal.md#7a-owner-approved--camera-grid-first-structural-hierarchy-29-october-2026): assigned camera cards with accurate health, selected larger actual camera preview, distinct OBS Program / OBS Preview / congregation tallies, framing **Ready / Unable** actions, scoped recovery and compact Director framing requests. Camera signal `Sending` ≠ volunteer `Ready` ≠ camera `On Air`. A camera card never Takes Live; `Hide from scenes` requires true source/scene impact review. **Structural layout approved, not expanded permissions, pixel-level styling or real-device implementation.** Codex resumes full feature building under 29 Oct instructions.
+
 ### Operator design review protocol: one page at a time, with owner sign-off
 
 **We have NOT completed the operator visual redesign together. Do not silently invent final approved page designs or count a generic console as accepted.** Implement shared safety/data foundations first, then present an individually reviewable page specification/screenshot/interactive demo to the owner for each step. Record feedback and approval, then continue to the next page. No automatic completion of 12 pages because their route exists.
