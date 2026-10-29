@@ -140,3 +140,79 @@ No Send until the host approves or explicitly delegates that scope.
 ## 8. Next visual approval
 
 When the owner confirms Page 6 structure, record `OWNER APPROVED — STRUCTURAL HIERARCHY` and update [34](34-browser-operators-connected-development.md), AGENTS and Codex handoff. Until then **Stage Operator Page 6 visual layout is a proposal only**; the direct-send host-assigned-recipient **permissions in §7A are already owner-approved**. Codex may implement already-approved Stage timing and privacy features under the owner resumed-build instruction but must not claim this new layout has owner sign-off.
+
+
+## 9. Next Stage Operator design exploration — cue workflow and operator attention (PROPOSED)
+
+**Visual proposal for owner review; only direct-send to host-assigned recipients in §7A is approved.** Focus on the volunteer's critical task, not a wall of Stage presets.
+
+### 9A. Always-visible operator context
+
+```text
+[Church / Sunday Service]   STAGE OPERATOR   [Host: Connected]
+SEND TO [Pastor Confidence 1 ✓ Assigned]  [Choir Monitor ✓ Assigned]
+        [Backstage Board 🔒 Not assigned — Request access]
+CURRENT EVENT          WHAT RECIPIENT ACTUALLY DISPLAYS
+Sermon · 08:20 left     Host received 11:42 / Receiver ACK 11:42:01
+Now: Sermon            08:20    Private note: "2 min remaining"
+Next: Offering         Cue expires in 0:08 [Hide my cue]
+────────────────────────────────────────────────────────────
+PREPARE PRIVATE CUE · [Stand by] [5 min] [Please conclude] [Custom]
+Message [Please conclude in 2 minutes                         ]
+Priority [Routine ▼]  Presentation [Routine banner per host policy]
+PRIVATE PREVIEW [Clock + proposed note]   [Send to Pastor Confidence 1]
+────────────────────────────────────────────────────────────
+INCOMING REQUESTS   1 from Director: Choir standby     [Open] [Ready/Unable]
+RECENT CUES        Displayed · Expired · Not confirmed · Denied    [History]
+```
+
+Place named recipient and host assignment **next to the main Send action**. The large clock is display-only and derived from host Live timing; no inadvertent Hold/next-event in a Stage role. An audience-facing Stage TV has its own **read-only** scene with no Send, History or navigation controls.
+
+### 9B. Three moments: Prepare, Deliver, Recover
+
+**Prepare**: The operator selects one explicitly assigned private monitor, chooses a short host-provided preset or enters compliant text, and sees the current clock, host policy's predicted appearance and allowed urgency. Changes are **private preview**. Permit a safe optional draft save if service-linked, but do not let a partial draft go to the Stage monitor.
+
+**Deliver**: The prominent action is `Send private cue to Pastor Confidence` rather than `Go Live`. Before sending, check recipient, priority and duration. Once pressed show **`Sending` → `Host accepted` → `Receiver confirmed displayed`**, with `Not confirmed`/failed branch. Never claim the human pastor read it. No per-message approval round trip for the operator's assigned/allowed receiver. If recipient/policy is blocked, show **`Request access`** rather than fake Send.
+
+**Recover**: The actual current cue and host-controlled expiry are displayed right above/beside the composer. A permitted `Hide my cue` action removes only the selected receiver's appropriate current cue, not all Stage outputs or a higher-priority Timekeeper message. On expiry the view returns to the authorized confidence clock; stale reconnect does not replay. If the recipient disconnected, show last actual confirmed state, not a fabricated remaining countdown/receiver success.
+
+### 9C. Distinguish Timekeeper automatic cues from Stage manual messages
+
+The existing Timekeeper family already supports **automatic and manual** Stage reminders with recipient-based urgency. The Stage page must show:
+- **Cue source:** `Automatic Timekeeper`, `Timekeeper manual`, `Stage Operator`, `Director` or another authorized source with exact relevant role.
+- **Precedence:** host policy selects what supersedes what; an operator's routine message cannot override a current urgent Timekeeper cue. Operator sees `Waiting behind urgent message` or `Not permitted to replace`, not a false local overlay.
+- **One authoritative clock:** Timekeeper changes clock; Stage observes it. If an automatic 5-min reminder is sent to Pastor Confidence, its appearance is not also duplicated by a second Stage local timer.
+- **History + delivery:** receiver applied, queue, expired and revoked states record authoritative cue IDs; Comms `Ready` does not equal receiver display.
+- **Audience isolation:** Stage operator sees only appropriately assigned recipient cues. Even a Director's request doesn't confer rights to a new monitor.
+
+### 9D. Host-provided quick cues (visual proposals, not yet chosen as default)
+
+Suggested compact three- or four-item row, customizable centrally per church and optionally filtered by service moment:
+
+| Suggested preset | Example stage use | Not automatic |
+| --- | --- | --- |
+| `Stand by` | Choir or next speaker prepares | **Send** only on explicit action |
+| `5 min remaining` | Pastor timing reminder if host allows Stage operator to send | Do not duplicate host automatic Timekeeper cue |
+| `Please conclude` | Sermon running over | Host sets priority and expiration |
+| `Custom message` | One-time safe cue | Check message length, receiver, urgency |
+
+Prioritize **short, accurate content** and direct operator workflow. Custom stage cue presets belong to church configuration and may be restricted by recipient; this is not a new top-level disconnected Template workspace.
+
+### 9E. Responsive/safe states to visually verify
+
+- **Desktop:** clock and actual selected monitor side by side; cue composer full-width below. Most recent private Director/Timekeeper request stays a small strip.
+- **Tablet:** name the selected receiver in a pinned bar; actual monitor panel and private cue preview switch/toggle without confusing Preview and Actual.
+- **Phone:** main Send stays sticky and names the receiver; recipient assignment and policy visible; incoming requests accessed in a badge/drawer without obscuring the clock or Send action. On a revoked session, disable Send and show what changed.
+- **Missing/invalid monitor:** don't infer pairing from a saved name; show `Receiver not confirmed / not assigned`, with permission-safe navigation to Connections/Permissions.
+- **Urgent overlay:** display may be prominent according to host policy, but the clock remains accessible or automatically restores; no infinite black screen, flashing, sound or public leak.
+- **No Stage operator connected:** native host timing and authorized receiver cues continue unaffected. Offline LAN is not a blocker to messages between paired local devices.
+
+### 9F. Page 6's next owner choices
+
+For visual review, recommend:
+1. **Real receiver status as primary, Private Preview as secondary**: actual/host/receiver acknowledgment plainly separated; if screenshot streaming isn't available, label a rendered representation `Expected appearance`. Never show it as factual output.
+2. **Only three quick cue presets plus Custom** in the main composer; larger cue catalog appears contextually, if available, not as a second top-level page.
+3. **Compact incoming requests strip** at the bottom, expandable into the same event-linked Rhema Comms detail view, preserving the Stage composer draft.
+4. **No automatic Stage sends when a service event advances** unless Timekeeper/host has already configured its separately authorized automatic reminders; Stage operator actions are explicit by default.
+
+These are **proposals awaiting owner discussion**, not permissions changes. Continue the product-wide resumed build in parallel and do not claim this Page 6 visual layout is approved merely because §7A permissions are.
