@@ -46,6 +46,10 @@ export const SETTINGS_SEARCH_INDEX: Record<SettingsSection, { labels: string[]; 
     labels: ["Let AI assistants read Rhema Studio", "Add Rhema Studio to the assistant's MCP settings", "Copy"],
     keywords: ["ai", "mcp", "assistant", "claude", "chatgpt"],
   },
+  data: {
+    labels: ["Church folder", "Choose folder", "Back up now", "Restore from a backup"],
+    keywords: ["data", "backup", "backups", "restore", "church folder", "nas", "sync", "local files"],
+  },
   diagnostics: {
     labels: ["Time range", "Save logs…", "Version", "Log folder"],
     keywords: ["logs", "bug report", "support", "problem", "crash"],
@@ -95,7 +99,7 @@ export function searchSettings(
 }
 
 /** Things people look for in Settings that live on their own page (#215): Settings search points there. */
-export type ElsewhereId = "church" | "appearance" | "cameras" | "hosting" | "permissions" | "service-defaults" | "backups"
+export type ElsewhereId = "church" | "appearance" | "cameras" | "hosting" | "permissions" | "service-defaults"
 
 export interface ElsewhereEntry {
   id: ElsewhereId
@@ -113,7 +117,6 @@ export const SETTINGS_ELSEWHERE: readonly ElsewhereEntry[] = [
   { id: "hosting", name: "Host or join and the talk channel", where: "Connections", keywords: ["host", "join", "hosting", "talk channel", "operators", "volunteers", "desks", "another computer", "crew"] },
   { id: "permissions", name: "Paired device access and scene requests", where: "Permissions", keywords: ["paired device", "paired devices", "roles", "role", "access", "permissions", "scene request", "scene changes"] },
   { id: "service-defaults", name: "Approvals before a service goes live", where: "Team → Approvals", keywords: ["service defaults", "approval", "approvals", "approve", "unapproved", "ask before", "defaults", "operator name", "your name"] },
-  { id: "backups", name: "Backups and the church folder", where: "Archive", keywords: ["backup", "backups", "back up", "restore", "church folder", "archive", "export", "import", "data", "nas", "sync"] },
 ]
 
 /** The pages elsewhere that a search finds (none for an empty search: those are not Settings). */

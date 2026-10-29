@@ -42,7 +42,7 @@ describe("searchSettings", () => {
 })
 
 describe("searchElsewhere", () => {
-  it("points to the pages that hold what Settings does not (#215): church, appearance, cameras, host/join, permissions, service defaults, backups", () => {
+  it("points to the pages that hold what Settings does not (#215): church, appearance, cameras, host/join, permissions and service defaults", () => {
     const where = (q: string) => searchElsewhere(q).map((e) => e.id)
     expect(where("church name")).toEqual(["church"])
     expect(where("dark mode")).toEqual(["appearance"])
@@ -51,8 +51,8 @@ describe("searchElsewhere", () => {
     expect(where("roles")).toEqual(["permissions"])
     expect(where("paired device")).toEqual(["permissions"])
     expect(where("approval")).toEqual(["service-defaults"])
-    expect(where("backup")).toEqual(["backups"])
-    expect(where("church folder")).toEqual(["backups"])
+    expect(where("backup")).toEqual([])
+    expect(where("church folder")).toEqual([])
     // Each is found by its own name, and an empty search finds none of them (they are not Settings).
     for (const e of SETTINGS_ELSEWHERE) expect(where(e.name)).toContain(e.id)
     expect(searchElsewhere("")).toEqual([])
@@ -89,9 +89,20 @@ describe("Settings page search", () => {
   })
 
   it("lists every section under the five headings until something is typed", () => {
-    expect(sections()).toEqual(["Bible", "Outputs", "Heard verses", "Audio", "Speech Recognition", "Remote Control", "AI assistants", "Diagnostics", "Help"])
+    expect(sections()).toEqual(["Bible", "Outputs", "Heard verses", "Audio", "Speech Recognition", "Remote Control", "AI assistants", "Data & Sync", "Diagnostics", "Help"])
     expect(host.textContent).toContain("Display and output")
     expect(host.textContent).toContain("Data and diagnostics")
+  })
+
+  it("opens backups and the church folder under Data & Sync", async () => {
+    await type("backup")
+    expect(sections()).toEqual(["Data & Sync"])
+    expect(host.querySelector('[role="group"][aria-label="Elsewhere in Rhema Studio"]')).toBeNull()
+    await press("Enter")
+    expect(useSettingsDialogStore.getState().activeSection).toBe("data")
+    expect(host.querySelector('[aria-label="Data & Sync"]')?.textContent).toContain("Church folder")
+    expect(host.querySelector('[aria-label="Data & Sync"]')?.textContent).toContain("Back up now")
+    expect(host.querySelector('[aria-label="Data & Sync"]')?.textContent).toContain("Restore from a backup")
   })
 
   it("filters as you type, names the matching labels, opens the first on Enter and marks it in the section", async () => {
@@ -134,7 +145,7 @@ describe("Settings page search", () => {
     expect(host.textContent).toContain("Nothing in Settings matches")
     await press("Escape")
     expect(search().value).toBe("")
-    expect(sections()).toHaveLength(9)
+    expect(sections()).toHaveLength(10)
   })
 
   it("routes paired-device access searches to Permissions", async () => {

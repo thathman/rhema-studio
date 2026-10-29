@@ -98,12 +98,17 @@ interface LayerEntry {
   groupOpacity: number
 }
 
-function layerEntries(scene: SaraswatiScene): LayerEntry[] {
+function layerEntries(scene: SaraswatiScene, issues: DesignIssue[] = []): LayerEntry[] {
   const out: LayerEntry[] = []
+  const seen = new Set<string>()
   const walk = (id: string, visible: boolean, groupOpacity: number) => {
+    // A node reached twice (a group inside itself) is walked once; a missing one is reported, never skipped silently.
+    if (seen.has(id)) return void issues.push({ nodeId: id, message: `"${id}" appears twice in the design; it is shown once` })
+    seen.add(id)
     const node = scene.nodes[id]
-    if (!node) return
+    if (!node) return void issues.push({ nodeId: id, message: `"${id}" is listed in the design but missing from it` })
     if (node.type === "group") {
+      if (!Array.isArray(node.children)) return void issues.push({ nodeId: id, message: `group "${id}" has no list of layers` })
       node.children.forEach((child) => walk(child, visible && node.visible, groupOpacity * node.opacity))
     } else {
       out.push({ node, visible: visible && node.visible, groupOpacity })
@@ -135,7 +140,7 @@ export function designToScene(design: RhemaDesign): { scene: Scene; issues: Desi
       issues.push({ nodeId: node.id, message: "Group rotation cannot be saved into a Rhema scene yet" })
     }
   }
-  for (const { node, visible } of layerEntries(design.scene)) {
+  for (const { node, visible } of layerEntries(design.scene, issues)) {
     const binding = design.bindings[node.id]
     if (!binding) {
       issues.push({ nodeId: node.id, message: `"${node.name ?? node.id}" was drawn in the editor; Rhema scenes cannot show it yet` })

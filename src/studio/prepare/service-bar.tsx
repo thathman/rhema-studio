@@ -29,6 +29,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { useBibleStore } from "@/stores/bible-store"
 import { StatusChip } from "@/studio/ui/status-chip"
 import { saveStateOf } from "@/studio/prepare/save-state"
+import { ServiceFileActions } from "@/studio/prepare/service-file-actions"
 
 /** The saved / unsaved line beside the service's name. */
 export function SaveState() {
@@ -244,6 +245,7 @@ export function ServiceBar() {
       )}
 
       <ServiceHistory />
+      <ServiceFileActions />
       <NewerVersionNotice />
       <UnreadComments />
       {current && churchFolder && (

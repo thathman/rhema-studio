@@ -118,7 +118,7 @@ describe("keyboard order (#215)", () => {
     await mount(<SettingsPage />)
     const search = host.querySelector<HTMLInputElement>('input[aria-label="Search settings"]')!
     await act(async () => search.focus())
-    expect(await walk(9)).toEqual(["Bible", "Outputs", "Heard verses", "Audio", "Speech Recognition", "Remote Control", "AI assistants", "Diagnostics", "Help"])
+    expect(await walk(10)).toEqual(["Bible", "Outputs", "Heard verses", "Audio", "Speech Recognition", "Remote Control", "AI assistants", "Data & Sync", "Diagnostics", "Help"])
     // Then into the section that is open, not round again.
     await tab()
     expect(host.querySelector("section")!.contains(document.activeElement)).toBe(true)
