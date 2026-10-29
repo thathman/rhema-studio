@@ -1,6 +1,6 @@
 # 45 — Page 11 Main Presenter / Configure: One Live Command Desk, Privileged Settings Separate
 
-**Workshop:** 29 October 2026. **Status: PAGE 11 VISUAL/WORKFLOW PROPOSAL — AWAITING OWNER REVIEW.** Page 10 Viewer structure is owner-approved in [44 §9](44-viewer-operator-page-10-layout-proposal.md#9-owner-decision-29-october-2026). Page 11 completes the established page-by-page role sequence in [34](34-browser-operators-connected-development.md). Owner-directed full feature build is active, zero new PRs remain, website publishing gated. Product plans are not proof of implemented behavior.
+**Workshop:** 29 October 2026. **Status: OWNER APPROVED — PAGE 11 MAIN PRESENTER / CONFIGURE STRUCTURAL HIERARCHY.** The owner answered **“yes”** to one Live service command desk with configuration, device connections, permissions and administration kept in their own authorized workspaces. Pixel styling, precise control placement, execution permissions beyond earlier grants, live host integration, native recording engine and device evidence remain separately unverified. Page 10 Viewer structure is owner-approved in [44 §9](44-viewer-operator-page-10-layout-proposal.md#9-owner-decision-29-october-2026). Page 11 completes the established page-by-page role sequence in [34](34-browser-operators-connected-development.md). Owner-directed full feature build is active, zero new PRs remain, website publishing gated. Product plans are not proof of implemented behavior.
 
 ## 1. What this page really is
 
@@ -124,12 +124,19 @@ Acceptance:
 8. Performance under simultaneous camera+NDI/TV+Rhema Record+OBS remains within measured device constraints, with Live stability prioritized.
 9. Mobile, tablet, desktop, offline LAN, receiver loss, malformed permission grants and stale revisions have truthful actionable UI and host-denied unsafe commands.
 
-## 7. Open owner design decisions (NOT APPROVED)
+## 7. Page 11 approved hierarchy and remaining open details
 
-1. **Main visual composition:** Live workspace with **Now/Next + Running Order/crew readiness**, **side-by-side Private Preview and actual Current Program for a named output**, contextual controls and one named Take, compact Approval Requests/Comms, and a separate first-party native Recording dock. **Recommended.**
-2. **Configure separation:** use separate existing sidebar `Connections`, `Permissions`, `Settings`, `Design` and `Library` rather than making a permanent all-powerful Configure mode in the middle of Live. **Recommended.**
-3. **Operator focus:** Single named congregation output default; explicitly host-approved group output review; obvious OBS/Stage independence. **Recommended**, consistent with earlier Screen approvals.
+1. **OWNER APPROVED — Main visual composition:** Live workspace with **Now/Next + Running Order/crew readiness**, **side-by-side Private Preview and actual Current Program for a named output**, contextual controls and one named Take, compact Approval Requests/Comms, and a separate first-party native Recording dock. **Recommended.**
+2. **OWNER APPROVED — Configure separation:** use separate existing sidebar `Connections`, `Permissions`, `Settings`, `Design` and `Library` rather than making a permanent all-powerful Configure mode in the middle of Live. **Recommended.**
+3. **OWNER APPROVED — Operator focus:** Single named congregation output default; explicitly host-approved group output review; obvious OBS/Stage independence. **Recommended**, consistent with earlier Screen approvals.
 4. **Director/crew readiness:** compact always-discoverable status and one request strip, expandable into current Rhema Comms/Permissions, not a giant dashboard.
 5. **Recovery:** main host `Reclaim Control` in connected operator context and accurate output/record health; don't add one-tap global Panic without separately approved behavior.
 
-**Page 11 is a design proposal pending the owner's review.** It preserves the authority and architecture already approved in earlier pages without silently granting Main Presenter unlimited configuration or recording rights.
+**Owner approved Page 11's structural hierarchy.** The layout, host scope and service-first context are ratified; fine styling, reviewer badge placement, recovery details, exact command grants and runtime QA remain open. Approval does not grant Presenter unlimited configuration, group Take, OBS or independent recorder control.
+
+
+## 8. Owner sign-off — Page 11 (29 October 2026)
+
+The owner expressly replied **“yes”** to the Page 11 hierarchy: **one main Live command desk for service operation**, with running order/clock, crew readiness, named output selection, private Preview vs actual per-output Program, contextual specialist controls and one explicit output-scoped Take; compact Comms and Approval Requests; independent first-party Rhema native recording dock/status. **Configure/host administrative capabilities belong in separate existing Connections, Permissions, Settings, Design and Library workspaces under their own authorization**, not a second all-powerful Presenter clone.
+
+**Approval is structural, not blanket privilege:** Presenter does not automatically gain Configure, host permission approvals, recording Start/Stop, OBS streaming, library master saves or unscoped group Takes. Follow backend Rust host authorization, explicit role/output grant, revision integrity, rehearsal isolation, stale command prevention and truthful receiver acknowledgment. Preserve host reclaim and Live stability. Exact visual styling and functionality are accepted only with runtime/hardware evidence.
