@@ -1472,6 +1472,7 @@ fn live_reader<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers: &
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         }),
         Ok(None) => Err(StatusCode::FORBIDDEN),
         Err(_) => Err(StatusCode::UNAUTHORIZED),
@@ -2167,7 +2168,11 @@ async fn command_handler<S: CommandSink + 'static>(
                 ),
             );
         }
-        // An open remote (no keys) may do everything, as before, except group Take needs an identified grant.
+        // Rhema's own recorder needs a desk the host granted it (doc 42): never an open remote.
+        None if matches!(&request.command, RemoteCommand::Record(_)) => {
+            return (StatusCode::FORBIDDEN, CommandResponse::refused("Recording needs a paired desk the main desk granted the recorder"));
+        }
+        // An open remote (no keys) may do everything, as before, except group Take and the recorder need an identified grant.
         None => (
             "an open remote".to_string(),
             None,
@@ -2457,6 +2462,10 @@ impl CommandSink for WithWhy<'_> {
 /// Why a desk's role does not allow a command, in words for the person at that desk.
 fn refusal_for(role: crate::keys::Role, cmd: &RemoteCommand) -> &'static str {
     use crate::keys::Role;
+    // Rhema's own recorder is a separate grant, whatever the role (doc 42).
+    if matches!(cmd, RemoteCommand::Record(_)) {
+        return "Rhema's recorder needs a separate grant from the main desk (Permissions); no role includes it";
+    }
     match role {
         Role::Timekeeper => "this device keeps time: it may move the event clock, not the screens",
         Role::Bible => "this device runs the Bible: it may activate, step and clear the Bible only",
@@ -2745,6 +2754,7 @@ mod tests {
                 paused: false,
                 output_scope: Vec::new(),
                 group_take_scope: Vec::new(),
+                record: false,
             }],
         }));
         let live = new_live_hub();
@@ -2789,6 +2799,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         }
     }
 
@@ -2835,6 +2846,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         assert_eq!(ids(&notices_for(NOTICES, Some(&mimic))), ["all"]);
         let named_like_ade = KeyEntry {
@@ -2844,6 +2856,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         assert_eq!(
             ids(&notices_for(NOTICES, Some(&named_like_ade))),
@@ -2858,6 +2871,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         assert_eq!(ids(&notices_for(NOTICES, Some(&empty))), ["all"]);
     }
@@ -2872,6 +2886,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         assert_eq!(
             ids(&notices_for(NOTICES, Some(&renamed))),
@@ -2892,6 +2907,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
             require_auth: true,
@@ -3059,6 +3075,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         });
         keys.write().unwrap().entries.push(crate::keys::KeyEntry {
             hash: crate::keys::hash_key("k2"),
@@ -3067,6 +3084,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         });
         keys.write().unwrap().require_auth = true;
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, voice: voice.clone(), ..Default::default() };
@@ -3558,6 +3576,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
             require_auth: true,
@@ -3662,6 +3681,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
             require_auth: true,
@@ -3793,6 +3813,46 @@ mod tests {
         assert_eq!(sink.command_count(), 2);
         // Health stays open so a controller can find the app.
         assert!(raw_http_request(port, "GET", "/api/v1/health", None).await.contains("200 OK"));
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[tokio::test]
+    async fn only_a_desk_granted_the_recorder_may_record_and_never_in_open_mode() {
+        use crate::keys::{KeyEntry, Keys, Role};
+        let sink = Arc::new(MockSink::new());
+        let entry = |token: &str, name: &str, role: Role, record: bool| KeyEntry { hash: hash_key(token), name: name.into(), role, paused: false, output_scope: Vec::new(), group_take_scope: Vec::new(), record };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
+            require_auth: true,
+            entries: vec![entry("rec", "Media desk", Role::Viewer, true), entry("obs", "OBS desk", Role::Obs, false), entry("cfg", "Admin", Role::Configure, false)],
+        }));
+        let live = new_live_hub();
+        live.publish(r#"{"v":1,"program":{"onAir":true,"rehearsal":false}}"#.into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), live, ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let send = |key: &'static str| async move { raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"record","value":{"action":"start"}}"#), key).await };
+        // OBS director and Configure have no recorder authority without the grant.
+        for key in ["X-Rhema-Key: obs\r\n", "X-Rhema-Key: cfg\r\n"] {
+            let refused = send(key).await;
+            assert!(refused.contains("403") && refused.contains("needs a separate grant"), "{refused}");
+        }
+        assert_eq!(sink.command_count(), 0);
+        // The granted desk (a Viewer otherwise) reaches the host's recorder.
+        let granted = send("X-Rhema-Key: rec\r\n").await;
+        assert!(granted.contains("200 OK"), "{granted}");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(sink.commands.lock().unwrap().as_slice(), ["recorder"]);
+        // Open mode (no keys at all) gives nobody the recorder.
+        {
+            let mut k = keys.write().unwrap();
+            k.require_auth = false;
+            k.entries.clear();
+        }
+        let open = send("").await;
+        assert!(open.contains("403"), "{open}");
+        assert_eq!(sink.command_count(), 1);
         let mut handle = result.handle;
         handle.stop();
     }
@@ -4467,6 +4527,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
             require_auth: true,
@@ -4573,6 +4634,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         Arc::new(std::sync::RwLock::new(Keys {
             require_auth: true,
@@ -4620,6 +4682,7 @@ mod tests {
             paused: false,
             output_scope: vec!["sanctuary".into(), "stage".into()],
             group_take_scope: Vec::new(),
+            record: false,
         };
         let json = r#"{"v":1,"outputs":[{"id":"sanctuary","name":"Sanctuary"},{"id":"overflow","name":"Overflow"},{"id":"stage","name":"Stage","role":"stage"},{"id":"lobby","name":"Lobby","role":"signage"}],"outputMap":[{"id":"sanctuary","name":"Sanctuary","role":"congregation"},{"id":"overflow","name":"Overflow","role":"congregation"},{"id":"stage","name":"Stage","role":"stage"},{"id":"lobby","name":"Lobby","role":"signage"}]}"#;
         let live: serde_json::Value = serde_json::from_str(&live_for(json, Some(&entry))).unwrap();
@@ -4652,6 +4715,7 @@ mod tests {
             paused: false,
             output_scope: vec!["sanctuary".into(), "overflow".into()],
             group_take_scope: vec!["sanctuary".into(), "overflow".into()],
+            record: false,
         };
         let allowed: serde_json::Value =
             serde_json::from_str(&live_for(json, Some(&screens))).unwrap();
@@ -4773,6 +4837,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
             require_auth: true,
@@ -4857,6 +4922,7 @@ mod tests {
                     paused: false,
                     output_scope: vec!["sanctuary".into(), "stage".into(), "lobby".into()],
                     group_take_scope: Vec::new(),
+                    record: false,
                 },
                 KeyEntry {
                     hash: hash_key("legacy"),
@@ -4865,6 +4931,7 @@ mod tests {
                     paused: false,
                     output_scope: Vec::new(),
                     group_take_scope: Vec::new(),
+                    record: false,
                 },
             ],
         }));
@@ -4916,6 +4983,7 @@ mod tests {
                         "sanctuary".into(),
                         "stage".into(),
                     ],
+                    record: false,
                 },
                 KeyEntry {
                     hash: hash_key("individual-only"),
@@ -4924,6 +4992,7 @@ mod tests {
                     paused: false,
                     output_scope: vec!["overflow".into(), "sanctuary".into()],
                     group_take_scope: Vec::new(),
+                    record: false,
                 },
             ],
         }));
@@ -5184,6 +5253,7 @@ mod tests {
                 paused: false,
                 output_scope: vec!["overflow".into(), "sanctuary".into()],
                 group_take_scope: vec!["overflow".into(), "sanctuary".into()],
+                record: false,
             }],
         }));
         let live = new_live_hub();

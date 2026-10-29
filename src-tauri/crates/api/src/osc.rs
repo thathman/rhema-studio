@@ -359,6 +359,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         });
     }
 
@@ -489,6 +490,7 @@ mod tests {
             paused: false,
             output_scope: vec!["sanctuary".into(), "stage".into()],
             group_take_scope: Vec::new(),
+            record: false,
         });
         keys.write().unwrap().require_auth = true;
         let live = new_live_hub();

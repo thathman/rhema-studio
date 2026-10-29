@@ -151,6 +151,7 @@ pub fn remote_set_keys(
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         });
     }
     let n = entries.len();
@@ -161,6 +162,16 @@ pub fn remote_set_keys(
         k.entries = entries;
     }
     let current = remote.keys.read().map_err(|e| e.to_string())?.entries.clone();
+    // The recorder grant is its own authority (doc 42): every change to it is logged.
+    for now in &current {
+        let before = previous.iter().find(|p| p.hash == now.hash).is_some_and(|p| p.record);
+        if now.record != before {
+            log::info!("Recorder {} for remote device '{}'", if now.record { "granted" } else { "taken back" }, now.name);
+        }
+    }
+    for gone in previous.iter().filter(|p| p.record && !current.iter().any(|c| c.hash == p.hash)) {
+        log::info!("Recorder taken back: remote device '{}' removed", gone.name);
+    }
     for change in remote_access_changes(&previous, &current) {
         match change {
             RemoteAccessChange::RoleChanged { from, to } => log::info!(
@@ -274,6 +285,8 @@ impl CommandSink for TauriSink {
 
     fn invoke_backend(&self, action: &str, args: &str) -> Result<(), CommandError> {
         match action {
+            // Rhema's own recorder, for a desk the host granted it (checked by the control server).
+            "recorder" => super::recorder::remote(&self.app, args).map_err(|p| CommandError::DispatchFailed(p.message)),
             "show_broadcast" => {
                 log::info!("Remote control: show broadcast");
                 self.app
@@ -1240,6 +1253,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         });
         let status = remote_auth_status(&keys).unwrap();
         assert!(status.required);
@@ -1255,6 +1269,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         let previous = [
             entry('a', "Private phone label", Role::Configure),
@@ -1290,6 +1305,7 @@ mod tests {
             paused: false,
             output_scope: vec!["sanctuary".into(), "sanctuary".into()],
             group_take_scope: vec!["sanctuary".into(), "overflow".into(), "overflow".into()],
+            record: false,
         };
         let prior = normalize_key_entries(vec![device.clone()]);
         assert_eq!(prior[0].output_scope, ["sanctuary"]);

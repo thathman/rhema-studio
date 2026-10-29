@@ -82,6 +82,9 @@ pub struct Recorder {
     session: Mutex<Option<Session>>,
     /// What the last session ended as, until the next one starts.
     last: Mutex<RecorderStatus>,
+    /// The main desk's last recording setup: what a granted remote desk's "start" reuses (it never
+    /// chooses the screen or the sound input itself).
+    last_request: Mutex<Option<RecorderStartRequest>>,
 }
 
 impl Recorder {
@@ -95,7 +98,7 @@ impl Recorder {
                 log::warn!("recorder: {} interrupted recording(s) marked recoverable: {marked:?}", marked.len());
             }
         }
-        Self { folder, session: Mutex::new(None), last: Mutex::new(RecorderStatus::idle()) }
+        Self { folder, session: Mutex::new(None), last: Mutex::new(RecorderStatus::idle()), last_request: Mutex::new(None) }
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Option<Session>> {
@@ -105,6 +108,12 @@ impl Recorder {
     #[must_use]
     pub fn folder(&self) -> &Path {
         &self.folder
+    }
+
+    /// The setup of the last recording that started.
+    #[must_use]
+    pub fn last_request(&self) -> Option<RecorderStartRequest> {
+        self.last_request.lock().unwrap_or_else(PoisonError::into_inner).clone()
     }
 
     /// The output the running session is pinned to.
@@ -241,6 +250,7 @@ impl Recorder {
         let session = Session { dir, manifest: m, width, height, fps, t0, tx, shared, writer, frame: Vec::new(), audio };
         let status = status_of(&session, &self.folder);
         *self.lock() = Some(session);
+        *self.last_request.lock().unwrap_or_else(PoisonError::into_inner) = Some(req.clone());
         Ok(status)
     }
 

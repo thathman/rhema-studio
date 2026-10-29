@@ -122,6 +122,8 @@ impl Role {
             // An extra timer (#196 R2.5): the timekeeping desks, or the role the timer belongs to; the
             // server checks the owner against the host's Live State (crate::aux_timers).
             RemoteCommand::AuxTimer(_) => self != Role::ObsCompanion,
+            // Rhema's own recorder: no role grants it (see `KeyEntry::record`).
+            RemoteCommand::Record(_) => false,
             _ if !matches!(self, Role::Present | Role::Configure) => false,
             RemoteCommand::Theme(_) | RemoteCommand::Opacity(_) | RemoteCommand::Confidence(_) | RemoteCommand::OnAir(_) => self == Role::Configure,
             RemoteCommand::Next
@@ -157,6 +159,11 @@ pub struct KeyEntry {
     /// Missing or empty stays denied for older saved keys.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub group_take_scope: Vec<String>,
+    /// The host granted this desk Rhema's own recorder (start, stop, markers). Separate from every
+    /// role (doc 42): an OBS director, a Screens or a Present desk has no recorder authority without
+    /// it. Absent (entries saved before this) = not granted.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub record: bool,
 }
 
 /// What a paused desk is told when it sends a command.
@@ -166,6 +173,10 @@ impl KeyEntry {
     /// Role permission plus resource scope. A Screens role alone never grants every output.
     #[must_use]
     pub fn allows(&self, cmd: &RemoteCommand) -> bool {
+        // The recorder is a grant of its own, never part of a role.
+        if matches!(cmd, RemoteCommand::Record(_)) {
+            return self.record;
+        }
         if !self.role.allows(cmd) {
             return false;
         }
@@ -265,6 +276,7 @@ pub fn key_set_from(keys: &[(&str, &str)]) -> KeySet {
                 paused: false,
                 output_scope: Vec::new(),
                 group_take_scope: Vec::new(),
+                record: false,
             })
             .collect(),
     }))
@@ -374,6 +386,7 @@ pub fn try_pair_as(window: &PairingWindow, keys: &KeySet, code: &str, name: &str
         paused: false,
         output_scope: Vec::new(),
         group_take_scope: Vec::new(),
+        record: false,
     };
     k.entries.push(entry.clone());
     k.require_auth = true;
@@ -420,6 +433,7 @@ mod tests {
             paused: false,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         let have = [e("Femi's laptop"), e("Femi's laptop 2"), e("Phone")];
         assert_eq!(unique_name("Femi's laptop", &have), "Femi's laptop 3");
@@ -489,6 +503,7 @@ mod tests {
             paused: true,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         assert!(
             paused.paused_for(&RemoteCommand::Hold(None))
@@ -544,6 +559,7 @@ mod tests {
             paused: false,
             output_scope: vec!["sanctuary".into()],
             group_take_scope: Vec::new(),
+            record: false,
         };
         assert!(scoped.allows(&take("sanctuary")));
         assert!(scoped.allows(&RemoteCommand::ReleaseScene("sanctuary".into())));
@@ -572,6 +588,7 @@ mod tests {
             paused: false,
             output_scope: vec!["sanctuary".into(), "overflow".into()],
             group_take_scope: Vec::new(),
+            record: false,
         };
         assert!(
             !key.allows(&group(&["sanctuary", "overflow"])),
@@ -769,6 +786,7 @@ mod tests {
             paused: true,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         assert!(paused.paused_for(&step), "a paused desk steps nothing");
     }
@@ -789,6 +807,7 @@ mod tests {
             paused: true,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         assert!(paused.paused_for(&q), "a paused desk queues nothing");
     }
@@ -837,6 +856,7 @@ mod tests {
             paused: true,
             output_scope: Vec::new(),
             group_take_scope: Vec::new(),
+            record: false,
         };
         for cmd in [
             RemoteCommand::Next,
@@ -889,5 +909,25 @@ mod tests {
         assert_eq!(try_pair(&window, &keys, &code, "x"), PairOutcome::NotOpen);
         assert_eq!(keys.read().unwrap().entries.len(), 1);
         assert!(keys.read().unwrap().require_auth);
+    }
+
+    #[test]
+    fn the_recorder_is_a_grant_of_its_own_never_part_of_a_role() {
+        use crate::command::{ObsRecordIn, RecordAction};
+        let record = |action| RemoteCommand::Record(ObsRecordIn { action, label: None });
+        for role in [Role::Present, Role::Configure, Role::Timekeeper, Role::Bible, Role::Screens, Role::Worship, Role::Stage, Role::Camera, Role::Obs, Role::ObsCompanion, Role::Editor, Role::Viewer] {
+            let mut desk = KeyEntry { hash: "h".into(), name: "d".into(), role, paused: false, output_scope: vec!["main".into()], group_take_scope: Vec::new(), record: false };
+            for action in [RecordAction::Start, RecordAction::Stop, RecordAction::Marker] {
+                assert!(!role.allows(&record(action)), "{role:?} alone");
+                assert!(!desk.allows(&record(action)), "{role:?} without the grant");
+            }
+            desk.record = true;
+            assert!(desk.allows(&record(RecordAction::Start)), "{role:?} with the grant");
+            // The grant gives the recorder only, nothing else.
+            assert_eq!(desk.allows(&RemoteCommand::Theme("Dark".into())), role.allows(&RemoteCommand::Theme("Dark".into())));
+        }
+        // Saved entries without the field are not granted.
+        let old: KeyEntry = serde_json::from_str(r#"{"hash":"h","name":"Old desk","role":"obs"}"#).unwrap();
+        assert!(!old.record && !old.allows(&record(RecordAction::Stop)));
     }
 }
