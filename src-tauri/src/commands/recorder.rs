@@ -12,6 +12,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 use super::broadcast::window_label;
+use super::content::ContentState;
 
 /// Set once the app data folder is known (`<app data>/recordings`).
 pub struct RecorderHost(pub OnceLock<Recorder>);
@@ -99,6 +100,7 @@ pub fn recorder_stop(app: AppHandle, window: WebviewWindow) -> Res<RecorderStatu
 /// Main desk and granted desks alike: only a current congregation output is recorded (the host's Live
 /// state decides, not the caller).
 fn start_session(app: &AppHandle, request: RecorderStartRequest) -> Res<RecorderStatus> {
+    let request = in_run(request, current_run(app));
     let host = app.state::<RecorderHost>();
     let ndi = app.state::<Mutex<NdiRuntime>>();
     let live_state = super::remote::current_live_state(app);
@@ -146,6 +148,8 @@ pub fn remote(app: &AppHandle, args: &str) -> Res<()> {
             let request = recorder(&host)?.last_request().ok_or_else(|| {
                 RecorderProblem::new(ProblemCode::NotRecording, "Start the first recording at the main desk: a desk reuses its screen and sound choices.")
             })?;
+            // The last setup's service may be last week's: this recording files under the service running now.
+            let request = RecorderStartRequest { service_run_id: None, program_id: None, ..request };
             log::info!("recorder: start asked by {by}");
             start_session(app, request).map(drop)
         }
@@ -156,15 +160,16 @@ pub fn remote(app: &AppHandle, args: &str) -> Res<()> {
         Some("marker") => {
             let host = app.state::<RecorderHost>();
             let label = v.get("label").and_then(serde_json::Value::as_str).filter(|l| !l.is_empty()).unwrap_or("Marker");
-            recorder(&host)?.marker(label, by, None, None).map(drop)
+            recorder(&host)?.marker(label, by, current_run(app).map(|r| r.0), None).map(drop)
         }
         _ => Err(RecorderProblem::new(ProblemCode::NotAllowed, "unknown recorder action")),
     }
 }
 
 #[tauri::command]
-pub fn recorder_marker(window: WebviewWindow, host: State<'_, RecorderHost>, label: String, service_run_id: Option<String>, item_id: Option<String>) -> Res<RecorderMarker> {
+pub fn recorder_marker(app: AppHandle, window: WebviewWindow, host: State<'_, RecorderHost>, label: String, service_run_id: Option<String>, item_id: Option<String>) -> Res<RecorderMarker> {
     main_desk_only(&window)?;
+    let service_run_id = service_run_id.or_else(|| current_run(&app).map(|r| r.0));
     recorder(&host)?.marker(&label, "main desk", service_run_id, item_id)
 }
 
@@ -194,6 +199,23 @@ fn spawn_status_beat(app: AppHandle, session_id: Option<String>) {
     });
 }
 
+/// The service running now (with its plan), so recordings and markers file under it in History.
+/// `None` when no service is running or the services store is unavailable.
+fn current_run(app: &AppHandle) -> Option<(String, Option<String>)> {
+    let state = app.state::<ContentState>();
+    let guard = state.0.lock().ok()?;
+    let run = guard.as_ref()?.current_service_run(12).ok()??;
+    Some((run.run_id, run.program_id))
+}
+
+/// A run the caller named wins; otherwise the recording joins the service running now.
+fn in_run(request: RecorderStartRequest, now: Option<(String, Option<String>)>) -> RecorderStartRequest {
+    match (request.service_run_id.is_some(), now) {
+        (false, Some((run, program))) => RecorderStartRequest { service_run_id: Some(run), program_id: request.program_id.clone().or(program), ..request },
+        _ => request,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -211,6 +233,16 @@ mod tests {
             program_id: None,
             rehearsal: false,
         }
+    }
+
+    #[test]
+    fn a_recording_files_under_the_service_running_now_unless_the_caller_named_one() {
+        let now = Some(("run-today".to_string(), Some("plan-today".to_string())));
+        let joined = in_run(request("sanctuary", "congregation"), now.clone());
+        assert_eq!((joined.service_run_id.as_deref(), joined.program_id.as_deref()), (Some("run-today"), Some("plan-today")));
+        let named = in_run(RecorderStartRequest { service_run_id: Some("run-x".into()), ..request("sanctuary", "congregation") }, now);
+        assert_eq!((named.service_run_id.as_deref(), named.program_id), (Some("run-x"), None));
+        assert_eq!(in_run(request("sanctuary", "congregation"), None).service_run_id, None);
     }
 
     #[test]

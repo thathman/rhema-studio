@@ -104,7 +104,7 @@ The frame readback (`getImageData`) is the dominant cost: ~70 ms per 1080p frame
 - One session, one congregation output, one stereo mixer input. No ISO cameras, multi-output, stems, pause, record-only scenes.
 - Media sound played by a video item is **not** captured separately; churches record the mixer, which carries the room/PA mix (doc 42 §1 audio policy: no silent guess, no double capture).
 - macOS backend only; other platforms report `unsupported_platform` at preflight.
-- History linkage is by `serviceRunId` in the manifest; a database index (additive migration) follows once Codex's History UI needs queries.
+- History linkage is by `serviceRunId` in the manifest. **Host-filled:** a start or marker that names no `serviceRunId` joins the service running now (the newest `active` service run checkpointed in the last 12 hours, with its `programId`); a desk's remote start never reuses the main desk's previous run. A named run always wins. A database index (additive migration) follows once Codex's History UI needs queries.
 
 ## 8. Licensing
 
