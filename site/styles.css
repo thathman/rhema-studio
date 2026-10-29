@@ -105,11 +105,12 @@ h1 span { color: var(--green); }
   .nav-wrap { min-height: 68px; }
   .brand { font-size: 16px; }
   .brand img { width: 34px; height: 34px; }
-  .menu-toggle { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 11px; border: 1px solid #c9d3cd; border-radius: 8px; background: transparent; font-size: 13px; font-weight: 650; }
+  html.js-enabled .menu-toggle { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 11px; border: 1px solid #c9d3cd; border-radius: 8px; background: transparent; font-size: 13px; font-weight: 650; }
   .menu-icon { width: 15px; height: 11px; position: relative; border-block: 2px solid currentColor; }
   .menu-icon::after { position: absolute; inset: 3px 0 auto; height: 2px; background: currentColor; content: ""; }
-  .nav-links { position: absolute; top: calc(100% + 1px); right: 0; left: 0; display: none; align-items: stretch; gap: 2px; padding: 12px 16px 18px; border-bottom: 1px solid var(--line); background: var(--paper); box-shadow: 0 16px 30px rgb(26 45 36 / 10%); }
-  .nav-links.open { display: flex; flex-direction: column; }
+  .nav-links { position: absolute; top: calc(100% + 1px); right: 0; left: 0; display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 12px 16px 18px; border-bottom: 1px solid var(--line); background: var(--paper); box-shadow: 0 16px 30px rgb(26 45 36 / 10%); }
+  html.js-enabled .nav-links { display: none; }
+  html.js-enabled .nav-links.open { display: flex; }
   .nav-links a { padding: 11px 9px; }
   .nav-links .nav-github { margin-top: 6px; text-align: center; }
   .hero { gap: 34px; padding-block: 54px 74px; }

@@ -75,4 +75,6 @@ if (navigationButton && docsNavigation) {
     navigationButton.setAttribute("aria-expanded", String(open));
     docsNavigation.classList.toggle("open", open);
   });
+
+  document.documentElement.classList.add("js-enabled");
 }

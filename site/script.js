@@ -2,6 +2,8 @@ const menuButton = document.querySelector(".menu-toggle");
 const mainNavigation = document.getElementById("primary-nav");
 
 if (menuButton && mainNavigation) {
+  document.documentElement.classList.add("js-enabled");
+
   const setMenuOpen = (open) => {
     menuButton.setAttribute("aria-expanded", String(open));
     mainNavigation.classList.toggle("open", open);

@@ -26,7 +26,7 @@ python3 -m http.server 8080
 
 The existing GitHub Pages workflow remains unchanged: it validates the home page and selected relative assets, then publishes `site/` to the same repository Pages destination on its existing main-branch path. It does not publish this preview branch.
 
-**Screenshot provenance:** The six application screenshots on the site are byte-for-byte copies of captures already in the repository. They show the frontend running in browser-shim development mode with synthetic example data. They are not native-app, connected-host, output, or physical-device acceptance evidence. The excluded operator/camera captures contained pairing credentials or private network details. Do not add those captures publicly.
+**Screenshot provenance:** The six application screenshots on the site are byte-for-byte copies of captures already in the repository, dated October 25, 2026. They show the frontend running in browser-shim development mode with synthetic example data and predate the current Home, Prepare, Live, Library, Design, and History navigation. They are not native-app, connected-host, output, or physical-device acceptance evidence. The excluded operator/camera captures contained pairing credentials or private network details. Do not add those captures publicly.
 
 **Important content policy:** Keep implemented code, approved product direction, and device acceptance distinct. Do not claim every operator workspace, Rhema-native recording, connected device, or release is shipped without evidence. The wiki labels known implementation limits and links to the current feature-coverage inventory and approved contracts. Recheck those sources when updating status.
 
