@@ -1,6 +1,6 @@
 # 40 — Page 7 Camera Operator: Live Camera Grid, Readiness and Handoffs
 
-**Workshop date:** 29 October 2026. **State:** **PAGE 7 VISUAL AND WORKFLOW PROPOSAL — AWAITING OWNER REVIEW**. The owner approved Page 6's structural Stage layout and asked to proceed. This Page 7 concept preserves the existing Camera role and connected app contracts; it does not ratify new Camera permissions or claim implementation. Product-wide feature development is **active** under [owner resume order](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md), **zero new PRs** remains in force, and the two owner-gated website publishing PRs remain held.
+**Workshop date:** 29 October 2026. **State:** **OWNER APPROVED — PAGE 7 OVERALL CAMERA-GRID HIERARCHY; detailed camera permissions, pixels and runtime acceptance still open.** The owner answered **“yes”** to a camera-grid-first Camera Operator workspace, larger selected-camera preview, separate source health versus OBS/congregation output tally, Ready/Unable controls and compact Director requests beneath. This approval covers information architecture and interaction direction, **not** permission expansion, host implementation or device verification. Product-wide feature development is **active** under [owner resume order](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md), **zero new PRs** remains in force, and website publishing remains gated.
 
 Read [34 — Browser operator roles](34-browser-operators-connected-development.md), [32 — Feature inventory](32-feature-coverage-inventory.md), [28 — Unified workspaces](28-unified-workspace-contract.md), [37 — Permissions](37-permissions-sidebar-and-authority-design.md), [39 — Stage UI](39-stage-operator-page-6-layout-proposal.md). For feature code, audit actual host/backend and native UI before adding duplicates.
 
@@ -118,12 +118,24 @@ From **Connections**, an authorized host sets up camera identity, church LAN acc
 6. Reconnect, host restart and WAN-off maintain correct state; Stage/private cues and public outputs do not leak into camera preview/Comms.
 7. Desktop 1440, tablet 768, phone ~390 render readable camera grid and avoid unbounded N×high-resolution live video decoding.
 
+## 7A. OWNER APPROVED — Camera-grid-first structural hierarchy (29 October 2026)
+
+**Explicit owner response: “yes”** to the proposed Page 7 Camera Operator screen composition:
+
+1. **Camera grid is the default page, not a separate camera library.** Show assigned camera tiles with real media previews when available, exact source identity, `Sending / Frozen / Waiting / Hidden / Disconnected` state and any truly measured health. Selecting a tile only changes the operator's focus, **never takes a scene Live**.
+2. **Selected camera gets a larger, private viewer** and contextual framing/health area; on phones use a single actively decoded stream where necessary to avoid overloading the device. Do not fabricate thumbnails or PTZ capability.
+3. **Keep output/tally information separate from camera availability.** Show OBS Program, OBS Preview and each authorized physical screen independently; distinguish `camera signal healthy`, `human marked Ready` and `actually visible on an output`. No false combined “Live” badge.
+4. Provide clear **Ready / Unable** controls for a permitted framing request, and show retry/backup/freeze/source-visibility actions only when genuinely available and explicitly authorized. Existing `Hide from scenes` may affect many scenes; an **impact review** is required before a potentially broad change.
+5. Keep **Director Requests in a compact, private, event-linked strip below** selected-camera controls; `Frame camera` → Acknowledge → Ready/Unable, with real host acknowledgment. Marking Ready does not alter OBS or congregation outputs.
+
+**Structural signoff only:** exact grid breakpoint, number of thumbnails decoded concurrently, card borders, tally visual language, initial selection rule, source-control entitlement details, PTZ models and physical media QA are **not approved by this answer**. Backend Camera role policy, host session/output ACL, rehearsal isolation and device telemetry must be implemented and verified before claims of completion. Page 8 OBS Director is separate and has its own permissions and actual online Program/Preview.
+
 ## 8. Open design decisions for owner review (NOT approved)
 
-1. **Main Page 7 hierarchy:** camera grid (2–4 tiles across, responsive) → selected larger actual preview + health → "where used" tally → framing Ready/Unable & authorized recovery → compact Director Requests. Recommended **yes**.
+1. **RESOLVED / OWNER APPROVED:** Camera grid → selected larger actual preview/health → separate output tally → Ready/Unable + authorized recovery → compact Director Requests. See §7A; only exact layout pixels and other choices below remain open.
 2. **Initial camera selection:** default `Needs Attention` when there is a failing camera, otherwise a selected authorized camera with a factual `On Air` indicator; preserve previous operator selection until explicit change; never auto-cut/auto-Take based on a selection.
 3. **Preview density:** decode high-quality video only for selected camera; lightweight/stale-labeled thumbnails for others on phone/low-resource devices. On desktop adapt to physical capacity.
 4. **Camera control authority:** preserve existing role actions but require explicit impact review for global source Hide/Show; advanced remote PTZ, backup/freeze/unfreeze only when the host truly supports and delegates them.
 5. **Request handling:** use private event-linked Director `Frame [camera]` request plus `Acknowledge / Ready / Unable`, not a new generic chat workflow. Keep Comms linked to the same source and cue.
 
-**Owner approval not yet requested for each detailed item.** This is one page layout proposal, pending acceptance before marking the visual design final; Codex may continue already-approved Camera and connected app implementation in parallel.
+**Owner approved the broad Page 7 camera-grid-first hierarchy (§7A).** Other detailed choices remain for separate approval; visual pixels, permissions and physical media proof are not yet signed off. Codex should implement the structurally approved direction using existing camera modules without creating duplicate registries or unauthorized Live controls.
