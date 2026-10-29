@@ -13,7 +13,7 @@ import {
   type SaraswatiRectNode,
   type SaraswatiScene,
 } from "../vendor/avnac/saraswati"
-import type { Scene, SceneLayer } from "../types/scene"
+import type { DesignPin, Scene, SceneLayer } from "../types/scene"
 
 /** The editing frame: a 1920×1080 artboard; layer boxes are kept in % of it, as Rhema keeps them. */
 export const DESIGN_WIDTH = 1920
@@ -189,6 +189,22 @@ export function designToScene(design: RhemaDesign): { scene: Scene; issues: Desi
   const bg = design.scene.artboard.bg
   const background = bg.type === "solid" ? (bg.color === "rgba(0,0,0,0)" ? "transparent" : bg.color) : "#000000"
   return { scene: { ...design.meta, background, layers }, issues }
+}
+
+/**
+ * A scene made from one version of a design, pinned to it (docs/contracts/design-documents-v1.md,
+ * Pinning). Saving it is the ordinary scene save and approval path: never a Take.
+ */
+export function sceneFromVersion(v: { designId: string; version: number; document: RhemaDesign }): { scene: Scene; issues: DesignIssue[] } {
+  const { scene, issues } = designToScene(v.document)
+  return { scene: { ...scene, design: { id: v.designId, version: v.version } }, issues }
+}
+
+/** A pinned scene and the design's newest version: `update` is the version to offer ("Update to v N"),
+ * which the operator chooses; nothing moves a pin by itself. `null` for a scene not made from a design. */
+export function pinStatus(scene: Scene, latestVersion: number | null): { pin: DesignPin; update: number | null } | null {
+  if (!scene.design) return null
+  return { pin: scene.design, update: latestVersion !== null && latestVersion > scene.design.version ? latestVersion : null }
 }
 
 /** What a live layer would show now, from the host's Live State (the parts a preview needs). */

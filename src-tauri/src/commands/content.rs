@@ -381,6 +381,11 @@ pub fn design_duplicate(state: State<'_, ContentState>, id: String, version: Opt
 }
 
 #[tauri::command]
+pub fn design_used_on(state: State<'_, ContentState>, id: String) -> CmdResult<Vec<rhema_content::DesignUse>> {
+    with_db(&state, |db| db.design_used_on(&id))
+}
+
+#[tauri::command]
 pub fn design_delete(state: State<'_, ContentState>, id: String, expected_revision: i64) -> CmdResult<()> {
     with_db(&state, |db| db.delete_design(&id, expected_revision))
 }

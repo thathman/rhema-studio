@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { applyCommand, buildRenderCommands, SARASWATI_ROOT_ID, type SaraswatiGroupNode, type SaraswatiRectNode } from "../vendor/avnac/saraswati"
 import type { Scene, SceneLayer } from "../types/scene"
-import { designToScene, previewDesign, sceneToDesign } from "./rhema-scene"
+import { designToScene, pinStatus, previewDesign, sceneFromVersion, sceneToDesign } from "./rhema-scene"
 
 const layer = (id: string, kind: SceneLayer["kind"], extra: Partial<SceneLayer> = {}): SceneLayer => ({
   id, name: id, kind, box: { x: 10, y: 20, w: 30, h: 40 }, opacity: 1, visible: true, ...extra,
@@ -138,6 +138,30 @@ describe("a design whose node tree is broken", () => {
     expect(issues.map((i) => i.nodeId)).toEqual(["ghost", SARASWATI_ROOT_ID])
     const childless = { ...design.scene, nodes: { ...design.scene.nodes, [SARASWATI_ROOT_ID]: { ...root, children: undefined as unknown as string[] } } }
     expect(designToScene({ ...design, scene: childless }).issues).toEqual([{ nodeId: SARASWATI_ROOT_ID, message: expect.stringContaining("no list") }])
+  })
+})
+
+describe("a scene made from a design version", () => {
+  it("is pinned to that version, and a newer version is only offered, never applied", () => {
+    const v1 = { designId: "d1", version: 1, document: sceneToDesign(sermon) }
+    const { scene, issues } = sceneFromVersion(v1)
+    expect(issues).toEqual([])
+    expect(scene.design).toEqual({ id: "d1", version: 1 })
+    expect(scene.layers).toEqual(sermon.layers)
+    // The design moves on to version 2: the scene made from version 1 is unchanged and is offered v2.
+    const moved = applyCommand(v1.document.scene, { type: "MOVE_NODE", id: "cam", dx: 192, dy: 0 })
+    const v2 = { designId: "d1", version: 2, document: { ...v1.document, scene: moved } }
+    expect(scene.layers.find((l) => l.id === "cam")?.box.x).toBe(10)
+    expect(pinStatus(scene, 2)).toEqual({ pin: { id: "d1", version: 1 }, update: 2 })
+    expect(pinStatus(scene, 1)).toEqual({ pin: { id: "d1", version: 1 }, update: null })
+    expect(pinStatus(sermon, 2)).toBeNull()
+    // Choosing the update makes a new scene pinned to v2; the old one is untouched.
+    const updated = sceneFromVersion(v2).scene
+    expect(updated.design).toEqual({ id: "d1", version: 2 })
+    expect(updated.layers.find((l) => l.id === "cam")?.box.x).toBe(20)
+    // Survives the design round trip (an approved snapshot keeps the pin as JSON).
+    expect(JSON.parse(JSON.stringify(scene)).design).toEqual({ id: "d1", version: 1 })
+    expect(designToScene(sceneToDesign(scene)).scene.design).toEqual({ id: "d1", version: 1 })
   })
 })
 
