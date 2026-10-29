@@ -451,9 +451,12 @@ fn run_writer(
     // Constant frame rate: on every tick the latest picture is written (a still slide repeats).
     let period_us = 1_000_000 / i64::from(fps.max(1));
     let mut tick: i64 = 0;
+    // The encoder could not take the next tick yet (or there is no picture yet): try it again shortly.
+    let mut retry = false;
     loop {
         let due = t0 + Duration::from_micros((tick * period_us) as u64);
-        match rx.recv_timeout(due.saturating_duration_since(Instant::now())) {
+        let wait = due.saturating_duration_since(Instant::now());
+        match rx.recv_timeout(if retry { wait.max(Duration::from_millis(5)) } else { wait }) {
             Ok(Msg::Video(frame)) => {
                 shared.video_queued.fetch_sub(1, Ordering::Relaxed);
                 if failed.is_none() {
@@ -476,24 +479,24 @@ fn run_writer(
         }
         let now_us = t0.elapsed().as_micros() as i64;
         if failed.is_none() && now_us >= tick * period_us {
-            // Late (a busy computer): fill every missed tick with the latest picture, so the file's
-            // timeline never has a gap (fragmented MPEG-4 fails on one); past 2 s the oldest are skipped.
+            // Every tick is written, in order, with the latest picture: a hole in the timeline (a busy
+            // computer, a burst the encoder could not take) makes fragmented MPEG-4 fail to close
+            // (-11800/-16341). A tick written more than 2 s late counts as dropped: a stale repeat.
             let current = now_us / period_us;
-            let first = tick.max(current - i64::from(fps) * 2);
-            if first > tick {
-                shared.frames_dropped.fetch_add((first - tick) as u64, Ordering::Relaxed);
-            }
-            for t in first..=current {
-                match writer.tick(t * period_us) {
-                    Ok(true) => _ = shared.frames_written.fetch_add(1, Ordering::Relaxed),
-                    Ok(false) => {}
-                    Err(e) => {
-                        failed = Some(e);
-                        break;
-                    }
+            let written = write_due(&mut tick, current, |t| {
+                let ok = writer.tick(t * period_us)?;
+                if ok && now_us - t * period_us > 2_000_000 {
+                    shared.frames_dropped.fetch_add(1, Ordering::Relaxed);
                 }
+                Ok(ok)
+            });
+            match written {
+                Ok((n, again)) => {
+                    shared.frames_written.fetch_add(n, Ordering::Relaxed);
+                    retry = again;
+                }
+                Err(e) => failed = Some(e),
             }
-            tick = current + 1;
         }
         if let Some(e) = &failed {
             if !shared.writer_gone.swap(true, Ordering::Relaxed) {
@@ -527,6 +530,20 @@ fn run_writer(
     shared.writer_gone.store(true, Ordering::Relaxed);
     let _ = ready.send(Err("unsupported platform".into()));
     Err("unsupported platform".into())
+}
+
+/// Write ticks `*tick..=current` in order. Stops at the first one the encoder cannot take yet and
+/// leaves `*tick` on it, so it is written next time rather than left out: `(written, retry)`.
+fn write_due(tick: &mut i64, current: i64, mut write: impl FnMut(i64) -> Result<bool, String>) -> Result<(u64, bool), String> {
+    let mut n = 0;
+    while *tick <= current {
+        if !write(*tick)? {
+            return Ok((n, true));
+        }
+        n += 1;
+        *tick += 1;
+    }
+    Ok((n, false))
 }
 
 /// Puts each captured audio block on the file's timeline. Counting samples keeps audio gapless; the
@@ -663,6 +680,27 @@ mod tests {
         assert_eq!(codes(&req("stage", None, true)), vec![ProblemCode::OutputNotRecordable]);
         assert_eq!(codes(&req("congregation", None, false)), vec![ProblemCode::AudioMissing]);
         assert!(codes(&req("congregation", None, true)).is_empty());
+    }
+
+    #[test]
+    fn a_busy_encoder_never_leaves_a_hole_in_the_timeline() {
+        // The loop woke late (ticks 0..=9 due at once) and the encoder takes only some of each burst.
+        let mut written = Vec::new();
+        let mut tick = 0;
+        let mut calls = 0;
+        for current in [9, 9, 9, 12, 12].into_iter().chain(std::iter::repeat(20).take(20)) {
+            let _ = write_due(&mut tick, current, |t| {
+                calls += 1;
+                let ready = calls % 3 != 0;
+                if ready {
+                    written.push(t);
+                }
+                Ok(ready)
+            })
+            .unwrap();
+        }
+        assert_eq!(written, (0..=20).collect::<Vec<_>>());
+        assert_eq!(write_due(&mut tick, 25, |_| Err("writer failed".into())), Err("writer failed".into()));
     }
 
     #[test]
