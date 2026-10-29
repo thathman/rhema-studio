@@ -3,10 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/studio/more/song-usage-block", () => ({ SongUsageBlock: () => null }))
 vi.mock("@/studio/library/library-blocks", () => ({
-  ChurchFolderBlock: () => null,
-  DatabaseBlock: () => null,
   JournalBlock: () => null,
-  PackageBlock: () => null,
 }))
 
 import { act } from "react"
@@ -69,6 +66,11 @@ describe("Archive calendar dates", () => {
     const serviceCount = [...glance.querySelectorAll("dt")].find((node) => node.textContent === "Services this month")
     expect(serviceCount?.nextElementSibling?.textContent).toBe("1")
     expect(serviceCount?.nextElementSibling?.nextElementSibling?.textContent).toBe("2 items in all")
+    expect(host.textContent).toContain("History and records.")
+    expect(host.textContent).toContain("private and read-only")
+    expect(host.textContent).not.toContain("Backups")
+    expect(host.textContent).not.toContain("Church folder")
+    expect(host.textContent).not.toContain("One service as a file")
 
     await act(async () => useSettingsStore.getState().setSetup({ timeZone: "Asia/Tokyo" }))
     expect(glance.textContent).toContain("November at a glance")

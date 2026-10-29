@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { invoke, summary } = vi.hoisted(() => {
+const { invoke, summary, invalidBackup } = vi.hoisted(() => {
   const summary: Record<string, unknown> = { services: 24, songs: 310, newest_service: "Harvest Sunday", newest_date: "2026-10-12", last_changed: "2026-10-12T11:00:00Z", newer: false, installation: null }
+  const invalidBackup = { current: false }
   const invoke = vi.fn(async (cmd: string, ...args: unknown[]): Promise<unknown> => {
     void args
     switch (cmd) {
       case "content_inspect_backup":
+        if (invalidBackup.current) throw { message: "not a Rhema Studio database" }
         return { ...summary }
       case "content_restore":
         return { snapshot: "/data/studio.db.before-restore-1.bak", migrations: [], installation: summary.installation }
@@ -16,7 +18,7 @@ const { invoke, summary } = vi.hoisted(() => {
         return null
     }
   })
-  return { invoke, summary }
+  return { invoke, summary, invalidBackup }
 })
 vi.mock("@tauri-apps/api/core", () => ({ invoke }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
@@ -58,6 +60,7 @@ beforeEach(async () => {
   root = null
   document.body.replaceChildren()
   invoke.mockClear()
+  invalidBackup.current = false
   Object.assign(summary, { newer: false, installation: null })
   useSettingsStore.setState({ setup: defaultSetup(), brandKit: defaultBrandKit(), operatorName: "", churchFolder: "" })
   useShellStore.setState({ setupOpen: false, outputsDialogOpen: false })
@@ -120,11 +123,10 @@ describe("Bring in a previous installation (#298)", () => {
   })
 
   it("a file that is not a backup is refused with nothing changed", async () => {
-    invoke.mockImplementationOnce(async () => {
-      throw { message: "not a Rhema Studio database" }
-    })
+    invalidBackup.current = true
     await open()
     await click("Choose a backup file")
+    invalidBackup.current = false
     expect(document.querySelector('[aria-label="What this backup brings in"]')).toBeNull()
     expect(restores()).toEqual([])
   })

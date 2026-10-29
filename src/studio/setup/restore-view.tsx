@@ -9,7 +9,7 @@ import { outputOnAir } from "@/lib/output-on-air"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useShellStore } from "@/studio/shell-store"
-import { ChurchFolderBlock } from "@/studio/library/library-blocks"
+import { ChurchFolderBlock } from "@/studio/settings/data-sync-blocks"
 import { describeError, reloadAfterRestore } from "@/studio/library/content-actions"
 import type { BackupSummary } from "@/types"
 
