@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { applyCommand, buildRenderCommands, SARASWATI_ROOT_ID, type SaraswatiRectNode } from "../vendor/avnac/saraswati"
 import type { Scene, SceneLayer } from "../types/scene"
-import { designToScene, sceneToDesign } from "./rhema-scene"
+import { designToScene, previewDesign, sceneToDesign } from "./rhema-scene"
 
 const layer = (id: string, kind: SceneLayer["kind"], extra: Partial<SceneLayer> = {}): SceneLayer => ({
   id, name: id, kind, box: { x: 10, y: 20, w: 30, h: 40 }, opacity: 1, visible: true, ...extra,
@@ -66,5 +66,36 @@ describe("Rhema scenes in the Avnac engine", () => {
     const { scene, issues } = designToScene({ ...design, scene: s })
     expect(scene.layers.map((l) => l.id)).not.toContain("doodle")
     expect(issues).toEqual([{ nodeId: "doodle", message: expect.stringContaining("Doodle") }])
+  })
+})
+
+describe("live layers in the editor's preview", () => {
+  const live = (bible: string | null, ticker = "Welcome to service") => ({
+    program: { onAir: true, reference: bible },
+    sources: [
+      { id: "bible", reference: bible ?? "", on: bible !== null },
+      { id: "ticker", reference: ticker, on: true },
+      { id: "timer", reference: "running · 12:30", on: true, state: "running" },
+      { id: "camera:pulpit", reference: "pulpit", on: true, state: "sending" },
+    ],
+  })
+
+  it("show what each live layer would show now, and follow the Live State", () => {
+    const design = sceneToDesign(sermon)
+    const words = (s: ReturnType<typeof previewDesign>) =>
+      Object.fromEntries(Object.values(s.nodes).filter((n) => n.id.startsWith("preview:") && n.type === "text").map((n) => [n.id, (n as { text: string }).text]))
+    const first = words(previewDesign(design, live("John 3:16")))
+    expect(first).toMatchObject({ "preview:verse": "John 3:16", "preview:ticker": "Welcome to service", "preview:clock": "running · 12:30", "preview:cam": "pulpit · sending" })
+    expect(first["preview:logo"]).toBeUndefined()
+    expect(words(previewDesign(design, live("Romans 8:28")))["preview:verse"]).toBe("Romans 8:28")
+    expect(words(previewDesign(design, live(null)))["preview:verse"]).toBe("Nothing on air")
+  })
+
+  it("never change the design itself: the saved scene keeps the subscription, not the words", () => {
+    const design = sceneToDesign(sermon)
+    const before = JSON.stringify(design)
+    previewDesign(design, live("John 3:16"))
+    expect(JSON.stringify(design)).toBe(before)
+    expect(designToScene(design).scene).toEqual(sermon)
   })
 })

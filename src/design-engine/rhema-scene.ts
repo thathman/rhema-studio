@@ -133,3 +133,65 @@ export function designToScene(design: RhemaDesign): { scene: Scene; issues: Desi
   const background = bg.type === "solid" ? (bg.color === "rgba(0,0,0,0)" ? "transparent" : bg.color) : "#000000"
   return { scene: { ...design.meta, background, layers }, issues }
 }
+
+/** What a live layer would show now, from the host's Live State (the parts a preview needs). */
+export interface LivePreviewInput {
+  program: { onAir: boolean; reference: string | null }
+  sources: { id: string; reference: string; on: boolean; state?: string }[]
+}
+
+function liveWords(binding: RhemaBinding, live: LivePreviewInput): string | null {
+  const source = (id: string) => live.sources.find((s) => s.id === id)
+  const on = (id: string) => {
+    const s = source(id)
+    return s?.on ? s.reference : null
+  }
+  switch (binding.kind) {
+    case "feed": {
+      if (!binding.shows?.length) return live.program.onAir ? (live.program.reference ?? "On air") : "Nothing on air"
+      const shown = binding.shows.map(on).find((r) => r)
+      return shown ?? "Nothing on air"
+    }
+    case "clock":
+      return source("timer")?.reference ?? "Service timer"
+    case "ticker":
+      return on("ticker") ?? "Ticker (off)"
+    case "lowerThird":
+      return on("lowerThird") ?? "Lower third (down)"
+    case "camera": {
+      const name = binding.cameraUrl?.split("/").filter(Boolean).at(-2) ?? "Camera"
+      const cam = source(`camera:${name}`)
+      return `${name}${cam?.state ? ` · ${cam.state}` : ""}`
+    }
+    default:
+      return null
+  }
+}
+
+/**
+ * The scene as the editor previews it now: each live layer's box carries what it would show from
+ * the Live State. Built fresh every time and never saved: the design keeps the subscription
+ * (doc 29), so moving the Bible reference changes the preview, not the design.
+ */
+export function previewDesign(design: RhemaDesign, live: LivePreviewInput): SaraswatiScene {
+  let preview = design.scene
+  for (const node of layerNodes(design.scene)) {
+    const binding = design.bindings[node.id]
+    if (!binding || !node.visible || node.type === "line") continue
+    const words = liveWords(binding, live)
+    if (!words) continue
+    const width = "width" in node ? node.width : 0
+    const height = "height" in node ? node.height : 0
+    const fontSize = Math.max(18, Math.min(72, height / 4))
+    preview = applyCommand(preview, {
+      type: "ADD_NODE",
+      node: {
+        id: `preview:${node.id}`, parentId: SARASWATI_ROOT_ID, name: `${node.name ?? node.id} (live)`, visible: true,
+        x: node.x, y: node.y + height / 2 - fontSize * 0.6, rotation: 0, scaleX: 1, scaleY: 1, opacity: 1, originX: "left", originY: "top",
+        type: "text", text: words, width, fontSize, fontFamily: "Helvetica", fontWeight: "600", fontStyle: "normal", textAlign: "center",
+        lineHeight: 1.2, underline: false, color: { type: "solid", color: "#ffffff" }, stroke: null, strokeWidth: 0,
+      },
+    })
+  }
+  return preview
+}
