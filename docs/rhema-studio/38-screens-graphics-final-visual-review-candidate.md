@@ -1,9 +1,11 @@
 # 38 — Screens & Graphics Operator: Consolidated Page 5 Visual Review Candidate
 
+**CURRENT PR EXECUTION POLICY (29 October):** The owner rescinded the blanket PR creation freeze. [New development PRs are allowed in a small continuously merged queue](../OWNER-PR-WORKFLOW-2026-10-29.md), subject to existing Live/security/review gates. Website-publishing PRs #352/#367 remain held. Any older PR-freeze phrase in this page is historical.
+
 **Date:** 29 October 2026  
 **Review state:** **OWNER APPROVED — OVERALL PAGE HIERARCHY AND WORKFLOW (29 October 2026).** The owner answered **“Yes”** when asked to approve the consolidated Page 5 hierarchy: side-by-side Private Preview/Current Program; pinned output selection; contextual Graphic Controls below; compact Upcoming Graphics strip; compact private Director Requests; explicit group impact review. This is structural/interaction acceptance, **not** pixel-perfect typography, styling or animation approval, and **not** proof that all commands, host APIs or real receivers have been implemented/tested. This consolidates previously approved functionality in [34](34-browser-operators-connected-development.md), [36](36-operator-page-layout-proposals.md) and [37](37-permissions-sidebar-and-authority-design.md).
 
-**Process:** Owner [Resume Implementation Order (29 October)](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md) **lifts the feature-work pause** and restores active full-building. **ZERO NEW PRs** remains, and #352/#367 website-publishing PRs remain held. Codex should implement this approved structural layout, reuse existing modules and produce runtime/device evidence without creating a new PR.
+**Process:** Owner [Resume Implementation Order (29 October)](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md) **lifts the feature-work pause** and restores active full-building. **new feature PRs allowed under the owner small-queue policy** remains, and #352/#367 website-publishing PRs remain held. Codex should implement this approved structural layout, reuse existing modules and produce runtime/device evidence without creating a new PR.
 
 ## 1. Product statement and visual intent
 
