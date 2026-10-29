@@ -336,6 +336,45 @@ describe("reusable slide library workflow (#395)", () => {
     expect(useShellStore.getState().workspace).toBe("library")
   })
 
+  it("refuses to add when the captured nested group moved to a different event", async () => {
+    const source: Row = { id: "source-1", kind: "slide", title: "Welcome", body: "Reusable words", link: null, background_media_id: null, revision: 1, created_at: "", updated_at: "" }
+    rows.set(source.id, source)
+    useSlideStore.setState({ slides: [source] })
+    const opening = { id: "opening-moment", kind: "slide" as const, slide: { title: "Opening", body: "Welcome" }, reference: "Opening", confidence: 1, source: "manual" as const, added_at: 0 }
+    const sermon = { id: "sermon-moment", kind: "slide" as const, slide: { title: "Sermon", body: "Listen" }, reference: "Sermon", confidence: 1, source: "manual" as const, added_at: 0 }
+    useQueueStore.setState({
+      items: [opening, sermon],
+      headers: [
+        { id: "event-1", type: "group", name: "Opening", at: 0, event: { schema_version: 1 } },
+        { id: "group-1", type: "group", name: "Welcome slides", at: 0 },
+        { id: "event-2", type: "group", name: "Sermon", at: 1, event: { schema_version: 1 } },
+      ],
+      activeIndex: null,
+      addTarget: null,
+    })
+    useServiceStore.setState({ current: { id: "service-1", title: "Sunday service", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 2 } })
+    useShellStore.setState({
+      workspace: "library",
+      prepareLibraryReturn: { serviceId: "service-1", targetHeaderId: "group-1", targetHeaderTitle: "Welcome slides", eventId: "event-1", momentId: null, eventTitle: "Opening", momentTitle: null },
+    })
+
+    await render()
+    await vi.waitFor(() => expect(button("Welcome")).toBeTruthy())
+    await act(async () => button("Welcome").click())
+    useQueueStore.setState({
+      headers: [
+        { id: "event-1", type: "group", name: "Opening", at: 0, event: { schema_version: 1 } },
+        { id: "event-2", type: "group", name: "Sermon", at: 1, event: { schema_version: 1 } },
+        { id: "group-1", type: "group", name: "Welcome slides", at: 1 },
+      ],
+    })
+    await act(async () => button("Add to service").click())
+
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["opening-moment", "sermon-moment"])
+    expect(useShellStore.getState().workspace).toBe("library")
+    expect(useShellStore.getState().prepareLibraryReturn).toMatchObject({ targetHeaderId: "group-1", eventId: "event-1", momentId: null })
+  })
+
   it("refuses to add when the captured phase was removed", async () => {
     const source: Row = { id: "source-1", kind: "slide", title: "Welcome", body: "Reusable words", link: null, background_media_id: null, revision: 1, created_at: "", updated_at: "" }
     rows.set(source.id, source)

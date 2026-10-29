@@ -2,10 +2,28 @@ import {
   interleave,
   projectRunOfShowEvents,
   sectionEnd,
+  type OutlineHeader,
 } from "@/lib/run-of-show"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import type { PrepareLibraryReturnContext } from "@/studio/shell-store"
+import type { QueueItem } from "@/types"
+
+function containingEventIdForHeader(
+  items: QueueItem[],
+  headers: OutlineHeader[],
+  target: OutlineHeader
+): string | null {
+  if (target.event) return target.id
+  let eventId: string | null = null
+  for (const row of interleave(items, headers)) {
+    if (!("header" in row)) continue
+    if (row.header.type === "phase") eventId = null
+    else if (row.header.event) eventId = row.header.id
+    if (row.header.id === target.id) return eventId
+  }
+  return null
+}
 
 /** Capture the exact service event and moment that opened the shared Library. */
 export function prepareLibraryReturnForMoment(
@@ -46,16 +64,11 @@ export function prepareLibraryReturnForAddTarget(): PrepareLibraryReturnContext 
       momentTitle: null,
     }
   }
-  let containingEventId: string | null = null
-  for (const row of interleave(queue.items, queue.headers)) {
-    if (!("header" in row)) continue
-    if (row.header.type === "phase") containingEventId = null
-    else if (row.header.event) containingEventId = row.header.id
-    if (row.header.id === target.id) {
-      if (row.header.event) containingEventId = row.header.id
-      break
-    }
-  }
+  const containingEventId = containingEventIdForHeader(
+    queue.items,
+    queue.headers,
+    target
+  )
   const event = containingEventId
     ? projectRunOfShowEvents(queue.items, queue.headers).find(
         (candidate) => candidate.id === containingEventId
@@ -81,6 +94,8 @@ export function isCurrentPrepareLibraryReturn(
   const { items, headers } = useQueueStore.getState()
   const target = headers.find((header) => header.id === context.targetHeaderId)
   if (!target) return false
+  if (containingEventIdForHeader(items, headers, target) !== context.eventId)
+    return false
   if (context.eventId === null) {
     if (context.momentId === null) return true
     const itemIndex = items.findIndex((item) => item.id === context.momentId)
