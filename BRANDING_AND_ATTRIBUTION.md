@@ -8,7 +8,8 @@ desktop app and every operator screen), **Rhema Studio Receiver** (Google TV), *
 ## The original project (kept)
 
 Rhema Studio is built on the original [Rhema by OpenBezal](https://github.com/openbezal/rhema) (MIT).
-The upstream **Copyright (c) 2025 OpenBezal** and the MIT permission notice stay, word for word, in the
+Rhema Studio itself is GPL-3.0-or-later (owner decision with legal sign-off, 29 October 2026). The
+upstream **Copyright (c) 2025 OpenBezal** and the MIT permission notice stay, word for word, inside the
 root [LICENSE](LICENSE) and in `data/INSTALLER-LICENSE.txt`, and ship with the app
 (`licenses/LICENSE.txt`). The About panel (Settings → Help, and the macOS app menu's About) says
 "Built on Rhema by OpenBezal (MIT licence, © 2025 OpenBezal)". Renaming the product does not transfer

@@ -1,8 +1,10 @@
 /**
  * Which dependency licences Rhema Studio may ship (docs/LICENSES.md, QA-004).
  * An SPDX expression passes when at least one OR-alternative consists only of
- * allowed licences. Copyleft that would bind the app (GPL, AGPL, LGPL-only,
- * SSPL) fails; so does a missing licence.
+ * allowed licences. Rhema Studio is GPL-3.0-or-later (owner decision, 29 Oct 2026),
+ * so licences that combine with it pass: GPL-3.0 and anything it may take (LGPL,
+ * GPL-2.0-or-later). GPL-2.0-only (cannot combine with v3), AGPL and SSPL (network-use
+ * terms the owner has not accepted) fail; so does a missing licence.
  */
 export const ALLOWED: Record<string, string> = {
   "MIT": "permissive",
@@ -25,6 +27,17 @@ export const ALLOWED: Record<string, string> = {
   "MPL-2.0": "file-level copyleft: fine unmodified; changes to those files stay MPL",
   "OFL-1.1": "fonts",
   "CC-BY-4.0": "data, attribution (browser support tables)",
+  "GPL-3.0": "copyleft: the app's own licence",
+  "GPL-3.0-only": "copyleft: the app's own licence",
+  "GPL-3.0-or-later": "copyleft: the app's own licence",
+  "GPL-2.0-or-later": "copyleft: taken as GPL-3.0",
+  "GPL-2.0+": "copyleft: taken as GPL-3.0",
+  "LGPL-2.1": "weak copyleft: combines with GPL-3.0",
+  "LGPL-2.1-only": "weak copyleft: combines with GPL-3.0",
+  "LGPL-2.1-or-later": "weak copyleft: combines with GPL-3.0",
+  "LGPL-3.0": "weak copyleft: combines with GPL-3.0",
+  "LGPL-3.0-only": "weak copyleft: combines with GPL-3.0",
+  "LGPL-3.0-or-later": "weak copyleft: combines with GPL-3.0",
 }
 
 /**

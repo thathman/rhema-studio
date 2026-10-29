@@ -81,10 +81,11 @@ describe("brand files (owner's pack)", () => {
 })
 
 describe("the original licence and credit (MIT)", () => {
-  it("LICENSE still carries OpenBezal's copyright and the MIT text", () => {
+  it("LICENSE is GPL-3.0-or-later and still carries OpenBezal's copyright and the MIT text word for word", () => {
     const license = read("LICENSE").toString()
-    expect(license.startsWith("MIT License")).toBe(true)
-    expect(license).toContain("Copyright (c) 2025 OpenBezal")
+    expect(license).toContain("either version 3 of the\nLicense, or (at your option) any later version.")
+    expect(license).toContain("GNU GENERAL PUBLIC LICENSE")
+    expect(license).toContain("MIT License\n\nCopyright (c) 2025 OpenBezal")
     expect(license).toContain("The above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.")
     expect(license).toContain('THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND')
     expect(read("data/INSTALLER-LICENSE.txt").toString()).toContain("Copyright (c) 2025 OpenBezal")
