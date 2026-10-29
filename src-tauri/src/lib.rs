@@ -113,6 +113,7 @@ pub fn run() {
         .manage(Mutex::new(rhema_detection::DetectionPipeline::new()))
         .manage(Mutex::new(rhema_broadcast::ndi::NdiRuntime::default()))
         .manage(commands::broadcast::OutputPacers::default())
+        .manage(commands::recorder::RecorderHost(std::sync::OnceLock::new()))
         .manage(Mutex::new(rhema_detection::DirectDetector::new()))
         .manage(Mutex::new(rhema_detection::DetectionMerger::new()))
         .manage(Mutex::new(rhema_detection::ReadingMode::new()))
@@ -154,6 +155,12 @@ pub fn run() {
             commands::broadcast::get_ndi_status,
             commands::broadcast::push_ndi_frame,
             commands::broadcast::push_ndi_region,
+            commands::recorder::recorder_preflight,
+            commands::recorder::recorder_start,
+            commands::recorder::recorder_stop,
+            commands::recorder::recorder_marker,
+            commands::recorder::recorder_status,
+            commands::recorder::recorder_list,
             commands::broadcast::set_output_pace,
             commands::fonts::list_system_fonts,
             commands::remote::start_osc,
@@ -319,6 +326,8 @@ pub fn run() {
                     }
                     // Imported media lives beside the database.
                     let _ = app.state::<commands::media::MediaState>().0.set(dir.join("media"));
+                    // Native recordings (and any a crash interrupted, marked recoverable now).
+                    let _ = app.state::<commands::recorder::RecorderHost>().0.set(rhema_recorder::Recorder::new(dir.join("recordings")));
                     let path = dir.join("studio.db");
                     let opened = std::fs::create_dir_all(&dir)
                         .map_err(|e| e.to_string())

@@ -12,7 +12,7 @@ use rhema_broadcast::ndi::{FrameRegion, NdiRuntime, NdiSessionInfo, NdiStartRequ
 /// Output ids are caller-supplied and end up in the window label and URL, so
 /// they are restricted to a safe charset. The capability files grant
 /// permissions to `broadcast-*`, which covers every label produced here.
-fn window_label(output_id: &str) -> Result<String, String> {
+pub(crate) fn window_label(output_id: &str) -> Result<String, String> {
     let valid = !output_id.is_empty()
         && output_id
             .chars()
@@ -351,7 +351,12 @@ pub fn get_ndi_status(
 /// at 720p that was ~5 MB of text per frame), the output and size in headers.
 /// Stays synchronous so frames reach the sender in order.
 #[tauri::command]
-pub fn push_ndi_frame(runtime: State<'_, Mutex<NdiRuntime>>, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+pub fn push_ndi_frame(
+    webview: tauri::Webview,
+    runtime: State<'_, Mutex<NdiRuntime>>,
+    recorder: State<'_, super::recorder::RecorderHost>,
+    request: tauri::ipc::Request<'_>,
+) -> Result<(), String> {
     let header = |name: &str| -> Result<String, String> {
         request.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_owned).ok_or_else(|| format!("missing {name}"))
     };
@@ -362,14 +367,29 @@ pub fn push_ndi_frame(runtime: State<'_, Mutex<NdiRuntime>>, request: tauri::ipc
         return Err("expected the frame as raw bytes".into());
     };
     check_frame_len(rgba.len(), width, height)?;
+    // One readback feeds both: the recorder (only from the output's own window, so no Stage or
+    // preview window can pass its picture off as this output's) and NDI.
+    let recorded = own_window(&webview, &output_id) && recorder.0.get().is_some_and(|r| r.push_frame(&output_id, width, height, rgba));
     let mut runtime = runtime.lock().map_err(|e| e.to_string())?;
+    if recorded && !runtime.is_active(&output_id) {
+        return Ok(());
+    }
     runtime.send_frame_rgba(&output_id, width, height, rgba).map_err(|e| e.to_string())
+}
+
+fn own_window(webview: &tauri::Webview, output_id: &str) -> bool {
+    window_label(output_id).is_ok_and(|l| webview.label() == l)
 }
 
 /// Like [`push_ndi_frame`] for one region of the frame (headers `x-ndi-x`,
 /// `x-ndi-y`, `x-ndi-width`, `x-ndi-height`): the rest stays as last sent.
 #[tauri::command]
-pub fn push_ndi_region(runtime: State<'_, Mutex<NdiRuntime>>, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+pub fn push_ndi_region(
+    webview: tauri::Webview,
+    runtime: State<'_, Mutex<NdiRuntime>>,
+    recorder: State<'_, super::recorder::RecorderHost>,
+    request: tauri::ipc::Request<'_>,
+) -> Result<(), String> {
     let header = |name: &str| -> Result<u32, String> {
         request.headers().get(name).and_then(|v| v.to_str().ok()).and_then(|v| v.parse().ok()).ok_or_else(|| format!("missing or bad {name}"))
     };
@@ -378,7 +398,13 @@ pub fn push_ndi_region(runtime: State<'_, Mutex<NdiRuntime>>, request: tauri::ip
     let tauri::ipc::InvokeBody::Raw(rgba) = request.body() else {
         return Err("expected the region as raw bytes".into());
     };
+    let recorded = own_window(&webview, &output_id)
+        && region.x == 0
+        && recorder.0.get().is_some_and(|r| r.push_region(&output_id, region.y, region.width, region.height, rgba));
     let mut runtime = runtime.lock().map_err(|e| e.to_string())?;
+    if recorded && !runtime.is_active(&output_id) {
+        return Ok(());
+    }
     runtime.send_region_rgba(&output_id, region, rgba).map_err(|e| e.to_string())
 }
 

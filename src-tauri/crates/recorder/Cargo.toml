@@ -1,0 +1,34 @@
+[package]
+name = "rhema-recorder"
+version = "0.1.0"
+edition = "2021"
+description = "Rhema Studio native service recorder: one pinned congregation output's frames plus approved mixer audio, encoded by the host (doc 42, contract docs/contracts/recorder-v1.md)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+thiserror.workspace = true
+crossbeam-channel = "0.5"
+uuid = { version = "1", features = ["v4"] }
+cpal = "0.15"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSDictionary", "NSValue", "NSError", "NSArray", "NSObject", "NSProcessInfo"] }
+objc2-av-foundation = { version = "0.3", features = ["AVAssetWriter", "AVAssetWriterInput", "AVMediaFormat", "AVVideoSettings", "AVAudioSettings", "AVAsset", "AVAssetTrack", "AVAssetExportSession", "AVError", "objc2-core-media", "objc2-core-video", "block2"] }
+objc2-core-media = { version = "0.3", features = ["CMTime", "CMSampleBuffer", "CMFormatDescription", "CMBlockBuffer", "CMBase", "objc2-core-audio-types"] }
+objc2-core-video = { version = "0.3", features = ["CVPixelBuffer", "CVPixelBufferPool", "CVBuffer", "CVImageBuffer", "CVReturn", "CVBase"] }
+objc2-core-audio-types = { version = "0.3", features = ["CoreAudioBaseTypes"] }
+block2 = "0.6"
+objc2-core-foundation = { version = "0.3", features = ["CFBase", "CFDictionary"] }
+objc2-avf-audio = { version = "0.3", features = ["AVAudioSettings"] }
+
+[dev-dependencies]
+tempfile = "3"

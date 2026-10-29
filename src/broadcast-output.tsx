@@ -135,6 +135,13 @@ function BroadcastCanvas() {
     width: 1920,
     height: 1080,
   })
+  // What really sends frames to the host: NDI when it runs here, else a native recording pinned to
+  // this output (docs/contracts/recorder-v1.md). One readback feeds both; ndiConfigRef is that sender.
+  const ndiRawRef = useRef<NdiConfigEventPayload>({ active: false, fps: 24, width: 1920, height: 1080 })
+  const recordTeeRef = useRef<NdiConfigEventPayload | null>(null)
+  const applySender = useCallback(() => {
+    ndiConfigRef.current = ndiRawRef.current.active ? ndiRawRef.current : (recordTeeRef.current ?? ndiRawRef.current)
+  }, [])
   const ndiCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const lastPushRef = useRef(0)
   const pushingRef = useRef(false)
@@ -330,10 +337,10 @@ function BroadcastCanvas() {
         })
       }
       lastPushRef.current = Date.now()
-      reportNdi(true, "")
+      if (ndiRawRef.current.active) reportNdi(true, "")
     } catch (error) {
       console.warn("[broadcast-output] push_ndi_frame failed", error)
-      reportNdi(false, String(error))
+      if (ndiRawRef.current.active) reportNdi(false, String(error))
     } finally {
       pushingRef.current = false
     }
@@ -586,24 +593,41 @@ function BroadcastCanvas() {
     const unlistenNdiConfig = currentWindow.listen<NdiConfigEventPayload>("broadcast:ndi-config", (event) => {
       // A deliberate on/off is a fresh start for trouble counting.
       ndiHealth = initialNdiHealth()
-      ndiConfigRef.current = event.payload
+      ndiRawRef.current = event.payload
+      applySender()
       logDebug("Received broadcast:ndi-config", event.payload)
       // Push burst when NDI becomes active
-      if (event.payload.active) pushNdiBurst()
+      if (ndiConfigRef.current.active) pushNdiBurst()
       syncPace()
     })
+
+    // A native recording pinned to this output: frames go to the host even with NDI off.
+    const startRecordTee = (tee: NdiConfigEventPayload | null) => {
+      recordTeeRef.current = tee?.active ? tee : null
+      applySender()
+      if (ndiConfigRef.current.active) pushNdiBurst()
+      syncPace()
+    }
+    const unlistenRecordTee = currentWindow.listen<NdiConfigEventPayload>("broadcast:record-tee", (event) => startRecordTee(event.payload))
+    // Reopened (or reloaded) while a recording of this output runs.
+    void invoke<{ state: string; outputId: string | null; video: { width: number; height: number; fps: number } }>("recorder_status")
+      .then((st) => {
+        if ((st.state === "recording" || st.state === "failed") && st.outputId === OUTPUT_ID) startRecordTee({ active: true, ...st.video })
+      })
+      .catch(() => {})
 
     // Request current NDI status on mount (fixes race condition
     // where NDI is started before this window opens)
     void invoke<{ active: boolean; width: number; height: number; fps: number } | null>("get_ndi_status", { outputId: OUTPUT_ID })
       .then((status) => {
         if (status && status.active) {
-          ndiConfigRef.current = {
+          ndiRawRef.current = {
             active: true,
             fps: status.fps,
             width: status.width,
             height: status.height,
           }
+          applySender()
           logDebug("Fetched NDI status on mount", status)
           // NDI started before this window was ready: anything already moving needs the pacer.
           syncPace()
@@ -650,8 +674,9 @@ function BroadcastCanvas() {
       sceneVideos.clear()
       unlisten.then((fn) => fn())
       unlistenNdiConfig.then((fn) => fn())
+      unlistenRecordTee.then((fn) => fn())
     }
-  }, [draw, drawTickerBand, logDebug, preloadThemeAssets, pushNdiFrame, pushNdiBurst])
+  }, [applySender, draw, drawTickerBand, logDebug, preloadThemeAssets, pushNdiFrame, pushNdiBurst])
 
   // Slow keepalive: push one frame every 2s if idle (prevents NDI receivers from dropping the source)
   useEffect(() => {
