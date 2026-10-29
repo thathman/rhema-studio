@@ -235,6 +235,18 @@ struct TauriSink {
     app: AppHandle,
 }
 
+/// Persist host approvals before exposing remote scene-change events to the frontend. This keeps
+/// an event with `request: true` from appearing successful when its durable request was not saved.
+fn emit_recorded_event(
+    event: &str,
+    payload: &str,
+    record: impl FnOnce(&str, &str) -> Result<String, String>,
+    emit: impl FnOnce(&str, &str) -> Result<(), CommandError>,
+) -> Result<(), CommandError> {
+    let recorded = record(event, payload).map_err(CommandError::DispatchFailed)?;
+    emit(event, &recorded)
+}
+
 impl CommandSink for TauriSink {
     fn asset(&self, path: &str) -> Option<(Vec<u8>, String)> {
         let asset = self.app.asset_resolver().get(path.to_string())?;
@@ -252,10 +264,12 @@ impl CommandSink for TauriSink {
 
     fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
         // A scene change that must wait for the main desk becomes a host approval request first.
-        let payload = super::approvals::record_scene_request(&self.app, event, payload);
-        self.app
-            .emit(event, payload)
-            .map_err(|e| CommandError::DispatchFailed(format!("Tauri emit failed: {e}")))
+        emit_recorded_event(
+            event,
+            payload,
+            |event, payload| super::approvals::record_scene_request(&self.app, event, payload),
+            |event, payload| self.app.emit(event, payload).map_err(|e| CommandError::DispatchFailed(format!("Tauri emit failed: {e}"))),
+        )
     }
 
     fn invoke_backend(&self, action: &str, args: &str) -> Result<(), CommandError> {
@@ -1167,6 +1181,22 @@ pub fn feed_status(state: State<'_, Mutex<HttpRuntime>>, id: String) -> Result<O
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn approval_persistence_failure_prevents_scene_event_emission() {
+        let mut emitted = false;
+        let result = emit_recorded_event(
+            "remote:save_scene",
+            r#"{"request":true,"scene":{"id":"s1"}}"#,
+            |_, _| Err("database unavailable".to_string()),
+            |_, _| {
+                emitted = true;
+                Ok(())
+            },
+        );
+        assert!(result.is_err());
+        assert!(!emitted);
+    }
 
     #[test]
     fn group_take_aspect_ratio_accepts_only_positive_dimensions() {

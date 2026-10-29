@@ -72,22 +72,49 @@ fn scene_request(event: &str, v: &serde_json::Value) -> Option<(Actor, ApprovalR
     ))
 }
 
-/// A desk's scene change that must wait for the main desk is recorded as a host request first, and
-/// its id added to the event, so the decision is the host's. Returns the payload to emit; if the
-/// database is unavailable the event goes on as before.
-pub fn record_scene_request(app: &tauri::AppHandle, event: &str, payload: &str) -> String {
-    let Ok(mut v) = serde_json::from_str::<serde_json::Value>(payload) else { return payload.to_string() };
-    let Some((requester, input)) = scene_request(event, &v) else { return payload.to_string() };
-    let saved = app.try_state::<ContentState>().and_then(|s| {
-        let guard = s.0.lock().ok()?;
-        let db: &ContentDb = guard.as_ref()?;
-        db.submit_approval_request(&requester, &input).map_err(|e| log::warn!("approval request not recorded: {e}")).ok()
-    });
-    if let Some(r) = saved {
-        v["requestId"] = serde_json::Value::String(r.id);
-        v["expiresAt"] = serde_json::Value::String(r.expires_at);
-    }
-    v.to_string()
+/// Add persisted host request metadata before a desk's scene-change event can be emitted.
+pub(super) fn record_scene_request_with(
+    event: &str,
+    payload: &str,
+    persist: impl FnOnce(&Actor, &ApprovalRequestInput) -> Result<(String, String), String>,
+) -> Result<String, String> {
+    let mut v = match serde_json::from_str::<serde_json::Value>(payload) {
+        Ok(value) => value,
+        Err(error) if matches!(event, "remote:save_scene" | "remote:delete_scene") => {
+            log::warn!("approval request not recorded: invalid scene request payload: {error}");
+            return Err("The host could not read the approval request.".into());
+        }
+        Err(_) => return Ok(payload.to_string()),
+    };
+    let Some((requester, input)) = scene_request(event, &v) else { return Ok(payload.to_string()) };
+    let (request_id, expires_at) = persist(&requester, &input)?;
+    v["requestId"] = serde_json::Value::String(request_id);
+    v["expiresAt"] = serde_json::Value::String(expires_at);
+    Ok(v.to_string())
+}
+
+/// A desk's scene change that must wait for the main desk is recorded on the host first. Any
+/// missing or failed database path returns an error so the caller cannot emit an untracked request.
+pub fn record_scene_request(app: &tauri::AppHandle, event: &str, payload: &str) -> Result<String, String> {
+    record_scene_request_with(event, payload, |requester, input| {
+        let Some(state) = app.try_state::<ContentState>() else {
+            return Err("The host approval database is unavailable.".into());
+        };
+        let guard = state.0.lock().map_err(|error| {
+            log::warn!("approval request not recorded: content database lock unavailable: {error}");
+            "The host could not save the approval request.".to_string()
+        })?;
+        let db: &ContentDb = guard.as_ref().ok_or_else(|| {
+            log::warn!("approval request not recorded: content database is not open");
+            "The host approval database is unavailable.".to_string()
+        })?;
+        db.submit_approval_request(requester, input)
+            .map(|saved| (saved.id, saved.expires_at))
+            .map_err(|error| {
+                log::warn!("approval request not recorded: {error}");
+                "The host could not save the approval request.".to_string()
+            })
+    })
 }
 
 #[cfg(test)]
@@ -119,5 +146,22 @@ mod tests {
         let (who, input) = scene_request("remote:save_scene", &forged).unwrap();
         let r = db.submit_approval_request(&who, &input).unwrap();
         assert!(db.decide_approval_request(&r.id, &main_desk(), Decision::Approve, None).is_err());
+    }
+
+    #[test]
+    fn failed_persistence_refuses_to_produce_an_emittable_request() {
+        let payload = serde_json::json!({ "scene": { "id": "s1" }, "request": true, "by": "Screens", "byId": "screens-1" }).to_string();
+        let result = record_scene_request_with("remote:save_scene", &payload, |_, _| {
+            Err("database unavailable".to_string())
+        });
+        assert_eq!(result, Err("database unavailable".to_string()));
+    }
+
+    #[test]
+    fn malformed_scene_request_payload_is_refused() {
+        let result = record_scene_request_with("remote:save_scene", "{", |_, _| {
+            panic!("malformed requests must not reach persistence")
+        });
+        assert_eq!(result, Err("The host could not read the approval request.".to_string()));
     }
 }
