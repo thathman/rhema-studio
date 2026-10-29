@@ -12,6 +12,7 @@ import { useMediaStore } from "@/stores/media-store"
 import { useSlideStore } from "@/stores/slide-store"
 import { useShellStore } from "@/studio/shell-store"
 import { slideLabel } from "@/stores/service-store"
+import { isCurrentPrepareLibraryReturn } from "@/studio/prepare/library-return"
 import type { ReusableSlide, ReusableSlideInput, SlideQueueItem } from "@/types"
 
 const empty: ReusableSlideInput = { kind: "slide", title: "", body: "", link: null, background_media_id: null }
@@ -60,6 +61,13 @@ export function SlideLibrary() {
   }, [pendingSourceId])
 
   const change = (patch: Partial<ReusableSlideInput>) => setForm((current) => ({ ...current, ...patch }))
+  const sourceHasUncommittedEdits = editing !== null && (
+    form.kind !== editing.kind
+    || form.title !== editing.title
+    || form.body !== editing.body
+    || (form.link ?? null) !== editing.link
+    || (form.background_media_id ?? null) !== editing.background_media_id
+  )
   const save = async () => {
     setBusy(true)
     try {
@@ -67,11 +75,13 @@ export function SlideLibrary() {
         const saved = await useSlideStore.getState().update(editing.id, editing.revision, form)
         setEditing(saved)
         setSelectedId(saved.id)
+        setForm({ kind: saved.kind, title: saved.title, body: saved.body, link: saved.link, background_media_id: saved.background_media_id })
         toast.success("Reusable slide saved")
       } else {
         const saved = await useSlideStore.getState().create(form)
         setEditing(saved)
         setSelectedId(saved.id)
+        setForm({ kind: saved.kind, title: saved.title, body: saved.body, link: saved.link, background_media_id: saved.background_media_id })
         toast.success("Added to your reusable library")
       }
     } catch {
@@ -83,6 +93,15 @@ export function SlideLibrary() {
 
   const addToService = () => {
     if (!editing) return
+    const prepareReturn = useShellStore.getState().prepareLibraryReturn
+    if (prepareReturn && !isCurrentPrepareLibraryReturn(prepareReturn)) {
+      toast.error("The service or Add target changed", { description: "Return to Prepare and choose where this reusable slide belongs." })
+      return
+    }
+    if (sourceHasUncommittedEdits) {
+      toast.error("Save the reusable source first", { description: "Add to service uses a saved source revision. Save your changes, then add the updated slide." })
+      return
+    }
     const bg = editing.background_media_id
     const item: SlideQueueItem = {
       id: crypto.randomUUID(), kind: "slide",
@@ -90,11 +109,17 @@ export function SlideLibrary() {
       reference: slideLabel({ title: editing.title, body: editing.body, ...(editing.link ? { link: editing.link } : {}) }), confidence: 1, source: "manual", added_at: Date.now(),
       ...(bg ? { background: { media_id: bg, name: media.find((asset) => asset.id === bg)?.name ?? "" } } : {}),
     }
-    const id = useQueueStore.getState().addItem(item, "end")
+    const queue = useQueueStore.getState()
+    if (prepareReturn) queue.setAddTarget(prepareReturn.targetHeaderId)
+    const id = queue.addItem(item, "end")
+    if (prepareReturn) useQueueStore.getState().setAddTarget(null)
     if (!id) return
     const index = useQueueStore.getState().items.findIndex((candidate) => candidate.id === id)
     useBibleStore.getState().selectSlide({ item, index })
     useBibleStore.getState().setSelectedQueueItemId(id)
+    if (prepareReturn) {
+      useShellStore.getState().setPrepareLibraryReturn({ ...prepareReturn, momentId: id, momentTitle: item.reference })
+    }
     useShellStore.getState().setWorkspace("prepare")
   }
 
@@ -160,7 +185,7 @@ export function SlideLibrary() {
             <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{editing ? "Reusable source" : "New reusable source"}</p>
             <h2 className="mt-1 text-base font-semibold">{editing ? "Edit library content" : "Create a slide"}</h2>
           </div>
-          {editing && <Button size="sm" onClick={addToService}>Add to service</Button>}
+          {editing && <Button size="sm" disabled={busy || sourceHasUncommittedEdits} onClick={addToService}>Add to service</Button>}
         </div>
         <div className="mb-3 flex gap-1 rounded-md border border-border p-0.5" role="group" aria-label="Reusable content type">
           {(["slide", "announcement"] as const).map((kind) => <button key={kind} type="button" aria-pressed={form.kind === kind} className={`rounded px-3 py-1.5 text-xs ${form.kind === kind ? "bg-muted font-semibold" : "text-muted-foreground"}`} onClick={() => change({ kind })}>{kind === "slide" ? "Slide" : "Announcement"}</button>)}
@@ -188,7 +213,7 @@ export function SlideLibrary() {
         </div>
         {error && <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md bg-destructive/10 p-2 text-xs text-destructive"><span>{error}</span><Button size="xs" variant="outline" disabled={loading} onClick={() => { void useSlideStore.getState().list("").then((all) => { const latest = editing ? all.find((item) => item.id === editing.id) : undefined; if (latest) select(latest) }).catch(() => {}) }}>Reload library</Button></div>}
         <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
-          <p className="text-[0.6875rem] text-muted-foreground">Each service gets a copy. Saving here changes the reusable source only.</p>
+          <p className="text-[0.6875rem] text-muted-foreground">Each service gets a copy. Save any source edits before adding the updated revision.</p>
           <div className="flex gap-2"><Button variant="outline" size="sm" onClick={startNew}>Clear</Button><Button size="sm" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : editing ? "Save source" : "Save to library"}</Button></div>
         </div>
       </section>

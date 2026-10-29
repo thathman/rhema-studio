@@ -50,8 +50,14 @@ export function RunOfShowEventEditor({
   }, [header.id])
 
   useEffect(() => {
-    if (activeTab !== "scenes" || !focusMomentId) return
-    const target = document.getElementById(`event-scene-moment-${focusMomentId}`)
+    if (!focusMomentId) return
+    const targetId = activeTab === "scenes"
+      ? `event-scene-moment-${focusMomentId}`
+      : activeTab === "content"
+        ? `event-content-moment-${focusMomentId}`
+        : null
+    if (!targetId) return
+    const target = document.getElementById(targetId)
     target?.scrollIntoView?.({ block: "nearest" })
     target?.focus({ preventScroll: true })
   }, [activeTab, focusMomentId, header.id])
@@ -117,7 +123,13 @@ export function RunOfShowEventEditor({
             {moments.length > 0 ? (
               <ol aria-label="Event moments" className="space-y-2">
                 {moments.map((moment, index) => (
-                  <li key={moment.id} className="flex items-center gap-3 rounded-md border border-border px-3 py-2">
+                  <li
+                    key={moment.id}
+                    id={`event-content-moment-${moment.id}`}
+                    aria-label={`Moment ${index + 1}: ${moment.reference}`}
+                    tabIndex={focusMomentId === moment.id ? -1 : undefined}
+                    className={`flex items-center gap-3 rounded-md border border-border px-3 py-2${focusMomentId === moment.id ? " ring-2 ring-primary/50" : ""}`}
+                  >
                     <span className="w-7 shrink-0 text-xs tabular-nums text-muted-foreground">{index + 1}.</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{moment.reference}</span>

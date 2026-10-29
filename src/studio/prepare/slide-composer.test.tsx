@@ -7,7 +7,9 @@ import type { QueueItem, SlideQueueItem } from "@/types"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useServiceStore } from "@/stores/service-store"
 import { useShellStore } from "@/studio/shell-store"
+import { useAddDialog } from "@/studio/prepare/add-target"
 import { SlideComposer } from "./slide-composer"
 
 let root: Root | null = null
@@ -17,6 +19,7 @@ beforeEach(() => {
   useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null })
   useQueueStore.setState({ items: [], headers: [], activeIndex: null, addTarget: null })
   useShellStore.setState({ workspace: "prepare", librarySection: "songs" })
+  useAddDialog.setState({ open: false, opener: null, focusItemId: null })
   root = createRoot(document.body.appendChild(document.createElement("div")))
 })
 
@@ -60,6 +63,87 @@ describe("Prepare slide composer preview (#391)", () => {
     await act(async () => browse.click())
     expect(useShellStore.getState().workspace).toBe("library")
     expect(useShellStore.getState().librarySection).toBe("slides")
+  })
+
+  it("closes the event Add dialog after capturing its target for the Library handoff", async () => {
+    useQueueStore.setState({
+      items: [{ id: "moment-1", kind: "slide", slide: { title: "Opening", body: "Welcome" }, reference: "Opening", confidence: 1, source: "manual", added_at: 0 }],
+      headers: [{ id: "event-1", type: "group", name: "Opening", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+      addTarget: null,
+    })
+    useServiceStore.setState({ current: { id: "service-1", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 1 } })
+    useAddDialog.getState().openFor("event-1")
+    await render()
+
+    const browse = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse reusable slides"))!
+    await act(async () => browse.click())
+
+    expect(useAddDialog.getState().open).toBe(false)
+    expect(useQueueStore.getState().addTarget).toBeNull()
+    expect(useShellStore.getState()).toMatchObject({
+      workspace: "library",
+      prepareLibraryReturn: { serviceId: "service-1", targetHeaderId: "event-1", targetHeaderTitle: "Opening", eventId: "event-1", momentId: null, eventTitle: "Opening", momentTitle: null },
+    })
+  })
+
+  it("captures a phase Add target before closing the dialog", async () => {
+    useQueueStore.setState({
+      items: [],
+      headers: [{ id: "phase-1", type: "phase", name: "Pre-service", at: 0, rule: "manual", role: "pre" }],
+      activeIndex: null,
+      addTarget: null,
+    })
+    useServiceStore.setState({ current: { id: "service-1", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 0 } })
+    useAddDialog.getState().openFor("phase-1")
+    await render()
+
+    const browse = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse reusable slides"))!
+    await act(async () => browse.click())
+
+    expect(useAddDialog.getState().open).toBe(false)
+    expect(useShellStore.getState()).toMatchObject({
+      workspace: "library",
+      prepareLibraryReturn: { serviceId: "service-1", targetHeaderId: "phase-1", targetHeaderTitle: "Pre-service", eventId: null, momentId: null, eventTitle: null, momentTitle: null },
+    })
+  })
+
+  it("retains the containing event when the Add target is a nested group", async () => {
+    useQueueStore.setState({
+      items: [],
+      headers: [
+        { id: "event-1", type: "group", name: "Opening", at: 0, event: { schema_version: 1 } },
+        { id: "group-1", type: "group", name: "Welcome slides", at: 0 },
+      ],
+      activeIndex: null,
+      addTarget: null,
+    })
+    useServiceStore.setState({ current: { id: "service-1", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 0 } })
+    useAddDialog.getState().openFor("group-1")
+    await render()
+
+    const browse = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse reusable slides"))!
+    await act(async () => browse.click())
+
+    expect(useShellStore.getState()).toMatchObject({
+      workspace: "library",
+      prepareLibraryReturn: { targetHeaderId: "group-1", targetHeaderTitle: "Welcome slides", eventId: "event-1", eventTitle: "Opening" },
+    })
+  })
+
+  it("keeps a stale Add target in the Library context so a later add can fail closed", async () => {
+    useServiceStore.setState({ current: { id: "service-1", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 0 } })
+    useAddDialog.getState().openFor("removed-phase")
+    await render()
+
+    const browse = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse reusable slides"))!
+    await act(async () => browse.click())
+
+    expect(useAddDialog.getState().open).toBe(false)
+    expect(useShellStore.getState()).toMatchObject({
+      workspace: "library",
+      prepareLibraryReturn: { serviceId: "service-1", targetHeaderId: "removed-phase", eventId: null, momentId: null },
+    })
   })
 
   it.each(modes)("clears the $name draft preview when its form becomes empty", async ({ name, field, value }) => {

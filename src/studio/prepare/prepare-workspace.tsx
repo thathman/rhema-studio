@@ -28,6 +28,7 @@ import { presentActions } from "@/studio/present-actions"
 import { cn } from "@/lib/utils"
 import { AddEventPalette, type EventInsertionTarget } from "@/studio/prepare/add-event-palette"
 import { toast } from "sonner"
+import { isCurrentPrepareLibraryReturn } from "@/studio/prepare/library-return"
 
 type RundownView = "simple" | "grouped"
 const RUNDOWN_VIEW_KEY = "rhema.prepare.rundown-view.v1"
@@ -64,12 +65,16 @@ export function PrepareWorkspace() {
     ? `${eventCount} ${eventCount === 1 ? "event" : "events"}${looseItemCount > 0 ? ` · ${looseItemCount} ${looseItemCount === 1 ? "item" : "items"}` : ""}`
     : `${count} ${count === 1 ? "item" : "items"}`
   const [designReturn] = useState(() => useShellStore.getState().prepareDesignReturn)
-  const returnContextIsCurrent = designReturn !== null
+  const [libraryReturn] = useState(() => useShellStore.getState().prepareLibraryReturn)
+  const designReturnIsCurrent = designReturn !== null
     && useServiceStore.getState().current?.id === designReturn.serviceId
     && projectRunOfShowEvents(useQueueStore.getState().items, useQueueStore.getState().headers)
       .some((event) => event.id === designReturn.eventId && event.moments.some((moment) => moment.id === designReturn.momentId))
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(() => returnContextIsCurrent ? designReturn?.eventId ?? null : null)
-  const [returnMomentId, setReturnMomentId] = useState<string | null>(() => returnContextIsCurrent ? designReturn?.momentId ?? null : null)
+  const libraryReturnIsCurrent = libraryReturn !== null && isCurrentPrepareLibraryReturn(libraryReturn)
+  const selectedReturn = libraryReturnIsCurrent ? libraryReturn : designReturnIsCurrent ? designReturn : null
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(() => selectedReturn?.eventId ?? null)
+  const [returnMomentId, setReturnMomentId] = useState<string | null>(() => selectedReturn?.momentId ?? null)
+  const [returnTab, setReturnTab] = useState<"content" | "scenes">(() => libraryReturnIsCurrent ? "content" : designReturnIsCurrent ? "scenes" : "content")
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => new Set())
   const selectedEvent = headers.find((header) => header.id === selectedEventId && header.event)
   const selectedItem = useSelectedItem()
@@ -90,15 +95,23 @@ export function PrepareWorkspace() {
       ? { kind: "row", itemId: selectedItem.item.id }
       : { kind: "end" }
   useEffect(() => {
-    if (!designReturn) return
-    if (!returnContextIsCurrent) {
-      toast("The service changed while you were editing", { description: "Choose the event and moment again from the current service." })
+    if (designReturn) {
+      if (!designReturnIsCurrent) {
+        toast("The service changed while you were editing", { description: "Choose the event and moment again from the current service." })
+      }
+      useShellStore.getState().clearPrepareDesignReturn()
     }
-    useShellStore.getState().clearPrepareDesignReturn()
-  }, [designReturn, returnContextIsCurrent])
+    if (libraryReturn) {
+      if (!libraryReturnIsCurrent) {
+        toast("The service or insertion point changed while you were in the Library", { description: "Choose the event or section again in the current service." })
+      }
+      useShellStore.getState().clearPrepareLibraryReturn()
+    }
+  }, [designReturn, designReturnIsCurrent, libraryReturn, libraryReturnIsCurrent])
   const selectEvent = (id: string | null) => {
     setSelectedEventId(id)
     setReturnMomentId(null)
+    setReturnTab("content")
   }
   const selectAddedItem = (itemId: string) => {
     setSelectedEventId(null)
@@ -287,7 +300,7 @@ export function PrepareWorkspace() {
             <RunOfShowEventEditor
               key={`${selectedEvent.id}:${returnMomentId ?? ""}`}
               header={selectedEvent}
-              defaultTab={returnMomentId ? "scenes" : "content"}
+              defaultTab={returnTab}
               focusMomentId={returnMomentId}
               onOpenMoment={(item) => {
                 setSelectedEventId(null)

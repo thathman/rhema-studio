@@ -28,6 +28,17 @@ export interface PrepareDesignReturnContext {
   sceneId: string
 }
 
+/** In-memory caller path when a service moment opens the shared Library. */
+export interface PrepareLibraryReturnContext {
+  serviceId: string | null
+  targetHeaderId: string
+  targetHeaderTitle: string
+  eventId: string | null
+  momentId: string | null
+  eventTitle: string | null
+  momentTitle: string | null
+}
+
 export interface ShellPrefs {
   workspace: Workspace
   presentView: PresentView
@@ -103,7 +114,7 @@ interface ShellState extends ShellPrefs {
   setWorkspace: (workspace: Workspace) => void
   librarySection: LibrarySection
   setLibrarySection: (section: LibrarySection) => void
-  openLibrarySection: (section: LibrarySection) => void
+  openLibrarySection: (section: LibrarySection, prepareReturn?: PrepareLibraryReturnContext | null) => void
   setPresentView: (view: PresentView) => void
   /** Fold the sidebar to icons or open it out again (the sidebar's button, Cmd/Ctrl+B). */
   setSidebarCollapsed: (collapsed: boolean) => void
@@ -124,6 +135,9 @@ interface ShellState extends ShellPrefs {
   prepareDesignReturn: PrepareDesignReturnContext | null
   setPrepareDesignReturn: (context: PrepareDesignReturnContext) => void
   clearPrepareDesignReturn: () => void
+  prepareLibraryReturn: PrepareLibraryReturnContext | null
+  setPrepareLibraryReturn: (context: PrepareLibraryReturnContext) => void
+  clearPrepareLibraryReturn: () => void
   /** Setup status (#298): the church's setup, the equipment and this service, on one page. */
   setupStatusOpen: boolean
   setSetupStatusOpen: (open: boolean) => void
@@ -156,7 +170,7 @@ export const useShellStore = create<ShellState>((set) => ({
   setWorkspace: (workspace) => set({ workspace: canonicalWorkspace(workspace) }),
   librarySection: "songs",
   setLibrarySection: (librarySection) => set({ librarySection }),
-  openLibrarySection: (librarySection) => set({ workspace: "library", librarySection }),
+  openLibrarySection: (librarySection, prepareLibraryReturn = null) => set({ workspace: "library", librarySection, prepareLibraryReturn }),
   setPresentView: (presentView) => set({ presentView }),
   setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
@@ -172,6 +186,9 @@ export const useShellStore = create<ShellState>((set) => ({
   prepareDesignReturn: null,
   setPrepareDesignReturn: (prepareDesignReturn) => set({ prepareDesignReturn }),
   clearPrepareDesignReturn: () => set({ prepareDesignReturn: null }),
+  prepareLibraryReturn: null,
+  setPrepareLibraryReturn: (prepareLibraryReturn) => set({ prepareLibraryReturn }),
+  clearPrepareLibraryReturn: () => set({ prepareLibraryReturn: null }),
   setupStatusOpen: false,
   setSetupStatusOpen: (setupStatusOpen) => set({ setupStatusOpen }),
 }))

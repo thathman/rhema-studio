@@ -14,6 +14,8 @@ import { slidePages } from "@/lib/slide-pages"
 import { slideLabel } from "@/stores/service-store"
 import { hasReadingMarks, readingPages } from "@/lib/responsive-reading"
 import { useShellStore } from "@/studio/shell-store"
+import { prepareLibraryReturnForAddTarget } from "@/studio/prepare/library-return"
+import { useAddDialog } from "@/studio/prepare/add-target"
 
 const EXAMPLES = [
   { title: "Welcome", body: "We're glad you're here.\nPlease silence your phone." },
@@ -107,11 +109,17 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
     setLink("")
   }
 
+  const browseReusableSlides = () => {
+    const returnContext = prepareLibraryReturnForAddTarget()
+    useAddDialog.getState().close()
+    useShellStore.getState().openLibrarySection("slides", returnContext)
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">This slide is for the open service.</p>
-        <Button size="xs" variant="outline" onClick={() => useShellStore.getState().openLibrarySection("slides")}><BookOpenIcon /> Browse reusable slides</Button>
+        <Button size="xs" variant="outline" onClick={browseReusableSlides}><BookOpenIcon /> Browse reusable slides</Button>
       </div>
       <div role="group" aria-label="Slide kind" className="flex w-fit rounded-md border border-border p-0.5">
         {(["free", "announcement", "qr", "reading"] as const).map((m) => (

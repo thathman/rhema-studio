@@ -25,6 +25,7 @@ import { formatDuration, parseDuration } from "@/lib/run-of-show"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useSoundStore } from "@/stores/sound-store"
 import { SceneDesignPicker } from "@/studio/prepare/scene-design-picker"
+import { prepareLibraryReturnForMoment } from "@/studio/prepare/library-return"
 
 /** Prepare-only: how the picture fills the screen. */
 const commentTime = (at: string) => new Date(at).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })
@@ -385,7 +386,10 @@ export function CustomSlideEditor({ item }: { item: SlideQueueItem }) {
     <div className="ml-7 flex flex-col gap-1.5 py-1 pl-2">
       {item.slide.source_asset_id && <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/50 px-2 py-1.5">
         <p className="text-[0.6875rem] text-muted-foreground">This is this service’s copy. Changes here won’t change the reusable source.</p>
-        <Button size="xs" variant="outline" onClick={() => { useSlideStore.getState().requestEdit(item.slide.source_asset_id!); useShellStore.getState().openLibrarySection("slides") }}>Edit reusable source</Button>
+        <Button size="xs" variant="outline" onClick={() => {
+          useSlideStore.getState().requestEdit(item.slide.source_asset_id!)
+          useShellStore.getState().openLibrarySection("slides", prepareLibraryReturnForMoment(item.id))
+        }}>Edit reusable source</Button>
       </div>}
       <Input aria-label="Slide title" maxLength={200} value={item.slide.title} placeholder="Title" className="h-8 text-sm" onChange={(e) => update({ title: e.target.value })} />
       <Textarea

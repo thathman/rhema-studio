@@ -110,7 +110,7 @@ afterEach(() => {
   mockService.items = []
   document.body.replaceChildren()
   useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false, unsupportedItems: [], corruptItems: [] })
-  useShellStore.setState({ prepareDesignReturn: null, goRequest: null })
+  useShellStore.setState({ prepareDesignReturn: null, prepareLibraryReturn: null, goRequest: null })
 })
 
 async function renderPrepare(withLiveControls = false) {
@@ -1324,6 +1324,32 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(focusedMoment.id).toBe("event-scene-moment-Opening Scripture")
     expect(document.activeElement).toBe(focusedMoment)
     expect(useShellStore.getState().prepareDesignReturn).toBeNull()
+  })
+
+  it("returns from Library use to the same event and focuses the added service moment", async () => {
+    const added = slide("Reusable announcement")
+    useQueueStore.setState({
+      items: [slide("Opening Scripture"), added],
+      headers: [{ id: "event-1", type: "group", name: "Opening", at: 0, event: { schema_version: 1, role: "Welcome" } }],
+      activeIndex: null,
+    })
+    useServiceStore.setState({ current: { id: "service-1", title: "Sunday service", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 2 }, dirty: false, saving: false })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "program-item", liveVerse: { reference: "Program baseline" } as never })
+    useShellStore.setState({
+      prepareLibraryReturn: {
+        serviceId: "service-1", targetHeaderId: "event-1", targetHeaderTitle: "Opening", eventId: "event-1", momentId: added.id,
+        eventTitle: "Opening", momentTitle: added.reference,
+      },
+    })
+
+    const el = await renderPrepare()
+    const contentTab = el.querySelector<HTMLButtonElement>('[aria-label="Event content"]')!
+    const focusedMoment = document.getElementById(`event-content-moment-${added.id}`)!
+    expect(contentTab.getAttribute("aria-selected")).toBe("true")
+    expect(focusedMoment.className).toContain("ring-2")
+    expect(document.activeElement).toBe(focusedMoment)
+    expect(useShellStore.getState().prepareLibraryReturn).toBeNull()
+    expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveItemId: "program-item", liveVerse: { reference: "Program baseline" } })
   })
 })
 
