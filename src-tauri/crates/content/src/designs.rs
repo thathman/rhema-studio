@@ -201,6 +201,11 @@ fn validate(input: &DesignInput) -> Result<(String, String, String)> {
     if !ok {
         return invalid("a design document needs a scene (artboard, root, nodes) and bindings by node");
     }
+    let nodes = scene.and_then(|s| s.get("nodes")).and_then(serde_json::Value::as_object);
+    let root = scene.and_then(|s| s.get("root")).and_then(serde_json::Value::as_str).unwrap_or_default();
+    if let Some(nodes) = nodes {
+        check_tree(nodes, root)?;
+    }
     if let Some(bindings) = doc.get("bindings").and_then(serde_json::Value::as_object) {
         let nodes = scene.and_then(|s| s.get("nodes")).and_then(serde_json::Value::as_object);
         if let Some(missing) = bindings.keys().find(|k| !nodes.is_some_and(|n| n.contains_key(*k))) {
@@ -212,6 +217,34 @@ fn validate(input: &DesignInput) -> Result<(String, String, String)> {
         return invalid("this design is over 4 MB: put large pictures in the media library and use them from there");
     }
     Ok((title.to_string(), kind.to_string(), text))
+}
+
+/// The node tree the editor and the scene adapter walk: the root exists, every group's children
+/// exist, and no node is reached twice (a cycle, or one node under two groups) — otherwise opening
+/// it would silently drop layers or never end.
+fn check_tree(nodes: &serde_json::Map<String, serde_json::Value>, root: &str) -> Result<()> {
+    let invalid = |m: String| Err(ContentError::Invalid(m));
+    if !nodes.contains_key(root) {
+        return invalid(format!("the design's root \"{root}\" is not one of its nodes"));
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut stack = vec![root];
+    while let Some(id) = stack.pop() {
+        if !seen.insert(id) {
+            return invalid(format!("node \"{id}\" is reached twice in the design (a group inside itself or under two groups)"));
+        }
+        let Some(node) = nodes.get(id) else {
+            return invalid(format!("a group lists \"{id}\", which is not one of the design's nodes"));
+        };
+        if let Some(children) = node.get("children") {
+            let Some(children) = children.as_array() else { return invalid(format!("group \"{id}\" has children that are not a list")) };
+            for child in children {
+                let Some(child) = child.as_str() else { return invalid(format!("group \"{id}\" lists a child that is not a node id")) };
+                stack.push(child);
+            }
+        }
+    }
+    Ok(())
 }
 
 const DESIGN_COLUMNS: &str =
@@ -327,5 +360,19 @@ mod tests {
         huge["scene"]["nodes"]["verse"]["text"] = serde_json::Value::String("a".repeat(MAX_DESIGN_BYTES));
         assert!(matches!(bad(huge), Err(ContentError::Invalid(_))));
         assert!(matches!(db.create_design(&DesignInput { kind: "poster".into(), ..input("x") }), Err(ContentError::Invalid(_))));
+        // A tree the editor could not walk: a missing root, a missing child, a cycle, a node under two groups.
+        let refused = |edit: &dyn Fn(&mut serde_json::Value)| {
+            let mut d = doc("x");
+            edit(&mut d);
+            matches!(bad(d), Err(ContentError::Invalid(_)))
+        };
+        assert!(refused(&|d| d["scene"]["root"] = "nowhere".into()));
+        assert!(refused(&|d| d["scene"]["nodes"]["root"]["children"] = serde_json::json!(["verse", "ghost"])));
+        assert!(refused(&|d| d["scene"]["nodes"]["root"]["children"] = serde_json::json!(["root"])));
+        assert!(refused(&|d| {
+            d["scene"]["nodes"]["g"] = serde_json::json!({ "type": "group", "children": ["verse"] });
+            d["scene"]["nodes"]["root"]["children"] = serde_json::json!(["verse", "g"]);
+        }));
+        assert!(refused(&|d| d["scene"]["nodes"]["root"]["children"] = serde_json::json!("verse")));
     }
 }

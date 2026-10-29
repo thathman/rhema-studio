@@ -124,6 +124,21 @@ describe("Rhema scenes in the Avnac engine", () => {
   })
 })
 
+describe("a design whose node tree is broken", () => {
+  it("reports a missing root or child and survives a group inside itself, never an empty scene without a word", () => {
+    const design = sceneToDesign(sermon)
+    const missingRoot = designToScene({ ...design, scene: { ...design.scene, root: "nowhere" } })
+    expect(missingRoot.scene.layers).toEqual([])
+    expect(missingRoot.issues).toEqual([{ nodeId: "nowhere", message: expect.stringContaining("missing") }])
+    const root = design.scene.nodes[SARASWATI_ROOT_ID]
+    if (root.type !== "group") throw new Error("root")
+    const looped = { ...design.scene, nodes: { ...design.scene.nodes, [SARASWATI_ROOT_ID]: { ...root, children: [...root.children, "ghost", SARASWATI_ROOT_ID] } } }
+    const { scene, issues } = designToScene({ ...design, scene: looped })
+    expect(scene.layers.map((l) => l.id)).toEqual(sermon.layers.map((l) => l.id))
+    expect(issues.map((i) => i.nodeId)).toEqual(["ghost", SARASWATI_ROOT_ID])
+  })
+})
+
 describe("live layers in the editor's preview", () => {
   const live = (bible: string | null, ticker = "Welcome to service") => ({
     program: { onAir: true, reference: bible },
