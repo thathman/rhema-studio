@@ -810,6 +810,95 @@ describe("updateDraftNested deep paths", () => {
     expect(stagePayload.stage.languageNotice).toBe("Second language unavailable; showing available text.")
   })
 
+  it("records a congregation language fallback for the operator without adding it to the public frame", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const state = useBroadcastStore.getState()
+    const main = state.outputs.find((output) => output.id === "main")!
+    const primary = { ...main, id: "primary", name: "Primary Output", type: "ndi" as const, language: "both" as const }
+    useBroadcastStore.setState({
+      isLive: true,
+      liveVerse: { ...sampleLiveVerse, kind: "verse" },
+      outputs: [{ ...main, language: "both" }, primary],
+    })
+
+    emitToMock.mockClear()
+    useBroadcastStore.getState().syncBroadcastOutput()
+    expect(useBroadcastStore.getState().outputFrames.main.languageFallback).toBe(false)
+
+    // The sent content remains identical, but the operator status must still update.
+    useBroadcastStore.setState({ outputs: [{ ...main, language: "second" }, primary] })
+    useBroadcastStore.getState().syncBroadcastOutput()
+
+    expect(useBroadcastStore.getState().outputFrames.main.languageFallback).toBe(true)
+    expect(useBroadcastStore.getState().outputFrames.primary.languageFallback).toBe(false)
+    const payload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-main")?.[2] as Record<string, unknown>
+    expect(payload).not.toHaveProperty("languageFallback")
+    expect(payload.verse).toMatchObject({ reference: "John 3:16", segments: [{ text: "For God so loved the world" }] })
+  })
+
+  it("tracks a scene feed's own second-language fallback when the output is set to both", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const state = useBroadcastStore.getState()
+    const main = state.outputs.find((output) => output.id === "main")!
+    const scene = {
+      id: "second-language-scene",
+      name: "Bilingual scene",
+      background: "#000000",
+      layers: [{
+        id: "feed",
+        name: "Bible",
+        kind: "feed" as const,
+        language: "second" as const,
+        box: { x: 0, y: 0, w: 100, h: 100 },
+        opacity: 1,
+        visible: true,
+      }],
+      createdAt: 0,
+      updatedAt: 0,
+    }
+    useBroadcastStore.setState({
+      isLive: true,
+      liveVerse: { ...sampleLiveVerse, kind: "verse" },
+      outputs: [{ ...main, language: "both", sceneId: scene.id }],
+      scenes: [scene],
+    })
+
+    emitToMock.mockClear()
+    useBroadcastStore.getState().syncBroadcastOutput()
+
+    const frame = useBroadcastStore.getState().outputFrames.main
+    expect(frame.languageFallback).toBe(true)
+    expect(frame.scene?.layers[0]).toMatchObject({ kind: "feed", verse: { segments: [{ text: "For God so loved the world" }] } })
+    const payload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-main")?.[2] as Record<string, unknown>
+    expect(payload).not.toHaveProperty("languageFallback")
+  })
+
+  it("tracks a dynamic output lower third falling back over a scene", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const state = useBroadcastStore.getState()
+    const main = state.outputs.find((output) => output.id === "main")!
+    const scene = {
+      id: "lower-third-scene",
+      name: "Lower third background",
+      background: "#000000",
+      layers: [],
+      createdAt: 0,
+      updatedAt: 0,
+    }
+    useBroadcastStore.setState({
+      isLive: true,
+      liveVerse: { ...sampleLiveVerse, kind: "verse" },
+      lowerThird: { line1: "", line2: "", follow: "scripture" },
+      outputs: [{ ...main, language: "second", lowerThirds: true, sceneId: scene.id }],
+      scenes: [scene],
+    })
+
+    useBroadcastStore.getState().syncBroadcastOutput()
+
+    expect(useBroadcastStore.getState().outputFrames.main.overlay?.line1).toBe("For God so loved the world")
+    expect(useBroadcastStore.getState().outputFrames.main.languageFallback).toBe(true)
+  })
+
   it("the ticker crawls only on outputs that show it, takes word changes at once and stops", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const s = useBroadcastStore.getState()

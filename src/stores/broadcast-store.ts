@@ -22,7 +22,7 @@ import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import type { TimerState } from "@/lib/timer"
 import { useSongStore } from "@/stores/song-store"
 import { nextVisibleItem, type OutlineHeader } from "@/lib/run-of-show"
-import { forOutputLanguage, isOutputLanguageFallback } from "@/lib/output-language"
+import { forOutputLanguage, isOutputLanguageFallback, OUTPUT_LANGUAGE_FALLBACK_NOTICE } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
@@ -30,7 +30,7 @@ import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/
 import { useMediaStore } from "@/stores/media-store"
 import { feedLost, overscanPct } from "@/lib/feed-receivers"
 import { cameraSourceId, feedFrame, followsLowerThird, followsOnlyOverlays, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
-import { captureSceneAppearance, normalizeScene, presetFromScene, sceneClock, sceneForOutput, sceneFrame, sceneOwns } from "@/lib/scenes"
+import { captureSceneAppearance, normalizeScene, presetFromScene, sceneClock, sceneForOutput, sceneFrame, sceneHasLanguageFallback, sceneOwns } from "@/lib/scenes"
 import { useSettingsStore } from "@/stores/settings-store"
 import { cameraDownState, cameraLabelOf, useRouterHealth } from "@/lib/cameras"
 import type { Scene, SceneAppearanceSnapshot, SceneFrame, SceneLayerKind } from "@/types"
@@ -511,6 +511,8 @@ export interface OutputFrame {
   stage?: boolean
   /** The scene it shows, when it shows one. */
   scene?: SceneFrame
+  /** Host-only status: the visible program fell back because a selected second language is absent. */
+  languageFallback?: boolean
 }
 
 /** Keep what an output was last sent, for the multiview. Skips the write when nothing changed. */
@@ -726,7 +728,7 @@ function lostPicture(outputId: string, rule: HostLostRule | undefined): string |
 
 function recordFrame(id: string, frame: OutputFrame): void {
   const prev = useBroadcastStore.getState().outputFrames[id]
-  if (prev && prev.theme === frame.theme && prev.verse === frame.verse && prev.overlay === frame.overlay && prev.ticker === frame.ticker && prev.stage === frame.stage && !prev.scene && !frame.scene) return
+  if (prev && prev.theme === frame.theme && prev.verse === frame.verse && prev.overlay === frame.overlay && prev.ticker === frame.ticker && prev.stage === frame.stage && prev.languageFallback === frame.languageFallback && !prev.scene && !frame.scene) return
   useBroadcastStore.setState((s) => ({ outputFrames: { ...s.outputFrames, [id]: frame } }))
 }
 
@@ -997,7 +999,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         stage: applyStageStyle({ ...buildStagePayload({
           isLive: shown !== null, liveVerse: stageVerse, items: q.items, headers: q.headers, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
-        }), ...(isOutputLanguageFallback(shown, output.language) ? { languageNotice: "Second language unavailable; showing available text." } : {}), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}), ...(s.stageClock ? { clock: s.stageClock } : {}),
+        }), ...(isOutputLanguageFallback(shown, output.language) ? { languageNotice: OUTPUT_LANGUAGE_FALLBACK_NOTICE } : {}), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}), ...(s.stageClock ? { clock: s.stageClock } : {}),
           // This output's own layout, orientation and low-light colours (#196 R6); absent from older outputs.
           ...(output.stageLayout && output.stageLayout !== "countdown" ? { layout: output.stageLayout } : {}),
           ...(output.stageOrientation ? { portrait: output.stageOrientation } : {}),
@@ -1021,7 +1023,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()), ticker: liveTicker, overlay: liveOverlay, logoUrl: useSettingsStore.getState().brandKit.logoUrl, cameraLabel: (url) => cameraLabelOf(url, useSettingsStore.getState().cameras), cameraBackup, cameraDown }, sceneOutput, scene)
       const overlay = followsLowerThird(output) && !owns.lowerThird ? liveOverlay : null
       const ticker = followsTicker(output) && !owns.ticker ? liveTicker : null
-      recordFrame(outputId, { theme, verse: null, overlay, ticker, scene: frame })
+      recordFrame(outputId, { theme, verse: null, overlay, ticker, scene: frame, languageFallback: sceneHasLanguageFallback(s, output, scene, liveOverlay, shown, !!overlay) })
       deliver(outputId, { theme, verse: null, overlay, ticker, scene: frame, sound: false })
       return
     }
@@ -1029,10 +1031,12 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     // A lower-third-only feed has no content of its own: a strip that follows what is live follows the program.
     const program = !verse && followsOnlyOverlays(output) && s.isLive && s.liveVerse ? forOutputLanguage(s.liveVerse, output.language) : null
     const overlay = followsLowerThird(output) ? overlayFor(s.lowerThird, verse ?? program) : null
+    const languageFallback = isOutputLanguageFallback(shown, output.language) ||
+      (!!overlay?.follow && isOutputLanguageFallback(shown ?? (program ? s.liveVerse : null), output.language))
     // Only a real change of screen is timed (QA-007); resends after a window opens are not.
     const changed = get().outputFrames[outputId]?.verse !== verse
     const ticker = followsTicker(output) ? tickerForScreens(s) : null
-    recordFrame(outputId, { theme, verse, overlay, ticker })
+    recordFrame(outputId, { theme, verse, overlay, ticker, languageFallback })
     deliver(outputId, {
       theme,
       verse,

@@ -1,5 +1,7 @@
 import type { BroadcastOutputLanguage, VerseRenderData } from "@/types"
 
+export const OUTPUT_LANGUAGE_FALLBACK_NOTICE = "Second language unavailable; showing available text."
+
 /**
  * What one output shows of a bilingual frame. "both" is the frame as
  * prepared; "first" drops the second language; "second" shows only the

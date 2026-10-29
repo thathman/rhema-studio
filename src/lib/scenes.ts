@@ -1,4 +1,4 @@
-import { forOutputLanguage } from "@/lib/output-language"
+import { forOutputLanguage, isOutputLanguageFallback } from "@/lib/output-language"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { cameraPathOf, cameraSourceId, feedFrame, withCameraPath, type LiveSources, type StateSources } from "@/lib/live-sources"
 import { CONTENT_TYPES } from "@/types/broadcast"
@@ -305,6 +305,25 @@ export function layerContent(s: LiveState, output: Pick<BroadcastOutput, "themeI
   const themeId = layer.themeId ?? themeIdFor(output, shown?.content)
   const theme = output.sceneAppearanceSnapshot?.themes[themeId] ?? output.sceneAppearanceSnapshot?.themes[output.themeId] ?? s.themes.find((t) => t.id === themeId) ?? s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
   return { verse: shown ? forOutputLanguage(shown, layer.language ?? output.language) : null, theme }
+}
+
+/** Whether visible text in a taken scene falls back because a selected second language is absent. */
+export function sceneHasLanguageFallback(
+  s: Pick<LiveState, "isLive" | "liveVerse" | "sources">,
+  output: Pick<BroadcastOutput, "language" | "shows">,
+  scene: Pick<Scene, "layers">,
+  overlay: LowerThird | null,
+  shown: VerseRenderData | null,
+  outputOverlayVisible: boolean,
+): boolean {
+  const feedFallback = scene.layers.some((layer) =>
+    layer.visible && layer.kind === "feed" &&
+    isOutputLanguageFallback(layer.held ?? feedFrame(s, layer.shows), layer.language ?? output.language),
+  )
+  const hasVisibleOverlay = outputOverlayVisible || scene.layers.some((layer) => layer.visible && layer.kind === "lowerThird")
+  const overlayFallback = !!overlay?.follow && hasVisibleOverlay &&
+    isOutputLanguageFallback(shown, output.language)
+  return feedFallback || overlayFallback
 }
 
 /** A short fingerprint of a text, so a frame can say "this layer shows something new" without carrying it twice. */

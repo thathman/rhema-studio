@@ -189,6 +189,27 @@ describe("Production control", () => {
     useBroadcastStore.setState({ outputs: before })
   })
 
+  it("shows a missing second-language fallback to operators in the output inspector", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const before = useBroadcastStore.getState()
+    const output = before.outputs[0]
+    useBroadcastStore.setState({
+      outputs: [{ ...output, language: "second", role: "congregation" }],
+      outputFrames: {
+        [output.id]: { theme: before.themes[0], verse: null, overlay: null, languageFallback: true },
+      },
+    })
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    await act(async () => mount(el))
+    const screens = [...el.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === "Screens") as HTMLButtonElement
+    await act(async () => screens.click())
+
+    expect(el.querySelector(`[aria-label="${output.name}"]`)?.textContent).toContain("Second language unavailable; showing available text.")
+
+    useBroadcastStore.setState({ outputs: before.outputs, outputFrames: before.outputFrames })
+  })
+
   it("OBS sits beside Scenes and says it is OBS's program, separate from Rhema Studio's congregation scenes", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const el = document.createElement("div")
