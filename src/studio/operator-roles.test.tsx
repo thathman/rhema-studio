@@ -127,6 +127,25 @@ describe("a Screens group Take", () => {
     const root = createRoot(el)
     await act(async () => root.render(<OperatorsPanel />))
 
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Edit Sermon"]')!.click())
+    const sceneName = el.querySelector<HTMLInputElement>('[aria-label="Scene name"]')!
+    const setInputValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!
+    await act(async () => {
+      setInputValue.call(sceneName, "Unsaved scene edit")
+      sceneName.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async () => [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Choose group targets"))!.click())
+    await act(async () => el.querySelector<HTMLInputElement>('input[aria-label="Include Sanctuary in group Take"]')!.click())
+    await act(async () => el.querySelector<HTMLInputElement>('input[aria-label="Include Overflow in group Take"]')!.click())
+    await act(async () => [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Review 2 outputs"))!.click())
+    expect(document.body.textContent).toContain("Review this group Take")
+    await act(async () => useJoin.setState({ status: "reconnecting" }))
+    await act(async () => useJoin.setState({ status: "connected" }))
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Scene name"]')?.value).toBe("Unsaved scene edit")
+    expect(document.body.textContent).not.toContain("Review this group Take")
+    expect(el.querySelector('input[aria-label="Include Sanctuary in group Take"]')).toBeNull()
+    expect([...el.querySelectorAll("button")].some((button) => button.textContent?.includes("Choose group targets"))).toBe(true)
+
     expect([...el.querySelectorAll("button")].some((button) => button.textContent?.includes("Take Sermon"))).toBe(true)
     const groupToggle = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Choose group targets"))
     expect(groupToggle).toBeDefined()
