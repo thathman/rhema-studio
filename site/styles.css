@@ -52,7 +52,7 @@ h1 span { color: var(--green); }
 .button-secondary:hover { border-color: #91aa9d; background: white; }
 .hero-note { margin: 20px 0 0; color: #6a7771; font-size: 12px; line-height: 1.55; }
 .hero-screen { min-width: 0; margin: 0; padding: 12px; border: 1px solid #d7e0da; border-radius: 18px; background: #e7ece8; box-shadow: 0 24px 64px rgb(25 49 39 / 12%); }
-.hero-screen img { width: 100%; aspect-ratio: 16 / 10; border: 1px solid #283732; border-radius: 10px; object-fit: cover; }
+.hero-screen img { display: block; width: 100%; height: auto; border: 1px solid #283732; border-radius: 10px; }
 .hero-screen figcaption { display: flex; justify-content: space-between; gap: 14px; padding: 12px 3px 0; color: #52645c; font-size: 10px; font-weight: 730; letter-spacing: .07em; }
 .hero-screen figcaption span:last-child { font-weight: 520; letter-spacing: 0; }
 
@@ -62,7 +62,7 @@ h1 span { color: var(--green); }
 .section-heading > p:last-child, .docs-callout > div > p:last-child { max-width: 660px; margin-bottom: 0; color: var(--muted); }
 .screenshot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .screenshot-card { min-width: 0; overflow: hidden; margin: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
-.screenshot-card img { width: 100%; aspect-ratio: 16 / 10; border-bottom: 1px solid var(--line); background: #15221e; object-fit: cover; }
+.screenshot-card img { display: block; width: 100%; height: auto; border-bottom: 1px solid var(--line); background: #15221e; }
 .screenshot-card figcaption { display: grid; gap: 6px; padding: 17px 18px 18px; }
 .screenshot-card figcaption strong { font-size: 17px; letter-spacing: -.02em; }
 .screenshot-card figcaption span { color: var(--muted); font-size: 14px; line-height: 1.55; }
