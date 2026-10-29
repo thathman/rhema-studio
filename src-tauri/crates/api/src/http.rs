@@ -1692,7 +1692,7 @@ async fn plan_request<S: CommandSink + 'static>(state: Arc<AppState<S>>, peer: S
         Err(PlanError::Invalid(why)) => return (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!({ "error": why }))).into_response(),
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };
-    let desk = crate::plans::Desk { id: entry.hash.clone(), name: entry.name.clone() };
+    let desk = crate::plans::Desk { id: entry.hash.clone(), name: entry.name.clone(), role: entry.role };
     let sink = state.sink.clone();
     match tokio::task::spawn_blocking(move || sink.plans(&desk, &asked)).await {
         Ok(Ok(v)) => ([(axum::http::header::CACHE_CONTROL, "no-store")], Json(v)).into_response(),
@@ -2720,7 +2720,11 @@ mod tests {
             use crate::plans::{PlanError, PlanRequest};
             match q {
                 PlanRequest::List => Ok(serde_json::json!([{ "id": "p1", "revision": 3 }])),
-                PlanRequest::Get { id } if id == "p1" => Ok(serde_json::json!({ "id": "p1", "revision": 3 })),
+                PlanRequest::Get { id } if id == "p1" => Ok(serde_json::json!({
+                    "id": "p1",
+                    "revision": 3,
+                    "role": by.role.as_str()
+                })),
                 PlanRequest::Save { expected_revision: 3, items, .. } => Ok(serde_json::json!({ "revision": 4, "savedBy": by.name, "items": items.len() })),
                 PlanRequest::Submit { revision: 3, .. } => Ok(serde_json::json!({ "requestId": "r1", "requester": by.id })),
                 PlanRequest::Save { expected_revision: e, .. } | PlanRequest::Submit { revision: e, .. } => Err(PlanError::Conflict { expected: *e, actual: 3 }),
@@ -5435,7 +5439,11 @@ mod tests {
         };
         let listed = req("GET", "/api/v1/plans", None, "edi").await;
         assert!(listed.contains("200 OK"), "{listed}");
-        assert!(req("GET", "/api/v1/plans/p1", None, "pre").await.contains("200 OK"), "the Present desk reads the plan");
+        let present_plan = req("GET", "/api/v1/plans/p1", None, "pre").await;
+        assert!(
+            present_plan.contains("200 OK") && present_plan.contains(r#""role":"present""#),
+            "the authenticated Present role reaches the host for response redaction: {present_plan}"
+        );
         assert!(req("GET", "/api/v1/plans/p1", None, "vie").await.contains("403"), "view only does not read the plan");
         assert!(req("GET", "/api/v1/plans/nope", None, "edi").await.contains("404"));
         assert!(get_with(port, "/api/v1/plans", "", None).await.contains("401"), "never without a key");

@@ -38,11 +38,36 @@ pub struct SubmitBody {
     pub note: Option<String>,
 }
 
-/// Who asked: the key's hash and device name (recorded on the revision and the request).
+/// Who asked: the authenticated key, device name, and server-assigned role. The role is retained
+/// for response shaping; callers must never accept it from the request body.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Desk {
     pub id: String,
     pub name: String,
+    pub role: Role,
+}
+
+/// Whether a service may be addressed by the LAN plan endpoints.
+#[must_use]
+pub fn is_available(archived_at: Option<&str>, is_template: bool) -> bool {
+    archived_at.is_none() && !is_template
+}
+
+/// Present may read a current plan for running context, but receives no private item notes.
+/// The serialized host response is used so this stays in the API layer without depending on the
+/// content crate's internal models.
+pub fn redact_notes_for_role(plan: &mut serde_json::Value, role: Role) {
+    if role != Role::Present {
+        return;
+    }
+    let Some(items) = plan.get_mut("items").and_then(serde_json::Value::as_array_mut) else {
+        return;
+    };
+    for item in items {
+        if let Some(fields) = item.as_object_mut() {
+            fields.insert("notes".into(), serde_json::Value::Null);
+        }
+    }
 }
 
 /// Why the host refused: each becomes an HTTP status the desk can act on.
@@ -111,6 +136,34 @@ mod tests {
         assert_eq!(
             PlanRequest::Submit { id: "p1".into(), revision: 4, note: Some("  ready for Sunday  ".into()) }.checked(),
             Ok(PlanRequest::Submit { id: "p1".into(), revision: 4, note: Some("ready for Sunday".into()) })
+        );
+    }
+
+    #[test]
+    fn archived_services_and_templates_are_not_available_to_lan_plan_actions() {
+        assert!(is_available(None, false));
+        assert!(!is_available(Some("2026-10-29T00:00:00Z"), false));
+        assert!(!is_available(None, true));
+    }
+
+    #[test]
+    fn present_get_response_redacts_notes_without_changing_editor_responses() {
+        let mut present = serde_json::json!({
+            "program": {"id": "sunday"},
+            "items": [{"id": "moment-1", "notes": "private pastoral note", "reference": "John 3:16"}]
+        });
+        redact_notes_for_role(&mut present, Role::Present);
+        assert_eq!(present.pointer("/items/0/notes"), Some(&serde_json::Value::Null));
+        assert!(!present.to_string().contains("private pastoral note"));
+
+        let mut editor = serde_json::json!({
+            "program": {"id": "sunday"},
+            "items": [{"id": "moment-1", "notes": "private pastoral note", "reference": "John 3:16"}]
+        });
+        redact_notes_for_role(&mut editor, Role::Editor);
+        assert_eq!(
+            editor.pointer("/items/0/notes").and_then(serde_json::Value::as_str),
+            Some("private pastoral note")
         );
     }
 }

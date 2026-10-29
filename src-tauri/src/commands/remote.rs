@@ -320,7 +320,7 @@ impl CommandSink for TauriSink {
 /// revision the desk saw. The main desk hears of both; neither changes Live.
 fn answer_plan(app: &AppHandle, by: &rhema_api::Desk, q: &rhema_api::PlanRequest) -> Result<serde_json::Value, rhema_api::PlanError> {
     use rhema_api::{PlanError, PlanRequest};
-    use rhema_content::ContentError;
+    use rhema_content::{ContentError, ProgramWithItems};
     let failed = |e: ContentError| match e {
         ContentError::NotFound(_) => PlanError::NotFound,
         ContentError::Conflict { expected, actual } => PlanError::Conflict { expected, actual },
@@ -332,6 +332,16 @@ fn answer_plan(app: &AppHandle, by: &rhema_api::Desk, q: &rhema_api::PlanRequest
     let content = app.try_state::<super::content::ContentState>().ok_or_else(unavailable)?;
     let guard = content.0.lock().map_err(|_| unavailable())?;
     let db = guard.as_ref().ok_or_else(unavailable)?;
+    let read_active_plan = |id: &str| -> Result<ProgramWithItems, PlanError> {
+        let plan = db.get_program(id).map_err(failed)?.ok_or(PlanError::NotFound)?;
+        if !rhema_api::plans::is_available(
+            plan.program.archived_at.as_deref(),
+            plan.program.is_template,
+        ) {
+            return Err(PlanError::NotFound);
+        }
+        Ok(plan)
+    };
     fn json<T: serde::Serialize>(v: &T) -> Result<serde_json::Value, PlanError> {
         serde_json::to_value(v).map_err(|e| PlanError::Unavailable(e.to_string()))
     }
@@ -340,8 +350,16 @@ fn answer_plan(app: &AppHandle, by: &rhema_api::Desk, q: &rhema_api::PlanRequest
             let plans: Vec<_> = db.list_programs().map_err(failed)?.into_iter().filter(|p| p.archived_at.is_none() && !p.is_template).collect();
             json(&plans)
         }
-        PlanRequest::Get { id } => json(&db.get_program(id).map_err(failed)?.ok_or(PlanError::NotFound)?),
+        PlanRequest::Get { id } => {
+            let mut response = json(&read_active_plan(id)?)?;
+            rhema_api::plans::redact_notes_for_role(&mut response, by.role);
+            Ok(response)
+        }
         PlanRequest::Save { id, expected_revision, items } => {
+            // Archived services and templates are not LAN editing targets. The ContentState lock
+            // above stays held through the revision-checked save, so archive/template changes on
+            // this host cannot race this eligibility check.
+            let _current = read_active_plan(id)?;
             let items: Vec<rhema_content::ItemInput> = items
                 .iter()
                 .cloned()
@@ -357,7 +375,7 @@ fn answer_plan(app: &AppHandle, by: &rhema_api::Desk, q: &rhema_api::PlanRequest
             json(&saved)
         }
         PlanRequest::Submit { id, revision, note } => {
-            let current = db.get_program(id).map_err(failed)?.ok_or(PlanError::NotFound)?;
+            let current = read_active_plan(id)?;
             if current.program.revision != *revision {
                 return Err(PlanError::Conflict { expected: *revision, actual: current.program.revision });
             }

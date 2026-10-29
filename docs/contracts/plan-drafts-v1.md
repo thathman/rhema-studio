@@ -20,11 +20,13 @@ Request bodies are camelCase; `Program`, `ProgramItem` and `ItemInput` keep the 
 | Route | Roles | Result |
 | --- | --- | --- |
 | `GET /api/v1/plans` | Editor, Configure, Present | `Program[]` in use (not archived, not templates) |
-| `GET /api/v1/plans/{id}` | Editor, Configure, Present | `{ program, items }` (`program.revision`, `program.approved_revision`) |
+| `GET /api/v1/plans/{id}` | Editor, Configure, Present | `{ program, items }` (`program.revision`, `program.approved_revision`); Present receives items with `notes: null` |
 | `PUT /api/v1/plans/{id}` `{ expectedRevision, items: ItemInput[] }` | Editor, Configure | `{ program, items }` at the next revision |
 | `POST /api/v1/plans/{id}/submit` `{ revision, note? }` | Editor, Configure | `ApprovalRequest` (`kind: "plan_approve"`, `baseRevision: revision`) |
 
 Refusals: no key `401`; another role `403`; paused key `423` for PUT/submit (it still reads); unknown plan `404`; bad item or revision `< 1` or more than 500 items `422`; **stale revision `409 { expected, actual }`**: reopen, never overwrite; services store unavailable `503`. Bible, Worship, Screens, Stage, Camera, OBS, Timekeeper and Viewer desks get nothing.
+
+Archived services and templates return `404` from Get, Save, and Submit as well as being omitted from the list. Present can read an in-use plan for running context, but private item notes are redacted to `null` for that public operator role.
 
 ## Rules
 
@@ -40,7 +42,7 @@ The inbox lists `plan_approve` requests from `approvals_list`. **Approve** = `ap
 
 ## Not in this slice
 
-Comments and per-item assignment (Page 9 left column), design drafts over HTTP (after #523), the home relay (owner decision), and redaction of private stage notes for Present desks (they already see the plan at the main desk).
+Comments and per-item assignment (Page 9 left column), design drafts over HTTP (after #523), and the home relay (owner decision).
 
 ## Rollback
 
