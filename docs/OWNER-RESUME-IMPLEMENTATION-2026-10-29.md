@@ -4,11 +4,13 @@
 
 **This document is an actionable Codex instruction, not proof that a Codex session was resumed or that code shipped.** The execution owner must actually read and follow it in the next running Codex CLI session.
 
+**LATEST OWNER PR ORDER (29 October): [NEW PRs ALLOWED, MANAGED QUEUE](OWNER-PR-WORKFLOW-2026-10-29.md).** This supersedes any older no-new-PR sentences in this document and historical handoffs. New coherent PRs and fast verified merges are authorized; the website PR hold is unchanged.
+
 ## 1. Exact change of state
 
 - **PR-backlog pause ends NOW.** The former Phase A / "stop unplanned feature development until backlog is cleared" restriction is **satisfied for the nonpublishing backlog** and **must no longer be used as a reason to avoid major feature work**. Restore the existing comprehensive build queue, working feature implementation, subagent delegation and regular integration. Do not schedule another full PR inventory project instead of writing code.
 - **Dated verification:** On 29 October, only **two** open PRs remain: [#352](https://github.com/thathman/rhema-studio/pull/352) and [#367](https://github.com/thathman/rhema-studio/pull/367). **Both are OWNER-GATED website-publishing changes**, intentionally unmerged; they are NOT blockers to native, LAN, receiver, operator or desktop work. Reconfirm actual status before making factual reports.
-- **The ZERO NEW PR creation rule REMAINS in effect**, because the owner did **not expressly ask to restore the previous mass PR-opening practice**. Resume coding immediately via the already approved direct-main or controlled existing integration-branch workflow, with single-writer ownership, risk-based review, verified exact-head CI and rollback strategy. Do not reaccumulate dozens of open PRs. If the owner's preferred working repository policy requires a new PR for a particular change, report the concrete blocker rather than silently expanding backlog. Do not invent extra issues/PRs as progress markers.
+- **OWNER UPDATE — NEW PRs ALLOWED (29 OCTOBER):** The owner explicitly lifted the blanket PR creation freeze. Follow [Owner PR Workflow](OWNER-PR-WORKFLOW-2026-10-29.md): reviewable new feature/fix PRs allowed, aim for 3 active development PRs and cap normal queue at 5 (exclude owner-gated #352/#367); integrate and merge promptly with relevant tests and host/output security. Never rebuild a 52-PR backlog. Continue resumed feature implementation and subagent delegation without waiting for website publishing.
 - Maintain **do not merge or publish #352/#367** until the owner separately authorizes website publishing. No other deployments/releases, app distribution, real church-data mutations, destructive migrations, security/license exceptions, or unapproved auto-live behavior.
 - **Resume prior approved product scope, not just the latest Page 5 design.** Build the originally intended complete Rhema platform, preserving all earlier agreed capabilities in [comprehensive feature coverage](rhema-studio/32-feature-coverage-inventory.md) and [unified handoff](CODEX-UNIFIED-HANDOFF.md). Page-by-page operator design brainstorming is useful input, **not a development stop-work gate** for other independent approved functionality.
 
@@ -27,7 +29,7 @@
 - Main Codex agent is the **only integrator** and owns architecture, taskboard, current-main conflict resolution, decision and final evidence.
 - **Use up to four bounded subagents, preferably three concurrent independently scoped agents**, with explicit task/owned file sets and isolation: e.g. (A) Prepare/Live UX vertical journey; (B) Design/Library/Avnac (native + licensing); (C) Browser Operators/Permissions/Screens; (D) QA/security/CI/device integration read-only or disjoint files. Agent assignments are illustrative—avoid overlap in `src/studio/shell`, host ACL, shared schema, `broadcast-store`, `AGENTS` or documentation. One writer per collision domain.
 - Require each agent's handoff: files/commits changed, source contract, tests actually run, real limitations, owner actions needed, next exact handoff. Main Codex integrates incrementally and checks safety. Do not claim subagent work occurred without logs/evidence from the running Codex session.
-- Preserve the prior **subagent instructions** in [FAST-DELIVERY-SUBAGENTS](FAST-DELIVERY-SUBAGENTS.md) and [AGENTS.md](../AGENTS.md); the prior *pause* on feature implementation is lifted, not the safety review or no-new-PR rule.
+- Preserve the prior **subagent instructions** in [FAST-DELIVERY-SUBAGENTS](FAST-DELIVERY-SUBAGENTS.md) and [AGENTS.md](../AGENTS.md). Both the feature-work pause and the blanket no-new-PR rule have now been lifted explicitly; security, review, code ownership and website publication gates still apply.
 - Prefer code and usable working behavior to recurring architectural essays. No unbounded background promises or "ready" milestones without proof.
 
 ## 4. Milestone order, not a serial stop-work
@@ -46,6 +48,6 @@
 
 ## 5. Reporting cadence and proof
 
-At each coherent milestone, publish: `MAIN SHA`, changed workflows, actual code paths, test/CI outcomes (what passed and what wasn't run), real device results, subagent handoffs, blockers, `PRs opened=0`, `PRs owner-gated=#352/#367`, and **the next concrete build task**. Update existing issue discussions / current taskboard so the owner can see work from GitHub. Never say "everything completed" merely because all PRs except website publishing were closed.
+At each coherent milestone, publish: `MAIN SHA`, changed workflows, actual code paths, test/CI outcomes (what passed and what wasn't run), real device results, subagent handoffs, blockers, `PRs opened=N`, `development PRs active=M (target <=3, normal max 5)`, `PRs owner-gated=#352/#367`, and **the next concrete build task**. Update existing issue discussions / current taskboard so the owner can see work from GitHub. Never say "everything completed" merely because all PRs except website publishing were closed.
 
 **Success means implementing and validating the backlog of approved major features, not merging the last two website PRs and not writing more plans.**
