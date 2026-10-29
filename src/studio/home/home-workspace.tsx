@@ -14,7 +14,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
 import { type ReadinessCheck, type ReadinessFix } from "@/studio/readiness"
 import { isImageItem, isSongItem } from "@/types"
-import { isSkipped, nextVisibleItem, plannedTimes } from "@/lib/run-of-show"
+import { isSkipped, nextVisibleItem, plannedTimes, projectRunOfShowEvents } from "@/lib/run-of-show"
 import { formatMinutes } from "@/lib/service-timing"
 import { useReadiness } from "@/studio/use-readiness"
 import { ChurchFolderCard } from "@/studio/home/church-folder-card"
@@ -35,6 +35,9 @@ const ICON: Record<ReadinessCheck["status"], React.ReactNode> = {
 export function HomeWorkspace() {
   const songs = useSongStore((s) => s.songs)
   const { ready, checks, onAir, items, headers, activeIndex, current, dirty, programs, suggested, outputs, setWorkspace, openOutputs } = useReadiness()
+  const events = projectRunOfShowEvents(items, headers)
+  const eventTitleByMomentId = new Map(events.flatMap((event) => event.moments.map((moment) => [moment.id, event.title] as const)))
+  const hasPlan = Boolean(current) || items.length > 0 || events.length > 0
 
   const fix = (f: ReadinessFix) => {
     if (f === "outputs") openOutputs()
@@ -84,14 +87,18 @@ export function HomeWorkspace() {
               <span className="block font-[Georgia,serif] font-bold text-primary-text italic">Without the chaos.</span>
             </h2>
             <p className="mt-3 max-w-[590px] text-[0.8125rem] text-muted-foreground">
-              {items.length === 0
-                ? "Start the service in Prepare: passages, songs, hymns, slides and pictures, in order. Nothing goes on a screen until you show it live."
+              {!hasPlan
+                ? "Start a service in Prepare: add events, then place passages, songs, hymns, slides and pictures in order. The plan stays separate from Live."
+                : items.length === 0
+                  ? events.length > 0
+                    ? `${events.length} ${events.length === 1 ? "event is" : "events are"} in the running order, with no moments yet. Continue in Prepare to add content. Plan changes do not change Live on their own.`
+                    : "This service is open, but its running order is empty. Add an event in Prepare. Plan changes do not change Live on their own."
                 : ready
                   ? "Your service is ready. Turn the screens on and take it to the live console with confidence."
                   : "Your service is taking shape. Finish the final details, then take it to the live console with confidence."}
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
-              <Button onClick={() => setWorkspace("prepare")}>{items.length ? "Continue preparing" : "Prepare a service"} <ArrowRightIcon /></Button>
+              <Button onClick={() => setWorkspace("prepare")}>{hasPlan ? "Continue preparing" : "Prepare a service"} <ArrowRightIcon /></Button>
               <Button variant="outline" onClick={() => setWorkspace("present")}>Open live console <PlayIcon /></Button>
             </div>
           </div>
@@ -109,7 +116,7 @@ export function HomeWorkspace() {
         </section>
 
         <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-1">
-          <Stat icon={<CalendarDaysIcon />} label="Sunday plan" value={String(items.length)} unit={items.length === 1 ? "item" : "items"} detail={current ? `${current.title}${skippedCount ? ` · ${skippedCount} skipped` : ""}${minutes ? ` · ${formatMinutes(minutes * 60_000)} scheduled` : ""}${dirty ? " · unsaved changes" : ""}` : "No saved service open"} />
+          <Stat icon={<CalendarDaysIcon />} label="Sunday plan" value={String(items.length)} unit={items.length === 1 ? "item" : "items"} detail={current ? `${current.title}${events.length ? ` · ${events.length} ${events.length === 1 ? "event" : "events"}` : ""}${skippedCount ? ` · ${skippedCount} skipped` : ""}${minutes ? ` · ${formatMinutes(minutes * 60_000)} scheduled` : ""}${dirty ? " · unsaved changes" : ""}` : "No saved service open"} />
           {/* Checks counted, not a percentage (#298: no arbitrary percentages). */}
           <Stat icon={<CheckIcon />} label="Service readiness" value={String(okCount)} unit={`of ${counted} check${counted === 1 ? "" : "s"}`} detail={ready ? "Ready to present" : `${warnings.length} to check`} />
           <Stat icon={<MonitorIcon />} label="Screens" value={String(onAir)} unit={`of ${outputs.length} on`} detail={onAir ? "On air when you show something live" : "Turn them on in Outputs"} />
@@ -123,13 +130,32 @@ export function HomeWorkspace() {
             </div>
             <div className="rounded-lg border border-border bg-card p-3 shadow-panel">
               {items.length === 0 ? (
-                <p className="px-2 py-6 text-center text-sm text-muted-foreground">Nothing in the service yet. Open Prepare to add passages, songs and slides.</p>
+                events.length === 0 ? (
+                  <p className="px-2 py-6 text-center text-sm text-muted-foreground">Nothing in the running order yet. Open Prepare to add an event and its moments.</p>
+                ) : (
+                  <>
+                    <p className="px-2 py-2 text-xs text-muted-foreground">{events.length} {events.length === 1 ? "event" : "events"} in the running order · no moments yet</p>
+                    <ol className="divide-y divide-border">
+                      {events.slice(0, 6).map((event, index) => (
+                        <li key={event.id} className="flex items-center gap-3 rounded-lg px-2 py-2.5">
+                          <span className="flex h-8 w-[53px] shrink-0 items-center justify-center rounded-md bg-[#edf1ec] text-[0.6875rem] font-extrabold text-[#536d67] tabular-nums dark:bg-muted dark:text-muted-foreground">{String(index + 1).padStart(2, "0")}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold">{event.title || "Untitled event"}</span>
+                            <span className="block truncate text-xs text-muted-foreground">Event · no moments yet</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                    {events.length > 6 && <p className="px-2 pt-2 text-xs text-muted-foreground">and {events.length - 6} more in the full rundown</p>}
+                  </>
+                )
               ) : (
                 <ol className="divide-y divide-border">
                   {items.slice(0, 6).map((it, i) => {
                     const skipped = isSkipped(items, headers, i)
                     const skipLabel = it.hidden ? "Hidden for this service" : skipped ? "Phase skipped for this service" : null
                     const plannedTime = skipped ? null : plannedAt.get(i)
+                    const eventTitle = eventTitleByMomentId.get(it.id)
                     return (
                       <li key={it.id}>
                         <button type="button" onClick={() => setWorkspace("prepare")} className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left outline-none hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50">
@@ -137,7 +163,7 @@ export function HomeWorkspace() {
                           <KindTile item={it} />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-semibold">{it.reference}</span>
-                            <span className="block truncate text-xs text-muted-foreground">{kindLabel(it, songs)}{it.planned_minutes ? ` · ${it.planned_minutes} min` : ""}{skipLabel ? ` · ${skipLabel}` : ""}{next?.item.id === it.id && activeIndex !== null ? next.kind === "moment" ? " · next moment" : " · next" : ""}</span>
+                            <span className="block truncate text-xs text-muted-foreground">{eventTitle ? `${eventTitle} · ` : ""}{kindLabel(it, songs)}{it.planned_minutes ? ` · ${it.planned_minutes} min` : ""}{skipLabel ? ` · ${skipLabel}` : ""}{next?.item.id === it.id && activeIndex !== null ? next.kind === "moment" ? " · next moment" : " · next" : ""}</span>
                           </span>
                           <ChevronRightIcon className="size-4 text-muted-foreground" />
                         </button>

@@ -84,6 +84,33 @@ describe("Home workspace", () => {
     return home.querySelector('section[aria-labelledby="glance"]')!
   }
 
+  it("shows an event-only service as work to continue, not an empty plan", async () => {
+    const home = await renderHome([], [
+      { id: "welcome", type: "group", name: "Welcome", at: 0, event: { schema_version: 1 } },
+      { id: "worship", type: "group", name: "Worship", at: 0, event: { schema_version: 1 } },
+    ], null)
+
+    expect(home.textContent).toContain("Welcome")
+    expect(home.textContent).toContain("Worship")
+    expect(home.textContent).toMatch(/no moments yet/i)
+    expect(home.textContent).toContain("Continue preparing")
+    expect(home.textContent).not.toContain("Nothing in the service yet")
+    expect(home.textContent).not.toContain("Prepare a service")
+  })
+
+  it("keeps each moment connected to its event in the Home rundown", async () => {
+    const home = await renderHome([slide("Welcome Scripture"), slide("Opening song")], [
+      { id: "welcome", type: "group", name: "Welcome", at: 0, event: { schema_version: 1 } },
+      { id: "worship", type: "group", name: "Worship", at: 1, event: { schema_version: 1 } },
+    ], null)
+    const entries = [...home.querySelector('section[aria-labelledby="glance"] ol')!.querySelectorAll(":scope > li")]
+
+    expect(entries[0].textContent).toContain("Welcome Scripture")
+    expect(entries[0].textContent).toContain("Welcome")
+    expect(entries[1].textContent).toContain("Opening song")
+    expect(entries[1].textContent).toContain("Worship")
+  })
+
   function readinessTile(home: HTMLElement) {
     const label = [...home.querySelectorAll<HTMLParagraphElement>("p")].find((paragraph) => paragraph.textContent?.trim() === "Service readiness")
     return label?.parentElement ?? null
