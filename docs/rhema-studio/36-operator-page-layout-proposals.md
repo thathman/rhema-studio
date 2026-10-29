@@ -402,7 +402,11 @@ The owner explicitly answered **yes** to these four proposed defaults. They are 
 
 ## Page 5 consolidated full-screen review candidate (29 October)
 
-The full one-page Screens & Graphics composition is now preserved as **[38 — Consolidated Page 5 Visual Review Candidate](38-screens-graphics-final-visual-review-candidate.md)**. It assembles the previously owner-approved output scope, Preview/Program truth, temporary service drafts, contextual design/graphics editor, compact 2–3 Upcoming queue, transitions/duration, Restore Previous Graphic and Director handoff into one coherent operator workspace with 1440px desktop, 768px tablet and ~390px mobile behavior. **This is a visual-review candidate, not yet signed off, implemented or production-ready**. The functional decisions in §5G–I remain approved regardless of any visual changes.
+The full one-page Screens & Graphics composition is now preserved as **[38 — Consolidated Page 5 Visual Review Candidate](38-screens-graphics-final-visual-review-candidate.md)**. It assembles the previously owner-approved output scope, Preview/Program truth, temporary service drafts, contextual design/graphics editor, compact 2–3 Upcoming queue, transitions/duration, Restore Previous Graphic and Director handoff into one coherent operator workspace with 1440px desktop, 768px tablet and ~390px mobile behavior. **The overall screen hierarchy was owner-approved 29 October; pixel styling, implementation and real-device acceptance remain outstanding**. The functional decisions in §5G–I remain approved regardless of any visual changes.
+
+## Page 5 owner structural sign-off (29 October 2026)
+
+After reviewing the consolidated interactive Page 5 visual candidate, the owner answered **Yes** to its **overall hierarchy**: side-by-side Private Preview and actual Current Program; selected output visible, contextual graphic controls below; compact 2–3 Upcoming Graphics; Director Requests as compact private cue; deliberate group-Take review. Refer to **[38 — Page 5 structurally approved visual composition](38-screens-graphics-final-visual-review-candidate.md)**. This approval covers the *composition and interaction direction*, not final pixel-level styling or claims that backend/receiver behavior is complete. Also see the [29 October owner resumption](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md): major feature building resumes without reopening PR backlog.
 
 ## Main Studio utility — Permissions sidebar page (NEW OWNER REQUEST)
 
