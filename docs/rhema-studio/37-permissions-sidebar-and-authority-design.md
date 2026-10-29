@@ -1,12 +1,14 @@
 # 37 — Permissions: First-Class Main Studio Sidebar Route and Access Management
 
+**CURRENT PR EXECUTION POLICY (29 October):** The owner rescinded the blanket PR creation freeze. [New development PRs are allowed in a small continuously merged queue](../OWNER-PR-WORKFLOW-2026-10-29.md), subject to existing Live/security/review gates. Website-publishing PRs #352/#367 remain held. Any older PR-freeze phrase in this page is historical.
+
 **Owner direction:** 28 October 2026. **APPROVED PRODUCT DECISIONS:** Permissions must be an unmistakable, directly accessible **route in the MAIN Rhema Studio sidebar**, not solely a Settings subpage or an implicit part of Connections; **Approval Requests must be a first-class area within that Permissions route**, where authorized host approvers can review, decide and track delegated operator requests. The host remains the source of role assignment and delegated authority. This is a **requirement/UX design contract**, not a claim that the route, approval queue or fine-grained authorization is implemented.
 
 **Status boundary:** The main-sidebar route, Approval Requests inbox and **Screens editing policy (29 Oct: service-scoped temporary edits by default; permanent reusable scene/design saves only under explicit host delegation or a specific approved request; temporary drafts survive restarts for the same service)** are owner-approved requirements. Exact visual layout, per-capability schema, grant UI and implementation remain under technical and visual review; no claim of shipped functionality. Owner-approved Bible Direct/Request, Timekeeper host reminders and individual/group Screens Takes remain binding. Do not promote an unapproved permission proposal to a broad live capability.
 
 **Read with:** [28 — Unified workspace](28-unified-workspace-contract.md), [34 — Operator roles](34-browser-operators-connected-development.md), [35 — Timing](35-timekeeper-and-timing-view-family.md), [36 — Page layout proposals](36-operator-page-layout-proposals.md), [32 — Coverage](32-feature-coverage-inventory.md), [Owner Finish-First](../OWNER-FINISH-FIRST-2026-10-28.md).
 
-**Execution policy:** Maintain **ZERO NEW PRs** and avoid unplanned refactors until the owner-directed backlog-clearance/integration work allows it. No website publishing or unvalidated production policy activation. A visual permission toggle never substitutes for host-enforced authorization.
+**Execution policy:** Maintain **new feature PRs allowed under the owner small-queue policy** and avoid unplanned refactors until the owner-directed backlog-clearance/integration work allows it. No website publishing or unvalidated production policy activation. A visual permission toggle never substitutes for host-enforced authorization.
 
 ## 1. Navigation: literal main-sidebar Permissions route
 
