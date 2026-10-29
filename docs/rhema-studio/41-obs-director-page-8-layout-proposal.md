@@ -126,3 +126,42 @@ The most important persistent difference on screen:
 5. **Comms:** a compact actionable Director/Camera handoff strip, avoiding a competing full chat page.
 
 **The owner has NOT approved Page 8 layout or expanded role powers yet.** Continue implementing already approved OBS functionality under owner resumed build/no-new-PR process while this design gets reviewed.
+
+## 9. Page 8 revised final composition candidate — OWNER VISUAL REVIEW PENDING (29 October)
+
+**This is the next approval question**, after owner confirmed Rhema-native **selected congregation-output** recording under [42](42-rhema-native-service-recording.md). The OBS Director controls the **online streaming production path only**. The page must not contain a primary OBS-based Record transport. Native Rhema REC is **read-only awareness**, optionally opening the separately authorized main Live recorder.
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ SUNDAY WORSHIP     OBS DIRECTOR    OBS Connected · Stream: ONLINE?  [Rhema REC · Sanctuary Main ↗]   │
+│                    OBS Studio Mode: [ON]          OBS stream connection from actual OBS state           │
+├──────────────────────────────────────────┬─────────────────────────────────────────────────────────────┤
+│ OBS PREVIEW — NOT ONLINE                 │ OBS PROGRAM — ONLINE PICTURE                              │
+│ [actual OBS preview if supported]        │ [actual OBS Program if supported]                           │
+│ Choir Worship                            │ Sermon Pulpit                                              │
+│ Prepared privately                       │ OBS Program applied (not proof platform viewers received)  │
+├──────────────────────────────────────────┴─────────────────────────────────────────────────────────────┤
+│ Transition: [Fade ▾]       [TAKE "Choir Worship" TO OBS ONLINE PROGRAM] — one explicit on-air action  │
+├──────────────────────────────────────────┬─────────────────────────────────────────────────────────────┤
+│ OBS SCENES                               │ STREAM HEALTH                                               │
+│ Sermon Pulpit · Program                  │ OBS stream: Connected / Reconnecting / Unknown             │
+│ Choir Worship · Preview                  │ Dropped frames + bitrate only when OBS actually reports    │
+│ Wide Camera · Set Preview                │ Rhema Native REC: read-only selected congregation output   │
+│ Full-screen Bible · Set Preview          │ Other screens: Sanctuary + Overflow · read only            │
+├──────────────────────────────────────────┴─────────────────────────────────────────────────────────────┤
+│ DIRECTOR + CAMERA REQUESTS: "Choir angle Ready" [Open] [Acknowledge] [Unable]                         │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### State and action rules
+
+1. **OBS connected, Studio Mode ON:** selecting scene sets **OBS Preview only**; `Take [name] to OBS Online Program` is a distinct explicit host-scoped operation. Do not assume actual Preview **video** unless secure real preview telemetry is available; otherwise display honest scene/status placeholders.
+2. **Studio Mode OFF:** no imaginary Preview; show `OBS DIRECT SWITCH MODE`, stage a named scene, demand `Review/confirm switch to Online Program`, and invalidate any pending confirmation if actual OBS mode or program changes.
+3. **Rhema recorder:** small status chip e.g. `Rhema REC · Sanctuary Main · 00:32:14` if actual native recorder state exists, otherwise `Rhema recorder unavailable/not configured`, with optional authorized navigation to **Live → Record**. Do not equate the OBS `StartRecord` API or OBS's recording status with Rhema's native recorder. No direct RhRec Start/Stop within OBS role absent distinct grant.
+4. **OBS offline:** direct OBS Take disabled and stale actual state labeled. Native recorder capture of the selected congregation output remains independent.
+5. **Congregation awareness:** show selected Sanctuary/Overflow state read-only, never auto-sync or show outputs as OBS's scene destinations. The selected congregation output being recorded does not become the OBS Program or change when OBS switches.
+6. **Recording/stream safety:** only true OBS Stream controls/status from verified backend; starting/stopping OBS live streaming requires separate explicit permission, and any legacy OBS-only Record controls move to clearly labeled optional Advanced/Fallback until Rhema native recording is validated, without breaking existing fallback prematurely.
+7. **Comms:** compact private Director/Camera request strip linked to service Event/Moment. `Ready` does not take OBS online automatically. Rehearsal cannot mutate OBS online Program.
+8. **Responsive:** desktop large side-by-side OBS Preview/Program; tablet preserve named distinction and one Take; phone pinned OBS Program status, one selected Preview, clear named Take plus separated other output/REC awareness. No fake live thumbnails or tiny destructive control next to Take.
+
+**Suggested owner sign-off:** approve the above **Page 8 streaming-only structural hierarchy** (OBS Preview and Program first, one explicit Take, scene picker, stream health, small read-only Rhema REC, private Comms). Detailed styling and proof of preview-video streams remain pending. **Not yet owner approved** and **not a proof of implementation**.
