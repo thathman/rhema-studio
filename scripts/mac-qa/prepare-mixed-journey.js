@@ -355,7 +355,9 @@ async function runScenario() {
     const addEvent = async (label, title, duration) => {
       const before = new Set(qa.queue.getState().headers.map((header) => header.id))
       await clickButton("Add event")
-      await clickButton(label, { startsWith: true })
+      // The event menu's option reads "<label> Creates <event>" ("Worship" alone when the names match);
+      // a bare "Bible" would also match the Add-to-service picker's Bible tab, which stays in the page.
+      await clickButton(label === title ? label : `${label} Creates ${title}`, { startsWith: true })
       const header = await waitFor(
         () => qa.queue.getState().headers.find((candidate) => !before.has(candidate.id) && candidate.event && candidate.name === title),
         `${title} event`,
@@ -419,6 +421,8 @@ async function runScenario() {
     await clickButton("Edit event: Scripture")
     await clickTab("Content")
     await clickButton("Add content to Scripture")
+    // The Add picker opens on the tab used last (the hymn book, earlier in this journey).
+    await clickTab("Bible")
     await setInput('input[aria-label="Quick find"]', "John 3 16")
     const verseRow = await waitFor(
       () => [...document.querySelectorAll('ul[aria-live="polite"] li')].find((candidate) => normal(candidate.innerText).includes("John 3:16")),
