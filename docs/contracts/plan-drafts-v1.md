@@ -38,7 +38,7 @@ Archived services and templates return `404` from Get, Save, and Submit as well 
 
 ## Main desk (Codex)
 
-The inbox lists `plan_approve` requests from `approvals_list`. **Approve** = `approvals_decide(id, "approve")`. Then use the existing Prepare approval (`content_approve_program_with_designs(programId, request.baseRevision, …)`, which freezes designs as today); if it returns `conflict`, the plan moved: tell the reviewer. Last, call `approvals_apply(id, currentRevision = request.baseRevision)` to close the request. The host never approves a plan by itself, so the design snapshot stays the main desk's.
+The inbox lists `plan_approve` requests from `approvals_list`. **Approve** = `approvals_decide(id, "approve")`. Then use the existing Prepare approval (`content_approve_program_with_designs(programId, request.baseRevision, …)`, which freezes designs as today); if it returns `conflict`, the plan moved: tell the reviewer. Last, call `approvals_apply(id)` to close the request. **Host-checked:** for `plan_approve` the host ignores the caller's revision and reads the plan: `applied` only when `approved_revision == baseRevision`; `not-approved-yet` (request stays approved) while the plan still sits at `baseRevision` unapproved; otherwise `stale` (superseded). The host never approves a plan by itself, so the design snapshot stays the main desk's.
 
 ## Not in this slice
 
