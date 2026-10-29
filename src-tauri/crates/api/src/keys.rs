@@ -607,8 +607,8 @@ mod tests {
 
     #[test]
     fn the_specialist_desks_do_only_their_part() {
-        let save = RemoteCommand::SaveScene(crate::command::SceneSave { scene: serde_json::json!({ "id": "s1" }), request: false });
-        let delete = RemoteCommand::DeleteScene(crate::command::SceneDelete { id: "s1".into(), request: false });
+        let save = RemoteCommand::SaveScene(crate::command::SceneSave { scene: serde_json::json!({ "id": "s1" }), request: false, base_revision: None });
+        let delete = RemoteCommand::DeleteScene(crate::command::SceneDelete { id: "s1".into(), request: false, base_revision: None });
         let obs = [RemoteCommand::ObsPreview("Sermon".into()), RemoteCommand::ObsTake, RemoteCommand::ObsProgram("Wide".into())];
         let take = RemoteCommand::TakeScene(crate::command::SceneTake { output: "main".into(), scene: "s".into() });
         // Worship: songs and hymns, and taking the lyrics off and back; nothing else on a screen.
@@ -692,8 +692,8 @@ mod tests {
         let e = Role::Editor;
         assert_eq!((e.as_str(), serde_json::to_string(&e).unwrap().as_str()), ("editor", "\"editor\""));
         assert_eq!(serde_json::from_str::<Role>("\"editor\"").unwrap(), e);
-        let save = RemoteCommand::SaveScene(crate::command::SceneSave { scene: serde_json::json!({ "id": "s1" }), request: false });
-        let delete = RemoteCommand::DeleteScene(crate::command::SceneDelete { id: "s1".into(), request: false });
+        let save = RemoteCommand::SaveScene(crate::command::SceneSave { scene: serde_json::json!({ "id": "s1" }), request: false, base_revision: None });
+        let delete = RemoteCommand::DeleteScene(crate::command::SceneDelete { id: "s1".into(), request: false, base_revision: None });
         let notice = RemoteCommand::NoticeSend(crate::command::NoticeIn { text: "ready".into(), to: None, priority: None, event: None, action: None });
         for cmd in [RemoteCommand::BiblePreview("John 3:16".into()), RemoteCommand::SongPreview("Amazing Grace".into()), RemoteCommand::AddToQueue, save, delete, notice, RemoteCommand::VoiceTalk(true)] {
             assert!(e.allows(&cmd), "{cmd}");
@@ -723,10 +723,10 @@ mod tests {
         assert_eq!(serde_json::from_str::<Role>("\"viewer\"").unwrap(), v);
         assert!(!v.edits_scenes());
         let take = RemoteCommand::TakeScene(crate::command::SceneTake { output: "main".into(), scene: "s".into() });
-        let save = RemoteCommand::SaveScene(crate::command::SceneSave { scene: serde_json::json!({ "id": "s1" }), request: false });
+        let save = RemoteCommand::SaveScene(crate::command::SceneSave { scene: serde_json::json!({ "id": "s1" }), request: false, base_revision: None });
         for cmd in [
             RemoteCommand::Next, RemoteCommand::Show, RemoteCommand::AddToQueue, RemoteCommand::BiblePreview("x".into()), RemoteCommand::SongPreview("x".into()), RemoteCommand::BibleActivate("x".into()),
-            RemoteCommand::ClearSource("bible".into()), take, save, RemoteCommand::DeleteScene(crate::command::SceneDelete { id: "s".into(), request: false }), RemoteCommand::StageMessage("x".into()),
+            RemoteCommand::ClearSource("bible".into()), take, save, RemoteCommand::DeleteScene(crate::command::SceneDelete { id: "s".into(), request: false, base_revision: None }), RemoteCommand::StageMessage("x".into()),
             RemoteCommand::EventNext, RemoteCommand::TimerAdjust(1), RemoteCommand::Resume, RemoteCommand::Macro("x".into()), RemoteCommand::OnAir(false), RemoteCommand::ObsPreview("x".into()),
         ] {
             assert!(!v.allows(&cmd), "{cmd}");

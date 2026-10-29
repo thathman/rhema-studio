@@ -2379,9 +2379,17 @@ async fn command_handler<S: CommandSink + 'static>(
             return (status, Json(CommandResponse { success: false, error: Some(message), code: Some(r.code), note: None }));
         }
         Ok(Some(crate::scene_edits::Verdict::Request(why))) => {
+            // The revision the server itself tracks for this scene, not one a desk could leave out.
+            let base = |id: &str| state.live.revision(&format!("scene:{id}"));
             match &mut command {
-                RemoteCommand::SaveScene(s) => s.request = true,
-                RemoteCommand::DeleteScene(d) => d.request = true,
+                RemoteCommand::SaveScene(s) => {
+                    s.request = true;
+                    s.base_revision = base(s.id());
+                }
+                RemoteCommand::DeleteScene(d) => {
+                    d.request = true;
+                    d.base_revision = base(&d.id);
+                }
                 _ => {}
             }
             waits = true;
@@ -3690,7 +3698,13 @@ mod tests {
         assert!(waits.contains("200 OK") && waits.contains("Sent to the main desk to accept, because that scene is on a screen"), "{waits}");
         let sent: serde_json::Value = serde_json::from_str(sink.scene.lock().unwrap().as_deref().unwrap()).unwrap();
         assert_eq!(sent["request"].as_bool(), Some(true), "a desk cannot say it needs no approval");
+        assert_eq!(sent["baseRevision"].as_u64(), Some(on), "the request is pinned to the revision the server tracks");
         assert_eq!(live.revision("scene:on"), Some(on), "a change that waits has not changed the scene");
+        // A desk that leaves out `seen` and claims a revision of its own still gets the server's.
+        let unseen = send(r#"{"command":"save_scene","value":{"scene":{"id":"on","name":"Sermon","revision":999,"layers":[]},"baseRevision":1}}"#.into(), scr).await;
+        assert!(unseen.contains("200 OK"), "{unseen}");
+        let sent: serde_json::Value = serde_json::from_str(sink.scene.lock().unwrap().as_deref().unwrap()).unwrap();
+        assert_eq!((sent["request"].as_bool(), sent["baseRevision"].as_u64()), (Some(true), Some(on)), "{sent}");
 
         // A scene deleted on the main desk: a change from before is refused.
         live.publish(r#"{"v":1,"program":{"onAir":true,"rehearsal":false},"scenes":[]}"#.into());
@@ -3713,7 +3727,7 @@ mod tests {
         let rehearsal = send(r#"{"command":"obs_program","value":"Wide"}"#.into(), "X-Rhema-Key: obs\r\n").await;
         assert!(rehearsal.contains("403") && rehearsal.contains("Rehearsal is on"), "{rehearsal}");
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        assert_eq!(sink.command_count(), 3, "two scene saves and one OBS take reached the app");
+        assert_eq!(sink.command_count(), 4, "three scene saves (two of them requests) and one OBS take reached the app");
         let mut handle = result.handle;
         handle.stop();
     }

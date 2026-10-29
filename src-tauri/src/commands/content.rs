@@ -29,6 +29,8 @@ pub enum ContentCommandError {
     Conflict { message: String, expected: i64, actual: i64 },
     /// A reusable asset still in use; `titles` names the dependent services/assets.
     InUse { message: String, titles: Vec<String> },
+    /// A rule refused it (approval requests: `self-approval`, `already-decided`, `expired`, `stale`…).
+    Refused { message: String, code: &'static str },
     Database { message: String },
 }
 
@@ -40,14 +42,15 @@ impl From<ContentError> for ContentCommandError {
             ContentError::Invalid(_) => Self::Invalid { message },
             ContentError::Conflict { expected, actual } => Self::Conflict { message, expected, actual },
             ContentError::InUse { titles } => Self::InUse { message, titles },
+            ContentError::Refused { code, .. } => Self::Refused { message, code },
             _ => Self::Database { message },
         }
     }
 }
 
-type CmdResult<T> = Result<T, ContentCommandError>;
+pub(crate) type CmdResult<T> = Result<T, ContentCommandError>;
 
-fn with_db<T>(
+pub(crate) fn with_db<T>(
     state: &State<'_, ContentState>,
     f: impl FnOnce(&ContentDb) -> rhema_content::Result<T>,
 ) -> CmdResult<T> {
