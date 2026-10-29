@@ -33,6 +33,15 @@ const live: LiveStateV1 = {
   },
 }
 
+const graphicsQueue: NonNullable<LiveStateV1["graphicsQueue"]> = {
+  planState: "approved",
+  items: [
+    { id: "current", title: "John 3:16", kind: "Scripture", eventId: "sermon", eventTitle: "Sermon", state: "Current moment", destinations: ["Sanctuary"] },
+    ...[1, 2, 3, 4].map((n) => ({ id: `slide-${n}`, title: `Graphic ${n}`, kind: "Slide" as const, eventId: "sermon", eventTitle: "Sermon", state: "Upcoming" as const, destinations: ["Sanctuary"] })),
+    { id: "done", title: "Welcome", kind: "Slide", eventId: "opening", eventTitle: "Welcome", state: "Completed", destinations: ["Overflow"] },
+  ],
+}
+
 const render = async (role: string, state: LiveStateV1 = live) => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   useJoin.setState({ status: "connected", me: { name: "Op", role }, live: state, error: null, paused: false, note: null })
@@ -136,6 +145,47 @@ describe("screens desk and the director's output map", () => {
     await click(button(box, "Put back"))
     expect(sent.at(-1)).toMatchObject({ command: "restore_source", value: "lowerThird" })
     expect((await render("worship")).querySelector('[aria-label="Ticker and lower third"]')).toBeNull()
+  })
+
+  it("shows the next three graphics, expands without changing target or live state, and marks narrow layouts for two readable rows", async () => {
+    const state: LiveStateV1 = {
+      ...live,
+      program: { onAir: true, reference: "Welcome slide", rehearsal: false },
+      graphicsQueue,
+      outputs: [{ id: "main", name: "Sanctuary", sceneId: null }, { id: "side", name: "Overflow", sceneId: null }],
+    }
+    const el = await render("screens", state)
+    const queue = el.querySelector('[aria-label="Upcoming graphics"]')!
+    expect(queue.textContent).toContain("Approved service plan")
+    expect(queue.textContent).not.toContain("John 3:16")
+    expect(queue.querySelectorAll('[aria-label="Upcoming graphics strip"] li')).toHaveLength(3)
+    expect(queue.querySelector('[aria-label="Upcoming graphics strip"] li:nth-child(3)')?.className).toContain("hidden sm:flex")
+
+    await choose(el.querySelector<HTMLSelectElement>('[aria-label="Congregation output"]')!, "side")
+    await click(button(queue, "View all"))
+    expect(queue.querySelectorAll('[aria-label="Full graphics queue"] li')).toHaveLength(6)
+    expect(queue.querySelector('[aria-label="Full graphics queue"]')?.textContent).toContain("Current moment")
+    expect(el.querySelector<HTMLSelectElement>('[aria-label="Congregation output"]')?.value).toBe("side")
+    expect(state.program.reference).toBe("Welcome slide")
+
+    await click(button(queue, "Collapse"))
+    expect(queue.querySelectorAll('[aria-label="Upcoming graphics strip"] li')).toHaveLength(3)
+    expect(el.querySelector<HTMLSelectElement>('[aria-label="Congregation output"]')?.value).toBe("side")
+    expect(sent).toHaveLength(0)
+  })
+
+  it("says when the host is older and does not expose the graphics queue to unrelated roles", async () => {
+    const oldHost = await render("screens", live)
+    expect(oldHost.textContent).toContain("does not share the graphics queue yet")
+    expect((await render("worship", { ...live, graphicsQueue })).querySelector('[aria-label="Upcoming graphics"]')).toBeNull()
+  })
+
+  it("marks stale host data and explains an empty event graphics queue", async () => {
+    const empty = await render("screens", { ...live, graphicsQueue: { planState: "draft", items: [] } })
+    expect(empty.textContent).toContain("No visual moments are planned inside service events")
+    const stale = await render("screens", { ...live, graphicsQueue })
+    await act(async () => useJoin.setState({ status: "reconnecting" }))
+    expect(stale.querySelector('[aria-label="Upcoming graphics"] [role="status"]')?.textContent).toContain("Host is out of date")
   })
 })
 

@@ -4446,7 +4446,7 @@ dependencies = [
 
 [[package]]
 name = "rhema"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "crossbeam-channel",
  "dotenvy",

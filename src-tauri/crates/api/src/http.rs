@@ -566,7 +566,11 @@ pub fn live_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String {
     let filtered = notices_for(json, reader);
     let Some(reader) = reader else { return filtered };
     let scenes = !reader.role.edits_scenes() && filtered.contains("\"layers\"");
-    let hidden: Vec<&str> = hidden_from(reader.role).iter().copied().filter(|k| filtered.contains(&format!("\"{k}\""))).collect();
+    let mut hidden: Vec<&str> = hidden_from(reader.role).to_vec();
+    if !matches!(reader.role, crate::keys::Role::Present | crate::keys::Role::Configure | crate::keys::Role::Screens) {
+        hidden.push("graphicsQueue");
+    }
+    hidden.retain(|k| filtered.contains(&format!("\"{k}\"")));
     if !scenes && hidden.is_empty() {
         return filtered;
     }
@@ -3785,19 +3789,23 @@ mod tests {
     #[test]
     fn the_console_parts_go_only_to_their_desks() {
         use crate::keys::Role;
-        let json = r#"{"v":1,"readiness":{"ready":false,"checks":[]},"heard":[{"reference":"John 3:16"}],"auxTimers":[],"outputMap":[],"lyrics":null,"notices":[]}"#;
+        let json = r#"{"v":1,"readiness":{"ready":false,"checks":[]},"heard":[{"reference":"John 3:16"}],"auxTimers":[],"outputMap":[],"lyrics":null,"graphicsQueue":{"planState":"approved","items":[]},"notices":[]}"#;
         let get = |role: Role| -> serde_json::Value { serde_json::from_str(&live_for(json, Some(&desk("Desk", role)))).unwrap() };
         for role in [Role::Present, Role::Configure] {
             let v = get(role);
             assert!(v.get("readiness").is_some() && v.get("heard").is_some(), "{role:?}");
+            assert!(v.get("graphicsQueue").is_some(), "{role:?} gets the Screens graphics plan");
         }
+        assert!(get(Role::Screens).get("graphicsQueue").is_some(), "Screens desk gets the upcoming graphics projection");
         for role in [Role::Bible, Role::Editor] {
             let v = get(role);
             assert!(v.get("readiness").is_none() && v.get("heard").is_some(), "{role:?}");
+            assert!(v.get("graphicsQueue").is_none(), "{role:?} does not get Screens-specific details");
         }
         for role in [Role::Worship, Role::Stage, Role::Screens, Role::Timekeeper, Role::Camera, Role::Obs, Role::Viewer] {
             let v = get(role);
             assert!(v.get("readiness").is_none() && v.get("heard").is_none() && v.get("presence").is_none(), "{role:?}");
+            assert_eq!(v.get("graphicsQueue").is_some(), role == Role::Screens, "{role:?} graphics queue access");
             assert!(v.get("auxTimers").is_some() && v.get("outputMap").is_some(), "{role:?} still gets the timers and the output map");
         }
         // A presence list a host's app sent itself never reaches a desk that may not see it.

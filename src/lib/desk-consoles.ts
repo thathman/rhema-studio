@@ -12,7 +12,9 @@ import { outputsForScreens, useBroadcastStore, type LiveSlide } from "@/stores/b
 import { useDetectionStore } from "@/stores/detection-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useSongStore } from "@/stores/song-store"
-import { isSongItem, type SongQueueItem, type SongWithSections } from "@/types"
+import { takeSteps } from "@/lib/item-intent"
+import { projectRunOfShowEvents, type OutlineHeader } from "@/lib/run-of-show"
+import { isImageItem, isSlideItem, isSongItem, isVerseItem, type Program, type QueueItem, type SongQueueItem, type SongWithSections } from "@/types"
 import type { ReadinessCheck } from "@/studio/readiness"
 
 /**
@@ -79,6 +81,82 @@ export interface HeardVerse {
 export interface SharedReadiness {
   ready: boolean
   checks: Pick<ReadinessCheck, "id" | "status" | "label" | "detail">[]
+}
+
+export type UpcomingGraphicState = "Upcoming" | "Current moment" | "Earlier in this event" | "Completed" | "Skipped" | "Planned"
+export type ServicePlanState = "draft" | "changed" | "approved"
+
+export interface UpcomingGraphic {
+  id: string
+  title: string
+  kind: "Scripture" | "Song" | "Hymn" | "Slide" | "Image" | "Scene moment"
+  eventId: string
+  eventTitle: string
+  state: UpcomingGraphicState
+  /** Planned scene destinations only; these names are not authority to Take. */
+  destinations: string[]
+}
+
+export interface UpcomingGraphicsQueue {
+  planState: ServicePlanState
+  items: UpcomingGraphic[]
+}
+
+interface UpcomingGraphicsInput {
+  items: QueueItem[]
+  headers: OutlineHeader[]
+  outputs: Array<{ id: string; name: string }>
+  service: Pick<Program, "revision" | "approved_revision"> | null
+  dirty: boolean
+  currentEventId: string | null
+  currentMomentId: string | null
+  eventStates: Record<string, "done" | "live" | "upcoming" | "skipped" | undefined>
+}
+
+function graphicKind(item: QueueItem): UpcomingGraphic["kind"] | null {
+  if (isVerseItem(item)) return "Scripture"
+  if (isSongItem(item)) return item.song.hymn ? "Hymn" : "Song"
+  if (isSlideItem(item)) return "Slide"
+  if (isImageItem(item)) return "Image"
+  return takeSteps(item).some((step) => step.kind === "scene") || !!item.scene_id ? "Scene moment" : null
+}
+
+function plannedDestinations(item: QueueItem, outputs: UpcomingGraphicsInput["outputs"]): string[] {
+  const targets = takeSteps(item).filter((step) => step.kind === "scene")
+  if (targets.length === 0) return [item.scene_id ? "Scene set for Preview; no Take target" : "Per output source settings"]
+  const names = new Set<string>()
+  for (const target of targets) {
+    if (target.kind !== "scene") continue
+    if (target.outputId) names.add(outputs.find((output) => output.id === target.outputId)?.name ?? "Unavailable output")
+    else if (outputs.length > 0) outputs.forEach((output) => names.add(output.name))
+    else names.add("No congregation outputs")
+  }
+  return [...names]
+}
+
+/** A read-only Screens queue projected from the canonical Run of Show → Event → Moment structure. */
+export function upcomingGraphicsQueue(input: UpcomingGraphicsInput): UpcomingGraphicsQueue {
+  const { items, headers, outputs, service, dirty, currentEventId, currentMomentId, eventStates } = input
+  const planState: ServicePlanState = !service || service.approved_revision == null
+    ? "draft"
+    : dirty || service.approved_revision !== service.revision ? "changed" : "approved"
+  const events = projectRunOfShowEvents(items, headers)
+  const graphics = events.flatMap((event) => event.moments.flatMap((item, index) => {
+    if (item.hidden) return []
+    const kind = graphicKind(item)
+    if (!kind) return []
+    const eventState = eventStates[event.id]
+    let state: UpcomingGraphicState = "Planned"
+    if (eventState === "done") state = "Completed"
+    else if (eventState === "skipped") state = "Skipped"
+    else if (currentMomentId === item.id) state = "Current moment"
+    else if (currentEventId === event.id && currentMomentId) {
+      const currentIndex = event.moments.findIndex((moment) => moment.id === currentMomentId)
+      if (currentIndex >= 0) state = index < currentIndex ? "Earlier in this event" : "Upcoming"
+    } else if (eventState === "upcoming") state = "Upcoming"
+    return [{ id: item.id, title: item.reference, kind, eventId: event.id, eventTitle: event.title, state, destinations: plannedDestinations(item, outputs) }]
+  }))
+  return { planState, items: graphics }
 }
 
 /** The host's readiness checks as its own views computed them last (set by `ShareReadiness`). */

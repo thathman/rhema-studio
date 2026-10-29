@@ -26,7 +26,7 @@ import { sceneForDesk, scenesOnScreen, type DeskScene } from "@/lib/desk-scenes"
 import { useObsStore } from "@/stores/obs-store"
 import { useAuxTimers } from "@/stores/aux-timers-store"
 import { useTimeChange } from "@/stores/time-change-store"
-import { deskConsoleState, watchDeskConsoles, type HeardVerse, type LiveLyrics, type OutputMapRow, type SharedReadiness, type WorshipSetItem } from "@/lib/desk-consoles"
+import { deskConsoleState, upcomingGraphicsQueue, watchDeskConsoles, type HeardVerse, type LiveLyrics, type OutputMapRow, type SharedReadiness, type UpcomingGraphicsQueue, type WorshipSetItem } from "@/lib/desk-consoles"
 import { recordWords, streamWords, type ObsLine } from "@/lib/obs-status"
 import { useTakeAttemptStore, type TakeAttempt } from "@/stores/take-attempt-store"
 
@@ -138,6 +138,8 @@ export interface LiveStateV1 {
    */
   lyrics?: LiveLyrics | null
   outputMap?: OutputMapRow[]
+  /** Canonical service event/moment graphics summary; the host sends this only to Screens and directors. */
+  graphicsQueue?: UpcomingGraphicsQueue
   heard?: HeardVerse[]
   /** The service's songs and hymns in order with their keys, for a Worship desk (#197). Absent from older hosts. */
   worshipSet?: WorshipSetItem[]
@@ -223,11 +225,23 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
   const onAirMs = input.onAirMs
   const timing = serviceTiming(input)
   const times = rundownTimes(timing, onAirMs)
+  const clockRows = runOfShowClockRows(q.items, q.headers).rows
   const current = useServiceStore.getState().current
+  const serviceDirty = useServiceStore.getState().dirty
   const untrusted = useTimingTrust.getState().untrusted
   const currentElapsedMs = clock.currentId && (!untrusted || (untrusted.eventId ?? untrusted.itemId) !== clock.currentId)
     ? eventTimes(useJournalStore.getState().entries, Math.max(monotonicNow(), useJournalStore.getState().entries.at(-1)?.mono ?? 0)).get(clock.currentId) ?? 0
     : undefined
+  const graphicsQueue = upcomingGraphicsQueue({
+    items: q.items,
+    headers: q.headers,
+    outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => ({ id: o.id, name: o.name })),
+    service: current,
+    dirty: serviceDirty,
+    currentEventId: clock.currentId,
+    currentMomentId: clock.currentMomentId,
+    eventStates: Object.fromEntries(clockRows.map((row) => [row.id, times.get(row.id)?.state])),
+  })
   return {
     v: 1,
     at: now,
@@ -252,7 +266,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
       currentId: clock.currentId,
       currentMomentId: clock.currentMomentId,
       ...(currentElapsedMs !== undefined ? { currentElapsedMs } : {}),
-      targets: runOfShowClockRows(q.items, q.headers).rows.map((row) => {
+      targets: clockRows.map((row) => {
         const time = times.get(row.id)
         return { id: row.id, reference: row.reference, plannedMinutes: row.planned_minutes, kind: row.kind, ...(time ? { time } : {}) }
       }),
@@ -301,6 +315,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     auxTimers: useAuxTimers.getState().timers.map((t) => ({ id: t.id, label: t.label, ...(t.owner ? { owner: t.owner } : {}), durationMs: t.timer.durationMs, elapsedMs: Math.round(elapsedMs(t.timer, monotonicNow())), running: t.timer.startedAt !== null, ...(t.onStage ? { onStage: true as const } : {}) })),
     timeChange: (() => { const c = useTimeChange.getState().last; return c ? { what: c.what, ...(c.by ? { by: c.by } : {}), at: c.at } : null })(),
     ...deskConsoleState(),
+    graphicsQueue,
     churchLook: sharedChurchLook(useSettingsStore.getState().brandKit, b.themes),
   }
 }
@@ -354,7 +369,7 @@ export function startLiveStatePublisher(): () => void {
     useEventClock.subscribe(soon),
     useQueueStore.subscribe((s, p) => { if (s.items !== p.items || s.headers !== p.headers) soon() }),
     useJournalStore.subscribe((s, p) => { if (s.entries !== p.entries) soon() }),
-    useServiceStore.subscribe((s, p) => { if (s.current !== p.current) soon() }),
+    useServiceStore.subscribe((s, p) => { if (s.current !== p.current || s.dirty !== p.dirty) soon() }),
     useNotices.subscribe((s, p) => { if (s.notices !== p.notices) soon() }),
     useServiceOffset.subscribe(() => soon()),
     useHold.subscribe((s, p) => { if (s.hold !== p.hold) soon() }),

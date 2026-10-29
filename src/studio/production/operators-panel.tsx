@@ -21,7 +21,7 @@ import { backstageRows, pauseWords } from "@/lib/cuesheet"
 import { formatMinutes } from "@/lib/service-timing"
 import { HostLookOffer } from "@/studio/production/host-look-offer"
 import { CameraDesk, DeskSceneEditor, ObsDesk, SongsDesk, StageDesk } from "@/studio/production/joined-desks"
-import { BibleConsole, DirectorBoard, OutputMap, ScreenSources } from "@/studio/production/desk-consoles"
+import { BibleConsole, DirectorBoard, OutputMap, ScreenSources, UpcomingGraphics } from "@/studio/production/desk-consoles"
 import type { CrewRow } from "@/lib/desk-console-words"
 import { useReadiness } from "@/studio/use-readiness"
 import { deskEditable } from "@/lib/desk-scenes"
@@ -271,6 +271,7 @@ function JoinedDesk() {
             {live.sources.filter((s) => s.on).length > 0 && <p className="mt-1 truncate text-[0.6875rem] text-[#9fb2b0]">Live sources: {live.sources.filter((s) => s.on).map((s) => [sourceName(s.id), s.reference, activatedLabel(s)].filter(Boolean).join(" · ")).join("   ")}</p>}
           </div>
           <TakeAttemptNotice attempts={live.takeAttempts} />
+          {me?.role === "screens" && <UpcomingGraphics queue={live.graphicsQueue} stale={fresh.stale} />}
           {desks.includes("director") && <DirectorBoard readiness={live.readiness} crew={live.presence} />}
           {desks.includes("clock") && <ClockDesk live={live} stale={fresh.stale} />}
           {desks.includes("prepare") && <PrepareDesk />}

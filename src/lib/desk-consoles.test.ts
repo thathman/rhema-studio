@@ -1,10 +1,64 @@
 import { describe, expect, it } from "vitest"
-import { chorusesOf, chorusTarget, sectionsOf } from "@/lib/desk-consoles"
+import { chorusesOf, chorusTarget, sectionsOf, upcomingGraphicsQueue } from "@/lib/desk-consoles"
 import { crewWords, passageFrom } from "@/lib/desk-console-words"
+import type { OutlineHeader } from "@/lib/run-of-show"
+import type { QueueItem } from "@/types"
 
 const slide = (sectionId: string, sectionLabel: string) => ({ sectionId, sectionLabel })
 
 describe("desk consoles (#197)", () => {
+  it("projects event-linked visual moments in service order with planned targets and truthful timing state", () => {
+    const item = (id: string, kind: string, extra: Partial<QueueItem> = {}) => ({
+      id, kind, reference: id, confidence: 1, source: "manual", added_at: 0,
+      ...(kind === "slide" ? { slide: { title: id, body: "" } } : {}),
+      ...(kind === "image" ? { image: { media_id: id, name: id, fit: "contain" as const } } : {}),
+      ...(kind === "song" ? { song: { song_id: id, title: id, arrangement_id: null, languages: [] } } : {}),
+      ...extra,
+    }) as QueueItem
+    const items = [
+      item("welcome", "slide", { on_take: ["scene.take:welcome@main"] }),
+      item("audio", "audio"),
+      item("scripture", "verse", { on_take: ["scene.take:reading@overflow"] }),
+      item("announcement", "slide"),
+      item("logo", "image"),
+      item("song", "song"),
+    ]
+    const headers: OutlineHeader[] = [
+      { id: "welcome-event", type: "group", name: "Welcome", at: 0, event: { schema_version: 1 } },
+      { id: "sermon-event", type: "group", name: "Sermon", at: 2, event: { schema_version: 1 } },
+    ]
+    const projected = upcomingGraphicsQueue({
+      items,
+      headers,
+      outputs: [{ id: "main", name: "Sanctuary" }, { id: "overflow", name: "Overflow" }],
+      service: { revision: 4, approved_revision: 4 },
+      dirty: false,
+      currentEventId: "sermon-event",
+      currentMomentId: "scripture",
+      eventStates: { "welcome-event": "done", "sermon-event": "live" },
+    })
+
+    expect(projected.planState).toBe("approved")
+    expect(projected.items.map((row) => [row.id, row.eventTitle, row.kind, row.state, row.destinations])).toEqual([
+      ["welcome", "Welcome", "Slide", "Completed", ["Sanctuary"]],
+      ["scripture", "Sermon", "Scripture", "Current moment", ["Overflow"]],
+      ["announcement", "Sermon", "Slide", "Upcoming", ["Per output source settings"]],
+      ["logo", "Sermon", "Image", "Upcoming", ["Per output source settings"]],
+      ["song", "Sermon", "Song", "Upcoming", ["Per output source settings"]],
+    ])
+  })
+
+  it("marks changed or unapproved services and keeps unsupported moments out of the graphics list", () => {
+    const slide = { id: "s", kind: "slide", slide: { title: "s", body: "" }, reference: "s", confidence: 1, source: "manual", added_at: 0 } as QueueItem
+    const audio = { id: "a", kind: "audio", audio: { media_id: "a", name: "a" }, reference: "a", confidence: 1, source: "manual", added_at: 0 } as QueueItem
+    const headers: OutlineHeader[] = [{ id: "event", type: "group", name: "Event", at: 0, event: { schema_version: 1 } }]
+    const base = { items: [slide, audio], headers, outputs: [], currentEventId: null, currentMomentId: null, eventStates: {} }
+    expect(upcomingGraphicsQueue({ ...base, service: { revision: 5, approved_revision: 4 }, dirty: false }).planState).toBe("changed")
+    expect(upcomingGraphicsQueue({ ...base, service: null, dirty: true }).planState).toBe("draft")
+    expect(upcomingGraphicsQueue({ ...base, service: { revision: 5, approved_revision: 5 }, dirty: true }).planState).toBe("changed")
+    expect(upcomingGraphicsQueue({ ...base, service: null, dirty: false }).items.map((row) => row.id)).toEqual(["s"])
+  })
+
   it("a song's sections follow its slides: a long verse is one section, a chorus sung twice is two", () => {
     const slides = [slide("v1", "Verse 1"), slide("v1", "Verse 1"), slide("c", "Chorus"), slide("v2", "Verse 2"), slide("c", "Chorus")]
     expect(sectionsOf(slides, 0)).toEqual({ starts: [0, 2, 3, 4], labels: ["Verse 1", "Chorus", "Verse 2", "Chorus"], ids: ["v1", "c", "v2", "c"], at: 0 })

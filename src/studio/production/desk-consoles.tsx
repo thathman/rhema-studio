@@ -6,7 +6,7 @@ import { activatedLabel } from "@/lib/live-sources"
 import { parseTypedReference } from "@/lib/quick-search"
 import { roleLabel } from "@/lib/remote-roles"
 import type { LiveStateV1 } from "@/lib/live-state"
-import type { SharedReadiness } from "@/lib/desk-consoles"
+import type { SharedReadiness, UpcomingGraphicsQueue } from "@/lib/desk-consoles"
 import { useBibleStore } from "@/stores/bible-store"
 import { lookupOnHost, useCanSend, useJoin, type SendResult } from "@/stores/join-store"
 import { crewWords, passageFrom, type CrewRow, type HostVerse } from "@/lib/desk-console-words"
@@ -245,6 +245,59 @@ export function OutputMap({ live }: { live: LiveStateV1 }) {
         ))}
       </ul>
     </div>
+  )
+}
+
+const GRAPHIC_PLAN_STATE = { draft: "Draft service plan", changed: "Changed since approval", approved: "Approved service plan" } as const
+const COMPACT_GRAPHIC_STATES = new Set(["Upcoming", "Planned"])
+
+/** The next service-linked graphics, read only: expanding this list never previews, shows or takes anything. */
+export function UpcomingGraphics({ queue, stale }: { queue: UpcomingGraphicsQueue | undefined; stale: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  if (!queue) {
+    return (
+      <section aria-label="Upcoming graphics" className={box}>
+        <p className="font-semibold">Upcoming graphics</p>
+        <p role="status" className="text-muted-foreground">This host does not share the graphics queue yet. Update Rhema Studio on the host to see it.</p>
+      </section>
+    )
+  }
+  const upcoming = queue.items.filter((item) => COMPACT_GRAPHIC_STATES.has(item.state))
+  const compact = upcoming.slice(0, 3)
+  const canExpand = queue.items.length > compact.length
+  const shown = expanded ? queue.items : compact
+  return (
+    <section aria-label="Upcoming graphics" className={box}>
+      <header className="flex flex-wrap items-center gap-2">
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold">Upcoming graphics</span>
+          <span className="text-xs text-muted-foreground">{GRAPHIC_PLAN_STATE[queue.planState]} · planned destinations</span>
+        </span>
+        {canExpand && <Button size="sm" variant="outline" aria-expanded={expanded} aria-controls="upcoming-graphics-items" onClick={() => setExpanded((value) => !value)}>{expanded ? "Collapse" : "View all"}</Button>}
+      </header>
+      {stale && <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2 py-1 text-sm">Host is out of date; this queue may have changed.</p>}
+      <p className="text-xs text-muted-foreground">Plan only. These rows never send a graphic to an output or change what is live.</p>
+      <div id="upcoming-graphics-items">
+        {queue.items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No visual moments are planned inside service events.</p>
+        ) : shown.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No upcoming graphics. View all to review earlier or current moments.</p>
+        ) : (
+          <ol aria-label={expanded ? "Full graphics queue" : "Upcoming graphics strip"} className="flex flex-col gap-1.5">
+            {shown.map((item, index) => (
+              <li key={item.id} className={cn("flex flex-col gap-1 rounded-md border border-border px-2.5 py-2", !expanded && index === 2 && "hidden sm:flex")}>
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
+                  <span className="rounded-sm bg-muted px-1.5 py-0.5 text-xs">{item.state}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">{item.kind} · {item.eventTitle}</p>
+                <p className="text-xs text-muted-foreground">{item.destinations.join(" · ")}</p>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </section>
   )
 }
 
