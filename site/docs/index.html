@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Rhema Studio documentation: how to get started, understand the app, use operator roles, and track work still in development.">
+  <link rel="icon" href="../assets/rhema-studio-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./docs.css">
+  <title>Documentation home — Rhema Studio</title>
+</head>
+<body>
+  <a class="skip-link" href="#docs-content">Skip to documentation</a>
+  <header class="docs-header">
+    <a class="docs-brand" href="../index.html"><img src="../assets/rhema-studio-mark.svg" width="34" height="34" alt=""><span>Rhema Studio</span></a>
+    <nav class="docs-top-links" aria-label="Site navigation"><a href="../index.html">Website</a><a href="./roadmap.html">Roadmap</a><a class="docs-home-link" href="https://github.com/thathman/rhema-studio" rel="noopener noreferrer">GitHub ↗</a></nav>
+  </header>
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation navigation">
+      <p class="docs-sidebar-title">Documentation</p>
+      <button class="docs-nav-toggle" type="button" aria-controls="docs-navigation" aria-expanded="false">Browse documentation</button>
+      <nav class="docs-sidebar-nav" id="docs-navigation" data-docs-nav aria-label="Documentation pages"></nav>
+      <noscript><p><a href="./index.html">Docs home and full page index</a></p></noscript>
+    </aside>
+    <main class="docs-main" id="docs-content">
+      <div class="docs-breadcrumb"><a href="../index.html">Rhema Studio</a><span aria-hidden="true">›</span><a href="./index.html">Docs & wiki</a></div>
+      <header class="article-header"><p class="article-kicker">DOCS & WIKI</p><h1>Rhema Studio documentation</h1><p>Guides to the current application, its operator roles, and the approved work that is still being built.</p></header>
+      <article class="prose">
+        <div class="notice warning"><p><strong>Read the status before relying on a feature.</strong> This project is in active development. A screenshot may be a browser-shim capture; an approved design may still lack implementation; source code is not the same as device acceptance.</p></div>
+
+        <h2>Start with the basics</h2>
+        <div class="link-grid">
+          <a class="link-card" href="./getting-started.html"><strong>Getting started</strong><span>What the app is, how its connected applications fit, and how contributors run it locally.</span></a>
+          <a class="link-card" href="./core-concepts.html"><strong>Core concepts</strong><span>Prepare, Design, Preview, Program, outputs, and host-governed permissions.</span></a>
+          <a class="link-card" href="./operators.html"><strong>Operator pages</strong><span>Responsibilities and limits for each current role.</span></a>
+          <a class="link-card" href="./connected-operators.html"><strong>Connected operators</strong><span>What LAN access supports today and what the browser role app still needs.</span></a>
+        </div>
+
+        <h2>Production guides</h2>
+        <div class="link-grid">
+          <a class="link-card" href="./recording.html"><strong>Recording</strong><span>Rhema-native recording direction, separate from OBS stream recording.</span></a>
+          <a class="link-card" href="./comms-and-timing.html"><strong>Comms & timing</strong><span>Private team communication, clocks, timers, and Stage messages.</span></a>
+          <a class="link-card" href="./devices.html"><strong>Devices & companion apps</strong><span>Google TV Receiver, Rhema Cam, OBS Companion, MCP, and Engage status.</span></a>
+          <a class="link-card" href="./faq.html"><strong>FAQ</strong><span>Release status, offline behavior, saving, browser roles, and recording.</span></a>
+        </div>
+
+        <h2>How this wiki labels status</h2>
+        <table>
+          <thead><tr><th>Label</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><span class="status-chip">In the repository</span></td><td>Code or a UI surface exists. This alone is not a claim that the whole workflow is accepted.</td></tr>
+            <tr><td><span class="status-chip dev">Approved direction</span></td><td>The product behavior has owner approval; implementation and verification may still be incomplete.</td></tr>
+            <tr><td><span class="status-chip dev">In development</span></td><td>The integrated feature or role experience is not ready to claim as complete.</td></tr>
+            <tr><td><span class="status-chip pending">Acceptance pending</span></td><td>Native, network, receiver, camera, or real-device proof is still outstanding.</td></tr>
+          </tbody>
+        </table>
+
+        <figure class="docs-figure">
+          <img src="../assets/screenshots/live-console.png" width="1440" height="900" loading="lazy" decoding="async" alt="Browser-shim capture of Rhema Studio's Live console UI with an example service, private Preview, and a separate Live panel.">
+          <figcaption><strong>Frontend capture, not native acceptance.</strong> This image is an unaltered browser-shim screenshot from the repository's app documentation, captured October 25, 2026 with synthetic service data. It does not show a connected output.</figcaption>
+        </figure>
+
+        <h2>Read the source of truth</h2>
+        <ul>
+          <li><a href="https://github.com/thathman/rhema-studio/blob/main/README.md" rel="noopener noreferrer">Repository README</a> for source builds and platform setup.</li>
+          <li><a href="https://github.com/thathman/rhema-studio/blob/main/docs/rhema-studio/32-feature-coverage-inventory.md" rel="noopener noreferrer">Feature coverage inventory</a> for approved scope and verified gaps.</li>
+          <li><a href="https://github.com/thathman/rhema-studio/blob/main/docs/rhema-studio/34-browser-operators-connected-development.md" rel="noopener noreferrer">Browser operator contract</a> for LAN access and connected development limits.</li>
+          <li><a href="https://github.com/thathman/rhema-studio/blob/main/docs/rhema-studio/42-rhema-native-service-recording.md" rel="noopener noreferrer">Native recording direction</a> for the selected congregation-output recorder.</li>
+        </ul>
+        <p>These pages summarize the current repository and approved product direction as checked on October 29, 2026. Recheck the linked source before relying on changing implementation details.</p>
+      </article>
+      <nav class="page-nav" aria-label="Next page"><span></span><a href="./getting-started.html">Getting started →</a></nav>
+    </main>
+  </div>
+  <footer class="docs-footer"><span>Rhema Studio · independent project · in development</span><a href="https://github.com/thathman/rhema-studio" rel="noopener noreferrer">Repository ↗</a></footer>
+  <script src="./docs.js" defer></script>
+</body>
+</html>

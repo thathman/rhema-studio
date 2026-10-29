@@ -14,7 +14,7 @@
 
 ## Editing
 
-The site deliberately has **zero build dependencies**. Edit `index.html`, `styles.css`, `script.js` and approved logo in `assets/`.
+The site deliberately has **zero build dependencies**. The home page is `index.html`; its styles and responsive navigation are `styles.css` and `script.js`. The approved mark is in `assets/`. The static documentation and wiki live in `docs/`, with shared styling and navigation in `docs/docs.css` and `docs/docs.js`.
 
 Run locally:
 
@@ -24,12 +24,14 @@ python3 -m http.server 8080
 # Open http://localhost:8080/
 ```
 
-The GitHub Pages workflow validates relative asset URLs and disallows reuse of the original domain.
+The existing GitHub Pages workflow remains unchanged: it validates the home page and selected relative assets, then publishes `site/` to the same repository Pages destination on its existing main-branch path. It does not publish this preview branch.
 
-**Important content policy:** This page describes Rhema Studio's approved product direction **in development**. Do not claim every operator workspace, Rhema Native Recording, connected device or release is shipped without real code/device acceptance. The example Live workstation graphic is a **concept**, not a product screenshot.
+**Screenshot provenance:** The six application screenshots on the site are byte-for-byte copies of captures already in the repository. They show the frontend running in browser-shim development mode with synthetic example data. They are not native-app, connected-host, output, or physical-device acceptance evidence. The excluded operator/camera captures contained pairing credentials or private network details. Do not add those captures publicly.
+
+**Important content policy:** Keep implemented code, approved product direction, and device acceptance distinct. Do not claim every operator workspace, Rhema-native recording, connected device, or release is shipped without evidence. The wiki labels known implementation limits and links to the current feature-coverage inventory and approved contracts. Recheck those sources when updating status.
 
 ## Legacy `web/` directory and PRs
 
-The inherited OpenBezal Next.js marketing site remains under `web/` for source history. Its `deploy-web.yml` job is now **build-only** and the inherited `web/public/CNAME` was removed to prevent accidental publication of `openrhema.com`. Website PRs #352/#367 target that old Next.js site; their design/technical content should be reviewed for selective reuse rather than deployed as the project's current website. The new site lives under `site/` and its own Pages workflow only.
+The inherited OpenBezal Next.js marketing site remains under `web/` for source history. Its `deploy-web.yml` job is **build-only** and the inherited `web/public/CNAME` was removed to prevent accidental publication of `openrhema.com`. Its marketing story and screenshots were not reused for this site because they are stale or do not establish current product behavior. The standalone site under `site/` and its existing Pages workflow remain authoritative.
 
 Upstream attribution: Based on [Rhema by OpenBezal](https://github.com/openbezal/rhema) (MIT license); see repository license and project documentation.

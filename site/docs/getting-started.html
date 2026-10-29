@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="What Rhema Studio is, its application family, local-first design, and how contributors run it from source.">
+  <link rel="icon" href="../assets/rhema-studio-mark.svg" type="image/svg+xml"><link rel="stylesheet" href="./docs.css">
+  <title>Getting started — Rhema Studio</title>
+</head>
+<body>
+  <a class="skip-link" href="#docs-content">Skip to documentation</a>
+  <header class="docs-header"><a class="docs-brand" href="../index.html"><img src="../assets/rhema-studio-mark.svg" width="34" height="34" alt=""><span>Rhema Studio</span></a><nav class="docs-top-links" aria-label="Site navigation"><a href="../index.html">Website</a><a href="./roadmap.html">Roadmap</a><a class="docs-home-link" href="https://github.com/thathman/rhema-studio" rel="noopener noreferrer">GitHub ↗</a></nav></header>
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation navigation"><p class="docs-sidebar-title">Documentation</p><button class="docs-nav-toggle" type="button" aria-controls="docs-navigation" aria-expanded="false">Browse documentation</button><nav class="docs-sidebar-nav" id="docs-navigation" data-docs-nav aria-label="Documentation pages"></nav><noscript><p><a href="./index.html">Docs home and full page index</a></p></noscript></aside>
+    <main class="docs-main" id="docs-content">
+      <div class="docs-breadcrumb"><a href="../index.html">Rhema Studio</a><span aria-hidden="true">›</span><a href="./index.html">Docs & wiki</a></div>
+      <header class="article-header"><p class="article-kicker">START HERE</p><h1>Getting started</h1><p>Learn what Rhema Studio is, how its connected applications fit, and how contributors can run the desktop app from source.</p></header>
+      <article class="prose">
+        <div class="notice"><p><strong>Development status:</strong> Rhema Studio is an active software project. This guide is not a promise that every app has a public installer or that every operator/device path is ready for a service.</p></div>
+        <h2>What Rhema Studio is</h2>
+        <p>Rhema Studio is a church-production workspace being built around one local service host. The desktop application includes preparation, content and design tools, live presentation, outputs, and host-managed operator access. It is intended to work for a solo operator, with connected team members and devices as optional contributors.</p>
+        <p>Plan, private Preview, the actual Program on an output, and execution history have different jobs. Saving preparation is not an instruction to publish a screen.</p>
+
+        <h2>Application family</h2>
+        <table>
+          <thead><tr><th>Part</th><th>What the repository contains</th><th>Current limit</th></tr></thead>
+          <tbody>
+            <tr><td>Rhema Studio desktop</td><td>Tauri desktop app with a React frontend and Rust services for local content and connected production.</td><td>Builds from source; a screenshot or code path is not release acceptance.</td></tr>
+            <tr><td>LAN operator access</td><td>Host pairing, role-checked commands, live-state feeds, and selected browser pages.</td><td>The complete role-by-role browser app is still in development.</td></tr>
+            <tr><td>Rhema Studio Receiver</td><td>Android TV application source for a locally authorized display.</td><td>Real television, remote-control, reconnect, and performance acceptance remain pending.</td></tr>
+            <tr><td>Rhema Studio Cam</td><td>Android camera-publisher source that sends a named camera feed to a Rhema host.</td><td>Phone, Wi-Fi, heat, battery, and sustained-stream acceptance remain pending.</td></tr>
+            <tr><td>Rhema Studio Companion</td><td>Separate desktop companion source for connecting to OBS on another computer.</td><td>Install, pairing, and real OBS workflow acceptance remain pending.</td></tr>
+            <tr><td>MCP and Engage</td><td>Optional local MCP tooling and an Engage quiz implementation are present in the repository.</td><td>Do not assume hosted quiz deployment or complete MCP draft workflows are available.</td></tr>
+          </tbody>
+        </table>
+
+        <h2>Local-first philosophy</h2>
+        <ul>
+          <li>The host computer is the authority for its service and production state.</li>
+          <li>A church can prepare and run the core service from one computer; additional operators are optional.</li>
+          <li>Connected operator and receiver traffic is intended to stay on the local network.</li>
+          <li>Optional online speech services, public streaming, external AI tools, and internet quiz access can require internet access.</li>
+        </ul>
+        <div class="notice warning"><p><strong>Offline wording:</strong> Local-first is an approved architecture principle. It does not mean every optional integration, receiver, backup path, or WAN-off recovery scenario has passed physical acceptance.</p></div>
+
+        <h2>Run the desktop app locally</h2>
+        <p>For contributors, the repository README is the current source for platform packages and setup. The usual source workflow is:</p>
+        <pre><code>git clone https://github.com/thathman/rhema-studio.git
+cd rhema-studio
+bun install
+bun run setup:all
+bun run tauri dev</code></pre>
+        <p>You need Bun, Rust, and the platform prerequisites for Tauri. The setup script can download Bible/model data and other resources; see the <a href="https://github.com/thathman/rhema-studio/blob/main/README.md" rel="noopener noreferrer">repository README</a> for current options and platform-specific steps.</p>
+        <p>This is a contributor workflow, not an installer. Check the repository's <a href="https://github.com/thathman/rhema-studio/releases" rel="noopener noreferrer">Releases</a> page for any currently published build; this website does not claim a generally supported release is available.</p>
+
+        <h2>Next steps</h2>
+        <p>Read <a href="./core-concepts.html">Core concepts</a> before using outputs, then open the guide for the operator role you need. Use the <a href="./roadmap.html">Roadmap</a> to distinguish current repository surfaces from approved but unfinished work.</p>
+      </article>
+      <nav class="page-nav" aria-label="Page navigation"><a href="./index.html">← Docs home</a><a href="./core-concepts.html">Core concepts →</a></nav>
+    </main>
+  </div>
+  <footer class="docs-footer"><span>Rhema Studio · independent project · in development</span><a href="https://github.com/thathman/rhema-studio" rel="noopener noreferrer">Repository ↗</a></footer>
+  <script src="./docs.js" defer></script>
+</body>
+</html>
