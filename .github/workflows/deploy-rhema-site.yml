@@ -6,6 +6,11 @@ on:
     paths:
       - 'site/**'
       - '.github/workflows/deploy-rhema-site.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - '.github/workflows/deploy-rhema-site.yml'
   workflow_dispatch:
 
 permissions:
