@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f5f6f2">
-  <meta name="description" content="Rhema Studio is a local-first church service preparation and live production app in active development. Explore real app screenshots, documentation, and the roadmap.">
+  <meta name="description" content="Explore Rhema Studio's current app screens, local-first product direction, documentation, and development status.">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Rhema Studio — Prepare the service. Present with care.">
-  <meta property="og:description" content="An independent, local-first church production project. See real application screens and what is still in development.">
+  <meta property="og:description" content="A local-first church production workspace in active development. See current frontend captures, docs, and honest feature status.">
   <meta property="og:url" content="https://thathman.github.io/rhema-studio/">
   <meta property="og:image" content="https://thathman.github.io/rhema-studio/assets/rhema-studio-mark.svg">
   <link rel="icon" href="./assets/rhema-studio-mark.svg" type="image/svg+xml">
@@ -40,45 +40,41 @@
       <div class="hero-copy">
         <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span> INDEPENDENT PROJECT · IN ACTIVE DEVELOPMENT</p>
         <h1 id="hero-title">Prepare the service.<br><span>Present with care.</span></h1>
-        <p class="hero-intro">Rhema Studio is a local-first workspace for planning and running a church service. The application is still being built; this site uses real, dated frontend captures and labels unfinished work plainly.</p>
+        <p class="hero-intro">Rhema Studio is a local-first workspace for planning and running a church service. The desktop app is in active development; see the current interface and read what still needs integration or acceptance.</p>
         <div class="hero-actions">
-          <a class="button button-primary" href="#screens">View app captures <span aria-hidden="true">↓</span></a>
+          <a class="button button-primary" href="#screens">Explore the app <span aria-hidden="true">↓</span></a>
           <a class="button button-secondary" href="./docs/index.html">Read the docs <span aria-hidden="true">↗</span></a>
         </div>
-        <p class="hero-note">Screens show the real frontend in browser-shim mode with synthetic data. They are not native-app or device-acceptance evidence.</p>
+        <p class="hero-note">Current frontend · browser-shim simulation · sample data · no native host or persistence.</p>
       </div>
       <figure class="hero-screen">
-        <img src="./assets/screenshots/home-dark.png" width="1440" height="900" fetchpriority="high" alt="Historical Rhema Studio Home frontend capture from October 25, 2026. It shows the earlier Prepare, Present, Production, Library, and Design navigation, with no service open.">
-        <figcaption><span>HOME · HISTORICAL FRONTEND CAPTURE</span><span>Browser shim · Oct 25, 2026</span></figcaption>
+        <img src="./assets/screenshots/home.png" width="1440" height="900" fetchpriority="high" alt="Current Rhema Studio Home interface with Home, Prepare, Live, Library, Design, and History navigation, the simulated-mode banner, and an empty-service readiness overview.">
+        <figcaption><span>HOME · CURRENT FRONTEND</span><span>Browser shim · Oct 29, 2026</span></figcaption>
       </figure>
     </section>
 
     <section class="section shell" id="screens" aria-labelledby="screens-title">
       <div class="section-heading">
-        <p class="eyebrow">REAL FRONTEND CAPTURES · OCT 25, 2026</p>
-        <h2 id="screens-title">Earlier app screens, with their limits stated.</h2>
-        <p>These unaltered screenshots capture the frontend in browser-shim development mode before the current Home, Prepare, Live, Library, Design, and History navigation was consolidated. Service values are synthetic; they do not show today's exact route labels, and they are not native-app, connected-host, output, or device-acceptance evidence.</p>
+        <p class="eyebrow">CURRENT FRONTEND CAPTURES · OCT 29, 2026</p>
+        <h2 id="screens-title">The app as it looks today.</h2>
+        <p>These unaltered 1440 × 900 captures show the current desktop frontend running in browser-shim mode. The service and library content are synthetic, changes stay in memory, and no Tauri host, connected operator, or physical output is attached. Capture details and limits are recorded in the <a href="./assets/screenshots/README.md">screenshot provenance note</a>.</p>
       </div>
       <div class="screenshot-grid">
         <figure class="screenshot-card screenshot-wide">
-          <img src="./assets/screenshots/prepare.png" width="1440" height="900" loading="lazy" decoding="async" alt="Rhema Studio Prepare workspace showing service phases, a running order, an event editor, and a private preview. Sample service content is visible.">
-          <figcaption><strong>Prepare · earlier interface</strong><span>Historical frontend capture with a synthetic sample service. It does not show the current navigation or prove native runtime or saved-service acceptance.</span><small>BROWSER-SHIM CAPTURE · OCT 25, 2026</small></figcaption>
+          <img src="./assets/screenshots/prepare-preview.png" width="1440" height="900" loading="lazy" decoding="async" alt="Current Prepare workspace with a synthetic sample service, one Scripture item, event editor, and a private preview marked Only you see this.">
+          <figcaption><strong>Prepare · arrange the service</strong><span>A synthetic sample item is selected. Preview is marked private; this browser-shim capture does not verify native save or reopen.</span><small>FRONTEND SIMULATION · OCT 29, 2026</small></figcaption>
         </figure>
         <figure class="screenshot-card">
-          <img src="./assets/screenshots/live-console.png" width="1440" height="900" loading="lazy" decoding="async" alt="Rhema Studio Live console showing the service order, a private Preview panel, and a separate Live panel. The example has nothing on air.">
-          <figcaption><strong>Earlier Present console</strong><span>Captured before Present and Production were consolidated into Live. It shows an empty sample Preview and Live panel, not the current route or a connected output.</span><small>BROWSER-SHIM CAPTURE · OCT 25, 2026</small></figcaption>
+          <img src="./assets/screenshots/live-preview-program.png" width="1440" height="900" loading="lazy" decoding="async" alt="Current Rhema Studio Live console showing a private Scripture Preview beside an empty Program panel, with no output on a screen.">
+          <figcaption><strong>Live · private Preview and Program</strong><span>The synthetic verse is in private Preview; Program remains empty and the interface says no output is on a screen. No receiver is connected.</span><small>FRONTEND SIMULATION · OCT 29, 2026</small></figcaption>
         </figure>
         <figure class="screenshot-card">
-          <img src="./assets/screenshots/design-library.png" width="1440" height="900" loading="lazy" decoding="async" alt="Rhema Studio Design workspace showing a library of reusable scripture and hymn looks with preview cards and Use and Use and edit actions.">
-          <figcaption><strong>Design Library · earlier interface</strong><span>Historical frontend capture of the look gallery. Cards and sample text are synthetic; this is not a saved church design or native editor proof.</span><small>BROWSER-SHIM CAPTURE · OCT 25, 2026</small></figcaption>
+          <img src="./assets/screenshots/library-songs.png" width="1440" height="900" loading="lazy" decoding="async" alt="Current Rhema Studio Library workspace with the Songs and ministrations tab selected, local search, and two synthetic sample cards.">
+          <figcaption><strong>Library · find content</strong><span>Current Library layout with synthetic song examples. The capture does not establish content licensing or a saved church library.</span><small>FRONTEND SIMULATION · OCT 29, 2026</small></figcaption>
         </figure>
         <figure class="screenshot-card">
-          <img src="./assets/screenshots/output-setup.png" width="1440" height="900" loading="lazy" decoding="async" alt="Rhema Studio output settings showing a congregation display and a browser feed with separate presentation and language settings.">
-          <figcaption><strong>Outputs · earlier settings view</strong><span>Historical frontend output-settings view with example names and feed values. It does not show a running output or receiver test.</span><small>BROWSER-SHIM CAPTURE · OCT 25, 2026</small></figcaption>
-        </figure>
-        <figure class="screenshot-card">
-          <img src="./assets/screenshots/countdown-editor.png" width="1440" height="900" loading="lazy" decoding="async" alt="Rhema Studio Design workspace countdown editor, with a stage timer preview and editable color and message steps.">
-          <figcaption><strong>Countdown design · earlier interface</strong><span>Historical frontend editor view with a synthetic timer state. It is not a connected Stage monitor or timing acceptance test.</span><small>BROWSER-SHIM CAPTURE · OCT 25, 2026</small></figcaption>
+          <img src="./assets/screenshots/design-themes.png" width="1440" height="900" loading="lazy" decoding="async" alt="Current Design workspace showing the Themes editor, built-in looks, a synthetic bilingual sample preview, and editable typography and layout controls.">
+          <figcaption><strong>Design · themes and looks</strong><span>This is the current theme editor with synthetic preview text. It is not the planned native Avnac slide-design editor.</span><small>FRONTEND SIMULATION · OCT 29, 2026</small></figcaption>
         </figure>
       </div>
     </section>
@@ -94,19 +90,19 @@
           <article class="status-card">
             <p class="status-label">VISIBLE IN THE APP</p>
             <h3>Desktop workspaces</h3>
-            <p>The current main navigation is Home, Prepare, Live, Library, Design, and History. The screenshots above are earlier browser-shim captures with synthetic data; they do not prove native, host, or device behavior.</p>
+            <p>The current main navigation is Home, Prepare, Live, Library, Design, and History. The captures show current frontend layouts in simulation; they do not prove native persistence, connected-host behavior, or device output.</p>
             <a href="./docs/core-concepts.html">How the workspaces fit together <span aria-hidden="true">↗</span></a>
           </article>
           <article class="status-card">
             <p class="status-label">IN DEVELOPMENT</p>
             <h3>Connected operator journeys</h3>
-            <p>Role-specific browser pages, complete permissions and approval workflows, companion-device acceptance, crash recovery, and offline rehearsal still need integrated verification.</p>
-            <a href="./docs/connected-operators.html">Read about connected operators <span aria-hidden="true">↗</span></a>
+            <p>Host-managed pairing and role checks exist in code. Complete browser operator pages, broader approval workflows, and tablet/phone acceptance remain in development.</p>
+            <a href="./docs/permissions.html">Read about permissions <span aria-hidden="true">↗</span></a>
           </article>
           <article class="status-card">
             <p class="status-label">APPROVED DIRECTION</p>
             <h3>Independent, local-first production</h3>
-            <p>One host should support solo operation. Plan, Preview, actual Program, OBS, Stage, and each congregation output have distinct responsibilities.</p>
+            <p>One host supports local operation. Plan, private Preview, Program, OBS, Stage, and each congregation output have distinct responsibilities.</p>
             <a href="./docs/roadmap.html">See the roadmap and gaps <span aria-hidden="true">↗</span></a>
           </article>
         </div>
@@ -129,7 +125,7 @@
       <p>An independent project for the teams behind a service.</p>
       <nav aria-label="Footer navigation"><a href="./docs/index.html">Docs & wiki</a><a href="./docs/roadmap.html">Roadmap</a><a href="https://github.com/thathman/rhema-studio" rel="noopener noreferrer">GitHub ↗</a></nav>
     </div>
-    <div class="shell footer-bottom"><span>In active development · Screens are repository app captures</span><span>Based on Rhema by OpenBezal · MIT-licensed upstream</span></div>
+    <div class="shell footer-bottom"><span>In active development · Captures show the browser-shim simulation</span><span>Based on Rhema by OpenBezal · MIT-licensed upstream</span></div>
   </footer>
   <script src="./script.js" defer></script>
 </body>
