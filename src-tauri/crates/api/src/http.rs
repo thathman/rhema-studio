@@ -2454,6 +2454,10 @@ impl CommandSink for WithWhy<'_> {
 /// Why a desk's role does not allow a command, in words for the person at that desk.
 fn refusal_for(role: crate::keys::Role, cmd: &RemoteCommand) -> &'static str {
     use crate::keys::Role;
+    // Rhema's own recorder is a separate grant, whatever the role (doc 42).
+    if matches!(cmd, RemoteCommand::Record(_)) {
+        return "Rhema's recorder needs a separate grant from the main desk (Permissions); no role includes it";
+    }
     match role {
         Role::Timekeeper => "this device keeps time: it may move the event clock, not the screens",
         Role::Bible => "this device runs the Bible: it may activate, step and clear the Bible only",
@@ -3818,7 +3822,7 @@ mod tests {
         // OBS director and Configure have no recorder authority without the grant.
         for key in ["X-Rhema-Key: obs\r\n", "X-Rhema-Key: cfg\r\n"] {
             let refused = send(key).await;
-            assert!(refused.contains("403"), "{refused}");
+            assert!(refused.contains("403") && refused.contains("needs a separate grant"), "{refused}");
         }
         assert_eq!(sink.command_count(), 0);
         // The granted desk (a Viewer otherwise) reaches the host's recorder.
