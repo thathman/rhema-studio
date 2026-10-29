@@ -1,20 +1,20 @@
 # 41 — Page 8 OBS Director Operator: Online Preview, Program and Stream Safety
 
-**Design workshop:** 29 October 2026. **Status:** **VISUAL WORKFLOW PROPOSAL ONLY — AWAITING OWNER APPROVAL.** Page 7 Camera Operator's overall camera-grid hierarchy is owner approved in [40 §7A](40-camera-operator-page-7-layout-proposal.md#7a-owner-approved--camera-grid-first-structural-hierarchy-29-october-2026). This new OBS Director page is the next proposed role workspace, **not a separately approved OBS authority expansion** or evidence of shipped browser parity.
+**Design workshop:** 29 October 2026. **Status:** **VISUAL WORKFLOW PROPOSAL ONLY — AWAITING OWNER APPROVAL.** **OWNER CORRECTION (29 Oct): Rhema Studio itself must be the native recording application, independently of OBS.** Read mandatory [42 — Rhema Native Service Recording](42-rhema-native-service-recording.md). The OBS Director page must not own the church's main recording lifecycle. This supersedes the earlier assumption that OBS recording is the default workflow. Page 7 Camera Operator's overall camera-grid hierarchy is owner approved in [40 §7A](40-camera-operator-page-7-layout-proposal.md#7a-owner-approved--camera-grid-first-structural-hierarchy-29-october-2026). This new OBS Director page is the next proposed role workspace, **not a separately approved OBS authority expansion** or evidence of shipped browser parity.
 
 **Architecture:** Rhema Studio's local church host owns role and command authorization. The OBS Director operates the church's **online OBS scene/program path** through the host's existing OBS/OBS Companion integration. OBS Studio Mode Preview/Program is entirely distinct from Rhema's Sanctuary/Overflow/Stage outputs. The OBS Companion running on another computer can be the actual OBS runtime/bridge; a browser role does **not** pretend to install OBS plugins, open local OBS sockets itself, or independently publish a stream. Keep [34 — browser roles](34-browser-operators-connected-development.md), [28 — unified workspaces](28-unified-workspace-contract.md), [37 — permissions](37-permissions-sidebar-and-authority-design.md) and the [owner build resumption](../OWNER-RESUME-IMPLEMENTATION-2026-10-29.md) authoritative. No new PRs or public website publishing.
 
 ## 1. Primary experience
 
-A volunteer knows **what is currently online, what is next, what changes when they press Take, and whether the actual stream/recording is healthy**.
+A volunteer knows **what is currently on OBS online Program, what is next, what changes when they press an OBS Take, and whether OBS's stream connection is healthy**. **Rhema native recording is independent and controlled from main Live's Record dock**. OBS's own legacy recording status may be informational/advanced only, never mistaken for Rhema recording.
 
 **Simple mental model:** `Select OBS scene → OBS Preview → Check audio/cameras and output truth → Take to OBS Program`. If OBS Studio Mode is OFF, scene switching is a **direct live switch**, so require deliberate explicit impact confirmation; never label a direct switch as private Preview.
 
 The most important persistent difference on screen:
 - **OBS Preview:** prepared OBS scene, not online.
-- **OBS Program:** what OBS itself currently reports for the stream/recording (not proof a remote streaming platform has received it or viewers saw it).
+- **OBS Program:** what OBS itself currently reports for the online livestream path (not proof a remote streaming platform has received it or viewers saw it). The church's primary video recording uses **Rhema's independently configured recording program**.
 - **Rhema congregation output:** independently assigned Sanctuary/Overflow scene/source, never implicitly affected by an OBS Take.
-- **OBS stream health and recording:** distinct status from OBS Program name, with fresh telemetries and unknown/stale states shown honestly.
+- **OBS stream health:** separate from OBS Program name; fresh telemetry and unknown/stale states are shown honestly. A small independent **Rhema REC** chip may reflect the host recorder's status, never OBS's own legacy recording flag.
 
 ## 2. Proposed main desktop workspace (1440px)
 
@@ -22,7 +22,7 @@ The most important persistent difference on screen:
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
 │ [Church]  Sunday Worship         OBS DIRECTOR       OBS Connected ●  [Comms 2] [Help]       │
 ├─────────────────────────────────────────────────────────────────────────────────────────────┤
-│ OBS MODE: [Studio Mode ON]   Online: [OBS Program]    Recording: [REC ●]   Stream: [LIVE ●]│
+│ OBS MODE: [Studio Mode ON]    Online: [OBS Program]   Stream: [LIVE ●]  Rhema REC: [● ↗ Live]│
 ├─────────────────────────────────────┬───────────────────────────────────────────────────────┤
 │ OBS PRIVATE PREVIEW                 │ OBS PROGRAM — CURRENT ONLINE PRODUCTION              │
 │ [actual OBS preview stream,         │ [actual OBS program frame, if supported;             │
@@ -33,12 +33,12 @@ The most important persistent difference on screen:
 │ TRANSITION [Fade ▾] [Duration if OBS reports/supports]  [TAKE OBS PREVIEW TO ONLINE PROGRAM]│
 │ Studio Mode OFF → [Review direct switch] → confirm target / ON-AIR IMPACT                 │
 ├─────────────────────────────────────┬───────────────────────────────────────────────────────┤
-│ OBS SCENES                          │ STREAM & RECORDING HEALTH                             │
+│ OBS SCENES                          │ OBS STREAM HEALTH · RHEMA RECORDING STATUS            │
 │ [Sermon Pulpit]   [● Program]       │ Stream: Connected / Connecting / Failed / Unknown    │
-│ [Camera 2 + Name] [◌ Preview]       │ Recording: Running / Not recording / Unknown         │
+│ [Camera 2 + Name] [◌ Preview]       │ Rhema REC: status from native recorder; link to Live │
 │ [Choir Worship]  [Set Preview]      │ Dropped frames / bitrate / reconnect *if reported*    │
-│ [Holding / Countdown]               │ [Recording: start / stop with confirmation]          │
-│ [Fullscreen Bible]                  │ [Record marker: Sermon starts] [Add marker]           │
+│ [Holding / Countdown]               │ OBS recording: optional legacy/advanced only         │
+│ [Fullscreen Bible]                  │ Rhema marker: use main Live Record dock / History     │
 ├─────────────────────────────────────┴───────────────────────────────────────────────────────┤
 │ CREW CUES · Camera 2 Ready · Director asks \"Preview choir\" [Open] [Acknowledged] [Unable]│
 ├─────────────────────────────────────────────────────────────────────────────────────────────┤
@@ -51,8 +51,8 @@ The most important persistent difference on screen:
 
 ## 3. Existing source code to REUSE (observed 29 Oct)
 
-- `src/studio/production/joined-desks.tsx` exports `ObsDesk` with host-shared OBS Program, optional Studio Mode Preview, `obs_preview`, `obs_program`, `obs_take`, transitions, stream/recording health, recording start/stop and markers. During rehearsal controls are disabled. **Use this as a working foundation**, not a separate new command registry.
-- `src/studio/production/obs-panel.tsx` owns a native OBS panel with separate OBS and congregation program semantics, OBS Scene list, Studio Mode behavior, current program/preview, manual OBS Take, direct-switch confirmation, OBS transition and stream/recording controls. It does not automatically prove browser preview video is supported.
+- `src/studio/production/joined-desks.tsx` exports `ObsDesk` with host-shared OBS Program, optional Studio Mode Preview, `obs_preview`, `obs_program`, `obs_take`, transitions, stream health **and legacy OBS recording start/stop/markers**. During rehearsal controls are disabled. **Use the streaming/switching portion as a working foundation**; separate OBS-only legacy recording controls from the future native Rhema Recorder under [42](42-rhema-native-service-recording.md), without abruptly deleting an existing recording fallback.
+- `src/studio/production/obs-panel.tsx` owns a native OBS panel with separate OBS and congregation program semantics, OBS Scene list, Studio Mode behavior, current program/preview, manual OBS Take, direct-switch confirmation, OBS transition and OBS stream/legacy recorder status. The application must introduce **Rhema native recording** separately, not rely on this. It does not automatically prove browser preview video is supported.
 - `src/lib/remote-roles.ts` lists existing `obs` role as switching scenes through host OBS, Preview/Take when supported, never in rehearsal. Host Rust `Role::allows` still governs allowed commands. Main `Configure` roles do not allow accidental OBS administrative access by mere UI.
 - Existing separate `OBS Companion` is not the same as an OBS browser operator. The companion's role is to bridge independently installed OBS on another device. Do not collapse or claim a browser replaces that functionality.
 
@@ -72,12 +72,14 @@ The most important persistent difference on screen:
 - If Studio Mode changes while the browser is viewing, invalidate stale pending confirmations and re-fetch current mode/Program. Do not execute a previous action against a different live state.
 - Don't force Studio Mode ON from a joined browser unless a separate explicit role-approved host command exists; direct-switch mode must be safe and truthful.
 
-### C. Streaming and recording control
+### C. Streaming and Rhema-native recording separation
 
-- **Stream health is awareness first.** Report actual OBS states `Streaming`, `Disconnected`, `Reconnecting`, `Unknown` and measured dropped frames/bitrate when OBS supplies them; OBS Program being visible doesn't prove external delivery.
-- Recording is a **separate state and action**; Stop Recording is high consequence: confirm `Stop recording?` and verify that OBS reported stopped. Add Marker only when OBS recording/marker API supports it, with event label and host recording/audit revision.
-- Starting/stopping the live stream from a browser is **not automatically authorized merely because scene switch is allowed**. If requested later, require a distinct host-granted capability, clear confirmations and separate live operations acceptance. Existing native host may intentionally keep stream start/stop inside OBS itself.
-- On loss of OBS connection, keep a last-seen Program label with freshness, disable destructive commands, show what remains known vs unknown and allow authorized host retry if supported.
+- **OBS stream health is awareness first.** Report OBS states `Streaming`, `Disconnected`, `Reconnecting`, `Unknown` and measured dropped frames/bitrate if OBS supplies them; OBS Program displayed does not prove external delivery.
+- **Rhema's built-in local recorder is the church's primary recording system** and does not depend on OBS being connected. The actual Start/Stop/markers/audio/storage/record file/archive controls belong in the main **Live → Record** dock and resulting History, as specified in [42 — Native Recording](42-rhema-native-service-recording.md). The OBS Director page may show a small **read-only Rhema REC status and link**, using the real native host recorder state.
+- **OBS recording is legacy/optional OBS-specific compatibility only.** The existing OBS `StartRecord/StopRecord/CreateRecordChapter` APIs may remain clearly labeled in Advanced while Rhema native recording is implemented and safely adopted. They must never masquerade as Rhema's native recorder. Do not remove working OBS fallback until Rhema has proven recording on target machines.
+- Recording control permissions are independent from OBS Director switch rights. Being an OBS Director **does not automatically grant Rhema native recording Start/Stop**, nor should stopping OBS stream stop Rhema recording. Host may grant separate bounded Recorder permission later.
+- Starting/stopping the live OBS stream from a browser is **not automatically authorized merely because OBS scene switching is allowed**. Require a distinct grant/confirmed command if that feature is added.
+- On loss of OBS connection, keep last-seen OBS Program label with freshness, disable OBS control, but **Rhema recording must continue normally** when its own sources, encoder and local disk remain healthy. When Rhema recording fails, do not imply that OBS must stop streaming.
 
 ### D. Director and Camera Operator handoffs
 
@@ -96,7 +98,7 @@ The most important persistent difference on screen:
 
 ## 6. Responsive page direction
 
-- **Wide desktop:** largest OBS Preview/Program panels side by side, single explicit Take below; OBS scene list and stream/recording health side by side below.
+- **Wide desktop:** largest OBS Preview/Program panels side by side, single explicit Take below; OBS scenes and stream health below; only a small native Rhema REC status/link, without duplicate recording transport.
 - **Tablet:** keep named OBS Preview and OBS Program visual comparison readable, then scenes, transition and Take; use secondary drawer for health/details.
 - **Phone:** Program awareness pinned with unmistakable `OBS ONLINE` label; separate accessible Preview pane, large scene picker, explicit named Take/confirm, concise stream/record indicators. No small destructive buttons adjacent to Take. Preview playback opt-in or one feed at a time to conserve CPU/battery.
 - **Receiver failure:** Program labels and stream health remain useful without playing video. Lost heartbeat shows last-known timestamp, not green Live status.
@@ -107,8 +109,8 @@ The most important persistent difference on screen:
 1. Studio Mode ON: choose Choir scene → OBS Preview changes, OBS Program unchanged → explicit OBS Take updates online Program, not Sanctuary/Stage/Overflow.
 2. Studio Mode OFF: direct scene-switch clearly confirms named OBS Program impact; stale/changed mode invalidates pending switch.
 3. Rehearsal, revoked OBS role, disconnected host or stale shared state: no live OBS command goes through.
-4. OBS stream drops while Program remains `Sermon`: show Program and Stream separately; never report successful broadcast.
-5. Recording Stop requires explicit confirmation, correct OBS acknowledgment, and appropriate audit; marker insert only when recording supports it.
+4. OBS stream drops while Program remains `Sermon`: show Program and Stream separately; never report successful broadcast, and verify that independent Rhema-native recording is unaffected when recording sources remain healthy.
+5. The OBS Director cannot implicitly stop the **Rhema** recording by switching scenes, losing OBS or clicking a status chip. Native recording start/stop/markers are independently authorized in Live Record. If legacy OBS-specific recorder controls remain, they are clearly labeled OBS-only and guarded.
 6. Director `Preview choir` and Camera Operator `Ready` remain private cues. Neither auto-Takes.
 7. Connected browser operator, separate OBS Companion and native main Studio remain one host-governed truth without sharing OBS credentials to browser.
 8. 1440/768/390px and WAN-off LAN operation preserve readable state, safe actions and accurate output separation.
@@ -117,7 +119,7 @@ The most important persistent difference on screen:
 
 1. **Primary visual hierarchy (recommended):** giant side-by-side OBS Preview and OBS Program first, one clearly named OBS Take under them, OBS scene list and stream/record health next, compact Director requests and read-only congregation output strip last.
 2. **Scene selection default:** In Studio Mode ON, clicking an OBS scene **sets OBS Preview only**; it cannot alter OBS Program until explicit Take. With Studio Mode OFF, `Switch OBS online…` requires confirm, never a hidden one-tap direct switch.
-3. **Recording:** show small persistent recording status in header but place Start/Stop recording in dedicated guarded section. Stream start/stop stays outside ordinary joined OBS role unless separately authorized.
+3. **Recording (OWNER DIRECTION RESOLVED):** the primary recorder is **Rhema Studio native**, not OBS. Show a small **read-only Rhema REC status chip** here and link to the main Live Record dock when authorized. Do not show OBS recording Start/Stop as the default workflow; legacy OBS recording can be clearly marked Advanced/Fallback until the native replacement is validated. Stream start/stop remains separately permissioned.
 4. **Preview video:** actual OBS Preview/Program streams only if supported by secure host backend; truthful names/status and no invented picture otherwise. Accept `Preview feed unavailable` fallback.
 5. **Comms:** a compact actionable Director/Camera handoff strip, avoiding a competing full chat page.
 
