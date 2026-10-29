@@ -24,10 +24,13 @@ on the church network. It is one family of apps:
 The logo files and how to use them are in [`brand/`](brand/README.md); a preview of the whole family is
 [`docs/brand/preview.html`](docs/brand/preview.html).
 
-**Developed and maintained by Rhema Studio contributors.** Built on the original
-[Rhema](https://github.com/openbezal/rhema) by OpenBezal (MIT licence). The original
-**Copyright (c) 2025 OpenBezal** notice stays in [LICENSE](LICENSE) and in the installer's notices, and
-the About panel credits it. Bible texts, NDI, fonts and other dependencies keep their own licences; see
+**Developed and maintained by Rhema Studio contributors.** Rhema Studio is free software under the
+**GNU GPL, version 3 or later** ([LICENSE](LICENSE)). It is built on the original
+[Rhema](https://github.com/openbezal/rhema) by OpenBezal (MIT licence): the original
+**Copyright (c) 2025 OpenBezal** notice stays, word for word, in [LICENSE](LICENSE) and in the installer's
+notices, and the About panel credits it. Its design engine includes code from
+[Avnac Studio](https://github.com/striker561/Avnac-Studio) (GPL-3.0; see
+[src/vendor/avnac/NOTICE.md](src/vendor/avnac/NOTICE.md)). Bible texts, NDI, fonts and other dependencies keep their own licences; see
 [docs/LICENSES.md](docs/LICENSES.md) and [BRANDING_AND_ATTRIBUTION.md](BRANDING_AND_ATTRIBUTION.md).
 
 The new application shell lives under `src/studio/`; design and architecture documents are in

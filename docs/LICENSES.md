@@ -6,8 +6,9 @@
 
 | Item | Licence | Notes |
 |---|---|---|
-| Rhema (upstream, OpenBezal) | MIT, © 2025 OpenBezal | `LICENSE` at the repo root is kept verbatim; Settings → Help (About) and the README carry the attribution. |
-| Rhema Studio additions (this fork) | MIT, same file | No separate licence; every contribution is under the repo's MIT licence. |
+| Rhema Studio (this fork, as a whole) | **GPL-3.0-or-later** (owner decision with legal sign-off, 29 Oct 2026, #443) | `LICENSE` at the repo root: a short GPL notice, OpenBezal's MIT notice word for word, then the GPL-3.0 text. The installer shows the same file. |
+| Rhema (upstream, OpenBezal) | MIT, © 2025 OpenBezal | Notice kept verbatim inside `LICENSE`; Settings → Help (About) and the README carry the attribution. MIT code may be included in GPL work. |
+| Avnac Studio engine (`src/vendor/avnac/`) | GPL-3.0, © 2026 striker561, d3uceY (from Avnac by akinloluwami) | Source commit, files taken and Rhema's changes in `src/vendor/avnac/NOTICE.md`. |
 
 ## 2. Bundled content
 
