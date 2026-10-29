@@ -27,7 +27,8 @@ use crate::command::{same_key, RemoteCommand};
 /// desk's Preview, adds to the queue and makes or changes scenes (a scene on a screen still waits for
 /// the main desk, `crate::scene_edits`). `Viewer` (view only) follows the service and changes nothing;
 /// like every desk it keeps the notices and the talk channel.
-/// Existing entries without a role are `Configure`, as before.
+/// A stored entry without a role is `Viewer` (C3.2): it follows the service and changes nothing
+/// until the main desk gives it a role.
 /// The desk consoles: `Worship` also steps the song on the screens section by section (and back to
 /// the chorus); `Screens` also takes the ticker and the lower third off and back; `Obs` also starts,
 /// stops and marks OBS's recording and chooses its transition. A verse or song asked for in a notice
@@ -36,7 +37,6 @@ use crate::command::{same_key, RemoteCommand};
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     Present,
-    #[default]
     Configure,
     Timekeeper,
     Bible,
@@ -48,6 +48,7 @@ pub enum Role {
     #[serde(rename = "obs-companion")]
     ObsCompanion,
     Editor,
+    #[default]
     Viewer,
 }
 
@@ -454,7 +455,8 @@ mod tests {
         assert!(!Role::Present.allows(&RemoteCommand::OnAir(false)));
         assert!(Role::Configure.allows(&RemoteCommand::OnAir(false)));
         let e: KeyEntry = serde_json::from_str(r#"{"hash":"h","name":"old"}"#).unwrap();
-        assert_eq!(e.role, Role::Configure, "entries saved before roles keep full access");
+        assert_eq!(e.role, Role::Viewer, "an entry with no role changes nothing until the main desk gives it one");
+        assert!(!e.allows(&RemoteCommand::Next) && !e.allows(&RemoteCommand::OnAir(false)));
     }
 
     #[test]
