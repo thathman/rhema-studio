@@ -248,13 +248,13 @@ await waitFor(() => {
   const selected = qaStores.bible.getState()
   return selected.selectedQueueItemId === addedItem.id && selected.selectedSlide?.item.id === addedItem.id
 }, "reopened hymn preview selection")
-await clickButton("Present")
-const preview = await waitFor(() => document.querySelector('[data-slot="preview-panel"]'), "Present preview panel")
-const previewCanvas = await waitFor(() => preview.querySelector('canvas[role="img"]'), "Present preview canvas")
+await clickButton("Live")
+const preview = await waitFor(() => document.querySelector('[data-slot="preview-panel"]'), "Live preview panel")
+const previewCanvas = await waitFor(() => preview.querySelector('canvas[role="img"]'), "Live preview canvas")
 await waitFor(() => {
   const label = previewCanvas.getAttribute("aria-label") ?? ""
   return label.includes("Test words for a Sunday service") || label.includes("Ọ̀rọ̀ ìdánwò fún iṣẹ́")
-}, "hymn words in Present preview")
+}, "hymn words in Live preview")
 if (qaStores.broadcast.getState().isLive) throw new Error("Previewing the saved hymn changed Live output")
 
 return { imported, hymn: "QA Journey Hymn Edited", added: addedItem.id, order: reopenedQueue.items.map((item) => item.reference), phases: reopenedQueue.headers.map(({ id, at }) => ({ id, at })), savedService: savedId, preview: previewCanvas.getAttribute("aria-label"), live: qaStores.broadcast.getState().isLive }
