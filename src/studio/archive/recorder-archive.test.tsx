@@ -21,7 +21,13 @@ const serviceRecording = {
   stoppedAt: "2026-10-30T10:30:00Z",
   durationMs: 1_800_000,
   files: { mp4: "recording.mp4" },
-  markers: [],
+  markers: [{
+    atMs: 420_000,
+    label: "Sermon begins",
+    actor: "main desk",
+    serviceRunId: "run-1",
+    itemId: "moment-1",
+  }],
   framesWritten: 54_000,
   framesDropped: 0,
   problem: null,
@@ -33,6 +39,7 @@ const rehearsalRecording = {
   outputName: "Overflow",
   rehearsal: true,
   durationMs: 2_500,
+  markers: [],
   framesWritten: 60,
   framesDropped: 2,
   problem: {
@@ -82,6 +89,11 @@ describe("History's native recording archive", () => {
     expect(host?.textContent).toContain("Saved")
     expect(host?.textContent).toContain("30:00")
     expect(host?.textContent).toContain("show it in its folder to copy it")
+    expect(host?.textContent).toContain("Recording markers")
+    expect(host?.textContent).toContain("07:00")
+    expect(host?.textContent).toContain("Sermon begins")
+    expect(host?.textContent).toContain("Service moment linked")
+    expect(host?.textContent).toContain("do not confirm what was visible")
     expect(host?.textContent).not.toContain("Open file")
 
     await act(async () =>
