@@ -776,4 +776,19 @@ mod tests {
         assert_eq!(r.stop().unwrap_err().code, ProblemCode::NotRecording);
         assert!(r.session_dir("../etc", false).is_none());
     }
+
+    #[test]
+    fn history_finds_a_recording_only_by_its_session_id() {
+        let t = tempfile::tempdir().unwrap();
+        let r = Recorder::new(t.path().to_path_buf());
+        let dir = t.path().join("rehearsal").join("20261030_061646-618daba0");
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(r.session_dir("20261030_061646-618daba0", true), None, "no manifest, not a recording");
+        std::fs::write(dir.join(manifest::MANIFEST), "{}").unwrap();
+        assert_eq!(r.session_dir("20261030_061646-618daba0", true), Some(dir));
+        assert_eq!(r.session_dir("20261030_061646-618daba0", false), None, "a rehearsal is not a service recording");
+        for bad in ["", ".", "..", "rehearsal/20261030_061646-618daba0", "a\\b", "/etc"] {
+            assert_eq!(r.session_dir(bad, true), None, "{bad}");
+        }
+    }
 }

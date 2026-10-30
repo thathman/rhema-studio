@@ -183,6 +183,18 @@ pub fn recorder_list(host: State<'_, RecorderHost>, rehearsal: bool) -> Res<Vec<
     Ok(recorder(&host)?.list(rehearsal))
 }
 
+/// Show a recording in Finder / Explorer for History (play it from there, copy it to the archive).
+/// Only by session id, never a path: the window cannot ask to reveal anything else.
+#[tauri::command]
+pub fn recorder_reveal(window: WebviewWindow, host: State<'_, RecorderHost>, session_id: String, rehearsal: bool) -> Res<()> {
+    main_desk_only(&window)?;
+    let missing = || RecorderProblem::new(ProblemCode::RecordingMissing, "This recording is no longer in the recordings folder.");
+    let dir = recorder(&host)?.session_dir(&session_id, rehearsal).ok_or_else(missing)?;
+    let file = dir.join(rhema_recorder::FILE_NAME);
+    let target = if file.exists() { file } else { dir };
+    tauri_plugin_opener::reveal_item_in_dir(&target).map_err(|e| RecorderProblem::new(ProblemCode::RecordingMissing, format!("Could not show the recording: {e}")))
+}
+
 fn tee(active: bool, width: u32, height: u32, fps: u32) -> serde_json::Value {
     serde_json::json!({ "active": active, "width": width, "height": height, "fps": fps })
 }

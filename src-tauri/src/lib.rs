@@ -161,6 +161,7 @@ pub fn run() {
             commands::recorder::recorder_marker,
             commands::recorder::recorder_status,
             commands::recorder::recorder_list,
+            commands::recorder::recorder_reveal,
             commands::broadcast::set_output_pace,
             commands::fonts::list_system_fonts,
             commands::remote::start_osc,

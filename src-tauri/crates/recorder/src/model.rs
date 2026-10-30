@@ -81,6 +81,8 @@ pub enum ProblemCode {
     NotAllowed,
     /// Frames arrive at a different size from the one the file was started at (NDI was changed mid-recording).
     FrameSizeChanged,
+    /// A History entry names a recording that is no longer in the recordings folder.
+    RecordingMissing,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

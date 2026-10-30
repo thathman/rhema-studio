@@ -85,6 +85,7 @@ interface RecordingManifest {           // <folder>/<sessionId>/manifest.json
 | `recorder_stop()` → `RecorderStatus` | Main desk only. `finalizing` → `saved`, or `recoverable`/`failed` with the reason |
 | `recorder_status()` / event `recorder:status` to `main` (1 Hz while recording, and once on stop) | Truthful state; a REC badge must come from this, never a UI flag |
 | `recorder_list({rehearsal})` → `RecordingManifest[]` | Newest first, read from manifests |
+| `recorder_reveal({sessionId, rehearsal})` | Main desk only. Shows the session's `recording.mp4` in Finder / Explorer for History to play or archive. By session id only, never a path; `recording_missing` if the session is gone |
 | `push_ndi_frame` / `push_ndi_region` (existing) | Now also the recorder's input (see §2) |
 
 Errors are `RecorderProblem` (`{code, message}`), message written for the operator.
