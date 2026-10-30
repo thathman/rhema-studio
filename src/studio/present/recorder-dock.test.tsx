@@ -8,6 +8,7 @@ const native = vi.hoisted(() => ({
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }))
 vi.mock("@tauri-apps/api/event", () => ({
+  emitTo: vi.fn(async () => {}),
   listen: vi.fn(
     async (_event: string, handler: (event: { payload: unknown }) => void) => {
       native.eventHandler = handler
@@ -21,6 +22,8 @@ vi.mock("@tauri-apps/api/event", () => ({
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useEventClock } from "@/stores/event-clock-store"
+import { useQueueStore } from "@/stores/queue-store"
 import type { BroadcastOutput } from "@/types/broadcast-output"
 import { RecorderDock } from "./recorder-dock"
 
@@ -104,6 +107,8 @@ const preflight = {
 }
 
 const initialBroadcast = useBroadcastStore.getState()
+const initialEventClock = useEventClock.getState()
+const initialQueue = useQueueStore.getState()
 let host: HTMLDivElement
 let root: Root
 
@@ -147,6 +152,8 @@ beforeEach(() => {
     isLive: true,
     liveVerse: { reference: "Program item", segments: [] },
   })
+  useEventClock.setState({ currentId: null, currentMomentId: null })
+  useQueueStore.setState({ items: [] })
 })
 
 afterEach(() => {
@@ -154,6 +161,8 @@ afterEach(() => {
   host?.remove()
   native.eventHandler = null
   useBroadcastStore.setState(initialBroadcast)
+  useEventClock.setState(initialEventClock)
+  useQueueStore.setState(initialQueue)
 })
 
 describe("Live's Rhema recording dock", () => {
@@ -415,6 +424,17 @@ describe("Live's Rhema recording dock", () => {
           ? { atMs: 8_000, label: "Sermon begins", actor: "main desk" }
           : null
     )
+    useQueueStore.setState({
+      items: [{
+        id: "moment-1",
+        kind: "cue",
+        reference: "Sermon begins",
+        confidence: 1,
+        source: "manual",
+        added_at: 1,
+      }],
+    })
+    useEventClock.setState({ currentId: "event-1", currentMomentId: "moment-1" })
     await renderDock()
     const details = host.querySelector("details")!
     await act(async () => details.querySelector("summary")!.click())
@@ -433,9 +453,11 @@ describe("Live's Rhema recording dock", () => {
     expect(native.invoke).toHaveBeenCalledWith("recorder_marker", {
       label: "Sermon begins",
       serviceRunId: null,
-      itemId: null,
+      itemId: "moment-1",
     })
     expect(host.textContent).toContain("Marker added: Sermon begins · 00:08")
+    expect(host.textContent).toContain("service clock: Sermon begins")
+    expect(host.textContent).toContain("does not confirm what is visible")
     expect(native.invoke.mock.calls.map(([command]) => command)).toEqual([
       "recorder_status",
       "recorder_marker",
@@ -443,6 +465,40 @@ describe("Live's Rhema recording dock", () => {
     expect(useBroadcastStore.getState()).toMatchObject({
       isLive: true,
       liveVerse: { reference: "Program item" },
+    })
+    expect(useEventClock.getState()).toMatchObject({
+      currentId: "event-1",
+      currentMomentId: "moment-1",
+    })
+  })
+
+  it("keeps the marker unlinked when the event clock has no current moment", async () => {
+    native.invoke.mockImplementation(async (command: string) =>
+      command === "recorder_status"
+        ? recordingStatus
+        : command === "recorder_marker"
+          ? { atMs: 8_000, label: "Sermon begins", actor: "main desk" }
+          : null
+    )
+    await renderDock()
+    const details = host.querySelector("details")!
+    await act(async () => details.querySelector("summary")!.click())
+    await act(async () =>
+      changeInput(
+        host.querySelector<HTMLInputElement>("#recorder-marker-label")!,
+        "Sermon begins"
+      )
+    )
+    expect(host.textContent).toContain("No current service moment")
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Add marker")!
+        .click()
+    )
+    expect(native.invoke).toHaveBeenCalledWith("recorder_marker", {
+      label: "Sermon begins",
+      serviceRunId: null,
+      itemId: null,
     })
   })
 

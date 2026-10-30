@@ -20,7 +20,13 @@ interface RecordingManifest {
   startedAt: string
   durationMs?: number | null
   files: { mp4?: string | null; mov?: string | null }
-  markers: Array<{ atMs: number; label: string }>
+  markers: Array<{
+    atMs: number
+    label: string
+    actor?: string | null
+    serviceRunId?: string | null
+    itemId?: string | null
+  }>
   framesWritten: number
   framesDropped: number
   problem?: { code: string; message: string } | null
@@ -249,6 +255,26 @@ export function RecorderArchive() {
                     ? ` · ${record.markers.length} marker${record.markers.length === 1 ? "" : "s"}`
                     : ""}
                 </p>
+                {record.markers.length > 0 && (
+                  <div className="mt-2 rounded-md border border-border/70 px-2.5 py-2">
+                    <p className="text-xs font-semibold">Recording markers</p>
+                    <ul className="mt-1 flex flex-col gap-1.5">
+                      {record.markers.map((marker, index) => (
+                        <li key={`${marker.atMs}-${index}`} className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                          <span className="font-mono tabular-nums text-muted-foreground">{durationLabel(marker.atMs)}</span>
+                          <span>{marker.label}</span>
+                          {marker.itemId && (
+                            <span className="text-muted-foreground">Service moment linked</span>
+                          )}
+                          {marker.actor && <span className="text-muted-foreground">· {marker.actor}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-1 text-[0.6875rem] text-muted-foreground">
+                      Moment links follow the service clock; they do not confirm what was visible in this output.
+                    </p>
+                  </div>
+                )}
                 {record.problem && (
                   <p role="alert" className="mt-1 text-xs text-amber-800">
                     {record.problem.message}

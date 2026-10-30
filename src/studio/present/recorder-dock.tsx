@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useEventClock } from "@/stores/event-clock-store"
+import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { Button } from "@/components/ui/button"
 
@@ -126,6 +128,11 @@ export function RecorderDock() {
   const outputs = useBroadcastStore((state) => state.outputs)
   const rehearsal = useBroadcastStore((state) => state.rehearsal)
   const currentProgramId = useServiceStore((state) => state.current?.id ?? null)
+  const currentMomentId = useEventClock((state) => state.currentMomentId)
+  const queueItems = useQueueStore((state) => state.items)
+  const currentMoment = currentMomentId
+    ? queueItems.find((item) => item.id === currentMomentId) ?? null
+    : null
   const congregationOutputs = useMemo(
     () =>
       outputs.filter(
@@ -342,6 +349,7 @@ export function RecorderDock() {
   const addMarker = async () => {
     const label = markerLabel.trim().slice(0, 120)
     if (!label || status?.state !== "recording" || pendingAction) return
+    const momentAtMarker = currentMoment
     setPendingAction("marker")
     setActionError(null)
     try {
@@ -350,10 +358,12 @@ export function RecorderDock() {
         {
           label,
           serviceRunId: null,
-          itemId: null,
+          itemId: momentAtMarker?.id ?? null,
         }
       )
-      setLastMarker(`${marker.label} · ${formatDuration(marker.atMs)}`)
+      setLastMarker(
+        `${marker.label} · ${formatDuration(marker.atMs)}${momentAtMarker ? ` · service clock: ${momentAtMarker.reference}` : ""}`
+      )
       setMarkerLabel("")
     } catch (error) {
       setActionError(`Marker was not added: ${errorMessage(error)}`)
@@ -594,6 +604,14 @@ export function RecorderDock() {
                 </>
               )}
             </div>
+
+            {status?.state === "recording" && (
+              <p className="lg:col-span-3 text-xs text-muted-foreground">
+                {currentMoment
+                  ? `Service clock context: ${currentMoment.reference}. This does not confirm what is visible in the selected recording output.`
+                  : "No current service moment; this marker will not be linked to a moment."}
+              </p>
+            )}
 
             <div className="lg:col-span-3" aria-live="polite">
               {rehearsal && (
