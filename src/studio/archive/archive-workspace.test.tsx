@@ -5,6 +5,7 @@ vi.mock("@/studio/more/song-usage-block", () => ({ SongUsageBlock: () => null })
 vi.mock("@/studio/library/library-blocks", () => ({
   JournalBlock: () => null,
 }))
+vi.mock("@/studio/archive/recorder-archive", () => ({ RecorderArchive: () => <section aria-label="Rhema-native recordings" /> }))
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -68,6 +69,7 @@ describe("Archive calendar dates", () => {
     expect(serviceCount?.nextElementSibling?.nextElementSibling?.textContent).toBe("2 items in all")
     expect(host.textContent).toContain("History and records.")
     expect(host.textContent).toContain("private and read-only")
+    expect(host.querySelector('[aria-label="Rhema-native recordings"]')).not.toBeNull()
     expect(host.textContent).not.toContain("Backups")
     expect(host.textContent).not.toContain("Church folder")
     expect(host.textContent).not.toContain("One service as a file")

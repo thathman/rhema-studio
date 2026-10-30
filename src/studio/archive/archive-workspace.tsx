@@ -9,6 +9,7 @@ import { validTimeZone } from "@/lib/church-time"
 import { systemTimeZone } from "@/lib/setup-readiness"
 import { SongUsageBlock } from "@/studio/more/song-usage-block"
 import { JournalBlock } from "@/studio/library/library-blocks"
+import { RecorderArchive } from "@/studio/archive/recorder-archive"
 import { useSettingsStore } from "@/stores/settings-store"
 
 function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
@@ -103,6 +104,8 @@ export function ArchiveWorkspace() {
             })}
           </ul>
         </section>
+
+        <RecorderArchive />
 
         <div className="grid grid-cols-2 gap-5 max-[1100px]:grid-cols-1">
           <Card title="Service runs and logs" sub="Review captured run activity and plan versus actual timing. A run record never restores a service or sends anything to a screen.">
