@@ -211,7 +211,13 @@ fn current_run(app: &AppHandle) -> Option<(String, Option<String>)> {
 /// A run the caller named wins; otherwise the recording joins the service running now.
 fn in_run(request: RecorderStartRequest, now: Option<(String, Option<String>)>) -> RecorderStartRequest {
     match (request.service_run_id.is_some(), now) {
-        (false, Some((run, program))) => RecorderStartRequest { service_run_id: Some(run), program_id: request.program_id.clone().or(program), ..request },
+        (false, Some((run, program))) => RecorderStartRequest {
+            service_run_id: Some(run),
+            // The host's current run and program are one authoritative pair. Do not let a stale
+            // program selected in the UI split the recording's History link across services.
+            program_id: program,
+            ..request
+        },
         _ => request,
     }
 }
@@ -238,7 +244,8 @@ mod tests {
     #[test]
     fn a_recording_files_under_the_service_running_now_unless_the_caller_named_one() {
         let now = Some(("run-today".to_string(), Some("plan-today".to_string())));
-        let joined = in_run(request("sanctuary", "congregation"), now.clone());
+        let stale_ui_plan = RecorderStartRequest { program_id: Some("old-plan".into()), ..request("sanctuary", "congregation") };
+        let joined = in_run(stale_ui_plan, now.clone());
         assert_eq!((joined.service_run_id.as_deref(), joined.program_id.as_deref()), (Some("run-today"), Some("plan-today")));
         let named = in_run(RecorderStartRequest { service_run_id: Some("run-x".into()), ..request("sanctuary", "congregation") }, now);
         assert_eq!((named.service_run_id.as_deref(), named.program_id), (Some("run-x"), None));

@@ -44,6 +44,7 @@ const browser = {
 
 const idleStatus = {
   state: "idle",
+  sessionActive: false,
   sessionId: null,
   outputId: null,
   startedAt: null,
@@ -68,6 +69,7 @@ const idleStatus = {
 const recordingStatus = {
   ...idleStatus,
   state: "recording",
+  sessionActive: true,
   sessionId: "session-1",
   outputId: "overflow",
   elapsedMs: 12_000,
@@ -549,5 +551,46 @@ describe("Live's Rhema recording dock", () => {
     )
     expect(host.textContent).not.toContain("Recording · Overflow")
     expect(host.textContent).toContain("Not recording")
+  })
+
+  it("keeps an active failed recorder session locked and lets the host close it", async () => {
+    const failedStatus = {
+      ...recordingStatus,
+      state: "failed" as const,
+      sessionActive: true,
+      problem: { code: "encoder_failed" as const, message: "The writer stopped." },
+    }
+    const recoveredStatus = {
+      ...idleStatus,
+      state: "recoverable" as const,
+      sessionActive: false,
+      sessionId: "session-1",
+      outputId: "overflow",
+    }
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "recorder_status") return failedStatus
+      if (command === "recorder_stop") return recoveredStatus
+      return null
+    })
+    await renderDock()
+    const details = host.querySelector("details")!
+    await act(async () => details.querySelector("summary")!.click())
+
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="Congregation output"]')!.disabled).toBe(true)
+    expect(host.querySelector<HTMLButtonElement>('button[aria-label="Check recording setup"]')).toBeNull()
+    expect(host.textContent).toContain("The writer stopped.")
+    const requestClose = [...host.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Close failed recording…")!
+    await act(async () => requestClose.click())
+    expect(host.textContent).toContain("Close the failed recorder session and keep any recoverable file; Live continues.")
+    expect(native.invoke.mock.calls.some(([command]) => command === "recorder_stop")).toBe(false)
+
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Close and recover")!
+      .click())
+    expect(native.invoke).toHaveBeenCalledWith("recorder_stop")
+    expect(native.invoke.mock.calls.some(([command]) => command === "recorder_start")).toBe(false)
+    expect(host.textContent).toContain("The recording may need recovery. Find its record in History.")
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="Congregation output"]')!.disabled).toBe(false)
   })
 })

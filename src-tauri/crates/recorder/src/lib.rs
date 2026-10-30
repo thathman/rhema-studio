@@ -327,6 +327,7 @@ impl Recorder {
         manifest::write(&dir, &manifest).map_err(|e| RecorderProblem::new(ProblemCode::WriteFailed, e.to_string()))?;
         let status = RecorderStatus {
             state: manifest.state,
+            session_active: false,
             session_id: Some(manifest.session_id.clone()),
             output_id: Some(manifest.output_id.clone()),
             started_at: Some(manifest.started_at.clone()),
@@ -399,6 +400,7 @@ fn status_of(s: &Session, folder: &Path) -> RecorderStatus {
     let gone = sh.writer_gone.load(Ordering::Relaxed);
     RecorderStatus {
         state: if gone { RecorderState::Failed } else { RecorderState::Recording },
+        session_active: true,
         session_id: Some(s.manifest.session_id.clone()),
         output_id: Some(s.manifest.output_id.clone()),
         started_at: Some(s.manifest.started_at.clone()),
@@ -775,5 +777,51 @@ mod tests {
         assert!(r.marker("x", "desk", None, None).is_err());
         assert_eq!(r.stop().unwrap_err().code, ProblemCode::NotRecording);
         assert!(r.session_dir("../etc", false).is_none());
+    }
+
+    #[test]
+    fn a_failed_writer_session_remains_active_until_stop_closes_it() {
+        let t = tempfile::tempdir().unwrap();
+        let shared = Arc::new(Shared::default());
+        shared.writer_gone.store(true, Ordering::Relaxed);
+        shared.set_problem(RecorderProblem::new(ProblemCode::EncoderFailed, "writer stopped"));
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let writer = std::thread::spawn(|| Ok(()));
+        let session = Session {
+            dir: t.path().to_path_buf(),
+            manifest: RecordingManifest {
+                version: 1,
+                session_id: "failed-session".into(),
+                state: RecorderState::Recording,
+                output_id: "sanctuary".into(),
+                output_name: "Sanctuary".into(),
+                profile: RecorderProfile::Standard720p30,
+                audio_device_id: None,
+                service_run_id: None,
+                program_id: None,
+                rehearsal: false,
+                started_at: iso_utc(SystemTime::now()),
+                stopped_at: None,
+                duration_ms: None,
+                files: RecordingFiles { mov: None, mp4: Some(FILE_NAME.into()) },
+                markers: Vec::new(),
+                frames_written: 0,
+                frames_dropped: 0,
+                problem: None,
+            },
+            width: 1280,
+            height: 720,
+            fps: 30,
+            t0: Instant::now(),
+            tx,
+            shared,
+            writer,
+            frame: Vec::new(),
+            audio: None,
+        };
+
+        let status = status_of(&session, t.path());
+        assert_eq!(status.state, RecorderState::Failed);
+        assert!(status.session_active, "Stop still needs to remove this live Session");
     }
 }

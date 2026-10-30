@@ -21,6 +21,7 @@ interface RecorderProblem {
 
 interface RecorderStatus {
   state: RecorderState
+  sessionActive: boolean
   sessionId: string | null
   outputId: string | null
   startedAt: string | null
@@ -160,10 +161,11 @@ export function RecorderDock() {
   const pinnedOutputName = outputs.find(
     (candidate) => candidate.id === status?.outputId
   )?.name
-  const active =
-    status?.state === "recording" ||
-    status?.state === "preparing" ||
-    status?.state === "finalizing"
+  const active = Boolean(status?.sessionActive)
+  const canStop = Boolean(
+    status?.sessionActive &&
+    (status.state === "recording" || status.state === "failed")
+  )
   const request: RecorderStartRequest = {
     outputId: output?.id ?? "",
     outputName: output?.name ?? "",
@@ -247,7 +249,7 @@ export function RecorderDock() {
   }, [])
 
   useEffect(() => {
-    if (status?.state !== "recording" || pendingAction || statusEventsConnected)
+    if (!status?.sessionActive || pendingAction || statusEventsConnected)
       return
     let cancelled = false
     const timer = window.setInterval(() => {
@@ -269,7 +271,7 @@ export function RecorderDock() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [pendingAction, status?.state, statusEventsConnected])
+  }, [pendingAction, status?.sessionActive, statusEventsConnected])
 
   const invalidatePreflight = () => {
     setPreflight(null)
@@ -322,7 +324,7 @@ export function RecorderDock() {
   }
 
   const stopRecording = async () => {
-    if (status?.state !== "recording" || pendingAction) return
+    if (!canStop || pendingAction) return
     setPendingAction("stop")
     setActionError(null)
     setConfirmStop(false)
@@ -401,7 +403,7 @@ export function RecorderDock() {
               {audioLine}
             </span>
           )}
-          {status?.state === "recording" && status.file.bytes > 0 && (
+          {status?.sessionActive && status.file.bytes > 0 && (
             <span className="text-xs text-muted-foreground">
               File {formatBytes(status.file.bytes)}
             </span>
@@ -480,32 +482,36 @@ export function RecorderDock() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-              {status?.state === "recording" ? (
+              {canStop ? (
                 <>
-                  <label className="sr-only" htmlFor="recorder-marker-label">
-                    Recording marker
-                  </label>
-                  <input
-                    id="recorder-marker-label"
-                    value={markerLabel}
-                    maxLength={120}
-                    disabled={Boolean(pendingAction)}
-                    onChange={(event) => setMarkerLabel(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void addMarker()
-                    }}
-                    placeholder="Marker, e.g. Sermon begins"
-                    className="h-8 w-48 rounded-md border border-input bg-background px-2 text-xs"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!markerLabel.trim() || Boolean(pendingAction)}
-                    onClick={() => void addMarker()}
-                  >
-                    {pendingAction === "marker" ? "Adding…" : "Add marker"}
-                  </Button>
+                  {status?.state === "recording" && (
+                    <>
+                      <label className="sr-only" htmlFor="recorder-marker-label">
+                        Recording marker
+                      </label>
+                      <input
+                        id="recorder-marker-label"
+                        value={markerLabel}
+                        maxLength={120}
+                        disabled={Boolean(pendingAction)}
+                        onChange={(event) => setMarkerLabel(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") void addMarker()
+                        }}
+                        placeholder="Marker, e.g. Sermon begins"
+                        className="h-8 w-48 rounded-md border border-input bg-background px-2 text-xs"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!markerLabel.trim() || Boolean(pendingAction)}
+                        onClick={() => void addMarker()}
+                      >
+                        {pendingAction === "marker" ? "Adding…" : "Add marker"}
+                      </Button>
+                    </>
+                  )}
                   <Button
                     type="button"
                     variant="destructive"
@@ -515,17 +521,25 @@ export function RecorderDock() {
                     aria-controls="recorder-stop-confirmation"
                     aria-expanded={confirmStop}
                   >
-                    Stop recording…
+                    {status?.state === "failed"
+                      ? "Close failed recording…"
+                      : "Stop recording…"}
                   </Button>
                   <div
                     id="recorder-stop-confirmation"
                     role="group"
-                    aria-label="Stop confirmation"
+                    aria-label={
+                      status?.state === "failed"
+                        ? "Close failed recording confirmation"
+                        : "Stop confirmation"
+                    }
                     hidden={!confirmStop}
                     className="flex flex-wrap items-center gap-2"
                   >
                     <span className="text-xs text-muted-foreground">
-                      This closes the local recording; Live continues.
+                      {status?.state === "failed"
+                        ? "Close the failed recorder session and keep any recoverable file; Live continues."
+                        : "This closes the local recording; Live continues."}
                     </span>
                     <Button
                       type="button"
@@ -534,7 +548,9 @@ export function RecorderDock() {
                       disabled={Boolean(pendingAction)}
                       onClick={() => void stopRecording()}
                     >
-                      Stop and finalize
+                      {status?.state === "failed"
+                        ? "Close and recover"
+                        : "Stop and finalize"}
                     </Button>
                     <Button
                       type="button"
@@ -542,7 +558,9 @@ export function RecorderDock() {
                       size="sm"
                       onClick={() => setConfirmStop(false)}
                     >
-                      Keep recording
+                      {status?.state === "failed"
+                        ? "Leave for now"
+                        : "Keep recording"}
                     </Button>
                   </div>
                 </>
