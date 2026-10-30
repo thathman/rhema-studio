@@ -14,7 +14,7 @@ use windows::Win32::Media::MediaFoundation::{
     MFVideoTransferMatrix_BT709, MFSTARTUP_FULL, MF_MT_AUDIO_AVG_BYTES_PER_SECOND, MF_MT_AUDIO_BITS_PER_SAMPLE, MF_MT_AUDIO_BLOCK_ALIGNMENT,
     MF_MT_AUDIO_NUM_CHANNELS, MF_MT_AUDIO_SAMPLES_PER_SECOND, MF_MT_AVG_BITRATE, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE,
     MF_MT_MAJOR_TYPE, MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE, MF_MT_YUV_MATRIX, MF_PD_DURATION, MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS,
-    MF_SOURCE_READER_FIRST_AUDIO_STREAM, MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_SOURCE_READER_MEDIASOURCE, MF_TRANSCODE_CONTAINERTYPE, MF_VERSION,
+    MF_SOURCE_READER_FIRST_AUDIO_STREAM, MF_SOURCE_READERF_ENDOFSTREAM, MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_SOURCE_READER_MEDIASOURCE, MF_TRANSCODE_CONTAINERTYPE, MF_VERSION,
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
@@ -284,6 +284,14 @@ pub fn probe(path: &Path) -> Probe {
         let d: Option<PROPVARIANT> = reader.GetPresentationAttribute(MF_SOURCE_READER_MEDIASOURCE.0 as u32, &MF_PD_DURATION).ok();
         if let Some(ticks) = d.and_then(|d| u64::try_from(&d).ok()) {
             p.duration_s = ticks as f64 / TICKS_PER_SECOND as f64;
+        }
+        // A file cut off by a crash declares no duration: what plays is what can actually be read.
+        if p.duration_s == 0.0 {
+            let (mut flags, mut at, mut last) = (0u32, 0i64, 0i64);
+            while reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, 0, None, Some(&mut flags), Some(&mut at), None).is_ok() && flags & MF_SOURCE_READERF_ENDOFSTREAM.0 as u32 == 0 {
+                last = last.max(at);
+            }
+            p.duration_s = last as f64 / TICKS_PER_SECOND as f64;
         }
     }
     p
