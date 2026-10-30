@@ -287,9 +287,9 @@ pub fn probe(path: &Path) -> Probe {
         }
         // A file cut off by a crash declares no duration: what plays is what can actually be read.
         if p.duration_s == 0.0 {
-            let (mut flags, mut at, mut last) = (0u32, 0i64, 0i64);
+            let (mut flags, mut at, mut last, mut read) = (0u32, 0i64, 0i64, None);
             loop {
-                match reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, 0, None, Some(&mut flags), Some(&mut at), None) {
+                match reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, 0, None, Some(&mut flags), Some(&mut at), Some(&mut read)) {
                     Ok(()) if flags & MF_SOURCE_READERF_ENDOFSTREAM.0 as u32 == 0 => last = last.max(at),
                     Ok(()) => break,
                     Err(e) => {
