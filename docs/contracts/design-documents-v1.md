@@ -32,6 +32,7 @@ Typed client: `src/design-engine/design-store.ts` (`designStore.*`).
 | A version is immutable (DB triggers refuse UPDATE/DELETE) | database error |
 | Document must have `scene.artboard`, `scene.root`, `scene.nodes`; every binding names a node; ≤ 4 MB; title 1–200 chars; kind one of four | `{kind:"invalid"}` |
 | A design with versions is never deleted (a service may pin one) | `{kind:"refused", code:"has-versions"}` |
+| A media file a design draft or version shows (image `src` carries the file's hash name) is never deleted | `media_delete` → in use, naming `design <title>` / `design <title> v<N>` |
 | Editing a template: duplicate it (`kind` becomes `design`) | — |
 | No command here emits to outputs or Live State | — |
 
@@ -56,7 +57,7 @@ interface DesignedMomentPayload { designRef: { id: string; version: number } }
 
 - **Use on a screen:** `designToScene(version.document)` and set `scene.design = {id, version}`. Saving the scene is the existing scene save and approval path; it is never a Take.
 - **A newer version exists:** the scene keeps its pin and the UI offers "Update to v N", an explicit, reviewable scene change. Nothing updates silently, Brand Kit included (doc 29 §2).
-- **Approved service:** `approved_design_snapshots` already freezes the scenes as they were. With pins, the snapshot also records `{designId, version}` per scene, and because versions are immutable the approved service reopens exactly as approved, offline.
+- **Approved service:** `approved_design_snapshots` already freezes the scenes as they were, `design` pin included. **Host-enforced:** `content_approve_program_with_designs` refuses (`{kind:"invalid"}`, naming the scene or item and the version) when a scene's `design` or an item's `designRef` is not a whole positive version this computer holds, so an approved service always reopens exactly as approved, offline.
 - **Live bindings:** the pinned version holds the subscriptions (`bindings`); live words come from the Live State through `previewDesign` / the output renderer, never stored in the design.
 - **Used On (host):** `design_used_on({id})` returns the services whose items pin a version, with title, revision and approved revision. Scenes live in the desk's scene store, so the UI adds those it holds.
 - **Built:** `Scene.design?: DesignPin` (`src/types/scene.ts`); `sceneFromVersion(v)` (always pins what it made) and `pinStatus(scene, latestVersion)` → `{pin, update}` in `rhema-scene.ts`; `design_used_on({id})` / `designStore.usedOn(id)` → `DesignUse[]`. A designed moment is a `slide` item whose payload carries `designRef` beside its `title` (the title is what shows if the design cannot be drawn). `CustomSlide.designRef` / `SlideItemPayload.designRef` are typed; the service store saves it and reads it back (a malformed pin is dropped, the slide kept). `resolveDesignedMoment(slide, designStore.getVersion)` gives the scene to show from the pinned version, or `scene: null` with the reason (version missing after a partial restore, unreadable, or not drawable), meaning show the moment's own slide; never another version.

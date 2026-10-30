@@ -161,7 +161,8 @@ impl ContentDb {
         let mut conn = self.lock()?;
         let tx = conn.transaction()?;
         let asset = load_media(&tx, id)?.ok_or_else(|| ContentError::NotFound(id.to_string()))?;
-        let used = services_using_media(&tx, id)?;
+        let mut used = services_using_media(&tx, id)?;
+        used.extend(designs_using_file(&tx, &asset.file)?);
         if !used.is_empty() {
             return Err(ContentError::InUse { titles: used });
         }
@@ -213,6 +214,25 @@ fn services_using_media(conn: &Connection, media_id: &str) -> Result<Vec<String>
          ORDER BY 1",
     )?;
     let rows = stmt.query_map(params![media_id], |r| r.get(0))?;
+    Ok(rows.collect::<std::result::Result<_, _>>()?)
+}
+
+/// Designs that show this file: an image node's `src` is the file's asset URL, which carries the
+/// file's content-hash name verbatim. Versions are immutable, so the file must outlive them.
+// ponytail: substring match on the hash name; a media reference index when designs need one.
+fn designs_using_file(conn: &Connection, file: &str) -> Result<Vec<String>> {
+    let has_designs: i64 = conn.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'design_versions'", [], |r| r.get(0))?;
+    // Short names are not content hashes and could match by accident.
+    if has_designs == 0 || file.len() < 32 {
+        return Ok(Vec::new());
+    }
+    let mut stmt = conn.prepare(
+        "SELECT 'design ' || title FROM design_documents WHERE instr(document, ?1) > 0
+         UNION
+         SELECT 'design ' || title || ' v' || version FROM design_versions WHERE instr(document, ?1) > 0
+         ORDER BY 1",
+    )?;
+    let rows = stmt.query_map(params![file], |r| r.get(0))?;
     Ok(rows.collect::<std::result::Result<_, _>>()?)
 }
 
@@ -359,6 +379,26 @@ mod tests {
         ] {
             assert!(validate_audio_payload(0, bad).is_err(), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn a_picture_a_design_version_shows_cannot_be_deleted() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let a = db.register_media(&picture("Welcome", 1)).unwrap();
+        let src = format!("asset://localhost/%2FUsers%2Fx%2Fmedia%2F{}", a.file);
+        let doc = serde_json::json!({
+            "scene": { "version": 1, "root": "root", "artboard": { "width": 1920, "height": 1080 },
+                       "nodes": { "root": { "type": "group", "children": ["bg"] }, "bg": { "type": "image", "src": src } } },
+            "bindings": {}, "meta": {},
+        });
+        let design = db.create_design(&crate::designs::DesignInput { title: "Welcome".into(), kind: "design".into(), document: doc }).unwrap();
+        db.create_design_version(&design.id, design.revision, None, "tester").unwrap();
+        match db.delete_media(&a.id) {
+            Err(ContentError::InUse { titles }) => assert_eq!(titles, vec!["design Welcome", "design Welcome v1"]),
+            other => panic!("expected InUse, got {other:?}"),
+        }
+        let unused = db.register_media(&MediaInput { file: format!("{}.png", "b".repeat(64)), ..picture("Other", 2) }).unwrap();
+        db.delete_media(&unused.id).unwrap();
     }
 
     #[test]
