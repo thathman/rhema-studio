@@ -432,7 +432,7 @@ export function DesignDocumentEditor({
                   <label className="flex items-center justify-between gap-2 text-[0.6875rem] font-medium text-muted-foreground">Fill colour
                     {selectedPaintNode.fill.type === "solid"
                       ? <Input type="color" value={selectedPaintNode.fill.color} onChange={(event) => dispatch({ type: "SET_NODE_FILL", id: selectedPaintNode.id, fill: { type: "solid", color: event.currentTarget.value } })} className="h-8 w-14 p-1" />
-                      : <span className="text-[0.625rem]">Gradient preserved</span>}
+                      : <span className="text-[0.6875rem]">Gradient preserved</span>}
                   </label>
                 )}
                 {selectedRenderable.type === "text" && (
@@ -447,7 +447,7 @@ export function DesignDocumentEditor({
                     <label className="flex items-center justify-between gap-2 text-[0.6875rem] font-medium text-muted-foreground">Text colour
                       {selectedRenderable.color.type === "solid"
                         ? <Input type="color" value={selectedRenderable.color.color} onChange={(event) => dispatch({ type: "SET_TEXT_FORMAT", id: selectedRenderable.id, color: { type: "solid", color: event.currentTarget.value } })} className="h-8 w-14 p-1" />
-                        : <span className="text-[0.625rem]">Gradient preserved</span>}
+                        : <span className="text-[0.6875rem]">Gradient preserved</span>}
                     </label>
                     <label className="flex flex-col gap-1 text-[0.6875rem] font-medium text-muted-foreground">Alignment
                       <select aria-label="Text alignment" value={selectedRenderable.textAlign} onChange={(event) => dispatch({ type: "SET_TEXT_FORMAT", id: selectedRenderable.id, textAlign: event.currentTarget.value as SaraswatiTextNode["textAlign"] })} className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground">
@@ -476,7 +476,7 @@ export function DesignDocumentEditor({
               <label className="mt-2 flex items-center justify-between gap-2 text-[0.6875rem] font-medium text-muted-foreground">Background colour
                 {scene.artboard.bg.type === "solid" ? (
                   <Input type="color" value={scene.artboard.bg.color} onChange={(event) => dispatch({ type: "SET_ARTBOARD", bg: { type: "solid", color: event.currentTarget.value } })} className="h-8 w-14 p-1" />
-                ) : <span className="text-[0.625rem]">Gradient is not supported for Rhema output</span>}
+                ) : <span className="text-[0.6875rem]">Gradient is not supported for Rhema output</span>}
               </label>
             </div>
             <div className="mt-5 border-t border-border pt-3">
@@ -488,7 +488,7 @@ export function DesignDocumentEditor({
                 <ul className="mt-2 space-y-2">
                   {versions.map((version) => <li key={version.version} className="rounded border border-border px-2 py-1.5">
                     <p className="text-[0.6875rem] font-semibold">Version {version.version}{version.note ? " · " + version.note : ""}</p>
-                    <p className="text-[0.625rem] text-muted-foreground">{version.savedBy || "Main desk"} · {new Date(version.createdAt).toLocaleString()}</p>
+                    <p className="text-[0.6875rem] text-muted-foreground">{version.savedBy || "Main desk"} · {new Date(version.createdAt).toLocaleString()}</p>
                   </li>)}
                 </ul>
               )}

@@ -198,7 +198,7 @@ export function DesignDocumentsWorkspace() {
           {documents.map((item) => (
             <button key={item.id} type="button" onClick={() => void open(item.id)} className={cn("mb-1 flex w-full flex-col rounded-md border px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring", active?.id === item.id ? "border-primary bg-accent" : "border-transparent hover:bg-accent/60")}>
               <span className="truncate text-xs font-semibold">{item.title}</span>
-              <span className="mt-0.5 text-[0.625rem] text-muted-foreground">{item.kind}{item.latestVersion ? " · v" + item.latestVersion : " · draft only"}</span>
+              <span className="mt-0.5 text-[0.6875rem] text-muted-foreground">{item.kind}{item.latestVersion ? " · v" + item.latestVersion : " · draft only"}</span>
             </button>
           ))}
         </div>
@@ -441,7 +441,7 @@ export function DesignVersionPicker({ onUse, onDirtyChange }: {
             <div key={version.version} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
               <div className="min-w-0">
                 <p className="text-xs font-semibold">Version {version.version}{version.note ? " · " + version.note : ""}</p>
-                <p className="text-[0.625rem] text-muted-foreground">Saved {new Date(version.createdAt).toLocaleString()}</p>
+                <p className="text-[0.6875rem] text-muted-foreground">Saved {new Date(version.createdAt).toLocaleString()}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="xs" variant="outline" onClick={() => void customizeCopy(version)} disabled={busy}>Customize a copy</Button>

@@ -113,7 +113,7 @@ export function DesignUsagePanel({ designId }: { designId: string }) {
   return (
     <section aria-label="Used On" className="max-h-56 shrink-0 overflow-y-auto border-t border-border p-3">
       <h3 className="text-xs font-semibold">Used On</h3>
-      <p className="mt-1 text-[0.625rem] leading-relaxed text-muted-foreground">
+      <p className="mt-1 text-[0.6875rem] leading-relaxed text-muted-foreground">
         Services show current plan pins; their approved Live revision is listed separately.
       </p>
       {current.loading && <p className="mt-2 text-[0.6875rem] text-muted-foreground">Checking saved uses…</p>}
@@ -125,11 +125,11 @@ export function DesignUsagePanel({ designId }: { designId: string }) {
       {pinnedScenes.map((scene) => (
         <div key={scene.id} className="mt-2 rounded-md bg-muted/40 px-2 py-1.5">
           <p className="truncate text-[0.6875rem] font-medium">{scene.name}</p>
-          <p className="text-[0.625rem] text-muted-foreground">Saved scene · version {scene.design?.version}</p>
+          <p className="text-[0.6875rem] text-muted-foreground">Saved scene · version {scene.design?.version}</p>
           {!versions.loading && versions.latestVersion !== null && scene.design && versions.latestVersion > scene.design.version && (
             <button
               type="button"
-              className="mt-1 min-h-10 rounded px-2 text-left text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="mt-1 min-h-10 rounded px-2 text-left text-xs font-medium text-primary-text underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               disabled={sceneUpdate?.status === "updating"}
               onClick={() => void updateScene(scene, versions.latestVersion!)}
             >
@@ -137,15 +137,15 @@ export function DesignUsagePanel({ designId }: { designId: string }) {
             </button>
           )}
           {sceneUpdate?.sceneId === scene.id && sceneUpdate.status === "error" && (
-            <p role="alert" className="mt-1 text-[0.625rem] text-destructive">{sceneUpdate.message}</p>
+            <p role="alert" className="mt-1 text-[0.6875rem] text-destructive">{sceneUpdate.message}</p>
           )}
         </div>
       ))}
       {current.uses.map((use) => (
         <div key={use.programId + ":" + use.itemId} className="mt-2 rounded-md bg-muted/40 px-2 py-1.5">
           <p className="truncate text-[0.6875rem] font-medium">{use.title}</p>
-          <p className="truncate text-[0.625rem] text-muted-foreground">{use.reference} · version {use.version}</p>
-          <p className="text-[0.625rem] text-muted-foreground">
+          <p className="truncate text-[0.6875rem] text-muted-foreground">{use.reference} · version {use.version}</p>
+          <p className="text-[0.6875rem] text-muted-foreground">
             Plan revision {use.revision} · Live approved revision {use.approvedRevision ?? "none"}
           </p>
         </div>
