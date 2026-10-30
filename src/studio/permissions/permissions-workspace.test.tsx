@@ -57,6 +57,47 @@ describe("Permissions workspace", () => {
 
     expect(el.textContent).toContain("View only · needs a role")
     expect(el.querySelector<HTMLSelectElement>('select[aria-label="Role for Legacy phone"]')?.value).toBe("viewer")
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Rhema Recorder access for Legacy phone"]')?.checked).toBe(false)
+    await act(async () => root.unmount())
+  })
+
+  it("saves Recorder grant changes only after host confirmation and keeps them read-only on joined desks", async () => {
+    useSettingsStore.setState({ remoteDevices: [{ hash: "phone-hash", name: "Phone", paired_at: "2026-10-01T00:00:00Z", role: "viewer" }] })
+    let acknowledge!: () => void
+    tauri.invoke.mockImplementation((command: string, args?: unknown) => {
+      void args
+      if (command === "remote_set_keys") return new Promise<void>((resolve) => { acknowledge = resolve })
+      return Promise.resolve(command === "approvals_list" ? [] : null)
+    })
+    const el = await mount()
+    const checkbox = el.querySelector<HTMLInputElement>('input[aria-label="Rhema Recorder access for Phone"]')!
+
+    await act(async () => { checkbox.click(); await Promise.resolve() })
+    expect(checkbox.checked).toBe(false)
+    expect(tauri.invoke).toHaveBeenCalledWith("remote_set_keys", expect.objectContaining({
+      devices: [expect.objectContaining({ hash: "phone-hash", record: true })],
+    }))
+    await act(async () => acknowledge())
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Rhema Recorder access for Phone"]')?.checked).toBe(true)
+    await act(async () => root.unmount())
+
+    useJoin.setState({ status: "connected" })
+    const joinedEl = await mount()
+    expect(joinedEl.querySelector<HTMLInputElement>('input[aria-label="Rhema Recorder access for Phone"]')?.disabled).toBe(true)
+    await act(async () => root.unmount())
+  })
+
+  it("shows an inline error and preserves the Recorder grant when the host rejects it", async () => {
+    useSettingsStore.setState({ remoteDevices: [{ hash: "phone-hash", name: "Phone", paired_at: "2026-10-01T00:00:00Z", role: "viewer" }] })
+    tauri.invoke.mockImplementation(async (command: string) => {
+      if (command === "remote_set_keys") throw new Error("host unavailable")
+      return command === "approvals_list" ? [] : null
+    })
+    const el = await mount()
+
+    await act(async () => { el.querySelector<HTMLInputElement>('input[aria-label="Rhema Recorder access for Phone"]')!.click(); await Promise.resolve(); await Promise.resolve() })
+    expect(useSettingsStore.getState().remoteDevices[0]?.record).toBeUndefined()
+    expect(el.textContent).toContain("host did not confirm the Recorder access change")
     await act(async () => root.unmount())
   })
 

@@ -279,7 +279,31 @@ describe("settings store", () => {
     expect(useSettingsStore.getState().remoteDevices).toEqual([device])
     expect(mockRemoteInvoke).toHaveBeenLastCalledWith("remote_set_keys", {
       shared: null,
-      devices: [{ hash: device.hash, name: device.name, role: "viewer", paused: false, output_scope: [], group_take_scope: [] }],
+      devices: [{ hash: device.hash, name: device.name, role: "viewer", paused: false, output_scope: [], group_take_scope: [], record: false }],
+      requireAuth: true,
+    })
+
+    useSettingsStore.setState({ remoteDevices: [{ ...device, record: true }] })
+    await pushRemoteKeys()
+    expect(mockRemoteInvoke).toHaveBeenLastCalledWith("remote_set_keys", {
+      shared: null,
+      devices: [{ hash: device.hash, name: device.name, role: "viewer", paused: false, output_scope: [], group_take_scope: [], record: true }],
+      requireAuth: true,
+    })
+  })
+
+  it("hydrates and resends an explicitly saved Recorder grant", async () => {
+    const device = { hash: "a".repeat(64), name: "Recorder phone", paired_at: "2026-10-20T20:00:00Z", role: "viewer", record: true }
+    mockGet.mockImplementation(async (key: string) => key === "remoteDevices" ? [device] : undefined)
+
+    const { hydrateSettings, pushRemoteKeys, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+    expect(useSettingsStore.getState().remoteDevices[0]?.record).toBe(true)
+    await pushRemoteKeys()
+
+    expect(mockRemoteInvoke).toHaveBeenLastCalledWith("remote_set_keys", {
+      shared: null,
+      devices: [{ hash: device.hash, name: device.name, role: "viewer", paused: false, output_scope: [], group_take_scope: [], record: true }],
       requireAuth: true,
     })
   })
@@ -337,7 +361,7 @@ describe("settings store", () => {
     await Promise.resolve()
     expect(mockRemoteInvoke).toHaveBeenCalledWith("remote_set_keys", {
       shared: null,
-      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false, output_scope: [], group_take_scope: [] }],
+      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false, output_scope: [], group_take_scope: [], record: false }],
       requireAuth: true,
     })
     acknowledge()
@@ -359,7 +383,7 @@ describe("settings store", () => {
     await Promise.resolve()
     expect(mockRemoteInvoke).toHaveBeenCalledWith("remote_set_keys", {
       shared: null,
-      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false, output_scope: ["overflow", "sanctuary"], group_take_scope: [] }],
+      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false, output_scope: ["overflow", "sanctuary"], group_take_scope: [], record: false }],
       requireAuth: true,
     })
     acknowledge()
@@ -379,7 +403,7 @@ describe("settings store", () => {
     await Promise.resolve()
     expect(mockRemoteInvoke).toHaveBeenCalledWith("remote_set_keys", {
       shared: null,
-      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false, output_scope: ["sanctuary", "overflow"], group_take_scope: ["overflow", "sanctuary"] }],
+      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: false, output_scope: ["sanctuary", "overflow"], group_take_scope: ["overflow", "sanctuary"], record: false }],
       requireAuth: true,
     })
     acknowledge()
@@ -389,6 +413,65 @@ describe("settings store", () => {
     mockRemoteInvoke.mockResolvedValue(undefined)
     await useSettingsStore.getState().setRemoteDeviceOutputScope(device.hash, ["overflow"])
     expect(useSettingsStore.getState().remoteDevices[0]?.groupTakeScope).toEqual(["overflow"])
+  })
+
+  it("keeps the separate Recorder grant host-acknowledged and preserves it across role changes", async () => {
+    const { useSettingsStore } = await import("./settings-store")
+    const device = { hash: "device-hash", name: "Phone", paired_at: "2026-10-27T10:00:00Z", role: "viewer" as const }
+    useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
+    let acknowledge!: () => void
+    mockRemoteInvoke.mockImplementation(() => new Promise<void>((resolve) => { acknowledge = resolve }))
+
+    const grant = useSettingsStore.getState().setRemoteDeviceRecorderGrant(device.hash, true)
+    expect(useSettingsStore.getState().remoteDevices[0]?.record).toBeUndefined()
+    await Promise.resolve()
+    expect(mockRemoteInvoke).toHaveBeenLastCalledWith("remote_set_keys", {
+      shared: null,
+      devices: [{ hash: device.hash, name: device.name, role: "viewer", paused: false, output_scope: [], group_take_scope: [], record: true }],
+      requireAuth: true,
+    })
+    acknowledge()
+    await expect(grant).resolves.toBe(true)
+    expect(useSettingsStore.getState().remoteDevices[0]?.record).toBe(true)
+
+    mockRemoteInvoke.mockResolvedValue(undefined)
+    await expect(useSettingsStore.getState().setRemoteDeviceRole(device.hash, "editor")).resolves.toBe(true)
+    expect(useSettingsStore.getState().remoteDevices[0]).toMatchObject({ role: "editor", record: true })
+    expect(mockRemoteInvoke).toHaveBeenLastCalledWith("remote_set_keys", {
+      shared: null,
+      devices: [{ hash: device.hash, name: device.name, role: "editor", paused: false, output_scope: [], group_take_scope: [], record: true }],
+      requireAuth: true,
+    })
+
+    await useSettingsStore.getState().setRemoteDeviceRole(device.hash, "screens")
+    await useSettingsStore.getState().setRemoteDeviceOutputScope(device.hash, ["sanctuary"])
+    await useSettingsStore.getState().setRemoteDeviceGroupTakeScope(device.hash, ["sanctuary"])
+    await useSettingsStore.getState().setRemoteDevicePaused(device.hash, true)
+    const remotePayloads = mockRemoteInvoke.mock.calls
+      .filter(([command]) => command === "remote_set_keys")
+      .map(([, args]) => (args as { devices: Array<{ record?: boolean }> }).devices[0])
+    expect(remotePayloads.every((payload) => payload?.record === true)).toBe(true)
+
+    await useSettingsStore.getState().setRemoteDeviceRecorderGrant(device.hash, false)
+    expect(mockRemoteInvoke).toHaveBeenLastCalledWith("remote_set_keys", {
+      shared: null,
+      devices: [{ hash: device.hash, name: device.name, role: "screens", paused: true, output_scope: ["sanctuary"], group_take_scope: ["sanctuary"], record: false }],
+      requireAuth: true,
+    })
+  })
+
+  it("leaves the Recorder grant unchanged when the host rejects a grant or revoke", async () => {
+    const { useSettingsStore } = await import("./settings-store")
+    const device = { hash: "device-hash", name: "Phone", paired_at: "2026-10-27T10:00:00Z", role: "viewer" as const }
+    useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
+    mockRemoteInvoke.mockRejectedValue(new Error("host unavailable"))
+
+    await expect(useSettingsStore.getState().setRemoteDeviceRecorderGrant(device.hash, true)).resolves.toBe(false)
+    expect(useSettingsStore.getState().remoteDevices).toEqual([device])
+
+    useSettingsStore.setState({ remoteDevices: [{ ...device, record: true }] })
+    await expect(useSettingsStore.getState().setRemoteDeviceRecorderGrant(device.hash, false)).resolves.toBe(false)
+    expect(useSettingsStore.getState().remoteDevices).toEqual([{ ...device, record: true }])
   })
 
   it("keeps role, pause and revoke state unchanged when the host rejects access updates", async () => {

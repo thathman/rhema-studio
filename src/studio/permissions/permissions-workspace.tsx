@@ -24,8 +24,10 @@ export function PermissionsWorkspace() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const congregationOutputs = outputs.filter((output) => (output.role ?? "congregation") === "congregation")
   const [busy, setBusy] = useState<string | null>(null)
+  const [busyRecorderGrant, setBusyRecorderGrant] = useState<string | null>(null)
   const [reloading, setReloading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [recorderGrantErrors, setRecorderGrantErrors] = useState<Record<string, string>>({})
   const isHost = joinStatus === "off"
   const pending = requests.filter((request) => request.status === "pending" || request.status === "needs-review")
   const ordered = [...requests].sort((a, b) => b.at - a.at)
@@ -52,6 +54,20 @@ export function PermissionsWorkspace() {
       setErrors((current) => ({ ...current, [request.id]: error instanceof Error ? error.message : String(error) }))
     } finally {
       setBusy(null)
+    }
+  }
+
+  const setRecorderGrant = async (hash: string, enabled: boolean) => {
+    setBusyRecorderGrant(hash)
+    setRecorderGrantErrors((current) => ({ ...current, [hash]: "" }))
+    try {
+      const applied = await useSettingsStore.getState().setRemoteDeviceRecorderGrant(hash, enabled)
+      const savedGrant = useSettingsStore.getState().remoteDevices.find((device) => device.hash === hash)?.record === true
+      if (!applied && savedGrant !== enabled) throw new Error("The host did not confirm the Recorder access change. The saved grant was left unchanged.")
+    } catch (error) {
+      setRecorderGrantErrors((current) => ({ ...current, [hash]: error instanceof Error ? error.message : String(error) }))
+    } finally {
+      setBusyRecorderGrant(null)
     }
   }
 
@@ -117,6 +133,21 @@ export function PermissionsWorkspace() {
                   <label className="flex items-center gap-2 text-xs"><span>Role</span><select aria-label={`Role for ${device.name}`} disabled={!isHost} value={device.role ?? "viewer"} onChange={(event) => { const role = asRemoteRole(event.target.value); if (role) void useSettingsStore.getState().setRemoteDeviceRole(device.hash, role) }} className="h-8 max-w-48 rounded-md border border-border bg-background px-2">
                     {REMOTE_ROLES.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
                   </select></label>
+                  <fieldset className="w-full rounded-md border border-border p-3">
+                    <legend className="px-1 text-xs font-semibold">Separate Rhema Recorder grant</legend>
+                    <p className="mb-2 text-xs text-muted-foreground">Allows this device to start or stop Rhema-native recording and add markers. This is independent of its role and does not grant OBS recording access.</p>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        aria-label={`Rhema Recorder access for ${device.name}`}
+                        disabled={!isHost || busyRecorderGrant === device.hash}
+                        checked={device.record === true}
+                        onChange={(event) => void setRecorderGrant(device.hash, event.target.checked)}
+                      />
+                      <span>Allow Rhema recording controls</span>
+                    </label>
+                    {recorderGrantErrors[device.hash] && <p role="alert" className="mt-2 text-xs text-destructive">{recorderGrantErrors[device.hash]}</p>}
+                  </fieldset>
                   {device.role === "screens" && <fieldset className="w-full rounded-md border border-border p-3">
                     <legend className="px-1 text-xs font-semibold">Individual scene Take outputs</legend>
                     {device.outputScope === undefined

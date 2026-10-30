@@ -35,6 +35,8 @@ export interface RemoteDevice {
   outputScope?: string[]
   /** Separate host grant for group Takes; always a subset of outputScope. */
   groupTakeScope?: string[]
+  /** Independent host grant for Rhema-native recording. Never inferred from the paired device role. */
+  record?: boolean
 }
 
 /** A host's https link, kept at pairing (see `joinSecure`). */
@@ -91,7 +93,7 @@ export function pushRemoteKeys(): Promise<void> {
   const write = remoteKeysPush.then(async () => {
     const s = useSettingsStore.getState()
     try {
-      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "viewer", paused: d.paused === true, output_scope: d.outputScope ?? [], group_take_scope: d.groupTakeScope ?? [] })), requireAuth: s.remoteAuthRequired })
+      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "viewer", paused: d.paused === true, output_scope: d.outputScope ?? [], group_take_scope: d.groupTakeScope ?? [], record: d.record === true })), requireAuth: s.remoteAuthRequired })
     } catch (e) {
       if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
         const { toast } = await import("sonner")
@@ -119,7 +121,7 @@ function updateRemotePolicy(change: (current: SettingsState) => RemotePolicyPatc
     try {
       await invoke("remote_set_keys", {
         shared: next.remoteSecret.trim() || null,
-        devices: next.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "viewer", paused: d.paused === true, output_scope: d.outputScope ?? [], group_take_scope: d.groupTakeScope ?? [] })),
+        devices: next.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "viewer", paused: d.paused === true, output_scope: d.outputScope ?? [], group_take_scope: d.groupTakeScope ?? [], record: d.record === true })),
         requireAuth: next.remoteAuthRequired,
       })
       useSettingsStore.setState(patch)
@@ -343,6 +345,7 @@ export interface SettingsState {
   addRemoteDevice: (d: { hash: string; name: string; role?: RemoteRole }) => void
   revokeRemoteDevice: (hash: string) => Promise<boolean>
   setRemoteDeviceRole: (hash: string, role: RemoteRole) => Promise<boolean>
+  setRemoteDeviceRecorderGrant: (hash: string, enabled: boolean) => Promise<boolean>
   setRemoteDeviceOutputScope: (hash: string, outputScope: string[]) => Promise<boolean>
   setRemoteDeviceGroupTakeScope: (hash: string, groupTakeScope: string[]) => Promise<boolean>
   /** Take back control from a paired desk (true) or give it back (false); see src/lib/desk-control.ts. */
@@ -497,6 +500,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     })
     return { remoteDevices }
   }),
+  setRemoteDeviceRecorderGrant: (hash, enabled) => updateRemotePolicy((s) => {
+    const device = s.remoteDevices.find((x) => x.hash === hash)
+    if (!device || (device.record === true) === enabled) return null
+    return { remoteDevices: s.remoteDevices.map((x) => x.hash === hash ? { ...x, record: enabled } : x) }
+  }),
   setRemoteDeviceOutputScope: (hash, outputScope) => updateRemotePolicy((s) => {
     const device = s.remoteDevices.find((x) => x.hash === hash)
     if (!device || device.role !== "screens") return null
@@ -636,7 +644,7 @@ function acceptable(key: string, value: unknown): boolean {
     case "joinSecure":
       return isJoinSecure(value)
     case "remoteDevices":
-      return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string" && ((d as { outputScope?: unknown }).outputScope === undefined || (Array.isArray((d as { outputScope?: unknown }).outputScope) && ((d as { outputScope: unknown[] }).outputScope).every((id) => typeof id === "string"))) && ((d as { groupTakeScope?: unknown }).groupTakeScope === undefined || (Array.isArray((d as { groupTakeScope?: unknown }).groupTakeScope) && ((d as { groupTakeScope: unknown[] }).groupTakeScope).every((id) => typeof id === "string"))))
+      return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string" && ((d as { outputScope?: unknown }).outputScope === undefined || (Array.isArray((d as { outputScope?: unknown }).outputScope) && ((d as { outputScope: unknown[] }).outputScope).every((id) => typeof id === "string"))) && ((d as { groupTakeScope?: unknown }).groupTakeScope === undefined || (Array.isArray((d as { groupTakeScope?: unknown }).groupTakeScope) && ((d as { groupTakeScope: unknown[] }).groupTakeScope).every((id) => typeof id === "string"))) && ((d as { record?: unknown }).record === undefined || typeof (d as { record?: unknown }).record === "boolean"))
     case "openedFrom":
       return typeof value === "object" && value !== null && !Array.isArray(value)
     case "capacityLimits":
