@@ -256,8 +256,8 @@ export function RecorderArchive() {
                 )}
                 {record.state === "saved" && record.files.mp4 && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    MPEG-4 file saved locally. Open and export controls are not
-                    available here yet.
+                    MPEG-4 file saved locally. Open it with your computer's
+                    video app or show it in its folder to copy it.
                   </p>
                 )}
                 {record.state === "recoverable" && (

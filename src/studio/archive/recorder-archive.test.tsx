@@ -81,6 +81,7 @@ describe("History's native recording archive", () => {
     expect(host?.textContent).toContain("Sanctuary")
     expect(host?.textContent).toContain("Saved")
     expect(host?.textContent).toContain("30:00")
+    expect(host?.textContent).toContain("show it in its folder to copy it")
     expect(host?.textContent).not.toContain("Open file")
 
     await act(async () =>
