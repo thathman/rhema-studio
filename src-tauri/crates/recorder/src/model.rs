@@ -81,6 +81,8 @@ pub enum ProblemCode {
     NotAllowed,
     /// Frames arrive at a different size from the one the file was started at (NDI was changed mid-recording).
     FrameSizeChanged,
+    /// A warning, never a refusal: the computer is so loaded the screen and encoder may fall behind.
+    ComputerBusy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
