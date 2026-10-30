@@ -177,7 +177,6 @@ describe("Run of Show event preview", () => {
       id: "designed-welcome",
       kind: "slide",
       slide: { title: "Welcome", body: "The service begins soon", designRef: { id: "design-1", version: 1 } },
-      scene_id: localLatestScene.id,
       reference: "Welcome",
       confidence: 1,
       source: "manual",
@@ -201,7 +200,7 @@ describe("Run of Show event preview", () => {
     })
     useBroadcastStore.setState({
       scenes: [localLatestScene],
-      outputs: [output],
+      outputs: [{ ...output, sceneId: localLatestScene.id }],
       isLive: true,
       liveItemId: "currently-on-air",
       liveVerse: { reference: "Psalm 23:1", segments: [{ text: "The Lord is my shepherd" }] },
@@ -223,6 +222,7 @@ describe("Run of Show event preview", () => {
     expect(getVersionMock).not.toHaveBeenCalledWith("design-1", 2)
     expect(el.textContent).toContain("Welcome look v1 · Sanctuary")
     expect(el.textContent).not.toContain("Mutable local copy v2")
+    expect(el.textContent).not.toContain("This screen keeps its current scene for this moment")
     expect(el.querySelector('[aria-label="Preview of Welcome look v1"]')).not.toBeNull()
     expect(useBroadcastStore.getState()).toMatchObject({
       isLive: before.isLive,

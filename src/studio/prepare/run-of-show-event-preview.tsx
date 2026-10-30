@@ -130,7 +130,7 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
           </label>
         </div>
 
-        {sceneSelection?.source === "current" && (
+        {sceneSelection?.source === "current" && !designKey && (
           <p className="text-xs text-muted-foreground">This screen keeps its current scene for this moment.</p>
         )}
         {requestedDesignKey && hasExplicitTakeScene && (
