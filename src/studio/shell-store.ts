@@ -156,7 +156,7 @@ export const useShellStore = create<ShellState>((set) => ({
   ...readShellPrefs(storage),
   libraryVisitId: 0,
   outputsDialogOpen: false,
-  designTab: "themes",
+  designTab: "my-designs",
   setDesignTab: (tab) => set({ designTab: designTabOf(tab) }),
   designRequest: null,
   openDesign: (tab) => set({ designRequest: designTabOf(tab) }),

@@ -58,6 +58,10 @@ describe("shell prefs", () => {
 })
 
 describe("the old Design → Output looks link (#299 UX15-4)", () => {
+  it("starts the Design workspace in My Designs", () => {
+    expect(useShellStore.getState().designTab).toBe("my-designs")
+  })
+
   it("opens Used on…; other sections are unchanged", () => {
     expect(designTabOf("outputs")).toBe("used-on")
     expect(designTabOf("themes")).toBe("themes")
