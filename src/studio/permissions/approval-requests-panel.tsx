@@ -4,8 +4,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useJoin } from "@/stores/join-store"
+import { useShellStore } from "@/studio/shell-store"
 import {
   decideApprovalRequest,
+  approvalErrorText,
+  confirmPlanApprovalRequest,
   hydrateApprovalRequests,
   loadApprovalHistory,
   reloadApprovalRequests,
@@ -26,6 +29,10 @@ function record(value: unknown): Record<string, unknown> | null {
 function requestDescription(request: ApprovalRequest, scenes: ReturnType<typeof useBroadcastStore.getState>["scenes"]): string {
   const payload = record(request.payload)
   const scene = record(payload?.scene)
+  if (request.kind === "plan_approve") {
+    const title = typeof payload?.title === "string" && payload.title.trim() ? payload.title.trim() : request.targetId
+    return `Approve service “${title}”${request.baseRevision === null ? " · revision missing" : ` · revision ${request.baseRevision}`}`
+  }
   const sceneName = typeof scene?.name === "string" && scene.name.trim()
     ? scene.name.trim()
     : scenes.find((item) => item.id === request.targetId)?.name ?? request.targetId
@@ -40,6 +47,10 @@ function requestImpact(
 ): string {
   const payload = record(request.payload)
   const scene = record(payload?.scene)
+  if (request.kind === "plan_approve") {
+    if (request.baseRevision === null) return "This request has no host-checked base revision and cannot be confirmed safely."
+    return `Submitted revision ${request.baseRevision}. Approve this exact revision in Prepare first; the host verifies it before confirmation.`
+  }
   if (request.kind === "scene_save" && Array.isArray(scene?.layers)) return `Proposed composition: ${scene.layers.length} visual layers.`
   if (request.kind === "scene_delete") {
     const assignedOutputs = outputs.filter((output) => output.sceneId === request.targetId).map((output) => output.name)
@@ -50,12 +61,13 @@ function requestImpact(
   return `Target: ${request.targetId}`
 }
 
-function stateLabel(state: ApprovalRequest["state"]): string {
+function stateLabel(request: ApprovalRequest): string {
+  const state = request.state
   switch (state) {
     case "submitted": return "Pending review"
-    case "approved": return "Approved · not applied"
+    case "approved": return request.kind === "plan_approve" ? "Approved · awaiting Prepare" : "Approved · not applied"
     case "requested_changes": return "Changes requested"
-    case "applied": return "Marked applied by host"
+    case "applied": return request.kind === "plan_approve" ? "Revision confirmed by host" : "Marked applied by host"
     default: return state[0].toUpperCase() + state.slice(1)
   }
 }
@@ -106,6 +118,18 @@ export function ApprovalRequestsPanel() {
     }
   }
 
+  const confirmPlan = async (request: ApprovalRequest) => {
+    setBusy(request.id)
+    setRowErrors((current) => ({ ...current, [request.id]: "" }))
+    try {
+      await confirmPlanApprovalRequest(request.id)
+    } catch (cause) {
+      setRowErrors((current) => ({ ...current, [request.id]: approvalErrorText(cause) }))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const toggleHistory = async (request: ApprovalRequest, open: boolean) => {
     if (!open || histories[request.id]) return
     setHistoryErrors((current) => ({ ...current, [request.id]: "" }))
@@ -139,10 +163,11 @@ export function ApprovalRequestsPanel() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-semibold">{requestDescription(request, scenes)}</h3>
-                      <Badge variant={stateVariant(request.state)}>{stateLabel(request.state)}</Badge>
+                      <Badge variant={stateVariant(request.state)}>{stateLabel(request)}</Badge>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">From {request.requester.name} · {dateWords(request.createdAt)} · {request.baseRevision === null ? "No base revision" : `Based on host revision ${request.baseRevision}`} · Expires {dateWords(request.expiresAt)}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{requestImpact(request, outputs)}</p>
+                    {request.state === "approved" && request.kind.startsWith("scene_") && <p className="mt-1 text-xs text-muted-foreground">Scene apply workflow is not available yet; approval does not save this scene or change an output.</p>}
                     {request.reason && <p className="mt-1 text-xs text-muted-foreground">Reason: {request.reason}</p>}
                     {request.decisionNote && <p className="mt-1 text-xs text-muted-foreground">Decision note: {request.decisionNote}</p>}
                     {rowErrors[request.id] && <p role="alert" className="mt-2 text-xs text-destructive">{rowErrors[request.id]}</p>}
@@ -166,6 +191,12 @@ export function ApprovalRequestsPanel() {
                     <Button size="sm" disabled={busy === request.id} onClick={() => void decide(request, "approve")}><CheckIcon /> Approve</Button>
                     <Button size="sm" variant="outline" disabled={busy === request.id} onClick={() => void decide(request, "decline")}><XIcon /> Decline</Button>
                     <Button size="sm" variant="ghost" disabled={busy === request.id} onClick={() => setRequestingChanges(request.id)}>Request changes</Button>
+                  </div>}
+                  {isHost && request.kind === "plan_approve" && request.state === "approved" && request.baseRevision !== null && <div className="flex flex-wrap items-center gap-2">
+                    <Button size="sm" variant="outline" disabled={busy === request.id} onClick={() => void confirmPlan(request)}>Confirm approved revision</Button>
+                  </div>}
+                  {isHost && request.kind === "plan_approve" && request.state !== "expired" && request.state !== "withdrawn" && request.state !== "superseded" && <div className="flex flex-wrap items-center gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => useShellStore.getState().openPrepareProgram(request.targetId)}>Open in Prepare</Button>
                   </div>}
                 </li>
               )
