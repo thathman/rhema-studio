@@ -230,7 +230,23 @@ impl ContentDb {
         if current.state != "approved" {
             return Err(refused("not-approved", format!("Only an approved request can be applied; this one is {}.", current.state.replace('_', " "))));
         }
-        if current.base_revision != current_revision {
+        // A plan request is applied by approving that exact revision in Prepare; the host reads the
+        // plan itself rather than trusting the caller's revision (docs/contracts/plan-drafts-v1.md).
+        let stale = if current.kind == "plan_approve" {
+            let plan: Option<(i64, Option<i64>)> = tx
+                .query_row("SELECT revision, approved_revision FROM programs WHERE id = ?1", [&current.target_id], |r| Ok((r.get(0)?, r.get(1)?)))
+                .optional()?;
+            match plan {
+                Some((_, approved)) if approved.is_some() && approved == current.base_revision => false,
+                Some((revision, _)) if Some(revision) == current.base_revision => {
+                    return Err(refused("not-approved-yet", "Approve this revision of the plan in Prepare first; the request stays approved until then."));
+                }
+                _ => true,
+            }
+        } else {
+            current.base_revision != current_revision
+        };
+        if stale {
             tx.execute("UPDATE approval_requests SET state = 'superseded' WHERE id = ?1", [id])?;
             event(&tx, id, &by, "superseded", Some("the target changed after the request was made"))?;
             tx.commit()?;
@@ -357,6 +373,27 @@ mod tests {
         assert_eq!(db.list_approval_requests(None, None).unwrap()[0].state, "expired");
         let steps: Vec<String> = db.approval_history(&r.id).unwrap().into_iter().map(|e| e.action).collect();
         assert_eq!(steps, ["submitted", "expired"]);
+    }
+
+    #[test]
+    fn a_plan_request_applies_only_once_that_revision_is_approved() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let plan = |db: &ContentDb, p: &crate::Program| {
+            let r = db.submit_approval_request(&who("editor"), &ApprovalRequestInput { kind: "plan_approve".into(), target_id: p.id.clone(), base_revision: Some(p.revision), payload: serde_json::json!({}), reason: None, ttl_secs: None }).unwrap();
+            db.decide_approval_request(&r.id, &who("main-desk"), Decision::Approve, None).unwrap()
+        };
+        let p = db.create_program("Sunday", None).unwrap();
+        let r = plan(&db, &p);
+        // The caller cannot vouch for it: not approved in Prepare yet, whatever revision it sends.
+        assert_eq!(code(db.apply_approval_request(&r.id, &who("main-desk"), Some(p.revision)).unwrap_err()), "not-approved-yet");
+        db.approve_program(&p.id, p.revision).unwrap();
+        assert_eq!(db.apply_approval_request(&r.id, &who("main-desk"), None).unwrap().state, "applied");
+
+        let q = db.create_program("Midweek", None).unwrap();
+        let r = plan(&db, &q);
+        let moved = db.replace_items(&q.id, q.revision, &[]).unwrap().program;
+        db.approve_program(&q.id, moved.revision).unwrap();
+        assert_eq!(code(db.apply_approval_request(&r.id, &who("main-desk"), r.base_revision).unwrap_err()), "stale", "a later revision was approved instead");
     }
 
     #[test]
