@@ -53,7 +53,6 @@ The inbox reads `approvals_list` and decisions call `approvals_decide`. For a `p
 
 - A general request/withdrawal API (`/api/v1/requests`) and requesters' own waiting/answered view. Current host-backed requests are created by scene save/delete events and the plan submission route; other request kinds remain unsupported.
 - Grants with expiry (`access_grants`).
-- The Recorder grant (slice 4).
 
 ## Rollback
 
