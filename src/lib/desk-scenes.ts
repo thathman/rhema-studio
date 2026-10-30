@@ -191,6 +191,16 @@ export async function receiveDeskScene(p: Record<string, unknown>, deleting = fa
   const byId = asText(p.byId, 100)
   const sceneId = deleting ? asText(p.id, 100) : asText((p.scene as { id?: unknown } | null)?.id, 100)
   if (!sceneId) return
+  const hostRequestId = asText(p.requestId, 100)
+  if (hostRequestId) {
+    const existing = useBroadcastStore.getState().scenes.find((scene) => scene.id === sceneId)
+    const action = deleting ? "delete" : existing ? "change" : "add"
+    const name = asText((p.scene as { name?: unknown } | null)?.name, 80) ?? existing?.name ?? "the scene"
+    toast.info(`${by} requested to ${action} “${name}”`, {
+      description: "The host recorded this in Permissions → Approval Requests. A decision does not save the scene or change Preview or Program.",
+    })
+    return
+  }
   const existing = useBroadcastStore.getState().scenes.find((s) => s.id === sceneId)
   if (deleting && !existing) return
   const scene = deleting ? null : mergeDeskScene(p.scene, existing)

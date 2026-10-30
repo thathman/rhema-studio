@@ -10,6 +10,7 @@ import { useNotices } from "@/stores/notices-store"
 import { useSceneApprovalsStore, hydrateSceneApprovals, reloadSceneApprovals, type SceneEditApproval } from "@/stores/scene-approvals-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { ApprovalRequestsPanel } from "./approval-requests-panel"
 
 const dateWords = (at: number) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
 
@@ -67,16 +68,18 @@ export function PermissionsWorkspace() {
 
         {!isHost && <p role="status" className="rounded-md border border-border bg-muted/40 p-3 text-sm">This joined desk is read-only for approvals and device access. Ask the main host to make changes.</p>}
 
+        <ApprovalRequestsPanel />
+
         <section aria-labelledby="scene-approvals-title" className="rounded-lg border border-border bg-card shadow-panel">
           <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
             <ShieldCheckIcon aria-hidden className="size-4 text-muted-foreground" />
-            <div className="min-w-0 flex-1"><h2 id="scene-approvals-title" className="font-semibold">Scene change requests</h2><p className="text-xs text-muted-foreground">Saved on this host, including after a restart. Accept never takes a scene live.</p></div>
+            <div className="min-w-0 flex-1"><h2 id="scene-approvals-title" className="font-semibold">Legacy local scene requests</h2><p className="text-xs text-muted-foreground">Compatibility requests without a host request ID live in this computer’s local ledger. Accept saves locally and never takes a scene live; new host-tagged requests appear above.</p></div>
             <Badge variant={pending.length ? "amber" : "neutral"}>{pending.length} to review</Badge>
             {loadError && <Button size="sm" variant="outline" disabled={reloading} onClick={() => { setReloading(true); void reloadSceneApprovals().catch(() => {}).finally(() => setReloading(false)) }}><RefreshCwIcon /> Try again</Button>}
           </header>
           <div className="p-4">
-            {loadError && <p role="alert" className="mb-3 flex items-start gap-2 text-sm text-destructive"><CircleAlertIcon className="mt-0.5 size-4 shrink-0" />Approval history could not be loaded: {loadError}</p>}
-            {!hydrated && !loadError ? <p role="status" className="text-sm text-muted-foreground">Loading saved requests…</p> : ordered.length === 0 ? <p className="text-sm text-muted-foreground">No saved scene change requests.</p> : (
+            {loadError && <p role="alert" className="mb-3 flex items-start gap-2 text-sm text-destructive"><CircleAlertIcon className="mt-0.5 size-4 shrink-0" />Local request history could not be loaded: {loadError}</p>}
+            {!hydrated && !loadError ? <p role="status" className="text-sm text-muted-foreground">Loading saved requests…</p> : ordered.length === 0 ? <p className="text-sm text-muted-foreground">No legacy local scene requests.</p> : (
               <ul className="divide-y divide-border">
                 {ordered.map((request) => {
                   const status = request.status === "needs-review" ? "Needs a fresh request" : request.status[0].toUpperCase() + request.status.slice(1)
