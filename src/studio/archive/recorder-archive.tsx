@@ -188,12 +188,12 @@ export function RecorderArchive() {
                     {record.outputName}
                   </h3>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[0.625rem] font-semibold ${record.state === "saved" ? "bg-tone-green text-tone-green-foreground" : record.state === "failed" ? "bg-destructive/10 text-destructive" : "bg-tone-amber text-tone-amber-foreground"}`}
+                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${record.state === "saved" ? "bg-tone-green text-tone-green-foreground" : record.state === "failed" ? "bg-destructive/10 text-destructive" : "bg-tone-amber text-tone-amber-foreground"}`}
                   >
                     {stateLabel(record.state)}
                   </span>
                   {record.rehearsal && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-[0.625rem] font-semibold">
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold">
                       Rehearsal
                     </span>
                   )}
