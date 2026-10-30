@@ -10,12 +10,15 @@ import {
 } from "@/components/ui/dialog"
 import { libraryLooks } from "@/lib/design-packs"
 import { adoptLook, type LibraryLook } from "@/lib/look-library"
+import type { DesignVersion } from "@/design-engine/design-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { LookLibraryView } from "@/studio/design/look-library-view"
+import { DesignVersionPicker } from "@/studio/design/design-documents-workspace"
 import { openProductionTab } from "@/studio/production/production-tab"
 import { useShellStore } from "@/studio/shell-store"
+import type { Scene } from "@/types/scene"
 
 type SceneLook = Extract<LibraryLook, { kind: "scene" }>
 
@@ -33,6 +36,40 @@ export function SceneDesignPicker({
   onSceneSelected: (sceneId: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [source, setSource] = useState<"my-designs" | "templates">("templates")
+  const [designEditorDirty, setDesignEditorDirty] = useState(false)
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && designEditorDirty) {
+      toast.error("Save the design draft before closing", {
+        description: "Your edits are still in this private copy. Save the draft or finish using a saved version first.",
+      })
+      return
+    }
+    setOpen(nextOpen)
+    if (!nextOpen) setDesignEditorDirty(false)
+  }
+
+  const attachSavedVersion = (scene: Scene, version: DesignVersion) => {
+    const queueItem = useQueueStore.getState().items.find((item) => item.id === momentId)
+    if (!queueItem) {
+      setOpen(false)
+      toast.error("This service moment is no longer available", {
+        description: "Choose the scene again from the current event.",
+      })
+      return
+    }
+
+    useBroadcastStore.getState().saveScene(scene)
+    useQueueStore.getState().updateItem(momentId, (item) => item.kind === "slide"
+      ? { ...item, slide: { ...item.slide, designRef: { id: version.designId, version: version.version } } }
+      : item)
+    onSceneSelected(scene.id)
+    setOpen(false)
+    toast.success("Saved version added to the service plan", {
+      description: `“${version.title} v${version.version}” is pinned to ${momentTitle}. Present marks it as planned for this Preview item; Program and screens remain unchanged until you explicitly Take it.`,
+    })
+  }
 
   const choose = (look: SceneLook, customize: boolean) => {
     const queueItem = useQueueStore
@@ -88,25 +125,33 @@ export function SceneDesignPicker({
         type="button"
         size="sm"
         variant="outline"
-        onClick={() => setOpen(true)}
+        onClick={() => { setSource("templates"); setOpen(true) }}
         aria-label={`Choose a scene design for ${momentTitle}`}
       >
         Choose from Design…
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="flex max-h-[90vh] w-[calc(100vw-2rem)] max-w-6xl flex-col overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Choose a scene for {momentTitle}</DialogTitle>
             <DialogDescription>
-              {eventTitle} · choosing creates a copy and attaches it to this
-              moment. This updates the service plan only; it does not change
-              Program.
+              {eventTitle} · choosing a saved version or template attaches a
+              pinned scene to this moment. Present marks it as planned for this
+              Preview item; Program and screen outputs stay unchanged until you
+              explicitly Take it.
             </DialogDescription>
           </DialogHeader>
-          <LookLibraryView
-            onOpen={() => {}}
-            scenePicker={{ onChoose: choose }}
-          />
+          <div role="tablist" aria-label="Scene source" className="flex gap-1 border-b border-border">
+            <button type="button" role="tab" aria-selected={source === "my-designs"} onClick={() => setSource("my-designs")} className="border-b-2 border-transparent px-3 py-2 text-xs font-semibold aria-selected:border-primary aria-selected:text-primary-text">My Designs</button>
+            <button type="button" role="tab" aria-selected={source === "templates"} onClick={() => setSource("templates")} className="border-b-2 border-transparent px-3 py-2 text-xs font-semibold aria-selected:border-primary aria-selected:text-primary-text">Templates</button>
+          </div>
+          <div role="tabpanel" aria-label={source === "my-designs" ? "Saved design versions" : "Scene templates"} className="min-h-0 flex-1 overflow-y-auto">
+            {source === "my-designs" ? (
+              <DesignVersionPicker onDirtyChange={setDesignEditorDirty} onUse={attachSavedVersion} />
+            ) : (
+              <LookLibraryView onOpen={() => {}} scenePicker={{ onChoose: choose }} />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </>
