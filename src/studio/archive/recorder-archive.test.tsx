@@ -99,6 +99,39 @@ describe("History's native recording archive", () => {
     expect(host?.textContent).not.toContain("Sanctuary")
   })
 
+  it("opens a saved local recording through the host's archive command", async () => {
+    await renderArchive()
+    await act(async () =>
+      host
+        ?.querySelector<HTMLButtonElement>(
+          'button[aria-label="Open Sanctuary recording service-1"]'
+        )
+        ?.click()
+    )
+    expect(native.invoke).toHaveBeenCalledWith("recorder_open_file", {
+      sessionId: "service-1",
+      rehearsal: false,
+    })
+    expect(host?.textContent).toContain(
+      "Opening the recording with this computer's video app."
+    )
+
+    await act(async () =>
+      host
+        ?.querySelector<HTMLButtonElement>(
+          'button[aria-label="Show Sanctuary recording service-1 in folder"]'
+        )
+        ?.click()
+    )
+    expect(native.invoke).toHaveBeenCalledWith("recorder_reveal_file", {
+      sessionId: "service-1",
+      rehearsal: false,
+    })
+    expect(host?.textContent).toContain(
+      "Showing the recording in its local folder."
+    )
+  })
+
   it("shows a local availability error instead of an empty archive when the recorder API fails", async () => {
     native.invoke.mockRejectedValueOnce(new Error("unsupported platform"))
     await renderArchive()

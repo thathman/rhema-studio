@@ -183,6 +183,24 @@ pub fn recorder_list(host: State<'_, RecorderHost>, rehearsal: bool) -> Res<Vec<
     Ok(recorder(&host)?.list(rehearsal))
 }
 
+/// Open only a saved/recoverable recording resolved from Rhema's archive, never an arbitrary path.
+#[tauri::command]
+pub fn recorder_open_file(window: WebviewWindow, host: State<'_, RecorderHost>, session_id: String, rehearsal: bool) -> Res<()> {
+    main_desk_only(&window)?;
+    let file = recorder(&host)?.archive_file_path(&session_id, rehearsal)?;
+    tauri_plugin_opener::open_path(&file, None::<&str>)
+        .map_err(|e| RecorderProblem::new(ProblemCode::WriteFailed, format!("Could not open the recording: {e}")))
+}
+
+/// Show only a saved/recoverable recording resolved from Rhema's archive in its native file browser.
+#[tauri::command]
+pub fn recorder_reveal_file(window: WebviewWindow, host: State<'_, RecorderHost>, session_id: String, rehearsal: bool) -> Res<()> {
+    main_desk_only(&window)?;
+    let file = recorder(&host)?.archive_file_path(&session_id, rehearsal)?;
+    tauri_plugin_opener::reveal_item_in_dir(&file)
+        .map_err(|e| RecorderProblem::new(ProblemCode::WriteFailed, format!("Could not show the recording: {e}")))
+}
+
 fn tee(active: bool, width: u32, height: u32, fps: u32) -> serde_json::Value {
     serde_json::json!({ "active": active, "width": width, "height": height, "fps": fps })
 }

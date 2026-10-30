@@ -1,8 +1,8 @@
 # 42 — OWNER DECISION: Rhema Studio Is the Native Service Recording Application
 
-**Owner direction:** 29 October 2026. **Status:** **OWNER APPROVED — RHEMA-NATIVE RECORDING OF A SELECTED CONGREGATION OUTPUT**; the video source choice is now **settled**. Technical media engine, exact formats/codecs, ISO/multitrack features, final UI and real-device performance remain to be engineered and validated. This supersedes the earlier assumption that OBS recording is required. The owner first said "I want Rhema studio to be the recording app," then explicitly confirmed **"yes... recording congregation output"**.
+**Owner direction:** 29 October 2026. **Status:** **OWNER APPROVED — RHEMA-NATIVE RECORDING OF A SELECTED CONGREGATION OUTPUT**; the video source choice is now **settled**. A macOS engine and basic Live/History controls exist in the current source. Selected-output fidelity, sustained capture, target-device recovery playback, performance, Windows support and the remaining ISO/multitrack features still need implementation or acceptance. This supersedes the earlier assumption that OBS recording is required. The owner first said "I want Rhema studio to be the recording app," then explicitly confirmed **"yes... recording congregation output"**.
 
-**Priority:** First-party, reliable, **offline-capable** service recording must be provided by Rhema Studio itself. The OBS integration remains a separate optional online program / livestream integration and is **not a prerequisite for starting, continuing or finalizing a Rhema recording**. The output to pastor/Stage, Sanctuary and Overflow remains independent and is not implicitly changed by record or OBS actions. This is a product instruction for Codex, not a claim the native recorder exists yet.
+**Priority:** First-party, reliable, **offline-capable** service recording must be provided by Rhema Studio itself. The OBS integration remains a separate optional online program / livestream integration and is **not a prerequisite for starting, continuing or finalizing a Rhema recording**. The output to pastor/Stage, Sanctuary and Overflow remains independent and is not implicitly changed by record or OBS actions. The approved mode is not evidence that selected-output fidelity, offline behavior or real-device acceptance has been completed.
 
 ## 1. Critical separation: independent programs and controls
 
@@ -33,6 +33,8 @@
 
 
 ## 2. Main Live workspace — first-class recording dock
+
+The layout below is an approved design direction, not a screenshot or a claim about the current UI. The source currently has a compact Live dock and a History archive; pause and user-selected recording folders are not available.
 
 ```text
 RHEMA STUDIO · LIVE

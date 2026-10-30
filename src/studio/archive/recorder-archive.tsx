@@ -80,6 +80,15 @@ export function RecorderArchive() {
     message: string
   } | null>(null)
   const [refresh, setRefresh] = useState(0)
+  const [fileAction, setFileAction] = useState<{
+    sessionId: string
+    action: "open" | "reveal"
+  } | null>(null)
+  const [fileActionMessage, setFileActionMessage] = useState<{
+    sessionId: string
+    message: string
+    error: boolean
+  } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -105,6 +114,36 @@ export function RecorderArchive() {
   const records = archive?.rehearsal === rehearsal ? archive.records : null
   const error =
     archiveError?.rehearsal === rehearsal ? archiveError.message : null
+
+  const actOnRecordingFile = async (
+    record: RecordingManifest,
+    action: "open" | "reveal"
+  ) => {
+    setFileAction({ sessionId: record.sessionId, action })
+    setFileActionMessage(null)
+    try {
+      await invoke(
+        action === "open" ? "recorder_open_file" : "recorder_reveal_file",
+        { sessionId: record.sessionId, rehearsal }
+      )
+      setFileActionMessage({
+        sessionId: record.sessionId,
+        message:
+          action === "open"
+            ? "Opening the recording with this computer's video app."
+            : "Showing the recording in its local folder.",
+        error: false,
+      })
+    } catch (reason) {
+      setFileActionMessage({
+        sessionId: record.sessionId,
+        message: `Could not ${action === "open" ? "open" : "show"} the recording: ${reason instanceof Error ? reason.message : String(reason)}`,
+        error: true,
+      })
+    } finally {
+      setFileAction(null)
+    }
+  }
 
   return (
     <section
@@ -231,6 +270,48 @@ export function RecorderArchive() {
                     A completed recording file was not confirmed.
                   </p>
                 )}
+                {(record.state === "saved" ||
+                  record.state === "recoverable") &&
+                  record.files.mp4 && (
+                    <>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          aria-label={`Open ${record.outputName} recording ${record.sessionId}`}
+                          disabled={fileAction?.sessionId === record.sessionId}
+                          onClick={() => void actOnRecordingFile(record, "open")}
+                        >
+                          {fileAction?.sessionId === record.sessionId &&
+                          fileAction.action === "open"
+                            ? "Opening…"
+                            : "Open recording"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          aria-label={`Show ${record.outputName} recording ${record.sessionId} in folder`}
+                          disabled={fileAction?.sessionId === record.sessionId}
+                          onClick={() => void actOnRecordingFile(record, "reveal")}
+                        >
+                          {fileAction?.sessionId === record.sessionId &&
+                          fileAction.action === "reveal"
+                            ? "Opening folder…"
+                            : "Show in folder"}
+                        </Button>
+                      </div>
+                      {fileActionMessage?.sessionId === record.sessionId && (
+                        <p
+                          role={fileActionMessage.error ? "alert" : "status"}
+                          className={`mt-1 text-xs ${fileActionMessage.error ? "text-destructive" : "text-muted-foreground"}`}
+                        >
+                          {fileActionMessage.message}
+                        </p>
+                      )}
+                    </>
+                  )}
               </div>
             </li>
           ))}
