@@ -531,7 +531,7 @@ function StagePreview({ look }: { look: Extract<LibraryLook, { kind: "stage" }> 
   return <canvas ref={ref} width={1280} height={720} className="block h-full w-full" />
 }
 
-const PLACE_NAMES: Record<Exclude<SceneLayerKind, "text">, string> = { feed: "On air", camera: "Camera", color: "Colour", picture: "Picture", video: "Video", clock: "Clock", ticker: "Ticker", lowerThird: "Name band", logo: "Logo" }
+const PLACE_NAMES: Record<Exclude<SceneLayerKind, "text">, string> = { feed: "On air", camera: "Camera", color: "Colour", ellipse: "Ellipse", picture: "Picture", video: "Video", clock: "Clock", ticker: "Ticker", lowerThird: "Name band", logo: "Logo" }
 
 // One canvas for every scene preview's feed layer: each is drawn and placed before the next.
 let layerCanvas: HTMLCanvasElement | null = null
@@ -550,7 +550,7 @@ function ScenePreview({ look }: { look: Extract<LibraryLook, { kind: "scene" }> 
         layers: look.scene.layers.map((l, i) => l.kind === "feed"
           ? { id: `${i}`, kind: "feed", box: l.box, opacity: 1, theme: themeLook(l.lookId), verse: sampleFor(l.shows) }
           // The other layers are places for what the church chooses in Scenes: a labelled box.
-          : { id: `${i}`, kind: l.kind, box: l.box, opacity: 1, label: PLACE_NAMES[l.kind], ...(l.kind === "color" ? { color: "#101820" } : {}) }),
+          : { id: `${i}`, kind: l.kind, box: l.box, opacity: 1, label: PLACE_NAMES[l.kind], ...((l.kind === "color" || l.kind === "ellipse") ? { color: "#101820" } : {}) }),
       }
       try {
         drawScene(ctx, canvas.width, canvas.height, frame, { image: () => null, layerCanvas: () => (layerCanvas ??= document.createElement("canvas")), imageCache: themeImageCache(), preview: true })

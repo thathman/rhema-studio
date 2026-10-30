@@ -32,7 +32,7 @@ export interface SceneCrop {
  * A scene with a ticker (or lower third) layer owns that source on its output: the output does not
  * also draw it over the whole frame.
  */
-export type SceneLayerKind = "feed" | "color" | "picture" | "video" | "camera" | "clock" | "ticker" | "lowerThird" | "logo" | "text"
+export type SceneLayerKind = "feed" | "color" | "ellipse" | "picture" | "video" | "camera" | "clock" | "ticker" | "lowerThird" | "logo" | "text"
 
 /**
  * A clock as an output draws it: counting down to `at`, up from `at` (wall-clock ms), or still at
@@ -75,7 +75,7 @@ export interface SceneLayer {
   countdownTo?: CountdownTo
   /** feed, clock: the look (an approved theme); absent = the output's own looks. */
   themeId?: string
-  /** color: the fill. */
+  /** color, ellipse: the solid fill. */
   color?: string
   /** text: literal content (not a live source binding). */
   text?: string

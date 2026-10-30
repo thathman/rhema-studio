@@ -205,6 +205,7 @@ function PrivateSceneBar({ context, congregation, target, onTarget, draft, dirty
 function describe(l: SceneLayer): string {
   if (l.kind === "feed") return l.shows?.length ? l.shows.map((k) => CONTENT_NAMES[k]).join(" + ") + (l.held ? " · held" : "") : "whatever is on air" + (l.held ? " · held" : "")
   if (l.kind === "color") return "colour"
+  if (l.kind === "ellipse") return "ellipse · solid fill"
   if (l.kind === "picture") return "picture"
   if (l.kind === "video") return l.videoUrl ? "video, looping, no sound" : "video (none chosen yet)"
   if (l.kind === "clock") return "clock"
@@ -270,7 +271,7 @@ function IconButton({ label, onClick, disabled, children }: { label: string; onC
 }
 
 function AddLayer({ onAdd }: { onAdd: (kind: SceneLayerKind) => void }) {
-  const kinds: [SceneLayerKind, string][] = [["feed", "Live content"], ["color", "Colour"], ["picture", "Picture"], ["video", "Video"], ["clock", "Clock"], ["camera", "Camera"], ["ticker", "Ticker"], ["lowerThird", "Lower third"], ["logo", "Logo"]]
+  const kinds: [SceneLayerKind, string][] = [["feed", "Live content"], ["color", "Colour"], ["ellipse", "Ellipse"], ["picture", "Picture"], ["video", "Video"], ["clock", "Clock"], ["camera", "Camera"], ["ticker", "Ticker"], ["lowerThird", "Lower third"], ["logo", "Logo"]]
   return (
     <div role="group" aria-label="Add a layer" className="flex flex-wrap items-center gap-1.5 text-xs">
       <span className="text-muted-foreground">Add</span>
@@ -452,10 +453,10 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
           )}
         </>
       )}
-      {layer.kind === "color" && (
+      {(layer.kind === "color" || layer.kind === "ellipse") && (
         <label className="flex items-center justify-between gap-2">
-          <span>Colour</span>
-          <input type="color" aria-label="Layer colour" value={layer.color ?? "#000000"} onChange={(e) => onChange({ color: e.target.value })} className="h-7 w-10 rounded border border-border bg-transparent p-0.5" />
+          <span>{layer.kind === "ellipse" ? "Ellipse fill" : "Colour"}</span>
+          <input type="color" aria-label={layer.kind === "ellipse" ? "Ellipse fill" : "Layer colour"} value={layer.color ?? (layer.kind === "ellipse" ? "#3157a4" : "#000000")} onChange={(e) => onChange({ color: e.target.value })} className="h-7 w-10 rounded border border-border bg-transparent p-0.5" />
         </label>
       )}
       {layer.kind === "picture" && (
@@ -523,7 +524,7 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
       {layer.kind === "ticker" && <p className="text-muted-foreground">The ticker that is running (Present → Ticker), in this box. While this scene is up, the ticker shows only here, not across the whole screen. Nothing shows here while no ticker runs.</p>}
       {layer.kind === "lowerThird" && <p className="text-muted-foreground">The lower third that is up (Present → Lower third), laid out in this box. While this scene is up, the lower third shows only here, not across the whole screen.</p>}
       {layer.kind === "logo" && <LogoNote />}
-      {layer.kind !== "color" && layer.kind !== "ticker" && layer.kind !== "lowerThird" && (
+      {layer.kind !== "color" && layer.kind !== "ellipse" && layer.kind !== "ticker" && layer.kind !== "lowerThird" && (
         <div className="grid grid-cols-4 gap-1.5">
           <Num label="Crop left" value={crop.l} max={90 - crop.r} onChange={(l) => onChange({ crop: { ...crop, l } })} />
           <Num label="Crop top" value={crop.t} max={90 - crop.b} onChange={(t) => onChange({ crop: { ...crop, t } })} />

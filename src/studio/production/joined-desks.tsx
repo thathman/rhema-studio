@@ -203,7 +203,7 @@ interface Draft { id: string; name: string; background: string; fadeMs?: number;
 
 /** Kinds a desk can add: pictures and videos are in the host's library, so they are added there. */
 const ADDABLE: { kind: SceneLayerKind; label: string }[] = [
-  { kind: "feed", label: "Live content" }, { kind: "camera", label: "Camera" }, { kind: "color", label: "Colour" }, { kind: "clock", label: "Clock" }, { kind: "ticker", label: "Ticker" }, { kind: "lowerThird", label: "Lower third" }, { kind: "logo", label: "Logo" },
+  { kind: "feed", label: "Live content" }, { kind: "camera", label: "Camera" }, { kind: "color", label: "Colour" }, { kind: "ellipse", label: "Ellipse" }, { kind: "clock", label: "Clock" }, { kind: "ticker", label: "Ticker" }, { kind: "lowerThird", label: "Lower third" }, { kind: "logo", label: "Logo" },
 ]
 
 const draftOf = (s: LiveScene): Draft => ({ id: s.id, name: s.name, background: s.background ?? "#000000", ...(s.fadeMs ? { fadeMs: s.fadeMs } : {}), layers: (s.layers ?? []).map((l) => ({ ...l, box: { ...l.box } })) })
@@ -323,8 +323,8 @@ export function DeskSceneEditor({ live, scene, cameraOnly = false, onDone }: { l
               })}
             </div>
           )}
-          {layer.kind === "color" && (
-            <label className="flex items-center gap-2"><span className="text-muted-foreground">Colour</span><input type="color" aria-label="Layer colour" value={layer.color ?? "#000000"} onChange={(e) => patch(layer.id, { color: e.target.value })} className="h-7 w-10 rounded border border-border bg-transparent p-0.5" /></label>
+          {(layer.kind === "color" || layer.kind === "ellipse") && (
+            <label className="flex items-center gap-2"><span className="text-muted-foreground">{layer.kind === "ellipse" ? "Ellipse fill" : "Colour"}</span><input type="color" aria-label={layer.kind === "ellipse" ? "Ellipse fill" : "Layer colour"} value={layer.color ?? (layer.kind === "ellipse" ? "#3157a4" : "#000000")} onChange={(e) => patch(layer.id, { color: e.target.value })} className="h-7 w-10 rounded border border-border bg-transparent p-0.5" /></label>
           )}
           {layer.kind === "camera" && (
             <>

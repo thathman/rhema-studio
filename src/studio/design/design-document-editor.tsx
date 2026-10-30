@@ -268,6 +268,7 @@ export function DesignDocumentEditor({
       stroke: null,
       strokeWidth: 0,
     }
+    setBindings((current) => ({ ...current, [id]: { id, kind: "ellipse" } }))
     dispatch({ type: "ADD_NODE", node })
     setSelectedId(id)
   }

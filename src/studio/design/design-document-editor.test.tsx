@@ -94,6 +94,9 @@ describe("canonical design editor", () => {
       scenes: before.scenes,
       outputs: before.outputs,
       outputStatus: before.outputStatus,
+      outputFrames: before.outputFrames,
+      sceneReturn: before.sceneReturn,
+      sceneTakes: before.sceneTakes,
       isLive: before.isLive,
       liveVerse: before.liveVerse,
       liveSlide: before.liveSlide,
@@ -115,6 +118,9 @@ describe("canonical design editor", () => {
       scenes: after.scenes,
       outputs: after.outputs,
       outputStatus: after.outputStatus,
+      outputFrames: after.outputFrames,
+      sceneReturn: after.sceneReturn,
+      sceneTakes: after.sceneTakes,
       isLive: after.isLive,
       liveVerse: after.liveVerse,
       liveSlide: after.liveSlide,
@@ -179,6 +185,9 @@ describe("canonical design editor", () => {
       scenes: before.scenes,
       outputs: before.outputs,
       outputStatus: before.outputStatus,
+      outputFrames: before.outputFrames,
+      sceneReturn: before.sceneReturn,
+      sceneTakes: before.sceneTakes,
       isLive: before.isLive,
       liveVerse: before.liveVerse,
       liveSlide: before.liveSlide,
@@ -191,18 +200,24 @@ describe("canonical design editor", () => {
     const element = await render(documentValue)
 
     await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Ellipse")!.click())
-    expect(element.textContent).toContain("cannot be used in Prepare")
+    expect(element.textContent).not.toContain("cannot be used in Prepare")
     await act(async () => setValue(element.querySelectorAll<HTMLInputElement>('input[type="color"]')[0]!, "#d14c62"))
     await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
 
     const input = store.saveDraft.mock.calls[0]![2] as DesignInput
     const ellipse = Object.values(input.document.scene.nodes).find((node) => node.type === "ellipse")
     expect(ellipse).toMatchObject({ type: "ellipse", fill: { type: "solid", color: "#d14c62" } })
+    const prepared = designToScene(input.document)
+    expect(prepared.issues).toEqual([])
+    expect(prepared.scene.layers).toContainEqual(expect.objectContaining({ id: ellipse?.id, kind: "ellipse", color: "#d14c62" }))
     const after = useBroadcastStore.getState()
     expect({
       scenes: after.scenes,
       outputs: after.outputs,
       outputStatus: after.outputStatus,
+      outputFrames: after.outputFrames,
+      sceneReturn: after.sceneReturn,
+      sceneTakes: after.sceneTakes,
       isLive: after.isLive,
       liveVerse: after.liveVerse,
       liveSlide: after.liveSlide,

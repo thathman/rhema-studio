@@ -31,6 +31,42 @@ describe("Rhema scenes in the Avnac engine", () => {
     expect(scene).toEqual(sermon)
   })
 
+  it("roundtrips solid Avnac ellipses as editable Rhema scene layers and refuses unsupported paint", () => {
+    const ellipseScene: Scene = { ...sermon, layers: [layer("oval", "ellipse", { color: "#d14c62" })] }
+    const design = sceneToDesign(ellipseScene)
+    expect(design.scene.nodes.oval).toMatchObject({ type: "ellipse", fill: { type: "solid", color: "#d14c62" }, stroke: null, strokeWidth: 0 })
+    const { scene, issues } = designToScene(design)
+    expect(issues).toEqual([])
+    expect(scene.layers).toEqual(ellipseScene.layers)
+    const reopened = JSON.parse(JSON.stringify(design)) as typeof design
+    const versioned = sceneFromVersion({ designId: "design-ellipse", version: 3, document: reopened })
+    expect(versioned.issues).toEqual([])
+    expect(versioned.scene.layers[0]).toMatchObject({ id: "oval", kind: "ellipse", color: "#d14c62" })
+    expect(versioned.scene.design).toEqual({ id: "design-ellipse", version: 3 })
+
+    const oval = design.scene.nodes.oval
+    if (oval.type !== "ellipse") throw new Error("Expected the ellipse node")
+    const stretched = designToScene({
+      ...design,
+      scene: { ...design.scene, nodes: { ...design.scene.nodes, oval: { ...oval, scaleX: 2 } } },
+    })
+    expect(stretched.issues).toEqual([])
+    expect(stretched.scene.layers[0]?.box).toEqual({ x: 10, y: 20, w: 60, h: 40 })
+    const gradient = applyCommand(design.scene, {
+      type: "SET_NODE_FILL", id: "oval",
+      fill: { type: "gradient", css: "linear-gradient(90deg, #d14c62, #3157a4)", stops: [{ color: "#d14c62", offset: 0 }, { color: "#3157a4", offset: 1 }], angle: 90 },
+    })
+    expect(designToScene({ ...design, scene: gradient }).issues).toContainEqual({ nodeId: "oval", message: "Ellipse gradients and non-hex colours cannot be used in Rhema scene output yet" })
+    const stroke = applyCommand(design.scene, { type: "SET_NODE_STROKE", id: "oval", stroke: { type: "solid", color: "#ffffff" }, strokeWidth: 2 })
+    expect(designToScene({ ...design, scene: stroke }).issues).toContainEqual({ nodeId: "oval", message: "Ellipse stroke and clipping cannot be saved into a Rhema scene yet" })
+    const clip = applyCommand(design.scene, { type: "SET_NODE_CLIP_PATH", id: "oval", clipPath: { type: "ellipse", x: 0, y: 0, width: 100, height: 100 } })
+    expect(designToScene({ ...design, scene: clip }).issues).toContainEqual({ nodeId: "oval", message: "Ellipse stroke and clipping cannot be saved into a Rhema scene yet" })
+    const rotated = applyCommand(design.scene, { type: "ROTATE_NODE", id: "oval", rotation: 12 })
+    expect(designToScene({ ...design, scene: rotated }).issues).toContainEqual({ nodeId: "oval", message: "Layer rotation cannot be saved into a Rhema scene yet" })
+    const flipped = designToScene({ ...design, scene: { ...design.scene, nodes: { ...design.scene.nodes, oval: { ...oval, scaleX: -1 } } } })
+    expect(flipped.issues).toContainEqual({ nodeId: "oval", message: "Ellipse must keep a positive, finite scale for Rhema scene output" })
+  })
+
   it("draw in layer order with Rhema's boxes on a 1920×1080 frame", () => {
     const drawn = buildRenderCommands(sceneToDesign(sermon).scene)
     expect(drawn.map((c) => c.id)).toEqual(["__artboard__", "bg", "title", "pic", "cam", "verse", "clock", "ticker", "lt", "vid"])

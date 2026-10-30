@@ -243,6 +243,11 @@ function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: n
   if (l.kind === "color") {
     ctx.fillStyle = l.color ?? "#000"
     ctx.fillRect(r.x, r.y, r.w, r.h)
+  } else if (l.kind === "ellipse") {
+    ctx.fillStyle = l.color ?? "#3157a4"
+    ctx.beginPath()
+    ctx.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2, 0, 0, Math.PI * 2)
+    ctx.fill()
   } else if (l.kind === "picture" && l.imageUrl) {
     const img = opts.image(l.imageUrl)
     if (img && img.naturalWidth > 0) {
