@@ -104,6 +104,9 @@ interface ShellState extends ShellPrefs {
   /** Ask the shell to go to a workspace (it runs the same guards as the sidebar). */
   goRequest: Workspace | null
   goTo: (workspace: Workspace) => void
+  /** Ask the shell to open a saved service in Prepare after its navigation guards pass. */
+  prepareProgramRequest: string | null
+  openPrepareProgram: (programId: string) => void
   /** Prepare's New service form, also opened from Home. */
   newServiceOpen: boolean
   setNewServiceOpen: (open: boolean) => void
@@ -164,6 +167,8 @@ export const useShellStore = create<ShellState>((set) => ({
   openDeskMenu: () => set((s) => ({ deskMenuRequest: s.deskMenuRequest + 1 })),
   goRequest: null,
   goTo: (workspace) => set({ goRequest: canonicalWorkspace(workspace) }),
+  prepareProgramRequest: null,
+  openPrepareProgram: (programId) => set({ prepareProgramRequest: programId }),
   newServiceOpen: false,
   setNewServiceOpen: (newServiceOpen) => set({ newServiceOpen }),
   searchOpen: false,

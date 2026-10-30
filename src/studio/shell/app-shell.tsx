@@ -174,6 +174,27 @@ export function AppShell() {
     void go(goRequest)
   }, [goRequest, go])
 
+  const prepareProgramRequest = useShellStore((s) => s.prepareProgramRequest)
+  useEffect(() => {
+    if (!prepareProgramRequest) return
+    if (useShellStore.getState().prepareProgramRequest !== prepareProgramRequest) return
+    useShellStore.setState({ prepareProgramRequest: null })
+    void go("prepare").then(async () => {
+      // `go` owns route guards (including an open Design draft). Do not change the selected
+      // service if the user chose to stay in the current workspace.
+      if (useShellStore.getState().workspace !== "prepare") return
+      // A newer request supersedes this one if it arrived while navigation was guarded.
+      if (useShellStore.getState().prepareProgramRequest !== null) return
+      const result = await useServiceStore.getState().openProgram(prepareProgramRequest)
+      if (result !== "ok") {
+        const detail = result === "unsaved"
+          ? "Save or discard the current service changes in Prepare before opening this request."
+          : useServiceStore.getState().error ?? "The requested service could not be opened."
+        toast.error("Could not open service in Prepare", { description: detail })
+      }
+    })
+  }, [prepareProgramRequest, go])
+
   // The Bible catalogue used to load only when the search panel mounted.
   useEffect(() => {
     bibleActions.loadTranslations().catch(console.error)

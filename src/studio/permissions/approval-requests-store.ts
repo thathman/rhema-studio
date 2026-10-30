@@ -52,7 +52,7 @@ export const useApprovalRequestsStore = create<ApprovalRequestsState>(() => ({
 let hydration: Promise<void> | null = null
 let loadSequence = 0
 
-function errorText(error: unknown): string {
+export function approvalErrorText(error: unknown): string {
   if (error instanceof Error) return error.message
   if (typeof error === "string") return error
   if (error && typeof error === "object" && "message" in error && typeof error.message === "string") return error.message
@@ -68,7 +68,7 @@ export async function reloadApprovalRequests(): Promise<void> {
     if (!Array.isArray(requests)) throw new Error("The host returned an invalid approval list.")
     if (sequence === loadSequence) useApprovalRequestsStore.setState({ requests, hydrated: true, error: null })
   } catch (error) {
-    if (sequence === loadSequence) useApprovalRequestsStore.setState({ hydrated: true, error: errorText(error) })
+    if (sequence === loadSequence) useApprovalRequestsStore.setState({ hydrated: true, error: approvalErrorText(error) })
     throw error
   } finally {
     if (sequence === loadSequence) useApprovalRequestsStore.setState({ loading: false })
@@ -101,6 +101,33 @@ export async function decideApprovalRequest(id: string, decision: ApprovalDecisi
     error: null,
   }))
   return request
+}
+
+/** Confirm a plan approval only after Prepare approved the requested revision. The host checks
+ * the saved program revision itself; scene requests must never use this generic apply command. */
+export async function confirmPlanApprovalRequest(id: string): Promise<ApprovalRequest> {
+  const current = useApprovalRequestsStore.getState().requests.find((item) => item.id === id)
+  if (!current || current.kind !== "plan_approve") throw new Error("Only plan approval requests can be confirmed here.")
+  if (current.state !== "approved") throw new Error("The request must be approved before it can be confirmed.")
+  if (current.baseRevision === null) throw new Error("This plan request has no revision to verify and cannot be confirmed safely.")
+
+  try {
+    const request = await invoke<ApprovalRequest>("approvals_apply", { id })
+    if (!request || request.id !== id || request.state !== "applied") {
+      throw new Error("The host did not confirm this plan revision as applied.")
+    }
+    useApprovalRequestsStore.setState((state) => ({
+      requests: state.requests.map((item) => item.id === id ? request : item),
+      histories: Object.fromEntries(Object.entries(state.histories).filter(([requestId]) => requestId !== id)),
+      error: null,
+    }))
+    return request
+  } catch (error) {
+    // A stale apply changes the durable host state to superseded before it returns a refusal.
+    // Refresh the list so the UI reflects that host truth instead of leaving an approved badge.
+    await reloadApprovalRequests().catch(() => {})
+    throw error
+  }
 }
 
 export async function loadApprovalHistory(id: string): Promise<ApprovalEvent[]> {
