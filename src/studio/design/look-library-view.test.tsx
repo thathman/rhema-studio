@@ -78,13 +78,35 @@ afterEach(() => {
 const card = (el: HTMLElement, name: string) => [...el.querySelectorAll("li")].find((li) => li.querySelector("h4")?.textContent === name) as HTMLLIElement
 
 describe("Design → Templates (#299)", () => {
-  it("labels reusable looks Templates so the content Library stays distinct", async () => {
+  it("keeps My Designs and Templates primary, with specialist tools grouped accessibly", async () => {
     const el = await renderDesignWorkspace()
-    const tabs = [...el.querySelectorAll('[role="tab"]')] as HTMLButtonElement[]
-    const templates = tabs.find((tab) => tab.textContent?.trim() === "Templates")
-    expect(templates?.getAttribute("aria-selected")).toBe("true")
-    expect(tabs.some((tab) => tab.textContent?.trim() === "My Designs")).toBe(true)
-    expect(tabs.some((tab) => tab.textContent?.trim() === "Library")).toBe(false)
+    const nav = el.querySelector<HTMLElement>('nav[aria-label="Design sections"]')!
+    const destinations = [...nav.querySelectorAll<HTMLButtonElement>("button")]
+    expect(destinations.map((button) => button.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+      "My Designs",
+      "Templates",
+      "Design tools",
+    ])
+    expect(destinations.find((button) => button.textContent?.includes("Templates"))?.getAttribute("aria-current")).toBe("page")
+
+    const tools = nav.querySelector<HTMLButtonElement>('button[aria-label^="Design tools"]')!
+    await act(async () => tools.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })))
+    const toolItems = [...document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
+    expect(toolItems.map((item) => item.textContent?.trim())).toEqual([
+      "Themes",
+      "Lower thirds",
+      "News ticker",
+      "Stage",
+      "Countdown",
+      "Brand kit",
+      "Used on…",
+    ])
+
+    const brand = toolItems.find((item) => item.textContent?.trim() === "Brand kit")!
+    await act(async () => brand.click())
+    expect(useShellStore.getState().designTab).toBe("brand")
+    expect(tools.getAttribute("aria-current")).toBe("page")
+    expect(tools.getAttribute("aria-label")).toBe("Design tools, Brand kit selected")
   })
 
   it("shows the bundled Worship Expressions gallery on a clean install; Use creates a copy without taking it live", async () => {

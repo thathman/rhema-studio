@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
-import { ExternalLinkIcon, Layers3Icon, SaveIcon, TrashIcon } from "lucide-react"
+import { ChevronDownIcon, ExternalLinkIcon, Layers3Icon, SaveIcon, TrashIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
 import { useBroadcastStore } from "@/stores"
 import { useShellStore, type DesignTab } from "@/studio/shell-store"
@@ -32,6 +33,8 @@ const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["brand", "Brand kit", "Logo, colours and fonts once"],
   ["used-on", "Used on…", "Which outputs show each look"],
 ]
+const PRIMARY_TABS = TABS.filter(([id]) => id === "my-designs" || id === "library")
+const DESIGN_TOOLS = TABS.filter(([id]) => id !== "my-designs" && id !== "library")
 
 /**
  * Design studio: My Designs is the canonical editable scene workflow; the
@@ -40,6 +43,7 @@ const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
 export function DesignWorkspace() {
   const tab = useShellStore((s) => s.designTab)
   const setTab = useShellStore((s) => s.setDesignTab)
+  const activeTool = DESIGN_TOOLS.find(([id]) => id === (tab === "outputs" ? "used-on" : tab))
   // A lower-third style just added from Templates opens selected.
   const [styleId, setStyleId] = useState<string>()
 
@@ -68,13 +72,12 @@ export function DesignWorkspace() {
           </>}
         </div>
       </header>
-      <div role="tablist" aria-label="What you are designing" className="mx-8 mb-3 flex shrink-0 gap-1 overflow-x-auto border-b border-border max-[1200px]:mx-5">
-        {TABS.map(([id, label, hint]) => (
+      <nav aria-label="Design sections" className="mx-8 mb-3 flex shrink-0 flex-wrap items-center gap-1 border-b border-border max-[1200px]:mx-5">
+        {PRIMARY_TABS.map(([id, label, hint]) => (
           <button
             key={id}
             type="button"
-            role="tab"
-            aria-selected={tab === id}
+            aria-current={tab === id ? "page" : undefined}
             title={hint}
             onClick={() => setTab(id)}
             className={cn(
@@ -85,7 +88,35 @@ export function DesignWorkspace() {
             {label}
           </button>
         ))}
-      </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={activeTool ? `Design tools, ${activeTool[1]} selected` : "Design tools"}
+              aria-current={activeTool ? "page" : undefined}
+              title={activeTool ? `Design tools: ${activeTool[1]}` : "Themes, lower thirds, ticker, stage, countdown, brand kit, and usage"}
+              className={cn(
+                "-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-[3px] px-3 py-2.5 text-xs font-bold whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                activeTool ? "border-primary text-primary-text" : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Design tools
+              {activeTool && <span className="font-medium">· {activeTool[1]}</span>}
+              <ChevronDownIcon aria-hidden className="size-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuLabel>Specialist design tools</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={activeTool?.[0] ?? ""} onValueChange={(value) => setTab(value as DesignTab)}>
+              {DESIGN_TOOLS.map(([id, label, hint]) => (
+                <DropdownMenuRadioItem key={id} value={id} title={hint}>
+                  {label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </nav>
       {tab === "themes" && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-8 pb-3 text-xs max-[1200px]:px-5" aria-label="More ways to use this look">
           <span className="font-semibold">More ways to use this look</span>
@@ -96,7 +127,7 @@ export function DesignWorkspace() {
           ))}
         </div>
       )}
-      <div role="tabpanel" aria-label={TABS.find((t) => t[0] === tab)?.[1]} className="min-h-0 flex-1 px-8 pb-6 max-[1200px]:px-5">
+      <div role="region" aria-label={TABS.find((t) => t[0] === tab)?.[1]} className="min-h-0 flex-1 px-8 pb-6 max-[1200px]:px-5">
         {tab === "themes" ? (
           <div className="grid h-full min-h-0 grid-cols-[240px_minmax(0,1fr)_300px] overflow-hidden rounded-lg border border-border bg-card shadow-panel max-[1200px]:grid-cols-[200px_minmax(0,1fr)_280px]">
             <ThemeLibrary />
