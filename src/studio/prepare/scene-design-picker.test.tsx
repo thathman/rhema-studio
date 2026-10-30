@@ -78,6 +78,7 @@ function withNativeText(design: RhemaDesign): RhemaDesign {
   }
   return {
     ...design,
+    bindings: { ...design.bindings, [node.id]: { id: node.id, kind: "text" } },
     scene: {
       ...design.scene,
       nodes: {
@@ -247,7 +248,7 @@ describe("Prepare design version picker", () => {
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
   })
 
-  it("refuses a native-only version in Prepare without changing the plan or Live", async () => {
+  it("uses a native static-text version in Prepare without changing Live", async () => {
     const design = withNativeText(createBlankRhemaDesign("Opening"))
     const version: DesignVersion = {
       designId: "design-native",
@@ -305,9 +306,13 @@ describe("Prepare design version picker", () => {
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent === "My Designs")!.click())
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use in Prepare")!.click())
 
-    expect(document.body.querySelector('[role="alert"]')?.textContent).toContain("cannot show it yet")
-    expect(onSceneSelected).not.toHaveBeenCalled()
-    expect(useQueueStore.getState().items[0]).toEqual(item)
+    expect(document.body.querySelector('[role="alert"]')).toBeNull()
+    expect(onSceneSelected).toHaveBeenCalledTimes(1)
+    const selectedSceneId = onSceneSelected.mock.calls[0]?.[0]
+    expect(useQueueStore.getState().items[0]).toMatchObject({ slide: { designRef: { id: version.designId, version: version.version } } })
+    expect(useBroadcastStore.getState().scenes.find((scene) => scene.id === selectedSceneId)?.layers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "text", text: "Welcome to worship" }),
+    ]))
     const after = useBroadcastStore.getState()
     expect({
       outputs: after.outputs,
@@ -433,7 +438,7 @@ describe("Prepare design version picker", () => {
     }).toEqual(liveBefore)
   })
 
-  it("saves a customized native-only version but does not offer it for Prepare", async () => {
+  it("saves a customized static-text version and offers it for Prepare", async () => {
     const design = withNativeText(createBlankRhemaDesign("Opening"))
     const sourceVersion: DesignVersion = {
       designId: "design-native",
@@ -495,9 +500,11 @@ describe("Prepare design version picker", () => {
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Customize a copy")!.click())
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Create version"))!.click())
 
-    expect(document.body.textContent).toContain("Version 1 is saved, but cannot be used in Prepare yet.")
-    expect([...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use version 1 in Prepare")).toBeUndefined()
-    expect(onSceneSelected).not.toHaveBeenCalled()
-    expect(useQueueStore.getState().items[0]).toEqual(moment)
+    const useVersion = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use version 1 in Prepare")
+    expect(useVersion).toBeDefined()
+    expect(document.body.textContent).not.toContain("cannot be used in Prepare yet")
+    await act(async () => useVersion!.click())
+    expect(onSceneSelected).toHaveBeenCalledTimes(1)
+    expect(useQueueStore.getState().items[0]).toMatchObject({ slide: { designRef: { id: copy.id, version: 1 } } })
   })
 })

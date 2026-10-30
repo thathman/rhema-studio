@@ -531,7 +531,7 @@ function StagePreview({ look }: { look: Extract<LibraryLook, { kind: "stage" }> 
   return <canvas ref={ref} width={1280} height={720} className="block h-full w-full" />
 }
 
-const PLACE_NAMES: Record<SceneLayerKind, string> = { feed: "On air", camera: "Camera", color: "Colour", picture: "Picture", video: "Video", clock: "Clock", ticker: "Ticker", lowerThird: "Name band", logo: "Logo" }
+const PLACE_NAMES: Record<Exclude<SceneLayerKind, "text">, string> = { feed: "On air", camera: "Camera", color: "Colour", picture: "Picture", video: "Video", clock: "Clock", ticker: "Ticker", lowerThird: "Name band", logo: "Logo" }
 
 // One canvas for every scene preview's feed layer: each is drawn and placed before the next.
 let layerCanvas: HTMLCanvasElement | null = null
