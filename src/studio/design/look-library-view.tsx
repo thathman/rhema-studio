@@ -310,7 +310,7 @@ function LookCard({ look, favourite, onFavourite, onOpen, scenePicker }: { look:
         <div className="mt-auto flex flex-wrap items-center gap-1 pt-1.5">
           {scenePicker && look.kind === "scene" ? (
             <>
-              <Button size="xs" onClick={() => scenePicker.onChoose(look, false)}><PlusIcon /> {scenePicker.purpose === "design" ? "Add a design copy" : "Use for this moment"}</Button>
+              <Button size="xs" onClick={() => scenePicker.onChoose(look, false)} title={scenePicker.purpose === "design" ? "Save a private editable copy in My Designs" : undefined}><PlusIcon /> {scenePicker.purpose === "design" ? "Choose template" : "Use for this moment"}</Button>
               <Button size="xs" variant="outline" onClick={() => scenePicker.onChoose(look, true)} title={scenePicker.purpose === "design" ? "Create a canonical design copy and open it in the editor" : "Create and attach a copy, then customize it without taking it live"}><PencilIcon /> {scenePicker.purpose === "design" ? "Customize a copy" : "Customize a copy…"}</Button>
             </>
           ) : !scenePicker ? (
