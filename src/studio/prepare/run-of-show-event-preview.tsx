@@ -9,6 +9,8 @@ import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { tickerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { designStore } from "@/design-engine/design-store"
+import { resolveDesignedMoment, type DesignIssue } from "@/design-engine/rhema-scene"
 import { presentActions } from "@/studio/present-actions"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import type { BroadcastOutput, QueueItem, Scene } from "@/types"
@@ -28,7 +30,26 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
   const output = outputs.find((item) => item.id === outputId) ?? outputs[0]
   const sceneSelection = moment && output ? sceneForOutput(moment, output) : null
   const sceneId = sceneSelection?.sceneId
-  const scene = scenes.find((candidate) => candidate.id === sceneId)
+  const designedSlide = moment?.kind === "slide" ? moment.slide : null
+  const designRef = designedSlide?.designRef
+  const designRefId = designRef?.id
+  const designVersion = designRef?.version
+  const designTitle = designedSlide?.title
+  const hasExplicitTakeScene = sceneSelection?.source === "screen" || sceneSelection?.source === "shared"
+  const requestedDesignKey = designRefId && designVersion !== undefined
+    ? `${moment?.id ?? ""}:${designRefId}@${designVersion}:${designTitle ?? ""}`
+    : null
+  // Explicit screen/shared Take scenes are more specific than the slide's general design pin.
+  const designKey = hasExplicitTakeScene ? null : requestedDesignKey
+  const [designResolution, setDesignResolution] = useState<{
+    key: string
+    scene: Scene | null
+    issues: DesignIssue[]
+  } | null>(null)
+  const currentDesignResolution = designKey && designResolution?.key === designKey ? designResolution : null
+  const scene = designKey
+    ? currentDesignResolution?.scene ?? undefined
+    : scenes.find((candidate) => candidate.id === sceneId)
   const lastPreviewedMoment = useRef<QueueItem | null>(null)
 
   const previewMoment = useCallback((item: QueueItem) => {
@@ -42,6 +63,25 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
   useLayoutEffect(() => {
     if (moment) previewMoment(moment)
   }, [moment, previewMoment])
+
+  useEffect(() => {
+    if (!designKey || !designRefId || designVersion === undefined || designTitle === undefined) return
+    let cancelled = false
+    void resolveDesignedMoment({ title: designTitle, designRef: { id: designRefId, version: designVersion } }, designStore.getVersion)
+      .then((result) => {
+        if (!cancelled) setDesignResolution({ key: designKey, scene: result.scene, issues: result.issues })
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDesignResolution({
+            key: designKey,
+            scene: null,
+            issues: [{ nodeId: "__design__", message: `"${designTitle}" shows its text instead: design ${designRefId} version ${designVersion} could not be drawn` }],
+          })
+        }
+      })
+    return () => { cancelled = true }
+  }, [designKey, designRefId, designVersion, designTitle])
 
   if (!moments.length) {
     return <p className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">Add a moment to {eventTitle} before previewing this event.</p>
@@ -93,23 +133,41 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
         {sceneSelection?.source === "current" && (
           <p className="text-xs text-muted-foreground">This screen keeps its current scene for this moment.</p>
         )}
+        {requestedDesignKey && hasExplicitTakeScene && (
+          <p className="text-xs text-muted-foreground">The explicit Take scene for this screen takes precedence over pinned design v{designVersion} in this preview.</p>
+        )}
+        {designKey && !currentDesignResolution && (
+          <p role="status" className="rounded-md border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">
+            Loading pinned design v{designVersion}…
+          </p>
+        )}
+        {designKey && currentDesignResolution && !currentDesignResolution.scene && (
+          <p role="alert" className="rounded-md border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">
+            {currentDesignResolution.issues.map((issue) => issue.message).join(" ")} The moment&apos;s own slide is shown below; another local scene or design version is not substituted.
+          </p>
+        )}
         {scene && output ? (
           <div className="space-y-2">
             <div className="flex items-baseline justify-between gap-2">
               <p className="text-xs font-semibold">{scene.name} · {output.name}</p>
-              {sceneSelection?.source === "current" && <span className="text-[0.6875rem] text-muted-foreground">Current scene</span>}
-              {sceneSelection?.source === "item" && <span className="text-[0.6875rem] text-muted-foreground">Item look</span>}
+              {designKey
+                ? <span className="text-[0.6875rem] text-muted-foreground">Pinned design v{designVersion}</span>
+                : sceneSelection?.source === "current"
+                  ? <span className="text-[0.6875rem] text-muted-foreground">Current scene</span>
+                  : sceneSelection?.source === "item"
+                    ? <span className="text-[0.6875rem] text-muted-foreground">Item look</span>
+                    : null}
             </div>
             <EventSceneCanvas scene={scene} output={output} />
             <p className="text-xs text-muted-foreground">Congregation preview only. Live-source layers show values active now. OBS stays independent in Production, and stage screens keep their private layouts. Neither preview changes an audience output.</p>
           </div>
-        ) : output ? (
+        ) : !designKey && output ? (
           <p className="rounded-md border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">
             {sceneId ? "The planned scene is not available on this computer." : `No scene is planned for ${output.name}; its full-screen content look is shown below.`}
           </p>
-        ) : (
+        ) : !designKey && !output ? (
           <p className="rounded-md border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">No congregation screen is configured yet. The moment content preview is still available below.</p>
-        )}
+        ) : null}
       </section>
 
       <section className="space-y-2" aria-label="Selected moment content preview">
