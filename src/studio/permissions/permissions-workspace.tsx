@@ -17,6 +17,7 @@ const dateWords = (at: number) => new Date(at).toLocaleString([], { dateStyle: "
 /** Host-owned access controls and durable scene approvals. Joined desks can inspect, never decide. */
 export function PermissionsWorkspace() {
   const joinStatus = useJoin((s) => s.status)
+  const joinedMe = useJoin((s) => s.me)
   const requests = useSceneApprovalsStore((s) => s.requests)
   const hydrated = useSceneApprovalsStore((s) => s.hydrated)
   const loadError = useSceneApprovalsStore((s) => s.error)
@@ -120,7 +121,7 @@ export function PermissionsWorkspace() {
           </div>
         </section>
 
-        <section aria-labelledby="paired-access-title" className="rounded-lg border border-border bg-card shadow-panel">
+        {isHost ? <section aria-labelledby="paired-access-title" className="rounded-lg border border-border bg-card shadow-panel">
           <header className="flex items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
             <KeyRoundIcon aria-hidden className="size-4 text-muted-foreground" />
             <div><h2 id="paired-access-title" className="font-semibold">Paired device access</h2><p className="text-xs text-muted-foreground">Saved pairing records. A device is shown as paired; this list does not claim that it is online now. Individual Screens Takes remain the default. Group Take needs its own host grant and an exact target review on the desk.</p></div>
@@ -209,6 +210,19 @@ export function PermissionsWorkspace() {
             </details>
           </div>
         </section>
+        : <section aria-labelledby="your-access-title" className="rounded-lg border border-border bg-card shadow-panel">
+          <header className="flex items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
+            <ShieldCheckIcon aria-hidden className="size-4 text-muted-foreground" />
+            <div><h2 id="your-access-title" className="font-semibold">Your access</h2><p className="text-xs text-muted-foreground">This view shows only the access the host assigned to this desk. Other paired-device names and grants are private to the main host.</p></div>
+          </header>
+          <dl className="grid gap-3 p-4 sm:grid-cols-2">
+            <div><dt className="text-xs font-semibold text-muted-foreground">This desk</dt><dd className="mt-1 text-sm">{joinedMe?.name ?? "Waiting for host confirmation"}</dd></div>
+            <div><dt className="text-xs font-semibold text-muted-foreground">Role</dt><dd className="mt-1 text-sm">{joinedMe ? roleLabel(joinedMe.role) : "Not confirmed by the host"}</dd></div>
+            <div><dt className="text-xs font-semibold text-muted-foreground">Individual congregation outputs</dt><dd className="mt-1 text-sm">{joinedMe?.outputScope === undefined ? "Not shared in this view" : joinedMe.outputScope.length === 0 ? "None assigned" : `${joinedMe.outputScope.length} assigned`}</dd></div>
+            <div><dt className="text-xs font-semibold text-muted-foreground">Group Take outputs</dt><dd className="mt-1 text-sm">{joinedMe?.groupTakeScope === undefined ? "Not shared in this view" : joinedMe.groupTakeScope.length === 0 ? "None assigned" : `${joinedMe.groupTakeScope.length} assigned`}</dd></div>
+            <div className="sm:col-span-2"><dt className="text-xs font-semibold text-muted-foreground">Rhema Recorder</dt><dd className="mt-1 text-sm text-muted-foreground">The Recorder grant is separate from your role and is managed by the main host. This joined view does not expose the host’s paired-device list.</dd></div>
+          </dl>
+        </section>}
       </div>
     </div>
   )
