@@ -26,6 +26,7 @@ import { ObsChip } from "@/studio/present/obs-chip"
 import { SoundChip } from "@/studio/present/sound-chip"
 import { CueMenu } from "@/studio/present/cue-menu"
 import { TransportBar } from "@/studio/present/transport-bar"
+import { RecorderDock } from "@/studio/present/recorder-dock"
 import { ScenesStrip } from "@/studio/present/scenes-strip"
 import { LiveToolsDrawer, type LiveToolsTab } from "@/studio/present/live-tools-drawer"
 import { EngageHostControl } from "@/studio/engage/host-control"
@@ -239,6 +240,7 @@ function LiveConsoleSurface({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3 [@media(max-height:860px)]:gap-2 [@media(max-height:860px)]:pt-2.5">
     <PhaseStrip />
+    <RecorderDock />
     <div className="grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,14.5rem)] gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2">
       <section className="row-span-3 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken" data-tour="present-rundown">
         <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">

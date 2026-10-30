@@ -47,7 +47,7 @@ mod tests {
         for ok in ["push_ndi_frame", "push_ndi_region", "set_output_pace", "get_ndi_status", "whep_offer", "recorder_status"] {
             assert!(may_call("broadcast-main", ok), "{ok}");
         }
-        for refused in ["remote_set_keys", "remote_pair_start", "start_http", "stop_http", "start_osc", "feeds_set", "publish_live_state", "recorder_start", "recorder_stop", "content_delete_service_log", "media_delete"] {
+        for refused in ["remote_set_keys", "remote_pair_start", "start_http", "stop_http", "start_osc", "feeds_set", "publish_live_state", "recorder_start", "recorder_stop", "recorder_open_file", "recorder_reveal_file", "content_delete_service_log", "media_delete"] {
             assert!(!may_call("broadcast-main", refused), "{refused}");
         }
     }

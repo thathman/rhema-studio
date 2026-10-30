@@ -327,6 +327,7 @@ impl Recorder {
         manifest::write(&dir, &manifest).map_err(|e| RecorderProblem::new(ProblemCode::WriteFailed, e.to_string()))?;
         let status = RecorderStatus {
             state: manifest.state,
+            session_active: false,
             session_id: Some(manifest.session_id.clone()),
             output_id: Some(manifest.output_id.clone()),
             started_at: Some(manifest.started_at.clone()),
@@ -365,6 +366,40 @@ impl Recorder {
         let f = if rehearsal { self.folder.join("rehearsal") } else { self.folder.clone() };
         Some(f.join(session_id)).filter(|d| d.join(manifest::MANIFEST).exists())
     }
+
+    /// A saved or recoverable local MP4 that the desktop may open or reveal to the operator.
+    /// The path is resolved from a listed session and a fixed filename, then canonicalized so a
+    /// modified manifest, directory symlink, or file symlink cannot escape this archive.
+    pub fn archive_file_path(&self, session_id: &str, rehearsal: bool) -> Result<PathBuf, RecorderProblem> {
+        let record = self
+            .list(rehearsal)
+            .into_iter()
+            .find(|record| record.session_id == session_id)
+            .ok_or_else(|| RecorderProblem::new(ProblemCode::NotRecording, "That recording is no longer in this archive."))?;
+        if !matches!(record.state, RecorderState::Saved | RecorderState::Recoverable) || record.files.mp4.as_deref() != Some(FILE_NAME) {
+            return Err(RecorderProblem::new(ProblemCode::WriteFailed, "This recording does not have an available MPEG-4 file."));
+        }
+
+        let archive = if rehearsal { self.folder.join("rehearsal") } else { self.folder.clone() };
+        let archive = archive.canonicalize().map_err(|e| RecorderProblem::new(ProblemCode::WriteFailed, format!("The recordings folder is unavailable: {e}")))?;
+        let directory = self
+            .session_dir(session_id, rehearsal)
+            .and_then(|path| path.canonicalize().ok())
+            .filter(|path| path.parent() == Some(archive.as_path()))
+            .ok_or_else(|| RecorderProblem::new(ProblemCode::WriteFailed, "The recording folder is unavailable or outside its archive."))?;
+        let file = directory
+            .join(FILE_NAME)
+            .canonicalize()
+            .map_err(|e| RecorderProblem::new(ProblemCode::WriteFailed, format!("The recording file is unavailable: {e}")))?;
+        if file.parent() != Some(directory.as_path()) {
+            return Err(RecorderProblem::new(ProblemCode::WriteFailed, "The recording file is outside its archive folder."));
+        }
+        let metadata = std::fs::metadata(&file).map_err(|e| RecorderProblem::new(ProblemCode::WriteFailed, format!("The recording file is unavailable: {e}")))?;
+        if !metadata.is_file() || metadata.len() == 0 {
+            return Err(RecorderProblem::new(ProblemCode::WriteFailed, "The recording file is empty or unavailable."));
+        }
+        Ok(file)
+    }
 }
 
 fn send_frame(s: &Session) {
@@ -399,6 +434,7 @@ fn status_of(s: &Session, folder: &Path) -> RecorderStatus {
     let gone = sh.writer_gone.load(Ordering::Relaxed);
     RecorderStatus {
         state: if gone { RecorderState::Failed } else { RecorderState::Recording },
+        session_active: true,
         session_id: Some(s.manifest.session_id.clone()),
         output_id: Some(s.manifest.output_id.clone()),
         started_at: Some(s.manifest.started_at.clone()),
@@ -723,6 +759,87 @@ mod tests {
     }
 
     #[test]
+    fn saved_and_recoverable_archive_files_resolve_to_their_fixed_local_mp4() {
+        let t = tempfile::tempdir().unwrap();
+        let r = Recorder::new(t.path().to_path_buf());
+        for (id, state, rehearsal) in [
+            ("saved-service", RecorderState::Saved, false),
+            ("recoverable-rehearsal", RecorderState::Recoverable, true),
+        ] {
+            let folder = if rehearsal { t.path().join("rehearsal") } else { t.path().to_path_buf() };
+            let dir = folder.join(id);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join(FILE_NAME), b"fragmented media").unwrap();
+            manifest::write(
+                &dir,
+                &RecordingManifest {
+                    version: 1,
+                    session_id: id.into(),
+                    state,
+                    output_id: "sanctuary".into(),
+                    output_name: "Sanctuary".into(),
+                    profile: RecorderProfile::Standard720p30,
+                    audio_device_id: None,
+                    service_run_id: None,
+                    program_id: None,
+                    rehearsal,
+                    started_at: "2026-10-30T10:00:00Z".into(),
+                    stopped_at: None,
+                    duration_ms: Some(1_000),
+                    files: RecordingFiles { mov: None, mp4: Some(FILE_NAME.into()) },
+                    markers: vec![],
+                    frames_written: 30,
+                    frames_dropped: 0,
+                    problem: None,
+                },
+            )
+            .unwrap();
+
+            assert_eq!(r.archive_file_path(id, rehearsal).unwrap(), dir.join(FILE_NAME).canonicalize().unwrap());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn archive_file_resolution_rejects_symlinks_outside_the_recordings_folder() {
+        use std::os::unix::fs::symlink;
+
+        let t = tempfile::tempdir().unwrap();
+        let r = Recorder::new(t.path().to_path_buf());
+        let outside = t.path().join("outside.mp4");
+        std::fs::write(&outside, b"outside recording").unwrap();
+        let dir = t.path().join("session-escape");
+        std::fs::create_dir_all(&dir).unwrap();
+        symlink(&outside, dir.join(FILE_NAME)).unwrap();
+        manifest::write(
+            &dir,
+            &RecordingManifest {
+                version: 1,
+                session_id: "session-escape".into(),
+                state: RecorderState::Saved,
+                output_id: "sanctuary".into(),
+                output_name: "Sanctuary".into(),
+                profile: RecorderProfile::Standard720p30,
+                audio_device_id: None,
+                service_run_id: None,
+                program_id: None,
+                rehearsal: false,
+                started_at: "2026-10-30T10:00:00Z".into(),
+                stopped_at: None,
+                duration_ms: Some(1_000),
+                files: RecordingFiles { mov: None, mp4: Some(FILE_NAME.into()) },
+                markers: vec![],
+                frames_written: 30,
+                frames_dropped: 0,
+                problem: None,
+            },
+        )
+        .unwrap();
+
+        assert!(r.archive_file_path("session-escape", false).is_err());
+    }
+
+    #[test]
     fn a_busy_encoder_never_leaves_a_hole_in_the_timeline() {
         // The loop woke late (ticks 0..=9 due at once) and the encoder takes only some of each burst.
         let mut written = Vec::new();
@@ -775,5 +892,51 @@ mod tests {
         assert!(r.marker("x", "desk", None, None).is_err());
         assert_eq!(r.stop().unwrap_err().code, ProblemCode::NotRecording);
         assert!(r.session_dir("../etc", false).is_none());
+    }
+
+    #[test]
+    fn a_failed_writer_session_remains_active_until_stop_closes_it() {
+        let t = tempfile::tempdir().unwrap();
+        let shared = Arc::new(Shared::default());
+        shared.writer_gone.store(true, Ordering::Relaxed);
+        shared.set_problem(RecorderProblem::new(ProblemCode::EncoderFailed, "writer stopped"));
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let writer = std::thread::spawn(|| Ok(()));
+        let session = Session {
+            dir: t.path().to_path_buf(),
+            manifest: RecordingManifest {
+                version: 1,
+                session_id: "failed-session".into(),
+                state: RecorderState::Recording,
+                output_id: "sanctuary".into(),
+                output_name: "Sanctuary".into(),
+                profile: RecorderProfile::Standard720p30,
+                audio_device_id: None,
+                service_run_id: None,
+                program_id: None,
+                rehearsal: false,
+                started_at: iso_utc(SystemTime::now()),
+                stopped_at: None,
+                duration_ms: None,
+                files: RecordingFiles { mov: None, mp4: Some(FILE_NAME.into()) },
+                markers: Vec::new(),
+                frames_written: 0,
+                frames_dropped: 0,
+                problem: None,
+            },
+            width: 1280,
+            height: 720,
+            fps: 30,
+            t0: Instant::now(),
+            tx,
+            shared,
+            writer,
+            frame: Vec::new(),
+            audio: None,
+        };
+
+        let status = status_of(&session, t.path());
+        assert_eq!(status.state, RecorderState::Failed);
+        assert!(status.session_active, "Stop still needs to remove this live Session");
     }
 }

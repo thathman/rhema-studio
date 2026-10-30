@@ -1,8 +1,8 @@
 # 42 — OWNER DECISION: Rhema Studio Is the Native Service Recording Application
 
-**Owner direction:** 29 October 2026. **Status:** **OWNER APPROVED — RHEMA-NATIVE RECORDING OF A SELECTED CONGREGATION OUTPUT**; the video source choice is now **settled**. Technical media engine, exact formats/codecs, ISO/multitrack features, final UI and real-device performance remain to be engineered and validated. This supersedes the earlier assumption that OBS recording is required. The owner first said "I want Rhema studio to be the recording app," then explicitly confirmed **"yes... recording congregation output"**.
+**Owner direction:** 29 October 2026. **Status:** **OWNER APPROVED — RHEMA-NATIVE RECORDING OF A SELECTED CONGREGATION OUTPUT**; the video source choice is now **settled**. A macOS engine and basic Live/History controls exist in the current source. Selected-output fidelity, sustained capture, target-device recovery playback, performance, Windows support and the remaining ISO/multitrack features still need implementation or acceptance. This supersedes the earlier assumption that OBS recording is required. The owner first said "I want Rhema studio to be the recording app," then explicitly confirmed **"yes... recording congregation output"**.
 
-**Priority:** First-party, reliable, **offline-capable** service recording must be provided by Rhema Studio itself. The OBS integration remains a separate optional online program / livestream integration and is **not a prerequisite for starting, continuing or finalizing a Rhema recording**. The output to pastor/Stage, Sanctuary and Overflow remains independent and is not implicitly changed by record or OBS actions. This is a product instruction for Codex, not a claim the native recorder exists yet.
+**Priority:** First-party, reliable, **offline-capable** service recording must be provided by Rhema Studio itself. The OBS integration remains a separate optional online program / livestream integration and is **not a prerequisite for starting, continuing or finalizing a Rhema recording**. The output to pastor/Stage, Sanctuary and Overflow remains independent and is not implicitly changed by record or OBS actions. The approved mode is not evidence that selected-output fidelity, offline behavior or real-device acceptance has been completed.
 
 ## 1. Critical separation: independent programs and controls
 
@@ -28,11 +28,13 @@
 
 **Source acceptance example:** Sanctuary Main shows camera → Psalm 100 in its approved Yoruba/English view → Pastor lower third → Offering slide. A `Rhema Recording: Sanctuary Main` contains that same host-rendered visual sequence with clean mixed sermon audio; Overflow stays on a distinct hymn, Stage shows a private countdown, and OBS displays a separate online shot, **none of which appear in the recording** unless an authorized change puts them onto Sanctuary Main. If Sanctuary is intentionally black, its actual black output is recorded; do not silently substitute another scene.
 
-**Codex must validate** final compositor frame access, video/media synchronization, visual effects, frame timing, output-specific language/layout, privacy, offline operation and sustained resource budget with real output hardware before claiming exact fidelity. This is an **approved product mode**, not proof the engine is implemented.
+**Codex must validate** final compositor frame access, video/media synchronization, visual effects, frame timing, output-specific language/layout, privacy, offline operation and sustained resource budget with real output hardware before claiming exact fidelity. This is an **approved product mode**; implementation and acceptance status are tracked in §5.
 
 
 
 ## 2. Main Live workspace — first-class recording dock
+
+The layout below is an approved design direction, not a screenshot or a claim about the current UI. The source currently has a compact Live dock and a History archive; pause and user-selected recording folders are not available.
 
 ```text
 RHEMA STUDIO · LIVE
@@ -81,7 +83,7 @@ After start:
 
 ## 5. Integration acceptance and safe build phases
 
-| Wave | Observable user outcome | Gate |
+| Wave | Observable user outcome | Acceptance gate |
 | --- | --- | --- |
 | 0 — Audit and engine choice | Capture/encode/audio constraints, dependency/license/install size, performance budget and concrete native recording source proven feasible | Hardware proof / actual constraints, no guessed engine |
 | 1 — Basic local recording | Rhema host captures **one selected named congregation output's final composited frames** plus approved clean mixer audio into a recoverable local file **with OBS OFF and WAN OFF** | Start → camera/Scripture/lyrics/graphic transitions → stop → play synchronized file, 30+ min; exact selected-output language/look and no other output |
@@ -89,10 +91,22 @@ After start:
 | 3 — Resilience | Recover interrupted segments, low disk/fault handling, permissions, reroute/audio recovery, user-friendly repair and export | Power/crash and drive fault tests; Live remains functioning |
 | 4 — Combined load | Rhema recording + independent Sanctuary/Overflow/Stage output + cameras + OBS streaming + browser operators all active | CPU/GPU/RAM/dropped frame/sync/receiver measurements on target hardware; no Live regressions |
 
-**Missing feature status today:** Verified source snapshot before this decision contains an `OBS StartRecord/StopRecord/CreateRecordChapter` path in `src/stores/obs-store.ts`, remote OBS recording commands in `src/studio/production/joined-desks.tsx`, and OBS status/control in `src/studio/production/obs-panel.tsx`. Rust `crates/audio` captures audio for existing work and `src-tauri/crates/content/src/media.rs` indexes imported media; these are **not a proven standalone synchronized audio/video recording engine**. Treat native recording as **NOT IMPLEMENTED / MUST BUILD**, not as shipped merely because OBS can record.
+### Current implementation and acceptance status (30 October 2026)
+
+The source now contains a **macOS native recording implementation** in the active draft PR #538. It includes an AVAssetWriter H.264/AAC writer, CPAL input capture, a frame tee from the selected output webview, main-desk controls, status and markers, local session manifests, interrupted-session recovery, and History listing/open/reveal. This replaces the earlier “NOT IMPLEMENTED / MUST BUILD” source status. It does **not** mean the approved mode has passed acceptance.
+
+| Wave | Source / automated evidence | Still required before acceptance |
+| --- | --- | --- |
+| 0 — Audit and engine choice | A macOS AVAssetWriter + CPAL path is implemented and has Rust unit coverage. | Verify device routing, codec behavior, installation and resource limits on the supported church hardware. |
+| 1 — Basic local recording | The native QA journey exercises host-authorized start, explicit silent mode, capture of the synthetic `QA LIVE BASELINE` slide from a hidden congregation renderer, a marker, stop/finalize, History listing, and AVFoundation decoding of the saved MP4. This is a software integration smoke check only. | Use a real named congregation output and approved clean mixer input with OBS and WAN off; verify live content, language/look, A/V sync, and a sustained 30+ minute recording. |
+| 2 — Service integration | Source includes the Live dock, pinned output ID, marker command, archive/history linkage, host-side congregation-role check, local open/reveal, and an explicit host-granted Recorder permission separate from operator roles. | Verify authorized scene/source changes enter the selected output recording; private Preview, other outputs, Stage, and OBS remain excluded; exercise real permissioned operation. |
+| 3 — Resilience | Rust tests cover interrupted-session recovery and archive path containment. | Perform app-crash/restart, power-loss, disk-full, drive removal, write-permission and audio-device-loss journeys on supported hardware; confirm Live continues safely. |
+| 4 — Combined load | No target-load measurements are claimed. | Measure recording with congregation outputs, Stage, cameras, OBS streaming and browser operators active; review CPU/GPU/RAM, sync, dropped frames and receiver state. |
+
+The native QA journey captures a synthetic slide with no audio and checks whether the MP4 has a decodable video track at the selected profile size. It cannot establish the approved mixer's signal quality, physical display fidelity, remote receiver behavior, WAN-off operation, long-session stability or crash/power-loss recovery. The current host has no external congregation display or mixer available, so those gates remain open.
 
 ## 6. Scope boundary / open owner choices
 
-**Approved:** first-party, OBS-independent, offline Rhema recording of **one explicitly selected real congregation output's final composited video**, following all authorized Live source/scene/graphic changes on that **named** output; separate approved clean church audio; first-class Live controls; local files/History; safety/recovery and no private output leakage. **Proposed implementation choices:** efficient host compositor tee into recoverable segmented encoding plus playable export, with one finished recording path first. **Remaining open engineering choices:** exact profile/codecs/OS support, hardware encoder, resource ceilings, operator recorder grant preset, backup storage, whether later ISO/multi-output recording will be offered. **No separate record-only scene in initial mode.** Codex should audit the real renderer/audio APIs and build the smallest verifiable native capture slice.
+**Approved:** first-party, OBS-independent, offline Rhema recording of **one explicitly selected real congregation output's final composited video**, following all authorized Live source/scene/graphic changes on that **named** output; separate approved clean church audio; first-class Live controls; local files/History; safety/recovery and no private output leakage. The active draft PR implements a macOS host tee into AVAssetWriter with local session metadata, History controls and a separate explicit Recorder grant path for paired desks. The implementation is not yet verified against a real output, approved audio route, sustained service, or failure on target hardware. **Remaining open engineering and acceptance work:** supported OS coverage, hardware encoder/resource behavior, approved mixer routing, paired-desk permission acceptance, physical fidelity, recovery and fault drills, offline verification, and combined-load measurements. **No separate record-only scene in initial mode.**
 
 **Owner's Page 8 correction has priority over earlier Page 8 OBS recording proposals.** Keep OBS streaming as a separate integration until independently changed.
