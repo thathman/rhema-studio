@@ -134,7 +134,7 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
           <p className="text-xs text-muted-foreground">This screen keeps its current scene for this moment.</p>
         )}
         {requestedDesignKey && hasExplicitTakeScene && (
-          <p className="text-xs text-muted-foreground">The explicit Take scene for this screen takes precedence over pinned design v{designVersion} in this preview.</p>
+          <p className="text-xs text-muted-foreground">The planned Take scene takes precedence over pinned design v{designVersion} for this audience preview.</p>
         )}
         {designKey && !currentDesignResolution && (
           <p role="status" className="rounded-md border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">

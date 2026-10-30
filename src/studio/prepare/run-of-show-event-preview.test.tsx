@@ -300,7 +300,7 @@ describe("Run of Show event preview", () => {
     const tab = el.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Event preview"]')!
     await act(async () => { tab.focus(); tab.click() })
     expect(getVersionMock).not.toHaveBeenCalled()
-    expect(el.textContent).toContain("The explicit Take scene for this screen takes precedence over pinned design v1")
+    expect(el.textContent).toContain("The planned Take scene takes precedence over pinned design v1 for this audience preview")
     expect(el.textContent).toContain("Sanctuary's planned scene · Sanctuary")
 
     const outputSelect = el.querySelector<HTMLSelectElement>('[aria-label="Preview audience screen"]')!
@@ -310,6 +310,48 @@ describe("Run of Show event preview", () => {
     })
     expect(el.textContent).toContain("Overflow's planned scene · Overflow")
     expect(vi.mocked(drawScene).mock.calls.at(-1)?.[3]).toMatchObject({ sceneId: "overflow-planned" })
+    expect(getVersionMock).not.toHaveBeenCalled()
+  })
+
+  it("keeps an explicit shared Take scene ahead of a moment's general design pin on each screen", async () => {
+    const sharedPlannedScene = newScene("Shared planned scene")
+    sharedPlannedScene.id = "shared-planned"
+    const designedMoment: QueueItem = {
+      id: "designed-welcome",
+      kind: "slide",
+      slide: { title: "Welcome", body: "The service begins soon", designRef: { id: "design-1", version: 1 } },
+      on_take: [sceneStep(sharedPlannedScene.id)],
+      reference: "Welcome",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+    } as unknown as QueueItem
+    useQueueStore.setState({
+      items: [designedMoment],
+      headers: [{ id: "welcome", type: "group", name: "Welcome", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+    })
+    useBroadcastStore.setState({
+      scenes: [sharedPlannedScene],
+      outputs: [output, overflowOutput],
+      isLive: true,
+      liveItemId: "currently-on-air",
+    })
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D)
+
+    const el = render(useQueueStore.getState().headers[0])
+    const tab = el.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Event preview"]')!
+    await act(async () => { tab.focus(); tab.click() })
+    expect(el.textContent).toContain("Shared planned scene · Sanctuary")
+    expect(el.textContent).toContain("The planned Take scene takes precedence over pinned design v1 for this audience preview")
+
+    const outputSelect = el.querySelector<HTMLSelectElement>('[aria-label="Preview audience screen"]')!
+    await act(async () => {
+      outputSelect.value = "overflow"
+      outputSelect.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    expect(el.textContent).toContain("Shared planned scene · Overflow")
+    expect(vi.mocked(drawScene).mock.calls.at(-1)?.[3]).toMatchObject({ sceneId: "shared-planned" })
     expect(getVersionMock).not.toHaveBeenCalled()
   })
 })
