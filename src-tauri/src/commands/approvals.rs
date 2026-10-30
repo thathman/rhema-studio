@@ -4,7 +4,7 @@
 //! their own request, decide once, expiry, stale requests are not applied) are the database's.
 
 use rhema_content::{Actor, ApprovalEvent, ApprovalRequest, ApprovalRequestInput, ContentDb, Decision};
-use tauri::{Manager, State, WebviewWindow};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use super::content::{with_db, CmdResult, ContentCommandError, ContentState};
 
@@ -32,10 +32,34 @@ pub fn approvals_decide(window: WebviewWindow, state: State<'_, ContentState>, i
     with_db(&state, |db| db.decide_approval_request(&id, &main_desk(), decision, note.as_deref()))
 }
 
-/// The main desk carried out an approved request; `current_revision` is the target's revision now.
+/// The revision a scene request is judged against, read by the host and never taken from the caller.
+/// Deleting a scene on a screen would clear that screen, so it is refused until the screen has moved on.
+fn scene_apply_revision(kind: &str, target: &str, live: Option<&str>, revision: impl Fn(&str) -> Option<u64>) -> CmdResult<Option<i64>> {
+    let Some(on_screen) = rhema_api::scene_edits::scene_on_screen(live, target) else {
+        return Err(ContentCommandError::Refused { message: "The host has not shared its scenes yet; try again in a moment.".into(), code: "no-live-state" });
+    };
+    if kind == "scene_delete" && on_screen {
+        return Err(ContentCommandError::Refused { message: "That scene is still on a screen; move each output to another scene first.".into(), code: "on-screen" });
+    }
+    Ok(revision(&format!("scene:{target}")).and_then(|r| i64::try_from(r).ok()))
+}
+
+/// The main desk carries out an approved request. For a plan the host reads the plan itself. For a
+/// scene the host checks the scene has not changed and marks the request applied; the returned
+/// request's payload is what the main desk then saves, because the scene library lives in that
+/// window. `current_revision` counts only for other kinds.
+// ponytail: applied is recorded just before the window saves, so a crash in that instant asks the desk to resend; a host-owned scene store closes it.
 #[tauri::command]
-pub fn approvals_apply(window: WebviewWindow, state: State<'_, ContentState>, id: String, current_revision: Option<i64>) -> CmdResult<ApprovalRequest> {
+pub fn approvals_apply(app: AppHandle, window: WebviewWindow, state: State<'_, ContentState>, id: String, current_revision: Option<i64>) -> CmdResult<ApprovalRequest> {
     main_window_only(&window)?;
+    let request = with_db(&state, |db| db.approval_request(&id))?;
+    let current_revision = match request.kind.as_str() {
+        "scene_save" | "scene_delete" => {
+            let live = super::remote::current_live_state(&app);
+            scene_apply_revision(&request.kind, &request.target_id, live.as_deref(), |part| super::remote::current_revision(&app, part))?
+        }
+        _ => current_revision,
+    };
     with_db(&state, |db| db.apply_approval_request(&id, &main_desk(), current_revision))
 }
 
@@ -146,6 +170,39 @@ mod tests {
         let (who, input) = scene_request("remote:save_scene", &forged).unwrap();
         let r = db.submit_approval_request(&who, &input).unwrap();
         assert!(db.decide_approval_request(&r.id, &main_desk(), Decision::Approve, None).is_err());
+    }
+
+    #[test]
+    fn a_scene_request_is_applied_only_against_the_hosts_own_revision() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let live = serde_json::json!({ "scenes": [{ "id": "s1", "name": "Sermon" }] }).to_string();
+        let live = Some(live.as_str());
+        let submit = |base: i64| {
+            let save = serde_json::json!({ "scene": { "id": "s1" }, "request": true, "baseRevision": base, "by": "Screens", "byId": "abc" });
+            let (who, input) = scene_request("remote:save_scene", &save).unwrap();
+            let r = db.submit_approval_request(&who, &input).unwrap();
+            db.decide_approval_request(&r.id, &main_desk(), Decision::Approve, None).unwrap().id
+        };
+        let unchanged = submit(4);
+        let now = scene_apply_revision("scene_save", "s1", live, |part| (part == "scene:s1").then_some(4)).unwrap();
+        assert_eq!(db.apply_approval_request(&unchanged, &main_desk(), now).unwrap().state, "applied");
+        let changed = submit(4);
+        let now = scene_apply_revision("scene_save", "s1", live, |_| Some(5)).unwrap();
+        assert!(db.apply_approval_request(&changed, &main_desk(), now).is_err(), "the scene moved on");
+        assert_eq!(db.approval_request(&changed).unwrap().state, "superseded");
+    }
+
+    #[test]
+    fn deleting_a_scene_on_a_screen_or_with_no_live_state_is_refused() {
+        let code = |r: CmdResult<Option<i64>>| match r {
+            Err(ContentCommandError::Refused { code, .. }) => code,
+            other => panic!("not refused: {other:?}"),
+        };
+        assert_eq!(code(scene_apply_revision("scene_delete", "s1", None, |_| None)), "no-live-state");
+        let live = serde_json::json!({ "scenes": [{ "id": "s1", "onScreen": true }, { "id": "s2", "onScreen": false }] }).to_string();
+        assert_eq!(code(scene_apply_revision("scene_delete", "s1", Some(&live), |_| Some(1))), "on-screen");
+        assert_eq!(scene_apply_revision("scene_delete", "s2", Some(&live), |_| Some(1)).unwrap(), Some(1));
+        assert_eq!(scene_apply_revision("scene_save", "s1", Some(&live), |_| Some(1)).unwrap(), Some(1), "a change may wait on a screen, then be saved");
     }
 
     #[test]

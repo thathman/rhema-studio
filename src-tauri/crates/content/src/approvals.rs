@@ -259,6 +259,12 @@ impl ContentDb {
         Ok(saved)
     }
 
+    /// One request as it stands.
+    pub fn approval_request(&self, id: &str) -> Result<ApprovalRequest> {
+        let conn = self.lock()?;
+        load(&conn, id)?.ok_or_else(|| ContentError::NotFound(id.to_string()))
+    }
+
     /// The requester takes back a request nobody has decided yet.
     pub fn withdraw_approval_request(&self, id: &str, requester: &Actor) -> Result<ApprovalRequest> {
         let requester = checked_actor(requester)?;

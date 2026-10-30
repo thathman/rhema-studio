@@ -188,6 +188,14 @@ fn not_cameras(scene: &serde_json::Value) -> (Option<&serde_json::Value>, Option
     (scene.get("name"), scene.get("background"), scene.get("fadeMs"), layers)
 }
 
+/// Is this scene on a real screen now? `None` when the host has not shared its scenes, so a caller
+/// has nothing to judge by.
+#[must_use]
+pub fn scene_on_screen(live: Option<&str>, id: &str) -> Option<bool> {
+    let host = serde_json::from_str::<HostScenes>(live?).ok()?;
+    Some(host.scenes.iter().find(|s| s.get("id").and_then(serde_json::Value::as_str) == Some(id)).is_some_and(on_screen))
+}
+
 /// Check a scene command from a desk with `role` against the host's Live State (`live`). Not a
 /// scene command: `Ok(None)`.
 pub fn judge(live: Option<&str>, role: Role, cmd: &RemoteCommand) -> Result<Option<Verdict>, Refusal> {
