@@ -352,6 +352,18 @@ impl ContentDb {
         Ok(rows)
     }
 
+    /// The service running now: the newest `active` run checkpointed within `fresh_hours`. A run a
+    /// crash left active days ago is not "now", so a recording never files under last week's service.
+    pub fn current_service_run(&self, fresh_hours: u32) -> Result<Option<ServiceRunSummary>> {
+        let conn = self.lock()?;
+        Ok(conn.query_row(
+            &format!("SELECT {RUN_SUMMARY_COLS} FROM service_runs WHERE status = 'active'
+                      AND updated_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?1) ORDER BY updated_at DESC LIMIT 1"),
+            params![format!("-{fresh_hours} hours")],
+            row_to_run_summary,
+        ).optional()?)
+    }
+
     /// Finalize a run once. The body is the user's explicit journal record;
     /// transcripts are stored only when explicitly supplied. A retry returns
     /// the already saved row and never replaces its content.
@@ -509,6 +521,19 @@ mod tests {
             started_at: context.started_at.clone(),
             checkpoint,
         }
+    }
+
+    #[test]
+    fn the_current_run_is_the_newest_active_one_checkpointed_recently() {
+        let db = ContentDb::open_in_memory().unwrap();
+        assert_eq!(db.current_service_run(12).unwrap(), None);
+        let ctx = TestRunContext { program_id: None, program_revision: None, service_date: None, title: "Sunday".into(), time_zone: None, started_at: "2026-11-01T09:00:00Z".into() };
+        db.checkpoint_service_run(&checkpoint_input("old", &ctx, serde_json::json!({}))).unwrap();
+        db.checkpoint_service_run(&checkpoint_input("today", &ctx, serde_json::json!({}))).unwrap();
+        db.lock().unwrap().execute("UPDATE service_runs SET updated_at = '2020-01-01T00:00:00.000Z' WHERE run_id = 'old'", []).unwrap();
+        assert_eq!(db.current_service_run(12).unwrap().map(|r| r.run_id), Some("today".into()));
+        db.interrupt_service_run("today").unwrap();
+        assert_eq!(db.current_service_run(12).unwrap(), None, "a stale active run is not the current service");
     }
 
     #[test]
