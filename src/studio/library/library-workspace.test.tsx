@@ -141,6 +141,29 @@ async function clickButton(label: string) {
 }
 
 describe("Library workspace", () => {
+  it("opens the canonical versioned design editor without changing the current Live output", async () => {
+    await act(async () => {
+      root!.render(<LibraryWorkspace />)
+    })
+
+    const tab = [...document.querySelectorAll<HTMLButtonElement>("[role='tab']")]
+      .find((candidate) => candidate.textContent === "Visual designs")
+    expect(tab).toBeDefined()
+    await act(async () => {
+      tab!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(document.body.textContent).toContain("My Designs")
+    expect(document.body.textContent).toContain("Choose a starting point")
+    expect(useShellStore.getState().workspace).toBe("library")
+    expect(useBroadcastStore.getState().isLive).toBe(true)
+    expect(useBroadcastStore.getState().liveVerse).toEqual({
+      reference: "Psalm 23:1",
+      segments: [{ text: "Existing program content" }],
+    })
+  })
+
   it("offers saved Bible passages as a first-class Library section", async () => {
     await act(async () => {
       root!.render(<LibraryWorkspace />)

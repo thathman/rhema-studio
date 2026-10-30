@@ -16,7 +16,7 @@ export function designTabOf(tab: DesignTab): DesignTab {
   return tab === "outputs" ? "used-on" : tab
 }
 export type PresentView = "standard" | "production"
-export type LibrarySection = "bible" | "songs" | "hymns" | "slides" | "media" | "files"
+export type LibrarySection = "bible" | "songs" | "hymns" | "slides" | "designs" | "media" | "files"
 
 /** In-memory return path for customizing a copied Design from a Prepare event. Never persisted as a service preference. */
 export interface PrepareDesignReturnContext {

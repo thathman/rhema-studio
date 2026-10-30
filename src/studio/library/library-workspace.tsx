@@ -21,6 +21,7 @@ import { MediaLibrary } from "@/studio/prepare/media-library"
 import { SongFiles } from "@/studio/library/library-blocks"
 import { SlideLibrary } from "@/studio/library/slide-library"
 import { BibleLibrary } from "@/studio/library/bible-library"
+import { DesignDocumentsWorkspace } from "@/studio/design/design-documents-workspace"
 import type { LibrarySection, PrepareLibraryReturnContext } from "@/studio/shell-store"
 import { useShellStore } from "@/studio/shell-store"
 import {
@@ -45,6 +46,7 @@ const SECTIONS: ReadonlyArray<readonly [LibrarySection, string]> = [
   ["songs", "Songs & ministrations"],
   ["hymns", "Hymn book"],
   ["slides", "Slides & announcements"],
+  ["designs", "Visual designs"],
   ["media", "Pictures & videos"],
   ["files", "Import & export"],
 ]
@@ -328,44 +330,52 @@ export function LibraryWorkspace() {
         <div className="min-w-0">
           <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Everything in its place</p>
           <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Your creative library.</h1>
-          <p className="mt-1 max-w-3xl text-xs text-muted-foreground">One searchable home for saved Scripture passages, songs, choir ministrations, the hymn book, slides, pictures and videos on this computer. Use adds a copy to the chosen run-of-show destination. Preview stays private until an authorized operator explicitly Takes it.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setSection("files")}><UploadIcon /> Import files</Button>
-          <Button onClick={() => {
-            if (section === "slides") { setNewSlide((n) => n + 1); return }
-            setSection("songs"); setNewSong((n) => n + 1)
-          }}><PlusIcon /> {section === "slides" ? "New slide" : "New song"}</Button>
-        </div>
-      </header>
-
-      <div className="mx-[29px] mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 max-[1200px]:mx-5">
-        <div className="min-w-0">
-          <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{contextualDestination ? "Contextual Add" : "Add destination"}</p>
-          <p className="mt-1 truncate text-sm font-semibold">{contextualDestination ?? `Open service · ${currentService?.title || "Local draft"}`}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {contextualDestination
-              ? "The item returns to its captured Prepare section."
-              : currentDestination
-                ? `Library items go to ${currentDestination.label}. This choice is remembered for this service.`
-                : "Choose a destination before using Library content. The choice is remembered per service."}
+          <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
+            {section === "designs"
+              ? "Browse and customize the same local, versioned design documents used in Design and Prepare. Draft saves stay private and do not change a screen."
+              : "One searchable home for saved Scripture passages, songs, choir ministrations, the hymn book, slides, pictures and videos on this computer. Use adds a copy to the chosen run-of-show destination. Preview stays private until an authorized operator explicitly Takes it."}
           </p>
         </div>
-        {!contextualDestination && (
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (prepareReturn && !prepareReturnIsCurrent) {
-                useShellStore.getState().clearPrepareLibraryReturn()
-              }
-              openTargetChooser(null)
-            }}
-            aria-label={currentDestination ? "Change Library destination" : "Choose Library destination"}
-          >
-            {currentDestination ? "Change destination" : "Choose destination"}
-          </Button>
+        {section !== "designs" && (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setSection("files")}><UploadIcon /> Import files</Button>
+            <Button onClick={() => {
+              if (section === "slides") { setNewSlide((n) => n + 1); return }
+              setSection("songs"); setNewSong((n) => n + 1)
+            }}><PlusIcon /> {section === "slides" ? "New slide" : "New song"}</Button>
+          </div>
         )}
-      </div>
+      </header>
+
+      {section !== "designs" && (
+        <div className="mx-[29px] mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 max-[1200px]:mx-5">
+          <div className="min-w-0">
+            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{contextualDestination ? "Contextual Add" : "Add destination"}</p>
+            <p className="mt-1 truncate text-sm font-semibold">{contextualDestination ?? `Open service · ${currentService?.title || "Local draft"}`}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {contextualDestination
+                ? "The item returns to its captured Prepare section."
+                : currentDestination
+                  ? `Library items go to ${currentDestination.label}. This choice is remembered for this service.`
+                  : "Choose a destination before using Library content. The choice is remembered per service."}
+            </p>
+          </div>
+          {!contextualDestination && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (prepareReturn && !prepareReturnIsCurrent) {
+                  useShellStore.getState().clearPrepareLibraryReturn()
+                }
+                openTargetChooser(null)
+              }}
+              aria-label={currentDestination ? "Change Library destination" : "Choose Library destination"}
+            >
+              {currentDestination ? "Change destination" : "Choose destination"}
+            </Button>
+          )}
+        </div>
+      )}
 
       <div role="tablist" aria-label="Library" className="flex shrink-0 flex-wrap gap-2 px-[29px] pb-4 max-[1200px]:px-5">
         {SECTIONS.map(([id, label]) => (
@@ -387,7 +397,8 @@ export function LibraryWorkspace() {
       <div role="tabpanel" aria-label={SECTIONS.find(([id]) => id === section)?.[1]} className="mx-[29px] mb-6 flex min-h-0 flex-1 flex-col max-[1200px]:mx-5">
         {section === "bible" && <BibleLibrary onUseItem={useItem} />}
         {section === "songs" && <SongLibrary layout="cards" newRequest={newSong} onUseItem={useItem} />}
-        {section !== "songs" && section !== "bible" && (
+        {section === "designs" && <div className="min-h-0 flex-1 overflow-y-auto"><DesignDocumentsWorkspace /></div>}
+        {section !== "songs" && section !== "bible" && section !== "designs" && (
           <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-card p-4">
             {section === "hymns" && <HymnBook onUseItem={useItem} />}
             {section === "slides" && <SlideLibrary key={newSlide} onUseItem={useItem} />}
