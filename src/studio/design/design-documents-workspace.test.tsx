@@ -79,11 +79,14 @@ describe("My Designs workspace", () => {
       updatedAt: "2026-10-30T00:00:00Z",
     }
     store.create.mockResolvedValue(created)
+    store.get.mockResolvedValue(created)
     const host = document.createElement("div")
     document.body.appendChild(host)
     root = createRoot(host)
     await act(async () => root!.render(<DesignDocumentsWorkspace />))
     await act(async () => { await Promise.resolve() })
+    expect(host.textContent).toContain("Choose a starting point")
+    expect(host.textContent).toContain("3 · Use in Prepare")
 
     const before = useBroadcastStore.getState()
     const liveBefore = {
@@ -97,12 +100,18 @@ describe("My Designs workspace", () => {
     const browse = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse scene templates"))!
     await act(async () => browse.click())
     const card = [...host.querySelectorAll("li")].find((item) => item.querySelector("h4")?.textContent === "Clean · Camera and scripture")!
-    const add = [...card.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add a design copy")!
+    const choose = [...card.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Choose template")!
 
-    await act(async () => { add.click(); await Promise.resolve() })
+    await act(async () => { choose.click(); await Promise.resolve() })
 
     expect(store.create).toHaveBeenCalledWith(expect.objectContaining({ kind: "design", title: "Clean · Camera and scripture" }))
+    expect(host.textContent).toContain("Added to My Designs")
     expect(useBroadcastStore.getState().scenes).toEqual([])
+    const customize = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Customize this design")!
+    await vi.waitFor(() => expect(customize.disabled).toBe(false))
+    await act(async () => { customize.click(); await Promise.resolve() })
+    expect(store.get).toHaveBeenCalledWith("design-copy-1")
+    expect(host.querySelector('[aria-label="Design canvas"]')).not.toBeNull()
     const after = useBroadcastStore.getState()
     expect({
       outputs: after.outputs,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ExternalLinkIcon, SaveIcon, TrashIcon } from "lucide-react"
+import { ExternalLinkIcon, Layers3Icon, SaveIcon, TrashIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { useBroadcastStore } from "@/stores"
@@ -22,9 +22,9 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { cn } from "@/lib/utils"
 
 const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
-  ["themes", "Themes", "How Bible, songs, hymns, slides and pictures look"],
+  ["my-designs", "My Designs", "Editable church designs, private drafts and immutable versions"],
   ["library", "Templates", "Ready-made looks and layouts to start from"],
-  ["my-designs", "My Designs", "Church-owned designs, drafts and immutable versions"],
+  ["themes", "Themes", "How Bible, songs, hymns, slides and pictures look"],
   ["lower-thirds", "Lower thirds", "Names, scripture and lyrics strips"],
   ["ticker", "News ticker", "The crawl along the screen"],
   ["stage", "Stage", "What the team on the platform sees"],
@@ -34,9 +34,8 @@ const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
 ]
 
 /**
- * Design studio: every design edit in one place — themes for each kind of
- * content, lower thirds, the news ticker and the church brand, and where each
- * look is used (choosing it per output is in the output's editor).
+ * Design studio: My Designs is the canonical editable scene workflow; the
+ * specialised theme, lower-third, ticker, stage and brand tools remain nearby.
  */
 export function DesignWorkspace() {
   const tab = useShellStore((s) => s.designTab)
@@ -57,16 +56,17 @@ export function DesignWorkspace() {
       <header className="flex shrink-0 flex-wrap items-end justify-between gap-4 px-8 pt-6 pb-4 max-[1200px]:px-5">
         <div className="min-w-0">
           <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">The creative workspace</p>
-          <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Design once. Beautiful everywhere.</h1>
-          <p className="mt-1 text-xs text-muted-foreground">Every look in one place: scripture, songs, hymns, slides, pictures, lower thirds, the ticker, the stage display and your brand.</p>
+          <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Choose, customize, and use your designs.</h1>
+          <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Start in My Designs: choose a scene template, customize a private draft, then create a version for Prepare. A design version changes public output only through the normal approval and explicit Take flow.</p>
         </div>
-        {tab === "themes" && (
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {tab !== "my-designs" && <Button variant="outline" onClick={() => setTab("my-designs")}><Layers3Icon /> Open My Designs</Button>}
+          {tab === "themes" && <>
             <LiveEditSwitch />
             <Button variant="outline" onClick={() => useBroadcastStore.getState().discardDraft()}><TrashIcon /> Discard changes</Button>
             <Button onClick={() => useBroadcastStore.getState().saveDraft()}><SaveIcon /> Save theme</Button>
-          </div>
-        )}
+          </>}
+        </div>
       </header>
       <div role="tablist" aria-label="What you are designing" className="mx-8 mb-3 flex shrink-0 gap-1 overflow-x-auto border-b border-border max-[1200px]:mx-5">
         {TABS.map(([id, label, hint]) => (

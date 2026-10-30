@@ -26,6 +26,7 @@ function messageOf(error: unknown) {
 export function DesignDocumentsWorkspace() {
   const [documents, setDocuments] = useState<DesignSummary[]>([])
   const [active, setActive] = useState<DesignDocument | null>(null)
+  const [chosenDesign, setChosenDesign] = useState<DesignDocument | null>(null)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [activeDirty, setActiveDirty] = useState(false)
@@ -74,6 +75,7 @@ export function DesignDocumentsWorkspace() {
       const next = await designStore.get(id)
       if (!next) throw new Error("That design is no longer available.")
       setActive(next)
+      setChosenDesign(null)
       setActiveDirty(false)
       setBrowseTemplates(false)
       setError("")
@@ -91,6 +93,7 @@ export function DesignDocumentsWorkspace() {
       const title = "Untitled design"
       const created = await designStore.create({ title, kind: "design", document: createBlankRhemaDesign(title) })
       setActive(created)
+      setChosenDesign(null)
       setActiveDirty(false)
       setBrowseTemplates(false)
       setLoading(true)
@@ -123,6 +126,7 @@ export function DesignDocumentsWorkspace() {
       // Keep the editable document canonical here. A scene copy is saved only when an immutable
       // version is deliberately used in Prepare or on a screen.
       setActive(customize ? created : null)
+      setChosenDesign(customize ? null : created)
       setActiveDirty(false)
       setBrowseTemplates(false)
       setLoading(true)
@@ -143,6 +147,7 @@ export function DesignDocumentsWorkspace() {
     if (!(await confirmDiscard())) return
     setBrowseTemplates(true)
     setActive(null)
+    setChosenDesign(null)
     setActiveDirty(false)
   }
 
@@ -159,6 +164,7 @@ export function DesignDocumentsWorkspace() {
     try {
       const copy = await designStore.duplicate(active.id, active.latestVersion ?? undefined, active.title + " copy")
       setActive(copy)
+      setChosenDesign(null)
       setActiveDirty(false)
       setLoading(true)
       setReloadToken((token) => token + 1)
@@ -170,6 +176,7 @@ export function DesignDocumentsWorkspace() {
   }
   const onSaved = (saved: DesignDocument) => {
     setActive(saved)
+    setChosenDesign(null)
     setActiveDirty(false)
     setDocuments((current) => current.map((item) => item.id === saved.id ? summaryOf(saved) : item))
   }
@@ -210,7 +217,7 @@ export function DesignDocumentsWorkspace() {
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex items-center gap-2 border-b border-border px-4 py-2">
               <Button size="xs" variant="ghost" onClick={() => setBrowseTemplates(false)}><ArrowLeftIcon /> Back to My Designs</Button>
-              <span className="text-xs text-muted-foreground">Choose a scene template to make a church-owned design copy.</span>
+              <span className="text-xs text-muted-foreground">Choose a template to save a private, editable copy in My Designs. It does not add a service moment or change any screen.</span>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               <LookLibraryView onOpen={() => {}} scenePicker={{ purpose: "design", onChoose: (look, customize) => { void createFromTemplate(look, customize) } }} />
@@ -226,11 +233,35 @@ export function DesignDocumentsWorkspace() {
             onDuplicate={duplicateActive}
             onDirtyChange={setActiveDirty}
           />
+        ) : chosenDesign ? (
+          <section className="m-auto flex max-w-lg flex-col items-center px-6 py-10 text-center" aria-labelledby="chosen-design-title">
+            <Layers3Icon aria-hidden="true" className="size-8 text-muted-foreground" />
+            <h3 id="chosen-design-title" className="mt-3 text-base font-semibold">Added to My Designs</h3>
+            <p role="status" className="mt-2 text-sm text-muted-foreground">“{chosenDesign.title}” is a private editable copy. Customize and save a draft here; Preview, Program and screens are unchanged.</p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <Button onClick={() => void open(chosenDesign.id)} disabled={loading || creating}>Customize this design</Button>
+              <Button variant="outline" onClick={() => { setChosenDesign(null); setBrowseTemplates(true) }} disabled={creating}>Choose another template</Button>
+            </div>
+            <p className="mt-4 text-xs text-muted-foreground">When ready, create an immutable version and choose it for a moment in Prepare. Only an explicit Take can change the public output.</p>
+          </section>
         ) : (
-          <div className="m-auto max-w-lg px-6 py-10 text-center">
+          <div className="m-auto max-w-3xl px-6 py-8 text-center">
             <Layers3Icon className="mx-auto size-8 text-muted-foreground" />
-            <h3 className="mt-3 text-base font-semibold">Designs for this church</h3>
-            <p className="mt-2 text-sm text-muted-foreground">Start with a blank canvas or make a copy from a scene template. Save a draft, then create an immutable version when it is ready to use in Prepare.</p>
+            <h3 className="mt-3 text-base font-semibold">Choose a starting point</h3>
+            <ol className="mt-4 grid grid-cols-1 gap-2 text-left sm:grid-cols-3">
+              <li className="rounded-md border border-border p-3">
+                <span className="text-xs font-bold">1 · Choose</span>
+                <p className="mt-1 text-xs text-muted-foreground">Start blank or make a private editable copy of a scene template.</p>
+              </li>
+              <li className="rounded-md border border-border p-3">
+                <span className="text-xs font-bold">2 · Customize</span>
+                <p className="mt-1 text-xs text-muted-foreground">Edit the canvas and save a draft. Drafts stay out of Preview and Program.</p>
+              </li>
+              <li className="rounded-md border border-border p-3">
+                <span className="text-xs font-bold">3 · Use in Prepare</span>
+                <p className="mt-1 text-xs text-muted-foreground">Create an immutable version, choose it for a service moment, then use the explicit Take flow to publish.</p>
+              </li>
+            </ol>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               <Button onClick={() => void createBlank()} disabled={creating}>Create a blank design</Button>
               <Button variant="outline" onClick={() => setBrowseTemplates(true)} disabled={creating}>Browse scene templates</Button>
