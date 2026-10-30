@@ -5,18 +5,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { PermissionsWorkspace } from "./permissions-workspace"
 
 const disk = vi.hoisted(() => ({ values: new Map<string, unknown>() }))
+const tauri = vi.hoisted(() => ({ invoke: vi.fn(async (command: string, args?: unknown): Promise<unknown> => {
+  void args
+  return command === "approvals_list" ? [] : null
+}) }))
 vi.mock("@tauri-apps/plugin-store", () => ({ load: async () => ({
   get: async (key: string) => disk.values.get(key),
   set: async (key: string, value: unknown) => { disk.values.set(key, value) },
   save: async () => {},
 }) }))
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
+vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
 
 const { createSceneEditApproval, reloadSceneApprovals, useSceneApprovalsStore } = await import("@/stores/scene-approvals-store")
 const { useJoin } = await import("@/stores/join-store")
 const { useSettingsStore } = await import("@/stores/settings-store")
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
+const { reloadApprovalRequests, resetApprovalRequests, useApprovalRequestsStore } = await import("./approval-requests-store")
 
 let root: Root
 let host: HTMLDivElement
@@ -36,6 +41,10 @@ beforeEach(async () => {
   useJoin.setState({ status: "off", me: null, live: null })
   useSettingsStore.setState({ operatorName: "Main desk", remoteDevices: [] })
   useBroadcastStore.setState({ scenes: [], outputs: [], rehearsal: false, rehearsalReturn: null })
+  tauri.invoke.mockClear()
+  tauri.invoke.mockImplementation(async (command: string) => command === "approvals_list" ? [] : null)
+  resetApprovalRequests()
+  await reloadApprovalRequests()
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
 
@@ -87,6 +96,41 @@ describe("Permissions workspace", () => {
     expect(useSceneApprovalsStore.getState().requests).toMatchObject([{ status: "approved", decidedBy: "Main desk" }])
     expect(useBroadcastStore.getState().scenes.map((scene) => scene.id)).toEqual(["remote-scene"])
     expect(useBroadcastStore.getState().outputs).toEqual([])
+    await act(async () => root.unmount())
+  })
+
+  it("decides the exact host request ID without applying a scene or changing outputs", async () => {
+    const request = {
+      id: "host-request-uuid", kind: "scene_save", targetId: "remote-scene", baseRevision: 7,
+      requester: { id: "desk-key", name: "Screens desk" },
+      payload: { scene: { id: "remote-scene", name: "Remote scene", layers: [] } },
+      reason: "Prepare the welcome screen", state: "submitted", createdAt: "2026-10-30T09:00:00Z",
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: null, decidedAt: null, decisionNote: null,
+    }
+    tauri.invoke.mockImplementation(async (command: string, args?: unknown) => {
+      if (command === "approvals_list") return [request]
+      if (command === "approvals_decide") return { ...request, state: (args as { decision: string }).decision === "approve" ? "approved" : "declined" }
+      return null
+    })
+    resetApprovalRequests()
+    await reloadApprovalRequests()
+    const scenesBefore = useBroadcastStore.getState().scenes
+    const outputsBefore = useBroadcastStore.getState().outputs
+    const el = await mount()
+
+    expect(el.textContent).toContain("Approval Requests")
+    expect(el.textContent).toContain("Based on host revision 7")
+    expect(el.textContent).toContain("Approval records authorization; it does not save a scene")
+    expect(el.textContent).toContain("Remote scene")
+    expect(el.textContent).toContain("Proposed composition: 0 visual layers")
+    await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Approve"))!.click())
+
+    expect(tauri.invoke).toHaveBeenCalledWith("approvals_decide", { id: "host-request-uuid", decision: "approve" })
+    expect(tauri.invoke.mock.calls.some(([command]) => command === "approvals_apply")).toBe(false)
+    expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "host-request-uuid", state: "approved" }])
+    expect(useBroadcastStore.getState().scenes).toBe(scenesBefore)
+    expect(useBroadcastStore.getState().outputs).toBe(outputsBefore)
+    expect(useSceneApprovalsStore.getState().requests).toEqual([])
     await act(async () => root.unmount())
   })
 

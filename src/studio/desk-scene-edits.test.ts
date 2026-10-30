@@ -20,6 +20,7 @@ const { useQueueStore } = await import("@/stores/queue-store")
 const { useRouterHealth } = await import("@/lib/cameras")
 const { useJoin } = await import("@/stores/join-store")
 const { reloadSceneApprovals } = await import("@/stores/scene-approvals-store")
+const { resetApprovalRequests, useApprovalRequestsStore } = await import("@/studio/permissions/approval-requests-store")
 
 /** Scenes made and changed from joined desks (#243 SC.16, SC.17): what the host shares and its approval rule. */
 const box = { x: 0, y: 0, w: 100, h: 100 }
@@ -43,6 +44,7 @@ beforeEach(async () => {
   useSceneRequests.setState({ requests: [] })
   useJournalStore.setState({ entries: [] })
   useQueueStore.setState({ items: [], headers: [] })
+  resetApprovalRequests()
   await reloadSceneApprovals()
 })
 
@@ -149,6 +151,30 @@ describe("the approval rule (the default until the owner chooses another)", () =
     await send("off", { request: true })
     expect(useBroadcastStore.getState().scenes.find((s) => s.id === "off")?.name).toBe("off")
     expect(useSceneRequests.getState().requests).toHaveLength(1)
+  })
+
+  it("routes a host-tracked scene request by its authoritative ID without a local duplicate or scene mutation", async () => {
+    const scenesBefore = useBroadcastStore.getState().scenes
+    const outputsBefore = useBroadcastStore.getState().outputs
+
+    await send("on", { request: true, requestId: "host-request-uuid", expiresAt: "2026-10-31T09:00:00Z" })
+
+    expect(useApprovalRequestsStore.getState().requests).toEqual([])
+    expect(useSceneRequests.getState().requests).toEqual([])
+    expect(useNotices.getState().notices).toEqual([])
+    expect(useBroadcastStore.getState().scenes).toBe(scenesBefore)
+    expect(useBroadcastStore.getState().outputs).toBe(outputsBefore)
+  })
+
+  it("keeps a host-tracked delete request visible even when the target scene is not in the local store", async () => {
+    const scenesBefore = useBroadcastStore.getState().scenes
+    const outputsBefore = useBroadcastStore.getState().outputs
+
+    await receiveDeskScene({ id: "scene-not-cached", request: true, requestId: "host-delete-request", by: "Ade screens" }, true)
+
+    expect(useSceneRequests.getState().requests).toEqual([])
+    expect(useBroadcastStore.getState().scenes).toBe(scenesBefore)
+    expect(useBroadcastStore.getState().outputs).toBe(outputsBefore)
   })
 
   it("a waiting change is not put in once the scene changed here", async () => {
