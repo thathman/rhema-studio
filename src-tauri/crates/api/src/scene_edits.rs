@@ -63,7 +63,7 @@ struct CameraFeed {
 /// (`strip`). Pictures, videos and held copies are not among them: they stay on the host.
 const SCENE_FIELDS: &[&str] = &["id", "name", "background", "layers", "fadeMs"];
 const LAYER_FIELDS: &[&str] = &["id", "name", "kind", "shows", "cameraUrl", "cameraFallback", "noSignal", "noSignalName", "clockShows", "until", "countdownTo", "themeId", "color", "text", "fontFamily", "fontSize", "fontWeight", "fontStyle", "textAlign", "lineHeight", "textColor", "underline", "mediaId", "mediaFile", "language", "fadeMs", "box", "crop", "opacity", "visible"];
-const KINDS: &[&str] = &["feed", "color", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo", "text"];
+const KINDS: &[&str] = &["feed", "color", "ellipse", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo", "text"];
 /// What a camera's box may show while the camera is not sending.
 const NO_SIGNALS: &[&str] = &["bars", "static", "words", "none"];
 
@@ -363,6 +363,46 @@ mod tests {
         assert_eq!(extra.as_object().unwrap().keys().collect::<Vec<_>>(), ["background", "id", "layers"]);
         let l = extra["layers"][0].as_object().unwrap();
         assert!(!l.contains_key("onclick") && !l.contains_key("imageUrl") && !l.contains_key("held"), "{l:?}");
+    }
+
+    #[test]
+    fn ellipse_scene_edits_keep_a_hex_fill_and_refuse_invalid_fill_or_kind() {
+        let ellipse = serde_json::json!({
+            "id": "ellipse-scene", "name": "Welcome", "background": "#000000",
+            "layers": [{
+                "id": "ellipse-1", "name": "Ellipse", "kind": "ellipse", "color": "#3157a4",
+                "box": { "x": 20, "y": 30, "w": 40, "h": 35 }, "opacity": 1, "visible": true,
+            }],
+        });
+        assert_eq!(
+            judge(Some(LIVE), Role::Screens, &save(ellipse.clone())),
+            Ok(Some(Verdict::Direct))
+        );
+
+        let mut stripped = ellipse;
+        strip(&mut stripped);
+        assert_eq!(stripped["layers"][0]["kind"], "ellipse");
+        assert_eq!(stripped["layers"][0]["color"], "#3157a4");
+
+        for bad_layer in [
+            serde_json::json!({ "kind": "ellipse", "color": "url(https://example.test/fill)" }),
+            serde_json::json!({ "kind": "ellipses", "color": "#3157a4" }),
+        ] {
+            let scene = serde_json::json!({
+                "id": "bad-ellipse", "background": "#000000",
+                "layers": [{
+                    "id": "ellipse-1", "name": "Ellipse", "box": { "x": 0, "y": 0, "w": 50, "h": 50 },
+                    "opacity": 1, "visible": true,
+                    "kind": bad_layer["kind"].clone(),
+                    "color": bad_layer["color"].clone(),
+                }],
+            });
+            assert_eq!(
+                judge(Some(LIVE), Role::Screens, &save(scene)).unwrap_err().code,
+                "bad-scene",
+                "{bad_layer}"
+            );
+        }
     }
 
     #[test]

@@ -71,7 +71,7 @@ export function scenesOnScreen(s: Parameters<typeof outputsForScreens>[0] = useB
   return new Set(outputsForScreens(s).flatMap((o) => (o.sceneId ? [o.sceneId] : [])))
 }
 
-const KINDS: readonly SceneLayerKind[] = ["feed", "color", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo", "text"]
+const KINDS: readonly SceneLayerKind[] = ["feed", "color", "ellipse", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo", "text"]
 const HEX = /^#[0-9a-f]{6}$/i
 const FONT_FAMILY = /^[\p{L}\p{N}, _-]{1,120}$/u
 const text = (v: unknown, max: number): string | undefined => (typeof v === "string" && v.trim() && v.length <= max ? v.trim() : undefined)
@@ -127,6 +127,7 @@ function deskLayer(raw: unknown, had: SceneLayer | undefined, cameras: Set<strin
     ...(kind === "clock" && isCountdownTo(l.countdownTo) && l.countdownTo.length <= 120 ? { countdownTo: l.countdownTo } : {}),
     ...((kind === "feed" || kind === "clock") && themeId ? { themeId } : {}),
     ...(kind === "color" && typeof l.color === "string" && HEX.test(l.color) ? { color: l.color } : {}),
+    ...(kind === "ellipse" ? { color: typeof l.color === "string" && HEX.test(l.color) ? l.color : "#3157a4" } : {}),
     ...(kind === "text" ? {
       text: text(l.text, 2000) ?? "",
       fontFamily: typeof l.fontFamily === "string" && FONT_FAMILY.test(l.fontFamily.trim()) ? l.fontFamily.trim() : "Arial",

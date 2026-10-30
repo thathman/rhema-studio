@@ -88,6 +88,15 @@ describe("what the host shares with a desk", () => {
     expect(merged.createdAt).toBe(1)
     expect(mergeDeskScene({ name: "no id" }, undefined)).toBeNull()
   })
+
+  it("keeps a desk ellipse's hex fill and replaces an unsafe fill with the default", () => {
+    const raw = {
+      id: "ellipse-scene", name: "Welcome", background: "#000000",
+      layers: [{ id: "oval", name: "Ellipse", kind: "ellipse", color: "#d14c62", box, opacity: 1, visible: true }],
+    }
+    expect(mergeDeskScene(raw, undefined)?.layers[0]).toMatchObject({ kind: "ellipse", color: "#d14c62" })
+    expect(mergeDeskScene({ ...raw, layers: [{ ...raw.layers[0], color: "url(https://example.test/fill)" }] }, undefined)?.layers[0]).toMatchObject({ kind: "ellipse", color: "#3157a4" })
+  })
 })
 
 describe("the approval rule (the default until the owner chooses another)", () => {

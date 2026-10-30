@@ -14,7 +14,7 @@ import { countdownTarget, isCountdownTo, type CountdownTargets } from "@/lib/cou
  * output makes it that output's program.
  */
 
-const KINDS: readonly SceneLayerKind[] = ["feed", "color", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo", "text"]
+const KINDS: readonly SceneLayerKind[] = ["feed", "color", "ellipse", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo", "text"]
 const clamp = (n: unknown, lo: number, hi: number, d: number) => (typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d)
 const TEXT_WEIGHTS = ["400", "500", "600", "700", "800", "900"] as const
 const TEXT_COLOR = /^#[0-9a-f]{6}$/i
@@ -86,13 +86,14 @@ export function captureSceneAppearance(
 let seq = 0
 const newId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `layer-${Date.now()}-${++seq}`)
 
-const LAYER_NAMES: Record<SceneLayerKind, string> = { feed: "Live content", color: "Colour", picture: "Picture", video: "Video", camera: "Camera", clock: "Clock", ticker: "Ticker", lowerThird: "Lower third", logo: "Logo", text: "Static text" }
+const LAYER_NAMES: Record<SceneLayerKind, string> = { feed: "Live content", color: "Colour", ellipse: "Ellipse", picture: "Picture", video: "Video", camera: "Camera", clock: "Clock", ticker: "Ticker", lowerThird: "Lower third", logo: "Logo", text: "Static text" }
 
 /** Where a new layer of a kind goes when nothing says: the ticker along the bottom, the logo in the top-right corner, the rest full frame. */
 export function layerBox(kind: SceneLayerKind): SceneBox {
   if (kind === "ticker") return { x: 0, y: 92, w: 100, h: 8 }
   if (kind === "logo") return { x: 84, y: 4, w: 12, h: 12 }
   if (kind === "text") return { x: 10, y: 36, w: 80, h: 20 }
+  if (kind === "ellipse") return { x: 32, y: 30, w: 36, h: 40 }
   return { ...FULL }
 }
 
@@ -100,6 +101,7 @@ export function newLayer(kind: SceneLayerKind, patch: Partial<SceneLayer> = {}):
   return {
     id: newId(), name: LAYER_NAMES[kind], kind, box: layerBox(kind), opacity: 1, visible: true,
     ...(kind === "color" ? { color: "#101820" } : {}),
+    ...(kind === "ellipse" ? { color: "#3157a4" } : {}),
     ...(kind === "text" ? { text: "Your text", fontFamily: "Geist Variable", fontSize: 72, fontWeight: "600" as const, fontStyle: "normal" as const, textAlign: "center" as const, lineHeight: 1.2, textColor: "#ffffff", underline: false } : {}),
     ...patch,
   }
@@ -245,7 +247,8 @@ export function normalizeScene(raw: unknown): Scene | null {
       textColor: typeof l.textColor === "string" && TEXT_COLOR.test(l.textColor) ? l.textColor : "#ffffff",
       underline: l.underline === true,
     } : {}
-    return [{ ...l, ...staticText, clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
+    const ellipseColor = l.kind === "ellipse" ? (typeof l.color === "string" && TEXT_COLOR.test(l.color) ? l.color : "#3157a4") : undefined
+    return [{ ...l, ...staticText, ...(ellipseColor ? { color: ellipseColor } : {}), clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
   return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0), ...(typeof s.updatedBy === "string" ? { updatedBy: s.updatedBy.trim().slice(0, 60) || null } : s.updatedBy === null ? { updatedBy: null } : {}), ...(typeof s.libraryLookId === "string" && s.libraryLookId ? { libraryLookId: s.libraryLookId } : {}) }
 }
@@ -389,6 +392,7 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
     const base = { id: l.id, kind: l.kind, box: l.box, crop: l.crop, opacity: l.opacity }
     if (l.kind === "feed") return { ...base, ...layerContent(s, output, l) }
     if (l.kind === "color") return { ...base, color: l.color ?? "#000000" }
+    if (l.kind === "ellipse") return { ...base, color: l.color ?? "#3157a4" }
     if (l.kind === "picture") return { ...base, imageUrl: l.imageUrl ?? null, ...(preview && !l.imageUrl ? { label: "Choose a picture" } : {}) }
     // A video plays on each output (a window from the media folder, a browser feed from the host), looped and silent.
     if (l.kind === "video") return { ...base, ...(l.videoUrl ? { videoUrl: l.videoUrl } : {}), ...(l.mediaFile ? { mediaFile: l.mediaFile } : {}), ...(preview ? { label: l.videoUrl ? `${l.name} · video` : "Choose a video" } : {}) }

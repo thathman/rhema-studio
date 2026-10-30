@@ -8,6 +8,7 @@ import {
   createEmptySaraswatiScene,
   getNodeBounds,
   SARASWATI_ROOT_ID,
+  type SaraswatiEllipseNode,
   type SaraswatiGroupNode,
   type SaraswatiImageNode,
   type SaraswatiNode,
@@ -88,6 +89,13 @@ function toNode(layer: SceneLayer): SaraswatiNode {
   if (layer.kind === "picture" && layer.imageUrl) {
     const image: SaraswatiImageNode = { ...basePaint(layer), type: "image", width, height, src: layer.imageUrl, cropX: 0, cropY: 0, clipPath: null }
     return image
+  }
+  if (layer.kind === "ellipse") {
+    const ellipse: SaraswatiEllipseNode = {
+      ...basePaint(layer), type: "ellipse", width, height,
+      fill: { type: "solid", color: layer.color && TEXT_COLOR.test(layer.color) ? layer.color : "#3157a4" }, stroke: null, strokeWidth: 0,
+    }
+    return ellipse
   }
   const fill = layer.kind === "color" ? (layer.color ?? "#000000") : (PLACEHOLDER[layer.kind] ?? "#333333")
   const rect: SaraswatiRectNode = {
@@ -251,6 +259,21 @@ export function designToScene(design: RhemaDesign): { scene: Scene; issues: Desi
       if (node.stroke || node.strokeWidth !== 0 || node.radiusX !== 0 || node.radiusY !== 0 || node.clipPath || (node.clipPathStack?.length ?? 0) > 0) {
         issues.push({ nodeId: node.id, message: "Layer stroke, clipping and corner styles cannot be saved into a Rhema scene yet" })
       }
+    } else if (node.type === "ellipse") {
+      let compatible = true
+      const refuse = (message: string) => {
+        issues.push({ nodeId: node.id, message })
+        compatible = false
+      }
+      if (binding.kind !== "ellipse") refuse("An ellipse needs a Rhema ellipse-layer binding")
+      if (node.fill.type !== "solid" || !TEXT_COLOR.test(node.fill.color)) refuse("Ellipse gradients and non-hex colours cannot be used in Rhema scene output yet")
+      if (node.stroke || node.strokeWidth !== 0 || node.clipPath || (node.clipPathStack?.length ?? 0) > 0) {
+        refuse("Ellipse stroke and clipping cannot be saved into a Rhema scene yet")
+      }
+      if (!Number.isFinite(node.scaleX) || !Number.isFinite(node.scaleY) || node.scaleX <= 0 || node.scaleY <= 0) {
+        refuse("Ellipse must keep a positive, finite scale for Rhema scene output")
+      }
+      if (compatible && node.fill.type === "solid") layer.color = node.fill.color
     } else {
       issues.push({ nodeId: node.id, message: "This Avnac shape cannot be saved as a Rhema scene layer yet" })
     }

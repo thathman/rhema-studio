@@ -23,7 +23,7 @@ export const DESIGN_PACK_MAX_BYTES = 2_000_000
 export const DESIGN_PACK_MAX_LOOKS = 160
 const SLUG = /^[a-z0-9][a-z0-9-]{1,63}$/
 const COLOUR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
-const LAYER_KINDS: ReadonlySet<Exclude<SceneLayerKind, "text">> = new Set(["feed", "camera", "color", "picture", "video", "clock", "ticker", "lowerThird", "logo"])
+const LAYER_KINDS: ReadonlySet<Exclude<SceneLayerKind, "text">> = new Set(["feed", "camera", "color", "ellipse", "picture", "video", "clock", "ticker", "lowerThird", "logo"])
 const SOURCES: ReadonlySet<ContentType> = new Set(["bible", "song", "hymn", "slide", "picture"])
 
 /** A recipe's changes to its built-in look; each one optional. */
