@@ -9,7 +9,7 @@ export function canonicalWorkspace(workspace: Workspace): Workspace {
  * The Design page's sections: every design edit lives there. "outputs" was the old Output looks
  * table (#299 UX15-4 retired it); it is kept so old links still work and opens "used-on".
  */
-export type DesignTab = "themes" | "library" | "lower-thirds" | "ticker" | "stage" | "countdown" | "brand" | "used-on" | "outputs"
+export type DesignTab = "themes" | "library" | "my-designs" | "lower-thirds" | "ticker" | "stage" | "countdown" | "brand" | "used-on" | "outputs"
 
 /** The section a Design link really opens: the old Output looks table is now Used on… */
 export function designTabOf(tab: DesignTab): DesignTab {

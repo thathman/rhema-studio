@@ -13,6 +13,7 @@ import { StageDesigner } from "@/studio/design/stage-designer"
 import { CountdownDesigner } from "@/studio/design/countdown-designer"
 import { BrandDesigner } from "@/studio/design/brand-designer"
 import { LookLibraryView } from "@/studio/design/look-library-view"
+import { DesignDocumentsWorkspace } from "@/studio/design/design-documents-workspace"
 import { designUsage } from "@/lib/design-usage"
 import { themeIdsOf } from "@/lib/output-themes"
 import { outputOnAir } from "@/lib/output-on-air"
@@ -23,6 +24,7 @@ import { cn } from "@/lib/utils"
 const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["themes", "Themes", "How Bible, songs, hymns, slides and pictures look"],
   ["library", "Templates", "Ready-made looks and layouts to start from"],
+  ["my-designs", "My Designs", "Church-owned designs, drafts and immutable versions"],
   ["lower-thirds", "Lower thirds", "Names, scripture and lyrics strips"],
   ["ticker", "News ticker", "The crawl along the screen"],
   ["stage", "Stage", "What the team on the platform sees"],
@@ -44,10 +46,11 @@ export function DesignWorkspace() {
 
   // Editing starts on the first theme, as the designer always did (leaving the page settles it: see the shell).
   useEffect(() => {
+    if (tab !== "themes") return
     const s = useBroadcastStore.getState()
     s.setDesignerOpen(true)
     if (!s.draftTheme && s.themes.length > 0) s.startEditing(s.themes[0].id)
-  }, [])
+  }, [tab])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -103,6 +106,7 @@ export function DesignWorkspace() {
         ) : (
           <div className="h-full overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-panel">
             {tab === "library" && <LookLibraryView onOpen={(next, id) => { setStyleId(id); setTab(next) }} />}
+            {tab === "my-designs" && <DesignDocumentsWorkspace />}
             {tab === "lower-thirds" && <LowerThirdDesigner initialId={styleId} />}
             {tab === "ticker" && <TickerDesigner />}
             {tab === "stage" && <StageDesigner />}

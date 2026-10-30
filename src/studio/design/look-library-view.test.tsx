@@ -83,6 +83,7 @@ describe("Design → Templates (#299)", () => {
     const tabs = [...el.querySelectorAll('[role="tab"]')] as HTMLButtonElement[]
     const templates = tabs.find((tab) => tab.textContent?.trim() === "Templates")
     expect(templates?.getAttribute("aria-selected")).toBe("true")
+    expect(tabs.some((tab) => tab.textContent?.trim() === "My Designs")).toBe(true)
     expect(tabs.some((tab) => tab.textContent?.trim() === "Library")).toBe(false)
   })
 

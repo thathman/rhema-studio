@@ -22,6 +22,7 @@ const PLACES: ReadonlyArray<readonly [Workspace, string, React.ReactNode, string
 const DESIGN: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["themes", "Themes", "bible songs hymns slides pictures fonts colours background"],
   ["library", "Design templates", "ready-made looks starter templates built-in classic contemporary high contrast seasonal camera scene"],
+  ["my-designs", "My Designs", "saved local design documents drafts immutable versions Saraswati editor"],
   ["lower-thirds", "Lower thirds", "name title scripture strip lyrics strip band"],
   ["ticker", "News ticker", "crawl announcements scrolling"],
   ["stage", "Stage display", "confidence monitor platform team timer next note band"],
