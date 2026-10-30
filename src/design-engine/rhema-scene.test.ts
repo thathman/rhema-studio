@@ -12,6 +12,7 @@ const sermon: Scene = {
   id: "sermon", name: "Sermon", background: "#101020", fadeMs: 400, createdAt: 1, updatedAt: 2, updatedBy: "Femi",
   layers: [
     layer("bg", "color", { color: "#202040", box: { x: 0, y: 0, w: 100, h: 100 } }),
+    layer("title", "text", { text: "Sunday worship", fontFamily: "Geist Variable", fontSize: 64, fontWeight: "700", fontStyle: "italic", textAlign: "center", lineHeight: 1.15, textColor: "#ffffff", underline: true, box: { x: 10, y: 12, w: 80, h: 20 } }),
     layer("pic", "picture", { mediaId: "m1", imageUrl: "data:image/png;base64,AAAA" }),
     layer("cam", "camera", { cameraUrl: "http://192.168.1.10:8889/pulpit/whep", noSignal: "bars", noSignalName: true }),
     layer("verse", "feed", { shows: ["bible"], themeId: "t1", language: "both", fadeMs: 300, crop: { l: 1, t: 2, r: 3, b: 4 } }),
@@ -32,7 +33,7 @@ describe("Rhema scenes in the Avnac engine", () => {
 
   it("draw in layer order with Rhema's boxes on a 1920×1080 frame", () => {
     const drawn = buildRenderCommands(sceneToDesign(sermon).scene)
-    expect(drawn.map((c) => c.id)).toEqual(["__artboard__", "bg", "pic", "cam", "verse", "clock", "ticker", "lt", "vid"])
+    expect(drawn.map((c) => c.id)).toEqual(["__artboard__", "bg", "title", "pic", "cam", "verse", "clock", "ticker", "lt", "vid"])
     expect(drawn.find((c) => c.id === "cam")).toMatchObject({ x: 192, y: 216, width: 576, height: 432 })
   })
 
@@ -66,6 +67,30 @@ describe("Rhema scenes in the Avnac engine", () => {
     const { scene, issues } = designToScene({ ...design, scene: s })
     expect(scene.layers.map((l) => l.id)).not.toContain("doodle")
     expect(issues).toEqual([{ nodeId: "doodle", message: expect.stringContaining("Doodle") }])
+  })
+
+  it("roundtrips editable literal text and its style into a usable Rhema scene layer", () => {
+    const textOnly: Scene = { ...sermon, layers: [sermon.layers.find((candidate) => candidate.kind === "text")!] }
+    const design = sceneToDesign(textOnly)
+    const node = design.scene.nodes.title
+    expect(node).toMatchObject({ type: "text", text: "Sunday worship", fontFamily: "Geist Variable", fontSize: 64, fontWeight: "700", fontStyle: "italic", textAlign: "center", lineHeight: 1.15, underline: true })
+    const { scene, issues } = designToScene(design)
+    expect(issues).toEqual([])
+    expect(scene.layers[0]).toMatchObject({ kind: "text", text: "Sunday worship", fontFamily: "Geist Variable", fontSize: 64, fontWeight: "700", fontStyle: "italic", textAlign: "center", lineHeight: 1.15, textColor: "#ffffff", underline: true, box: { x: 10, y: 12, w: 80, h: 20 } })
+  })
+
+  it("refuses text with a non-uniform scale that the output renderer cannot reproduce", () => {
+    const textOnly: Scene = { ...sermon, layers: [sermon.layers.find((candidate) => candidate.kind === "text")!] }
+    const design = sceneToDesign(textOnly)
+    const node = design.scene.nodes.title
+    if (node.type !== "text") throw new Error("text")
+    const scene = {
+      ...design.scene,
+      nodes: { ...design.scene.nodes, title: { ...node, scaleX: 1.5 } },
+    }
+    expect(designToScene({ ...design, scene }).issues).toEqual(expect.arrayContaining([
+      { nodeId: "title", message: "Text must keep an even, unflipped scale for Rhema scene output" },
+    ]))
   })
 
   it("carries group visibility to its layers and blocks group opacity or rotation on save", () => {

@@ -107,6 +107,11 @@ export function DesignDocumentEditor({
   }, [editor])
 
   const orderedIds = useMemo(() => layerIds(scene), [scene])
+  // Keep bindings in editor state so Undo/Redo can restore deleted nodes with their Rhema data.
+  // Orphaned bindings are removed only from the document sent to storage.
+  const savedBindings = Object.fromEntries(
+    Object.entries(bindings).filter(([id]) => layerIds(scene).includes(id)),
+  )
   const selectedNode = selectedId ? scene.nodes[selectedId] : undefined
   const selectedRenderable = renderable(selectedNode) ? selectedNode : undefined
   const selectedPaintNode = selectedRenderable && paintNode(selectedRenderable) ? selectedRenderable : undefined
@@ -118,7 +123,7 @@ export function DesignDocumentEditor({
   }).issues, [document.document, scene, bindings, title])
   const dirty = title !== base.title ||
     JSON.stringify(scene) !== JSON.stringify(base.document.scene) ||
-    JSON.stringify(bindings) !== JSON.stringify(base.document.bindings)
+    JSON.stringify(savedBindings) !== JSON.stringify(base.document.bindings)
 
   useEffect(() => {
     onDirtyChange?.(dirty)
@@ -237,6 +242,7 @@ export function DesignDocumentEditor({
       stroke: null,
       strokeWidth: 0,
     }
+    setBindings((current) => ({ ...current, [id]: { id, kind: "text", textBoxHeight: scene.artboard.height * 0.2 } }))
     dispatch({ type: "ADD_NODE", node })
     setSelectedId(id)
   }
@@ -282,7 +288,7 @@ export function DesignDocumentEditor({
     document: {
       ...document.document,
       scene,
-      bindings,
+      bindings: savedBindings,
       meta: { ...document.document.meta, name: title.trim() },
     },
   })
@@ -413,7 +419,11 @@ export function DesignDocumentEditor({
               {selectedRenderable && <>
                 <Button size="icon-xs" variant="ghost" onClick={() => reorder(1)} aria-label="Move layer forward"><ArrowUpIcon /></Button>
                 <Button size="icon-xs" variant="ghost" onClick={() => reorder(-1)} aria-label="Move layer backward"><ArrowDownIcon /></Button>
-                <Button size="icon-xs" variant="ghost" onClick={() => dispatch({ type: "DELETE_NODE", id: selectedRenderable.id })} aria-label="Delete selected layer"><Trash2Icon /></Button>
+                <Button size="icon-xs" variant="ghost" onClick={() => {
+                  const id = selectedRenderable.id
+                  dispatch({ type: "DELETE_NODE", id })
+                  setSelectedId(null)
+                }} aria-label="Delete selected layer"><Trash2Icon /></Button>
               </>}
             </div>
             {selectedRenderable ? (
@@ -438,7 +448,7 @@ export function DesignDocumentEditor({
                 {selectedRenderable.type === "text" && (
                   <div className="space-y-3 border-t border-border pt-3">
                     <label className="flex flex-col gap-1 text-[0.6875rem] font-medium text-muted-foreground">Text content
-                      <textarea aria-label="Text content" value={selectedRenderable.text} onChange={(event) => dispatch({ type: "SET_TEXT_CONTENT", id: selectedRenderable.id, text: event.currentTarget.value })} rows={4} className="min-h-20 resize-y rounded-md border border-input bg-background px-2 py-1.5 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                      <textarea aria-label="Text content" value={selectedRenderable.text} maxLength={2000} onChange={(event) => dispatch({ type: "SET_TEXT_CONTENT", id: selectedRenderable.id, text: event.currentTarget.value })} rows={4} className="min-h-20 resize-y rounded-md border border-input bg-background px-2 py-1.5 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring" />
                     </label>
                     <NumberField label="Font size" min={8} max={400} value={selectedRenderable.fontSize} onCommit={(value) => dispatch({ type: "SET_TEXT_FORMAT", id: selectedRenderable.id, fontSize: value })} />
                     <label className="flex flex-col gap-1 text-[0.6875rem] font-medium text-muted-foreground">Font family

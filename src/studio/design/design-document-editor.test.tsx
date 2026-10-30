@@ -23,6 +23,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { createBlankRhemaDesign } from "@/design-engine/design-document-utils"
 import type { DesignDocument, DesignInput, DesignVersion } from "@/design-engine/design-store"
+import { designToScene } from "@/design-engine/rhema-scene"
 import { DesignDocumentEditor } from "./design-document-editor"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -208,7 +209,7 @@ describe("canonical design editor", () => {
     }).toEqual(liveSnapshot)
   })
 
-  it("saves and versions native Avnac text while keeping its Prepare limitation explicit", async () => {
+  it("saves and versions native Avnac text as a usable private Prepare scene", async () => {
     const documentValue = documentFixture()
     let savedDocument: DesignDocument | null = null
     store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => {
@@ -230,17 +231,64 @@ describe("canonical design editor", () => {
     const textArea = element.querySelector<HTMLTextAreaElement>('[aria-label="Text content"]')!
     await act(async () => setTextAreaValue(textArea, "Welcome to Sunday worship"))
     await act(async () => setValue(element.querySelector<HTMLInputElement>("#design-document-title")!, "Sunday welcome"))
-    expect(element.textContent).toContain("can still be saved and versioned as a native draft")
     await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
     expect(store.saveDraft).toHaveBeenCalledWith("design-1", 4, expect.objectContaining({ title: "Sunday welcome" }))
     const savedInput = store.saveDraft.mock.calls[0]![2] as DesignInput
     const textNode = Object.values(savedInput.document.scene.nodes).find((node) => node.type === "text")
     expect(textNode).toMatchObject({ text: "Welcome to Sunday worship" })
-    expect(element.textContent).toContain("Some Avnac features are not supported by Rhema scene output yet.")
+    expect(savedInput.document.bindings[textNode!.id]).toMatchObject({ kind: "text", textBoxHeight: 216 })
+    expect(designToScene(savedInput.document)).toMatchObject({ issues: [] })
+    expect(designToScene(savedInput.document).scene.layers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "text", text: "Welcome to Sunday worship", box: expect.objectContaining({ h: 20 }) }),
+    ]))
+    expect(element.textContent).not.toContain("cannot be used in Prepare")
+    expect(element.textContent).not.toContain("Some Avnac features are not supported by Rhema scene output yet.")
 
     const createButton = [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Create version"))!
     expect(createButton.disabled, element.textContent).toBe(false)
     await act(async () => createButton.click())
     expect(store.createVersion).toHaveBeenCalledWith("design-1", 5, undefined, "Tolu")
+  })
+
+  it("removes a deleted text node's Rhema binding before saving the draft", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Text")!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Delete selected layer"]')!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const input = store.saveDraft.mock.calls[0]![2] as DesignInput
+    expect(Object.values(input.document.scene.nodes).some((node) => node.type === "text")).toBe(false)
+    expect(Object.keys(input.document.bindings)).toEqual(Object.keys(documentValue.document.bindings))
+  })
+
+  it("undoes a text deletion with its binding intact so the design remains usable", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Text")!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Delete selected layer"]')!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Undo design edit"]')!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const input = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const textNode = Object.values(input.document.scene.nodes).find((node) => node.type === "text")
+    expect(textNode).toBeDefined()
+    expect(input.document.bindings[textNode!.id]).toMatchObject({ kind: "text" })
+    expect(designToScene(input.document).issues).toEqual([])
+    expect(designToScene(input.document).scene.layers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: textNode!.id, kind: "text", text: "Your text" }),
+    ]))
   })
 })

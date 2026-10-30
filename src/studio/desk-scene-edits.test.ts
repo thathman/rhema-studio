@@ -233,6 +233,29 @@ describe("what a desk may put in a scene (security review)", () => {
     expect(merge({ id: "s", layers: [layer({ kind: "script" })] })!.layers).toHaveLength(0)
   })
 
+  it("preserves safe static text and bounds style fields from an authorized scene desk", () => {
+    const saved = merge({ id: "s", background: "#000000", layers: [layer({
+      kind: "text", text: "Welcome to worship", fontFamily: "Geist Variable", fontSize: 68,
+      fontWeight: "700", fontStyle: "italic", textAlign: "center", lineHeight: 1.15,
+      textColor: "#fefefe", underline: true,
+    })] })!
+    expect(saved.layers[0]).toMatchObject({
+      kind: "text", text: "Welcome to worship", fontFamily: "Geist Variable", fontSize: 68,
+      fontWeight: "700", fontStyle: "italic", textAlign: "center", lineHeight: 1.15,
+      textColor: "#fefefe", underline: true,
+    })
+
+    const bounded = merge({ id: "s", background: "#000000", layers: [layer({
+      kind: "text", text: "w".repeat(3000), fontFamily: "Arial; color:red", fontSize: 500,
+      fontWeight: "1000", fontStyle: "oblique", textAlign: "justify", lineHeight: 8,
+      textColor: "red", underline: "yes",
+    })] })!.layers[0]
+    expect(bounded).toMatchObject({
+      kind: "text", text: "", fontFamily: "Arial", fontSize: 400, fontWeight: "600",
+      fontStyle: "normal", textAlign: "center", lineHeight: 3, textColor: "#ffffff", underline: false,
+    })
+  })
+
   it("drops a layer or a name with a huge string", () => {
     const s = merge({ id: "s", name: "n".repeat(10_000), layers: [layer({ id: "x".repeat(5000) }), layer({ id: "ok", name: "y".repeat(100_000), cameraFallback: "z".repeat(10_000) })] })!
     expect(s.name).toBe("Scene")
