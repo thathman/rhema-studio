@@ -66,6 +66,8 @@ fn start_for_current_congregation<T>(
 pub struct RecorderPreflight {
     ok: bool,
     problems: Vec<RecorderProblem>,
+    /// Worth telling the operator; Start still works (`computer_busy`).
+    warnings: Vec<RecorderProblem>,
     width: u32,
     height: u32,
     disk_free_bytes: Option<u64>,
@@ -82,7 +84,7 @@ pub fn recorder_preflight(app: AppHandle, host: State<'_, RecorderHost>, ndi: St
         problems.push(RecorderProblem::new(ProblemCode::OutputWindowMissing, "Open this screen first: Rhema records what its window shows."));
     }
     let (width, height) = frame_size(&ndi, &request);
-    Ok(RecorderPreflight { ok: problems.is_empty(), problems, width, height, disk_free_bytes: rhema_recorder::disk_free(rec.folder()), audio_devices: rhema_recorder::audio::devices() })
+    Ok(RecorderPreflight { ok: problems.is_empty(), problems, warnings: rec.warnings(), width, height, disk_free_bytes: rhema_recorder::disk_free(rec.folder()), audio_devices: rhema_recorder::audio::devices() })
 }
 
 #[tauri::command]

@@ -154,6 +154,15 @@ impl Recorder {
         problems
     }
 
+    /// What may spoil a recording without making it impossible: Start still works. Today: a computer
+    /// so loaded the output window stops drawing and frames arrive late (30 Oct: an emulator at load
+    /// 90 on the Intel Mac gave 9432 late frames of 15784 and a failed close).
+    #[must_use]
+    pub fn warnings(&self) -> Vec<RecorderProblem> {
+        let cores = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+        load_average().and_then(|load| busy(load, cores)).into_iter().collect()
+    }
+
     /// Start recording `req.output_id` at `width`×`height` (what its window will send).
     pub fn start(&self, req: &RecorderStartRequest, width: u32, height: u32) -> Result<RecorderStatus, RecorderProblem> {
         if let Some(p) = self.preflight(req).into_iter().next() {
@@ -746,6 +755,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_saturated_computer_is_a_warning_an_ordinary_one_is_not() {
+        assert_eq!(busy(90.0, 12).map(|p| p.code), Some(ProblemCode::ComputerBusy), "30 Oct: emulator at load 90");
+        assert!(busy(90.0, 12).unwrap().message.contains("load 90 on 12 cores"));
+        assert_eq!(busy(6.0, 12), None, "an ordinary working Mac");
+        assert_eq!(busy(3.0, 0).map(|p| p.code), Some(ProblemCode::ComputerBusy), "zero cores is read as one");
+    }
+
+    #[test]
     fn iso_dates_are_right() {
         assert_eq!(iso_utc(SystemTime::UNIX_EPOCH), "1970-01-01T00:00:00Z");
         assert_eq!(iso_utc(SystemTime::UNIX_EPOCH + Duration::from_secs(951_782_400)), "2000-02-29T00:00:00Z");
@@ -1002,3 +1019,32 @@ mod tests {
         assert!(status.session_active, "Stop still needs to remove this live Session");
     }
 }
+
+/// The 1-minute load average, where the system reports one.
+fn load_average() -> Option<f64> {
+    #[cfg(unix)]
+    {
+        let mut load = [0f64; 3];
+        // SAFETY: getloadavg writes at most the 1 sample asked for into `load`.
+        (unsafe { libc::getloadavg(load.as_mut_ptr(), 1) } == 1).then_some(load[0])
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
+}
+
+/// More than this many runnable threads per core: the recording is likely to suffer.
+// ponytail: one threshold from one bad run (~11/core on the 8-core Intel Mac failed, an idle Mac records cleanly); tune with Apple Silicon and Windows numbers.
+const BUSY_PER_CORE: f64 = 1.5;
+
+fn busy(load: f64, cores: usize) -> Option<RecorderProblem> {
+    let per_core = load / f64::from(u32::try_from(cores.max(1)).unwrap_or(u32::MAX));
+    (per_core > BUSY_PER_CORE).then(|| {
+        RecorderProblem::new(
+            ProblemCode::ComputerBusy,
+            format!("This computer is very busy (load {load:.0} on {cores} cores): the recording may stutter or miss slides. Close other heavy apps before the service."),
+        )
+    })
+}
+

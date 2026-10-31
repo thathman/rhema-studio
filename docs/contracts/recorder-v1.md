@@ -64,7 +64,7 @@ interface RecorderStatus {
 }
 type RecorderProblem =
   | { code: "unsupported_platform" | "output_not_recordable" | "output_window_missing" | "no_frames" | "audio_missing"
-           | "audio_device_lost" | "disk_low" | "disk_full" | "write_failed" | "encoder_failed" | "already_recording"
+           | "audio_device_lost" | "disk_low" | "disk_full" | "write_failed" | "encoder_failed" | "already_recording" | "computer_busy"
            | "not_recording" | "not_allowed" | "frame_size_changed"; message: string }
 interface RecorderMarker { atMs: number; label: string; actor: string; serviceRunId?: string; itemId?: string }
 interface RecordingManifest {           // <folder>/<sessionId>/manifest.json
@@ -79,7 +79,7 @@ interface RecordingManifest {           // <folder>/<sessionId>/manifest.json
 
 | Command | Effect |
 | --- | --- |
-| `recorder_preflight({request})` → `{ ok, problems[], width, height, diskFreeBytes, audioDevices[] }` | No side effects; `width`/`height` = the NDI size if NDI runs on that output, else the profile's |
+| `recorder_preflight({request})` → `{ ok, problems[], warnings[], width, height, diskFreeBytes, audioDevices[] }` | No side effects; `warnings` never block Start (`computer_busy`: 1-min load above 1.5 per core, "close other heavy apps"); `width`/`height` = the NDI size if NDI runs on that output, else the profile's |
 | `recorder_start({request})` → `RecorderStatus` | Main desk only. Refuses a closed output window. `preparing` → `recording`; emits `broadcast:record-tee` to the output's window |
 | `recorder_marker({label, serviceRunId?, itemId?})` → `RecorderMarker` | Main desk only. Appended to the manifest at session time; never sent to OBS |
 | `recorder_stop()` → `RecorderStatus` | Main desk only. `finalizing` → `saved`, or `recoverable`/`failed` with the reason |
