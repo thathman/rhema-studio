@@ -180,6 +180,44 @@ describe("the desks a joined computer gets", () => {
     expect(countdown()).toBe("4:55")
   })
 
+  it("keeps the Viewer order compact until they ask to see the full service", async () => {
+    const rows = ["Welcome", "Worship", "Scripture", "Sermon", "Offering"]
+    const longService: LiveStateV1 = {
+      ...live,
+      event: {
+        mode: "own",
+        currentId: "event-2",
+        targets: rows.map((reference, index) => ({
+          id: `event-${index}`,
+          reference,
+          plannedMinutes: 5,
+          kind: "event" as const,
+        })),
+      },
+      rundown: rows.map((reference, index) => ({
+        id: `event-${index}`,
+        reference,
+        plannedMinutes: 5,
+        kind: "event" as const,
+      })),
+    }
+    const el = await render("viewer", longService)
+    const order = el.querySelector('[aria-label="Running order (read only)"]')!
+    expect(order.textContent).toContain("Scripture")
+    expect(order.textContent).toContain("Sermon")
+    expect(order.textContent).toContain("Offering")
+    expect(order.textContent).not.toContain("Welcome")
+    expect(order.textContent).not.toContain("Worship")
+    const expand = [...order.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "View full service order")!
+    expect(expand.getAttribute("aria-expanded")).toBe("false")
+
+    await act(async () => expand.click())
+    expect(order.textContent).toContain("Welcome")
+    expect(order.textContent).toContain("Worship")
+    expect(order.textContent).toContain("Offering")
+    expect(expand.getAttribute("aria-expanded")).toBe("true")
+  })
+
   it("a paused desk says so, keeps Talk and notices, and its controls wait", async () => {
     const el = await render("bible")
     await act(async () => useJoin.setState({ paused: true }))

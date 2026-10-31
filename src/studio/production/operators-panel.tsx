@@ -384,6 +384,7 @@ function viewerLiveProjection(live: LiveStateV1): ViewerLiveProjection {
 
 /** A View only operator follows the host's service clock and run of show without seeing production state. */
 function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: ViewerLiveProjection; stale: boolean; connected: boolean; now: number; receivedAt: number }) {
+  const [showFullOrder, setShowFullOrder] = useState(false)
   const sinceReceipt = receivedAt > 0 ? Math.max(0, now - receivedAt) : 0
   const lastTrustedElapsed = stale
     ? connected && live.heartbeatMs !== undefined ? Math.min(sinceReceipt, STALE_AFTER_MS) : 0
@@ -391,6 +392,8 @@ function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: ViewerL
   const hostNow = live.at + lastTrustedElapsed
   const events = live.event.targets ?? live.rundown
   const currentIndex = events.findIndex((event) => event.id === live.event.currentId)
+  const compactStart = currentIndex >= 0 ? currentIndex : 0
+  const visibleEvents = showFullOrder ? events : events.slice(compactStart, compactStart + 3)
   const current = currentIndex >= 0 ? events[currentIndex] : null
   const next = currentIndex >= 0 ? events[currentIndex + 1] : live.event.currentId === null ? events[0] : null
   const zone = live.timing?.timeZone
@@ -439,10 +442,24 @@ function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: ViewerL
           <p className="font-semibold">Running order</p>
           <span className="text-muted-foreground">read only</span>
           {stale && <span className="font-semibold text-confidence-mid">may be out of date</span>}
+          {events.length > 3 && (
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              className="ml-auto"
+              aria-expanded={showFullOrder}
+              aria-controls="viewer-running-order"
+              onClick={() => setShowFullOrder((value) => !value)}
+            >
+              {showFullOrder ? "Show fewer items" : "View full service order"}
+            </Button>
+          )}
         </div>
         {events.length === 0 ? <p className="text-muted-foreground">The host has not shared a running order yet.</p> : (
-          <ol className={cn("flex max-h-64 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border", stale && "opacity-60")}>
-            {events.map((event, index) => {
+          <ol id="viewer-running-order" className={cn("flex max-h-64 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border", stale && "opacity-60")}>
+            {visibleEvents.map((event) => {
+              const index = events.indexOf(event)
               const state = event.time?.state
               const status = state === "done" ? "Done" : state === "skipped" ? "Skipped" : event.id === live.event.currentId ? "Now" : index === (currentIndex >= 0 ? currentIndex + 1 : live.event.currentId === null ? 0 : -1) ? "Next" : "Upcoming"
               return <li key={event.id} aria-current={event.id === live.event.currentId ? "step" : undefined} className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 px-2.5 py-2", event.id === live.event.currentId && "bg-primary/10 font-semibold")}>
