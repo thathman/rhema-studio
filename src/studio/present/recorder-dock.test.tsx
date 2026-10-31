@@ -100,6 +100,7 @@ const recordingStatus = {
 const preflight = {
   ok: true,
   problems: [],
+  warnings: [],
   width: 1280,
   height: 720,
   diskFreeBytes: 5_000_000_000,
@@ -255,12 +256,81 @@ describe("Live's Rhema recording dock", () => {
       isLive: true,
       liveVerse: { reference: "Program item" },
     })
-    expect(native.invoke.mock.calls.map(([command]) => command)).toEqual([
+    expect(
+      native.invoke.mock.calls
+        .map(([command]) => command)
+        .filter((command) => command.startsWith("recorder_"))
+    ).toEqual([
       "recorder_status",
       "recorder_preflight",
       "recorder_preflight",
       "recorder_start",
     ])
+  })
+
+  it("shows a computer-load warning without blocking recording", async () => {
+    const warning = {
+      code: "computer_busy",
+      message:
+        "This computer is very busy: the recording may stutter or miss slides.",
+    }
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "recorder_status") return idleStatus
+      if (command === "recorder_preflight")
+        return { ...preflight, warnings: [warning] }
+      if (command === "recorder_start") return recordingStatus
+      return null
+    })
+
+    await renderDock()
+    await act(async () =>
+      change(
+        host.querySelector<HTMLSelectElement>(
+          '[aria-label="Congregation output"]'
+        )!,
+        "overflow"
+      )
+    )
+    await act(async () =>
+      host
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Check recording setup"]'
+        )!
+        .click()
+    )
+    await act(async () =>
+      change(
+        host.querySelector<HTMLSelectElement>(
+          '[aria-label="Approved mixer input"]'
+        )!,
+        "Midas USB"
+      )
+    )
+    await act(async () =>
+      host
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Check recording setup"]'
+        )!
+        .click()
+    )
+
+    expect(host.textContent).toContain(warning.message)
+    const warningList = host.querySelector(
+      '[aria-label="Recording setup warnings"]'
+    )
+    expect(warningList).not.toBeNull()
+    expect(warningList?.getAttribute("aria-live")).toBe("polite")
+    const start = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="Start Rhema recording"]'
+    )!
+    expect(start.disabled).toBe(false)
+    await act(async () => start.click())
+    expect(native.invoke).toHaveBeenCalledWith(
+      "recorder_start",
+      expect.objectContaining({
+        request: expect.objectContaining({ outputId: "overflow" }),
+      })
+    )
   })
 
   it("requires explicit consent before starting without an audio device", async () => {

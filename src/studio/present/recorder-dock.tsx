@@ -54,6 +54,7 @@ interface RecorderStatus {
 interface RecorderPreflight {
   ok: boolean
   problems: RecorderProblem[]
+  warnings: RecorderProblem[]
   width: number
   height: number
   diskFreeBytes: number | null
@@ -653,6 +654,19 @@ export function RecorderDock() {
                       . Encoder startup and audio capture are confirmed only
                       after Start; watch the recorder status.
                     </p>
+                  )}
+                  {preflight.warnings.length > 0 && (
+                    <ul
+                      aria-label="Recording setup warnings"
+                      aria-live="polite"
+                      className="mt-2 list-inside list-disc text-amber-800"
+                    >
+                      {preflight.warnings.map((warning, index) => (
+                        <li key={`${warning.code}-${index}`}>
+                          {warning.message}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               )}
