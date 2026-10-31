@@ -7,9 +7,6 @@ on:
     paths:
       - src-tauri/crates/recorder/**
       - .github/workflows/recorder-windows.yml
-  push:
-    branches:
-      - claude/c1-windows-recorder
   workflow_dispatch:
 
 permissions:

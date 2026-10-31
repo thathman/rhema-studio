@@ -294,7 +294,6 @@ pub fn probe(path: &Path) -> Probe {
                     Ok(()) => break,
                     Err(e) => {
                         log::warn!("recorder probe: {e}");
-                        eprintln!("recorder probe: reading stopped: {e}");
                         break;
                     }
                 }

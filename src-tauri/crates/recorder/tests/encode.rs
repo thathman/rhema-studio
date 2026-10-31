@@ -54,21 +54,6 @@ fn record(path: &std::path::Path, secs: u32, finish: bool) {
     }
 }
 
-/// The file's top-level MP4 boxes, as (name, size), to show what reached the disk.
-fn boxes(path: &std::path::Path) -> Vec<(String, u64)> {
-    let data = std::fs::read(path).unwrap();
-    let (mut at, mut out) = (0usize, Vec::new());
-    while at + 8 <= data.len() {
-        let size = u64::from(u32::from_be_bytes(data[at..at + 4].try_into().unwrap()));
-        out.push((String::from_utf8_lossy(&data[at + 4..at + 8]).into_owned(), size));
-        if size < 8 {
-            break;
-        }
-        at += size as usize;
-    }
-    out
-}
-
 /// One encoder at a time, as in a real session.
 static ONE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -101,7 +86,6 @@ fn a_recording_cut_off_by_a_crash_still_plays_its_fragments() {
         .unwrap();
     assert!(!status.success(), "the child must have crashed");
     let p = probe(&path);
-    eprintln!("cut-off file: {:?}", boxes(&path));
     assert_eq!(p.video_tracks, 1, "{p:?}");
     // Fragments are flushed every 2 s: at least the first two fragments survive a crash at 5 s.
     assert!(p.duration_s >= 2.0, "only {p:?} survived");
