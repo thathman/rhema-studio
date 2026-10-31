@@ -9,14 +9,14 @@ export function canonicalWorkspace(workspace: Workspace): Workspace {
  * The Design page's sections: every design edit lives there. "outputs" was the old Output looks
  * table (#299 UX15-4 retired it); it is kept so old links still work and opens "used-on".
  */
-export type DesignTab = "themes" | "library" | "lower-thirds" | "ticker" | "stage" | "countdown" | "brand" | "used-on" | "outputs"
+export type DesignTab = "themes" | "library" | "my-designs" | "lower-thirds" | "ticker" | "stage" | "countdown" | "brand" | "used-on" | "outputs"
 
 /** The section a Design link really opens: the old Output looks table is now Used on… */
 export function designTabOf(tab: DesignTab): DesignTab {
   return tab === "outputs" ? "used-on" : tab
 }
 export type PresentView = "standard" | "production"
-export type LibrarySection = "bible" | "songs" | "hymns" | "slides" | "media" | "files"
+export type LibrarySection = "bible" | "songs" | "hymns" | "slides" | "designs" | "media" | "files"
 
 /** In-memory return path for customizing a copied Design from a Prepare event. Never persisted as a service preference. */
 export interface PrepareDesignReturnContext {
@@ -104,6 +104,9 @@ interface ShellState extends ShellPrefs {
   /** Ask the shell to go to a workspace (it runs the same guards as the sidebar). */
   goRequest: Workspace | null
   goTo: (workspace: Workspace) => void
+  /** Ask the shell to open a saved service in Prepare after its navigation guards pass. */
+  prepareProgramRequest: string | null
+  openPrepareProgram: (programId: string) => void
   /** Prepare's New service form, also opened from Home. */
   newServiceOpen: boolean
   setNewServiceOpen: (open: boolean) => void
@@ -156,7 +159,7 @@ export const useShellStore = create<ShellState>((set) => ({
   ...readShellPrefs(storage),
   libraryVisitId: 0,
   outputsDialogOpen: false,
-  designTab: "themes",
+  designTab: "my-designs",
   setDesignTab: (tab) => set({ designTab: designTabOf(tab) }),
   designRequest: null,
   openDesign: (tab) => set({ designRequest: designTabOf(tab) }),
@@ -164,6 +167,8 @@ export const useShellStore = create<ShellState>((set) => ({
   openDeskMenu: () => set((s) => ({ deskMenuRequest: s.deskMenuRequest + 1 })),
   goRequest: null,
   goTo: (workspace) => set({ goRequest: canonicalWorkspace(workspace) }),
+  prepareProgramRequest: null,
+  openPrepareProgram: (programId) => set({ prepareProgramRequest: programId }),
   newServiceOpen: false,
   setNewServiceOpen: (newServiceOpen) => set({ newServiceOpen }),
   searchOpen: false,

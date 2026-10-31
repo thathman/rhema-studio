@@ -21,11 +21,12 @@ const sent = (label: string) => emitTo.mock.calls.filter((c) => c[0] === label).
 /** A drawing context that records every call (and answers measureText). */
 function recorder() {
   const calls: { m: string; a: unknown[] }[] = []
+  const assignments: { m: string; v: unknown }[] = []
   const ctx = new Proxy({} as Record<string, unknown>, {
     get: (_t, k) => (k === "measureText" ? () => ({ width: 100 }) : k === "canvas" ? { width: 1920, height: 1080 } : (...a: unknown[]) => { calls.push({ m: String(k), a }) }),
-    set: () => true,
+    set: (_t, k, v) => { assignments.push({ m: String(k), v }); return true },
   }) as unknown as CanvasRenderingContext2D
-  return { ctx, calls, of: (m: string) => calls.filter((c) => c.m === m).map((c) => c.a) }
+  return { ctx, calls, assignments, of: (m: string) => calls.filter((c) => c.m === m).map((c) => c.a) }
 }
 
 const ticker: Ticker = { items: ["Youth meeting Friday"], style: DEFAULT_TICKER_STYLE, startedAt: 1_000 }
@@ -56,12 +57,29 @@ describe("ticker, lower-third and logo layers (#243)", () => {
     }
     const back = JSON.parse(JSON.stringify(normalizeScene(JSON.parse(JSON.stringify(old)))))
     expect(back).toEqual(old)
-    const withNew = normalizeScene({ ...old, layers: [newLayer("ticker"), newLayer("lowerThird"), newLayer("logo"), { id: "x", kind: "hologram" }] })!
+    const withNew = normalizeScene({ ...old, layers: [newLayer("ticker"), newLayer("lowerThird"), newLayer("logo"), newLayer("ellipse"), { id: "x", kind: "hologram" }] })!
     expect(withNew.layers.map((l) => [l.kind, l.box])).toEqual([
       ["ticker", { x: 0, y: 92, w: 100, h: 8 }],
       ["lowerThird", { x: 0, y: 0, w: 100, h: 100 }],
       ["logo", { x: 84, y: 4, w: 12, h: 12 }],
+      ["ellipse", { x: 32, y: 30, w: 36, h: 40 }],
     ])
+    expect(withNew.layers.at(-1)).toMatchObject({ kind: "ellipse", color: "#3157a4" })
+  })
+
+  it("carries an ellipse through the scene frame and paints its solid fill inside its box", () => {
+    const ellipse = newLayer("ellipse", { color: "#d14c62", opacity: 0.65 })
+    const scene = newScene("Ellipse", undefined)
+    scene.layers = [ellipse]
+    const live = { isLive: false, liveVerse: null, sources: {}, themes: useBroadcastStore.getState().themes }
+    const frame = sceneFrame(live, { themeId: themes[0].id }, scene)
+    expect(frame.layers[0]).toMatchObject({ kind: "ellipse", color: "#d14c62", box: ellipse.box, opacity: 0.65 })
+
+    const r = recorder()
+    drawScene(r.ctx, 1920, 1080, frame, noImages)
+    expect(r.of("ellipse")).toEqual([[960, 540, 345.6, 216, 0, 0, Math.PI * 2]])
+    expect(r.of("fill")).toHaveLength(1)
+    expect(r.assignments).toContainEqual({ m: "globalAlpha", v: 0.65 })
   })
 
   it("the ticker draws as a band filling its box, moving at its whole-frame speed", () => {

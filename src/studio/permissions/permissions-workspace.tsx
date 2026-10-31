@@ -10,12 +10,14 @@ import { useNotices } from "@/stores/notices-store"
 import { useSceneApprovalsStore, hydrateSceneApprovals, reloadSceneApprovals, type SceneEditApproval } from "@/stores/scene-approvals-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { ApprovalRequestsPanel } from "./approval-requests-panel"
 
 const dateWords = (at: number) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
 
 /** Host-owned access controls and durable scene approvals. Joined desks can inspect, never decide. */
 export function PermissionsWorkspace() {
   const joinStatus = useJoin((s) => s.status)
+  const joinedMe = useJoin((s) => s.me)
   const requests = useSceneApprovalsStore((s) => s.requests)
   const hydrated = useSceneApprovalsStore((s) => s.hydrated)
   const loadError = useSceneApprovalsStore((s) => s.error)
@@ -23,8 +25,10 @@ export function PermissionsWorkspace() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const congregationOutputs = outputs.filter((output) => (output.role ?? "congregation") === "congregation")
   const [busy, setBusy] = useState<string | null>(null)
+  const [busyRecorderGrant, setBusyRecorderGrant] = useState<string | null>(null)
   const [reloading, setReloading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [recorderGrantErrors, setRecorderGrantErrors] = useState<Record<string, string>>({})
   const isHost = joinStatus === "off"
   const pending = requests.filter((request) => request.status === "pending" || request.status === "needs-review")
   const ordered = [...requests].sort((a, b) => b.at - a.at)
@@ -54,6 +58,20 @@ export function PermissionsWorkspace() {
     }
   }
 
+  const setRecorderGrant = async (hash: string, enabled: boolean) => {
+    setBusyRecorderGrant(hash)
+    setRecorderGrantErrors((current) => ({ ...current, [hash]: "" }))
+    try {
+      const applied = await useSettingsStore.getState().setRemoteDeviceRecorderGrant(hash, enabled)
+      const savedGrant = useSettingsStore.getState().remoteDevices.find((device) => device.hash === hash)?.record === true
+      if (!applied && savedGrant !== enabled) throw new Error("The host did not confirm the Recorder access change. The saved grant was left unchanged.")
+    } catch (error) {
+      setRecorderGrantErrors((current) => ({ ...current, [hash]: error instanceof Error ? error.message : String(error) }))
+    } finally {
+      setBusyRecorderGrant(null)
+    }
+  }
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-8 pt-6 pb-16 max-[1200px]:px-5">
@@ -67,16 +85,18 @@ export function PermissionsWorkspace() {
 
         {!isHost && <p role="status" className="rounded-md border border-border bg-muted/40 p-3 text-sm">This joined desk is read-only for approvals and device access. Ask the main host to make changes.</p>}
 
+        <ApprovalRequestsPanel />
+
         <section aria-labelledby="scene-approvals-title" className="rounded-lg border border-border bg-card shadow-panel">
           <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
             <ShieldCheckIcon aria-hidden className="size-4 text-muted-foreground" />
-            <div className="min-w-0 flex-1"><h2 id="scene-approvals-title" className="font-semibold">Scene change requests</h2><p className="text-xs text-muted-foreground">Saved on this host, including after a restart. Accept never takes a scene live.</p></div>
+            <div className="min-w-0 flex-1"><h2 id="scene-approvals-title" className="font-semibold">Legacy local scene requests</h2><p className="text-xs text-muted-foreground">Compatibility requests without a host request ID live in this computer’s local ledger. Accept saves locally and never takes a scene live; new host-tagged requests appear above.</p></div>
             <Badge variant={pending.length ? "amber" : "neutral"}>{pending.length} to review</Badge>
             {loadError && <Button size="sm" variant="outline" disabled={reloading} onClick={() => { setReloading(true); void reloadSceneApprovals().catch(() => {}).finally(() => setReloading(false)) }}><RefreshCwIcon /> Try again</Button>}
           </header>
           <div className="p-4">
-            {loadError && <p role="alert" className="mb-3 flex items-start gap-2 text-sm text-destructive"><CircleAlertIcon className="mt-0.5 size-4 shrink-0" />Approval history could not be loaded: {loadError}</p>}
-            {!hydrated && !loadError ? <p role="status" className="text-sm text-muted-foreground">Loading saved requests…</p> : ordered.length === 0 ? <p className="text-sm text-muted-foreground">No saved scene change requests.</p> : (
+            {loadError && <p role="alert" className="mb-3 flex items-start gap-2 text-sm text-destructive"><CircleAlertIcon className="mt-0.5 size-4 shrink-0" />Local request history could not be loaded: {loadError}</p>}
+            {!hydrated && !loadError ? <p role="status" className="text-sm text-muted-foreground">Loading saved requests…</p> : ordered.length === 0 ? <p className="text-sm text-muted-foreground">No legacy local scene requests.</p> : (
               <ul className="divide-y divide-border">
                 {ordered.map((request) => {
                   const status = request.status === "needs-review" ? "Needs a fresh request" : request.status[0].toUpperCase() + request.status.slice(1)
@@ -101,7 +121,7 @@ export function PermissionsWorkspace() {
           </div>
         </section>
 
-        <section aria-labelledby="paired-access-title" className="rounded-lg border border-border bg-card shadow-panel">
+        {isHost ? <section aria-labelledby="paired-access-title" className="rounded-lg border border-border bg-card shadow-panel">
           <header className="flex items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
             <KeyRoundIcon aria-hidden className="size-4 text-muted-foreground" />
             <div><h2 id="paired-access-title" className="font-semibold">Paired device access</h2><p className="text-xs text-muted-foreground">Saved pairing records. A device is shown as paired; this list does not claim that it is online now. Individual Screens Takes remain the default. Group Take needs its own host grant and an exact target review on the desk.</p></div>
@@ -114,6 +134,21 @@ export function PermissionsWorkspace() {
                   <label className="flex items-center gap-2 text-xs"><span>Role</span><select aria-label={`Role for ${device.name}`} disabled={!isHost} value={device.role ?? "viewer"} onChange={(event) => { const role = asRemoteRole(event.target.value); if (role) void useSettingsStore.getState().setRemoteDeviceRole(device.hash, role) }} className="h-8 max-w-48 rounded-md border border-border bg-background px-2">
                     {REMOTE_ROLES.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
                   </select></label>
+                  <fieldset className="w-full rounded-md border border-border p-3">
+                    <legend className="px-1 text-xs font-semibold">Separate Rhema Recorder grant</legend>
+                    <p className="mb-2 text-xs text-muted-foreground">Allows this device to start or stop Rhema-native recording and add markers. This is independent of its role and does not grant OBS recording access.</p>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        aria-label={`Rhema Recorder access for ${device.name}`}
+                        disabled={!isHost || busyRecorderGrant === device.hash}
+                        checked={device.record === true}
+                        onChange={(event) => void setRecorderGrant(device.hash, event.target.checked)}
+                      />
+                      <span>Allow Rhema recording controls</span>
+                    </label>
+                    {recorderGrantErrors[device.hash] && <p role="alert" className="mt-2 text-xs text-destructive">{recorderGrantErrors[device.hash]}</p>}
+                  </fieldset>
                   {device.role === "screens" && <fieldset className="w-full rounded-md border border-border p-3">
                     <legend className="px-1 text-xs font-semibold">Individual scene Take outputs</legend>
                     {device.outputScope === undefined
@@ -175,6 +210,19 @@ export function PermissionsWorkspace() {
             </details>
           </div>
         </section>
+        : <section aria-labelledby="your-access-title" className="rounded-lg border border-border bg-card shadow-panel">
+          <header className="flex items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
+            <ShieldCheckIcon aria-hidden className="size-4 text-muted-foreground" />
+            <div><h2 id="your-access-title" className="font-semibold">Your access</h2><p className="text-xs text-muted-foreground">This view shows only the access the host assigned to this desk. Other paired-device names and grants are private to the main host.</p></div>
+          </header>
+          <dl className="grid gap-3 p-4 sm:grid-cols-2">
+            <div><dt className="text-xs font-semibold text-muted-foreground">This desk</dt><dd className="mt-1 text-sm">{joinedMe?.name ?? "Waiting for host confirmation"}</dd></div>
+            <div><dt className="text-xs font-semibold text-muted-foreground">Role</dt><dd className="mt-1 text-sm">{joinedMe ? roleLabel(joinedMe.role) : "Not confirmed by the host"}</dd></div>
+            <div><dt className="text-xs font-semibold text-muted-foreground">Individual congregation outputs</dt><dd className="mt-1 text-sm">{joinedMe?.outputScope === undefined ? "Not shared in this view" : joinedMe.outputScope.length === 0 ? "None assigned" : `${joinedMe.outputScope.length} assigned`}</dd></div>
+            <div><dt className="text-xs font-semibold text-muted-foreground">Group Take outputs</dt><dd className="mt-1 text-sm">{joinedMe?.groupTakeScope === undefined ? "Not shared in this view" : joinedMe.groupTakeScope.length === 0 ? "None assigned" : `${joinedMe.groupTakeScope.length} assigned`}</dd></div>
+            <div className="sm:col-span-2"><dt className="text-xs font-semibold text-muted-foreground">Rhema Recorder</dt><dd className="mt-1 text-sm text-muted-foreground">The Recorder grant is separate from your role and is managed by the main host. This joined view does not expose the host’s paired-device list.</dd></div>
+          </dl>
+        </section>}
       </div>
     </div>
   )

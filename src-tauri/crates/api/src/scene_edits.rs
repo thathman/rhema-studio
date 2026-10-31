@@ -62,8 +62,8 @@ struct CameraFeed {
 /// The fields a desk may send for a scene and for each of its layers; anything else is dropped
 /// (`strip`). Pictures, videos and held copies are not among them: they stay on the host.
 const SCENE_FIELDS: &[&str] = &["id", "name", "background", "layers", "fadeMs"];
-const LAYER_FIELDS: &[&str] = &["id", "name", "kind", "shows", "cameraUrl", "cameraFallback", "noSignal", "noSignalName", "clockShows", "until", "countdownTo", "themeId", "color", "mediaId", "mediaFile", "language", "fadeMs", "box", "crop", "opacity", "visible"];
-const KINDS: &[&str] = &["feed", "color", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo"];
+const LAYER_FIELDS: &[&str] = &["id", "name", "kind", "shows", "cameraUrl", "cameraFallback", "noSignal", "noSignalName", "clockShows", "until", "countdownTo", "themeId", "color", "text", "fontFamily", "fontSize", "fontWeight", "fontStyle", "textAlign", "lineHeight", "textColor", "underline", "mediaId", "mediaFile", "language", "fadeMs", "box", "crop", "opacity", "visible"];
+const KINDS: &[&str] = &["feed", "color", "ellipse", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo", "text"];
 /// What a camera's box may show while the camera is not sending.
 const NO_SIGNALS: &[&str] = &["bars", "static", "words", "none"];
 
@@ -89,8 +89,14 @@ fn longest(field: &str) -> usize {
         "id" | "themeId" | "mediaId" => 100,
         "name" => 80,
         "cameraUrl" => 300,
+        "fontFamily" => 120,
+        "text" => 2000,
         _ => 120,
     }
+}
+
+fn safe_font_family(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || (c.is_whitespace() && !c.is_control()) || matches!(c, ',' | '_' | '-'))
 }
 
 /// Why a desk's scene is not one the host can use: a background that is not transparent or one
@@ -122,10 +128,32 @@ fn unsafe_scene(scene: &serde_json::Value, current: Option<&serde_json::Value>, 
                 ("shows", serde_json::Value::Array(a)) if a.len() <= 10 && a.iter().all(|x| x.as_str().is_some_and(|x| x.len() <= 20)) => {}
                 ("shows", _) => return Some("A layer follows at most 10 sources".into()),
                 ("color", v) if !v.as_str().is_some_and(hex) => return Some("A colour is #rrggbb".into()),
-                ("opacity" | "fadeMs" | "visible" | "color" | "noSignal" | "noSignalName", _) => {}
+                ("textColor", v) if !v.as_str().is_some_and(hex) => return Some("Static text colour is #rrggbb".into()),
+                ("fontSize", v) if v.as_f64().is_none_or(|n| !(8.0..=400.0).contains(&n)) => return Some("Static text size is between 8 and 400 px".into()),
+                ("lineHeight", v) if v.as_f64().is_none_or(|n| !(0.5..=3.0).contains(&n)) => return Some("Static text line height is between 0.5 and 3".into()),
+                ("fontWeight", v) if !v.as_str().is_some_and(|weight| ["400", "500", "600", "700", "800", "900"].contains(&weight)) => return Some("Static text weight is unsupported".into()),
+                ("fontStyle", v) if !v.as_str().is_some_and(|style| ["normal", "italic"].contains(&style)) => return Some("Static text style is normal or italic".into()),
+                ("textAlign", v) if !v.as_str().is_some_and(|align| ["left", "center", "right"].contains(&align)) => return Some("Static text alignment is left, center or right".into()),
+                ("fontFamily", serde_json::Value::String(family)) if !safe_font_family(family) => return Some("Static text font family contains unsupported characters".into()),
+                ("underline", v) if !v.is_boolean() => return Some("Static text underline is true or false".into()),
+                ("opacity" | "fadeMs" | "visible" | "color" | "textColor" | "fontSize" | "lineHeight" | "fontWeight" | "fontStyle" | "textAlign" | "underline" | "noSignal" | "noSignalName", _) => {}
                 (field, serde_json::Value::String(t)) if t.chars().count() > longest(field) => return Some(format!("A layer's {field} is at most {} characters", longest(field))),
                 (_, serde_json::Value::String(_)) => {}
                 (field, _) => return Some(format!("A layer's {field} is words")),
+            }
+        }
+        if o.get("kind").and_then(serde_json::Value::as_str) == Some("text") {
+            let valid = o.get("text").and_then(serde_json::Value::as_str).is_some_and(|text| text.chars().count() <= 2000)
+                && o.get("fontFamily").and_then(serde_json::Value::as_str).is_some_and(safe_font_family)
+                && o.get("fontSize").and_then(serde_json::Value::as_f64).is_some_and(|n| (8.0..=400.0).contains(&n))
+                && o.get("fontWeight").and_then(serde_json::Value::as_str).is_some_and(|weight| ["400", "500", "600", "700", "800", "900"].contains(&weight))
+                && o.get("fontStyle").and_then(serde_json::Value::as_str).is_some_and(|style| ["normal", "italic"].contains(&style))
+                && o.get("textAlign").and_then(serde_json::Value::as_str).is_some_and(|align| ["left", "center", "right"].contains(&align))
+                && o.get("lineHeight").and_then(serde_json::Value::as_f64).is_some_and(|n| (0.5..=3.0).contains(&n))
+                && o.get("textColor").and_then(serde_json::Value::as_str).is_some_and(hex)
+                && o.get("underline").is_some_and(serde_json::Value::is_boolean);
+            if !valid {
+                return Some("A static text layer needs valid text, font, alignment and colour settings".into());
             }
         }
         if let Some(url) = o.get("cameraUrl").and_then(serde_json::Value::as_str) {
@@ -158,6 +186,14 @@ fn on_screen(scene: &serde_json::Value) -> bool {
 fn not_cameras(scene: &serde_json::Value) -> (Option<&serde_json::Value>, Option<&serde_json::Value>, Option<&serde_json::Value>, Vec<&serde_json::Value>) {
     let layers = scene.get("layers").and_then(serde_json::Value::as_array).map(|l| l.iter().filter(|x| x.get("kind").and_then(serde_json::Value::as_str) != Some("camera")).collect()).unwrap_or_default();
     (scene.get("name"), scene.get("background"), scene.get("fadeMs"), layers)
+}
+
+/// Is this scene on a real screen now? `None` when the host has not shared its scenes, so a caller
+/// has nothing to judge by.
+#[must_use]
+pub fn scene_on_screen(live: Option<&str>, id: &str) -> Option<bool> {
+    let host = serde_json::from_str::<HostScenes>(live?).ok()?;
+    Some(host.scenes.iter().find(|s| s.get("id").and_then(serde_json::Value::as_str) == Some(id)).is_some_and(on_screen))
 }
 
 /// Check a scene command from a desk with `role` against the host's Live State (`live`). Not a
@@ -335,5 +371,86 @@ mod tests {
         assert_eq!(extra.as_object().unwrap().keys().collect::<Vec<_>>(), ["background", "id", "layers"]);
         let l = extra["layers"][0].as_object().unwrap();
         assert!(!l.contains_key("onclick") && !l.contains_key("imageUrl") && !l.contains_key("held"), "{l:?}");
+    }
+
+    #[test]
+    fn ellipse_scene_edits_keep_a_hex_fill_and_refuse_invalid_fill_or_kind() {
+        let ellipse = serde_json::json!({
+            "id": "ellipse-scene", "name": "Welcome", "background": "#000000",
+            "layers": [{
+                "id": "ellipse-1", "name": "Ellipse", "kind": "ellipse", "color": "#3157a4",
+                "box": { "x": 20, "y": 30, "w": 40, "h": 35 }, "opacity": 1, "visible": true,
+            }],
+        });
+        assert_eq!(
+            judge(Some(LIVE), Role::Screens, &save(ellipse.clone())),
+            Ok(Some(Verdict::Direct))
+        );
+
+        let mut stripped = ellipse;
+        strip(&mut stripped);
+        assert_eq!(stripped["layers"][0]["kind"], "ellipse");
+        assert_eq!(stripped["layers"][0]["color"], "#3157a4");
+
+        for bad_layer in [
+            serde_json::json!({ "kind": "ellipse", "color": "url(https://example.test/fill)" }),
+            serde_json::json!({ "kind": "ellipses", "color": "#3157a4" }),
+        ] {
+            let scene = serde_json::json!({
+                "id": "bad-ellipse", "background": "#000000",
+                "layers": [{
+                    "id": "ellipse-1", "name": "Ellipse", "box": { "x": 0, "y": 0, "w": 50, "h": 50 },
+                    "opacity": 1, "visible": true,
+                    "kind": bad_layer["kind"].clone(),
+                    "color": bad_layer["color"].clone(),
+                }],
+            });
+            assert_eq!(
+                judge(Some(LIVE), Role::Screens, &save(scene)).unwrap_err().code,
+                "bad-scene",
+                "{bad_layer}"
+            );
+        }
+    }
+
+    #[test]
+    fn static_text_is_validated_preserved_and_only_saved_by_screens_roles() {
+        let text_layer = serde_json::json!({
+            "id": "welcome", "name": "Welcome", "kind": "text",
+            "text": "Welcome to worship", "fontFamily": "Geist Variable", "fontSize": 64,
+            "fontWeight": "700", "fontStyle": "italic", "textAlign": "center",
+            "lineHeight": 1.15, "textColor": "#fefefe", "underline": true,
+            "box": { "x": 10, "y": 20, "w": 80, "h": 35 }, "opacity": 1, "visible": true,
+        });
+        let new_scene = serde_json::json!({ "id": "text-scene", "name": "Welcome", "background": "#000000", "layers": [text_layer] });
+        assert_eq!(judge(Some(LIVE), Role::Screens, &save(new_scene.clone())), Ok(Some(Verdict::Direct)));
+
+        let mut with_unknown = new_scene.clone();
+        with_unknown["layers"][0]["onclick"] = "alert(1)".into();
+        strip(&mut with_unknown);
+        assert!(with_unknown["layers"][0].get("onclick").is_none());
+        assert_eq!(with_unknown["layers"][0]["text"], "Welcome to worship");
+        assert_eq!(with_unknown["layers"][0]["fontFamily"], "Geist Variable");
+        assert_eq!(with_unknown["layers"][0]["textColor"], "#fefefe");
+
+        let mut text_on_existing_scene = scene_in(LIVE, "off");
+        text_on_existing_scene["layers"].as_array_mut().unwrap().push(text_layer);
+        let denied = judge(Some(LIVE), Role::Camera, &save(text_on_existing_scene)).unwrap_err();
+        assert_eq!((denied.status, denied.code), (403, "role"));
+
+        for bad_text in [
+            serde_json::json!({ "fontFamily": "Arial; color:red" }),
+            serde_json::json!({ "fontSize": 900 }),
+            serde_json::json!({ "textColor": "red" }),
+            serde_json::json!({ "text": "w".repeat(2001) }),
+            serde_json::json!({ "underline": "yes" }),
+        ] {
+            let mut bad_scene = new_scene.clone();
+            for (key, value) in bad_text.as_object().unwrap() {
+                bad_scene["layers"][0][key] = value.clone();
+            }
+            let refused = judge(Some(LIVE), Role::Screens, &save(bad_scene)).unwrap_err();
+            assert_eq!((refused.status, refused.code), (400, "bad-scene"), "{bad_text}");
+        }
     }
 }

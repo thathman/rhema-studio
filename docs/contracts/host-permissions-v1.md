@@ -17,7 +17,7 @@ Implements the C3 row of [OWNER-DUAL-AGENT-DELIVERY](../OWNER-DUAL-AGENT-DELIVER
 | Key store | SHA-256 hashes + role + scopes in the frontend plugin-store, pushed with `remote_set_keys`; no expiry, no issued-at, no audit of grant changes | Partial (slice 3) |
 | Scene-edit approvals (`src/stores/scene-approvals-store.ts`) | Client JSON file; any actor string decides; self-approval possible; no expiry; client-rewritable audit | **Not host-authoritative** (slice 3) |
 | Program approval (`crates/content/src/revisions.rs`) | SQLite, optimistic revision check, `approved_by` = local operator name | Shipped (local desk only) |
-| Native recording | `recorder_*` main-window only (#510); no remote grant | Slice 4 adds the explicit Recorder grant |
+| Native recording | `recorder_*` main-window only (#510); remote start/stop/marker only for a paired desk the main desk granted the recorder, never by role or in open mode (#520; `only_a_desk_granted_the_recorder_may_record_and_never_in_open_mode`) | Done |
 
 ## 2. Slices
 

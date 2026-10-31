@@ -132,6 +132,8 @@ pub struct FileStatus {
 #[serde(rename_all = "camelCase")]
 pub struct RecorderStatus {
     pub state: RecorderState,
+    /// True while Recorder still owns a session that Stop must close, including writer failure.
+    pub session_active: bool,
     pub session_id: Option<String>,
     pub output_id: Option<String>,
     pub started_at: Option<String>,
@@ -147,6 +149,7 @@ impl RecorderStatus {
     pub fn idle() -> Self {
         Self {
             state: RecorderState::Idle,
+            session_active: false,
             session_id: None,
             output_id: None,
             started_at: None,
@@ -219,5 +222,6 @@ mod tests {
         assert_eq!(serde_json::to_string(&RecorderProfile::Hd1080p30).unwrap(), "\"hd_1080p30\"");
         assert_eq!(serde_json::to_string(&ProblemCode::FrameSizeChanged).unwrap(), "\"frame_size_changed\"");
         assert_eq!(serde_json::to_string(&RecorderState::Recoverable).unwrap(), "\"recoverable\"");
+        assert_eq!(serde_json::to_value(RecorderStatus::idle()).unwrap()["sessionActive"], false);
     }
 }

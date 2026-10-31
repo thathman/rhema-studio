@@ -23,7 +23,7 @@ export const DESIGN_PACK_MAX_BYTES = 2_000_000
 export const DESIGN_PACK_MAX_LOOKS = 160
 const SLUG = /^[a-z0-9][a-z0-9-]{1,63}$/
 const COLOUR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
-const LAYER_KINDS: ReadonlySet<SceneLayerKind> = new Set(["feed", "camera", "color", "picture", "video", "clock", "ticker", "lowerThird", "logo"])
+const LAYER_KINDS: ReadonlySet<Exclude<SceneLayerKind, "text">> = new Set(["feed", "camera", "color", "ellipse", "picture", "video", "clock", "ticker", "lowerThird", "logo"])
 const SOURCES: ReadonlySet<ContentType> = new Set(["bible", "song", "hymn", "slide", "picture"])
 
 /** A recipe's changes to its built-in look; each one optional. */
@@ -50,7 +50,7 @@ export interface PackVariant {
 }
 
 export interface PackLayer {
-  kind: SceneLayerKind
+  kind: Exclude<SceneLayerKind, "text">
   name: string
   box: { x: number; y: number; w: number; h: number }
   shows?: ContentType[]
@@ -138,12 +138,12 @@ function readVariant(raw: unknown, where: string): PackVariant {
 /** A scene layer with only its place, its sources and its look: no address, picture or video. */
 function readLayer(raw: unknown, where: string): PackLayer {
   if (!isObject(raw)) return fail(`${where}: a layer is not an object.`)
-  if (!LAYER_KINDS.has(raw.kind as SceneLayerKind)) fail(`${where}: "${String(raw.kind)}" is not a kind of scene layer.`)
+  if (!LAYER_KINDS.has(raw.kind as PackLayer["kind"])) fail(`${where}: "${String(raw.kind)}" is not a kind of scene layer.`)
   const b = raw.box
   if (!isObject(b)) return fail(`${where}: a layer has no box.`)
   const [x, y, w, h] = [b.x, b.y, b.w, b.h].map((n) => (typeof n === "number" && Number.isFinite(n) ? n : NaN))
   if ([x, y, w, h].some(Number.isNaN) || x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > 100.01 || y + h > 100.01) fail(`${where}: a layer's box is outside the frame.`)
-  const layer: PackLayer = { kind: raw.kind as SceneLayerKind, name: text(raw.name, `${where}: a layer name`, 80), box: { x, y, w, h } }
+  const layer: PackLayer = { kind: raw.kind as PackLayer["kind"], name: text(raw.name, `${where}: a layer name`, 80), box: { x, y, w, h } }
   if (raw.shows !== undefined) {
     if (!Array.isArray(raw.shows) || !raw.shows.every((s) => SOURCES.has(s as ContentType))) fail(`${where}: a layer shows something Rhema does not have.`)
     layer.shows = [...new Set(raw.shows as ContentType[])]

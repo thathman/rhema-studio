@@ -48,8 +48,10 @@ if let a = audio.first {
     }
 }
 let gen = AVAssetImageGenerator(asset: asset)
-gen.requestedTimeToleranceBefore = .zero
-gen.requestedTimeToleranceAfter = .zero
+// A QA still is a decode check, not a sample-exact timestamp assertion. Allow one frame of
+// tolerance so a valid sparse/short recording can return its nearest real frame.
+gen.requestedTimeToleranceBefore = CMTime(value: 1, timescale: 30)
+gen.requestedTimeToleranceAfter = CMTime(value: 1, timescale: 30)
 var stills: [String] = []
 for t in times {
     if let img = try? gen.copyCGImage(at: CMTime(seconds: t, preferredTimescale: 600), actualTime: nil) {

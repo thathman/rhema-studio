@@ -5,6 +5,7 @@ import { useObsStore } from "@/stores/obs-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import type { BroadcastOutput, QueueItem } from "@/types"
 import { useServiceStore } from "@/stores/service-store"
+import { showDesignedMoment } from "@/lib/designed-moments"
 
 export { takesSourceOnly } from "@/lib/item-intent"
 
@@ -24,6 +25,12 @@ const isCongregation = (o: BroadcastOutput) => (o.role ?? "congregation") === "c
  * changed (the OBS store refuses and says so). A step that cannot run says why; the rest still run.
  */
 export async function runTakeSteps(item: QueueItem): Promise<void> {
+  // A designed moment puts its pinned design up first; any other item gives the screens back.
+  try {
+    await showDesignedMoment(item)
+  } catch (e) {
+    console.warn(`[take-steps] design for ${item.reference} failed:`, e)
+  }
   for (const step of takeSteps(item)) {
     try {
       if (step.kind === "scene") takeItemScene(step)
