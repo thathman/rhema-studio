@@ -73,6 +73,12 @@ function setTextAreaValue(element: HTMLTextAreaElement, value: string) {
   element.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
+function setSelectValue(element: HTMLSelectElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!
+  setter.call(element, value)
+  element.dispatchEvent(new Event("change", { bubbles: true }))
+}
+
 function documentFixture(): DesignDocument {
   return {
     id: "design-1",
@@ -263,6 +269,52 @@ describe("canonical design editor", () => {
     expect(createButton.disabled, element.textContent).toBe(false)
     await act(async () => createButton.click())
     expect(store.createVersion).toHaveBeenCalledWith("design-1", 5, undefined, "Tolu")
+  })
+
+  it("saves explicit live-feed sources and language as a private design binding", async () => {
+    const documentValue = documentFixture()
+    const before = useBroadcastStore.getState()
+    const liveState = {
+      scenes: before.scenes,
+      outputs: before.outputs,
+      outputStatus: before.outputStatus,
+      outputFrames: before.outputFrames,
+      sceneTakes: before.sceneTakes,
+      isLive: before.isLive,
+      liveVerse: before.liveVerse,
+      liveSlide: before.liveSlide,
+    }
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Live content")!.click())
+    expect(element.querySelector('[aria-label="Live content binding"]')).not.toBeNull()
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Follow Bible"]')!.click())
+    await act(async () => setSelectValue(element.querySelector<HTMLSelectElement>('[aria-label="Live content language"]')!, "second"))
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const input = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const feedNode = Object.values(input.document.scene.nodes).find((node) => node.name === "Live content")!
+    expect(input.document.bindings[feedNode.id]).toMatchObject({ kind: "feed", shows: ["bible"], language: "second" })
+    expect(designToScene(input.document).issues).toEqual([])
+    expect(designToScene(input.document).scene.layers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "feed", shows: ["bible"], language: "second" }),
+    ]))
+    const after = useBroadcastStore.getState()
+    expect({
+      scenes: after.scenes,
+      outputs: after.outputs,
+      outputStatus: after.outputStatus,
+      outputFrames: after.outputFrames,
+      sceneTakes: after.sceneTakes,
+      isLive: after.isLive,
+      liveVerse: after.liveVerse,
+      liveSlide: after.liveSlide,
+    }).toEqual(liveState)
   })
 
   it("removes a deleted text node's Rhema binding before saving the draft", async () => {

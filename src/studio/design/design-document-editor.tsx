@@ -4,12 +4,15 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { designStore, type DesignDocument, type DesignInput, type DesignVersion } from "@/design-engine/design-store"
-import { designToScene } from "@/design-engine/rhema-scene"
+import { designToScene, type RhemaBinding } from "@/design-engine/rhema-scene"
 import { createColorLayer, createLiveFeedLayer } from "@/design-engine/design-document-utils"
 import { createSaraswatiEditorStore, getNodeBounds, pointerDown, pointerMove, pointerUp, type SaraswatiCommand, type SaraswatiPointerState } from "@/vendor/avnac/saraswati"
 import { renderSceneToCanvas } from "@/vendor/avnac/renderer/offscreen-render"
 import type { SaraswatiEllipseNode, SaraswatiNode, SaraswatiRenderableNode, SaraswatiScene, SaraswatiTextNode } from "@/vendor/avnac/saraswati"
 import { cn } from "@/lib/utils"
+import { CONTENT_NAMES } from "@/lib/content-names"
+import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
+import type { BroadcastOutputLanguage } from "@/types/broadcast-output"
 import { useSettingsStore } from "@/stores/settings-store"
 
 function errorMessage(error: unknown) {
@@ -115,6 +118,7 @@ export function DesignDocumentEditor({
   const selectedNode = selectedId ? scene.nodes[selectedId] : undefined
   const selectedRenderable = renderable(selectedNode) ? selectedNode : undefined
   const selectedPaintNode = selectedRenderable && paintNode(selectedRenderable) ? selectedRenderable : undefined
+  const selectedBinding = selectedRenderable ? bindings[selectedRenderable.id] : undefined
   const issues = useMemo(() => designToScene({
     ...document.document,
     scene,
@@ -173,6 +177,15 @@ export function DesignDocumentEditor({
     }
   }
   const updateNode = (node: SaraswatiRenderableNode) => dispatch({ type: "REPLACE_NODE", node })
+  const updateFeedBinding = (patch: Partial<RhemaBinding>) => {
+    if (!selectedRenderable) return
+    const id = selectedRenderable.id
+    setBindings((current) => {
+      const binding = current[id]
+      if (!binding || binding.kind !== "feed") return current
+      return { ...current, [id]: { ...binding, ...patch } }
+    })
+  }
   const commitNumber = (field: "x" | "y" | "width" | "height", value: number) => {
     if (selectedRenderable) updateNode(moveValue(selectedRenderable, field, value))
   }
@@ -445,6 +458,65 @@ export function DesignDocumentEditor({
                       ? <Input type="color" value={selectedPaintNode.fill.color} onChange={(event) => dispatch({ type: "SET_NODE_FILL", id: selectedPaintNode.id, fill: { type: "solid", color: event.currentTarget.value } })} className="h-8 w-14 p-1" />
                       : <span className="text-[0.6875rem]">Gradient preserved</span>}
                   </label>
+                )}
+                {selectedBinding?.kind === "feed" && (
+                  <section className="space-y-3 border-t border-border pt-3" aria-label="Live content binding">
+                    <fieldset className="space-y-2">
+                      <legend className="text-[0.6875rem] font-semibold">What this follows</legend>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          aria-pressed={!selectedBinding.shows?.length}
+                          onClick={() => updateFeedBinding({ shows: undefined })}
+                          className={cn(
+                            "rounded-full border px-2 py-1 text-[0.6875rem] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            !selectedBinding.shows?.length ? "border-primary bg-accent text-foreground" : "border-border text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          Whatever is on air
+                        </button>
+                        {CONTENT_TYPES.map((source: ContentType) => {
+                          const selected = !!selectedBinding.shows?.includes(source)
+                          return (
+                            <button
+                              key={source}
+                              type="button"
+                              aria-pressed={selected}
+                              aria-label={`Follow ${CONTENT_NAMES[source]}`}
+                              onClick={() => {
+                                const current = selectedBinding.shows ?? []
+                                const next = selected
+                                  ? current.filter((item) => item !== source)
+                                  : [...current, source]
+                                updateFeedBinding({ shows: next.length ? next : undefined })
+                              }}
+                              className={cn(
+                                "rounded-full border px-2 py-1 text-[0.6875rem] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                selected ? "border-primary bg-accent text-foreground" : "border-border text-muted-foreground hover:text-foreground",
+                              )}
+                            >
+                              {CONTENT_NAMES[source]}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </fieldset>
+                    <label className="flex flex-col gap-1 text-[0.6875rem] font-medium text-muted-foreground">
+                      Language
+                      <select
+                        aria-label="Live content language"
+                        value={selectedBinding.language ?? ""}
+                        onChange={(event) => updateFeedBinding({ language: (event.currentTarget.value || undefined) as BroadcastOutputLanguage | undefined })}
+                        className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+                      >
+                        <option value="">Use each output’s language</option>
+                        <option value="first">Primary language only</option>
+                        <option value="second">Secondary language only</option>
+                        <option value="both">Both available languages</option>
+                      </select>
+                    </label>
+                    <p className="text-[0.6875rem] text-muted-foreground">These choices are saved with this design. The canvas shows a placeholder for live content; it does not preview the current program.</p>
+                  </section>
                 )}
                 {selectedRenderable.type === "text" && (
                   <div className="space-y-3 border-t border-border pt-3">
