@@ -28,7 +28,7 @@ async function stageFromDesk(line: string): Promise<string | null> {
  * is for this desk (and what it sent), write one, and answer Seen / Ready / Unable. Private: nothing
  * here reaches a screen.
  */
-export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, onQueue, eventTitle, scenes = [], rundown = [], people = [], cameras = [], findSongs = librarySongs }: {
+export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, onQueue, eventTitle, scenes = [], rundown = [], people = [], cameras = [], findSongs = librarySongs, allowProductionActions = true, allowCommunications = true }: {
   notices: Notice[]
   /** "host" on the main desk, else the joined desk's role. */
   role: string
@@ -54,6 +54,10 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
   rundown?: { id: string; reference: string }[]
   /** Camera names to suggest for "camera ready". */
   cameras?: string[]
+  /** View only desks may read, send plain notices and acknowledge requests, but cannot run production actions. */
+  allowProductionActions?: boolean
+  /** A Viewer cannot send or acknowledge notices while the host connection is stale. */
+  allowCommunications?: boolean
   /** Songs and hymns matching a title, to ask for one (this computer's library by default). */
   findSongs?: (q: string) => Promise<{ title: string; number?: string }[]>
   /** The event happening now, attached to what this desk sends. */
@@ -79,6 +83,11 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
     const t = setTimeout(() => void findSongs(q).then((found) => { if (!gone) setSongs(found) }).catch(() => {}), 200)
     return () => { gone = true; clearTimeout(t) }
   }, [kind, value, findSongs])
+  useEffect(() => {
+    if (allowProductionActions) return
+    setKind("")
+    setValue("")
+  }, [allowProductionActions])
   const actionName = (a: NoticeAction) =>
     a.kind === "bible" || a.kind === "song" ? `Show ${a.value}`
       : a.kind === "camera" ? `Is ${a.value} framed?`
@@ -93,6 +102,7 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
    * desk accepted it), Unable (and why) when not.
    */
   const act = async (n: Notice, mode: ActionMode | "queue") => {
+    if (!allowCommunications) return
     setBusy(n.id)
     const a = n.action!
     // A wrap-up warning on a joined desk goes to the host's stage display as this desk's stage message.
@@ -110,6 +120,7 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
     onAnswer(n.id, "unable", `${what}: ${why}`)
   }
   const answer = async (n: Notice, state: NoticeAnswer) => {
+    if (!allowCommunications) return
     setBusy(n.id)
     setFailed((f) => ({ ...f, [n.id]: "" }))
     try {
@@ -122,12 +133,13 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
   }
   return (
     <div className="flex flex-col gap-2 text-xs">
+      {!allowCommunications && <p role="status" className="text-muted-foreground">Sending and acknowledgements resume when the host connection is current.</p>}
       <form
         className="flex flex-col gap-1.5"
         onSubmit={(e) => {
           e.preventDefault()
-          if (!text.trim()) return
-          onSend({ to: target, priority: urgent ? "urgent" : "normal", text: text.trim(), action })
+          if (!allowCommunications || !text.trim()) return
+          onSend({ to: target, priority: urgent ? "urgent" : "normal", text: text.trim(), action: allowProductionActions ? action : null })
           setText("")
           setUrgent(false)
           setKind("")
@@ -135,7 +147,7 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
         }}
       >
         <div className="flex gap-1.5">
-          <select aria-label="Send to" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 max-w-36 rounded-md border border-input bg-card px-1.5">
+          <select aria-label="Send to" value={to} disabled={!allowCommunications} onChange={(e) => setTo(e.target.value)} className="h-8 max-w-36 rounded-md border border-input bg-card px-1.5">
             {NOTICE_TARGETS.filter((t) => t !== (role === "host" ? "host" : "")).map((t) => <option key={t} value={t}>{TARGET_NAMES[t]}</option>)}
             {others.length > 0 && (
               <optgroup label="One person">
@@ -143,11 +155,11 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
               </optgroup>
             )}
           </select>
-          <input aria-label="Notice" value={text} onChange={(e) => setText(e.target.value)} maxLength={280} placeholder="Pulpit mic is ready" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
-          <Button size="sm" type="submit" disabled={!text.trim() || (!!kind && !action)}>Send</Button>
+          <input aria-label="Notice" value={text} disabled={!allowCommunications} onChange={(e) => setText(e.target.value)} maxLength={280} placeholder="Pulpit mic is ready" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
+          <Button size="sm" type="submit" disabled={!allowCommunications || !text.trim() || (!!kind && !action)}>Send</Button>
         </div>
-        <div className="flex gap-1.5">
-          <select aria-label="Ask them to" value={kind} onChange={(e) => { setKind(e.target.value as typeof kind); setValue(e.target.value === "wrap" ? WRAP_UP_LINE : "") }} className="h-8 rounded-md border border-input bg-card px-1.5">
+        {allowProductionActions && <div className="flex gap-1.5">
+          <select aria-label="Ask them to" value={kind} disabled={!allowCommunications} onChange={(e) => { setKind(e.target.value as typeof kind); setValue(e.target.value === "wrap" ? WRAP_UP_LINE : "") }} className="h-8 rounded-md border border-input bg-card px-1.5">
             <option value="">Just a message</option>
             <option value="bible">Ask to show a verse</option>
             <option value="song">Ask to show a song or hymn</option>
@@ -156,35 +168,35 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
             <option value="camera">Ask if a camera is ready</option>
             <option value="wrap">Ask for a wrap-up warning on the stage</option>
           </select>
-          {kind === "bible" && <input aria-label="Verse" value={value} onChange={(e) => setValue(e.target.value)} maxLength={120} placeholder="Romans 8:28" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />}
+          {kind === "bible" && <input aria-label="Verse" value={value} disabled={!allowCommunications} onChange={(e) => setValue(e.target.value)} maxLength={120} placeholder="Romans 8:28" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />}
           {kind === "song" && (
             <>
-              <input aria-label="Song or hymn" list={`${listId}-songs`} value={value} onChange={(e) => setValue(e.target.value)} maxLength={120} placeholder="Title, from the library" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
+              <input aria-label="Song or hymn" list={`${listId}-songs`} value={value} disabled={!allowCommunications} onChange={(e) => setValue(e.target.value)} maxLength={120} placeholder="Title, from the library" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
               <datalist id={`${listId}-songs`}>{songs.map((s) => <option key={s.title} value={s.title}>{s.number ? `${s.title} · ${s.number}` : s.title}</option>)}</datalist>
             </>
           )}
           {kind === "camera" && (
             <>
-              <input aria-label="Camera" list={`${listId}-cameras`} value={value} onChange={(e) => setValue(e.target.value)} maxLength={120} placeholder="Camera 2" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
+              <input aria-label="Camera" list={`${listId}-cameras`} value={value} disabled={!allowCommunications} onChange={(e) => setValue(e.target.value)} maxLength={120} placeholder="Camera 2" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
               <datalist id={`${listId}-cameras`}>{cameras.map((c) => <option key={c} value={c} />)}</datalist>
             </>
           )}
-          {kind === "wrap" && <input aria-label="Line for the stage display" value={value} onChange={(e) => setValue(e.target.value)} maxLength={120} placeholder={WRAP_UP_LINE} title="Shown on the stage display only, never to the congregation" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />}
+          {kind === "wrap" && <input aria-label="Line for the stage display" value={value} disabled={!allowCommunications} onChange={(e) => setValue(e.target.value)} maxLength={120} placeholder={WRAP_UP_LINE} title="Shown on the stage display only, never to the congregation" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />}
           {kind === "scene" && (
-            <select aria-label="Scene" value={value} onChange={(e) => setValue(e.target.value)} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-card px-1.5">
+            <select aria-label="Scene" value={value} disabled={!allowCommunications} onChange={(e) => setValue(e.target.value)} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-card px-1.5">
               <option value="">Choose a scene</option>
               {scenes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           )}
           {kind === "event" && (
-            <select aria-label="Item" value={value} onChange={(e) => setValue(e.target.value)} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-card px-1.5">
+            <select aria-label="Item" value={value} disabled={!allowCommunications} onChange={(e) => setValue(e.target.value)} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-card px-1.5">
               <option value="">Choose an item</option>
               {rundown.map((r) => <option key={r.id} value={r.id}>{r.reference}</option>)}
             </select>
           )}
-        </div>
+        </div>}
         <label className="flex items-center gap-1.5 text-muted-foreground">
-          <input type="checkbox" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} /> Urgent{eventTitle ? ` · about ${eventTitle}` : ""}
+          <input type="checkbox" checked={urgent} disabled={!allowCommunications} onChange={(e) => setUrgent(e.target.checked)} /> Urgent{eventTitle ? ` · about ${eventTitle}` : ""}
         </label>
       </form>
       <ul aria-label="Notices" className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
@@ -192,6 +204,7 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
         {mine.map((n) => {
           const answered = n.answers.find((a) => a.by === me)
           const forMe = n.from !== me && (role === "host" ? n.to === "host" || n.to === "all" : isFor(n, role, me))
+          const answerStates: NoticeAnswer[] = n.action?.kind === "sceneEdit" && allowProductionActions ? ["unable"] : n.action && !allowProductionActions ? ["seen", "unable"] : ["seen", "ready", "unable"]
           return (
             <li key={n.id} className={cn("flex flex-col gap-1 rounded-md border px-2.5 py-2", n.priority === "urgent" ? "border-on-air/50 bg-on-air/5" : "border-border")}>
               <div className="flex flex-wrap items-baseline gap-1.5">
@@ -200,21 +213,22 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
                 <span className="text-muted-foreground">→ {targetName(n.to)} · {ago(n.at)}{n.event ? ` · ${n.event.title}` : ""}</span>
               </div>
               <p className="text-sm">{n.text}</p>
-              {n.action && (!forMe || n.action.kind === "camera") && <p className="text-muted-foreground">Asks: {actionName(n.action)}{forMe ? " Answer Ready when it is, or Unable." : ""}</p>}
+              {n.action && (!forMe || n.action.kind === "camera") && <p className="text-muted-foreground">Asks: {actionName(n.action)}{forMe ? (allowProductionActions ? " Answer Ready when it is, or Unable." : " Acknowledge Seen or Unable.") : ""}</p>}
               {n.answers.length > 0 && <p className="text-muted-foreground">{n.answers.map((a) => `${a.by}: ${answerName(n, a.state)}`).join(" · ")}</p>}
               {/* Whoever sent it sees why each Unable could not be done, in the answering desk's words. */}
               {!forMe && n.answers.filter((a) => a.state === "unable" && a.why).map((a) => <p key={a.by} role="alert" className="text-destructive">{a.by} could not do it: {a.why}</p>)}
               {forMe && failed[n.id] && <p role="alert" className="text-destructive">{failed[n.id]}{n.action?.kind === "sceneEdit" ? "" : ". Answered Unable."}</p>}
+              {forMe && n.action && !allowProductionActions && <p className="text-muted-foreground">This desk can acknowledge the request but cannot carry out production actions.</p>}
               {forMe && !(n.action?.kind === "sceneEdit" && answered && answered.state !== "seen") && (
                 <div role="group" aria-label={`Answer ${n.from}`} className="flex flex-wrap gap-1">
-                  {n.action && n.action.kind !== "camera" && <Button size="xs" disabled={busy === n.id} onClick={() => void act(n, "show")}>{actionName(n.action)}</Button>}
+                  {allowProductionActions && n.action && n.action.kind !== "camera" && <Button size="xs" disabled={!allowCommunications || busy === n.id} onClick={() => void act(n, "show")}>{actionName(n.action)}</Button>}
                   {/* Preview only: the main desk's Preview, nothing goes live. */}
-                  {n.action && canPreview(n.action) && <Button size="xs" variant="outline" disabled={busy === n.id} aria-label={`Preview ${n.action.value}`} title="Put it in the main desk's Preview only: nothing goes live" onClick={() => void act(n, "preview")}>Preview</Button>}
+                  {allowProductionActions && n.action && canPreview(n.action) && <Button size="xs" variant="outline" disabled={!allowCommunications || busy === n.id} aria-label={`Preview ${n.action.value}`} title="Put it in the main desk's Preview only: nothing goes live" onClick={() => void act(n, "preview")}>Preview</Button>}
                   {/* Queue: into the run of show for later; nothing is shown. */}
-                  {n.action && onQueue && canQueue(n.action) && <Button size="xs" variant="outline" disabled={busy === n.id} aria-label={`Queue ${n.action.value}`} title="Add it to the run of show for later: nothing is shown" onClick={() => void act(n, "queue")}>Queue</Button>}
+                  {allowProductionActions && n.action && onQueue && canQueue(n.action) && <Button size="xs" variant="outline" disabled={!allowCommunications || busy === n.id} aria-label={`Queue ${n.action.value}`} title="Add it to the run of show for later: nothing is shown" onClick={() => void act(n, "queue")}>Queue</Button>}
                   {/* A scene change is accepted with its own button (above) or declined: no bare Ready. */}
-                  {(n.action?.kind === "sceneEdit" ? (["unable"] as const) : (["seen", "ready", "unable"] as const)).map((s) => (
-                    <Button key={s} size="xs" disabled={busy === n.id} variant={answered?.state === s ? "default" : "outline"} onClick={() => void answer(n, s)}>{n.action?.kind === "sceneEdit" ? "Decline" : ANSWER_NAMES[s]}</Button>
+                  {answerStates.map((s) => (
+                    <Button key={s} size="xs" disabled={!allowCommunications || busy === n.id} variant={answered?.state === s ? "default" : "outline"} onClick={() => void answer(n, s)}>{n.action?.kind === "sceneEdit" && allowProductionActions ? "Decline" : ANSWER_NAMES[s]}</Button>
                   ))}
                 </div>
               )}

@@ -77,6 +77,52 @@ describe("production notices", () => {
     expect(onSend).toHaveBeenCalledWith({ to: "host", priority: "normal", text: "Reading after the hymn", action: null })
   })
 
+  it("clears a selected production action when a desk is downgraded to View only", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const onSend = vi.fn()
+    const el = document.createElement("div")
+    const root = createRoot(el)
+    const props = { notices: [], role: "present", me: "Ade", onSend, onAnswer: vi.fn(), onAction: vi.fn() }
+    await act(async () => root.render(<NoticesPanel {...props} />))
+
+    const kind = el.querySelector<HTMLSelectElement>('[aria-label="Ask them to"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(kind, "bible")
+      kind.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    const verse = el.querySelector<HTMLInputElement>('[aria-label="Verse"]')!
+    const notice = el.querySelector<HTMLInputElement>('[aria-label="Notice"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(verse, "Romans 8:28")
+      verse.dispatchEvent(new Event("input", { bubbles: true }))
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(notice, "Reading is ready")
+      notice.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    await act(async () => root.render(<NoticesPanel {...props} allowProductionActions={false} />))
+    expect(el.querySelector('[aria-label="Ask them to"]')).toBeNull()
+    await act(async () => (el.querySelector("form") as HTMLFormElement).requestSubmit())
+    expect(onSend).toHaveBeenCalledWith({ to: "host", priority: "normal", text: "Reading is ready", action: null })
+    await act(async () => root.unmount())
+  })
+
+  it("lets a View only desk acknowledge a scene request without accepting it", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const notice = useNotices.getState().send({ from: "Screens desk", to: "viewer", text: "Scene changed; please review", action: { kind: "sceneEdit", value: "request-1" } })!
+    const onAnswer = vi.fn()
+    const el = document.createElement("div")
+    const root = createRoot(el)
+    await act(async () => root.render(<NoticesPanel notices={[notice]} role="viewer" me="Op" onSend={vi.fn()} onAnswer={onAnswer} onAction={vi.fn()} allowProductionActions={false} />))
+
+    expect([...el.querySelectorAll("button")].map((button) => button.textContent)).toContain("Seen")
+    expect([...el.querySelectorAll("button")].map((button) => button.textContent)).toContain("Unable")
+    expect(el.textContent).not.toContain("Decline")
+    expect(el.textContent).not.toContain("Accept the scene change")
+    await act(async () => buttonNamed(el, "Seen").click())
+    expect(onAnswer).toHaveBeenCalledWith(notice.id, "seen")
+    await act(async () => root.unmount())
+  })
+
   it("an action request is only a button on the recipient's desk; pressing it acts and answers Ready (C2)", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     expect(asAction({ kind: "shell", value: "rm" })).toBeNull()

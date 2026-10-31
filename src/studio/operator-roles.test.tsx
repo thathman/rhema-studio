@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { invoke } from "@tauri-apps/api/core"
 import type { Verse } from "@/types"
 
@@ -12,11 +12,17 @@ import { createRoot } from "react-dom/client"
 import { activateBibleReference } from "@/lib/bible-activate"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
-import { useJoin } from "@/stores/join-store"
+import { useJoin, type JoinStatus } from "@/stores/join-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { OperatorsPanel } from "@/studio/production/operators-panel"
 import type { LiveStateV1 } from "@/lib/live-state"
+
+const mountedRoots: Array<{ unmount: () => void }> = []
+afterEach(() => {
+  for (const root of mountedRoots.splice(0)) act(() => root.unmount())
+  vi.useRealTimers()
+})
 
 /** Delegated operators (Host/Join, ARCH-004): the Bible operator's activation rule and the desks each role gets. */
 const hymn = { kind: "lyric" as const, content: "hymn" as const, reference: "Amazing Grace · Verse 1", segments: [], lines: ["Amazing grace"] }
@@ -45,11 +51,13 @@ describe("the desks a joined computer gets", () => {
     event: { mode: "own", currentId: null }, rundown: [{ id: "w", reference: "Welcome", plannedMinutes: 5 }], timing: null, stageMessage: "",
     scenes: [{ id: "split", name: "Sermon split" }], outputs: [{ id: "main", name: "Projector", sceneId: null }], notices: [],
   }
-    const render = async (role: string) => {
+  const render = async (role: string, state: LiveStateV1 & { showMode?: "live" | "rehearsal" | "idle" } = live, status: JoinStatus = "connected", receivedAt = performance.now()) => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-    useJoin.setState({ status: "connected", me: { name: "Op", role }, live, error: null, paused: false, note: null })
+    useJoin.setState({ status, me: { name: "Op", role }, live: state, receivedAt, clockSkewMs: 0, error: null, paused: false, note: null })
     const el = document.createElement("div")
-    await act(async () => createRoot(el).render(<OperatorsPanel />))
+    const root = createRoot(el)
+    mountedRoots.push(root)
+    await act(async () => root.render(<OperatorsPanel />))
     return el
   }
   it("each role sees only its part", async () => {
@@ -64,6 +72,150 @@ describe("the desks a joined computer gets", () => {
     expect(screens.textContent).toContain("No congregation output is assigned")
     const all = await render("present")
     expect([has(all, "Event clock desk"), has(all, "Bible desk"), has(all, "Scenes desk")]).toEqual([true, true, true])
+  })
+
+  it("gives View only a stale-aware Now/Next desk without Program details or production actions", async () => {
+    const at = Date.UTC(2026, 9, 31, 9, 0)
+    const viewerLive: LiveStateV1 & { showMode?: "live" | "rehearsal" | "idle" } = {
+      ...live,
+      at,
+      showMode: "rehearsal",
+      service: { title: "Sunday service" },
+      program: { onAir: true, reference: "PRIVATE PROGRAM DETAIL", rehearsal: false },
+      sources: [{ id: "bible", reference: "PRIVATE SOURCE DETAIL", on: true, revision: 1 }],
+      takeAttempts: [{ id: 1, itemId: "welcome", reference: "PRIVATE TAKE DETAIL", status: "succeeded", startedAt: at, finishedAt: at, outcome: "presented" }],
+      event: {
+        mode: "own",
+        currentId: "welcome",
+        targets: [
+          { id: "welcome", reference: "Welcome", plannedMinutes: 5, kind: "event", time: { plan: [at, at + 5 * 60_000], expected: [at, at + 5 * 60_000], state: "live" } },
+          { id: "sermon", reference: "Sermon", plannedMinutes: 30, kind: "event", time: { plan: [at + 5 * 60_000, at + 35 * 60_000], expected: [at + 7 * 60_000, at + 37 * 60_000], state: "upcoming" } },
+        ],
+      },
+      rundown: [
+        { id: "welcome", reference: "Welcome", plannedMinutes: 5, time: { plan: [at, at + 5 * 60_000], expected: [at, at + 5 * 60_000], state: "live" } },
+        { id: "sermon", reference: "Sermon", plannedMinutes: 30, time: { plan: [at + 5 * 60_000, at + 35 * 60_000], expected: [at + 7 * 60_000, at + 37 * 60_000], state: "upcoming" } },
+      ],
+      timing: { plannedEnd: at + 60 * 60_000, expectedEnd: at + 65 * 60_000, lateMs: 5 * 60_000, timeZone: "UTC" },
+      auxTimers: [{ id: "viewer-timer", label: "Viewer-owned timer", owner: "viewer", durationMs: 60_000, elapsedMs: 0, running: false }],
+      outputs: [{ id: "private-output", name: "Private production output", sceneId: null }],
+      outputMap: [{ id: "private-output", name: "Private output map", kind: "display", role: "congregation", on: true, scene: "Private output scene" }],
+      notices: [{ id: "notice-1", from: "Host", fromId: "host", to: { name: "Op" }, priority: "normal", text: "Please show Romans 8:28", action: { kind: "bible", value: "Romans 8:28" }, at, answers: [] }],
+    }
+    const el = await render("viewer", viewerLive, "reconnecting")
+    const hostClock = el.querySelector<HTMLTimeElement>('time[aria-label="Host clock"]')
+    expect(hostClock).not.toBeNull()
+    expect(hostClock?.textContent).toBe(new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }))
+    expect(el.querySelector('[aria-label="Service countdown"]')?.textContent).toBe("5:00")
+    expect(el.textContent).toContain("Now")
+    expect(el.querySelector('[aria-label="Show status"]')?.textContent).toContain("Rehearsal")
+    expect(el.textContent).toContain("Welcome")
+    expect(el.textContent).toContain("Next")
+    expect(el.textContent).toContain("Sermon")
+    expect(el.querySelector('[aria-label="Running order (read only)"]')).not.toBeNull()
+    expect(el.textContent).toContain("may be out of date")
+    expect(el.textContent).not.toContain("PRIVATE PROGRAM DETAIL")
+    expect(el.textContent).not.toContain("PRIVATE SOURCE DETAIL")
+    expect(el.textContent).not.toContain("PRIVATE TAKE DETAIL")
+    expect(el.textContent).not.toContain("Viewer-owned timer")
+    expect(el.textContent).not.toContain("Private production output")
+    expect(el.textContent).not.toContain("Private output map")
+    expect(el.textContent).not.toContain("Private output scene")
+    expect(el.querySelector('[aria-label="Event clock desk"]')).toBeNull()
+    expect(el.querySelector('[aria-label="Extra timers"]')).toBeNull()
+    expect(el.querySelector('[aria-label="Talk desk"]')).not.toBeNull()
+    expect(el.querySelector('[aria-label="Talk desk"]')?.textContent).toContain("paused until the host connection is current")
+    expect(el.querySelector('[aria-label="Talk desk"] button')).toBeNull()
+    expect(el.querySelector('[aria-label="Notices desk"]')).not.toBeNull()
+    expect(el.querySelector('[aria-label="Ask them to"]')).toBeNull()
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Notices desk"] [aria-label="Notice"]')?.disabled).toBe(true)
+    expect(el.querySelector('[aria-label="Preview Romans 8:28"]')).toBeNull()
+    expect([...el.querySelectorAll("button")].some((button) => button.textContent?.includes("Show Romans 8:28"))).toBe(false)
+    expect([...el.querySelectorAll("button")].some((button) => ["Start", "Reset", "+5 min", "−5 min"].includes(button.textContent?.trim() ?? ""))).toBe(false)
+    const seen = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Seen")
+    expect(seen).toBeDefined()
+    expect(seen?.disabled).toBe(true)
+
+    const serviceClockOnly: LiveStateV1 = {
+      ...viewerLive,
+      event: { ...viewerLive.event, targets: viewerLive.event.targets?.map(({ id, reference, plannedMinutes, kind }) => ({ id, reference, plannedMinutes, kind })) },
+      rundown: viewerLive.rundown.map(({ id, reference, plannedMinutes }) => ({ id, reference, plannedMinutes })),
+    }
+    const serviceClockDesk = await render("viewer", serviceClockOnly, "reconnecting", 0)
+    expect(serviceClockDesk.querySelector('[aria-label="Service countdown"]')?.textContent).toBe("1:05:00")
+    expect(serviceClockDesk.textContent).toContain("until expected service end · host estimate")
+
+    const statusUnavailable = await render("viewer", { ...viewerLive, showMode: undefined }, "connected")
+    expect(statusUnavailable.querySelector('[aria-label="Show status"]')?.textContent).toContain("Show status unavailable")
+    expect(statusUnavailable.textContent).not.toContain("PRIVATE PROGRAM DETAIL")
+  })
+
+  it("ticks its service estimate while fresh, then freezes at the last trusted host time", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date", "performance"] })
+    await vi.advanceTimersByTimeAsync(1)
+    const at = Date.UTC(2026, 9, 31, 9, 0)
+    const timingLive: LiveStateV1 = {
+      ...live,
+      at,
+      heartbeatMs: 1_000,
+      event: {
+        mode: "own",
+        currentId: "welcome",
+        targets: [{ id: "welcome", reference: "Welcome", plannedMinutes: 5, kind: "event", time: { plan: [at, at + 300_000], expected: [at, at + 300_000], state: "live" } }],
+      },
+    }
+    const el = await render("viewer", timingLive, "connected", performance.now())
+    const countdown = () => el.querySelector('[aria-label="Service countdown"]')?.textContent
+    expect(countdown()).toBe("5:00")
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+    expect(countdown()).toBe("4:57")
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
+    expect(countdown()).toBe("4:55")
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000) })
+    expect(el.textContent).toContain("may be out of date")
+    expect(countdown()).toBe("4:55")
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
+    expect(countdown()).toBe("4:55")
+  })
+
+  it("keeps the Viewer order compact until they ask to see the full service", async () => {
+    const rows = ["Welcome", "Worship", "Scripture", "Sermon", "Offering"]
+    const longService: LiveStateV1 = {
+      ...live,
+      event: {
+        mode: "own",
+        currentId: "event-2",
+        targets: rows.map((reference, index) => ({
+          id: `event-${index}`,
+          reference,
+          plannedMinutes: 5,
+          kind: "event" as const,
+        })),
+      },
+      rundown: rows.map((reference, index) => ({
+        id: `event-${index}`,
+        reference,
+        plannedMinutes: 5,
+        kind: "event" as const,
+      })),
+    }
+    const el = await render("viewer", longService)
+    const order = el.querySelector('[aria-label="Running order (read only)"]')!
+    expect(order.textContent).toContain("Scripture")
+    expect(order.textContent).toContain("Sermon")
+    expect(order.textContent).toContain("Offering")
+    expect(order.textContent).not.toContain("Welcome")
+    expect(order.textContent).not.toContain("Worship")
+    const expand = [...order.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "View full service order")!
+    expect(expand.getAttribute("aria-expanded")).toBe("false")
+
+    await act(async () => expand.click())
+    expect(order.textContent).toContain("Welcome")
+    expect(order.textContent).toContain("Worship")
+    expect(order.textContent).toContain("Offering")
+    expect(expand.getAttribute("aria-expanded")).toBe("true")
   })
 
   it("a paused desk says so, keeps Talk and notices, and its controls wait", async () => {
