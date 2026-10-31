@@ -26,7 +26,7 @@ let latestVisualTake = 0
  */
 function afterTake(item: QueueItem, entering: boolean) {
   return (outcome: PresentOutcome | void) => {
-    if (outcome === "presented" && entering && !isSoundItem(item)) void runTakeSteps(item)
+    if (outcome === "presented" && entering && !isSoundItem(item)) void runTakeSteps(item, () => isUp(item))
   }
 }
 

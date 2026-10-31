@@ -1,5 +1,5 @@
 import { toast } from "sonner"
-import { takeSteps, type ParsedTakeStep } from "@/lib/item-intent"
+import { takeSteps, takesSourceOnly, type ParsedTakeStep } from "@/lib/item-intent"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useObsStore } from "@/stores/obs-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -24,14 +24,20 @@ const isCongregation = (o: BroadcastOutput) => (o.role ?? "congregation") === "c
  * shaped the Take). In rehearsal a scene Take is practice, as in Present's Scenes; OBS is never
  * changed (the OBS store refuses and says so). A step that cannot run says why; the rest still run.
  */
-export async function runTakeSteps(item: QueueItem): Promise<void> {
-  // A designed moment puts its pinned design up first; any other item gives the screens back.
-  try {
-    await showDesignedMoment(item)
-  } catch (e) {
-    console.warn(`[take-steps] design for ${item.reference} failed:`, e)
+export async function runTakeSteps(item: QueueItem, isTargetCurrent: () => boolean = () => true): Promise<void> {
+  if (!isTargetCurrent()) return
+  // A Bible-feeds-only Take leaves congregation screens as they are, including a design already up.
+  if (!takesSourceOnly(item)) {
+    // A designed moment puts its pinned design up first; any other visual Take gives screens back.
+    try {
+      await showDesignedMoment(item, undefined, isTargetCurrent)
+    } catch (e) {
+      console.warn(`[take-steps] design for ${item.reference} failed:`, e)
+    }
   }
+  if (!isTargetCurrent()) return
   for (const step of takeSteps(item)) {
+    if (!isTargetCurrent()) return
     try {
       if (step.kind === "scene") takeItemScene(step)
       else if (step.kind === "obs") await switchObs(step.scene, item.reference)

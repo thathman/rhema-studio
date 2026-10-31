@@ -12,6 +12,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn().mockResolvedValue(undefined), listen: vi.fn(async () => () => {}) }))
 
 const { showDesignedMoment, restoreAfterDesignedMoment } = await import("./designed-moments")
+const { runTakeSteps } = await import("./take-steps")
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { newScene, normalizeScene } = await import("@/lib/scenes")
 const { sceneToDesign } = await import("@/design-engine/rhema-scene")
@@ -52,6 +53,46 @@ describe("a designed moment on Live", () => {
 
     await showDesignedMoment(plain, getVersion)
     expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+  })
+
+  it("does not let a delayed design replace a newer Take", async () => {
+    let resolveVersion!: (value: (typeof versions)[string] | null) => void
+    const pendingVersion = new Promise<(typeof versions)[string] | null>((resolve) => { resolveVersion = resolve })
+    const getDelayedVersion = vi.fn(async () => pendingVersion)
+    let targetIsCurrent = true
+
+    const olderTake = showDesignedMoment(moment({ id: "d1", version: 2 }), getDelayedVersion, () => targetIsCurrent)
+    targetIsCurrent = false
+    resolveVersion(versions["d1:2"])
+    await olderTake
+
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+  })
+
+  it("keeps a designed moment on congregation screens during a Bible-feeds-only Take", async () => {
+    await showDesignedMoment(moment({ id: "d1", version: 2 }), getVersion)
+    const bibleOnly = {
+      id: "bible-only", kind: "verse", verse: { id: 26137, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "Jn", chapter: 3, verse: 16, text: "For God so loved the world" },
+      reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, on_take: ["source.only"],
+    } as QueueItem
+
+    await runTakeSteps(bibleOnly)
+
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+  })
+
+  it("restores the prior scene from persisted output state after a restart", async () => {
+    await showDesignedMoment(moment({ id: "d1", version: 2 }), getVersion)
+    const savedOutputs = JSON.parse(JSON.stringify(useBroadcastStore.getState().outputs))
+    const savedScenes = JSON.parse(JSON.stringify(useBroadcastStore.getState().scenes))
+
+    vi.resetModules()
+    const { useBroadcastStore: restartedStore } = await import("@/stores/broadcast-store")
+    const { restoreAfterDesignedMoment: restoreAfterRestart } = await import("./designed-moments")
+    restartedStore.setState({ outputs: savedOutputs, scenes: savedScenes })
+    restoreAfterRestart()
+
+    expect(restartedStore.getState().outputs.find((output) => output.id === MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
   })
 
   it("a screen that had no scene is released again", async () => {

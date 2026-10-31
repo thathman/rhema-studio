@@ -1,10 +1,10 @@
 import { toast } from "sonner"
 import { designStore } from "@/design-engine/design-store"
 import { resolveDesignedMoment } from "@/design-engine/rhema-scene"
-import { captureSceneAppearance } from "@/lib/scenes"
+import { captureSceneAppearance, normalizeScene } from "@/lib/scenes"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
-import { isSlideItem, type BroadcastOutput, type QueueItem, type Scene } from "@/types"
+import { isSlideItem, type BroadcastOutput, type DesignedMomentRestore, type QueueItem, type Scene } from "@/types"
 
 /**
  * A designed moment on Live (C2, docs/contracts/design-documents-v1.md, Pinning): when the operator
@@ -17,17 +17,19 @@ import { isSlideItem, type BroadcastOutput, type QueueItem, type Scene } from "@
 
 const isCongregation = (o: BroadcastOutput) => (o.role ?? "congregation") === "congregation"
 
-/** What a screen showed before a designed moment replaced it, by output id. */
-interface Before { designedId: string; scene: Scene | null; appearance: BroadcastOutput["sceneAppearanceSnapshot"]; themeId: string; themeFor: BroadcastOutput["themeFor"] }
-const replaced = new Map<string, Before>()
-
 type GetVersion = Parameters<typeof resolveDesignedMoment>[1]
 
 /** Run on the operator's own Take of `item` (after its content is up). */
-export async function showDesignedMoment(item: QueueItem, getVersion: GetVersion = designStore.getVersion): Promise<void> {
+export async function showDesignedMoment(
+  item: QueueItem,
+  getVersion: GetVersion = designStore.getVersion,
+  isTargetCurrent: () => boolean = () => true,
+): Promise<void> {
+  if (!isTargetCurrent()) return
   if (!isSlideItem(item) || !item.slide.designRef) return restoreAfterDesignedMoment()
   const ref = item.slide.designRef
   const { scene: resolved, issues } = await resolveDesignedMoment(item.slide, getVersion)
+  if (!isTargetCurrent()) return
   if (!resolved) {
     restoreAfterDesignedMoment()
     toast.warning("Design not shown", { description: issues[0]?.message ?? `"${item.slide.title}" shows its text instead.` })
@@ -39,12 +41,17 @@ export async function showDesignedMoment(item: QueueItem, getVersion: GetVersion
   const logo = useSettingsStore.getState().brandKit.logoUrl
   // ponytail: every congregation screen, like a scene step with no screen named; a per-moment target when Prepare offers one.
   for (const o of b.outputs.filter(isCongregation)) {
-    const earlier = replaced.get(o.id)
-    if (!earlier || o.sceneId !== earlier.designedId) {
-      replaced.set(o.id, { designedId: scene.id, scene: o.sceneId ? (o.sceneSnapshot ?? b.scenes.find((s) => s.id === o.sceneId) ?? null) : null, appearance: o.sceneAppearanceSnapshot, themeId: o.themeId, themeFor: o.themeFor })
-    } else {
-      replaced.set(o.id, { ...earlier, designedId: scene.id })
-    }
+    const earlier = o.designedMomentRestore
+    const restore: DesignedMomentRestore = earlier && o.sceneId === earlier.designSceneId
+      ? { ...earlier, designSceneId: scene.id }
+      : {
+          designSceneId: scene.id,
+          scene: o.sceneId ? (o.sceneSnapshot ?? b.scenes.find((s) => s.id === o.sceneId) ?? null) : null,
+          ...(o.sceneAppearanceSnapshot ? { appearance: o.sceneAppearanceSnapshot } : {}),
+          themeId: o.themeId,
+          ...(o.themeFor ? { themeFor: o.themeFor } : {}),
+        }
+    b.updateOutput(o.id, { designedMomentRestore: restore })
     b.restoreSceneSnapshot(o.id, scene, captureSceneAppearance(scene, o, b.themes, logo), { themeId: o.themeId, themeFor: o.themeFor })
   }
 }
@@ -55,16 +62,20 @@ export async function showDesignedMoment(item: QueueItem, getVersion: GetVersion
  */
 export function restoreAfterDesignedMoment(): void {
   const b = useBroadcastStore.getState()
-  for (const [outputId, before] of replaced) {
-    const o = b.outputs.find((x) => x.id === outputId)
-    if (o?.sceneId === before.designedId) {
-      if (before.scene) {
-        const appearance = before.appearance ?? captureSceneAppearance(before.scene, o, b.themes, useSettingsStore.getState().brandKit.logoUrl)
-        b.restoreSceneSnapshot(outputId, before.scene, appearance, { themeId: before.themeId, themeFor: before.themeFor })
+  for (const o of [...b.outputs]) {
+    const before = o.designedMomentRestore
+    if (!before) continue
+    if (o.sceneId === before.designSceneId) {
+      const scene = before.scene ? normalizeScene(before.scene) : null
+      if (scene) {
+        const originalOutput = { ...o, themeId: before.themeId, themeFor: before.themeFor }
+        const appearance = before.appearance ?? captureSceneAppearance(scene, originalOutput, b.themes, useSettingsStore.getState().brandKit.logoUrl)
+        b.restoreSceneSnapshot(o.id, scene, appearance, { themeId: before.themeId, themeFor: before.themeFor })
       } else {
-        b.releaseScene(outputId)
+        b.releaseScene(o.id)
+        if (before.scene) toast.warning("Scene not restored", { description: "The previous scene could not be recovered, so this screen was released to its normal feed." })
       }
     }
+    b.updateOutput(o.id, { designedMomentRestore: undefined })
   }
-  replaced.clear()
 }

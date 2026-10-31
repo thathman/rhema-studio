@@ -35,6 +35,7 @@ export type {
   CountdownFrame,
   BroadcastOutputNdiSettings,
   SceneAppearanceSnapshot,
+  DesignedMomentRestore,
   BroadcastOutputStatus,
   BroadcastOutputType,
   ReceiverTv,

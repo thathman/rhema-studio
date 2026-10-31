@@ -26,6 +26,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async (cmd: string) => (c
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn().mockResolvedValue(undefined), listen: vi.fn(async () => () => {}) }))
 
 const { presentQueueItem, remoteActions } = await import("./remote-actions")
+const { runTakeSteps } = await import("./take-steps")
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { useQueueStore } = await import("@/stores/queue-store")
 const { useBibleStore } = await import("@/stores/bible-store")
@@ -33,6 +34,7 @@ const { useMediaStore } = await import("@/stores/media-store")
 const { useObsStore } = await import("@/stores/obs-store")
 const { useSettingsStore } = await import("@/stores/settings-store")
 const { useServiceStore } = await import("@/stores/service-store")
+const { designStore } = await import("@/design-engine/design-store")
 const { toQueueItems } = await import("@/stores/service-store")
 const { useSoundStore } = await import("@/stores/sound-store")
 const { newScene } = await import("@/lib/scenes")
@@ -264,6 +266,24 @@ describe("an item's Take steps", () => {
     await presentQueueItem(3)
     await Promise.resolve()
     expect(obsSwitches()).toHaveLength(1)
+  })
+
+  it("does not run an older item's scene step when its design lookup finishes after a newer Take", async () => {
+    let resolveVersion!: (value: null) => void
+    const pendingVersion = new Promise<null>((resolve) => { resolveVersion = resolve })
+    const getVersion = vi.spyOn(designStore, "getVersion").mockImplementation(async () => pendingVersion)
+    let targetIsCurrent = true
+    const olderItem = slide("older", [`scene.take:${scene.id}`], {
+      slide: { title: "Older", body: "", designRef: { id: "d1", version: 2 } },
+    })
+
+    const running = runTakeSteps(olderItem, () => targetIsCurrent)
+    await vi.waitFor(() => expect(getVersion).toHaveBeenCalledTimes(1))
+    targetIsCurrent = false
+    resolveVersion(null)
+    await running
+
+    expect(sceneOnMain()).toBeUndefined()
   })
 
   it("a missing scene or OBS scene says so and changes nothing", async () => {
