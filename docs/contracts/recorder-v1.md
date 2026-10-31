@@ -105,7 +105,7 @@ The frame readback (`getImageData`) is the dominant cost: ~70 ms per 1080p frame
 
 - One session, one congregation output, one stereo mixer input. No ISO cameras, multi-output, stems, pause, record-only scenes.
 - Media sound played by a video item is **not** captured separately; churches record the mixer, which carries the room/PA mix (doc 42 §1 audio policy: no silent guess, no double capture).
-- macOS backend only; other platforms report `unsupported_platform` at preflight.
+- macOS and Windows backends (`macos.rs`, `windows.rs`); other platforms report `unsupported_platform` at preflight. Windows: Media Foundation Sink Writer, fragmented H.264/AAC; sound inputs at 44.1 or 48 kHz only (others refused with a message); the shared encode tests run on `windows-latest` (`recorder-windows.yml`). Not yet run on a Windows PC in the full app or with a real mixer.
 - History linkage is by `serviceRunId` in the manifest. **Host-filled:** a start or marker that names no `serviceRunId` joins the service running now (the newest `active` service run checkpointed in the last 12 hours, with its `programId`); a desk's remote start never reuses the main desk's previous run. A named run always wins. A database index (additive migration) follows once Codex's History UI needs queries.
 
 ## 8. Licensing

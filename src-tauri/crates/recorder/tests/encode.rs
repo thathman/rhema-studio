@@ -1,11 +1,11 @@
-//! Real encodes through AVFoundation (macOS): a playable file with the right picture and sound, and
-//! a file cut off by a crash that still plays up to its last fragment.
-#![cfg(target_os = "macos")]
+//! Real encodes through the system's encoder (AVFoundation, Media Foundation): a playable file with
+//! the right picture and sound, and a file cut off by a crash that still plays up to its last fragment.
+#![cfg(any(target_os = "macos", windows))]
 
 use std::f32::consts::TAU;
 use std::time::{Duration, Instant};
 
-use rhema_recorder::macos::{probe, Writer};
+use rhema_recorder::backend::{probe, Writer};
 
 const W: u32 = 1280;
 const H: u32 = 720;

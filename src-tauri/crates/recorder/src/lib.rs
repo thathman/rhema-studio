@@ -10,6 +10,14 @@ pub mod manifest;
 pub mod model;
 #[cfg(target_os = "macos")]
 pub mod macos;
+#[cfg(windows)]
+pub mod windows;
+
+/// This computer's encoder: one `Writer`, `Awake` and `probe` per system.
+#[cfg(target_os = "macos")]
+pub use macos as backend;
+#[cfg(windows)]
+pub use self::windows as backend;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
@@ -126,8 +134,8 @@ impl Recorder {
     #[must_use]
     pub fn preflight(&self, req: &RecorderStartRequest) -> Vec<RecorderProblem> {
         let mut problems = Vec::new();
-        if !cfg!(target_os = "macos") {
-            problems.push(RecorderProblem::new(ProblemCode::UnsupportedPlatform, "Recording in Rhema is available on macOS first; use OBS recording on this computer for now."));
+        if !cfg!(any(target_os = "macos", windows)) {
+            problems.push(RecorderProblem::new(ProblemCode::UnsupportedPlatform, "Recording in Rhema is available on macOS and Windows; use OBS recording on this computer for now."));
         }
         if self.lock().is_some() {
             problems.push(RecorderProblem::new(ProblemCode::AlreadyRecording, "A recording is already running."));
@@ -458,7 +466,7 @@ fn status_of(s: &Session, folder: &Path) -> RecorderStatus {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 fn run_writer(
     path: &Path,
     (width, height, fps, bitrate): (u32, u32, u32, u32),
@@ -468,10 +476,10 @@ fn run_writer(
     ready: &Sender<Result<Instant, String>>,
     folder: &Path,
 ) -> Result<(), String> {
-    // Awake for the whole recording: a napping app's frame ticks stall (see `macos::Awake`).
-    let _awake = macos::Awake::hold();
+    // Awake for the whole recording: a napping app's frame ticks stall (see `Awake`).
+    let _awake = backend::Awake::hold();
     let t0 = Instant::now();
-    let mut writer = match macos::Writer::start(path, width, height, fps, bitrate, audio_rate) {
+    let mut writer = match backend::Writer::start(path, width, height, fps, bitrate, audio_rate) {
         Ok(w) => {
             let _ = ready.send(Ok(t0));
             w
@@ -593,7 +601,7 @@ fn drain(tick: &mut i64, last: i64, within: Duration, mut write: impl FnMut(i64)
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 fn run_writer(
     _: &Path,
     _: (u32, u32, u32, u32),
@@ -645,7 +653,31 @@ impl AudioPlacer {
     }
 }
 
+/// RGBA pixels (tightly packed) to NV12 with no row padding, BT.709 limited range, the colours a video
+/// player assumes at HD sizes: a full-size Y plane, then one U,V pair per 2×2 block. `width` and
+/// `height` are even. Alpha is ignored: the output window is opaque.
+pub fn rgba_to_nv12(src: &[u8], dst: &mut [u8], width: usize, height: usize) {
+    let (luma, chroma) = dst.split_at_mut(width * height);
+    let (w4, row) = (width * 4, width);
+    for (s, d) in src.chunks_exact(w4).zip(luma.chunks_exact_mut(row)) {
+        for (p, y) in s.chunks_exact(4).zip(d) {
+            let (r, g, b) = (i32::from(p[0]), i32::from(p[1]), i32::from(p[2]));
+            *y = ((47 * r + 157 * g + 16 * b + 128) >> 8) as u8 + 16;
+        }
+    }
+    for (rows, d) in src.chunks_exact(w4 * 2).zip(chroma.chunks_exact_mut(row)) {
+        let (top, bottom) = rows.split_at(w4);
+        for ((a, b), uv) in top.chunks_exact(8).zip(bottom.chunks_exact(8)).zip(d.chunks_exact_mut(2)) {
+            let avg = |i: usize| (i32::from(a[i]) + i32::from(a[i + 4]) + i32::from(b[i]) + i32::from(b[i + 4]) + 2) >> 2;
+            let (r, g, b) = (avg(0), avg(1), avg(2));
+            uv[0] = (((-26 * r - 86 * g + 112 * b + 128) >> 8) + 128) as u8;
+            uv[1] = (((112 * r - 102 * g - 10 * b + 128) >> 8) + 128) as u8;
+        }
+    }
+}
+
 /// Copy `width`×`height` RGBA pixels (tightly packed) into a BGRA buffer with `dst_stride` bytes a row.
+#[cfg_attr(windows, allow(dead_code))] // macOS's picture format
 pub(crate) fn rgba_into_bgra(src: &[u8], dst: &mut [u8], width: usize, height: usize, dst_stride: usize) {
     let row = width * 4;
     for (s, d) in src.chunks_exact(row).take(height).zip(dst.chunks_mut(dst_stride)) {
@@ -673,9 +705,15 @@ pub fn disk_free(path: &Path) -> Option<u64> {
         #[allow(clippy::unnecessary_cast)]
         Some(st.f_bavail as u64 * st.f_frsize as u64)
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        // ponytail: no free-space check on Windows until its encoder backend lands (it is refused before this).
+        let existing = path.ancestors().find(|p| p.exists())?;
+        let mut free = 0u64;
+        unsafe { ::windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(&::windows::core::HSTRING::from(existing), Some(&mut free), None, None) }.ok()?;
+        Some(free)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
         let _ = path;
         None
     }
@@ -720,6 +758,30 @@ mod tests {
         let mut dst = [9u8; 12];
         rgba_into_bgra(&src, &mut dst, 1, 2, 6);
         assert_eq!(dst, [3, 2, 1, 255, 9, 9, 6, 5, 4, 255, 9, 9]);
+    }
+
+    #[test]
+    fn nv12_has_the_broadcast_levels_for_known_colours() {
+        let convert = |c: [u8; 4]| {
+            let src: Vec<u8> = c.iter().copied().cycle().take(16).collect();
+            let mut dst = [0u8; 6];
+            rgba_to_nv12(&src, &mut dst, 2, 2);
+            dst
+        };
+        assert_eq!(convert([0, 0, 0, 255]), [16, 16, 16, 16, 128, 128], "black");
+        assert_eq!(convert([255, 255, 255, 255]), [235, 235, 235, 235, 128, 128], "white");
+        let red = convert([255, 0, 0, 255]);
+        assert_eq!(red[0], 63, "BT.709 red luma");
+        assert!((i32::from(red[4]) - 102).abs() <= 1 && (i32::from(red[5]) - 240).abs() <= 1, "red chroma {red:?}");
+    }
+
+    #[test]
+    fn nv12_averages_chroma_per_block_and_keeps_luma_per_pixel() {
+        // Left column white, right column black.
+        let src = [255, 255, 255, 255, 0, 0, 0, 255, 255, 255, 255, 255, 0, 0, 0, 255];
+        let mut dst = [0u8; 6];
+        rgba_to_nv12(&src, &mut dst, 2, 2);
+        assert_eq!(dst, [235, 16, 235, 16, 128, 128]);
     }
 
     #[test]
