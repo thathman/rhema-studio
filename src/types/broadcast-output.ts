@@ -327,6 +327,15 @@ export interface SceneAppearanceSnapshot {
   approved?: { programId: string; revision: number; appearanceComplete?: boolean; approvedAt?: string | null; approvedBy?: string | null }
 }
 
+/** A temporary designed moment and the output snapshot to restore after it, including after restart. */
+export interface DesignedMomentRestore {
+  designSceneId: string
+  scene: Scene | null
+  appearance?: SceneAppearanceSnapshot
+  themeId: string
+  themeFor?: Partial<Record<ContentType, string>>
+}
+
 /**
  * Persisted configuration for one broadcast output. Whether the output is
  * currently on air (window open / NDI sender running) is runtime state,
@@ -363,6 +372,8 @@ export interface BroadcastOutput {
   sceneSnapshot?: Scene
   /** Immutable reusable looks and Brand Kit logo taken with the scene. */
   sceneAppearanceSnapshot?: SceneAppearanceSnapshot
+  /** Local recovery data for a pinned design temporarily replacing this output's scene. */
+  designedMomentRestore?: DesignedMomentRestore
   /** Browser feeds: the secret in the feed's link (renewing it closes the old link). */
   feedToken?: string
   signage?: SignageSettings
