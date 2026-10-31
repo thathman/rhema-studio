@@ -76,7 +76,7 @@ afterEach(async () => {
 })
 
 describe("each specialist desk sees only its part", () => {
-  it("shows a host Take attempt without confusing it with the current program or event clock", async () => {
+  it("keeps Viewer service awareness separate from private Program and Take details", async () => {
     const state: LiveStateV1 = {
       ...live,
       program: { onAir: true, reference: "Welcome slide", rehearsal: false },
@@ -86,8 +86,9 @@ describe("each specialist desk sees only its part", () => {
     }
     const el = await render("viewer", state)
 
-    expect(el.textContent).toContain("Take pending: Psalm 23")
-    expect(el.textContent).toContain("Welcome slide")
+    expect(el.textContent).not.toContain("Take pending: Psalm 23")
+    expect(el.textContent).not.toContain("Psalm 23")
+    expect(el.textContent).not.toContain("Welcome slide")
     expect(el.textContent).toContain("Welcome")
   })
 
