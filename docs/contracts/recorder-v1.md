@@ -1,21 +1,20 @@
 # Contract — Rhema native recorder v1 (C1)
 
-**Owner:** Claude (engine). **UI consumer:** Codex (Live → Record dock). **Status:** draft for review with PR `claude/recording-v1`.
+**Owner direction:** approved native recording of one selected congregation output. **Implementation status:** the macOS engine is in the current source; the Live dock and History archive are under review in draft PR #538. Selected-output fidelity, sustained capture, recovery playback and real-device acceptance remain unverified.
 Implements [42 — Rhema native service recording](../rhema-studio/42-rhema-native-service-recording.md): one pinned, named
 congregation output's final composited picture plus one approved mixer audio input, recorded by the host, with OBS closed and no WAN.
 
-## 1. Audit of the current implementation (fork/main 32bfb3c0)
+## 1. Current implementation snapshot (30 October 2026)
 
 | Path | What exists | Status for recording |
 | --- | --- | --- |
-| `src/broadcast-output.tsx` `BroadcastCanvas` / `paintFrame` | One 2D canvas per output window; scene, verse, lower third, ticker, fades; cameras (WHEP `<video>`) and videos are **drawn into** the canvas | **Shipped** — this canvas is the output's final composited picture |
-| `src/broadcast-output.tsx` `pushNdiFrame` | `getImageData` → raw-body `invoke("push_ndi_frame")` / `push_ndi_region`, only while NDI is on for that output | **Partial** — the only frame path into Rust; NDI-only |
-| `src-tauri/src/commands/broadcast.rs` `push_ndi_frame`, `push_ndi_region`, `set_output_pace` | Receive RGBA, hand to `rhema-broadcast` NDI sender; per-output pacer thread | **Shipped** for NDI |
-| `src-tauri/crates/audio` `capture::start` | cpal input, **mono 16 kHz i16** for speech | **Not suitable** — the recorder needs full-rate stereo |
-| Media audio (`output-video.ts`, `sound-store.ts`) | Plays inside webviews, not reachable from Rust | **Not recorded in v1** (see §7) |
-| Encoders / muxers | None in the tree | **Not built** |
-| OBS `StartRecord` (`obs-store.ts`, `ObsRecord` remote command) | Records **OBS's** program | **Not a native recorder** — stays as "OBS-only recording" |
-| Browser-feed / Google TV outputs | Drawn on the remote device | **Cannot be recorded by the host** (no host frames) — refused |
+| `src/broadcast-output.tsx` `BroadcastCanvas` / `paintFrame` | Each output window composites its scene, Scripture, lyrics, lower third, ticker, fades, cameras and video; the selected output can tee its readback to the host | **Implemented in source**; target display fidelity still needs acceptance |
+| `src-tauri/crates/recorder` | macOS AVAssetWriter writes fragmented H.264/AAC MP4; CPAL captures stereo mixer input; manifests record state and recovery data | **Implemented in source** with synthetic encode/crash tests; real mixer, output and sustained capture acceptance pending |
+| `src-tauri/src/commands/recorder.rs` | Main-desk preflight/start/stop/marker/status/list and validated archive open/reveal commands; start checks the host's current Live role and frame pushes come from the pinned output window | **Implemented in source**; no external OBS or WAN dependency |
+| `src/studio/present/recorder-dock.tsx` and `src/studio/archive/recorder-archive.tsx` | Live recording controls and a local History archive, including open/show-in-folder for saved or recoverable MP4s | **Under review in draft PR #538**; target hardware journey pending |
+| Media audio (`output-video.ts`, `sound-store.ts`) | Plays inside output webviews and is not joined to the recorder's clean mixer input | **Not separately captured in v1** (see §7) |
+| OBS `StartRecord` (`obs-store.ts`, `ObsRecord` remote command) | Records OBS's own program | **Separate optional OBS function**, not Rhema recording |
+| Browser-feed / Google TV outputs | Render on the remote device rather than a local output window that can tee host frames | **Not recordable by the host in v1** |
 
 ## 2. Design
 
@@ -53,6 +52,7 @@ interface RecorderStartRequest {
 }
 interface RecorderStatus {
   state: RecorderState
+  sessionActive: boolean             // true while the host still owns a session that Stop must close
   sessionId: string | null
   outputId: string | null
   startedAt: string | null         // ISO
@@ -85,6 +85,8 @@ interface RecordingManifest {           // <folder>/<sessionId>/manifest.json
 | `recorder_stop()` → `RecorderStatus` | Main desk only. `finalizing` → `saved`, or `recoverable`/`failed` with the reason |
 | `recorder_status()` / event `recorder:status` to `main` (1 Hz while recording, and once on stop) | Truthful state; a REC badge must come from this, never a UI flag |
 | `recorder_list({rehearsal})` → `RecordingManifest[]` | Newest first, read from manifests |
+| `recorder_open_file({sessionId, rehearsal})` | Main desk opens only a non-empty, listed saved/recoverable MP4 from this recorder's archive in the system video app |
+| `recorder_reveal_file({sessionId, rehearsal})` | Main desk shows that same validated local MP4 in Finder / Explorer for operator-controlled copying |
 | `push_ndi_frame` / `push_ndi_region` (existing) | Now also the recorder's input (see §2) |
 
 Errors are `RecorderProblem` (`{code, message}`), message written for the operator.
@@ -103,7 +105,7 @@ The frame readback (`getImageData`) is the dominant cost: ~70 ms per 1080p frame
 
 - One session, one congregation output, one stereo mixer input. No ISO cameras, multi-output, stems, pause, record-only scenes.
 - Media sound played by a video item is **not** captured separately; churches record the mixer, which carries the room/PA mix (doc 42 §1 audio policy: no silent guess, no double capture).
-- macOS backend only; other platforms report `unsupported_platform` at preflight.
+- macOS and Windows backends (`macos.rs`, `windows.rs`); other platforms report `unsupported_platform` at preflight. Windows: Media Foundation Sink Writer, fragmented H.264/AAC; sound inputs at 44.1 or 48 kHz only (others refused with a message); the shared encode tests run on `windows-latest` (`recorder-windows.yml`). Not yet run on a Windows PC in the full app or with a real mixer.
 - History linkage is by `serviceRunId` in the manifest. **Host-filled:** a start or marker that names no `serviceRunId` joins the service running now (the newest `active` service run checkpointed in the last 12 hours, with its `programId`); a desk's remote start never reuses the main desk's previous run. A named run always wins. A database index (additive migration) follows once Codex's History UI needs queries.
 
 ## 8. Licensing

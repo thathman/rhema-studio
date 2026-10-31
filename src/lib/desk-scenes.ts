@@ -71,8 +71,9 @@ export function scenesOnScreen(s: Parameters<typeof outputsForScreens>[0] = useB
   return new Set(outputsForScreens(s).flatMap((o) => (o.sceneId ? [o.sceneId] : [])))
 }
 
-const KINDS: readonly SceneLayerKind[] = ["feed", "color", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo"]
+const KINDS: readonly SceneLayerKind[] = ["feed", "color", "ellipse", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo", "text"]
 const HEX = /^#[0-9a-f]{6}$/i
+const FONT_FAMILY = /^[\p{L}\p{N}, _-]{1,120}$/u
 const text = (v: unknown, max: number): string | undefined => (typeof v === "string" && v.trim() && v.length <= max ? v.trim() : undefined)
 const num = (v: unknown, lo: number, hi: number): number | undefined => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : undefined)
 const pick = <T extends string>(v: unknown, set: readonly T[]): T | undefined => set.find((x) => x === v)
@@ -126,6 +127,18 @@ function deskLayer(raw: unknown, had: SceneLayer | undefined, cameras: Set<strin
     ...(kind === "clock" && isCountdownTo(l.countdownTo) && l.countdownTo.length <= 120 ? { countdownTo: l.countdownTo } : {}),
     ...((kind === "feed" || kind === "clock") && themeId ? { themeId } : {}),
     ...(kind === "color" && typeof l.color === "string" && HEX.test(l.color) ? { color: l.color } : {}),
+    ...(kind === "ellipse" ? { color: typeof l.color === "string" && HEX.test(l.color) ? l.color : "#3157a4" } : {}),
+    ...(kind === "text" ? {
+      text: text(l.text, 2000) ?? "",
+      fontFamily: typeof l.fontFamily === "string" && FONT_FAMILY.test(l.fontFamily.trim()) ? l.fontFamily.trim() : "Arial",
+      fontSize: num(l.fontSize, 8, 400) ?? 72,
+      fontWeight: pick(l.fontWeight, ["400", "500", "600", "700", "800", "900"] as const) ?? "600",
+      fontStyle: pick(l.fontStyle, ["normal", "italic"] as const) ?? "normal",
+      textAlign: pick(l.textAlign, ["left", "center", "right"] as const) ?? "center",
+      lineHeight: num(l.lineHeight, 0.5, 3) ?? 1.2,
+      textColor: typeof l.textColor === "string" && HEX.test(l.textColor) ? l.textColor : "#ffffff",
+      underline: l.underline === true,
+    } : {}),
     ...(kind === "feed" && pick(l.language, ["both", "first", "second"] as const) ? { language: pick(l.language, ["both", "first", "second"] as const) } : {}),
     ...(fadeMs ? { fadeMs } : {}),
   }
@@ -191,6 +204,16 @@ export async function receiveDeskScene(p: Record<string, unknown>, deleting = fa
   const byId = asText(p.byId, 100)
   const sceneId = deleting ? asText(p.id, 100) : asText((p.scene as { id?: unknown } | null)?.id, 100)
   if (!sceneId) return
+  const hostRequestId = asText(p.requestId, 100)
+  if (hostRequestId) {
+    const existing = useBroadcastStore.getState().scenes.find((scene) => scene.id === sceneId)
+    const action = deleting ? "delete" : existing ? "change" : "add"
+    const name = asText((p.scene as { name?: unknown } | null)?.name, 80) ?? existing?.name ?? "the scene"
+    toast.info(`${by} requested to ${action} “${name}”`, {
+      description: "The host recorded this in Permissions → Approval Requests. A decision does not save the scene or change Preview or Program.",
+    })
+    return
+  }
   const existing = useBroadcastStore.getState().scenes.find((s) => s.id === sceneId)
   if (deleting && !existing) return
   const scene = deleting ? null : mergeDeskScene(p.scene, existing)

@@ -14,8 +14,10 @@ import { countdownTarget, isCountdownTo, type CountdownTargets } from "@/lib/cou
  * output makes it that output's program.
  */
 
-const KINDS: readonly SceneLayerKind[] = ["feed", "color", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo"]
+const KINDS: readonly SceneLayerKind[] = ["feed", "color", "ellipse", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo", "text"]
 const clamp = (n: unknown, lo: number, hi: number, d: number) => (typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d)
+const TEXT_WEIGHTS = ["400", "500", "600", "700", "800", "900"] as const
+const TEXT_COLOR = /^#[0-9a-f]{6}$/i
 
 /** A media folder file name: its hash and type (as the host stores it); the only name a browser feed may ask for. */
 const MEDIA_FILE = /^[0-9a-f]{64}\.[a-z0-9]{1,8}$/
@@ -84,17 +86,25 @@ export function captureSceneAppearance(
 let seq = 0
 const newId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `layer-${Date.now()}-${++seq}`)
 
-const LAYER_NAMES: Record<SceneLayerKind, string> = { feed: "Live content", color: "Colour", picture: "Picture", video: "Video", camera: "Camera", clock: "Clock", ticker: "Ticker", lowerThird: "Lower third", logo: "Logo" }
+const LAYER_NAMES: Record<SceneLayerKind, string> = { feed: "Live content", color: "Colour", ellipse: "Ellipse", picture: "Picture", video: "Video", camera: "Camera", clock: "Clock", ticker: "Ticker", lowerThird: "Lower third", logo: "Logo", text: "Static text" }
 
 /** Where a new layer of a kind goes when nothing says: the ticker along the bottom, the logo in the top-right corner, the rest full frame. */
 export function layerBox(kind: SceneLayerKind): SceneBox {
   if (kind === "ticker") return { x: 0, y: 92, w: 100, h: 8 }
   if (kind === "logo") return { x: 84, y: 4, w: 12, h: 12 }
+  if (kind === "text") return { x: 10, y: 36, w: 80, h: 20 }
+  if (kind === "ellipse") return { x: 32, y: 30, w: 36, h: 40 }
   return { ...FULL }
 }
 
 export function newLayer(kind: SceneLayerKind, patch: Partial<SceneLayer> = {}): SceneLayer {
-  return { id: newId(), name: LAYER_NAMES[kind], kind, box: layerBox(kind), opacity: 1, visible: true, ...(kind === "color" ? { color: "#101820" } : {}), ...patch }
+  return {
+    id: newId(), name: LAYER_NAMES[kind], kind, box: layerBox(kind), opacity: 1, visible: true,
+    ...(kind === "color" ? { color: "#101820" } : {}),
+    ...(kind === "ellipse" ? { color: "#3157a4" } : {}),
+    ...(kind === "text" ? { text: "Your text", fontFamily: "Geist Variable", fontSize: 72, fontWeight: "600" as const, fontStyle: "normal" as const, textAlign: "center" as const, lineHeight: 1.2, textColor: "#ffffff", underline: false } : {}),
+    ...patch,
+  }
 }
 
 export interface ScenePreset {
@@ -231,7 +241,19 @@ export function normalizeScene(raw: unknown): Scene | null {
     const videoUrl = typeof l.videoUrl === "string" && l.videoUrl && l.videoUrl.length <= 4000 ? l.videoUrl : undefined
     const mediaFile = typeof l.mediaFile === "string" && MEDIA_FILE.test(l.mediaFile) ? l.mediaFile : undefined
     const fadeMs = clamp(l.fadeMs, 0, 3000, 0)
-    return [{ ...l, clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
+    const staticText = l.kind === "text" ? {
+      text: typeof l.text === "string" ? l.text.slice(0, 2000) : "",
+      fontFamily: typeof l.fontFamily === "string" ? l.fontFamily.replace(/[^\p{L}\p{N}, _-]/gu, "").trim().slice(0, 120) || "Arial" : "Arial",
+      fontSize: clamp(l.fontSize, 8, 400, 72),
+      fontWeight: (TEXT_WEIGHTS as readonly unknown[]).includes(l.fontWeight) ? l.fontWeight as SceneLayer["fontWeight"] : "600",
+      fontStyle: l.fontStyle === "italic" ? "italic" as const : "normal" as const,
+      textAlign: l.textAlign === "left" || l.textAlign === "right" ? l.textAlign : "center" as const,
+      lineHeight: clamp(l.lineHeight, 0.5, 3, 1.2),
+      textColor: typeof l.textColor === "string" && TEXT_COLOR.test(l.textColor) ? l.textColor : "#ffffff",
+      underline: l.underline === true,
+    } : {}
+    const ellipseColor = l.kind === "ellipse" ? (typeof l.color === "string" && TEXT_COLOR.test(l.color) ? l.color : "#3157a4") : undefined
+    return [{ ...l, ...staticText, ...(ellipseColor ? { color: ellipseColor } : {}), clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
   return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0), ...(typeof s.updatedBy === "string" ? { updatedBy: s.updatedBy.trim().slice(0, 60) || null } : s.updatedBy === null ? { updatedBy: null } : {}), ...(typeof s.libraryLookId === "string" && s.libraryLookId ? { libraryLookId: s.libraryLookId } : {}), ...(designPin(s.design) ? { design: { id: s.design!.id, version: s.design!.version } } : {}) }
 }
@@ -346,6 +368,7 @@ function contentKey(f: SceneLayerFrame): string {
   if (f.kind === "camera") return f.cameraUrl ?? f.fallback ?? ""
   // A clock's time moves by itself: only starting, stopping or a different kind of clock is new.
   if (f.kind === "clock") return f.clock?.mode ?? ""
+  if (f.kind === "text") return fingerprint(JSON.stringify([f.text, f.fontFamily, f.fontSize, f.fontWeight, f.fontStyle, f.textAlign, f.lineHeight, f.textColor, f.underline]))
   return f.color ?? ""
 }
 
@@ -374,6 +397,7 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
     const base = { id: l.id, kind: l.kind, box: l.box, crop: l.crop, opacity: l.opacity }
     if (l.kind === "feed") return { ...base, ...layerContent(s, output, l) }
     if (l.kind === "color") return { ...base, color: l.color ?? "#000000" }
+    if (l.kind === "ellipse") return { ...base, color: l.color ?? "#3157a4" }
     if (l.kind === "picture") return { ...base, imageUrl: l.imageUrl ?? null, ...(preview && !l.imageUrl ? { label: "Choose a picture" } : {}) }
     // A video plays on each output (a window from the media folder, a browser feed from the host), looped and silent.
     if (l.kind === "video") return { ...base, ...(l.videoUrl ? { videoUrl: l.videoUrl } : {}), ...(l.mediaFile ? { mediaFile: l.mediaFile } : {}), ...(preview ? { label: l.videoUrl ? `${l.name} · video` : "Choose a video" } : {}) }
@@ -388,6 +412,20 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
       const clock = l.clockShows === "time" ? { mode: "time" as const, at: 0, text: "" } : l.clockShows === "until" ? untilClock(l.until, s.now ?? Date.now()) : l.clockShows === "countdown" ? countdownClock(s.countdowns, l.countdownTo) : (s.clock ?? null)
       const missing = l.clockShows === "until" ? "choose the time to count down to" : l.clockShows === "countdown" ? ((l.countdownTo ?? "next") === "next" ? "no next item in the run of show now" : "not in the run of show now") : "set the service timer in Present"
       return { ...base, theme, clock, ...(preview && !clock ? { label: `${l.name} · ${missing}` } : {}) }
+    }
+    if (l.kind === "text") {
+      return {
+        ...base,
+        text: l.text ?? "",
+        fontFamily: l.fontFamily ?? "Arial",
+        fontSize: l.fontSize ?? 72,
+        fontWeight: l.fontWeight ?? "600",
+        fontStyle: l.fontStyle ?? "normal",
+        textAlign: l.textAlign ?? "center",
+        lineHeight: l.lineHeight ?? 1.2,
+        textColor: l.textColor ?? "#ffffff",
+        underline: l.underline ?? false,
+      }
     }
     // A camera: its stream, played by each output from the church network. One hidden from scenes
     // (Present → Sources) is not played: its box shows the fallback, the scene itself unchanged.

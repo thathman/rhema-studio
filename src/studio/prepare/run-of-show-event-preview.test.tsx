@@ -2,6 +2,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/scene-renderer", () => ({ drawScene: vi.fn() }))
+const { getVersionMock } = vi.hoisted(() => ({ getVersionMock: vi.fn() }))
+vi.mock("@/design-engine/design-store", () => ({ designStore: { getVersion: (...args: unknown[]) => getVersionMock(...args) } }))
 
 vi.hoisted(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
@@ -14,6 +16,8 @@ import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { newScene } from "@/lib/scenes"
+import { sceneToDesign } from "@/design-engine/rhema-scene"
+import type { DesignVersion } from "@/design-engine/design-store"
 import { parseItemIntent, sceneStep } from "@/lib/item-intent"
 import type { BroadcastOutput, QueueItem } from "@/types"
 import { RunOfShowEventEditor } from "./run-of-show-event-editor"
@@ -80,6 +84,7 @@ afterEach(() => {
   root = null
   vi.restoreAllMocks()
   vi.mocked(drawScene).mockClear()
+  getVersionMock.mockReset()
   document.body.replaceChildren()
 })
 
@@ -160,5 +165,193 @@ describe("Run of Show event preview", () => {
     })
     expect(takeScene).not.toHaveBeenCalled()
     takeScene.mockRestore()
+  })
+
+  it("renders the exact pinned design version instead of a newer local scene copy", async () => {
+    const pinnedVersionScene = newScene("Welcome look v1")
+    pinnedVersionScene.id = "welcome-v1"
+    const localLatestScene = newScene("Mutable local copy v2")
+    localLatestScene.id = "welcome-local"
+    localLatestScene.design = { id: "design-1", version: 2 }
+    const designedMoment: QueueItem = {
+      id: "designed-welcome",
+      kind: "slide",
+      slide: { title: "Welcome", body: "The service begins soon", designRef: { id: "design-1", version: 1 } },
+      reference: "Welcome",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+    } as unknown as QueueItem
+    const version: DesignVersion = {
+      designId: "design-1",
+      version: 1,
+      fromRevision: 1,
+      title: "Sunday welcome",
+      document: sceneToDesign(pinnedVersionScene),
+      note: null,
+      savedBy: "host",
+      createdAt: "2026-10-30T10:00:00Z",
+    }
+    getVersionMock.mockResolvedValue(version)
+    useQueueStore.setState({
+      items: [designedMoment],
+      headers: [{ id: "welcome", type: "group", name: "Welcome", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+    })
+    useBroadcastStore.setState({
+      scenes: [localLatestScene],
+      outputs: [{ ...output, sceneId: localLatestScene.id }],
+      isLive: true,
+      liveItemId: "currently-on-air",
+      liveVerse: { reference: "Psalm 23:1", segments: [{ text: "The Lord is my shepherd" }] },
+    })
+    const before = {
+      isLive: useBroadcastStore.getState().isLive,
+      liveItemId: useBroadcastStore.getState().liveItemId,
+      liveVerse: useBroadcastStore.getState().liveVerse,
+      outputs: structuredClone(useBroadcastStore.getState().outputs),
+    }
+    const takeScene = vi.spyOn(useBroadcastStore.getState(), "takeScene")
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D)
+
+    const el = render(useQueueStore.getState().headers[0])
+    const tab = el.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Event preview"]')!
+    await act(async () => { tab.focus(); tab.click() })
+
+    expect(getVersionMock).toHaveBeenCalledWith("design-1", 1)
+    expect(getVersionMock).not.toHaveBeenCalledWith("design-1", 2)
+    expect(el.textContent).toContain("Welcome look v1 · Sanctuary")
+    expect(el.textContent).not.toContain("Mutable local copy v2")
+    expect(el.textContent).not.toContain("This screen keeps its current scene for this moment")
+    expect(el.querySelector('[aria-label="Preview of Welcome look v1"]')).not.toBeNull()
+    expect(useBroadcastStore.getState()).toMatchObject({
+      isLive: before.isLive,
+      liveItemId: before.liveItemId,
+      liveVerse: before.liveVerse,
+      outputs: before.outputs,
+    })
+    expect(takeScene).not.toHaveBeenCalled()
+  })
+
+  it("falls back to the moment's own slide when its pinned version is missing, never the local scene", async () => {
+    const localLatestScene = newScene("Mutable local copy v2")
+    localLatestScene.id = "welcome-local"
+    const designedMoment: QueueItem = {
+      id: "designed-welcome",
+      kind: "slide",
+      slide: { title: "Welcome", body: "The service begins soon", designRef: { id: "design-1", version: 1 } },
+      scene_id: localLatestScene.id,
+      reference: "Welcome",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+    } as unknown as QueueItem
+    getVersionMock.mockResolvedValue(null)
+    useQueueStore.setState({
+      items: [designedMoment],
+      headers: [{ id: "welcome", type: "group", name: "Welcome", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+    })
+    useBroadcastStore.setState({ scenes: [localLatestScene], outputs: [output], isLive: true, liveItemId: "currently-on-air" })
+    const takeScene = vi.spyOn(useBroadcastStore.getState(), "takeScene")
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D)
+
+    const el = render(useQueueStore.getState().headers[0])
+    const tab = el.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Event preview"]')!
+    await act(async () => { tab.focus(); tab.click() })
+
+    expect(el.textContent).toContain("design-1 version 1 is not in this computer's designs")
+    expect(el.textContent).toContain("The moment's own slide is shown below")
+    expect(el.textContent).not.toContain("Mutable local copy v2")
+    expect(el.querySelector('[aria-label="Preview of Mutable local copy v2"]')).toBeNull()
+    expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveItemId: "currently-on-air", outputs: [output] })
+    expect(takeScene).not.toHaveBeenCalled()
+  })
+
+  it("keeps explicit per-screen Take scenes ahead of a moment's general design pin", async () => {
+    const sanctuaryPlannedScene = newScene("Sanctuary's planned scene")
+    sanctuaryPlannedScene.id = "sanctuary-planned"
+    const overflowPlannedScene = newScene("Overflow's planned scene")
+    overflowPlannedScene.id = "overflow-planned"
+    const designedMoment: QueueItem = {
+      id: "designed-welcome",
+      kind: "slide",
+      slide: { title: "Welcome", body: "The service begins soon", designRef: { id: "design-1", version: 1 } },
+      on_take: [sceneStep(sanctuaryPlannedScene.id, "sanctuary"), sceneStep(overflowPlannedScene.id, "overflow")],
+      reference: "Welcome",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+    } as unknown as QueueItem
+    useQueueStore.setState({
+      items: [designedMoment],
+      headers: [{ id: "welcome", type: "group", name: "Welcome", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+    })
+    useBroadcastStore.setState({
+      scenes: [sanctuaryPlannedScene, overflowPlannedScene],
+      outputs: [output, overflowOutput],
+      isLive: true,
+      liveItemId: "currently-on-air",
+    })
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D)
+
+    const el = render(useQueueStore.getState().headers[0])
+    const tab = el.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Event preview"]')!
+    await act(async () => { tab.focus(); tab.click() })
+    expect(getVersionMock).not.toHaveBeenCalled()
+    expect(el.textContent).toContain("The planned Take scene takes precedence over pinned design v1 for this audience preview")
+    expect(el.textContent).toContain("Sanctuary's planned scene · Sanctuary")
+
+    const outputSelect = el.querySelector<HTMLSelectElement>('[aria-label="Preview audience screen"]')!
+    await act(async () => {
+      outputSelect.value = "overflow"
+      outputSelect.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    expect(el.textContent).toContain("Overflow's planned scene · Overflow")
+    expect(vi.mocked(drawScene).mock.calls.at(-1)?.[3]).toMatchObject({ sceneId: "overflow-planned" })
+    expect(getVersionMock).not.toHaveBeenCalled()
+  })
+
+  it("keeps an explicit shared Take scene ahead of a moment's general design pin on each screen", async () => {
+    const sharedPlannedScene = newScene("Shared planned scene")
+    sharedPlannedScene.id = "shared-planned"
+    const designedMoment: QueueItem = {
+      id: "designed-welcome",
+      kind: "slide",
+      slide: { title: "Welcome", body: "The service begins soon", designRef: { id: "design-1", version: 1 } },
+      on_take: [sceneStep(sharedPlannedScene.id)],
+      reference: "Welcome",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+    } as unknown as QueueItem
+    useQueueStore.setState({
+      items: [designedMoment],
+      headers: [{ id: "welcome", type: "group", name: "Welcome", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+    })
+    useBroadcastStore.setState({
+      scenes: [sharedPlannedScene],
+      outputs: [output, overflowOutput],
+      isLive: true,
+      liveItemId: "currently-on-air",
+    })
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D)
+
+    const el = render(useQueueStore.getState().headers[0])
+    const tab = el.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Event preview"]')!
+    await act(async () => { tab.focus(); tab.click() })
+    expect(el.textContent).toContain("Shared planned scene · Sanctuary")
+    expect(el.textContent).toContain("The planned Take scene takes precedence over pinned design v1 for this audience preview")
+
+    const outputSelect = el.querySelector<HTMLSelectElement>('[aria-label="Preview audience screen"]')!
+    await act(async () => {
+      outputSelect.value = "overflow"
+      outputSelect.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    expect(el.textContent).toContain("Shared planned scene · Overflow")
+    expect(vi.mocked(drawScene).mock.calls.at(-1)?.[3]).toMatchObject({ sceneId: "shared-planned" })
+    expect(getVersionMock).not.toHaveBeenCalled()
   })
 })

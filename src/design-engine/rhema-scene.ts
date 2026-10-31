@@ -6,12 +6,15 @@
 import {
   applyCommand,
   createEmptySaraswatiScene,
+  getNodeBounds,
   SARASWATI_ROOT_ID,
+  type SaraswatiEllipseNode,
   type SaraswatiGroupNode,
   type SaraswatiImageNode,
   type SaraswatiNode,
   type SaraswatiRectNode,
   type SaraswatiScene,
+  type SaraswatiTextNode,
 } from "../vendor/avnac/saraswati"
 import type { DesignPin, Scene, SceneLayer } from "../types/scene"
 
@@ -20,7 +23,10 @@ export const DESIGN_WIDTH = 1920
 export const DESIGN_HEIGHT = 1080
 
 /** Everything about a layer that the canvas does not draw: kept whole, per node. */
-export type RhemaBinding = Omit<SceneLayer, "box" | "opacity" | "visible" | "name">
+export type RhemaBinding = Omit<SceneLayer, "box" | "opacity" | "visible" | "name"> & {
+  /** Text nodes size themselves from their contents; retain the scene's clipping viewport. */
+  textBoxHeight?: number
+}
 
 export interface RhemaDesign {
   scene: SaraswatiScene
@@ -37,6 +43,9 @@ export interface DesignIssue {
 const PLACEHOLDER: Record<string, string> = {
   feed: "#2b3a67", camera: "#1f4d3a", clock: "#5a3d1f", ticker: "#4d1f3a", lowerThird: "#3a1f4d", video: "#1f3a4d", logo: "#4d4d1f",
 }
+const TEXT_WEIGHTS = new Set(["400", "500", "600", "700", "800", "900"])
+const TEXT_COLOR = /^#[0-9a-f]{6}$/i
+const SAFE_FONT_FAMILY = /^[\p{L}\p{N}, _-]{1,120}$/u
 
 function basePaint(layer: SceneLayer) {
   return {
@@ -58,9 +67,35 @@ function basePaint(layer: SceneLayer) {
 function toNode(layer: SceneLayer): SaraswatiNode {
   const width = (layer.box.w / 100) * DESIGN_WIDTH
   const height = (layer.box.h / 100) * DESIGN_HEIGHT
+  if (layer.kind === "text") {
+    const text: SaraswatiTextNode = {
+      ...basePaint(layer),
+      type: "text",
+      text: layer.text ?? "",
+      width,
+      fontSize: layer.fontSize ?? 72,
+      fontFamily: layer.fontFamily ?? "Arial",
+      fontWeight: layer.fontWeight ?? "600",
+      fontStyle: layer.fontStyle ?? "normal",
+      textAlign: layer.textAlign ?? "center",
+      lineHeight: layer.lineHeight ?? 1.2,
+      underline: layer.underline ?? false,
+      color: { type: "solid", color: layer.textColor ?? "#ffffff" },
+      stroke: null,
+      strokeWidth: 0,
+    }
+    return text
+  }
   if (layer.kind === "picture" && layer.imageUrl) {
     const image: SaraswatiImageNode = { ...basePaint(layer), type: "image", width, height, src: layer.imageUrl, cropX: 0, cropY: 0, clipPath: null }
     return image
+  }
+  if (layer.kind === "ellipse") {
+    const ellipse: SaraswatiEllipseNode = {
+      ...basePaint(layer), type: "ellipse", width, height,
+      fill: { type: "solid", color: layer.color && TEXT_COLOR.test(layer.color) ? layer.color : "#3157a4" }, stroke: null, strokeWidth: 0,
+    }
+    return ellipse
   }
   const fill = layer.kind === "color" ? (layer.color ?? "#000000") : (PLACEHOLDER[layer.kind] ?? "#333333")
   const rect: SaraswatiRectNode = {
@@ -78,6 +113,7 @@ export function sceneToDesign(scene: Scene): RhemaDesign {
     design = applyCommand(design, { type: "ADD_NODE", node: toNode(layer) })
     const binding: Record<string, unknown> = { ...layer }
     for (const k of ["box", "opacity", "visible", "name"]) delete binding[k]
+    if (layer.kind === "text") binding.textBoxHeight = (layer.box.h / 100) * DESIGN_HEIGHT
     bindings[layer.id] = binding as RhemaBinding
   }
   const meta: Record<string, unknown> = { ...scene }
@@ -152,15 +188,57 @@ export function designToScene(design: RhemaDesign): { scene: Scene; issues: Desi
     if (node.shadow || (node.blur ?? 0) > 0) {
       issues.push({ nodeId: node.id, message: "Layer shadow and blur cannot be saved into a Rhema scene yet" })
     }
-    const size = "width" in node && "height" in node ? { w: node.width as number, h: node.height as number } : { w: 0, h: 0 }
+    const textBounds = node.type === "text" ? getNodeBounds(node) : null
+    const { textBoxHeight, ...layerBinding } = binding
+    const preservedTextHeight = typeof textBoxHeight === "number" && Number.isFinite(textBoxHeight)
+      ? Math.min(DESIGN_HEIGHT, Math.max(1, textBoxHeight))
+      : 0
+    const size = textBounds
+      ? { w: textBounds.width, h: Math.max(textBounds.height, preservedTextHeight), x: textBounds.x, y: textBounds.y }
+      : "width" in node && "height" in node
+        ? { w: (node.width as number) * node.scaleX, h: (node.height as number) * node.scaleY, x: node.x, y: node.y }
+        : { w: 0, h: 0, x: node.x, y: node.y }
     const layer: SceneLayer = {
-      ...binding,
+      ...layerBinding,
       name: node.name ?? node.id,
-      box: { x: round((node.x / DESIGN_WIDTH) * 100), y: round((node.y / DESIGN_HEIGHT) * 100), w: round((size.w * node.scaleX / DESIGN_WIDTH) * 100), h: round((size.h * node.scaleY / DESIGN_HEIGHT) * 100) },
+      box: { x: round((size.x / DESIGN_WIDTH) * 100), y: round((size.y / DESIGN_HEIGHT) * 100), w: round((size.w / DESIGN_WIDTH) * 100), h: round((size.h / DESIGN_HEIGHT) * 100) },
       opacity: node.opacity,
       visible,
     } as SceneLayer
-    if (node.type === "image") {
+    if (node.type === "text") {
+      if (binding.kind !== "text") {
+        issues.push({ nodeId: node.id, message: "A text layer needs a Rhema static-text binding" })
+      } else {
+        let compatible = true
+        const refuse = (message: string) => {
+          issues.push({ nodeId: node.id, message })
+          compatible = false
+        }
+        if (node.color.type !== "solid") refuse("Text gradients and non-hex colours cannot be used in Rhema scene output yet")
+        else if (!TEXT_COLOR.test(node.color.color)) refuse("Text gradients and non-hex colours cannot be used in Rhema scene output yet")
+        if (node.stroke || node.strokeWidth !== 0 || node.clipPath || (node.clipPathStack?.length ?? 0) > 0) refuse("Text stroke and clipping cannot be used in Rhema scene output yet")
+        if (node.text.length > 2000) refuse("Static text is limited to 2,000 characters in Rhema scene output")
+        if (!TEXT_WEIGHTS.has(node.fontWeight)) refuse("This text weight is not supported by Rhema scene output yet")
+        if (!SAFE_FONT_FAMILY.test(node.fontFamily.trim())) refuse("Use a font family made of letters, numbers, spaces, commas, underscores or hyphens")
+        const effectiveFontSize = node.fontSize * node.scaleY
+        if (!Number.isFinite(effectiveFontSize) || effectiveFontSize < 8 || effectiveFontSize > 400) refuse("Text size must be between 8 and 400 px")
+        if (node.lineHeight < 0.5 || node.lineHeight > 3) refuse("Text line height must be between 0.5 and 3")
+        if (node.scaleX <= 0 || node.scaleY <= 0 || Math.abs(node.scaleX - node.scaleY) > 0.0001) {
+          refuse("Text must keep an even, unflipped scale for Rhema scene output")
+        }
+        if (compatible && node.color.type === "solid") {
+          layer.text = node.text
+          layer.fontFamily = node.fontFamily.trim()
+          layer.fontSize = effectiveFontSize
+          layer.fontWeight = node.fontWeight as SceneLayer["fontWeight"]
+          layer.fontStyle = node.fontStyle
+          layer.textAlign = node.textAlign
+          layer.lineHeight = node.lineHeight
+          layer.textColor = node.color.color
+          layer.underline = node.underline
+        }
+      }
+    } else if (node.type === "image") {
       if (binding.kind !== "picture" || node.src !== binding.imageUrl) {
         issues.push({ nodeId: node.id, message: "Image replacement cannot be saved into this Rhema layer yet" })
       }
@@ -181,6 +259,21 @@ export function designToScene(design: RhemaDesign): { scene: Scene; issues: Desi
       if (node.stroke || node.strokeWidth !== 0 || node.radiusX !== 0 || node.radiusY !== 0 || node.clipPath || (node.clipPathStack?.length ?? 0) > 0) {
         issues.push({ nodeId: node.id, message: "Layer stroke, clipping and corner styles cannot be saved into a Rhema scene yet" })
       }
+    } else if (node.type === "ellipse") {
+      let compatible = true
+      const refuse = (message: string) => {
+        issues.push({ nodeId: node.id, message })
+        compatible = false
+      }
+      if (binding.kind !== "ellipse") refuse("An ellipse needs a Rhema ellipse-layer binding")
+      if (node.fill.type !== "solid" || !TEXT_COLOR.test(node.fill.color)) refuse("Ellipse gradients and non-hex colours cannot be used in Rhema scene output yet")
+      if (node.stroke || node.strokeWidth !== 0 || node.clipPath || (node.clipPathStack?.length ?? 0) > 0) {
+        refuse("Ellipse stroke and clipping cannot be saved into a Rhema scene yet")
+      }
+      if (!Number.isFinite(node.scaleX) || !Number.isFinite(node.scaleY) || node.scaleX <= 0 || node.scaleY <= 0) {
+        refuse("Ellipse must keep a positive, finite scale for Rhema scene output")
+      }
+      if (compatible && node.fill.type === "solid") layer.color = node.fill.color
     } else {
       issues.push({ nodeId: node.id, message: "This Avnac shape cannot be saved as a Rhema scene layer yet" })
     }

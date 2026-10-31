@@ -20,6 +20,7 @@ const { useQueueStore } = await import("@/stores/queue-store")
 const { useRouterHealth } = await import("@/lib/cameras")
 const { useJoin } = await import("@/stores/join-store")
 const { reloadSceneApprovals } = await import("@/stores/scene-approvals-store")
+const { resetApprovalRequests, useApprovalRequestsStore } = await import("@/studio/permissions/approval-requests-store")
 
 /** Scenes made and changed from joined desks (#243 SC.16, SC.17): what the host shares and its approval rule. */
 const box = { x: 0, y: 0, w: 100, h: 100 }
@@ -43,6 +44,7 @@ beforeEach(async () => {
   useSceneRequests.setState({ requests: [] })
   useJournalStore.setState({ entries: [] })
   useQueueStore.setState({ items: [], headers: [] })
+  resetApprovalRequests()
   await reloadSceneApprovals()
 })
 
@@ -85,6 +87,15 @@ describe("what the host shares with a desk", () => {
     expect(merged.layers[2]).not.toHaveProperty("videoUrl")
     expect(merged.createdAt).toBe(1)
     expect(mergeDeskScene({ name: "no id" }, undefined)).toBeNull()
+  })
+
+  it("keeps a desk ellipse's hex fill and replaces an unsafe fill with the default", () => {
+    const raw = {
+      id: "ellipse-scene", name: "Welcome", background: "#000000",
+      layers: [{ id: "oval", name: "Ellipse", kind: "ellipse", color: "#d14c62", box, opacity: 1, visible: true }],
+    }
+    expect(mergeDeskScene(raw, undefined)?.layers[0]).toMatchObject({ kind: "ellipse", color: "#d14c62" })
+    expect(mergeDeskScene({ ...raw, layers: [{ ...raw.layers[0], color: "url(https://example.test/fill)" }] }, undefined)?.layers[0]).toMatchObject({ kind: "ellipse", color: "#3157a4" })
   })
 })
 
@@ -151,6 +162,30 @@ describe("the approval rule (the default until the owner chooses another)", () =
     expect(useSceneRequests.getState().requests).toHaveLength(1)
   })
 
+  it("routes a host-tracked scene request by its authoritative ID without a local duplicate or scene mutation", async () => {
+    const scenesBefore = useBroadcastStore.getState().scenes
+    const outputsBefore = useBroadcastStore.getState().outputs
+
+    await send("on", { request: true, requestId: "host-request-uuid", expiresAt: "2026-10-31T09:00:00Z" })
+
+    expect(useApprovalRequestsStore.getState().requests).toEqual([])
+    expect(useSceneRequests.getState().requests).toEqual([])
+    expect(useNotices.getState().notices).toEqual([])
+    expect(useBroadcastStore.getState().scenes).toBe(scenesBefore)
+    expect(useBroadcastStore.getState().outputs).toBe(outputsBefore)
+  })
+
+  it("keeps a host-tracked delete request visible even when the target scene is not in the local store", async () => {
+    const scenesBefore = useBroadcastStore.getState().scenes
+    const outputsBefore = useBroadcastStore.getState().outputs
+
+    await receiveDeskScene({ id: "scene-not-cached", request: true, requestId: "host-delete-request", by: "Ade screens" }, true)
+
+    expect(useSceneRequests.getState().requests).toEqual([])
+    expect(useBroadcastStore.getState().scenes).toBe(scenesBefore)
+    expect(useBroadcastStore.getState().outputs).toBe(outputsBefore)
+  })
+
   it("a waiting change is not put in once the scene changed here", async () => {
     await send("on")
     const req = useNotices.getState().notices[0].action!.value
@@ -205,6 +240,29 @@ describe("what a desk may put in a scene (security review)", () => {
     expect(l.box.y + l.box.h).toBeLessThanOrEqual(100)
     expect(l.opacity).toBe(1)
     expect(merge({ id: "s", layers: [layer({ kind: "script" })] })!.layers).toHaveLength(0)
+  })
+
+  it("preserves safe static text and bounds style fields from an authorized scene desk", () => {
+    const saved = merge({ id: "s", background: "#000000", layers: [layer({
+      kind: "text", text: "Welcome to worship", fontFamily: "Geist Variable", fontSize: 68,
+      fontWeight: "700", fontStyle: "italic", textAlign: "center", lineHeight: 1.15,
+      textColor: "#fefefe", underline: true,
+    })] })!
+    expect(saved.layers[0]).toMatchObject({
+      kind: "text", text: "Welcome to worship", fontFamily: "Geist Variable", fontSize: 68,
+      fontWeight: "700", fontStyle: "italic", textAlign: "center", lineHeight: 1.15,
+      textColor: "#fefefe", underline: true,
+    })
+
+    const bounded = merge({ id: "s", background: "#000000", layers: [layer({
+      kind: "text", text: "w".repeat(3000), fontFamily: "Arial; color:red", fontSize: 500,
+      fontWeight: "1000", fontStyle: "oblique", textAlign: "justify", lineHeight: 8,
+      textColor: "red", underline: "yes",
+    })] })!.layers[0]
+    expect(bounded).toMatchObject({
+      kind: "text", text: "", fontFamily: "Arial", fontSize: 400, fontWeight: "600",
+      fontStyle: "normal", textAlign: "center", lineHeight: 3, textColor: "#ffffff", underline: false,
+    })
   })
 
   it("drops a layer or a name with a huge string", () => {

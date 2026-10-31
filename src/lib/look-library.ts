@@ -44,7 +44,7 @@ export interface LookFamily {
  * camera or logo layer is a place only: the church chooses its picture, video or camera in Scenes.
  */
 export interface SceneTemplateLayer {
-  kind: SceneLayerKind
+  kind: Exclude<SceneLayerKind, "text">
   name: string
   shows?: ContentType[]
   box: SceneBox

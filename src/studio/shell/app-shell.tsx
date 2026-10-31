@@ -49,6 +49,10 @@ import "@/lib/app-tick"
 import { removeOldTranscripts } from "@/lib/journal-transcript"
 import { hydrateSceneApprovals, useSceneApprovalsStore } from "@/stores/scene-approvals-store"
 import { PermissionsWorkspace } from "@/studio/permissions/permissions-workspace"
+import { hydrateApprovalRequests, reloadApprovalRequests, resetApprovalRequests, useApprovalRequestsStore } from "@/studio/permissions/approval-requests-store"
+import { useJoin } from "@/stores/join-store"
+import { listen, type UnlistenFn } from "@tauri-apps/api/event"
+import { REMOTE_EVENTS } from "@/lib/remote-events"
 
 /** What the top bar calls each page. */
 const TITLES: Record<Workspace, string> = { home: "Home", prepare: "Prepare", present: "Live", production: "Live", library: "Library", design: "Design", permissions: "Permissions", connections: "Connections", team: "Team", archive: "History", settings: "Settings", more: "More tools" }
@@ -76,7 +80,10 @@ export function AppShell() {
   const outputsOpen = useShellStore((s) => s.outputsDialogOpen)
   const setOutputsOpen = useShellStore((s) => s.setOutputsDialogOpen)
   const isLive = useBroadcastStore((s) => s.isLive)
-  const pendingApprovals = useSceneApprovalsStore((s) => s.requests.filter((request) => request.status === "pending" || request.status === "needs-review").length)
+  const joinStatus = useJoin((s) => s.status)
+  const hostPendingApprovals = useApprovalRequestsStore((s) => joinStatus === "off" ? s.requests.filter((request) => request.state === "submitted").length : 0)
+  const localPendingApprovals = useSceneApprovalsStore((s) => s.requests.filter((request) => request.status === "pending" || request.status === "needs-review").length)
+  const pendingApprovals = hostPendingApprovals + localPendingApprovals
   const church = useMemo(() => churchItems(pendingApprovals), [pendingApprovals])
   // A joined director sees this computer's readiness checks (desk consoles): worked out only while someone is paired.
   const paired = useSettingsStore((s) => s.remoteDevices.length > 0)
@@ -107,6 +114,34 @@ export function AppShell() {
   useEffect(() => startLiveStatePublisher(), [])
   // Load durable host approvals before rendering their pending badge or accepting decisions.
   useEffect(() => { void hydrateSceneApprovals().catch((error) => toast.error("Saved approvals could not be loaded", { description: error instanceof Error ? error.message : String(error) })) }, [])
+  // Host-backed requests power the Permissions badge. Joined desks never read or decide the host ledger.
+  useEffect(() => {
+    if (joinStatus === "off") void hydrateApprovalRequests().catch(() => {})
+    else resetApprovalRequests()
+  }, [joinStatus])
+  useEffect(() => {
+    if (joinStatus !== "off") return
+    let cancelled = false
+    const unlisteners: UnlistenFn[] = []
+    const refreshOnRequest = (received: { payload: string }) => {
+      if (cancelled) return
+      try {
+        const payload = JSON.parse(received.payload) as { requestId?: unknown }
+        if (typeof payload.requestId === "string" && payload.requestId.trim()) void reloadApprovalRequests().catch(() => {})
+      } catch {
+        // Malformed scene events are handled by the scene listener; they cannot refresh or alter approvals.
+      }
+    }
+    void Promise.allSettled([REMOTE_EVENTS.save_scene, REMOTE_EVENTS.delete_scene].map((event) => listen<string>(event, refreshOnRequest))).then((results) => {
+      const listeners = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : [])
+      if (cancelled) listeners.forEach((unlisten) => unlisten())
+      else unlisteners.push(...listeners)
+    }).catch(() => {})
+    return () => {
+      cancelled = true
+      unlisteners.forEach((unlisten) => unlisten())
+    }
+  }, [joinStatus])
   // Timekeeper's chime (#196 R2): this computer only, off unless turned on there.
   useEffect(() => startCountdownChime(), [])
   // Browser feeds: the LAN listener knows each feed and its secret.
@@ -138,6 +173,27 @@ export function AppShell() {
     useShellStore.setState({ goRequest: null })
     void go(goRequest)
   }, [goRequest, go])
+
+  const prepareProgramRequest = useShellStore((s) => s.prepareProgramRequest)
+  useEffect(() => {
+    if (!prepareProgramRequest) return
+    if (useShellStore.getState().prepareProgramRequest !== prepareProgramRequest) return
+    useShellStore.setState({ prepareProgramRequest: null })
+    void go("prepare").then(async () => {
+      // `go` owns route guards (including an open Design draft). Do not change the selected
+      // service if the user chose to stay in the current workspace.
+      if (useShellStore.getState().workspace !== "prepare") return
+      // A newer request supersedes this one if it arrived while navigation was guarded.
+      if (useShellStore.getState().prepareProgramRequest !== null) return
+      const result = await useServiceStore.getState().openProgram(prepareProgramRequest)
+      if (result !== "ok") {
+        const detail = result === "unsaved"
+          ? "Save or discard the current service changes in Prepare before opening this request."
+          : useServiceStore.getState().error ?? "The requested service could not be opened."
+        toast.error("Could not open service in Prepare", { description: detail })
+      }
+    })
+  }, [prepareProgramRequest, go])
 
   // The Bible catalogue used to load only when the search panel mounted.
   useEffect(() => {

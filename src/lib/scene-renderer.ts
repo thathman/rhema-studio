@@ -83,6 +83,66 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, r: { x: number; y:
   ctx.fillText(text, r.x + r.w / 2, r.y + r.h / 2)
 }
 
+/** Literal text saved in an Avnac design, drawn by the same renderer on Preview and every output. */
+function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, frameHeight: number): void {
+  const text = layer.text ?? ""
+  if (!text) return
+  const fontSize = Math.max(1, Math.min(400, layer.fontSize ?? 72) * frameHeight / 1080)
+  const fontFamily = (layer.fontFamily ?? "Arial").replace(/[^\p{L}\p{N}, _-]/gu, "").trim().slice(0, 120) || "Arial"
+  const fontWeight = ["400", "500", "600", "700", "800", "900"].includes(layer.fontWeight ?? "") ? layer.fontWeight : "600"
+  const fontStyle = layer.fontStyle === "italic" ? "italic" : "normal"
+  const align = layer.textAlign === "center" || layer.textAlign === "right" ? layer.textAlign : "left"
+  const lineHeight = Math.max(0.5, Math.min(3, layer.lineHeight ?? 1.2))
+  const color = /^#[0-9a-f]{6}$/i.test(layer.textColor ?? "") ? layer.textColor! : "#ffffff"
+  const lines: string[] = []
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(r.x, r.y, r.w, r.h)
+  ctx.clip()
+  ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`
+  ctx.fillStyle = color
+  ctx.textAlign = align
+  ctx.textBaseline = "top"
+  for (const paragraph of text.split(/\r\n?|\n/)) {
+    const words = paragraph.trim().split(/\s+/).filter(Boolean)
+    if (words.length === 0) {
+      lines.push("")
+      continue
+    }
+    let line = ""
+    for (const word of words) {
+      const candidate = line ? `${line} ${word}` : word
+      if (line && ctx.measureText(candidate).width > r.w) {
+        lines.push(line)
+        line = word
+      } else line = candidate
+    }
+    lines.push(line)
+  }
+  let y = r.y
+  const step = fontSize * lineHeight
+  for (const line of lines) {
+    if (y + fontSize > r.y + r.h) break
+    if (line) {
+      const x = align === "center" ? r.x + r.w / 2 : align === "right" ? r.x + r.w : r.x
+      ctx.fillText(line, x, y, r.w)
+      if (layer.underline) {
+        const width = Math.min(r.w, ctx.measureText(line).width)
+        const left = align === "center" ? r.x + (r.w - width) / 2 : align === "right" ? r.x + r.w - width : r.x
+        const underlineY = y + fontSize * 1.04
+        ctx.beginPath()
+        ctx.moveTo(left, underlineY)
+        ctx.lineTo(left + width, underlineY)
+        ctx.strokeStyle = color
+        ctx.lineWidth = Math.max(1, fontSize / 24)
+        ctx.stroke()
+      }
+    }
+    y += step
+  }
+  ctx.restore()
+}
+
 /**
  * Paint something that lays itself out in a frame (the ticker, a lower third) into a layer's box,
  * as if the box were the whole frame. A see-through layer goes through its own canvas, because
@@ -183,6 +243,11 @@ function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: n
   if (l.kind === "color") {
     ctx.fillStyle = l.color ?? "#000"
     ctx.fillRect(r.x, r.y, r.w, r.h)
+  } else if (l.kind === "ellipse") {
+    ctx.fillStyle = l.color ?? "#3157a4"
+    ctx.beginPath()
+    ctx.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2, 0, 0, Math.PI * 2)
+    ctx.fill()
   } else if (l.kind === "picture" && l.imageUrl) {
     const img = opts.image(l.imageUrl)
     if (img && img.naturalWidth > 0) {
@@ -222,6 +287,8 @@ function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: n
   } else if (l.kind === "clock" && l.theme && l.clock) {
     // The time fills its box in the look's text style; whatever is behind shows around it.
     fitText(ctx, clockText(l.clock, opts.now ?? Date.now()), r, l.theme, 0.8)
+  } else if (l.kind === "text") {
+    paintStaticText(ctx, l, r, height)
   } else if (l.kind === "feed" && l.theme && l.verse) {
     const lc = opts.layerCanvas(l.id)
     const { width: tw, height: th } = l.theme.resolution

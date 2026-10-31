@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
-import { ExternalLinkIcon, SaveIcon, TrashIcon } from "lucide-react"
+import { ChevronDownIcon, ExternalLinkIcon, Layers3Icon, SaveIcon, TrashIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
 import { useBroadcastStore } from "@/stores"
 import { useShellStore, type DesignTab } from "@/studio/shell-store"
@@ -13,6 +14,7 @@ import { StageDesigner } from "@/studio/design/stage-designer"
 import { CountdownDesigner } from "@/studio/design/countdown-designer"
 import { BrandDesigner } from "@/studio/design/brand-designer"
 import { LookLibraryView } from "@/studio/design/look-library-view"
+import { DesignDocumentsWorkspace } from "@/studio/design/design-documents-workspace"
 import { designUsage } from "@/lib/design-usage"
 import { themeIdsOf } from "@/lib/output-themes"
 import { outputOnAir } from "@/lib/output-on-air"
@@ -21,8 +23,9 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { cn } from "@/lib/utils"
 
 const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
-  ["themes", "Themes", "How Bible, songs, hymns, slides and pictures look"],
+  ["my-designs", "My Designs", "Editable church designs, private drafts and immutable versions"],
   ["library", "Templates", "Ready-made looks and layouts to start from"],
+  ["themes", "Themes", "How Bible, songs, hymns, slides and pictures look"],
   ["lower-thirds", "Lower thirds", "Names, scripture and lyrics strips"],
   ["ticker", "News ticker", "The crawl along the screen"],
   ["stage", "Stage", "What the team on the platform sees"],
@@ -30,48 +33,51 @@ const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["brand", "Brand kit", "Logo, colours and fonts once"],
   ["used-on", "Used on…", "Which outputs show each look"],
 ]
+const PRIMARY_TABS = TABS.filter(([id]) => id === "my-designs" || id === "library")
+const DESIGN_TOOLS = TABS.filter(([id]) => id !== "my-designs" && id !== "library")
 
 /**
- * Design studio: every design edit in one place — themes for each kind of
- * content, lower thirds, the news ticker and the church brand, and where each
- * look is used (choosing it per output is in the output's editor).
+ * Design studio: My Designs is the canonical editable scene workflow; the
+ * specialised theme, lower-third, ticker, stage and brand tools remain nearby.
  */
 export function DesignWorkspace() {
   const tab = useShellStore((s) => s.designTab)
   const setTab = useShellStore((s) => s.setDesignTab)
+  const activeTool = DESIGN_TOOLS.find(([id]) => id === (tab === "outputs" ? "used-on" : tab))
   // A lower-third style just added from Templates opens selected.
   const [styleId, setStyleId] = useState<string>()
 
   // Editing starts on the first theme, as the designer always did (leaving the page settles it: see the shell).
   useEffect(() => {
+    if (tab !== "themes") return
     const s = useBroadcastStore.getState()
     s.setDesignerOpen(true)
     if (!s.draftTheme && s.themes.length > 0) s.startEditing(s.themes[0].id)
-  }, [])
+  }, [tab])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 flex-wrap items-end justify-between gap-4 px-8 pt-6 pb-4 max-[1200px]:px-5">
         <div className="min-w-0">
           <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">The creative workspace</p>
-          <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Design once. Beautiful everywhere.</h1>
-          <p className="mt-1 text-xs text-muted-foreground">Every look in one place: scripture, songs, hymns, slides, pictures, lower thirds, the ticker, the stage display and your brand.</p>
+          <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Choose, customize, and use your designs.</h1>
+          <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Start in My Designs: choose a scene template, customize a private draft, then create a version for Prepare. A design version changes public output only through the normal approval and explicit Take flow.</p>
         </div>
-        {tab === "themes" && (
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {tab !== "my-designs" && <Button variant="outline" onClick={() => setTab("my-designs")}><Layers3Icon /> Open My Designs</Button>}
+          {tab === "themes" && <>
             <LiveEditSwitch />
             <Button variant="outline" onClick={() => useBroadcastStore.getState().discardDraft()}><TrashIcon /> Discard changes</Button>
             <Button onClick={() => useBroadcastStore.getState().saveDraft()}><SaveIcon /> Save theme</Button>
-          </div>
-        )}
+          </>}
+        </div>
       </header>
-      <div role="tablist" aria-label="What you are designing" className="mx-8 mb-3 flex shrink-0 gap-1 overflow-x-auto border-b border-border max-[1200px]:mx-5">
-        {TABS.map(([id, label, hint]) => (
+      <nav aria-label="Design sections" className="mx-8 mb-3 flex shrink-0 flex-wrap items-center gap-1 border-b border-border max-[1200px]:mx-5">
+        {PRIMARY_TABS.map(([id, label, hint]) => (
           <button
             key={id}
             type="button"
-            role="tab"
-            aria-selected={tab === id}
+            aria-current={tab === id ? "page" : undefined}
             title={hint}
             onClick={() => setTab(id)}
             className={cn(
@@ -82,7 +88,35 @@ export function DesignWorkspace() {
             {label}
           </button>
         ))}
-      </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={activeTool ? `Design tools, ${activeTool[1]} selected` : "Design tools"}
+              aria-current={activeTool ? "page" : undefined}
+              title={activeTool ? `Design tools: ${activeTool[1]}` : "Themes, lower thirds, ticker, stage, countdown, brand kit, and usage"}
+              className={cn(
+                "-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-[3px] px-3 py-2.5 text-xs font-bold whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                activeTool ? "border-primary text-primary-text" : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Design tools
+              {activeTool && <span className="font-medium">· {activeTool[1]}</span>}
+              <ChevronDownIcon aria-hidden className="size-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuLabel>Specialist design tools</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={activeTool?.[0] ?? ""} onValueChange={(value) => setTab(value as DesignTab)}>
+              {DESIGN_TOOLS.map(([id, label, hint]) => (
+                <DropdownMenuRadioItem key={id} value={id} title={hint}>
+                  {label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </nav>
       {tab === "themes" && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-8 pb-3 text-xs max-[1200px]:px-5" aria-label="More ways to use this look">
           <span className="font-semibold">More ways to use this look</span>
@@ -93,7 +127,7 @@ export function DesignWorkspace() {
           ))}
         </div>
       )}
-      <div role="tabpanel" aria-label={TABS.find((t) => t[0] === tab)?.[1]} className="min-h-0 flex-1 px-8 pb-6 max-[1200px]:px-5">
+      <div role="region" aria-label={TABS.find((t) => t[0] === tab)?.[1]} className="min-h-0 flex-1 px-8 pb-6 max-[1200px]:px-5">
         {tab === "themes" ? (
           <div className="grid h-full min-h-0 grid-cols-[240px_minmax(0,1fr)_300px] overflow-hidden rounded-lg border border-border bg-card shadow-panel max-[1200px]:grid-cols-[200px_minmax(0,1fr)_280px]">
             <ThemeLibrary />
@@ -103,6 +137,7 @@ export function DesignWorkspace() {
         ) : (
           <div className="h-full overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-panel">
             {tab === "library" && <LookLibraryView onOpen={(next, id) => { setStyleId(id); setTab(next) }} />}
+            {tab === "my-designs" && <DesignDocumentsWorkspace />}
             {tab === "lower-thirds" && <LowerThirdDesigner initialId={styleId} />}
             {tab === "ticker" && <TickerDesigner />}
             {tab === "stage" && <StageDesigner />}

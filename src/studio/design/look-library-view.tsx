@@ -62,8 +62,10 @@ const LANGUAGES: ReadonlyArray<readonly [LookLanguage | "both" | "all", string]>
 const storage = typeof localStorage === "undefined" ? null : localStorage
 
 export interface ContextualScenePickerOptions {
-  /** The caller creates a church-owned copy, attaches it to the selected moment, then optionally opens its editor. */
+  /** Design creates a canonical document; Prepare attaches a scene copy to its selected moment. */
   onChoose: (look: Extract<LibraryLook, { kind: "scene" }>, customize: boolean) => void
+  /** In Design, a copy becomes a canonical document; in Prepare, it is attached to the current moment. */
+  purpose?: "prepare" | "design"
 }
 
 /**
@@ -113,7 +115,9 @@ export function LookLibraryView({ onOpen, scenePicker }: { onOpen: (tab: DesignT
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-3xl text-sm text-muted-foreground">
-          {scenePicker
+          {scenePicker?.purpose === "design"
+            ? <>Start a church-owned design from a ready-made scene. The copy is saved in My Designs; it does not change a service plan or output.</>
+            : scenePicker
             ? <>Choose a scene for this service moment. Each choice creates a church-owned copy and updates the plan; it does not change an output.</>
             : <>Ready-made looks, made for Rhema Studio and fully offline. <strong className="font-semibold text-foreground">Add a copy</strong> to keep an editable version in your Designs. Nothing on the screens changes until you deliberately apply or Take it.</>}
         </p>
@@ -306,8 +310,8 @@ function LookCard({ look, favourite, onFavourite, onOpen, scenePicker }: { look:
         <div className="mt-auto flex flex-wrap items-center gap-1 pt-1.5">
           {scenePicker && look.kind === "scene" ? (
             <>
-              <Button size="xs" onClick={() => scenePicker.onChoose(look, false)}><PlusIcon /> Use for this moment</Button>
-              <Button size="xs" variant="outline" onClick={() => scenePicker.onChoose(look, true)} title="Create and attach a copy, then customize it without taking it live"><PencilIcon /> Customize a copy…</Button>
+              <Button size="xs" onClick={() => scenePicker.onChoose(look, false)} title={scenePicker.purpose === "design" ? "Save a private editable copy in My Designs" : undefined}><PlusIcon /> {scenePicker.purpose === "design" ? "Choose template" : "Use for this moment"}</Button>
+              <Button size="xs" variant="outline" onClick={() => scenePicker.onChoose(look, true)} title={scenePicker.purpose === "design" ? "Create a canonical design copy and open it in the editor" : "Create and attach a copy, then customize it without taking it live"}><PencilIcon /> {scenePicker.purpose === "design" ? "Customize a copy" : "Customize a copy…"}</Button>
             </>
           ) : !scenePicker ? (
             <>
@@ -527,7 +531,7 @@ function StagePreview({ look }: { look: Extract<LibraryLook, { kind: "stage" }> 
   return <canvas ref={ref} width={1280} height={720} className="block h-full w-full" />
 }
 
-const PLACE_NAMES: Record<SceneLayerKind, string> = { feed: "On air", camera: "Camera", color: "Colour", picture: "Picture", video: "Video", clock: "Clock", ticker: "Ticker", lowerThird: "Name band", logo: "Logo" }
+const PLACE_NAMES: Record<Exclude<SceneLayerKind, "text">, string> = { feed: "On air", camera: "Camera", color: "Colour", ellipse: "Ellipse", picture: "Picture", video: "Video", clock: "Clock", ticker: "Ticker", lowerThird: "Name band", logo: "Logo" }
 
 // One canvas for every scene preview's feed layer: each is drawn and placed before the next.
 let layerCanvas: HTMLCanvasElement | null = null
@@ -546,7 +550,7 @@ function ScenePreview({ look }: { look: Extract<LibraryLook, { kind: "scene" }> 
         layers: look.scene.layers.map((l, i) => l.kind === "feed"
           ? { id: `${i}`, kind: "feed", box: l.box, opacity: 1, theme: themeLook(l.lookId), verse: sampleFor(l.shows) }
           // The other layers are places for what the church chooses in Scenes: a labelled box.
-          : { id: `${i}`, kind: l.kind, box: l.box, opacity: 1, label: PLACE_NAMES[l.kind], ...(l.kind === "color" ? { color: "#101820" } : {}) }),
+          : { id: `${i}`, kind: l.kind, box: l.box, opacity: 1, label: PLACE_NAMES[l.kind], ...((l.kind === "color" || l.kind === "ellipse") ? { color: "#101820" } : {}) }),
       }
       try {
         drawScene(ctx, canvas.width, canvas.height, frame, { image: () => null, layerCanvas: () => (layerCanvas ??= document.createElement("canvas")), imageCache: themeImageCache(), preview: true })

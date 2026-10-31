@@ -183,6 +183,24 @@ pub fn recorder_list(host: State<'_, RecorderHost>, rehearsal: bool) -> Res<Vec<
     Ok(recorder(&host)?.list(rehearsal))
 }
 
+/// Open only a saved/recoverable recording resolved from Rhema's archive, never an arbitrary path.
+#[tauri::command]
+pub fn recorder_open_file(window: WebviewWindow, host: State<'_, RecorderHost>, session_id: String, rehearsal: bool) -> Res<()> {
+    main_desk_only(&window)?;
+    let file = recorder(&host)?.archive_file_path(&session_id, rehearsal)?;
+    tauri_plugin_opener::open_path(&file, None::<&str>)
+        .map_err(|e| RecorderProblem::new(ProblemCode::WriteFailed, format!("Could not open the recording: {e}")))
+}
+
+/// Show only a saved/recoverable recording resolved from Rhema's archive in its native file browser.
+#[tauri::command]
+pub fn recorder_reveal_file(window: WebviewWindow, host: State<'_, RecorderHost>, session_id: String, rehearsal: bool) -> Res<()> {
+    main_desk_only(&window)?;
+    let file = recorder(&host)?.archive_file_path(&session_id, rehearsal)?;
+    tauri_plugin_opener::reveal_item_in_dir(&file)
+        .map_err(|e| RecorderProblem::new(ProblemCode::WriteFailed, format!("Could not show the recording: {e}")))
+}
+
 fn tee(active: bool, width: u32, height: u32, fps: u32) -> serde_json::Value {
     serde_json::json!({ "active": active, "width": width, "height": height, "fps": fps })
 }
@@ -211,7 +229,13 @@ fn current_run(app: &AppHandle) -> Option<(String, Option<String>)> {
 /// A run the caller named wins; otherwise the recording joins the service running now.
 fn in_run(request: RecorderStartRequest, now: Option<(String, Option<String>)>) -> RecorderStartRequest {
     match (request.service_run_id.is_some(), now) {
-        (false, Some((run, program))) => RecorderStartRequest { service_run_id: Some(run), program_id: request.program_id.clone().or(program), ..request },
+        (false, Some((run, program))) => RecorderStartRequest {
+            service_run_id: Some(run),
+            // The host's current run and program are one authoritative pair. Do not let a stale
+            // program selected in the UI split the recording's History link across services.
+            program_id: program,
+            ..request
+        },
         _ => request,
     }
 }
@@ -238,7 +262,8 @@ mod tests {
     #[test]
     fn a_recording_files_under_the_service_running_now_unless_the_caller_named_one() {
         let now = Some(("run-today".to_string(), Some("plan-today".to_string())));
-        let joined = in_run(request("sanctuary", "congregation"), now.clone());
+        let stale_ui_plan = RecorderStartRequest { program_id: Some("old-plan".into()), ..request("sanctuary", "congregation") };
+        let joined = in_run(stale_ui_plan, now.clone());
         assert_eq!((joined.service_run_id.as_deref(), joined.program_id.as_deref()), (Some("run-today"), Some("plan-today")));
         let named = in_run(RecorderStartRequest { service_run_id: Some("run-x".into()), ..request("sanctuary", "congregation") }, now);
         assert_eq!((named.service_run_id.as_deref(), named.program_id), (Some("run-x"), None));

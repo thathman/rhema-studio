@@ -228,3 +228,41 @@ describe("safe area on the output card (#299 4.9)", () => {
     expect(safeAreaWords({ ...even, layout: { ...even.layout, padding: { top: 80, right: 50, bottom: 80, left: 50 } } })).toBe("5% left and right, 8% top and bottom")
   })
 })
+
+describe("static text in scene output", () => {
+  it("normalizes and bounds literal text and its saved style", () => {
+    const scene = normalizeScene({
+      id: "static-text",
+      layers: [{
+        id: "words", name: "Welcome", kind: "text", box: { x: 10, y: 20, w: 80, h: 35 },
+        text: "w".repeat(2500), fontFamily: "Arial;url", fontSize: 700, fontWeight: "1000",
+        fontStyle: "oblique", textAlign: "justify", lineHeight: 8, textColor: "red", underline: "yes",
+      }],
+    })!
+
+    expect(scene.layers[0]).toMatchObject({
+      kind: "text", text: "w".repeat(2000), fontFamily: "Arialurl", fontSize: 400,
+      fontWeight: "600", fontStyle: "normal", textAlign: "center", lineHeight: 3,
+      textColor: "#ffffff", underline: false,
+    })
+  })
+
+  it("carries an Avnac static-text layer into the shared output renderer", () => {
+    const scene = newScene("Welcome", SCENE_PRESETS[0])
+    scene.layers = [newLayer("text", {
+      id: "welcome", text: "Welcome to worship", fontFamily: "Geist Variable", fontSize: 64,
+      fontWeight: "700", textColor: "#fefefe", box: { x: 10, y: 20, w: 80, h: 35 },
+    })]
+    const state = useBroadcastStore.getState()
+    const frame = sceneFrame(
+      { isLive: false, liveVerse: null, sources: {}, themes: state.themes },
+      state.outputs[0]!,
+      scene,
+    )
+    expect(frame.layers[0]).toMatchObject({ kind: "text", text: "Welcome to worship", fontFamily: "Geist Variable", fontSize: 64 })
+
+    const drawing = recorder()
+    drawScene(drawing.ctx, 1920, 1080, frame, { image: () => null, layerCanvas: () => fakeCanvas() })
+    expect(drawing.calls.some((call) => call.m === "fillText" && call.a[0] === "Welcome to worship")).toBe(true)
+  })
+})
