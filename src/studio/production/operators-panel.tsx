@@ -368,14 +368,11 @@ function viewerLiveProjection(live: LiveStateV1): ViewerLiveProjection {
     plannedMinutes,
     ...(time ? { time: { expected: time.expected, state: time.state } } : {}),
   })
-  const reportedShowMode = (live as ViewerLiveStateWithStatus).showMode
-  const showMode = reportedShowMode === "live" || reportedShowMode === "rehearsal" || reportedShowMode === "idle"
-    ? reportedShowMode
-    : live.program.rehearsal ? "rehearsal" : live.program.onAir ? "live" : "idle"
+  const showMode = (live as ViewerLiveStateWithStatus).showMode
   return {
     at: live.at,
     ...(live.heartbeatMs !== undefined ? { heartbeatMs: live.heartbeatMs } : {}),
-    showMode,
+    ...(showMode === "live" || showMode === "rehearsal" || showMode === "idle" ? { showMode } : {}),
     event: {
       currentId: live.event.currentId,
       ...(live.event.targets ? { targets: live.event.targets.map(row) } : {}),

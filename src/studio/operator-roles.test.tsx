@@ -145,8 +145,9 @@ describe("the desks a joined computer gets", () => {
     expect(serviceClockDesk.querySelector('[aria-label="Service countdown"]')?.textContent).toBe("1:05:00")
     expect(serviceClockDesk.textContent).toContain("until expected service end · host estimate")
 
-    const statusFallback = await render("viewer", { ...viewerLive, showMode: undefined, program: { ...viewerLive.program, rehearsal: true } }, "connected")
-    expect(statusFallback.querySelector('[aria-label="Show status"]')?.textContent).toContain("Rehearsal")
+    const statusUnavailable = await render("viewer", { ...viewerLive, showMode: undefined }, "connected")
+    expect(statusUnavailable.querySelector('[aria-label="Show status"]')?.textContent).toContain("Show status unavailable")
+    expect(statusUnavailable.textContent).not.toContain("PRIVATE PROGRAM DETAIL")
   })
 
   it("ticks its service estimate while fresh, then freezes at the last trusted host time", async () => {
