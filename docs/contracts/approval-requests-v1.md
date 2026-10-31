@@ -29,7 +29,7 @@ type Decision = "approve" | "decline" | "request_changes"
 | Decide once | `UPDATE … WHERE state = 'submitted'` | `already-decided` |
 | Expiry (default 24 h, max 7 days) | checked at decision and on listing | `expired` |
 | A `plan_approve` request is confirmed only after its exact revision is approved in Prepare; the host reads the program and ignores a caller-supplied revision | `approvals_apply` | `not-approved-yet` (stays approved), or `stale` (becomes `superseded`) |
-| Scene save/delete apply is not implemented by the host command: it only records completion after comparing the request base with an optional caller-supplied revision | `approvals_apply` | Do not expose this as a scene Apply action; a trusted host apply path is still required |
+| A scene request is applied only if the scene's revision, read by the host from its Live State, still equals the request's base; a caller-supplied revision is ignored. A scene on a screen cannot be deleted | `approvals_apply` | `stale` (becomes `superseded`), `on-screen` (stays approved), `no-live-state` (stays approved) |
 | Only approved requests can be marked applied | `approvals_apply` | `not-approved` |
 | Only the requester withdraws, only before a decision | `withdraw_approval_request` | `not-withdrawable` |
 | A newer request from the same desk for the same target supersedes its older one | submit | — |
@@ -40,20 +40,19 @@ type Decision = "approve" | "decline" | "request_changes"
 | --- | --- | --- |
 | `approvals_list({status?, requesterId?})` | main window | `ApprovalRequest[]` (newest first; overdue ones marked expired first) |
 | `approvals_decide({id, decision, note?})` | **main window only** (`not-allowed` elsewhere); decider = `main-desk` | `ApprovalRequest` |
-| `approvals_apply({id, currentRevision?})` | **main window only**. For `plan_approve`, the host reads the program and ignores `currentRevision`; scene save/delete currently only record completion and must not be presented as scene application. | `ApprovalRequest` |
+| `approvals_apply({id, currentRevision?})` | **main window only**. For `plan_approve`, the host reads the program and ignores `currentRevision`; for scene save/delete the host checks the revision itself and returns the request; the main desk then saves its `payload` through the existing scene path (the scene library lives in that window). | `ApprovalRequest` |
 | `approvals_history({id})` | main window | `ApprovalEvent[]` |
 
 Errors use the existing `ContentCommandError` shape plus the new `{ kind: "refused", code, message }`.
 
 ## For Codex
 
-The inbox reads `approvals_list` and decisions call `approvals_decide`. For a `plan_approve` request, Prepare remains the explicit plan approval workflow; after that, `approvals_apply({id})` lets the host verify that the approved program revision matches the request's base revision. For `scene_save` and `scene_delete`, do not call `approvals_apply` from the UI: the host does not yet apply or validate the requested scene operation itself. That work needs a trusted host-side current-revision check and an in-use guard before scene Apply can be exposed. The requesting desk's scene event carries `requestId`; the legacy `scene-approvals-store.ts` remains compatibility-only and is not authoritative for new host requests.
+The inbox reads `approvals_list` and decisions call `approvals_decide`. For a `plan_approve` request, Prepare remains the explicit plan approval workflow; after that, `approvals_apply({id})` lets the host verify that the approved program revision matches the request's base revision. For `scene_save` and `scene_delete`, call `approvals_apply({id})` after an approval: on success save the returned `payload` through the existing merge path (`mergeDeskScene`); on `stale` tell the operator a fresh request is needed; on `on-screen` or `no-live-state` the request stays approved and can be tried again. The legacy `scene-approvals.json` path in `desk-scenes.ts` can go once the inbox uses this.
 
 ## Not in this slice
 
 - A general request/withdrawal API (`/api/v1/requests`) and requesters' own waiting/answered view. Current host-backed requests are created by scene save/delete events and the plan submission route; other request kinds remain unsupported.
 - Grants with expiry (`access_grants`).
-- The Recorder grant (slice 4).
 
 ## Rollback
 

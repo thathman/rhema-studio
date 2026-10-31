@@ -634,6 +634,13 @@ pub(crate) fn current_live_state(app: &AppHandle) -> Option<String> {
     runtime.live.current()
 }
 
+/// The host's own revision of one part of the live service (`scene:<id>`), None before it was shown.
+pub(crate) fn current_revision(app: &AppHandle, part: &str) -> Option<u64> {
+    let state = app.try_state::<Mutex<HttpRuntime>>()?;
+    let runtime = state.lock().ok()?;
+    runtime.live.revision(part)
+}
+
 impl Default for HttpRuntime {
     fn default() -> Self {
         Self::new()
