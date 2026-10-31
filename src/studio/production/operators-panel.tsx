@@ -16,7 +16,7 @@ import { NoticesPanel } from "@/studio/notices-panel"
 import { JoinedTalk } from "@/studio/talk"
 import type { NoticeAction } from "@/stores/notices-store"
 import { useSettingsStore } from "@/stores/settings-store"
-import { deskFreshness, skewWords } from "@/lib/desk-freshness"
+import { deskFreshness, skewWords, STALE_AFTER_MS } from "@/lib/desk-freshness"
 import { backstageRows, pauseWords } from "@/lib/cuesheet"
 import { formatMinutes } from "@/lib/service-timing"
 import { HostLookOffer } from "@/studio/production/host-look-offer"
@@ -74,7 +74,7 @@ function useFreshness() {
     const id = setInterval(() => setNow(performance.now()), 1000)
     return () => clearInterval(id)
   }, [])
-  return deskFreshness({ status, receivedAt, now: Math.max(now, receivedAt), heartbeatMs, clockSkewMs })
+  return { ...deskFreshness({ status, receivedAt, now: Math.max(now, receivedAt), heartbeatMs, clockSkewMs }), now, receivedAt }
 }
 
 /** Take back control from a paired desk, or give it back (#243). Its pairing and role stay. */
@@ -232,6 +232,7 @@ function JoinedDesk() {
   const address = useSettingsStore((s) => s.joinAddress)
   const secure = useJoin((s) => s.secure)
   const fingerprint = useSettingsStore((s) => s.joinSecure?.fingerprint)
+  const viewer = me?.role === "viewer"
   const desks = DESKS[me?.role ?? "present"] ?? []
   const deskLive = live && me?.role === "screens"
     ? {
@@ -265,14 +266,16 @@ function JoinedDesk() {
         </p>
       )}
       {note && <p role="status" className="text-muted-foreground">{note}</p>}
-      {live && <HostLookOffer look={live.churchLook} church={live.church} />}
+      {live && !viewer && <HostLookOffer look={live.churchLook} church={live.church} />}
       {live && fresh.skewMs !== null && (
         <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2">
           <span className="font-semibold">This computer's clock is {skewWords(fresh.skewMs)} the host's.</span> <span className="text-muted-foreground">Timers here follow the host, but times of day may not agree: set both computers to set their time automatically.</span>
         </p>
       )}
       {error && <p role="alert" className="text-destructive">{error}</p>}
-      {live && (
+      {live && (me?.role === "viewer" ? (
+        <ViewerDesk live={viewerLiveProjection(live)} stale={fresh.stale} connected={status === "connected"} now={fresh.now} receivedAt={fresh.receivedAt} />
+      ) : (
         <>
           <div className="rounded-md bg-[#16242b] p-3 text-[#d6e2df]">
             <p className="text-[0.625rem] font-bold tracking-[0.1em] text-[#9fb2b0] uppercase">On the screens{live.program.rehearsal ? " · rehearsal" : ""}</p>
@@ -294,45 +297,170 @@ function JoinedDesk() {
           {desks.includes("obs") && <ObsDesk live={live} />}
           <DeskAuxTimers live={live} role={me?.role ?? "present"} stale={fresh.stale} />
           <RunOfShowView live={live} stale={fresh.stale} />
-          <section aria-label="Talk desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
-            <p className="font-semibold">Talk</p>
-            <JoinedTalk people={(live.voice ?? []).filter((p) => p.name !== me?.name)} />
-          </section>
-          <section aria-label="Notices desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
-            <p className="font-semibold">Notices</p>
-            <NoticesPanel
-              notices={live.notices ?? []}
-              role={me?.role ?? "present"}
-              me={me?.name ?? ""}
-              eventTitle={(live.event.targets ?? live.rundown).find((r) => r.id === live.event.currentId)?.reference ?? null}
-              onSend={(n) => void useJoin.getState().send({ command: "notice_send", value: { text: n.text, to: n.to, priority: n.priority, ...(live.event.currentId ? { event: live.event.currentId } : {}), ...(n.action ? { action: n.action } : {}) } })}
-              onAnswer={(id, state) => void useJoin.getState().send({ command: "notice_ack", value: { id, state } })}
-              onAction={async (a, mode) => {
-                // The host checks this desk's role for each, as for its own buttons; its refusal is the
-                // reason. Preview puts a verse or a song in the main desk's Preview only.
-                if (a.kind === "camera") return null // answering is the action
-                if (a.kind === "sceneEdit") return "only the main desk answers a scene change"
-                if (a.kind === "scene") return "This request did not change any output. The host must choose one output in Scenes; group Take is unavailable."
-                const send = useJoin.getState().send
-                const results = a.kind === "bible" ? [await send({ command: mode === "preview" ? "bible_preview" : "bible_activate", value: a.value })]
-                  : a.kind === "song" ? [await send({ command: mode === "preview" ? "song_preview" : "song_show", value: a.value })]
-                    : a.kind === "event" ? [await send({ command: "event_start", value: a.value })]
-                      : a.kind === "wrap" ? [await send({ command: "stage_message", value: a.value.slice(0, 120) })]
-                      : []
-                if (results.length === 0) return "this action needs the main desk"
-                const refused = results.find((r) => !r.ok)
-                return refused && !refused.ok ? refused.error : null
-              }}
-              onQueue={QUEUE_ROLES.has(me?.role ?? "present") ? (a) => queueOnHost(a) : undefined}
-              scenes={live.scenes}
-              rundown={live.rundown}
-              people={live.crew ?? []}
-              cameras={live.sources.filter((s) => s.id.startsWith("camera:")).map((s) => s.reference ?? s.id.slice(7))}
-            />
-          </section>
         </>
-      )}
+      ))}
+      {live && <section aria-label="Talk desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+        <p className="font-semibold">Talk</p>
+        {viewer && fresh.stale
+          ? <p role="status" className="text-muted-foreground">Talk is paused until the host connection is current.</p>
+          : <JoinedTalk people={(live.voice ?? []).filter((p) => p.name !== me?.name)} />}
+      </section>}
+      {live && <section aria-label="Notices desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+        <p className="font-semibold">Notices</p>
+        <NoticesPanel
+          notices={live.notices ?? []}
+          role={me?.role ?? "present"}
+          me={me?.name ?? ""}
+          allowProductionActions={me?.role !== "viewer"}
+          allowCommunications={!viewer || (status === "connected" && !fresh.stale)}
+          eventTitle={(live.event.targets ?? live.rundown).find((r) => r.id === live.event.currentId)?.reference ?? null}
+          onSend={(n) => void useJoin.getState().send({ command: "notice_send", value: { text: n.text, to: n.to, priority: n.priority, ...(live.event.currentId ? { event: live.event.currentId } : {}), ...(n.action ? { action: n.action } : {}) } })}
+          onAnswer={(id, state) => void useJoin.getState().send({ command: "notice_ack", value: { id, state } })}
+          onAction={async (a, mode) => {
+            if (me?.role === "viewer") return "View only desks cannot run production actions"
+            // The host checks this desk's role for each, as for its own buttons; its refusal is the
+            // reason. Preview puts a verse or a song in the main desk's Preview only.
+            if (a.kind === "camera") return null // answering is the action
+            if (a.kind === "sceneEdit") return "only the main desk answers a scene change"
+            if (a.kind === "scene") return "This request did not change any output. The host must choose one output in Scenes; group Take is unavailable."
+            const send = useJoin.getState().send
+            const results = a.kind === "bible" ? [await send({ command: mode === "preview" ? "bible_preview" : "bible_activate", value: a.value })]
+              : a.kind === "song" ? [await send({ command: mode === "preview" ? "song_preview" : "song_show", value: a.value })]
+                : a.kind === "event" ? [await send({ command: "event_start", value: a.value })]
+                  : a.kind === "wrap" ? [await send({ command: "stage_message", value: a.value.slice(0, 120) })]
+                    : []
+            if (results.length === 0) return "this action needs the main desk"
+            const refused = results.find((r) => !r.ok)
+            return refused && !refused.ok ? refused.error : null
+          }}
+          onQueue={QUEUE_ROLES.has(me?.role ?? "present") ? (a) => queueOnHost(a) : undefined}
+          scenes={viewer ? [] : live.scenes}
+          rundown={live.rundown}
+          people={live.crew ?? []}
+          cameras={viewer ? [] : live.sources.filter((s) => s.id.startsWith("camera:")).map((s) => s.reference ?? s.id.slice(7))}
+        />
+      </section>}
     </Card>
+  )
+}
+
+type ViewerShowMode = "live" | "rehearsal" | "idle"
+type ViewerLiveStateWithStatus = LiveStateV1 & { showMode?: ViewerShowMode }
+
+type ViewerEventRow = Pick<LiveStateV1["rundown"][number], "id" | "reference" | "plannedMinutes"> & {
+  time?: Pick<NonNullable<LiveStateV1["rundown"][number]["time"]>, "expected" | "state">
+}
+
+/** The minimum host projection a View only page needs; production state is deliberately absent. */
+type ViewerLiveProjection = {
+  at: number
+  heartbeatMs?: number
+  showMode?: ViewerShowMode
+  event: { currentId: string | null; targets?: ViewerEventRow[] }
+  rundown: ViewerEventRow[]
+  timing?: { expectedEnd: number; timeZone?: string } | null
+}
+
+function viewerLiveProjection(live: LiveStateV1): ViewerLiveProjection {
+  const row = ({ id, reference, plannedMinutes, time }: LiveStateV1["rundown"][number]): ViewerEventRow => ({
+    id,
+    reference,
+    plannedMinutes,
+    ...(time ? { time: { expected: time.expected, state: time.state } } : {}),
+  })
+  const reportedShowMode = (live as ViewerLiveStateWithStatus).showMode
+  const showMode = reportedShowMode === "live" || reportedShowMode === "rehearsal" || reportedShowMode === "idle"
+    ? reportedShowMode
+    : live.program.rehearsal ? "rehearsal" : live.program.onAir ? "live" : "idle"
+  return {
+    at: live.at,
+    ...(live.heartbeatMs !== undefined ? { heartbeatMs: live.heartbeatMs } : {}),
+    showMode,
+    event: {
+      currentId: live.event.currentId,
+      ...(live.event.targets ? { targets: live.event.targets.map(row) } : {}),
+    },
+    rundown: live.rundown.map(row),
+    timing: live.timing ? { expectedEnd: live.timing.expectedEnd, ...(live.timing.timeZone ? { timeZone: live.timing.timeZone } : {}) } : null,
+  }
+}
+
+/** A View only operator follows the host's service clock and run of show without seeing production state. */
+function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: ViewerLiveProjection; stale: boolean; connected: boolean; now: number; receivedAt: number }) {
+  const sinceReceipt = receivedAt > 0 ? Math.max(0, now - receivedAt) : 0
+  const lastTrustedElapsed = stale
+    ? connected && live.heartbeatMs !== undefined ? Math.min(sinceReceipt, STALE_AFTER_MS) : 0
+    : sinceReceipt
+  const hostNow = live.at + lastTrustedElapsed
+  const events = live.event.targets ?? live.rundown
+  const currentIndex = events.findIndex((event) => event.id === live.event.currentId)
+  const current = currentIndex >= 0 ? events[currentIndex] : null
+  const next = currentIndex >= 0 ? events[currentIndex + 1] : live.event.currentId === null ? events[0] : null
+  const zone = live.timing?.timeZone
+  const eventExpectedEnd = current?.time?.expected[1]
+  const expectedEnd = eventExpectedEnd ?? live.timing?.expectedEnd
+  const remainingMs = expectedEnd === undefined ? null : expectedEnd - hostNow
+  let countdownDescription = "No expected end from the host"
+  if (remainingMs !== null && eventExpectedEnd !== undefined) {
+    countdownDescription = remainingMs < 0 ? "past this event's expected end" : "remaining in this event · host estimate"
+  } else if (remainingMs !== null) {
+    countdownDescription = remainingMs < 0 ? "past expected service end" : "until expected service end · host estimate"
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.65fr)]">
+        <section aria-label="Now and next" className="grid grid-cols-2 gap-2 rounded-md border border-border p-3">
+          <div className="col-span-2 flex justify-end">
+            <p role="status" aria-label="Show status" className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold uppercase tracking-wide">
+              {live.showMode === "live" ? "Live" : live.showMode === "rehearsal" ? "Rehearsal" : live.showMode === "idle" ? "Not on air" : "Show status unavailable"}
+            </p>
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Now</p>
+            <p className="mt-1 truncate text-lg font-semibold">{current?.reference ?? (live.event.currentId === null ? "Not started" : "Current item unavailable")}</p>
+            {current?.plannedMinutes != null && <p className="text-xs text-muted-foreground">{current.plannedMinutes} min planned</p>}
+          </div>
+          <div className="min-w-0 border-l border-border pl-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Next</p>
+            <p className="mt-1 truncate text-lg font-semibold">{next?.reference ?? "No next item"}</p>
+            {next?.plannedMinutes != null && <p className="text-xs text-muted-foreground">{next.plannedMinutes} min planned</p>}
+          </div>
+        </section>
+        <section aria-label="Service clock" className={cn("flex flex-col justify-center rounded-md bg-[#16242b] px-4 py-3 text-[#d6e2df]", stale && "opacity-70")}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#9fb2b0]">Service clock</p>
+          {remainingMs === null ? (
+            <p className="mt-1 text-lg font-semibold">Timing unavailable</p>
+          ) : (
+            <p role="timer" aria-label="Service countdown" className="mt-1 font-mono text-3xl font-semibold tabular-nums">{formatMs(remainingMs)}</p>
+          )}
+          <p className="mt-1 text-xs text-[#9fb2b0]">{countdownDescription}</p>
+          <p className="mt-1 text-xs text-[#9fb2b0]">Host time <time dateTime={new Date(hostNow).toISOString()} aria-label="Host clock">{hhmm(hostNow, zone)}</time> · {stale ? "update may be out of date" : "authoritative"}</p>
+        </section>
+      </div>
+      <section aria-label="Running order (read only)" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <p className="font-semibold">Running order</p>
+          <span className="text-muted-foreground">read only</span>
+          {stale && <span className="font-semibold text-confidence-mid">may be out of date</span>}
+        </div>
+        {events.length === 0 ? <p className="text-muted-foreground">The host has not shared a running order yet.</p> : (
+          <ol className={cn("flex max-h-64 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border", stale && "opacity-60")}>
+            {events.map((event, index) => {
+              const state = event.time?.state
+              const status = state === "done" ? "Done" : state === "skipped" ? "Skipped" : event.id === live.event.currentId ? "Now" : index === (currentIndex >= 0 ? currentIndex + 1 : live.event.currentId === null ? 0 : -1) ? "Next" : "Upcoming"
+              return <li key={event.id} aria-current={event.id === live.event.currentId ? "step" : undefined} className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 px-2.5 py-2", event.id === live.event.currentId && "bg-primary/10 font-semibold")}>
+                <span className="min-w-0 flex-1 truncate">{event.reference}</span>
+                <span className="text-xs text-muted-foreground">{status}</span>
+                {event.time && <span className="text-xs tabular-nums text-muted-foreground">Expected {hhmm(event.time.expected[0], zone)}</span>}
+                {event.plannedMinutes != null && <span className="text-xs text-muted-foreground">{event.plannedMinutes} min</span>}
+              </li>
+            })}
+          </ol>
+        )}
+        {live.timing && <p className="text-sm text-muted-foreground">Main service expected to finish {hhmm(live.timing.expectedEnd, zone)}.</p>}
+      </section>
+      <p role="status" className="text-sm text-muted-foreground">View only · production controls are not available on this desk.</p>
+    </div>
   )
 }
 
