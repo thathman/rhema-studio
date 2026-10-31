@@ -69,6 +69,23 @@ describe("a designed moment on Live", () => {
     expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
   })
 
+  it("keeps a manual scene Take made during a delayed design lookup", async () => {
+    let resolveVersion!: (value: (typeof versions)[string] | null) => void
+    const pendingVersion = new Promise<(typeof versions)[string] | null>((resolve) => { resolveVersion = resolve })
+    const getDelayedVersion = vi.fn(async () => pendingVersion)
+    const delayedTake = showDesignedMoment(moment({ id: "d1", version: 2 }), getDelayedVersion)
+
+    const manual = newScene("Manually taken while design loaded")
+    useBroadcastStore.setState({ scenes: [usual, manual] })
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, manual.id)
+    resolveVersion(versions["d1:2"])
+    await delayedTake
+
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(manual.id)
+    expect(out(MAIN_OUTPUT_ID)?.sceneSnapshot?.name).toBe(manual.name)
+    expect(out(MAIN_OUTPUT_ID)?.designedMomentRestore).toBeUndefined()
+  })
+
   it("keeps a designed moment on congregation screens during a Bible-feeds-only Take", async () => {
     await showDesignedMoment(moment({ id: "d1", version: 2 }), getVersion)
     const bibleOnly = {

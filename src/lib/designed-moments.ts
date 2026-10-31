@@ -28,6 +28,8 @@ export async function showDesignedMoment(
   if (!isTargetCurrent()) return
   if (!isSlideItem(item) || !item.slide.designRef) return restoreAfterDesignedMoment()
   const ref = item.slide.designRef
+  const before = useBroadcastStore.getState()
+  const takeRevisions = new Map(before.outputs.map((output) => [output.id, before.sceneTakes[output.id]?.revision ?? null]))
   const { scene: resolved, issues } = await resolveDesignedMoment(item.slide, getVersion)
   if (!isTargetCurrent()) return
   if (!resolved) {
@@ -41,6 +43,8 @@ export async function showDesignedMoment(
   const logo = useSettingsStore.getState().brandKit.logoUrl
   // ponytail: every congregation screen, like a scene step with no screen named; a per-moment target when Prepare offers one.
   for (const o of b.outputs.filter(isCongregation)) {
+    // A manual Take can happen while the pinned design is loading. Keep that newer per-output choice.
+    if (!takeRevisions.has(o.id) || (b.sceneTakes[o.id]?.revision ?? null) !== takeRevisions.get(o.id)) continue
     const earlier = o.designedMomentRestore
     const restore: DesignedMomentRestore = earlier && o.sceneId === earlier.designSceneId
       ? { ...earlier, designSceneId: scene.id }
