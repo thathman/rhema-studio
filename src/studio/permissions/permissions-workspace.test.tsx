@@ -57,6 +57,48 @@ describe("Permissions workspace", () => {
 
     expect(el.textContent).toContain("View only · needs a role")
     expect(el.querySelector<HTMLSelectElement>('select[aria-label="Role for Legacy phone"]')?.value).toBe("viewer")
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Rhema Recorder access for Legacy phone"]')?.checked).toBe(false)
+    await act(async () => root.unmount())
+  })
+
+  it("saves Recorder grant changes only after host confirmation and hides the host roster on joined desks", async () => {
+    useSettingsStore.setState({ remoteDevices: [{ hash: "phone-hash", name: "Phone", paired_at: "2026-10-01T00:00:00Z", role: "viewer" }] })
+    let acknowledge!: () => void
+    tauri.invoke.mockImplementation((command: string, args?: unknown) => {
+      void args
+      if (command === "remote_set_keys") return new Promise<void>((resolve) => { acknowledge = resolve })
+      return Promise.resolve(command === "approvals_list" ? [] : null)
+    })
+    const el = await mount()
+    const checkbox = el.querySelector<HTMLInputElement>('input[aria-label="Rhema Recorder access for Phone"]')!
+
+    await act(async () => { checkbox.click(); await Promise.resolve() })
+    expect(checkbox.checked).toBe(false)
+    expect(tauri.invoke).toHaveBeenCalledWith("remote_set_keys", expect.objectContaining({
+      devices: [expect.objectContaining({ hash: "phone-hash", record: true })],
+    }))
+    await act(async () => acknowledge())
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Rhema Recorder access for Phone"]')?.checked).toBe(true)
+    await act(async () => root.unmount())
+
+    useJoin.setState({ status: "connected" })
+    const joinedEl = await mount()
+    expect(joinedEl.textContent).toContain("Your access")
+    expect(joinedEl.querySelector<HTMLInputElement>('input[aria-label="Rhema Recorder access for Phone"]')).toBeNull()
+    await act(async () => root.unmount())
+  })
+
+  it("shows an inline error and preserves the Recorder grant when the host rejects it", async () => {
+    useSettingsStore.setState({ remoteDevices: [{ hash: "phone-hash", name: "Phone", paired_at: "2026-10-01T00:00:00Z", role: "viewer" }] })
+    tauri.invoke.mockImplementation(async (command: string) => {
+      if (command === "remote_set_keys") throw new Error("host unavailable")
+      return command === "approvals_list" ? [] : null
+    })
+    const el = await mount()
+
+    await act(async () => { el.querySelector<HTMLInputElement>('input[aria-label="Rhema Recorder access for Phone"]')!.click(); await Promise.resolve(); await Promise.resolve() })
+    expect(useSettingsStore.getState().remoteDevices[0]?.record).toBeUndefined()
+    expect(el.textContent).toContain("host did not confirm the Recorder access change")
     await act(async () => root.unmount())
   })
 
@@ -221,14 +263,21 @@ describe("Permissions workspace", () => {
 
   it("keeps approvals and device roles read-only on a joined desk", async () => {
     await createSceneEditApproval({ scene: null, sceneId: "scene-1", name: "Scene", savedAt: 1, by: "Screens desk", at: 10 })
-    useSettingsStore.setState({ remoteDevices: [{ hash: "device-hash", name: "Phone", paired_at: "2026-10-01T00:00:00Z", role: "viewer" as const }] })
-    useJoin.setState({ status: "connected" })
+    useSettingsStore.setState({ remoteDevices: [{ hash: "device-hash", name: "Other operator phone", paired_at: "2026-10-01T00:00:00Z", role: "screens" as const, record: true }] })
+    useJoin.setState({ status: "connected", me: { name: "Viewer desk", role: "viewer", outputScope: ["main"], groupTakeScope: [] } })
     const el = await mount()
 
     expect(el.textContent).toContain("read-only for approvals and device access")
+    expect(el.textContent).toContain("Your access")
+    expect(el.textContent).toContain("Viewer desk")
+    expect(el.textContent).toContain("View only")
+    expect(el.textContent).toContain("1 assigned")
+    expect(el.textContent).toContain("Recorder grant is separate from your role")
+    expect(el.textContent).not.toContain("Other operator phone")
     expect([...el.querySelectorAll("button")].some((button) => button.textContent?.includes("Accept"))).toBe(false)
     expect([...el.querySelectorAll("button")].some((button) => button.textContent?.includes("Decline"))).toBe(false)
-    expect(el.querySelector<HTMLSelectElement>('select[aria-label="Role for Phone"]')?.disabled).toBe(true)
+    expect(el.querySelector<HTMLSelectElement>('select[aria-label^="Role for "]')).toBeNull()
+    expect(el.querySelector<HTMLInputElement>('input[aria-label^="Rhema Recorder access for "]')).toBeNull()
     await act(async () => root.unmount())
   })
 })
