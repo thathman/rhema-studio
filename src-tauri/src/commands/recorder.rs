@@ -149,11 +149,13 @@ fn stop_session(app: &AppHandle) -> Res<RecorderStatus> {
     let host = app.state::<RecorderHost>();
     let rec = recorder(&host)?;
     let output = rec.pinned_output();
-    let status = rec.stop()?;
+    // Told before another start can begin, so this can't switch off the next recording's frames.
+    let status = rec.stop_then(|| {
+        if let Some(label) = output.and_then(|o| window_label(&o).ok()) {
+            let _ = app.emit_to(tauri::EventTarget::webview_window(label.as_str()), "broadcast:record-tee", tee(false, 0, 0, 0));
+        }
+    })?;
     log::info!("recorder: {:?} {}", status.state, status.file.path.as_deref().unwrap_or(""));
-    if let Some(label) = output.and_then(|o| window_label(&o).ok()) {
-        let _ = app.emit_to(tauri::EventTarget::webview_window(label.as_str()), "broadcast:record-tee", tee(false, 0, 0, 0));
-    }
     let _ = app.emit_to("main", "recorder:status", &status);
     Ok(status)
 }

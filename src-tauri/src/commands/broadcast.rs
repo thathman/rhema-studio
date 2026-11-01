@@ -305,15 +305,8 @@ pub fn start_ndi(
     // Holding the NDI lock while checking: a recorder start reserves the output first and reads the
     // size under this lock, so it sees this NDI, or this sees its reservation.
     let mut runtime = runtime.lock().map_err(|e| e.to_string())?;
-    if let Some(rec) = recorder.0.get() {
-        if rec.is_starting(&output_id) {
-            return Err("This screen's recording is starting. Try NDI again in a moment.".into());
-        }
-        // The window sends one picture size: another one would freeze the recording's picture until Stop.
-        let size = request.resolution.dimensions();
-        if let Some((w, h)) = rec.recording_size(&output_id).filter(|s| *s != size) {
-            return Err(format!("This screen is recording at {w}×{h}. Stop the recording, or choose {w}×{h} for NDI."));
-        }
+    if let Some(why) = recorder.0.get().and_then(|r| r.ndi_refusal(&output_id, request.resolution.dimensions())) {
+        return Err(why);
     }
     runtime.start(output_id, request).map_err(|e| {
         log::error!("start_ndi failed: {e}");
