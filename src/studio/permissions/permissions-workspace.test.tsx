@@ -266,6 +266,8 @@ describe("Permissions workspace", () => {
 
     expect(tauri.invoke).toHaveBeenCalledWith("approvals_apply", { id: "scene-request-uuid" })
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "scene-request-uuid", state: "applied" }])
+    expect(el.textContent).toContain("Applied by host · no Live change")
+    expect(el.textContent).toContain("Verify the scene library after a restart")
     expect(useBroadcastStore.getState().scenes).toEqual(expect.arrayContaining([expect.objectContaining({ id: "scene-1", name: "Welcome" })]))
     expect(useBroadcastStore.getState().outputs).toBe(outputsBefore)
     expect(useBroadcastStore.getState().isLive).toBe(false)

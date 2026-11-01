@@ -68,7 +68,7 @@ function stateLabel(request: ApprovalRequest): string {
     case "submitted": return "Pending review"
     case "approved": return request.kind === "plan_approve" ? "Approved · awaiting Prepare" : request.kind.startsWith("scene_") ? "Approved · ready to apply" : "Approved · not applied"
     case "requested_changes": return "Changes requested"
-    case "applied": return request.kind === "plan_approve" ? "Revision confirmed by host" : request.kind.startsWith("scene_") ? "Saved to scene library · not taken" : "Marked applied by host"
+    case "applied": return request.kind === "plan_approve" ? "Revision confirmed by host" : request.kind.startsWith("scene_") ? "Applied by host · no Live change" : "Marked applied by host"
     default: return state[0].toUpperCase() + state.slice(1)
   }
 }
@@ -182,6 +182,7 @@ export function ApprovalRequestsPanel() {
                     <p className="mt-1 text-xs text-muted-foreground">{requestImpact(request, outputs)}</p>
                     {request.state === "approved" && request.kind.startsWith("scene_") && <p className="mt-1 text-xs text-muted-foreground">Apply checks the scene revision and current output assignment on this host. Saving changes the scene library only; it does not Take the scene live.</p>}
                     {request.state === "approved" && request.kind === "scene_delete" && outputs.some((output) => output.sceneId === request.targetId) && <p role="status" className="mt-1 text-xs text-amber-800">Move every output away from this scene before applying its deletion.</p>}
+                    {request.state === "applied" && request.kind.startsWith("scene_") && <p role="status" className="mt-1 text-xs text-muted-foreground">The host recorded this request as applied; no scene was Taken live. Verify the scene library after a restart. If the change is missing, send a fresh request.</p>}
                     {request.reason && <p className="mt-1 text-xs text-muted-foreground">Reason: {request.reason}</p>}
                     {request.decisionNote && <p className="mt-1 text-xs text-muted-foreground">Decision note: {request.decisionNote}</p>}
                     {rowErrors[request.id] && <p role="alert" className="mt-2 text-xs text-destructive">{rowErrors[request.id]}</p>}
