@@ -12,6 +12,8 @@ const imageScene = (): Scene => ({
   id: "design-welcome-v1",
   name: "Welcome",
   background: "#000000",
+  createdAt: 0,
+  updatedAt: 0,
   layers: [{
     id: "background",
     name: "Welcome background",
