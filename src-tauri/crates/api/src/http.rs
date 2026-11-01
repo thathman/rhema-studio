@@ -350,9 +350,20 @@ pub struct LiveHub {
 /// once when the server accepts a command for it, so of two desks acting on what they both saw,
 /// only the first is carried out; the other is told to look again. The server keeps them and adds
 /// them to the Live State it hands on (`revisions`), so a desk sends back what it saw.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct Revisions {
     parts: std::collections::HashMap<String, (u64, String)>,
+    /// Where this run's parts start. Revisions live only in memory, and an approval request keeps
+    /// its base across restarts: counting from 1 each run would let a request made before a restart
+    /// match a scene changed since.
+    first: u64,
+}
+
+impl Default for Revisions {
+    fn default() -> Self {
+        let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_millis() as u64);
+        Self { parts: std::collections::HashMap::new(), first: ms.saturating_mul(1000) }
+    }
 }
 
 impl Revisions {
@@ -436,7 +447,7 @@ impl Revisions {
                 }
                 Some(_) => {}
                 None => {
-                    self.parts.insert(part, (1, fp));
+                    self.parts.insert(part, (self.first, fp));
                 }
             }
         }
@@ -707,6 +718,11 @@ pub fn notices_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String
 pub fn live_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String {
     let filtered = notices_for(json, reader);
     let Some(reader) = reader else { return filtered };
+    // View only follows the service: no production state, whatever its page chooses to show. A desk
+    // granted the recorder picks an output, so it keeps the rest.
+    if reader.role == crate::keys::Role::Viewer && !reader.record {
+        return viewer_live(&filtered);
+    }
     let scenes = !reader.role.edits_scenes() && filtered.contains("\"layers\"");
     let mut hidden: Vec<&str> = hidden_from(reader.role).to_vec();
     if !matches!(reader.role, crate::keys::Role::Present | crate::keys::Role::Configure | crate::keys::Role::Screens) {
@@ -793,6 +809,28 @@ fn hidden_from(role: crate::keys::Role) -> &'static [&'static str] {
         Role::Bible | Role::Editor => &["readiness", "presence"],
         _ => &["readiness", "presence", "heard"],
     }
+}
+
+/// The Live State for a View only desk: the lists stay, empty, because every desk page reads them;
+/// a source keeps only what is on screen, not who put it there, and never a camera's state.
+fn viewer_live(json: &str) -> String {
+    let Ok(mut v) = serde_json::from_str::<serde_json::Value>(json) else { return json.to_string() };
+    let Some(o) = v.as_object_mut() else { return json.to_string() };
+    for k in ["readiness", "presence", "heard", "graphicsQueue", "groupTakeResults", "takeAttempts", "obs", "revisions", "churchLook", "timeChange", "requireApproval"] {
+        o.remove(k);
+    }
+    for k in ["scenes", "outputs", "outputMap", "auxTimers", "cameraFeeds"] {
+        if o.contains_key(k) {
+            o.insert(k.into(), serde_json::json!([]));
+        }
+    }
+    if let Some(sources) = o.get_mut("sources").and_then(serde_json::Value::as_array_mut) {
+        sources.retain(|s| !s["id"].as_str().is_some_and(|id| id.starts_with("camera:")));
+        for s in sources.iter_mut().filter_map(serde_json::Value::as_object_mut) {
+            s.retain(|k, _| matches!(k.as_str(), "id" | "reference" | "on" | "revision"));
+        }
+    }
+    v.to_string()
 }
 
 /// Whether a reader gets who is connected (`presence`): this computer itself, and the director.
@@ -2255,6 +2293,12 @@ async fn command_handler<S: CommandSink + 'static>(
     };
     let (by, by_id, role) = by;
     let mut command = request.command;
+    // A View only desk may send words, not ask anyone to run something from them.
+    if role == crate::keys::Role::Viewer {
+        if let RemoteCommand::NoticeSend(notice) = &mut command {
+            notice.action = None;
+        }
+    }
     let group_take = matches!(&command, RemoteCommand::GroupTakeScene(_));
     if let RemoteCommand::GroupTakeScene(take) = &mut command {
         let Some(id) = request
@@ -2865,7 +2909,7 @@ mod tests {
         assert!(now.contains("200 OK") && now.contains("Opening prayer"), "{now}");
 
         // The stream starts with the current state, then each change.
-        let handle = tokio::spawn(async move { get_with(port, "/api/v1/live/events", "X-Rhema-Key: tok\r\n", Some(500)).await });
+        let handle = tokio::spawn(async move { get_with(port, "/api/v1/live/events", "X-Rhema-Key: tok\r\n", Some(1200)).await });
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
         live.publish(r#"{"v":1,"now":"Sermon"}"#.into());
         let stream = handle.await.unwrap();
@@ -3762,6 +3806,22 @@ mod tests {
     /// Scenes from a joined desk (#243 SC.16, SC.17): saved at once, sent to the main desk to accept,
     /// or refused when made from an older copy; full scenes only for desks that change them.
     #[tokio::test]
+    async fn a_view_only_desk_cannot_attach_an_action_to_a_notice() {
+        let sink = Arc::new(MockSink::new());
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(crate::keys::Keys { require_auth: true, entries: vec![entry("vie", "Pastor", Role::Viewer)] }));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let sent = raw_http_request_with(result.bound_port, "POST", "/api/v1/command", Some(r#"{"command":"notice_send","value":{"text":"Please","action":{"kind":"bible","value":"John 3:16"}}}"#), "X-Rhema-Key: vie\r\n").await;
+        assert!(sent.contains("200 OK"), "{sent}");
+        let notice: serde_json::Value = serde_json::from_str(sink.notice.lock().unwrap().as_deref().unwrap()).unwrap();
+        assert_eq!(notice["text"], "Please");
+        assert!(notice["action"].is_null(), "{notice}");
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
     async fn a_desk_saves_scenes_through_the_host_with_its_revision() {
         use crate::keys::{hash_key, KeyEntry, Keys, Role};
         let sink = Arc::new(MockSink::new());
@@ -4145,6 +4205,35 @@ mod tests {
         // Not JSON (a test, a broken build): passed on as it is.
         live.publish("not json".into());
         assert_eq!(live.current().as_deref(), Some("not json"));
+    }
+
+    #[test]
+    fn a_view_only_desk_gets_the_service_and_no_production_state() {
+        let json = r#"{"v":1,"event":{"currentId":"a"},"rundown":[{"id":"a","reference":"Sermon"}],"program":{"onAir":true,"rehearsal":false},"timing":{"expectedEnd":5},"notices":[],"voice":[],"auxTimers":[{"id":"t"}],"outputMap":[{"id":"o"}],"outputs":[{"id":"o"}],"scenes":[{"id":"s","name":"Secret"}],"cameraFeeds":[{"name":"c","url":"http://x"}],"obs":{"connected":true},"revisions":{"scene:s":1},"takeAttempts":[{"id":"x"}],"sources":[{"id":"bible","reference":"John 3:16","on":true,"revision":1,"by":"Ada"},{"id":"camera:choir","reference":"Choir","on":true,"revision":1}]}"#;
+        let desk = |record: bool| crate::keys::KeyEntry { record, ..crate::keys::KeyEntry { hash: "h".into(), name: "Pastor".into(), role: crate::keys::Role::Viewer, ..serde_json::from_value(serde_json::json!({"hash":"h","name":"Pastor"})).unwrap() } };
+        let v: serde_json::Value = serde_json::from_str(&live_for(json, Some(&desk(false)))).unwrap();
+        for k in ["auxTimers", "outputMap", "outputs", "scenes", "cameraFeeds"] {
+            assert_eq!(v[k], serde_json::json!([]), "{k}");
+        }
+        for k in ["obs", "revisions", "takeAttempts"] {
+            assert!(v.get(k).is_none(), "{k}");
+        }
+        assert_eq!(v["sources"], serde_json::json!([{"id":"bible","reference":"John 3:16","on":true,"revision":1}]));
+        assert_eq!((v["rundown"][0]["reference"].as_str(), v["program"]["onAir"].as_bool(), v["timing"]["expectedEnd"].as_i64()), (Some("Sermon"), Some(true), Some(5)));
+        let granted: serde_json::Value = serde_json::from_str(&live_for(json, Some(&desk(true)))).unwrap();
+        assert_eq!(granted["outputs"][0]["id"], "o", "a granted recorder desk still picks an output");
+    }
+
+    #[test]
+    fn a_new_run_never_reuses_a_revision_from_the_last_one() {
+        let state = r#"{"v":1,"scenes":[{"id":"s1","name":"Sermon","layers":[]}]}"#;
+        let before = new_live_hub();
+        before.publish(state.into());
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        let after = new_live_hub();
+        after.publish(state.into());
+        assert_ne!(before.revision("scene:s1"), after.revision("scene:s1"), "a request's base from before a restart must read as stale");
+        assert!(after.revision("scene:s1").unwrap() < (1 << 53), "desks read revisions as JavaScript numbers");
     }
 
     #[test]
@@ -4749,7 +4838,7 @@ mod tests {
             assert!(v.get("readiness").is_none() && v.get("heard").is_some(), "{role:?}");
             assert!(v.get("graphicsQueue").is_none(), "{role:?} does not get Screens-specific details");
         }
-        for role in [Role::Worship, Role::Stage, Role::Screens, Role::Timekeeper, Role::Camera, Role::Obs, Role::Viewer] {
+        for role in [Role::Worship, Role::Stage, Role::Screens, Role::Timekeeper, Role::Camera, Role::Obs] {
             let v = get(role);
             assert!(v.get("readiness").is_none() && v.get("heard").is_none() && v.get("presence").is_none(), "{role:?}");
             assert_eq!(v.get("graphicsQueue").is_some(), role == Role::Screens, "{role:?} graphics queue access");
