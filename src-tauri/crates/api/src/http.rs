@@ -366,6 +366,25 @@ impl Default for Revisions {
     }
 }
 
+/// Room left for one run's changes before the next run's revisions begin.
+const REVISIONS_PER_RUN: u64 = 1_000_000_000;
+
+/// Where this run's revisions start, kept in `path` so no two runs of this host can ever share one,
+/// even if the clock moved back. Losing the file falls back on the clock, so a collision needs both.
+/// Past 2^53 a desk's JavaScript could not tell two revisions apart, so a stored value that high is
+/// treated as damage. If it can't be saved, this run still has the clock, and the log says so.
+#[must_use]
+pub fn reserve_revision_floor(path: &std::path::Path, now_ms: u64) -> u64 {
+    const LIMIT: u64 = 1 << 52;
+    let stored = std::fs::read_to_string(path).ok().and_then(|text| text.trim().parse::<u64>().ok()).filter(|n| *n < LIMIT).unwrap_or(0);
+    let floor = stored.max(now_ms.saturating_mul(1000));
+    let tmp = path.with_extension("tmp");
+    if let Err(e) = std::fs::write(&tmp, (floor + REVISIONS_PER_RUN).to_string()).and_then(|()| std::fs::rename(&tmp, path)) {
+        log::error!("could not keep the live revision floor at {}: {e}", path.display());
+    }
+    floor
+}
+
 impl Revisions {
     /// What each part looks like in this Live State, to tell when it changed. Fields an older host
     /// does not send read as null, so its parts simply never move.
@@ -634,6 +653,13 @@ impl LiveHub {
         drop(revisions);
     }
 
+    /// Start this run's revisions from `reserve_revision_floor`. Before anything is published:
+    /// parts already counted keep their numbers.
+    pub fn start_revisions_from(&self, floor: u64) {
+        let mut revisions = self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        revisions.first = revisions.first.max(floor);
+    }
+
     /// The revision of one part of the live service now (see `Revisions`), None before the host
     /// has shown it.
     #[must_use]
@@ -825,7 +851,7 @@ fn keep_each(list: Option<&serde_json::Value>, fields: &[&str]) -> Vec<serde_jso
 
 /// The Live State for a View only desk, built field by field from what it may have, at every level,
 /// so a new field stays private until someone decides otherwise. The lists stay, empty, because
-/// every desk page reads them; a source keeps only what is on screen. A desk granted the recorder
+/// every desk page reads them; a source says only whether it is on, never the words. A desk granted the recorder
 /// also gets each output's id, name and role, to choose what to record.
 fn viewer_live(json: &str, record: bool) -> String {
     const TIME: &[&str] = &["plan", "expected", "actual", "ranMs", "state", "endBy", "cut", "fixed", "conflict", "pause", "milestone", "overrun", "untrusted"];
@@ -839,11 +865,10 @@ fn viewer_live(json: &str, record: bool) -> String {
     }
     for (k, fields) in [
         ("service", &["id", "title", "revision"][..]),
-        ("program", &["onAir", "reference", "rehearsal"]),
+        ("program", &["onAir", "rehearsal"]),
         ("timing", &["plannedEnd", "expectedEnd", "lateMs", "offsetMinutes", "offsetMode", "state", "timeZone", "untrusted"]),
         ("timer", &["durationMs", "elapsedMs", "running", "revision"]),
         ("hold", &["reason", "since"]),
-        ("lyrics", &["itemId", "index", "title", "kind", "section", "sections", "key", "choruses"]),
     ] {
         if let Some(value) = all.get(k) {
             o.insert(k.into(), keep_fields(value, fields));
@@ -899,7 +924,7 @@ fn viewer_live(json: &str, record: bool) -> String {
         o.insert(k.into(), serde_json::json!([]));
     }
     o.insert("stageMessage".into(), serde_json::json!(""));
-    let sources: Vec<_> = all.get("sources").and_then(serde_json::Value::as_array).into_iter().flatten().filter(|s| !s["id"].as_str().is_some_and(|id| id.starts_with("camera:"))).map(|s| keep_fields(s, &["id", "reference", "on", "revision"])).collect();
+    let sources: Vec<_> = all.get("sources").and_then(serde_json::Value::as_array).into_iter().flatten().filter(|s| !s["id"].as_str().is_some_and(|id| id.starts_with("camera:"))).map(|s| keep_fields(s, &["id", "on", "revision"])).collect();
     o.insert("sources".into(), serde_json::Value::Array(sources));
     if record {
         o.insert("outputs".into(), serde_json::Value::Array(keep_each(all.get("outputs"), &["id", "name", "role"])));
@@ -4294,8 +4319,9 @@ mod tests {
         for k in ["obs", "revisions", "takeAttempts"] {
             assert!(v.get(k).is_none(), "{k}");
         }
-        assert_eq!(v["sources"], serde_json::json!([{"id":"bible","reference":"John 3:16","on":true,"revision":1}]));
+        assert_eq!(v["sources"], serde_json::json!([{"id":"bible","on":true,"revision":1}]));
         assert_eq!((v["rundown"][0]["reference"].as_str(), v["program"]["onAir"].as_bool(), v["timing"]["expectedEnd"].as_i64()), (Some("Sermon"), Some(true), Some(5)));
+        assert!(v["program"].get("reference").is_none());
         let granted: serde_json::Value = serde_json::from_str(&live_for(json, Some(&desk(true)))).unwrap();
         assert_eq!(granted["outputs"], serde_json::json!([{"id":"o"}]), "a granted recorder desk picks an output and gets nothing more");
         assert_eq!(granted["scenes"], serde_json::json!([]));
@@ -4310,19 +4336,19 @@ mod tests {
         let json = serde_json::json!({
             "v": 1, "at": 5, "church": "Grace", "heartbeatMs": 1000, "SECRET_top": "SECRET",
             "service": { "id": "p", "title": "Sunday", "revision": 2, "notes": "SECRET" },
-            "program": { "onAir": true, "reference": "John 3:16", "rehearsal": false, "by": "SECRET" },
+            "program": { "onAir": true, "reference": "SECRET John 3:16", "rehearsal": false, "by": "SECRET" },
             "event": { "mode": "own", "currentId": "a", "secret": "SECRET", "targets": [{ "id": "a", "reference": "Sermon", "plannedMinutes": 5, "kind": "event", "notes": "SECRET", "time": { "plan": [1, 2], "state": "live", "by": "SECRET" } }] },
             "rundown": [{ "id": "a", "reference": "Sermon", "plannedMinutes": 5, "notes": "SECRET", "time": { "plan": [1, 2], "state": "live", "by": "SECRET" } }],
             "timing": { "plannedEnd": 1, "expectedEnd": 2, "lateMs": 3, "offsetBy": "SECRET", "secret": "SECRET" },
             "timer": { "durationMs": 1, "elapsedMs": 0, "running": true, "by": "SECRET" },
             "hold": { "reason": "Prayer", "since": 1, "by": "SECRET" },
-            "lyrics": { "itemId": "s", "index": 0, "title": "Grace", "kind": "song", "section": 0, "sections": ["Verse"], "notes": "SECRET" },
+            "lyrics": { "itemId": "s", "index": 0, "title": "SECRET", "kind": "song", "section": 0, "sections": ["SECRET"] },
             "notices": [{ "id": "n", "from": "Ada", "to": "all", "priority": "normal", "text": "Hello", "at": 1, "action": { "kind": "SECRET" }, "secret": "SECRET", "event": { "id": "a", "title": "Sermon", "notes": "SECRET" }, "answers": [{ "by": "Ben", "state": "seen", "at": 2, "ip": "SECRET" }] }],
             "voice": [{ "id": "SECRET", "name": "Ada", "role": "bible", "talking": false, "speaking": false, "address": "SECRET" }],
             "crew": ["Ada", { "key": "SECRET" }],
             "paused": ["Ben", { "key": "SECRET" }],
             "talkRights": { "band": ["worship", { "key": "SECRET" }] },
-            "sources": [{ "id": "bible", "reference": "John 3:16", "on": true, "revision": 1, "by": "SECRET", "state": "SECRET" }],
+            "sources": [{ "id": "bible", "reference": "SECRET John 3:16", "on": true, "revision": 1, "by": "SECRET", "state": "SECRET" }],
             "outputs": [{ "id": "o", "name": "Sanctuary", "role": "congregation", "feedToken": "SECRET", "sceneBy": "SECRET" }],
             "scenes": [{ "id": "s", "name": "SECRET" }], "stageMessage": "SECRET", "obs": { "program": "SECRET" }, "worshipSet": ["SECRET"], "timeChange": { "by": "SECRET" }, "graphicsQueue": ["SECRET"], "churchLook": { "logo": "SECRET" },
         }).to_string();
@@ -4343,6 +4369,37 @@ mod tests {
         assert!(!live_for(&json, Some(&desk(true))).contains("SECRET"), "the way a desk really gets it");
         let no_hold: serde_json::Value = serde_json::from_str(&viewer_live(r#"{"hold":null,"timing":null}"#, false)).unwrap();
         assert_eq!((no_hold["hold"].is_null(), no_hold.get("hold").is_some(), no_hold.get("timing").is_some()), (true, true, true), "nothing held stays a null, as desks read it");
+    }
+
+    #[test]
+    fn a_request_from_before_a_restart_is_stale_even_if_the_clock_went_back() {
+        let dir = std::env::temp_dir().join(format!("rhema-revisions-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("live-revisions");
+        let state = r#"{"v":1,"scenes":[{"id":"s1","name":"Sermon","layers":[]}]}"#;
+        let run = |now_ms: u64| {
+            let hub = new_live_hub();
+            let floor = reserve_revision_floor(&path, now_ms);
+            hub.start_revisions_from(floor);
+            hub.publish(state.into());
+            hub.revision("scene:s1").unwrap()
+        };
+        // A clock a day fast when the request was made, and right when the host restarts.
+        let today = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+        let requested_against = run(today + 86_400_000);
+        let after_restart = run(today);
+        assert!(after_restart > requested_against, "{after_restart} {requested_against}");
+        assert!(after_restart - requested_against >= REVISIONS_PER_RUN);
+        let again = run(today);
+        assert!(again > after_restart);
+
+        std::fs::write(&path, "damaged").unwrap();
+        assert_eq!(reserve_revision_floor(&path, 5), 5_000, "a damaged file falls back on the clock");
+        std::fs::write(&path, u64::MAX.to_string()).unwrap();
+        assert_eq!(reserve_revision_floor(&path, 5), 5_000, "and a number a desk could not hold is damage");
+        let unwritable = dir.join("missing").join("live-revisions");
+        assert_eq!(reserve_revision_floor(&unwritable, 7), 7_000, "a run still starts if it can't be kept");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

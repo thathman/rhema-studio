@@ -634,6 +634,15 @@ pub(crate) fn current_live_state(app: &AppHandle) -> Option<String> {
     runtime.live.current()
 }
 
+/// Start this run's live revisions past every earlier run's (`reserve_revision_floor`).
+pub fn start_revisions(app: &AppHandle, dir: &std::path::Path) {
+    let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+    let floor = rhema_api::reserve_revision_floor(&dir.join("live-revisions"), now_ms);
+    if let Ok(runtime) = app.state::<Mutex<HttpRuntime>>().lock() {
+        runtime.live.start_revisions_from(floor);
+    }
+}
+
 /// The host's own revision of one part of the live service (`scene:<id>`), None before it was shown.
 pub(crate) fn current_revision(app: &AppHandle, part: &str) -> Option<u64> {
     let state = app.try_state::<Mutex<HttpRuntime>>()?;
