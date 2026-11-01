@@ -118,6 +118,10 @@ impl Writer {
                         (key(AVNumberOfChannelsKey), any(&*NSNumber::new_u32(AUDIO_CHANNELS))),
                         (key(AVEncoderBitRateKey), any(&*NSNumber::new_u32(192_000))),
                     ]);
+                    // Asking for a rate AAC cannot take raises an Objective-C exception, which would abort the app.
+                    if !writer.canApplyOutputSettings_forMediaType(Some(&settings), key(AVMediaTypeAudio)) {
+                        return Err(format!("the AAC encoder cannot record {rate} Hz: set the sound input to 44.1 or 48 kHz"));
+                    }
                     let input = AVAssetWriterInput::assetWriterInputWithMediaType_outputSettings(key(AVMediaTypeAudio), Some(&settings));
                     input.setExpectsMediaDataInRealTime(true);
                     if !writer.canAddInput(&input) {

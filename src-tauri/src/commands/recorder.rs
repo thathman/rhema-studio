@@ -87,13 +87,14 @@ pub fn recorder_preflight(app: AppHandle, host: State<'_, RecorderHost>, ndi: St
     Ok(RecorderPreflight { ok: problems.is_empty(), problems, warnings: rec.warnings(), width, height, disk_free_bytes: rhema_recorder::disk_free(rec.folder()), audio_devices: rhema_recorder::audio::devices() })
 }
 
-#[tauri::command]
+// Both wait on the file (a stop up to a minute): off the main thread, or Live freezes meanwhile.
+#[tauri::command(async)]
 pub fn recorder_start(app: AppHandle, window: WebviewWindow, request: RecorderStartRequest) -> Res<RecorderStatus> {
     main_desk_only(&window)?;
     start_session(&app, request)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn recorder_stop(app: AppHandle, window: WebviewWindow) -> Res<RecorderStatus> {
     main_desk_only(&window)?;
     stop_session(&app)
@@ -109,13 +110,17 @@ fn start_session(app: &AppHandle, request: RecorderStartRequest) -> Res<Recorder
     let output_id = request.output_id.clone();
     let output_label = window_label(&output_id).map_err(|e| RecorderProblem::new(ProblemCode::OutputNotRecordable, e))?;
     let mut dimensions = (0, 0);
+    let dimensions_out = &mut dimensions;
     let status = start_for_current_congregation(request, live_state.as_deref(), |request| {
         let rec = recorder(&host)?;
         if app.get_webview_window(&output_label).is_none() {
             return Err(RecorderProblem::new(ProblemCode::OutputWindowMissing, "Open this screen first: Rhema records what its window shows."));
         }
-        dimensions = frame_size(&ndi, &request);
-        rec.start(&request, dimensions.0, dimensions.1)
+        // Read once the output is reserved: `start_ndi` refuses a change of size from then on.
+        rec.start_sized(&request, || {
+            *dimensions_out = frame_size(&ndi, &request);
+            *dimensions_out
+        })
     })?;
     let (width, height) = dimensions;
     log::info!("recorder: started {} on output {} at {width}x{height}", status.session_id.as_deref().unwrap_or("?"), output_id);
@@ -126,15 +131,31 @@ fn start_session(app: &AppHandle, request: RecorderStartRequest) -> Res<Recorder
     Ok(status)
 }
 
+/// The app is quitting: close the file properly rather than leave it to be recovered, even one
+/// still starting. A start never holds this for longer than the wait; its file is recovered if so.
+pub fn shutdown(app: &AppHandle) {
+    if let Some(host) = app.try_state::<RecorderHost>() {
+        if let Ok(rec) = recorder(&host) {
+            match rec.shut_down(Duration::from_secs(10)) {
+                Some(Ok(status)) => log::info!("recorder: closed on quit: {:?}", status.state),
+                Some(Err(p)) => log::warn!("recorder: could not close on quit: {}", p.message),
+                None => {}
+            }
+        }
+    }
+}
+
 fn stop_session(app: &AppHandle) -> Res<RecorderStatus> {
     let host = app.state::<RecorderHost>();
     let rec = recorder(&host)?;
     let output = rec.pinned_output();
-    let status = rec.stop()?;
+    // Told before another start can begin, so this can't switch off the next recording's frames.
+    let status = rec.stop_then(|| {
+        if let Some(label) = output.and_then(|o| window_label(&o).ok()) {
+            let _ = app.emit_to(tauri::EventTarget::webview_window(label.as_str()), "broadcast:record-tee", tee(false, 0, 0, 0));
+        }
+    })?;
     log::info!("recorder: {:?} {}", status.state, status.file.path.as_deref().unwrap_or(""));
-    if let Some(label) = output.and_then(|o| window_label(&o).ok()) {
-        let _ = app.emit_to(tauri::EventTarget::webview_window(label.as_str()), "broadcast:record-tee", tee(false, 0, 0, 0));
-    }
     let _ = app.emit_to("main", "recorder:status", &status);
     Ok(status)
 }

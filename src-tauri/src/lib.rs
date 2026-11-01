@@ -484,6 +484,7 @@ pub fn run() {
         // no "closed unexpectedly" offer next time.
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
+                commands::recorder::shutdown(app);
                 commands::camera_router::shutdown(app);
                 commands::remote::shutdown(app);
                 commands::app_close::clear_running(app);
