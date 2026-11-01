@@ -99,6 +99,7 @@ export function ApprovalRequestsPanel() {
   const localSceneRecoveries = useApprovalRequestsStore((state) => state.localSceneRecoveries)
   const localRecoveryDismissed = useApprovalRequestsStore((state) => state.localRecoveryDismissed)
   const localRecoveryUnavailable = useApprovalRequestsStore((state) => state.localRecoveryUnavailable)
+  const localHostStatusUnknown = useApprovalRequestsStore((state) => state.localHostStatusUnknown)
   const hydrated = useApprovalRequestsStore((state) => state.hydrated)
   const loading = useApprovalRequestsStore((state) => state.loading)
   const error = useApprovalRequestsStore((state) => state.error)
@@ -168,6 +169,18 @@ export function ApprovalRequestsPanel() {
     }
   }
 
+  const refreshHostStatus = async (request: ApprovalRequest) => {
+    setBusy(request.id)
+    setRowErrors((current) => ({ ...current, [request.id]: "" }))
+    try {
+      await reloadApprovalRequests()
+    } catch (cause) {
+      setRowErrors((current) => ({ ...current, [request.id]: cause instanceof Error ? cause.message : String(cause) }))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const toggleHistory = async (request: ApprovalRequest, open: boolean) => {
     if (!open || histories[request.id]) return
     setHistoryErrors((current) => ({ ...current, [request.id]: "" }))
@@ -209,6 +222,7 @@ export function ApprovalRequestsPanel() {
                     <p className="mt-1 text-xs text-muted-foreground">From {request.requester.name} · {dateWords(request.createdAt)} · {request.baseRevision === null ? "No base revision" : `Based on host revision ${request.baseRevision}`} · Expires {dateWords(request.expiresAt)}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{requestImpact(request, outputsOnScreens)}</p>
                     {request.state === "approved" && request.kind.startsWith("scene_") && <p className="mt-1 text-xs text-muted-foreground">Apply checks the scene revision and current output assignment on this host. Saving changes the scene library only; it does not Take the scene live.</p>}
+                    {request.state === "approved" && request.kind.startsWith("scene_") && localHostStatusUnknown[request.id] && <p role="alert" className="mt-1 text-xs text-amber-800">The host response was interrupted and its status is unknown. The local recovery record was kept. Refresh host status before trying again.</p>}
                     {request.state === "approved" && request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId) && <p role="status" className="mt-1 text-xs text-amber-800">Move every real screen away from this scene before applying its deletion.</p>}
                     {request.state === "applied" && request.kind.startsWith("scene_") && needsLocalRecovery && !localRecoveryUnavailable[request.id] && <p role="status" className="mt-1 text-xs text-amber-800">The host recorded this approval, but local scene recovery is still needed. Program has not changed. Retry applies only this approved version and stops if the local scene changed since approval.</p>}
                     {request.state === "applied" && request.kind.startsWith("scene_") && needsLocalRecovery && localRecoveryUnavailable[request.id] && <p role="alert" className="mt-1 text-xs text-amber-800">This applied request has no safe local recovery record. The current scene was preserved. Send a fresh request to synchronize it.</p>}
@@ -241,7 +255,7 @@ export function ApprovalRequestsPanel() {
                   {isHost && request.kind === "plan_approve" && request.state === "approved" && request.baseRevision !== null && <div className="flex flex-wrap items-center gap-2">
                     <Button size="sm" variant="outline" disabled={busy === request.id} onClick={() => void confirmPlan(request)}>Confirm approved revision</Button>
                   </div>}
-                  {isHost && request.kind.startsWith("scene_") && request.state === "approved" && <div className="flex flex-wrap items-center gap-2">
+                  {isHost && request.kind.startsWith("scene_") && request.state === "approved" && !localHostStatusUnknown[request.id] && <div className="flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
                       variant="outline"
@@ -251,6 +265,9 @@ export function ApprovalRequestsPanel() {
                     >
                       {request.kind === "scene_delete" ? "Apply approved deletion" : "Apply approved scene change"}
                     </Button>
+                  </div>}
+                  {isHost && request.kind.startsWith("scene_") && request.state === "approved" && localHostStatusUnknown[request.id] && <div className="flex flex-wrap items-center gap-2">
+                    <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void refreshHostStatus(request)}>Refresh host status</Button>
                   </div>}
                   {isHost && request.kind.startsWith("scene_") && request.state === "applied" && needsLocalRecovery && !localRecoveryUnavailable[request.id] && <div className="flex flex-wrap items-center gap-2">
                     <Button

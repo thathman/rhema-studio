@@ -441,7 +441,6 @@ describe("Permissions workspace", () => {
     expect(el.textContent).toContain("stopped to protect the newer design")
     expect(tauri.invoke.mock.calls.filter(([command]) => command === "approvals_apply")).toHaveLength(1)
 
-    disk.values.set("scenes", [newerLocalScene])
     useBroadcastStore.setState({ scenes: [newerLocalScene] as never })
     await act(async () => {
       el.querySelector<HTMLButtonElement>('[aria-label="Keep newer local scene"]')!.click()
@@ -522,6 +521,64 @@ describe("Permissions workspace", () => {
     })
     expect(tauri.invoke.mock.calls.filter(([command]) => command === "approvals_apply")).toHaveLength(1)
     expect(useBroadcastStore.getState().scenes).toEqual(expect.arrayContaining([expect.objectContaining({ id: "scene-1", name: "Welcome" })]))
+    await act(async () => root.unmount())
+  })
+
+  it("retains recovery when the host applies but both response and immediate refresh fail", async () => {
+    const original = { id: "scene-1", name: "Before approval", background: "#111111", createdAt: 1, updatedAt: 7, layers: [] }
+    const approved = {
+      id: "scene-refresh-recovery", kind: "scene_save", targetId: "scene-1", baseRevision: 7,
+      requester: { id: "screens-key", name: "Screens desk" },
+      payload: { scene: { id: "scene-1", name: "Welcome", background: "#000000", layers: [] } },
+      reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
+    }
+    let hostRequest = approved
+    let failedListCalls = 0
+    tauri.invoke.mockImplementation(async (command: string) => {
+      if (command === "approvals_list") {
+        if (failedListCalls > 0) {
+          failedListCalls -= 1
+          throw new Error("Host list temporarily unavailable")
+        }
+        return [hostRequest]
+      }
+      if (command === "approvals_apply") {
+        hostRequest = { ...approved, state: "applied" }
+        failedListCalls = 1
+        throw new Error("The host committed the approval but the response was interrupted.")
+      }
+      return null
+    })
+    useBroadcastStore.setState({ scenes: [original] as never })
+    resetApprovalRequests()
+    await reloadApprovalRequests()
+    const el = await mount()
+
+    await act(async () => {
+      el.querySelector<HTMLButtonElement>('[aria-label="Apply approved scene change"]')!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: approved.id, state: "approved" }])
+    expect(useApprovalRequestsStore.getState().localHostStatusUnknown[approved.id]).toBe(true)
+    expect(disk.values.get(`sceneApprovalRecovery:${approved.id}`)).toMatchObject({ status: "pending" })
+    expect(el.textContent).toContain("its status is unknown")
+    expect(el.querySelector('[aria-label="Apply approved scene change"]')).toBeNull()
+
+    await act(async () => {
+      [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Refresh host status")!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: approved.id, state: "applied" }])
+    expect(useApprovalRequestsStore.getState().localHostStatusUnknown[approved.id]).toBeUndefined()
+    await act(async () => {
+      el.querySelector<HTMLButtonElement>('[aria-label="Retry local approved scene save"]')!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(tauri.invoke.mock.calls.filter(([command]) => command === "approvals_apply")).toHaveLength(1)
+    expect(useBroadcastStore.getState().scenes).toEqual(expect.arrayContaining([expect.objectContaining({ id: "scene-1", name: "Welcome" })]))
+    expect(disk.values.get(`sceneApprovalRecovery:${approved.id}`)).toBeNull()
     await act(async () => root.unmount())
   })
 
