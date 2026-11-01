@@ -131,15 +131,16 @@ fn new_srt_passphrase() -> String {
 /// and no browser page (no allowed CORS origin). Its real password goes to the router in
 /// `API_PASS_ENV`; `api_placeholder` (random, thrown away) stands in the file so it is never empty. HLS, recording
 /// playback, metrics, pprof and MoQ are off: nothing uses them, and each would open another port.
+/// WebRTC finds this computer's addresses from its interfaces for each new session; listing the address
+/// here too would restart the router's WebRTC side, dropping every session, each time it changes.
 /// RTSP uses TCP only, so it opens no UDP ports beside the remote-control ones (OSC listens on UDP
 /// 8000 by default).
 pub fn config_yaml(ports: &Ports, lan_ip: Option<&str>, cameras: &[(String, String)], readers: &[(String, String)], api_placeholder: &str) -> Result<String, String> {
     if !valid_secret(api_placeholder) {
         return Err("The router's API password is not one Rhema Studio made".into());
     }
-    let hosts = lan_ip.filter(|ip| ip.parse::<std::net::Ipv4Addr>().is_ok()).map(|ip| format!("\"{ip}\"")).unwrap_or_default();
     // This computer reaches the router by its network address too (the address OBS is given).
-    let here = if hosts.is_empty() { String::new() } else { format!(", {hosts}") };
+    let here = lan_ip.filter(|ip| ip.parse::<std::net::Ipv4Addr>().is_ok()).map(|ip| format!(", \"{ip}\"")).unwrap_or_default();
     let relay = rhema_api::RELAY_USER;
     let prefix = rhema_api::PUBLISH_PREFIX;
     let publishers: String = cameras
@@ -196,7 +197,7 @@ webrtcAllowOrigins: ["*"]
 webrtcTrustedProxies: ["127.0.0.1"]
 webrtcLocalUDPAddress: :{udp}
 webrtcIPsFromInterfaces: true
-webrtcAdditionalHosts: [{hosts}]
+webrtcAdditionalHosts: []
 webrtcICEServers2: []
 srt: true
 srtAddress: :{srt}
@@ -487,6 +488,22 @@ fn readers_differ(config: &Path, readers: &[(String, String)]) -> bool {
     readers.iter().any(|(user, pass)| !text.contains(&format!("user: \"{user}\"\n    pass: \"{pass}\"")))
 }
 
+/// This computer moved to another network address: this computer's own readers by that address (the
+/// address OBS is given) follow. Changing that sign-in rule disconnects nobody; other readers, the
+/// cameras and the companions carry on. With no network now the address stays: nothing to follow yet.
+fn follow_address(router: &CameraRouter, hub: &rhema_api::SharedCameras, now: Option<String>) {
+    let mut s = router.lock();
+    if now.is_none() || now == s.lan {
+        return;
+    }
+    log::info!("camera router: this computer's address is now {}", now.as_deref().unwrap_or(""));
+    s.lan = now;
+    let Some(config) = s.config.clone() else { return };
+    if let Err(e) = config_yaml(&PORTS, s.lan.as_deref(), &hub.list(), &hub.reader_list(), &new_api_password()).and_then(|y| write_config(&config, &with_rtsps(y, &PORTS, s.tls.as_ref()))) {
+        log::warn!("camera router: its settings did not follow the new address: {e}");
+    }
+}
+
 /// How often Rhema checks that each relayed reader may still read: no network, so a lost key or role
 /// or a scene that left the camera cuts its picture within a moment.
 const RELAY_CHECK: Duration = Duration::from_millis(250);
@@ -542,7 +559,9 @@ fn look_regularly(router: CameraRouter, hub: rhema_api::SharedCameras, keys: rhe
                     // A TV or desk that lost its key or role: cut off here, so a failed try is tried again.
                     rhema_api::http::prune_camera_readers(&hub, &keys, &feeds);
                     hub.relay_kick_unheld(&client, &base, API_USER, &password, &webrtc).await;
-                    let local = local_addresses(super::remote::remote_lan_address().as_deref());
+                    let address = super::remote::remote_lan_address();
+                    let local = local_addresses(address.as_deref());
+                    follow_address(&router, &hub, address);
                     let now = Instant::now();
                     let watch = build_watch(&paths, &sessions, &Names { reader: &|u| hub.reader_name(u), desk: &|ip| hub.desk_at(ip) }, &local, &mut before, now);
                     hub.set_watch(watch);
@@ -904,13 +923,37 @@ mod tests {
     }
 
     #[test]
-    fn phones_and_tvs_are_told_this_computers_lan_address() {
-        let y = config_yaml(&PORTS, Some("192.168.1.20"), &cams(), &[], API).unwrap();
-        assert!(y.lines().any(|l| l == "webrtcAdditionalHosts: [\"192.168.1.20\"]"), "{y}");
-        let none = config_yaml(&PORTS, None, &cams(), &[], API).unwrap();
-        assert!(none.lines().any(|l| l == "webrtcAdditionalHosts: []"));
-        let odd = config_yaml(&PORTS, Some("bad\"]\nhost"), &cams(), &[], API).unwrap();
-        assert!(odd.lines().any(|l| l == "webrtcAdditionalHosts: []"), "only an IPv4 address goes in");
+    fn a_new_address_never_restarts_the_routers_webrtc_side() {
+        for lan in [Some("192.168.1.20"), None, Some("bad\"]\nhost")] {
+            let y = config_yaml(&PORTS, lan, &cams(), &[], API).unwrap();
+            assert!(y.lines().any(|l| l == "webrtcIPsFromInterfaces: true") && y.lines().any(|l| l == "webrtcAdditionalHosts: []"), "{y}");
+            assert!(!y.contains("bad"), "only an IPv4 address goes in");
+        }
+        // Only the line that allows this computer's own readers differs.
+        let (a, b) = (config_yaml(&PORTS, Some("192.168.1.20"), &cams(), &[], API).unwrap(), config_yaml(&PORTS, Some("10.0.0.7"), &cams(), &[], API).unwrap());
+        let differ: Vec<&str> = a.lines().zip(b.lines()).filter(|(x, y)| x != y).map(|(x, _)| x).collect();
+        assert_eq!(differ, ["    ips: [\"127.0.0.1\", \"::1\", \"192.168.1.20\"]"]);
+    }
+
+    #[test]
+    fn the_address_follows_the_network_and_stays_while_there_is_none() {
+        let dir = std::env::temp_dir().join(format!("rhema-follow-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let config = dir.join("mediamtx.yml");
+        let _ = std::fs::remove_file(&config);
+        let router = CameraRouter::default();
+        router.lock().config = Some(config.clone());
+        router.lock().lan = Some("192.168.1.20".into());
+        let hub = rhema_api::new_camera_hub();
+        follow_address(&router, &hub, Some("192.168.1.20".into()));
+        assert!(!config.exists(), "nothing changed: nothing is written");
+        follow_address(&router, &hub, None);
+        assert!(!config.exists(), "offline: nothing changed");
+        assert_eq!(router.lock().lan.as_deref(), Some("192.168.1.20"));
+        follow_address(&router, &hub, Some("10.0.0.7".into()));
+        assert!(std::fs::read_to_string(&config).unwrap().contains("\"10.0.0.7\"]"));
+        assert_eq!(router.lock().lan.as_deref(), Some("10.0.0.7"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The router's users, as (user, pass, ips, [(action, path)]).
