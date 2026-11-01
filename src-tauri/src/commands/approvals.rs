@@ -29,27 +29,44 @@ pub fn approvals_list(state: State<'_, ContentState>, status: Option<String>, re
 #[tauri::command]
 pub fn approvals_decide(app: AppHandle, window: WebviewWindow, state: State<'_, ContentState>, id: String, decision: Decision, note: Option<String>) -> CmdResult<ApprovalRequest> {
     main_window_only(&window)?;
-    scene_authority(&app, &with_db(&state, |db| db.approval_request(&id))?)?;
+    request_authority(&app, &with_db(&state, |db| db.approval_request(&id))?)?;
     with_db(&state, |db| db.decide_approval_request(&id, &main_desk(), decision, note.as_deref()))
 }
 
-/// A scene request is issued and judged only by the authoritative host (`remote::approval_authority`).
-fn check_authority(bound: bool, reserved: bool) -> Result<(), &'static str> {
+/// Approval changes are accepted only on the authoritative host (`remote::approval_authority`).
+fn check_host_bound(bound: bool) -> Result<(), &'static str> {
     if !bound {
-        return Err("This copy of Rhema Studio is not hosting, so it cannot handle scene approvals. Start hosting here, or use the copy that is.");
+        return Err("This copy of Rhema Studio is not hosting, so it cannot handle approvals. Start hosting here, or use the copy that is.");
     }
+    Ok(())
+}
+
+fn check_revision_floor(reserved: bool) -> Result<(), &'static str> {
     if !reserved {
         return Err("Rhema Studio could not reserve its revision numbers in its data folder, so scene approvals are off until it restarts. Check the disk.");
     }
     Ok(())
 }
 
-fn scene_authority(app: &AppHandle, request: &ApprovalRequest) -> CmdResult<()> {
-    if !matches!(request.kind.as_str(), "scene_save" | "scene_delete") {
-        return Ok(());
+fn check_authority(bound: bool, reserved: bool) -> Result<(), &'static str> {
+    check_host_bound(bound)?;
+    check_revision_floor(reserved)
+}
+
+/// Every approval mutation belongs to the copy whose listener successfully bound. Scene approvals
+/// additionally require their cross-process revision floor so stale scene requests fail closed.
+fn check_request_authority(kind: &str, bound: bool, reserved: bool) -> Result<(), &'static str> {
+    check_host_bound(bound)?;
+    if matches!(kind, "scene_save" | "scene_delete") {
+        check_revision_floor(reserved)?;
     }
+    Ok(())
+}
+
+fn request_authority(app: &AppHandle, request: &ApprovalRequest) -> CmdResult<()> {
     let (bound, reserved) = super::remote::approval_authority(app);
-    check_authority(bound, reserved).map_err(|message| ContentCommandError::Refused { message: message.into(), code: "not-authority" })
+    check_request_authority(&request.kind, bound, reserved)
+        .map_err(|message| ContentCommandError::Refused { message: message.into(), code: "not-authority" })
 }
 
 /// The revision a scene request is judged against, read by the host and never taken from the caller.
@@ -73,7 +90,7 @@ fn scene_apply_revision(kind: &str, target: &str, live: Option<&str>, revision: 
 pub fn approvals_apply(app: AppHandle, window: WebviewWindow, state: State<'_, ContentState>, id: String, current_revision: Option<i64>) -> CmdResult<ApprovalRequest> {
     main_window_only(&window)?;
     let request = with_db(&state, |db| db.approval_request(&id))?;
-    scene_authority(&app, &request)?;
+    request_authority(&app, &request)?;
     let current_revision = match request.kind.as_str() {
         "scene_save" | "scene_delete" => {
             let live = super::remote::current_live_state(&app);
@@ -177,6 +194,15 @@ mod tests {
         assert!(check_authority(false, true).unwrap_err().contains("not hosting"), "a second copy that lost the port");
         assert!(check_authority(true, false).unwrap_err().contains("reserve"), "revisions another run might share");
         assert!(check_authority(false, false).is_err());
+    }
+
+    #[test]
+    fn every_approval_mutation_requires_the_bound_host_and_scenes_require_reserved_revisions() {
+        assert!(check_request_authority("plan_approve", true, false).is_ok(), "plan approvals need the bound host, not scene revision numbers");
+        assert!(check_request_authority("plan_approve", false, true).unwrap_err().contains("not hosting"));
+        assert!(check_request_authority("scene_save", true, false).unwrap_err().contains("reserve"));
+        assert!(check_request_authority("scene_delete", true, true).is_ok());
+        assert!(check_request_authority("scene_delete", false, true).unwrap_err().contains("not hosting"));
     }
 
     #[test]
