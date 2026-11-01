@@ -21,7 +21,7 @@ pub mod presence;
 pub mod peer;
 pub mod tls;
 
-pub use cameras::{new_camera_hub, valid_camera_name, CameraHub, CameraWatch, ObsTally, RouterTarget, SharedCameras, Tally, Watcher, COMPANION_PATH, PUBLISH_PREFIX, READ_PREFIX};
+pub use cameras::{new_camera_hub, RelayHolder, RELAY_USER, valid_camera_name, CameraHub, CameraWatch, ObsTally, RouterTarget, SharedCameras, Tally, Watcher, COMPANION_PATH, PUBLISH_PREFIX, READ_PREFIX};
 pub use coerce::{coerce_bool, coerce_f32_normalized, coerce_string, parse_osc};
 pub use command::RemoteCommand;
 pub use dispatch::{CommandDispatcher, CommandSink};
