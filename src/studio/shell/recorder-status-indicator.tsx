@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import { CircleAlertIcon, CircleDotIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useRecorderAlertStore } from "@/stores/recorder-alert-store"
 import { useShellStore, type Workspace } from "@/studio/shell-store"
 
 type RecorderSummary = {
@@ -12,8 +13,8 @@ type RecorderSummary = {
   problem: { message: string } | null
 }
 
-function visibleOutsideLive(status: RecorderSummary | null): boolean {
-  return Boolean(status && (status.sessionActive || status.state === "recoverable" || status.state === "failed"))
+function visibleOutsideLive(status: RecorderSummary | null, alert: string | null): boolean {
+  return Boolean(alert || (status && (status.sessionActive || status.state === "recoverable" || status.state === "failed")))
 }
 
 /** A status-only reminder keeps recording and failure state visible while the operator uses another workspace. */
@@ -21,6 +22,10 @@ export function RecorderStatusIndicator({ workspace }: { workspace: Workspace })
   const [status, setStatus] = useState<RecorderSummary | null>(null)
   const [eventsConnected, setEventsConnected] = useState(false)
   const eventSequence = useRef(0)
+  const actionAlert = useRecorderAlertStore((state) => state.alerts.action)
+  const statusAlert = useRecorderAlertStore((state) => state.alerts.status)
+  const alertMessage = actionAlert ?? statusAlert
+  const alertScope = actionAlert ? "action" : statusAlert ? "status" : null
 
   useEffect(() => {
     let cancelled = false
@@ -30,7 +35,10 @@ export function RecorderStatusIndicator({ workspace }: { workspace: Workspace })
     const listening = listen<RecorderSummary>("recorder:status", (event) => {
       eventReceived = true
       eventSequence.current += 1
-      if (!cancelled) setStatus(event.payload)
+      if (!cancelled) {
+        setStatus(event.payload)
+        useRecorderAlertStore.getState().clear("status")
+      }
     }).then((stop) => {
       if (cancelled) stop()
       else {
@@ -41,8 +49,13 @@ export function RecorderStatusIndicator({ workspace }: { workspace: Workspace })
       if (!cancelled) setEventsConnected(false)
     })
     void invoke<RecorderSummary>("recorder_status").then((next) => {
-      if (!cancelled && !eventReceived && eventSequence.current === initialSequence) setStatus(next)
-    }).catch(() => {})
+      if (!cancelled && !eventReceived && eventSequence.current === initialSequence) {
+        setStatus(next)
+        useRecorderAlertStore.getState().clear("status")
+      }
+    }).catch((error: unknown) => {
+      if (!cancelled) useRecorderAlertStore.getState().report("status", `Recorder status is unavailable: ${error instanceof Error ? error.message : String(error)}`)
+    })
     return () => {
       cancelled = true
       unlisten?.()
@@ -50,34 +63,39 @@ export function RecorderStatusIndicator({ workspace }: { workspace: Workspace })
     }
   }, [])
 
-  const keepVisible = visibleOutsideLive(status)
   useEffect(() => {
-    if (!keepVisible || eventsConnected) return
+    if (eventsConnected) return
     let cancelled = false
     const timer = window.setInterval(() => {
       void invoke<RecorderSummary>("recorder_status").then((next) => {
-        if (!cancelled) setStatus(next)
-      }).catch(() => {})
+        if (!cancelled) {
+          setStatus(next)
+          useRecorderAlertStore.getState().clear("status")
+        }
+      }).catch((error: unknown) => {
+        if (!cancelled) useRecorderAlertStore.getState().report("status", `Recorder status refresh failed: ${error instanceof Error ? error.message : String(error)}`)
+      })
     }, 1000)
     return () => {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [eventsConnected, keepVisible])
+  }, [eventsConnected])
 
-  if (workspace === "present" || !visibleOutsideLive(status)) return null
+  if (workspace === "present" || !visibleOutsideLive(status, alertMessage)) return null
   const failed = status?.state === "failed"
   const recoverable = status?.state === "recoverable"
-  const attention = failed || recoverable
-  const label = failed ? "Recording failed" : recoverable ? "Recording needs recovery" : status?.state === "finalizing" ? "Recording is finalizing" : "Recording is active"
+  const attention = Boolean(alertMessage || failed || recoverable)
+  const label = failed ? "Recording failed" : recoverable ? "Recording needs recovery" : alertMessage ? "Recorder needs attention" : status?.state === "finalizing" ? "Recording is finalizing" : "Recording is active"
   const destination = recoverable || failed ? "archive" : "present"
 
   return (
     <div className={`flex max-w-[22rem] items-center gap-2 rounded-md border px-2 py-1 ${attention ? "border-confidence-mid/50 bg-confidence-mid/10" : "border-on-air/40 bg-on-air/5"}`} aria-label="Recorder status">
       {attention ? <CircleAlertIcon aria-hidden className="size-4 shrink-0 text-confidence-mid" /> : <CircleDotIcon aria-hidden className="size-4 shrink-0 text-on-air" />}
       <span role={attention ? "alert" : "status"} aria-live={attention ? "assertive" : "polite"} className="min-w-0 truncate text-xs font-semibold">
-        {label}{status?.problem?.message ? ` · ${status.problem.message}` : status?.outputId ? ` · ${status.outputId}` : ""}
+        {label}{alertMessage ? ` · ${alertMessage}` : status?.problem?.message ? ` · ${status.problem.message}` : status?.outputId ? ` · ${status.outputId}` : ""}
       </span>
+      {alertScope && <Button type="button" variant="ghost" size="xs" className="shrink-0" aria-label="Dismiss recorder alert" onClick={() => useRecorderAlertStore.getState().clear(alertScope)}>Dismiss</Button>}
       <Button type="button" variant="outline" size="xs" className="shrink-0" onClick={() => useShellStore.getState().goTo(destination)}>
         {destination === "archive" ? "Open History" : "Open Live"}
       </Button>
