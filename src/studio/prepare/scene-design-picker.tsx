@@ -95,6 +95,13 @@ export function SceneDesignPicker({
     for (const theme of added.themes)
       useBroadcastStore.getState().saveTheme(theme)
     useBroadcastStore.getState().saveScene(added.scene)
+    // A template replaces a pinned design; otherwise Take would still show the old one.
+    useQueueStore.getState().updateItem(momentId, (item) => {
+      if (item.kind !== "slide" || !item.slide.designRef) return item
+      const slide = { ...item.slide }
+      delete slide.designRef
+      return { ...item, slide }
+    })
     onSceneSelected(added.scene.id)
     setOpen(false)
 

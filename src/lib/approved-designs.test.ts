@@ -15,6 +15,14 @@ const output = (patch: Partial<BroadcastOutput> = {}): BroadcastOutput => ({
   ...patch,
 })
 
+describe("approved design moments", () => {
+  it("captures each pinned slide's version by item, and nothing for a plain one", () => {
+    const slide = (id: string, designRef?: { id: string; version: number }) => ({ id, kind: "slide", slide: { title: id, body: "", ...(designRef ? { designRef } : {}) }, reference: id, confidence: 1, source: "manual", added_at: 0 }) as QueueItem
+    const designs = captureApprovedDesigns([slide("a", { id: "d1", version: 2 }), slide("b")], [], [], [output()], null)
+    expect(designs.moments).toEqual({ a: { id: "d1", version: 2 } })
+  })
+})
+
 describe("approved design blockers", () => {
   it("does not require output looks when the service has no scene references", () => {
     expect(approvedDesignBlockers(

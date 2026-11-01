@@ -340,6 +340,7 @@ pub fn run() {
                     if let Ok(mut v) = app.state::<commands::store_check::DamagedStoreFiles>().0.lock() {
                         *v = moved;
                     }
+                    commands::remote::start_revisions(app.handle(), &dir);
                     // Imported media lives beside the database.
                     let _ = app.state::<commands::media::MediaState>().0.set(dir.join("media"));
                     // Native recordings (and any a crash interrupted, marked recoverable now).
