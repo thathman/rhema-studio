@@ -117,15 +117,61 @@ fn a_still_screen_with_continuous_sound_closes_properly() {
             next_pic += 2.0;
         }
         // The session ticks at 30 fps; before the first picture a tick writes nothing.
-        while next_tick * 1_000_000 / 30 <= (now * 1e6) as i64 {
-            w.tick(next_tick * 1_000_000 / 30).expect("video appends");
+        // A busy encoder takes the tick later, as a session does: skipping it would leave the hole
+        // that fails the file (see `a_hole_in_the_timeline_fails_but_a_late_picture_does_not`).
+        while next_tick * 1_000_000 / 30 <= (now * 1e6) as i64 && w.tick(next_tick * 1_000_000 / 30).expect("video appends") {
             next_tick += 1;
+        }
+    }
+    while next_tick * 1_000_000 / 30 <= (audio_at * 1_000_000 / 48_000) {
+        if w.tick(next_tick * 1_000_000 / 30).expect("video appends") {
+            next_tick += 1;
+        } else {
+            std::thread::sleep(Duration::from_millis(2));
         }
     }
     w.finish().expect("file closes");
     let p = probe(&path);
     assert_eq!((p.video_tracks, p.audio_tracks), (1, 1), "{p:?}");
     assert!(p.duration_s >= 7.5, "{p:?}");
+}
+
+/// What -11800/-16341 means, measured 1 Nov: a jump in the picture's timestamps fails the writer,
+/// while pictures that merely arrive 3 s late, with sound still flowing, close properly. So a stall
+/// costs a late frame, never the file, as long as every tick is written in order.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_hole_in_the_timeline_fails_but_a_late_picture_does_not() {
+    let _one = ONE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let dir = tempfile::tempdir().unwrap();
+    let run = |name: &str, skip: i64| -> Result<(), String> {
+        let mut w = Writer::start(&dir.path().join(name), W, H, 30, 5_000_000, Some(48_000)).expect("writer starts");
+        w.set_frame(&frame(0)).expect("picture converts");
+        let t0 = Instant::now();
+        let (mut tick, mut audio_at, mut skipped) = (0i64, 0i64, false);
+        let block = vec![0.1f32; 960];
+        while t0.elapsed() < Duration::from_secs(9) {
+            let now = t0.elapsed().as_secs_f64();
+            while audio_at as f64 / 48_000.0 <= t0.elapsed().as_secs_f64() {
+                w.append_audio(&block, audio_at)?;
+                audio_at += 480;
+            }
+            // Seconds 3 to 6: no pictures. Then either carry on in order, or jump over the gap.
+            if !(3.0..6.0).contains(&now) {
+                if now >= 6.0 && !skipped {
+                    skipped = true;
+                    tick += skip;
+                }
+                while tick as f64 / 30.0 <= t0.elapsed().as_secs_f64() + skip as f64 / 30.0 * f64::from(u8::from(skipped)) && w.tick(tick * 1_000_000 / 30)? {
+                    tick += 1;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        w.finish()
+    };
+    run("late.mp4", 0).expect("late pictures close properly");
+    assert!(run("hole.mp4", 90).is_err(), "a 3 s hole fails: if this now passes, the system's writer changed");
 }
 
 #[test]

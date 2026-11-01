@@ -87,6 +87,12 @@ describe("joined host state", () => {
     })
   })
 
+  it("ignores a host snapshot arriving after the desk left", async () => {
+    await useJoin.getState().leave()
+    listeners.get("join:live")?.({ payload: JSON.stringify({ v: 1, at: 1235 } as LiveStateV1) })
+    expect(useJoin.getState().live).toBeNull()
+  })
+
   it("clears the last host snapshot when reconnect requires pairing again", async () => {
     useJoin.setState({
       status: "connected",
