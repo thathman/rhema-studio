@@ -80,6 +80,13 @@ impl Role {
         matches!(self, Role::Configure | Role::Screens | Role::Camera | Role::Editor)
     }
 
+    /// Whether this desk may play the church's cameras (a scene's camera box, a camera's picture).
+    /// An OBS companion reads them its own way (`crate::cameras`).
+    #[must_use]
+    pub fn reads_cameras(self) -> bool {
+        matches!(self, Role::Present | Role::Configure | Role::Screens | Role::Camera | Role::Editor)
+    }
+
     #[must_use]
     pub fn allows(self, cmd: &RemoteCommand) -> bool {
         match cmd {

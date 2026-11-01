@@ -13,7 +13,7 @@ import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { normalizeTheme } from "@/lib/theme-migrations"
-import { cameraReports, syncCameras, WhepPlayer } from "@/lib/whep"
+import { cameraReports, feedCameraUrl, syncCameras, WhepPlayer } from "@/lib/whep"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
 import type { LowerThird, SceneFrame, StagePayload, Ticker } from "@/types"
 import { latencyClock } from "@/lib/latency-clock"
@@ -51,7 +51,7 @@ let frame: Frame | null = null
 /** Cameras in the scene (WHEP from the church network's relay; MediaMTX allows a page to ask). */
 const cameras = new Map<string, WhepPlayer>()
 const whep = async (url: string, sdp: string) => {
-  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/sdp" }, body: sdp })
+  const r = await fetch(feedCameraUrl(url, location, id, key), { method: "POST", headers: { "Content-Type": "application/sdp" }, body: sdp })
   if (!r.ok) throw new Error(String(r.status))
   return r.text()
 }
