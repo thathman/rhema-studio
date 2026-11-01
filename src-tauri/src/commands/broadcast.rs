@@ -299,8 +299,14 @@ pub async fn close_broadcast_window(
 pub fn start_ndi(
     output_id: String,
     runtime: State<'_, Mutex<NdiRuntime>>,
+    recorder: State<'_, super::recorder::RecorderHost>,
     request: NdiStartRequest,
 ) -> Result<NdiSessionInfo, String> {
+    // The window sends one picture size: another one would freeze the recording's picture until Stop.
+    let size = request.resolution.dimensions();
+    if let Some((w, h)) = recorder.0.get().and_then(|r| r.recording_size(&output_id)).filter(|s| *s != size) {
+        return Err(format!("This screen is recording at {w}×{h}. Stop the recording, or choose {w}×{h} for NDI."));
+    }
     let mut runtime = runtime.lock().map_err(|e| e.to_string())?;
     runtime.start(output_id, request).map_err(|e| {
         log::error!("start_ndi failed: {e}");

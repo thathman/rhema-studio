@@ -87,13 +87,14 @@ pub fn recorder_preflight(app: AppHandle, host: State<'_, RecorderHost>, ndi: St
     Ok(RecorderPreflight { ok: problems.is_empty(), problems, warnings: rec.warnings(), width, height, disk_free_bytes: rhema_recorder::disk_free(rec.folder()), audio_devices: rhema_recorder::audio::devices() })
 }
 
-#[tauri::command]
+// Both wait on the file (a stop up to a minute): off the main thread, or Live freezes meanwhile.
+#[tauri::command(async)]
 pub fn recorder_start(app: AppHandle, window: WebviewWindow, request: RecorderStartRequest) -> Res<RecorderStatus> {
     main_desk_only(&window)?;
     start_session(&app, request)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn recorder_stop(app: AppHandle, window: WebviewWindow) -> Res<RecorderStatus> {
     main_desk_only(&window)?;
     stop_session(&app)
@@ -124,6 +125,20 @@ fn start_session(app: &AppHandle, request: RecorderStartRequest) -> Res<Recorder
     spawn_status_beat(app.clone(), status.session_id.clone());
     let _ = app.emit_to("main", "recorder:status", &status);
     Ok(status)
+}
+
+/// The app is quitting: close the file properly rather than leave it to be recovered.
+pub fn shutdown(app: &AppHandle) {
+    if let Some(host) = app.try_state::<RecorderHost>() {
+        if let Ok(rec) = recorder(&host) {
+            if rec.pinned_output().is_some() {
+                match rec.stop() {
+                    Ok(status) => log::info!("recorder: closed on quit: {:?}", status.state),
+                    Err(p) => log::warn!("recorder: could not close on quit: {}", p.message),
+                }
+            }
+        }
+    }
 }
 
 fn stop_session(app: &AppHandle) -> Res<RecorderStatus> {

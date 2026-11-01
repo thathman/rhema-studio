@@ -93,6 +93,9 @@ pub struct Recorder {
     /// The main desk's last recording setup: what a granted remote desk's "start" reuses (it never
     /// chooses the screen or the sound input itself).
     last_request: Mutex<Option<RecorderStartRequest>>,
+    /// A start is under way: the session is only set once the file is open, so without this a second
+    /// start would pass preflight too and replace the first, leaving its writer unstopped.
+    starting: AtomicBool,
 }
 
 impl Recorder {
@@ -106,7 +109,7 @@ impl Recorder {
                 log::warn!("recorder: {} interrupted recording(s) marked recoverable: {marked:?}", marked.len());
             }
         }
-        Self { folder, session: Mutex::new(None), last: Mutex::new(RecorderStatus::idle()), last_request: Mutex::new(None) }
+        Self { folder, session: Mutex::new(None), last: Mutex::new(RecorderStatus::idle()), last_request: Mutex::new(None), starting: AtomicBool::new(false) }
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Option<Session>> {
@@ -126,6 +129,12 @@ impl Recorder {
 
     /// The output the running session is pinned to.
     #[must_use]
+    /// The picture size output `output_id` is being recorded at, if it is.
+    #[must_use]
+    pub fn recording_size(&self, output_id: &str) -> Option<(u32, u32)> {
+        self.lock().as_ref().filter(|s| s.manifest.output_id == output_id).map(|s| (s.width, s.height))
+    }
+
     pub fn pinned_output(&self) -> Option<String> {
         self.lock().as_ref().map(|s| s.manifest.output_id.clone())
     }
@@ -165,6 +174,15 @@ impl Recorder {
 
     /// Start recording `req.output_id` at `width`×`height` (what its window will send).
     pub fn start(&self, req: &RecorderStartRequest, width: u32, height: u32) -> Result<RecorderStatus, RecorderProblem> {
+        if self.starting.swap(true, Ordering::SeqCst) {
+            return Err(RecorderProblem::new(ProblemCode::AlreadyRecording, "A recording is already starting."));
+        }
+        let result = self.start_one(req, width, height);
+        self.starting.store(false, Ordering::SeqCst);
+        result
+    }
+
+    fn start_one(&self, req: &RecorderStartRequest, width: u32, height: u32) -> Result<RecorderStatus, RecorderProblem> {
         if let Some(p) = self.preflight(req).into_iter().next() {
             return Err(p);
         }
@@ -341,7 +359,12 @@ impl Recorder {
                 }
             }
         };
-        manifest::write(&dir, &manifest).map_err(|e| RecorderProblem::new(ProblemCode::WriteFailed, e.to_string()))?;
+        // The session is over whatever happens here: a failed write is reported on the status, or
+        // the desk would stay on "Recording" with nothing left to stop.
+        let manifest_error = manifest::write(&dir, &manifest).err();
+        if let Some(e) = &manifest_error {
+            manifest.problem = Some(RecorderProblem::new(ProblemCode::WriteFailed, format!("The recording's details could not be saved: {e}")));
+        }
         let status = RecorderStatus {
             state: manifest.state,
             session_active: false,
@@ -351,7 +374,7 @@ impl Recorder {
             elapsed_ms: manifest.duration_ms.unwrap_or(0),
             video: VideoStatus { width, height, fps, frames_written: manifest.frames_written, frames_dropped: manifest.frames_dropped, last_frame_ago_ms: None },
             audio: AudioStatus { device_id: manifest.audio_device_id.clone(), receiving: false, peak_db: None, samples_written: shared.samples_written.load(Ordering::Relaxed) },
-            file: FileStatus { path: Some(file.to_string_lossy().into_owned()), bytes: std::fs::metadata(&file).map_or(0, |x| x.len()), disk_free_bytes: disk_free(&dir), last_write_ok: manifest.state == RecorderState::Saved },
+            file: FileStatus { path: Some(file.to_string_lossy().into_owned()), bytes: std::fs::metadata(&file).map_or(0, |x| x.len()), disk_free_bytes: disk_free(&dir), last_write_ok: manifest.state == RecorderState::Saved && manifest_error.is_none() },
             problem: manifest.problem.clone(),
         };
         *self.last.lock().unwrap_or_else(PoisonError::into_inner) = status.clone();
@@ -439,10 +462,12 @@ fn status_of(s: &Session, folder: &Path) -> RecorderStatus {
     let file = s.dir.join(FILE_NAME);
     let disk_free_bytes = disk_free(folder);
     let mut problem = sh.problem();
-    if problem.is_none() {
+    // A lost sound input stays on the status, but must not hide a lost picture or a filling disk.
+    let sound_only = problem.as_ref().is_some_and(|p| matches!(p.code, ProblemCode::AudioDeviceLost | ProblemCode::AudioMissing));
+    if problem.is_none() || sound_only {
         if Duration::from_millis(last_frame_ago.unwrap_or(elapsed_ms)) >= NO_FRAMES_AFTER {
             problem = Some(RecorderProblem::new(ProblemCode::NoFrames, "No picture from the screen for 5 seconds: is its window open?"));
-        } else if s.manifest.audio_device_id.is_some() && !receiving && elapsed > Duration::from_secs(3) {
+        } else if !sound_only && s.manifest.audio_device_id.is_some() && !receiving && elapsed > Duration::from_secs(3) {
             problem = Some(RecorderProblem::new(ProblemCode::AudioMissing, "No sound arriving from the sound desk input."));
         } else if disk_free_bytes.is_some_and(|f| f < DISK_LOW) {
             problem = Some(RecorderProblem::new(ProblemCode::DiskLow, "Less than 1 GB free: the recording will close before the disk fills."));
@@ -511,7 +536,9 @@ fn run_writer(
     loop {
         let due = t0 + Duration::from_micros((tick * period_us) as u64);
         let wait = due.saturating_duration_since(Instant::now());
-        match rx.recv_timeout(if retry { wait.max(Duration::from_millis(5)) } else { wait }) {
+        // Once the writer has failed nothing is due: only wait for Stop, without spinning a core.
+        let timeout = if failed.is_some() { Duration::from_millis(100) } else if retry { wait.max(Duration::from_millis(5)) } else { wait };
+        match rx.recv_timeout(timeout) {
             Ok(Msg::Video(frame)) => {
                 shared.video_queued.fetch_sub(1, Ordering::Relaxed);
                 if failed.is_none() {
@@ -524,7 +551,12 @@ fn run_writer(
                 if failed.is_none() {
                     match writer.append_audio(&samples, at) {
                         Ok(true) => _ = shared.samples_written.fetch_add((samples.len() / 2) as u64, Ordering::Relaxed),
-                        Ok(false) => {}
+                        // Real-time audio the encoder was not ready for is gone: say so, not a silent gap.
+                        Ok(false) => {
+                            if shared.problem().is_none() {
+                                shared.set_problem(RecorderProblem::new(ProblemCode::AudioMissing, "The computer could not keep up with the sound: the recording may have short gaps in it."));
+                            }
+                        }
                         Err(e) => failed = Some(e),
                     }
                 }
@@ -973,16 +1005,12 @@ mod tests {
         assert!(r.session_dir("../etc", false).is_none());
     }
 
-    #[test]
-    fn a_failed_writer_session_remains_active_until_stop_closes_it() {
-        let t = tempfile::tempdir().unwrap();
+    fn stub_session(dir: &std::path::Path) -> Session {
         let shared = Arc::new(Shared::default());
-        shared.writer_gone.store(true, Ordering::Relaxed);
-        shared.set_problem(RecorderProblem::new(ProblemCode::EncoderFailed, "writer stopped"));
         let (tx, _rx) = crossbeam_channel::unbounded();
         let writer = std::thread::spawn(|| Ok(()));
-        let session = Session {
-            dir: t.path().to_path_buf(),
+        Session {
+            dir: dir.to_path_buf(),
             manifest: RecordingManifest {
                 version: 1,
                 session_id: "failed-session".into(),
@@ -1012,7 +1040,47 @@ mod tests {
             writer,
             frame: Vec::new(),
             audio: None,
-        };
+        }
+    }
+
+    #[test]
+    fn stop_ends_the_session_even_when_its_manifest_cannot_be_written() {
+        let t = tempfile::tempdir().unwrap();
+        let blocker = t.path().join("a-file");
+        std::fs::write(&blocker, b"x").unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        *rec.lock() = Some(stub_session(&blocker.join("session")));
+        let status = rec.stop().expect("the desk must learn the session ended");
+        assert!(!status.session_active);
+        assert_eq!(status.problem.map(|p| p.code), Some(ProblemCode::WriteFailed));
+        assert!(!status.file.last_write_ok);
+        assert!(!rec.status().session_active, "nothing is left on Recording");
+    }
+
+    #[test]
+    fn a_second_start_is_refused_while_one_is_under_way() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        rec.starting.store(true, Ordering::SeqCst);
+        let req = RecorderStartRequest { output_id: "sanctuary".into(), output_name: "Sanctuary".into(), output_role: "congregation".into(), audio_device_id: None, allow_silent: true, profile: RecorderProfile::Standard720p30, service_run_id: None, program_id: None, rehearsal: false };
+        assert_eq!(rec.start(&req, 1280, 720).unwrap_err().code, ProblemCode::AlreadyRecording);
+    }
+
+    #[test]
+    fn a_lost_sound_input_does_not_hide_a_lost_picture() {
+        let t = tempfile::tempdir().unwrap();
+        let mut session = stub_session(t.path());
+        session.t0 = Instant::now() - Duration::from_secs(10);
+        session.shared.set_problem(RecorderProblem::new(ProblemCode::AudioDeviceLost, "gone"));
+        assert_eq!(status_of(&session, t.path()).problem.map(|p| p.code), Some(ProblemCode::NoFrames));
+    }
+
+    #[test]
+    fn a_failed_writer_session_remains_active_until_stop_closes_it() {
+        let t = tempfile::tempdir().unwrap();
+        let session = stub_session(t.path());
+        session.shared.writer_gone.store(true, Ordering::Relaxed);
+        session.shared.set_problem(RecorderProblem::new(ProblemCode::EncoderFailed, "writer stopped"));
 
         let status = status_of(&session, t.path());
         assert_eq!(status.state, RecorderState::Failed);
