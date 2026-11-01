@@ -2223,13 +2223,15 @@ async fn desk_camera_handler<S: CommandSink + 'static>(
     if !state.rate.allow(peer.ip()) {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
-    let hash = match check_http_command_key(&state.keys, &headers, peer) {
-        Ok(None) => String::new(),
-        Ok(Some(e)) if e.role.reads_cameras() => e.hash,
+    // Camera relay always requires a paired role, even when legacy remote commands are open.
+    // Host outputs use the local router directly; TV viewers use the separately scoped feed route.
+    let entry = match check_http_command_key(&state.keys, &headers, peer) {
+        Ok(Some(e)) if e.role.reads_cameras() => e,
         Ok(Some(_)) => return StatusCode::FORBIDDEN.into_response(),
+        Ok(None) => return StatusCode::UNAUTHORIZED.into_response(),
         Err((code, _)) => return code.into_response(),
     };
-    state.cameras.relay_offer(&name, crate::cameras::RelayHolder::Key(hash), peer.ip(), body).await
+    state.cameras.relay_offer(&name, crate::cameras::RelayHolder::Key(entry.hash), peer.ip(), body).await
 }
 
 /// `POST /api/v1/feed/{id}/camera/{name}/whep?k=<secret>`: a TV's feed page plays a camera in its scene.
@@ -2255,7 +2257,8 @@ async fn feed_camera_handler<S: CommandSink + 'static>(
 pub fn camera_readers_gone(cameras: &crate::cameras::CameraHub, keys: &KeySet, feeds: &FeedHub) -> Vec<std::net::IpAddr> {
     let k = keys.read().unwrap_or_else(std::sync::PoisonError::into_inner);
     cameras.relay_gone(|holder| match holder {
-        crate::cameras::RelayHolder::Key(hash) if hash.is_empty() => !k.require_auth,
+        // Anonymous camera relays are no longer permitted, even if legacy commands remain open.
+        crate::cameras::RelayHolder::Key(hash) if hash.is_empty() => false,
         crate::cameras::RelayHolder::Key(hash) => k.require_auth && k.entries.iter().any(|e| &e.hash == hash && e.role.reads_cameras()),
         crate::cameras::RelayHolder::Feed(id, key) => feeds.admits(id, key),
     })
@@ -4039,6 +4042,61 @@ mod tests {
         assert!(post(tv, "").await.starts_with("HTTP/1.1 403"), "an old TV link stops at once");
         let mut h = server.handle;
         h.stop();
+    }
+
+    #[tokio::test]
+    async fn an_open_host_does_not_relay_camera_offers_from_an_unpaired_local_peer() {
+        let keys = new_key_set();
+        let cameras = crate::cameras::new_camera_hub();
+        cameras.set(&[("pulpit".into(), "0123456789abcdef".into())]);
+        let (router, seen) = fake_router().await;
+        cameras.set_router(Some(crate::cameras::RouterTarget {
+            base: format!("http://127.0.0.1:{router}"),
+            srt_port: 8890,
+            srt_passphrase: "Passphrase0123456789".into(),
+            relay_secret: "Relaysecret0123456789".into(),
+        }));
+        let server = start_http_server(
+            HttpConfig { port: 0, host: "127.0.0.1".into(), keys, cameras, ..Default::default() },
+            Arc::new(MockSink::new()),
+            new_shared_status(),
+        ).await.expect("bind");
+        let port = server.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let response = raw(port, &format!(
+            "POST /api/v1/cameras/pulpit/whep HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/sdp\r\nContent-Length: 9\r\nConnection: close\r\n\r\nv=0 offer"
+        )).await;
+
+        assert!(response.starts_with("HTTP/1.1 401"), "{response}");
+        assert!(seen.lock().unwrap().is_empty(), "the unpaired offer must not reach the camera router");
+        let mut handle = server.handle;
+        handle.stop();
+    }
+
+    #[tokio::test]
+    async fn an_open_host_drops_legacy_camera_relays_without_a_paired_key() {
+        let keys = new_key_set();
+        let feeds = new_feed_hub();
+        let cameras = crate::cameras::new_camera_hub();
+        cameras.set(&[("pulpit".into(), "0123456789abcdef".into())]);
+        let (router, _) = fake_router().await;
+        cameras.set_router(Some(crate::cameras::RouterTarget {
+            base: format!("http://127.0.0.1:{router}"),
+            srt_port: 8890,
+            srt_passphrase: "Passphrase0123456789".into(),
+            relay_secret: "Relaysecret0123456789".into(),
+        }));
+        let peer = std::net::IpAddr::from([192, 168, 1, 22]);
+        let response = cameras.relay_offer(
+            "pulpit",
+            crate::cameras::RelayHolder::Key(String::new()),
+            peer,
+            axum::body::Bytes::from_static(b"v=0 offer"),
+        ).await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        assert_eq!(camera_readers_gone(&cameras, &keys, &feeds), [peer]);
     }
 
     #[tokio::test]
