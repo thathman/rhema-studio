@@ -215,7 +215,7 @@ pub struct CameraHub {
     cameras: RwLock<HashMap<String, String>>,
     router: RwLock<Option<RouterTarget>>,
     /// Who was let in to read cameras, by address (`relay_offer`).
-    relayed: RwLock<HashMap<IpAddr, std::collections::HashSet<RelayHolder>>>,
+    relayed: RwLock<HashMap<IpAddr, std::collections::HashSet<(RelayHolder, String)>>>,
     /// Paired OBS companions' sign-ins, by key hash (#209).
     readers: RwLock<HashMap<String, Reader>>,
     /// The router's cameras as it last answered (the app looks every few seconds while it runs).
@@ -422,7 +422,7 @@ impl CameraHub {
         let Ok(client) = reqwest::Client::builder().connect_timeout(Duration::from_secs(3)).timeout(Duration::from_secs(15)).build() else {
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         };
-        self.relayed.write().unwrap_or_else(PoisonError::into_inner).entry(peer).or_default().insert(holder);
+        self.relayed.write().unwrap_or_else(PoisonError::into_inner).entry(peer).or_default().insert((holder, name.to_string()));
         let sent = client.post(format!("{}/{name}/whep", router.base)).basic_auth(RELAY_USER, Some(&router.relay_secret)).header("x-forwarded-for", peer.to_string()).header("content-type", "application/sdp").body(body.to_vec()).send().await;
         let Ok(resp) = sent else {
             return (StatusCode::BAD_GATEWAY, "The camera router did not answer").into_response();
@@ -437,26 +437,21 @@ impl CameraHub {
         (StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY), [(axum::http::header::CONTENT_TYPE, "application/sdp")], answer).into_response()
     }
 
-    /// Whether someone allowed reads from this address. ponytail: by address, so a revoked key keeps a
-    /// picture it already has while another allowed key reads from the same computer (it can start
-    /// nothing new); per-session tracking if one address ever serves separate people.
+    /// Whether someone allowed reads this camera from this address. ponytail: by address and camera,
+    /// so a revoked key keeps a picture it already has while another allowed key reads the same camera
+    /// from the same computer (it can start nothing new); per-session if one address serves separate people.
     #[must_use]
-    pub fn relay_holds(&self, ip: IpAddr) -> bool {
-        self.relayed.read().unwrap_or_else(PoisonError::into_inner).contains_key(&ip)
+    pub fn relay_holds(&self, ip: IpAddr, name: &str) -> bool {
+        self.relayed.read().unwrap_or_else(PoisonError::into_inner).get(&ip).is_some_and(|held| held.iter().any(|(_, n)| n == name))
     }
 
-    /// Forget readers no longer allowed; the addresses with nobody allowed left are to be cut off.
-    pub fn relay_gone(&self, allowed: impl Fn(&RelayHolder) -> bool) -> Vec<IpAddr> {
+    /// Forget readers no longer allowed to read that camera.
+    pub fn relay_prune(&self, allowed: impl Fn(&RelayHolder, &str) -> bool) {
         let mut relayed = self.relayed.write().unwrap_or_else(PoisonError::into_inner);
-        let mut gone = Vec::new();
-        relayed.retain(|ip, holders| {
-            holders.retain(&allowed);
-            if holders.is_empty() {
-                gone.push(*ip);
-            }
-            !holders.is_empty()
+        relayed.retain(|_, held| {
+            held.retain(|(holder, name)| allowed(holder, name));
+            !held.is_empty()
         });
-        gone
     }
 
     pub(crate) async fn forward(&self, method: Method, name: &str, session: Option<&str>, headers: &HeaderMap, body: Bytes) -> Response {
