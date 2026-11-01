@@ -45,7 +45,7 @@ const clickButton = async (name, { startsWith = false } = {}) => {
 const clickWithin = async (selector, name) => {
   const button = await waitFor(
     () => [...(document.querySelector(selector)?.querySelectorAll("button") ?? [])]
-      .find((candidate) => normal(candidate.innerText) === name),
+      .find((candidate) => normal(candidate.textContent) === name),
     `button “${name}” in ${selector}`,
   )
   return activateButton(button, name)
