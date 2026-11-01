@@ -449,6 +449,29 @@ describe("canonical design editor", () => {
     }).toEqual(liveSnapshot)
   })
 
+  it("adds an editable rectangle that remains usable in a prepared scene", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Rectangle")!.click())
+    expect(element.textContent).not.toContain("cannot be used in Prepare")
+    await act(async () => setValue(element.querySelectorAll<HTMLInputElement>('input[type="color"]')[0]!, "#d14c62"))
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const input = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const rectangle = Object.values(input.document.scene.nodes).find((node) => node.type === "rect" && node.name === "Rectangle")
+    expect(rectangle).toMatchObject({ type: "rect", fill: { type: "solid", color: "#d14c62" } })
+    expect(input.document.bindings[rectangle!.id]).toMatchObject({ id: rectangle!.id, kind: "color" })
+    const prepared = designToScene(input.document)
+    expect(prepared.issues).toEqual([])
+    expect(prepared.scene.layers).toContainEqual(expect.objectContaining({ id: rectangle?.id, kind: "color", color: "#d14c62" }))
+  })
+
   it("saves and versions native Avnac text as a usable private Prepare scene", async () => {
     const documentValue = documentFixture()
     let savedDocument: DesignDocument | null = null

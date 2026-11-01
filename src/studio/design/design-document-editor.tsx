@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowDownIcon, ArrowUpIcon, CircleIcon, EyeIcon, EyeOffIcon, PlusIcon, Redo2Icon, SaveIcon, TextIcon, Trash2Icon, Undo2Icon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, CircleIcon, EyeIcon, EyeOffIcon, PlusIcon, Redo2Icon, SaveIcon, SquareIcon, TextIcon, Trash2Icon, Undo2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -441,6 +441,18 @@ export function DesignDocumentEditor({
     dispatch({ type: "ADD_NODE", node })
     setSelectedId(id)
   }
+  const addRectangleLayer = () => {
+    const made = createColorLayer({
+      x: Math.round(scene.artboard.width * 0.35),
+      y: Math.round(scene.artboard.height * 0.35),
+      color: "#3157a4",
+      name: "Rectangle",
+    })
+    made.node.parentId = activeRootId
+    setBindings((current) => ({ ...current, [made.node.id]: made.binding }))
+    dispatch({ type: "ADD_NODE", node: made.node })
+    setSelectedId(made.node.id)
+  }
   const addEllipseLayer = () => {
     const id = "ellipse-" + (globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2))
     const node: SaraswatiEllipseNode = {
@@ -687,6 +699,7 @@ export function DesignDocumentEditor({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button size="xs" variant="outline" onClick={addTextLayer} disabled={document.kind === "template"}><TextIcon /> Text</Button>
+            <Button size="xs" variant="outline" onClick={addRectangleLayer} disabled={document.kind === "template"}><SquareIcon /> Rectangle</Button>
             <Button size="xs" variant="outline" onClick={addEllipseLayer} disabled={document.kind === "template"}><CircleIcon /> Ellipse</Button>
             <Button size="xs" variant="outline" onClick={openImagePicker} disabled={document.kind === "template" || imagePickerBusy}>
               {selectedRenderable?.type === "image" ? "Replace image" : "Image from Library"}
