@@ -44,12 +44,14 @@ pub struct Ports {
     pub rtsps: u16,
     /// RTMP and SRT for camera apps (Moblin, StreamCaster) and encoders.
     pub rtmp: u16,
+    /// RTMP over TLS, for the same apps when they can use it, while Rhema has its https certificate.
+    pub rtmps: u16,
     pub srt: u16,
     /// The router's own status (which cameras are sending, who watches), this computer only.
     pub api: u16,
 }
 
-pub const PORTS: Ports = Ports { webrtc: 8889, webrtc_udp: 8189, rtsp: 8554, rtsps: 8322, rtmp: 1935, srt: 8890, api: 9997 };
+pub const PORTS: Ports = Ports { webrtc: 8889, webrtc_udp: 8189, rtsp: 8554, rtsps: 8322, rtmp: 1935, rtmps: 1936, srt: 8890, api: 9997 };
 
 /// Rhema's https certificate and key (made for the secure phone pages, kept in `<data folder>/tls`,
 /// #251/#336). The router serves RTSPS with the same certificate, so the Rhema Camera app pins the
@@ -75,17 +77,22 @@ pub fn rtsps_fingerprint(tls: &RtspsCert) -> Option<String> {
 
 /// The router's settings with RTSPS added after the RTSP lines (#209): with Rhema's certificate,
 /// RTSP is also offered over TLS for the Rhema Camera app, while plain RTSP stays for OBS as
-/// before; without it (or with a path that cannot be written safely), RTSP only.
+/// before, and RTMP likewise for a camera app that can send over TLS; without it (or with a path
+/// that cannot be written safely), RTSP and RTMP only.
 pub fn with_rtsps(yaml: String, ports: &Ports, tls: Option<&RtspsCert>) -> String {
-    let lines = match tls.and_then(|t| yaml_path(&t.cert).zip(yaml_path(&t.key))) {
-        Some((cert, key)) => format!("rtspEncryption: \"optional\"\nrtspsAddress: :{}\nrtspServerKey: {key}\nrtspServerCert: {cert}\n", ports.rtsps),
-        None => "rtspEncryption: \"no\"\n".into(),
+    let paths = tls.and_then(|t| yaml_path(&t.cert).zip(yaml_path(&t.key)));
+    let (rtsp, rtmp) = match paths {
+        Some((cert, key)) => (
+            format!("rtspEncryption: \"optional\"\nrtspsAddress: :{}\nrtspServerKey: {key}\nrtspServerCert: {cert}\n", ports.rtsps),
+            format!("rtmpEncryption: \"optional\"\nrtmpsAddress: :{}\nrtmpServerKey: {key}\nrtmpServerCert: {cert}\n", ports.rtmps),
+        ),
+        None => ("rtspEncryption: \"no\"\n".into(), "rtmpEncryption: \"no\"\n".into()),
     };
-    let anchor = format!("rtspAddress: :{}\n", ports.rtsp);
-    match yaml.find(&anchor) {
+    let after = |yaml: String, anchor: String, lines: String| match yaml.find(&anchor) {
         Some(at) => format!("{}{lines}{}", &yaml[..at + anchor.len()], &yaml[at + anchor.len()..]),
         None => yaml,
-    }
+    };
+    after(after(yaml, format!("rtspAddress: :{}\n", ports.rtsp), rtsp), format!("rtmpAddress: :{}\n", ports.rtmp), rtmp)
 }
 
 /// A file path as a single-quoted YAML string; None for one that cannot be written safely.
@@ -433,7 +440,14 @@ pub fn camera_router_start(app: AppHandle, router: State<'_, CameraRouter>, http
         s.tls = tls;
         s.last_error = None;
         s.restarts = 0;
-        let child = spawn(&binary, &config, &router, s.generation, &api_password, &srt_passphrase, &relay_password)?;
+        let child = match spawn(&binary, &config, &router, s.generation, &api_password, &srt_passphrase, &relay_password) {
+            Ok(child) => child,
+            Err(e) => {
+                // Not left "on" with nothing running or watching it, or the next start would do nothing.
+                s.want = false;
+                return Err(e);
+            }
+        };
         s.api_password = api_password;
         s.relay_password.clone_from(&relay_password);
         s.srt_passphrase.clone_from(&srt_passphrase);
@@ -888,6 +902,10 @@ mod tests {
     fn rtsps_uses_rhemas_own_certificate_and_keeps_plain_rtsp_for_obs() {
         let tls = RtspsCert { cert: PathBuf::from("/data/tls/rhema-server.pem"), key: PathBuf::from("/data/tls/rhema-server.key") };
         let y = with_rtsps(config_yaml(&PORTS, None, &cams(), &[], API).unwrap(), &PORTS, Some(&tls));
+        // RTMP over TLS beside plain RTMP, for the apps that can use it; nothing plain goes away.
+        for line in ["rtmpAddress: :1935", "rtmpEncryption: \"optional\"", "rtmpsAddress: :1936", "rtmpServerKey: '/data/tls/rhema-server.key'", "rtmpServerCert: '/data/tls/rhema-server.pem'"] {
+            assert!(y.lines().any(|l| l == line), "{line} in\n{y}");
+        }
         for line in ["rtspEncryption: \"optional\"", "rtspsAddress: :8322", "rtspServerKey: '/data/tls/rhema-server.key'", "rtspServerCert: '/data/tls/rhema-server.pem'", "rtspAddress: :8554", "rtspTransports: [tcp]"] {
             assert!(y.lines().any(|l| l == line), "{line} in\n{y}");
         }
@@ -895,6 +913,7 @@ mod tests {
         let plain = with_rtsps(config_yaml(&PORTS, None, &cams(), &[], API).unwrap(), &PORTS, None);
         assert!(plain.lines().any(|l| l == "rtspEncryption: \"no\""), "{plain}");
         assert!(!plain.contains("rtspsAddress") && !plain.contains("rtspServerKey"));
+        assert!(plain.lines().any(|l| l == "rtmpEncryption: \"no\"") && !plain.contains("rtmpsAddress"), "{plain}");
         // A path the YAML could misread: quotes doubled; a line break means no RTSPS at all.
         let odd = RtspsCert { cert: PathBuf::from("/Users/o'neil/tls/rhema-server.pem"), key: PathBuf::from("/Users/o'neil/tls/rhema-server.key") };
         assert!(with_rtsps(config_yaml(&PORTS, None, &cams(), &[], API).unwrap(), &PORTS, Some(&odd)).lines().any(|l| l == "rtspServerCert: '/Users/o''neil/tls/rhema-server.pem'"));
@@ -1135,7 +1154,7 @@ mod tests {
     fn print_router_config() {
         let out = std::env::var("RHEMA_ROUTER_TEST_CONFIG").expect("RHEMA_ROUTER_TEST_CONFIG");
         let off: u16 = std::env::var("RHEMA_ROUTER_PORT_OFFSET").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
-        let ports = Ports { webrtc: PORTS.webrtc + off, webrtc_udp: PORTS.webrtc_udp + off, rtsp: PORTS.rtsp + off, rtsps: PORTS.rtsps + off, rtmp: PORTS.rtmp + off, srt: PORTS.srt + off, api: PORTS.api + off };
+        let ports = Ports { webrtc: PORTS.webrtc + off, webrtc_udp: PORTS.webrtc_udp + off, rtsp: PORTS.rtsp + off, rtsps: PORTS.rtsps + off, rtmp: PORTS.rtmp + off, rtmps: PORTS.rtmps + off, srt: PORTS.srt + off, api: PORTS.api + off };
         let cams: Vec<(String, String)> = std::env::var("RHEMA_ROUTER_CAMERAS").unwrap_or_default().split(',').filter_map(|c| c.split_once(':')).map(|(n, t)| (n.to_string(), t.to_string())).collect();
         let readers: Vec<(String, String)> = std::env::var("RHEMA_ROUTER_READERS").unwrap_or_default().split(',').filter_map(|c| c.split_once(':')).map(|(n, t)| (n.to_string(), t.to_string())).collect();
         std::fs::write(out, config_yaml(&ports, None, &cams, &readers, API).unwrap()).unwrap();

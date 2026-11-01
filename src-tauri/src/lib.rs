@@ -33,11 +33,26 @@ fn install_panic_hook() {
 
 #[expect(clippy::too_many_lines, reason = "app setup is inherently complex")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// An app opened from the Dock may start with room for only 256 open files, and every paired device,
+/// TV and camera holds connections: ask for this process's share of what the system already allows.
+fn raise_open_file_limit() {
+    #[cfg(target_os = "macos")]
+    // SAFETY: both calls only read or write the `rlimit` passed by reference, valid for the call.
+    unsafe {
+        let mut limit: libc::rlimit = std::mem::zeroed();
+        if libc::getrlimit(libc::RLIMIT_NOFILE, &raw mut limit) == 0 && limit.rlim_cur < 4096 {
+            limit.rlim_cur = limit.rlim_max.min(4096);
+            let _ = libc::setrlimit(libc::RLIMIT_NOFILE, &raw const limit);
+        }
+    }
+}
+
 pub fn run() {
     // Load .env file — try src-tauri/.env first, then project root ../.env
     dotenvy::dotenv().ok();
     dotenvy::from_filename("../.env").ok();
     install_panic_hook();
+    raise_open_file_limit();
     tauri::Builder::default()
         // First, so a second launch exits before anything else starts; it
         // brings the running copy's main window forward instead.

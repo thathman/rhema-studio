@@ -17,6 +17,8 @@ export interface RouterPorts {
   /** RTSP over TLS for the Rhema Studio Cam app (absent from builds before it). */
   rtsps?: number
   rtmp: number
+  /** RTMP over TLS, while the router has Rhema's certificate. */
+  rtmps?: number
   srt: number
   api: number
 }
@@ -143,6 +145,12 @@ export function publishUser(name: string): string {
 /** For a camera app or encoder instead of the camera page (Moblin, StreamCaster, OBS itself). */
 export function rtmpUrl(host: string, ports: RouterPorts, cam: CameraSource): string {
   return `rtmp://${host}:${ports.rtmp}/${cam.name}?user=${publishUser(cam.name)}&pass=${cam.token}`
+}
+
+/** The same over TLS, for an app that can send it and accept Rhema's own certificate; null while the router has none. */
+export function rtmpsUrl(host: string, ports: RouterPorts, cam: CameraSource, fingerprint: string | null | undefined): string | null {
+  if (!ports.rtmps || !fingerprint) return null
+  return `rtmps://${host}:${ports.rtmps}/${cam.name}?user=${publishUser(cam.name)}&pass=${cam.token}`
 }
 
 /**

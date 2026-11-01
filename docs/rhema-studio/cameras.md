@@ -97,6 +97,7 @@ play it.
 | 8189 (UDP) | The camera video itself (WebRTC) | Phones, Rhema, TVs |
 | 8554 (TCP) | RTSP | OBS |
 | 8322 (TCP) | RTSPS (RTSP over TLS, Rhema's https certificate), once secure phone pages have been on | The Rhema Camera app |
+| 1936 (TCP) | RTMPS | Camera apps that can send over TLS and accept Rhema's certificate |
 | 1935 (TCP), 8890 (UDP) | RTMP, SRT | Camera apps and encoders; OBS companions read over SRT |
 | 9997 (TCP) | The router's control API (status, disconnecting a camera) | Rhema only: this computer, a password made afresh each run, no web page |
 
