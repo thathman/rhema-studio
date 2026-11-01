@@ -97,6 +97,9 @@ async function listenOnce() {
     try {
       const live = JSON.parse(e.payload) as LiveStateV1
       if (live?.v !== 1) return
+      // An in-flight host snapshot can arrive after its refusal event. Keep the
+      // desk cleared until the user successfully pairs or reconnects again.
+      if (useJoin.getState().status === "refused") return
       const name = useJoin.getState().me?.name
       // The host lists the desks it has taken back control from; an older host does not say.
       const paused = Array.isArray(live.paused) && name ? live.paused.includes(name) : useJoin.getState().paused
@@ -126,7 +129,15 @@ async function listenOnce() {
         ...(outputScope ? { outputScope } : {}),
         ...(groupTakeScope ? { groupTakeScope } : {}),
       }, paused: p.me.paused === true } : {}
-      useJoin.setState({ status, error: p.error ?? null, ...(typeof p.secure === "boolean" ? { secure: p.secure } : {}), ...me })
+      useJoin.setState({
+        status,
+        error: p.error ?? null,
+        ...(typeof p.secure === "boolean" ? { secure: p.secure } : {}),
+        ...me,
+        // A refusal means this host no longer grants access. Do not leave its last
+        // service, notices, or role in memory while the desk waits for a new pairing.
+        ...(status === "refused" ? { me: null, live: null, paused: false, note: null, receivedAt: 0, clockSkewMs: null } : {}),
+      })
     } catch {
       // ignore
     }
@@ -169,7 +180,13 @@ export const useJoin = create<JoinState>((set, get) => ({
       set({ me: { name: me.name, role: me.role, ...(outputScope ? { outputScope } : {}), ...(groupTakeScope ? { groupTakeScope } : {}) }, paused: me.paused === true })
       await invoke("join_connect", { address, token })
     } catch (e) {
-      set({ status: String(e).includes("pair again") ? "refused" : "reconnecting", error: String(e) })
+      const message = String(e)
+      if (message.includes("pair again")) {
+        gaps = []
+        set({ status: "refused", error: message, me: null, live: null, paused: false, note: null, receivedAt: 0, clockSkewMs: null })
+      } else {
+        set({ status: "reconnecting", error: message })
+      }
     }
   },
   leave: async (forget = false) => {
