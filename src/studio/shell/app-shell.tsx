@@ -15,6 +15,7 @@ import { PresentWorkspace } from "@/studio/present/present-workspace"
 import { MoreWorkspace } from "@/studio/more/more-workspace"
 import { DesignWorkspace } from "@/studio/design/design-workspace"
 import { mayLeaveThemeDraft } from "@/lib/theme-draft"
+import { mayLeaveDesignDocumentDraft } from "@/lib/design-document-draft"
 import { BroadcastOutputsDialog } from "@/components/broadcast/broadcast-outputs-dialog"
 import { SettingsPage } from "@/components/settings-dialog"
 import { useSettingsDialogStore } from "@/lib/settings-dialog"
@@ -95,6 +96,7 @@ export function AppShell() {
     if (from === target) return
     if (from === "design") {
       if (!(await mayLeaveThemeDraft())) return
+      if (!(await mayLeaveDesignDocumentDraft())) return
       useBroadcastStore.getState().setDesignerOpen(false)
     }
     setWorkspace(target)
@@ -227,8 +229,13 @@ export function AppShell() {
       if (!item && e.key !== ",") return
       e.preventDefault()
       // Never switch away from an unsaved song or under an open dialog: that would discard it unasked.
-      if (useUnsavedStore.getState().songEditor !== null) {
+      const unsaved = useUnsavedStore.getState()
+      if (unsaved.songEditor !== null) {
         toast("Save or close the song you are editing first.")
+        return
+      }
+      if (unsaved.designEditor !== null) {
+        toast("Save or discard the design you are editing first.")
         return
       }
       if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return

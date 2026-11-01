@@ -14,7 +14,7 @@ import { themeDraftChanged } from "@/stores/broadcast-store"
 
 /** Work that is not saved yet (the same as the close question asks about). */
 function unsavedWork(): boolean {
-  return useServiceStore.getState().dirty || useUnsavedStore.getState().songEditor !== null || unsavedScratch(useQueueStore.getState().items, useServiceStore.getState().current) || themeDraftChanged()
+  return useServiceStore.getState().dirty || useUnsavedStore.getState().songEditor !== null || useUnsavedStore.getState().designEditor !== null || unsavedScratch(useQueueStore.getState().items, useServiceStore.getState().current) || themeDraftChanged()
 }
 
 /**
@@ -23,7 +23,7 @@ function unsavedWork(): boolean {
  */
 export async function switchMode(companion: boolean): Promise<boolean> {
   if (companion && unsavedWork()) {
-    toast.error("Save your work first", { description: "A service, song or look here has changes that are not saved. Save or close it, then make this computer an OBS companion." })
+    toast.error("Save your work first", { description: "A service, song, design or look here has changes that are not saved. Save or close it, then make this computer an OBS companion." })
     return false
   }
   useSettingsStore.getState().setCompanionMode(companion)

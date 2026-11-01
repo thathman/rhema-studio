@@ -35,6 +35,8 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { BUILTIN_THEMES } from "@/lib/builtin-themes"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useUnsavedStore } from "@/stores/unsaved-store"
+import { mayLeaveDesignDocumentDraft } from "@/lib/design-document-draft"
 import type { DesignDocument, DesignSummary, DesignVersion } from "@/design-engine/design-store"
 import { createBlankRhemaDesign } from "@/design-engine/design-document-utils"
 import type { Scene } from "@/types/scene"
@@ -58,6 +60,7 @@ beforeEach(() => {
   store.usedOn.mockReset().mockResolvedValue([])
   mockAsk.mockReset().mockResolvedValue(true)
   useBroadcastStore.setState({ themes: BUILTIN_THEMES, scenes: [], designDrafts: [] })
+  useUnsavedStore.setState({ songEditor: null, designEditor: null })
 })
 
 afterEach(() => {
@@ -67,6 +70,55 @@ afterEach(() => {
 })
 
 describe("My Designs workspace", () => {
+  it("asks before leaving an unsaved design document and honors Keep editing", async () => {
+    useUnsavedStore.getState().setDesignEditor("First design")
+    mockAsk.mockResolvedValue(false)
+
+    await expect(mayLeaveDesignDocumentDraft()).resolves.toBe(false)
+    expect(mockAsk).toHaveBeenCalledWith("Your changes to ‘First design’ are not saved. Discard them?", expect.objectContaining({
+      title: "Discard design changes?",
+      kind: "warning",
+      okLabel: "Discard",
+      cancelLabel: "Keep editing",
+    }))
+
+    mockAsk.mockResolvedValue(true)
+    await expect(mayLeaveDesignDocumentDraft()).resolves.toBe(true)
+  })
+
+  it("registers a dirty design with the shell guard and clears it when the editor closes", async () => {
+    const design: DesignDocument = {
+      id: "design-unsaved",
+      title: "First design",
+      kind: "design",
+      document: createBlankRhemaDesign("First design"),
+      revision: 1,
+      latestVersion: null,
+      createdAt: "2026-10-30T00:00:00Z",
+      updatedAt: "2026-10-30T00:00:00Z",
+    }
+    store.list.mockResolvedValue([{ id: design.id, title: design.title, kind: design.kind, revision: design.revision, latestVersion: null, updatedAt: design.updatedAt }])
+    store.get.mockResolvedValue(design)
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => root!.render(<DesignDocumentsWorkspace />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
+
+    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("First design"))!.click() })
+    const title = host.querySelector<HTMLInputElement>("#design-document-title")!
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!
+      setter.call(title, "Unsaved first design")
+      title.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    expect(useUnsavedStore.getState().designEditor).toBe("First design")
+    act(() => root?.unmount())
+    root = null
+    expect(useUnsavedStore.getState().designEditor).toBeNull()
+  })
+
   it("saves a template as a canonical design without adding an unpinned scene or changing Live", async () => {
     const created: DesignDocument = {
       id: "design-copy-1",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { ask } from "@tauri-apps/plugin-dialog"
 import { ArrowLeftIcon, FilePlus2Icon, Layers3Icon, PaletteIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -10,6 +10,7 @@ import { sceneToDesign } from "@/design-engine/rhema-scene"
 import { adoptLook, type LibraryLook } from "@/lib/look-library"
 import { libraryLooks } from "@/lib/design-packs"
 import { useBroadcastStore, useSettingsStore } from "@/stores"
+import { useUnsavedStore } from "@/stores/unsaved-store"
 import { useShellStore } from "@/studio/shell-store"
 import { LookLibraryView } from "@/studio/design/look-library-view"
 import { DesignDocumentEditor } from "@/studio/design/design-document-editor"
@@ -34,6 +35,13 @@ export function DesignDocumentsWorkspace() {
   const [query, setQuery] = useState("")
   const [error, setError] = useState("")
   const [reloadToken, setReloadToken] = useState(0)
+
+  const onActiveDirtyChange = useCallback((dirty: boolean) => {
+    setActiveDirty(dirty)
+    useUnsavedStore.getState().setDesignEditor(dirty ? active?.title ?? null : null)
+  }, [active?.title])
+
+  useEffect(() => () => useUnsavedStore.getState().setDesignEditor(null), [])
 
   useEffect(() => {
     let cancelled = false
@@ -74,6 +82,7 @@ export function DesignDocumentsWorkspace() {
     try {
       const next = await designStore.get(id)
       if (!next) throw new Error("That design is no longer available.")
+      useUnsavedStore.getState().setDesignEditor(null)
       setActive(next)
       setChosenDesign(null)
       setActiveDirty(false)
@@ -92,6 +101,7 @@ export function DesignDocumentsWorkspace() {
     try {
       const title = "Untitled design"
       const created = await designStore.create({ title, kind: "design", document: createBlankRhemaDesign(title) })
+      useUnsavedStore.getState().setDesignEditor(null)
       setActive(created)
       setChosenDesign(null)
       setActiveDirty(false)
@@ -145,6 +155,7 @@ export function DesignDocumentsWorkspace() {
 
   const showTemplates = async () => {
     if (!(await confirmDiscard())) return
+    useUnsavedStore.getState().setDesignEditor(null)
     setBrowseTemplates(true)
     setActive(null)
     setChosenDesign(null)
@@ -163,6 +174,7 @@ export function DesignDocumentsWorkspace() {
     setCreating(true)
     try {
       const copy = await designStore.duplicate(active.id, active.latestVersion ?? undefined, active.title + " copy")
+      useUnsavedStore.getState().setDesignEditor(null)
       setActive(copy)
       setChosenDesign(null)
       setActiveDirty(false)
@@ -231,7 +243,7 @@ export function DesignDocumentsWorkspace() {
             onReopen={reloadActive}
             onVersionCreated={onVersionCreated}
             onDuplicate={duplicateActive}
-            onDirtyChange={setActiveDirty}
+            onDirtyChange={onActiveDirtyChange}
           />
         ) : chosenDesign ? (
           <section className="m-auto flex max-w-lg flex-col items-center px-6 py-10 text-center" aria-labelledby="chosen-design-title">

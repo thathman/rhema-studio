@@ -20,6 +20,7 @@ import { themeIdsOf } from "@/lib/output-themes"
 import { outputOnAir } from "@/lib/output-on-air"
 import { sceneForOutput } from "@/lib/scenes"
 import { useSettingsStore } from "@/stores/settings-store"
+import { mayLeaveDesignDocumentDraft } from "@/lib/design-document-draft"
 import { cn } from "@/lib/utils"
 
 const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
@@ -47,6 +48,11 @@ export function DesignWorkspace() {
   // A lower-third style just added from Templates opens selected.
   const [styleId, setStyleId] = useState<string>()
 
+  const changeTab = async (next: DesignTab) => {
+    if (next === tab || !(await mayLeaveDesignDocumentDraft())) return
+    setTab(next)
+  }
+
   // Editing starts on the first theme, as the designer always did (leaving the page settles it: see the shell).
   useEffect(() => {
     if (tab !== "themes") return
@@ -64,7 +70,7 @@ export function DesignWorkspace() {
           <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Start in My Designs: choose a scene template, customize a private draft, then create a version for Prepare. A design version changes public output only through the normal approval and explicit Take flow.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {tab !== "my-designs" && <Button variant="outline" onClick={() => setTab("my-designs")}><Layers3Icon /> Open My Designs</Button>}
+          {tab !== "my-designs" && <Button variant="outline" onClick={() => void changeTab("my-designs")}><Layers3Icon /> Open My Designs</Button>}
           {tab === "themes" && <>
             <LiveEditSwitch />
             <Button variant="outline" onClick={() => useBroadcastStore.getState().discardDraft()}><TrashIcon /> Discard changes</Button>
@@ -79,7 +85,7 @@ export function DesignWorkspace() {
             type="button"
             aria-current={tab === id ? "page" : undefined}
             title={hint}
-            onClick={() => setTab(id)}
+            onClick={() => void changeTab(id)}
             className={cn(
               "-mb-px shrink-0 border-b-[3px] px-3 py-2.5 text-xs font-bold whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
               tab === id ? "border-primary text-primary-text" : "border-transparent text-muted-foreground hover:text-foreground",
@@ -107,7 +113,7 @@ export function DesignWorkspace() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
             <DropdownMenuLabel>Specialist design tools</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={activeTool?.[0] ?? ""} onValueChange={(value) => setTab(value as DesignTab)}>
+            <DropdownMenuRadioGroup value={activeTool?.[0] ?? ""} onValueChange={(value) => void changeTab(value as DesignTab)}>
               {DESIGN_TOOLS.map(([id, label, hint]) => (
                 <DropdownMenuRadioItem key={id} value={id} title={hint}>
                   {label}
@@ -121,7 +127,7 @@ export function DesignWorkspace() {
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-8 pb-3 text-xs max-[1200px]:px-5" aria-label="More ways to use this look">
           <span className="font-semibold">More ways to use this look</span>
           {(["library", "lower-thirds", "ticker", "stage", "brand"] as const).map((id) => (
-            <button key={id} type="button" onClick={() => setTab(id)} className="rounded-[5px] bg-accent px-2 py-1 text-[0.6875rem] font-bold text-accent-foreground outline-none hover:bg-accent/80 focus-visible:ring-3 focus-visible:ring-ring/50">
+            <button key={id} type="button" onClick={() => void changeTab(id)} className="rounded-[5px] bg-accent px-2 py-1 text-[0.6875rem] font-bold text-accent-foreground outline-none hover:bg-accent/80 focus-visible:ring-3 focus-visible:ring-ring/50">
               {TABS.find((t) => t[0] === id)?.[1]}
             </button>
           ))}
@@ -136,7 +142,7 @@ export function DesignWorkspace() {
           </div>
         ) : (
           <div className="h-full overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-panel">
-            {tab === "library" && <LookLibraryView onOpen={(next, id) => { setStyleId(id); setTab(next) }} />}
+            {tab === "library" && <LookLibraryView onOpen={(next, id) => { setStyleId(id); void changeTab(next) }} />}
             {tab === "my-designs" && <DesignDocumentsWorkspace />}
             {tab === "lower-thirds" && <LowerThirdDesigner initialId={styleId} />}
             {tab === "ticker" && <TickerDesigner />}
