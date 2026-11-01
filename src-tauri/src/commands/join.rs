@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use rhema_join::discover::{browse, found, Found};
@@ -39,15 +39,21 @@ pub struct Paired {
     secure: Option<SecureLink>,
 }
 
+/// How to reach `address`, given the secure link held now. With a link for another address (its host
+/// moved a moment ago) nothing is sent: never plain http, where this computer's key would be in the clear.
+fn host_for(secure: Option<&(String, SecureLink)>, address: &str) -> Result<Host, String> {
+    match secure {
+        Some((a, link)) if a == address.trim() => rhema_join::pin::pinned_host(address, link.port, &link.fingerprint),
+        Some(_) => Err("The host has moved to another address: trying again there".into()),
+        None => Host::plain(address),
+    }
+}
+
 impl JoinRuntime {
     /// How to reach this host: https with its pinned CA when pairing kept one for this address,
     /// else plain http as before.
     fn host(&self, address: &str) -> Result<Host, String> {
-        let secure = self.secure.lock().map_err(|e| e.to_string())?.clone();
-        match secure.filter(|(a, _)| a == address.trim()) {
-            Some((_, link)) => rhema_join::pin::pinned_host(address, link.port, &link.fingerprint),
-            None => Host::plain(address),
-        }
+        host_for(self.secure.lock().map_err(|e| e.to_string())?.as_ref(), address)
     }
 
     /// A camera at the router of the host this computer follows goes through that host, with this
@@ -218,8 +224,34 @@ pub fn join_connect(app: AppHandle, state: State<'_, JoinRuntime>, address: Stri
     if let Some(old) = state.stop.lock().map_err(|e| e.to_string())?.replace(tx) {
         let _ = old.send(true);
     }
-    tauri::async_runtime::spawn(rhema_join::host::follow_live(host, token, rx, move |event, payload| {
+    // Only a host with its certificate pinned is looked for elsewhere: over plain http, nothing shows
+    // that a device answering at another address is the same host, and this computer's key would reach it.
+    let pinned = state.secure.lock().map_err(|e| e.to_string())?.clone().filter(|(a, _)| a == address.trim()).map(|(_, link)| link);
+    let current = Arc::new(Mutex::new(address));
+    let (seen, secret) = (current.clone(), token.clone());
+    tauri::async_runtime::spawn(rhema_join::host::follow_moving(host, token, rx, move |event, payload| {
+        if event == "join:moved" {
+            if let Some(moved) = serde_json::from_str::<serde_json::Value>(&payload).ok().and_then(|v| v["address"].as_str().map(str::to_string)) {
+                let state = tauri::Manager::state::<JoinRuntime>(&app);
+                if let Ok(mut joined) = state.joined.lock() {
+                    *joined = joined.take().map(|(_, token)| (moved.clone(), token));
+                }
+                if let Ok(mut secure) = state.secure.lock() {
+                    *secure = secure.take().map(|(_, link)| (moved.clone(), link));
+                }
+                if let Ok(mut c) = current.lock() {
+                    moved.clone_into(&mut c);
+                }
+            }
+        }
         let _ = app.emit(event, payload);
+    }, move || {
+        let (pinned, secret) = (pinned.clone(), secret.clone());
+        let address = seen.lock().map(|a| a.clone()).unwrap_or_default();
+        async move {
+            let link = pinned?;
+            rhema_join::pin::find_moved(&address, link.port, &link.fingerprint, &secret).await
+        }
     }));
     Ok(())
 }
@@ -426,6 +458,15 @@ pub async fn host_discover() -> Result<Vec<Found>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_key_never_goes_in_the_clear_to_an_address_a_secure_host_left() {
+        let link = SecureLink { port: 8081, fingerprint: "ab".repeat(32) };
+        let held = ("192.168.1.30:8080".to_string(), link);
+        assert!(host_for(Some(&held), "192.168.1.30:8080").unwrap().is_secure());
+        assert!(host_for(Some(&held), "192.168.1.20:8080").is_err(), "the address it moved from");
+        assert!(!host_for(None, "192.168.1.20:8080").unwrap().is_secure(), "a host paired over http, as before");
+    }
     // Moved to the shared crate with Rhema Studio Companion (#209); still checked here as this app uses them.
     use rhema_join::discover::{found_hosts, lan_ip as tv_ip};
     use rhema_join::host::sse_data;
@@ -730,7 +771,9 @@ mod tests {
         let other = rhema_api::tls::fingerprint(&rhema_api::tls::make_ca().unwrap()).unwrap();
         *rt.secure.lock().unwrap() = Some((address.clone(), SecureLink { port: secure.port, fingerprint: other }));
         assert_eq!(rhema_join::host::me(&rt.host(&address).unwrap(), &paired.token).await.unwrap_err(), rhema_join::pin::NOT_THE_PAIRED_HOST);
-        // Another address than the one paired: plain http (it has its own pairing).
+        // Another address than the one paired: nothing until that host's own pairing is said (`join_secure`).
+        assert!(rt.host("127.0.0.1:1").is_err());
+        *rt.secure.lock().unwrap() = None;
         assert!(!rt.host("127.0.0.1:1").unwrap().is_secure());
         let mut h = r.handle;
         h.stop();

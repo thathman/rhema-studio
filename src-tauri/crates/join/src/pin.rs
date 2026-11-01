@@ -115,6 +115,41 @@ pub fn pinned_host(address: &str, tls_port: u16, ca_fingerprint: &str) -> Result
     Host::https(address, tls_port, tls(verifier(Some(ca_fingerprint.to_string())))?)
 }
 
+/// More Rhema hosts than any church network has.
+const MOVED_CANDIDATES: usize = 16;
+
+/// The paired host at another of these addresses (host:port of its Remote control), when its address
+/// changed: the first that shows a certificate from the pinned CA and accepts this computer's key. The
+/// key goes only to one that has shown that certificate, so a device merely announcing itself as a
+/// Rhema host learns nothing.
+pub async fn moved_to(candidates: &[String], current: &str, tls_port: u16, ca_fingerprint: &str, token: &str) -> Option<(String, Host)> {
+    use futures_util::stream::{FuturesUnordered, StreamExt};
+    // All at once, so devices that merely take the connection and wait hold up nothing.
+    let mut trying: FuturesUnordered<_> = candidates
+        .iter()
+        .filter(|a| !a.trim().eq_ignore_ascii_case(current.trim()))
+        .take(MOVED_CANDIDATES)
+        .filter_map(|address| pinned_host(address, tls_port, ca_fingerprint).ok().map(|host| (address, host)))
+        .map(|(address, host)| async move {
+            let accepted = matches!(tokio::time::timeout(Duration::from_secs(4), crate::host::me(&host, token)).await, Ok(Ok(_)));
+            accepted.then(|| (address.clone(), host))
+        })
+        .collect();
+    while let Some(tried) = trying.next().await {
+        if tried.is_some() {
+            return tried;
+        }
+    }
+    None
+}
+
+/// `moved_to` among the Rhema hosts found on the network now.
+pub async fn find_moved(current: &str, tls_port: u16, ca_fingerprint: &str, token: &str) -> Option<(String, Host)> {
+    let found = crate::discover::discover_hosts().await.ok()?;
+    let candidates: Vec<String> = found.into_iter().map(|f| f.address).collect();
+    moved_to(&candidates, current, tls_port, ca_fingerprint, token).await
+}
+
 /// The host's certificate authority as it presents it on `tls_port` (its fingerprint), checked to
 /// have signed the host's certificate: what the companion shows at pairing and then pins.
 pub async fn read_host_ca(address: &str, tls_port: u16) -> Result<String, String> {
@@ -145,6 +180,142 @@ pub fn refused_certificate(e: &reqwest::Error) -> bool {
         cause = c.source();
     }
     false
+}
+
+#[cfg(test)]
+mod moved_tests {
+    use super::*;
+    use rhema_api::tls::{make_ca, make_server};
+    use rhema_api::{hash_key, new_key_set, new_shared_status, start_http_server, CommandError, CommandSink, HttpConfig, KeyEntry, Role, TlsListener};
+    use std::sync::Arc;
+
+    struct Sink;
+    impl CommandSink for Sink {
+        fn emit_event(&self, _: &str, _: &str) -> Result<(), CommandError> {
+            Ok(())
+        }
+        fn invoke_backend(&self, _: &str, _: &str) -> Result<(), CommandError> {
+            Ok(())
+        }
+    }
+
+    /// Rhema's real server over https, which knows the key "desk"; its address and https port.
+    async fn real_host(ca: &rhema_api::tls::Pem) -> (String, u16, rhema_api::HttpHandle) {
+        let keys = new_key_set();
+        {
+            let mut k = keys.write().unwrap();
+            k.require_auth = true;
+            k.entries = vec![KeyEntry { hash: hash_key("desk"), name: "Desk".into(), role: Role::Present, paused: false, output_scope: Vec::new(), group_take_scope: Vec::new(), record: false }];
+        }
+        let server = make_server(ca, &["127.0.0.1".into()]).unwrap();
+        let tls = TlsListener { port: 0, server, ca_cert: ca.cert.clone(), leaves: rhema_api::TlsLeaves::default() };
+        let r = start_http_server(HttpConfig { port: 0, host: "127.0.0.1".into(), keys, tls: Some(tls), ..Default::default() }, Arc::new(Sink), new_shared_status()).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        (format!("127.0.0.1:{}", r.bound_port), r.tls_port.unwrap(), r.handle)
+    }
+
+    fn ca_print(ca: &rhema_api::tls::Pem) -> String {
+        rhema_api::tls::fingerprint(&rhema_api::tls::Pem { cert: ca.cert.clone(), key: String::new() }).unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_desk_finds_its_host_by_the_pinned_certificate_and_never_shows_its_key_to_another() {
+        let (ours, other) = (make_ca().unwrap(), make_ca().unwrap());
+        let (address, tls_port, mut handle) = real_host(&ours).await;
+        let (stranger, stranger_tls, mut stranger_handle) = real_host(&other).await;
+        let print = ca_print(&ours);
+        // Another Rhema with another CA is passed over.
+        assert!(moved_to(&[stranger.clone()], "10.0.0.1:8080", stranger_tls, &print, "desk").await.is_none());
+        // Nothing where the old address was; a wrong key opens nothing; the current address is no move.
+        assert!(moved_to(&[address.clone()], "10.0.0.1:8080", tls_port, &print, "wrong").await.is_none());
+        assert!(moved_to(&[address.clone()], &address, tls_port, &print, "desk").await.is_none());
+        let (found, host) = moved_to(&["192.0.2.1:8080".into(), address.clone()], "10.0.0.1:8080", tls_port, &print, "desk").await.expect("the host, moved");
+        assert_eq!(found, address);
+        assert!(host.is_secure());
+        handle.stop();
+        stranger_handle.stop();
+    }
+
+    #[tokio::test]
+    async fn a_desk_whose_host_moved_follows_it_there_and_says_so() {
+        let ca = make_ca().unwrap();
+        let (address, tls_port, mut handle) = real_host(&ca).await;
+        let print = ca_print(&ca);
+        // The address it paired with answers no more.
+        let gone = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let old = pinned_host(&format!("127.0.0.1:{gone}"), gone, &print).unwrap();
+        let (stop, rx) = tokio::sync::watch::channel(false);
+        let said = Arc::new(std::sync::Mutex::new(Vec::<(String, String)>::new()));
+        let record = said.clone();
+        let (print2, address2, current) = (print.clone(), address.clone(), format!("127.0.0.1:{gone}"));
+        let follow = tokio::spawn(crate::host::follow_moving(old, "desk".into(), rx, move |e, p| record.lock().unwrap().push((e.to_string(), p)), move || {
+            let (print, address, current) = (print2.clone(), address2.clone(), current.clone());
+            async move { moved_to(&[address], &current, tls_port, &print, "desk").await }
+        }));
+        let t0 = std::time::Instant::now();
+        loop {
+            let connected = said.lock().unwrap().iter().any(|(e, p)| e == "join:state" && p.contains("connected") && !p.contains("reconnecting"));
+            if connected {
+                break;
+            }
+            assert!(t0.elapsed() < Duration::from_secs(20), "{:?}", said.lock().unwrap());
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let said_now = said.lock().unwrap().clone();
+        assert!(said_now.iter().any(|(e, p)| e == "join:moved" && p.contains(&address)), "{said_now:?}");
+        let _ = stop.send(true);
+        let _ = tokio::time::timeout(Duration::from_secs(3), follow).await;
+        handle.stop();
+    }
+
+    /// A host that takes connections and then says nothing, as a hung process does.
+    async fn hung_host() -> String {
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = l.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((tcp, _)) = l.accept().await {
+                held.push(tcp);
+            }
+        });
+        format!("127.0.0.1:{port}")
+    }
+
+    #[tokio::test]
+    async fn devices_that_only_wait_do_not_hold_up_finding_the_host() {
+        let ca = make_ca().unwrap();
+        let (address, tls_port, mut handle) = real_host(&ca).await;
+        // On one address the waiting device must share the host's port number; another loopback address does that.
+        let l = tokio::net::TcpListener::bind(("127.0.0.2", tls_port)).await;
+        if let Ok(l) = l {
+            tokio::spawn(async move {
+                let mut held = Vec::new();
+                while let Ok((tcp, _)) = l.accept().await {
+                    held.push(tcp);
+                }
+            });
+        }
+        let t0 = std::time::Instant::now();
+        let candidates = ["127.0.0.2:8080".to_string(), address.clone()];
+        let found = moved_to(&candidates, "10.0.0.1:8080", tls_port, &ca_print(&ca), "desk").await;
+        assert_eq!(found.map(|f| f.0), Some(address));
+        assert!(t0.elapsed() < Duration::from_secs(3), "{:?}", t0.elapsed());
+        handle.stop();
+    }
+
+    #[tokio::test]
+    async fn a_hung_host_shows_as_reconnecting_and_never_holds_up_disconnecting() {
+        let host = crate::host::Host::plain(&hung_host().await).unwrap();
+        let (stop, rx) = tokio::sync::watch::channel(false);
+        let said = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let record = said.clone();
+        let follow = tokio::spawn(crate::host::follow_live(host, "desk".into(), rx, move |_, p| record.lock().unwrap().push(p)));
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+        assert!(said.lock().unwrap().iter().any(|p| p.contains("reconnecting")), "{:?}", said.lock().unwrap());
+        // And in the middle of the wait, stopping ends it at once.
+        let _ = stop.send(true);
+        assert!(tokio::time::timeout(Duration::from_millis(500), follow).await.is_ok(), "a hung host held the task");
+    }
 }
 
 #[cfg(test)]

@@ -113,6 +113,15 @@ async function listenOnce() {
       // A snapshot this build cannot read: keep the last one.
     }
   })
+  // The host's address changed and this computer found it by its pinned certificate.
+  await listen<string>("join:moved", (e) => {
+    try {
+      const { address } = JSON.parse(e.payload) as { address?: unknown }
+      if (typeof address === "string" && address) useSettingsStore.getState().setJoin({ joinAddress: address })
+    } catch {
+      // Not a message this build can read: this computer keeps the address it has.
+    }
+  })
   await listen<string>("join:state", (e) => {
     try {
       const p = JSON.parse(e.payload) as { state: string; error?: string; secure?: boolean; me?: { name?: unknown; role?: unknown; paused?: unknown; outputScope?: unknown; groupTakeScope?: unknown } | null }
