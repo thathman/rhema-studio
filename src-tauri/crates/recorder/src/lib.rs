@@ -85,6 +85,26 @@ struct Session {
     audio: Option<audio::Capture>,
 }
 
+/// What a recording is going through. One lock decides every change of it, so a start, a stop and
+/// the quit can't each act on a different view. Taken before the session's lock, never after.
+#[derive(Default)]
+struct Lifecycle {
+    phase: Phase,
+    /// The app is quitting: nothing new may start or be installed, so no file is left unclosed.
+    closing: bool,
+}
+
+#[derive(Default, PartialEq)]
+enum Phase {
+    #[default]
+    Idle,
+    /// The session is only set once the file is open, so without this a second start would pass
+    /// preflight too and replace the first. Holds the output: NDI must not change its picture size.
+    Starting(String),
+    /// One stop owns closing the file, until it has told the output's window to stop sending.
+    Stopping,
+}
+
 pub struct Recorder {
     folder: PathBuf,
     session: Mutex<Option<Session>>,
@@ -93,15 +113,8 @@ pub struct Recorder {
     /// The main desk's last recording setup: what a granted remote desk's "start" reuses (it never
     /// chooses the screen or the sound input itself).
     last_request: Mutex<Option<RecorderStartRequest>>,
-    /// A start is under way: the session is only set once the file is open, so without this a second
-    /// start would pass preflight too and replace the first, leaving its writer unstopped. Holds the
-    /// output it is for: NDI must not change that window's picture size meanwhile.
-    starting: Mutex<Option<String>>,
-    /// The app is quitting: nothing new may start, so no file is left unclosed.
-    closing: AtomicBool,
-    /// A stop is closing its file. A start waits it out: the session is gone by then, and that stop
-    /// is about to tell the output's window to stop sending frames.
-    stopping: AtomicBool,
+    /// Which start or stop is under way, and whether the app is quitting (`Lifecycle`).
+    lifecycle: Mutex<Lifecycle>,
 }
 
 impl Recorder {
@@ -115,7 +128,7 @@ impl Recorder {
                 log::warn!("recorder: {} interrupted recording(s) marked recoverable: {marked:?}", marked.len());
             }
         }
-        Self { folder, session: Mutex::new(None), last: Mutex::new(RecorderStatus::idle()), last_request: Mutex::new(None), starting: Mutex::new(None), closing: AtomicBool::new(false), stopping: AtomicBool::new(false) }
+        Self { folder, session: Mutex::new(None), last: Mutex::new(RecorderStatus::idle()), last_request: Mutex::new(None), lifecycle: Mutex::default() }
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Option<Session>> {
@@ -152,11 +165,11 @@ impl Recorder {
     /// A start for this output is under way, its picture size chosen or about to be.
     #[must_use]
     pub fn is_starting(&self, output_id: &str) -> bool {
-        self.starting_slot().as_deref() == Some(output_id)
+        matches!(&self.state().phase, Phase::Starting(output) if output == output_id)
     }
 
-    fn starting_slot(&self) -> std::sync::MutexGuard<'_, Option<String>> {
-        self.starting.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    fn state(&self) -> std::sync::MutexGuard<'_, Lifecycle> {
+        self.lifecycle.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// The output the running session is pinned to.
@@ -209,37 +222,45 @@ impl Recorder {
         struct Reserved<'a>(&'a Recorder);
         impl Drop for Reserved<'_> {
             fn drop(&mut self) {
-                *self.0.starting_slot() = None;
+                self.0.state().phase = Phase::Idle;
             }
         }
         {
-            let mut slot = self.starting_slot();
-            if slot.is_some() {
-                return Err(RecorderProblem::new(ProblemCode::AlreadyRecording, "A recording is already starting."));
-            }
-            if self.closing.load(Ordering::SeqCst) {
+            let mut state = self.state();
+            if state.closing {
                 return Err(RecorderProblem::new(ProblemCode::NotAllowed, "Rhema is closing."));
             }
-            if self.stopping.load(Ordering::SeqCst) {
-                return Err(RecorderProblem::new(ProblemCode::AlreadyRecording, "The last recording is still closing. Start again in a moment."));
+            match state.phase {
+                Phase::Idle => state.phase = Phase::Starting(req.output_id.clone()),
+                Phase::Starting(_) => return Err(RecorderProblem::new(ProblemCode::AlreadyRecording, "A recording is already starting.")),
+                Phase::Stopping => return Err(RecorderProblem::new(ProblemCode::AlreadyRecording, "The last recording is still closing. Start again in a moment.")),
             }
-            *slot = Some(req.output_id.clone());
         }
         let _reserved = Reserved(self);
         let (width, height) = size();
         self.start_one(req, width, height)
     }
 
-    /// The app is quitting: refuse new starts, let one under way finish, then close the file properly.
-    /// `wait` bounds the wait for that start; if it never finishes its file is recovered on the next launch.
-    pub fn shut_down(&self, wait: Duration) -> Option<Result<RecorderStatus, RecorderProblem>> {
-        // Under the slot's lock, so a start either is in the slot here or sees `closing`.
-        {
-            let _slot = self.starting_slot();
-            self.closing.store(true, Ordering::SeqCst);
+    /// The session goes in unless quitting began while it was opening, however late: the quit has
+    /// stopped looking by then, so its file is closed here. Under the lifecycle lock, so either the
+    /// quit sees this session or this sees the quit.
+    fn install(&self, session: Session) -> Result<(), RecorderProblem> {
+        let state = self.state();
+        if state.closing {
+            drop(state);
+            let _ = self.finish(session);
+            return Err(RecorderProblem::new(ProblemCode::NotAllowed, "Rhema is closing."));
         }
+        *self.lock() = Some(session);
+        Ok(())
+    }
+
+    /// The app is quitting: refuse new starts, let a start or stop under way finish, then close the
+    /// file properly. `wait` bounds that wait; a start outlasting it closes its own file (`install`).
+    pub fn shut_down(&self, wait: Duration) -> Option<Result<RecorderStatus, RecorderProblem>> {
+        self.state().closing = true;
         let deadline = Instant::now() + wait;
-        while self.starting_slot().is_some() && Instant::now() < deadline {
+        while self.state().phase != Phase::Idle && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(10));
         }
         self.pinned_output().map(|_| self.stop())
@@ -347,7 +368,7 @@ impl Recorder {
         let _ = manifest::write(&dir, &m);
         let session = Session { dir, manifest: m, width, height, fps, t0, tx, shared, writer, frame: Vec::new(), audio };
         let status = status_of(&session, &self.folder);
-        *self.lock() = Some(session);
+        self.install(session)?;
         *self.last_request.lock().unwrap_or_else(PoisonError::into_inner) = Some(req.clone());
         Ok(status)
     }
@@ -406,19 +427,24 @@ impl Recorder {
         struct Stopping<'a>(&'a Recorder);
         impl Drop for Stopping<'_> {
             fn drop(&mut self) {
-                self.0.stopping.store(false, Ordering::SeqCst);
+                self.0.state().phase = Phase::Idle;
             }
         }
         // A start under way is let through first (one refused at once if a session is running),
         // so it can't pass its checks on the session this is about to take.
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
-            let slot = self.starting_slot();
-            if slot.is_none() {
-                self.stopping.store(true, Ordering::SeqCst);
-                break;
+            {
+                let mut state = self.state();
+                match state.phase {
+                    Phase::Idle => {
+                        state.phase = Phase::Stopping;
+                        break;
+                    }
+                    Phase::Stopping => return Err(RecorderProblem::new(ProblemCode::NotRecording, "The recording is already closing.")),
+                    Phase::Starting(_) => {}
+                }
             }
-            drop(slot);
             if Instant::now() >= deadline {
                 return Err(RecorderProblem::new(ProblemCode::AlreadyRecording, "A recording is still starting. Stop again in a moment."));
             }
@@ -427,6 +453,13 @@ impl Recorder {
         let _stopping = Stopping(self);
         // Out of the lock first: frames for NDI keep flowing while the file closes.
         let s = self.lock().take().ok_or_else(|| RecorderProblem::new(ProblemCode::NotRecording, "Nothing is recording."))?;
+        let status = self.finish(s);
+        closed();
+        Ok(status)
+    }
+
+    /// Close a session's file and record how it ended.
+    fn finish(&self, s: Session) -> RecorderStatus {
         let Session { dir, mut manifest, t0, tx, shared, writer, width, height, fps, audio, .. } = s;
         drop(audio);
         manifest.state = RecorderState::Finalizing;
@@ -469,8 +502,7 @@ impl Recorder {
             problem: manifest.problem.clone(),
         };
         *self.last.lock().unwrap_or_else(PoisonError::into_inner) = status.clone();
-        closed();
-        Ok(status)
+        status
     }
 
     /// The truthful state right now (a REC indicator must come from this).
@@ -1153,7 +1185,7 @@ mod tests {
     fn a_second_start_is_refused_while_one_is_under_way() {
         let t = tempfile::tempdir().unwrap();
         let rec = Recorder::new(t.path().to_path_buf());
-        *rec.starting_slot() = Some("sanctuary".into());
+        rec.state().phase = Phase::Starting("sanctuary".into());
         let req = RecorderStartRequest { output_id: "sanctuary".into(), output_name: "Sanctuary".into(), output_role: "congregation".into(), audio_device_id: None, allow_silent: true, profile: RecorderProfile::Standard720p30, service_run_id: None, program_id: None, rehearsal: false };
         assert_eq!(rec.start(&req, 1280, 720).unwrap_err().code, ProblemCode::AlreadyRecording);
     }
@@ -1224,7 +1256,7 @@ mod tests {
         assert!(rec.shut_down(Duration::ZERO).is_some_and(|r| r.is_ok()));
         assert!(rec.pinned_output().is_none());
         let stuck = Recorder::new(t.path().to_path_buf());
-        *stuck.starting_slot() = Some("sanctuary".into());
+        stuck.state().phase = Phase::Starting("sanctuary".into());
         let began = Instant::now();
         assert!(stuck.shut_down(Duration::from_millis(30)).is_none());
         assert!(began.elapsed() < Duration::from_secs(5), "a stuck start must not hang the quit");
@@ -1235,10 +1267,10 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         let rec = Recorder::new(t.path().to_path_buf());
         assert_eq!(rec.ndi_refusal("sanctuary", (1920, 1080)), None);
-        *rec.starting_slot() = Some("sanctuary".into());
+        rec.state().phase = Phase::Starting("sanctuary".into());
         assert!(rec.ndi_refusal("sanctuary", (1280, 720)).is_some_and(|m| m.contains("starting")));
         assert_eq!(rec.ndi_refusal("other", (1920, 1080)), None);
-        *rec.starting_slot() = None;
+        rec.state().phase = Phase::Idle;
         let session = stub_session(t.path());
         let (w, h) = (session.width, session.height);
         *rec.lock() = Some(session);
@@ -1264,12 +1296,12 @@ mod tests {
             let (recorder, log) = (&rec, &order);
             scope.spawn(move || {
                 recorder.stop_then(|| {
-                    assert!(recorder.stopping.load(Ordering::SeqCst), "still held while the window is told");
+                    assert!((recorder.state().phase == Phase::Stopping), "still held while the window is told");
                     log.lock().unwrap().push("window told");
                     closing_tx.send(()).unwrap();
                 }).unwrap();
             });
-            while !rec.stopping.load(Ordering::SeqCst) || rec.pinned_output().is_some() {
+            while !(rec.state().phase == Phase::Stopping) || rec.pinned_output().is_some() {
                 std::thread::yield_now();
             }
             let refused = rec.start(&silent_request(), 1280, 720).unwrap_err();
@@ -1280,7 +1312,85 @@ mod tests {
             closing_rx.recv().unwrap();
         });
         assert_eq!(*order.lock().unwrap(), ["start refused", "window told"]);
-        assert!(!rec.stopping.load(Ordering::SeqCst), "the next start is not blocked for good");
+        assert!(!(rec.state().phase == Phase::Stopping), "the next start is not blocked for good");
+    }
+
+    /// A session whose writer only closes when told; the sender is the file finishing.
+    fn closing_session(dir: &std::path::Path) -> (Session, std::sync::mpsc::Sender<()>) {
+        let mut session = stub_session(dir);
+        let (close_tx, close_rx) = std::sync::mpsc::channel::<()>();
+        session.writer = std::thread::spawn(move || {
+            let _ = close_rx.recv();
+            Ok(())
+        });
+        (session, close_tx)
+    }
+
+    #[test]
+    fn a_second_stop_cannot_release_the_first_stops_hold() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        let (session, close_tx) = closing_session(t.path());
+        *rec.lock() = Some(session);
+        let told = AtomicU32::new(0);
+        std::thread::scope(|scope| {
+            let (recorder, told) = (&rec, &told);
+            let first = scope.spawn(move || recorder.stop_then(|| { told.fetch_add(1, Ordering::SeqCst); }));
+            while !(rec.state().phase == Phase::Stopping) || rec.pinned_output().is_some() {
+                std::thread::yield_now();
+            }
+            let second = rec.stop_then(|| { told.fetch_add(1, Ordering::SeqCst); }).unwrap_err();
+            assert_eq!(second.code, ProblemCode::NotRecording);
+            assert!(second.message.contains("already closing"));
+            assert!((rec.state().phase == Phase::Stopping), "the first stop still holds it");
+            assert_eq!(rec.start(&silent_request(), 1280, 720).unwrap_err().code, ProblemCode::AlreadyRecording, "so a start is still refused");
+            close_tx.send(()).unwrap();
+            assert!(first.join().unwrap().is_ok());
+        });
+        assert_eq!(told.load(Ordering::SeqCst), 1, "only the owner tells the window");
+        assert!(!(rec.state().phase == Phase::Stopping));
+    }
+
+    #[test]
+    fn a_start_finishing_after_the_quit_gave_up_closes_its_own_file() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        rec.state().phase = Phase::Starting("sanctuary".into());
+        assert!(rec.shut_down(Duration::from_millis(10)).is_none(), "the wait ran out");
+        let session = stub_session(t.path());
+        let dir = session.dir.clone();
+        assert_eq!(rec.install(session).unwrap_err().code, ProblemCode::NotAllowed);
+        assert!(rec.pinned_output().is_none(), "nothing is left recording with nobody to stop it");
+        assert!(!rec.status().session_active);
+        assert_eq!(manifest::read(&dir).map(|m| m.state).ok(), Some(RecorderState::Saved), "the file was closed and its ending written");
+    }
+
+    #[test]
+    fn quitting_waits_for_a_stop_closing_its_file_without_closing_it_twice() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        let (session, close_tx) = closing_session(t.path());
+        *rec.lock() = Some(session);
+        std::thread::scope(|scope| {
+            let recorder = &rec;
+            let stop = scope.spawn(move || recorder.stop());
+            while rec.state().phase != Phase::Stopping || rec.pinned_output().is_some() {
+                std::thread::yield_now();
+            }
+            assert!(rec.shut_down(Duration::from_millis(30)).is_none(), "that stop owns the file");
+            assert_eq!(rec.start(&silent_request(), 1280, 720).unwrap_err().code, ProblemCode::NotAllowed);
+            close_tx.send(()).unwrap();
+            assert!(stop.join().unwrap().is_ok());
+        });
+    }
+
+    #[test]
+    fn a_start_finishing_before_the_quit_is_closed_by_the_quit() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        rec.install(stub_session(t.path())).unwrap();
+        assert!(rec.shut_down(Duration::ZERO).is_some_and(|r| r.is_ok()));
+        assert!(rec.pinned_output().is_none());
     }
 
     #[test]
@@ -1288,7 +1398,7 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         let rec = Recorder::new(t.path().to_path_buf());
         assert_eq!(rec.stop().unwrap_err().code, ProblemCode::NotRecording);
-        assert!(!rec.stopping.load(Ordering::SeqCst));
+        assert!(!(rec.state().phase == Phase::Stopping));
     }
 
     #[test]
