@@ -354,6 +354,49 @@ describe("the screens following Program", () => {
   })
 })
 
+describe("a designed moment put back by a recovery", () => {
+  const pin = { id: "d1", version: 2 }
+  // A recovery restores each screen's saved scene first, then Program: the moment is already up when Program moves.
+  const recovered = async (moments: Record<string, { id: string; version: number }> | undefined, ref = pin) => {
+    await showDesignedMoment(moment(pin), getVersion)
+    useQueueStore.setState({ items: [moment(ref)] })
+    approve(moments)
+    toast.warning.mockClear()
+    live(moment(ref))
+    await settled()
+  }
+
+  it("stays up when the approval still covers that exact pin", async () => {
+    await recovered({ m: pin })
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+    expect(toast.warning).not.toHaveBeenCalled()
+  })
+
+  it.each([["missing from", {}], ["different in", { m: { id: "d1", version: 1 } }], ["absent from an older", undefined]])("comes down when the pin is %s the approval", async (_why, moments) => {
+    await recovered(moments)
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+    expect(toast.warning).toHaveBeenCalledWith("Design needs approval", expect.anything())
+  })
+
+  it("a slide pinned to another version since does not keep the old one up", async () => {
+    versions["d1:3"] = { designId: "d1", version: 3, document: versions["d1:2"].document }
+    await recovered({ m: { id: "d1", version: 3 } }, { id: "d1", version: 3 })
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v3")
+  })
+
+  it("comes down when the service's approval arrives or changes with the moment already up", async () => {
+    useQueueStore.setState({ items: [moment(pin)] })
+    live(moment(pin))
+    await settled()
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+    approve({ m: pin })
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+    approve({})
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+    expect(toast.warning).toHaveBeenCalledWith("Design needs approval", expect.anything())
+  })
+})
+
 describe("a scene's design pin", () => {
   it("survives normalising; a malformed pin is dropped", () => {
     expect(normalizeScene({ ...usual, design: { id: "d1", version: 2 } })?.design).toEqual({ id: "d1", version: 2 })

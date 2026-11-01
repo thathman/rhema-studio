@@ -26,6 +26,9 @@ const isCongregation = (o: BroadcastOutput) => (o.role ?? "congregation") === "c
 
 type GetVersion = Parameters<typeof resolveDesignedMoment>[1]
 
+/** One id per pinned version, so a screen still showing it is recognised at restore. */
+const momentSceneId = (ref: DesignPin) => `design-${ref.id}-v${ref.version}`
+
 /** Why the open service's approval does not cover this pin; null when it does, or nothing is approved. */
 function designNotApproved(itemId: string, ref: DesignPin): string | null {
   const service = useServiceStore.getState()
@@ -66,8 +69,7 @@ export async function showDesignedMoment(
     toast.warning("Design not shown", { id: `design-missing-${item.id}`, description: issues[0]?.message ?? `"${item.slide.title}" shows its text instead.` })
     return
   }
-  // One id per pinned version, so a screen still showing it is recognised at restore.
-  const scene: Scene = { ...resolved, id: `design-${ref.id}-v${ref.version}`, name: resolved.name?.trim() ? resolved.name : item.slide.title || "Design", design: ref }
+  const scene: Scene = { ...resolved, id: momentSceneId(ref), name: resolved.name?.trim() ? resolved.name : item.slide.title || "Design", design: ref }
   const b = useBroadcastStore.getState()
   const logo = useSettingsStore.getState().brandKit.logoUrl
   // ponytail: every congregation screen, like a scene step with no screen named; a per-moment target when Prepare offers one.
@@ -128,8 +130,11 @@ useBroadcastStore.subscribe((s, prev) => {
   const next = s.isLive && s.liveItemId ? useQueueStore.getState().items.find((item) => item.id === s.liveItemId) : undefined
   if (next && takesSourceOnly(next)) return
   if (next && isSlideItem(next) && next.slide.designRef) {
-    const up = (s.outputs.find((o) => o.designedMomentRestore?.itemId === next.id))
-    if (up) return
+    // Already up, as this version and still approved (a Take arriving second, or a recovery putting
+    // Program back): leave it. Anything else goes through the same check as a Take.
+    const ref = next.slide.designRef
+    const up = s.outputs.some((o) => o.designedMomentRestore?.itemId === next.id && o.designedMomentRestore.designSceneId === momentSceneId(ref) && o.sceneId === momentSceneId(ref))
+    if (up && !designNotApproved(next.id, ref)) return
     void showDesignedMoment(next, undefined, () => {
       const now = useBroadcastStore.getState()
       return !now.rehearsal && now.isLive && now.liveItemId === next.id
@@ -137,4 +142,24 @@ useBroadcastStore.subscribe((s, prev) => {
     return
   }
   if (s.outputs.some((o) => o.designedMomentRestore)) restoreAfterDesignedMoment()
+})
+
+/**
+ * The approval can change with a moment already up: a refreshed approval, or the service's list
+ * arriving after a recovery put the screens back. A moment it no longer covers comes down.
+ */
+useServiceStore.subscribe((s, prev) => {
+  if (s.approvedDesigns === prev.approvedDesigns && s.approvedDesignRevision === prev.approvedDesignRevision && s.current?.approved_revision === prev.current?.approved_revision) return
+  const b = useBroadcastStore.getState()
+  if (b.rehearsal) return
+  const items = useQueueStore.getState().items
+  const uncovered = b.outputs.some((o) => {
+    const restore = o.designedMomentRestore
+    const item = restore?.itemId ? items.find((i) => i.id === restore.itemId) : undefined
+    if (!restore || !item || o.sceneId !== restore.designSceneId) return false
+    return !isSlideItem(item) || !item.slide.designRef || designNotApproved(item.id, item.slide.designRef) !== null
+  })
+  if (!uncovered) return
+  restoreAfterDesignedMoment()
+  toast.warning("Design needs approval", { description: "The service's approval no longer covers the design on screen, so the screens went back. Refresh the approval to show it." })
 })
