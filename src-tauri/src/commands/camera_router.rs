@@ -5,8 +5,10 @@
 //! Rhema writes the router's settings into its data folder each time it starts it, runs it, puts
 //! its messages in Rhema's log, starts it again if it stops by itself (waiting longer each time),
 //! and stops it when Rhema closes. Each camera publishes as its own user (`cam-<name>`, with its
-//! link's secret), to its own name only; watching a camera's own name is open on the church network
-//! for now, the same as a TV or OBS reading any local camera. The router's control API answers only
+//! link's secret), to its own name only. Knowing a camera's name lets nobody read it: without a
+//! sign-in only this computer can (its screens, its OBS). A TV or a joined desk shows Rhema its own
+//! key and Rhema asks for it, as `rhema-relay`, a sign-in only Rhema knows (`rhema_api::cameras`);
+//! losing the key cuts that reader off. The router's control API answers only
 //! Rhema: a user and password made afresh each run, kept in memory and handed to the router in its
 //! environment (the settings file holds a throwaway value in its place), never written to a file or
 //! the log.
@@ -96,10 +98,12 @@ fn yaml_path(p: &Path) -> Option<String> {
 /// the first user in the settings, so the router takes its password from this variable.
 const API_USER: &str = "rhema-api";
 const API_PASS_ENV: &str = "MTX_AUTHINTERNALUSERS_0_PASS";
+/// The relay's password, the same way: it is the third user in the settings.
+const RELAY_PASS_ENV: &str = "MTX_AUTHINTERNALUSERS_2_PASS";
 /// The companions' SRT passphrase, for every name (no SRT reader without it).
 const SRT_READ_PASS_ENV: &str = "MTX_PATHDEFAULTS_SRTREADPASSPHRASE";
 
-/// The camera names `any` may read (a camera's own name, never `companion/…`).
+/// The camera names `any` (from this computer) and the relay may read: a camera's own name, never `companion/…`.
 const CAMERA_PATHS: &str = "~^[a-z0-9][a-z0-9_-]*$";
 
 /// A secret Rhema made: letters and digits only (it goes into the router's settings and into
@@ -119,7 +123,9 @@ fn new_srt_passphrase() -> String {
 }
 
 /// The router's settings. Each camera (name, secret) may publish to its own name only, as
-/// `cam-<name>`; watching a camera's own name is open; each OBS companion (user, secret) may read the
+/// `cam-<name>`; watching a camera's own name takes no sign-in from this computer only, and
+/// `RELAY_USER` for what Rhema has checked (its real password in `RELAY_PASS_ENV`; the router believes
+/// the reader's address only from Rhema, on this computer); each OBS companion (user, secret) may read the
 /// companion names only (`companion/<name>`, filled from the camera here over RTSP while it is read,
 /// SRT with the passphrase in the router's environment); the control API answers only `rhema-api`, from this computer,
 /// and no browser page (no allowed CORS origin). Its real password goes to the router in
@@ -132,6 +138,9 @@ pub fn config_yaml(ports: &Ports, lan_ip: Option<&str>, cameras: &[(String, Stri
         return Err("The router's API password is not one Rhema Studio made".into());
     }
     let hosts = lan_ip.filter(|ip| ip.parse::<std::net::Ipv4Addr>().is_ok()).map(|ip| format!("\"{ip}\"")).unwrap_or_default();
+    // This computer reaches the router by its network address too (the address OBS is given).
+    let here = if hosts.is_empty() { String::new() } else { format!(", {hosts}") };
+    let relay = rhema_api::RELAY_USER;
     let prefix = rhema_api::PUBLISH_PREFIX;
     let publishers: String = cameras
         .iter()
@@ -159,6 +168,12 @@ authInternalUsers:
       - action: api
   - user: any
     pass:
+    ips: ["127.0.0.1", "::1"{here}]
+    permissions:
+      - action: read
+        path: "{CAMERA_PATHS}"
+  - user: {relay}
+    pass: "{api_placeholder}"
     ips: []
     permissions:
       - action: read
@@ -178,6 +193,7 @@ hls: false
 webrtc: true
 webrtcAddress: :{webrtc}
 webrtcAllowOrigins: ["*"]
+webrtcTrustedProxies: ["127.0.0.1"]
 webrtcLocalUDPAddress: :{udp}
 webrtcIPsFromInterfaces: true
 webrtcAdditionalHosts: [{hosts}]
@@ -240,6 +256,8 @@ struct RouterState {
     api_password: String,
     /// This run's companions' SRT passphrase (memory only).
     srt_passphrase: String,
+    /// This run's relay password (memory only).
+    relay_password: String,
     /// Its settings file and the LAN address it was started with, to rewrite when cameras change.
     config: Option<PathBuf>,
     lan: Option<String>,
@@ -274,9 +292,9 @@ impl CameraRouter {
     }
 }
 
-fn spawn(binary: &Path, config: &Path, router: &CameraRouter, generation: u64, api_password: &str, srt_passphrase: &str) -> Result<Child, String> {
+fn spawn(binary: &Path, config: &Path, router: &CameraRouter, generation: u64, api_password: &str, srt_passphrase: &str, relay_password: &str) -> Result<Child, String> {
     let mut cmd = Command::new(binary);
-    cmd.arg(config).env(API_PASS_ENV, api_password).env(SRT_READ_PASS_ENV, srt_passphrase).current_dir(config.parent().unwrap_or(Path::new("."))).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.arg(config).env(API_PASS_ENV, api_password).env(SRT_READ_PASS_ENV, srt_passphrase).env(RELAY_PASS_ENV, relay_password).current_dir(config.parent().unwrap_or(Path::new("."))).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -350,8 +368,8 @@ fn supervise(router: CameraRouter, binary: PathBuf, config: PathBuf, generation:
             if !s.want || s.generation != generation {
                 return;
             }
-            let (api_password, srt_passphrase) = (s.api_password.clone(), s.srt_passphrase.clone());
-            match spawn(&binary, &config, &router, generation, &api_password, &srt_passphrase) {
+            let (api_password, srt_passphrase, relay_password) = (s.api_password.clone(), s.srt_passphrase.clone(), s.relay_password.clone());
+            match spawn(&binary, &config, &router, generation, &api_password, &srt_passphrase, &relay_password) {
                 Ok(child) => {
                     s.child = Some(child);
                     s.started_at = Some(Instant::now());
@@ -400,7 +418,7 @@ pub fn camera_router_start(app: AppHandle, router: State<'_, CameraRouter>, http
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let config = dir.join("mediamtx.yml");
     let lan = super::remote::remote_lan_address();
-    let (api_password, srt_passphrase) = (new_api_password(), new_srt_passphrase());
+    let (api_password, srt_passphrase, relay_password) = (new_api_password(), new_srt_passphrase(), new_api_password());
     let tls_dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("tls");
     let tls = rtsps_cert(&tls_dir);
     write_config(&config, &with_rtsps(config_yaml(&PORTS, lan.as_deref(), &hub.list(), &hub.reader_list(), &new_api_password())?, &PORTS, tls.as_ref()))?;
@@ -414,17 +432,19 @@ pub fn camera_router_start(app: AppHandle, router: State<'_, CameraRouter>, http
         s.tls = tls;
         s.last_error = None;
         s.restarts = 0;
-        let child = spawn(&binary, &config, &router, s.generation, &api_password, &srt_passphrase)?;
+        let child = spawn(&binary, &config, &router, s.generation, &api_password, &srt_passphrase, &relay_password)?;
         s.api_password = api_password;
+        s.relay_password.clone_from(&relay_password);
         s.srt_passphrase.clone_from(&srt_passphrase);
         s.child = Some(child);
         s.started_at = Some(Instant::now());
         s.generation
     };
-    hub.set_router(Some(rhema_api::RouterTarget { base: format!("http://127.0.0.1:{}", PORTS.webrtc), srt_port: PORTS.srt, srt_passphrase }));
+    hub.set_router(Some(rhema_api::RouterTarget { base: format!("http://127.0.0.1:{}", PORTS.webrtc), srt_port: PORTS.srt, srt_passphrase, relay_secret: relay_password }));
     log::info!("camera router started ({}), WebRTC on port {}, RTSP on {}, SRT on {}{}", binary.display(), PORTS.webrtc, PORTS.rtsp, PORTS.srt, if router.lock().tls.is_some() { format!(", RTSPS on {}", PORTS.rtsps) } else { String::new() });
     supervise(router.inner().clone(), binary, config, generation);
-    look_regularly(router.inner().clone(), hub, generation);
+    let feeds = http.lock().map_err(|e| e.to_string())?.feeds();
+    look_regularly(router.inner().clone(), hub, keys.keys.clone(), feeds, generation);
     Ok(())
 }
 
@@ -461,6 +481,18 @@ pub fn desks_changed(app: &AppHandle) {
     });
 }
 
+/// The relay's WebRTC sessions (ids) reading a camera nobody allowed reads from that address any more.
+fn unheld_sessions(list: &serde_json::Value, held: impl Fn(std::net::IpAddr, &str) -> bool) -> Vec<String> {
+    list.get("items").and_then(|v| v.as_array()).map_or_else(Vec::new, |items| {
+        items
+            .iter()
+            .filter(|c| c.get("user").and_then(|u| u.as_str()) == Some(rhema_api::RELAY_USER))
+            .filter(|c| c.get("remoteAddr").and_then(|a| a.as_str()).and_then(ip_of).zip(c.get("path").and_then(|p| p.as_str())).is_none_or(|(ip, path)| !held(ip, path)))
+            .filter_map(|c| c.get("id")?.as_str().map(str::to_string))
+            .collect()
+    })
+}
+
 /// Whether the settings file lacks one of these companions (a new one paired since it was written).
 fn readers_differ(config: &Path, readers: &[(String, String)]) -> bool {
     let text = std::fs::read_to_string(config).unwrap_or_default();
@@ -491,7 +523,7 @@ fn conns_of(list: &serde_json::Value, users: &[String]) -> Vec<String> {
 
 /// While the router runs, ask it every two seconds which cameras send and who reads them, for
 /// Production → Cameras and the OBS companions (camera_router_status reads the answer).
-fn look_regularly(router: CameraRouter, hub: rhema_api::SharedCameras, generation: u64) {
+fn look_regularly(router: CameraRouter, hub: rhema_api::SharedCameras, keys: rhema_api::KeySet, feeds: rhema_api::SharedFeeds, generation: u64) {
     tauri::async_runtime::spawn(async move {
         let Ok(client) = reqwest::Client::builder().timeout(Duration::from_millis(1500)).build() else { return };
         let mut before: std::collections::HashMap<String, Seen> = std::collections::HashMap::new();
@@ -515,6 +547,12 @@ fn look_regularly(router: CameraRouter, hub: rhema_api::SharedCameras, generatio
                     let mut sessions = parse_sessions("srt", &srt);
                     sessions.extend(parse_sessions("rtsp", &rtsp));
                     sessions.extend(parse_sessions("webrtc", &webrtc));
+                    // A TV or desk that lost its key or role: cut off here, so a failed try is tried again.
+                    rhema_api::http::prune_camera_readers(&hub, &keys, &feeds);
+                    for id in unheld_sessions(&webrtc, |ip, path| hub.relay_holds(ip, path)) {
+                        let kicked = client.post(format!("{base}/webrtc/sessions/kick/{id}")).basic_auth(API_USER, Some(&password)).send().await;
+                        log::info!("camera router: a screen or desk that lost its key was disconnected ({})", kicked.map_or_else(|e| e.to_string(), |r| r.status().to_string()));
+                    }
                     let local = local_addresses(super::remote::remote_lan_address().as_deref());
                     let now = Instant::now();
                     let watch = build_watch(&paths, &sessions, &Names { reader: &|u| hub.reader_name(u), desk: &|ip| hub.desk_at(ip) }, &local, &mut before, now);
@@ -897,11 +935,12 @@ mod tests {
     #[test]
     fn each_camera_publishes_as_itself_to_its_own_name_only() {
         let u = users(&config_yaml(&PORTS, None, &cams(), &[], API).unwrap());
-        assert_eq!(u.len(), 4, "{u:?}");
-        assert_eq!(u[1], ("any".into(), String::new(), "[]".into(), vec![("read".into(), format!("\"{CAMERA_PATHS}\""))]), "watching a camera's own name is open");
-        assert_eq!(u[2], ("\"cam-pulpit\"".into(), format!("\"{TOK}\""), "[]".into(), vec![("publish".into(), "\"pulpit\"".into())]));
-        assert_eq!(u[3].0, "\"cam-choir\"");
-        assert_eq!(u[3].3, vec![("publish".into(), "\"choir\"".into())]);
+        assert_eq!(u.len(), 5, "{u:?}");
+        assert_eq!(u[1], ("any".into(), String::new(), "[\"127.0.0.1\", \"::1\"]".into(), vec![("read".into(), format!("\"{CAMERA_PATHS}\""))]), "without a sign-in only this computer reads a camera");
+        assert_eq!(u[2].0, "rhema-relay", "the third user: RELAY_PASS_ENV");
+        assert_eq!(u[3], ("\"cam-pulpit\"".into(), format!("\"{TOK}\""), "[]".into(), vec![("publish".into(), "\"pulpit\"".into())]));
+        assert_eq!(u[4].0, "\"cam-choir\"");
+        assert_eq!(u[4].3, vec![("publish".into(), "\"choir\"".into())]);
         // Nobody else may publish: no other publish permission, and none without a path.
         let publishers: Vec<_> = u.iter().filter(|x| x.3.iter().any(|(a, _)| a == "publish")).collect();
         assert_eq!(publishers.len(), 2);
@@ -960,7 +999,7 @@ mod tests {
     fn a_reader_rhema_did_not_make_never_reaches_the_router() {
         let bad = [("any".into(), RTOK.into()), ("read-xyz".into(), RTOK.into()), ("cam-pulpit".into(), RTOK.into()), (READER.into(), "short".into()), ("read-a1b2c3d4\"\n  - user: any".into(), RTOK.into())];
         let u = users(&config_yaml(&PORTS, None, &[], &bad, API).unwrap());
-        assert_eq!(u.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), vec!["rhema-api", "any"]);
+        assert_eq!(u.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), vec!["rhema-api", "any", "rhema-relay"]);
     }
 
     #[test]
@@ -1064,6 +1103,24 @@ mod tests {
     }
 
     #[test]
+    fn this_computers_own_address_reads_without_a_sign_in_and_no_other() {
+        let y = config_yaml(&PORTS, Some("192.168.1.20"), &cams(), &[], API).unwrap();
+        assert!(y.contains("  - user: any\n    pass:\n    ips: [\"127.0.0.1\", \"::1\", \"192.168.1.20\"]\n"), "{y}");
+    }
+
+    #[test]
+    fn only_the_relays_sessions_to_those_addresses_are_cut_off() {
+        let list = serde_json::json!({ "items": [
+            { "id": "a", "user": "rhema-relay", "path": "pulpit", "remoteAddr": "192.168.1.40:5000" },
+            { "id": "b", "user": "rhema-relay", "path": "pulpit", "remoteAddr": "192.168.1.41:5000" },
+            { "id": "d", "user": "rhema-relay", "path": "choir", "remoteAddr": "192.168.1.41:5002" },
+            { "id": "c", "user": "", "path": "pulpit", "remoteAddr": "192.168.1.40:5001" },
+        ]});
+        let kept: std::net::IpAddr = "192.168.1.41".parse().unwrap();
+        assert_eq!(unheld_sessions(&list, |ip, path| ip == kept && path == "pulpit"), ["a", "d"]);
+    }
+
+    #[test]
     fn the_api_password_is_new_each_run_and_long() {
         let (a, b) = (new_api_password(), new_api_password());
         assert_ne!(a, b);
@@ -1074,7 +1131,7 @@ mod tests {
     fn bad_names_and_short_secrets_never_reach_the_router() {
         let y = config_yaml(&PORTS, None, &[("any".into(), TOK.into()), ("Bad".into(), TOK.into()), ("x".into(), "short".into()), ("ok".into(), format!("{TOK}\"\n  - user: any"))], &[], API).unwrap();
         let u = users(&y);
-        assert_eq!(u.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), vec!["rhema-api", "any", "\"cam-any\""], "a camera called any is cam-any, never the router's anyone");
+        assert_eq!(u.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), vec!["rhema-api", "any", "rhema-relay", "\"cam-any\""], "a camera called any is cam-any, never the router's anyone");
         for bad in ["", "short", "has space in it 1234", "quote\"inside123456", &"a".repeat(129)] {
             assert!(config_yaml(&PORTS, None, &[], &[], bad).is_err(), "{bad}");
         }

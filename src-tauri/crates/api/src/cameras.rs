@@ -8,6 +8,9 @@
 //! Each camera publishes as its own router user (`cam-<name>`, its link's secret as the password),
 //! allowed to send to its own name only; a new link or removing the camera closes that door.
 //!
+//! A TV's feed page or a joined desk reads a camera through Rhema too (`relay_offer`): knowing a
+//! camera's name is not enough, the reader shows its own key, and losing that key cuts it off.
+//!
 //! An OBS companion (a computer that runs OBS only, #209) reads every camera over SRT, encrypted,
 //! as its own router user (`read-<8 characters of its key>`, a secret made afresh each time Rhema
 //! starts), from the camera's companion name (`companion/<name>`), which nobody else may read.
@@ -31,6 +34,10 @@ pub const PUBLISH_PREFIX: &str = "cam-";
 /// A companion's router user is this and the start of its key's hash (#209).
 pub const READ_PREFIX: &str = "read-";
 
+/// Rhema's own router user for a screen or desk it has checked (`relay_offer`); only Rhema knows its
+/// secret, made afresh each time the router starts.
+pub const RELAY_USER: &str = "rhema-relay";
+
 /// Where an OBS companion reads a camera: its own name for the companion (`companion/pulpit`), so
 /// the router lets only companions in and asks for the encrypted link's passphrase.
 pub const COMPANION_PATH: &str = "companion/";
@@ -50,6 +57,8 @@ pub struct RouterTarget {
     pub srt_port: u16,
     /// The passphrase of companions' SRT link, made afresh each time the router starts.
     pub srt_passphrase: String,
+    /// `RELAY_USER`'s password.
+    pub relay_secret: String,
 }
 
 // Never print the passphrase.
@@ -191,12 +200,22 @@ fn new_read_secret() -> String {
     format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple())
 }
 
+/// Who a relayed camera reader was let in as: a paired key (its hash, "" while keys are off) or a
+/// feed page or TV (feed id and the key it showed).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum RelayHolder {
+    Key(String),
+    Feed(String, String),
+}
+
 /// The cameras the operator added (name and the secret in its camera-page link) and the running
 /// router, if any. The app keeps both in step; a removed camera's link stops working at once.
 #[derive(Default)]
 pub struct CameraHub {
     cameras: RwLock<HashMap<String, String>>,
     router: RwLock<Option<RouterTarget>>,
+    /// Who was let in to read cameras, by address (`relay_offer`).
+    relayed: RwLock<HashMap<IpAddr, std::collections::HashSet<(RelayHolder, String)>>>,
     /// Paired OBS companions' sign-ins, by key hash (#209).
     readers: RwLock<HashMap<String, Reader>>,
     /// The router's cameras as it last answered (the app looks every few seconds while it runs).
@@ -387,6 +406,54 @@ impl CameraHub {
     /// Pass one WHIP request (POST the offer; PATCH ICE; DELETE to hang up) to the router, signed
     /// in as that camera, and hand back its answer. The session address in `Location` is rewritten to
     /// this route so the page's next request comes here too.
+    /// Pass the WHEP offer of a screen or desk Rhema has checked to the router, as `RELAY_USER` with
+    /// the reader's own address, so Production → Cameras still names it and `relay_gone` can cut it.
+    /// Only the signalling passes through Rhema; the video flows from the router to the reader.
+    pub(crate) async fn relay_offer(&self, name: &str, holder: RelayHolder, peer: IpAddr, body: Bytes) -> Response {
+        if !self.cameras.read().unwrap_or_else(PoisonError::into_inner).contains_key(name) {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        let Some(router) = self.router() else {
+            return (StatusCode::SERVICE_UNAVAILABLE, "The camera router is off").into_response();
+        };
+        if body.len() > MAX_BODY {
+            return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+        }
+        let Ok(client) = reqwest::Client::builder().connect_timeout(Duration::from_secs(3)).timeout(Duration::from_secs(15)).build() else {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        };
+        self.relayed.write().unwrap_or_else(PoisonError::into_inner).entry(peer).or_default().insert((holder, name.to_string()));
+        let sent = client.post(format!("{}/{name}/whep", router.base)).basic_auth(RELAY_USER, Some(&router.relay_secret)).header("x-forwarded-for", peer.to_string()).header("content-type", "application/sdp").body(body.to_vec()).send().await;
+        let Ok(resp) = sent else {
+            return (StatusCode::BAD_GATEWAY, "The camera router did not answer").into_response();
+        };
+        let status = resp.status();
+        // The router refusing Rhema's sign-in is Rhema's fault: never ask the reader to sign in.
+        if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
+            log::warn!("camera {name}: the router refused Rhema's relay");
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+        let answer = resp.bytes().await.unwrap_or_default();
+        (StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY), [(axum::http::header::CONTENT_TYPE, "application/sdp")], answer).into_response()
+    }
+
+    /// Whether someone allowed reads this camera from this address. ponytail: by address and camera,
+    /// so a revoked key keeps a picture it already has while another allowed key reads the same camera
+    /// from the same computer (it can start nothing new); per-session if one address serves separate people.
+    #[must_use]
+    pub fn relay_holds(&self, ip: IpAddr, name: &str) -> bool {
+        self.relayed.read().unwrap_or_else(PoisonError::into_inner).get(&ip).is_some_and(|held| held.iter().any(|(_, n)| n == name))
+    }
+
+    /// Forget readers no longer allowed to read that camera.
+    pub fn relay_prune(&self, allowed: impl Fn(&RelayHolder, &str) -> bool) {
+        let mut relayed = self.relayed.write().unwrap_or_else(PoisonError::into_inner);
+        relayed.retain(|_, held| {
+            held.retain(|(holder, name)| allowed(holder, name));
+            !held.is_empty()
+        });
+    }
+
     pub(crate) async fn forward(&self, method: Method, name: &str, session: Option<&str>, headers: &HeaderMap, body: Bytes) -> Response {
         let Some(token) = self.cameras.read().unwrap_or_else(PoisonError::into_inner).get(name).cloned() else {
             return StatusCode::FORBIDDEN.into_response();
@@ -478,7 +545,7 @@ mod tests {
     }
 
     fn target() -> RouterTarget {
-        RouterTarget { base: "http://127.0.0.1:8889".into(), srt_port: 8890, srt_passphrase: "Passphrase0123456789".into() }
+        RouterTarget { base: "http://127.0.0.1:8889".into(), srt_port: 8890, srt_passphrase: "Passphrase0123456789".into(), relay_secret: "Relaysecret0123456789".into() }
     }
 
     #[test]

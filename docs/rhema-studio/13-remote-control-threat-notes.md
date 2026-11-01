@@ -49,6 +49,10 @@ Settings → Diagnostics → Save logs runs every line through a redaction pass 
 - The page has a strict content security policy (no outside scripts or connections, no framing). Plain HTTP on the LAN: someone on the same network who can watch traffic can copy the token, as with the shared key.
 - The status line polls `/api/v1/status` with the device token, so a revoked or unpaired phone reads nothing; it shows the live reference text. View only and OBS companion keys get on air state only. `/api/v1/health` is the anonymous check: that Rhema is here and its https port.
 
+## Cameras
+- Knowing a camera's name lets nobody read it. Without a sign-in the router answers this computer only (its screens, its OBS). A TV's feed page and a joined desk ask through Rhema with their own key (`/api/v1/feed/{id}/camera/{name}/whep`, `/api/v1/cameras/{name}/whep`); an OBS companion has its own sign-in. A TV reads only the cameras in its current scene. Losing the key, a role that may read, or the camera from the scene disconnects that reader within about two seconds. Plain OBS on another computer no longer reads by address: pair it as a companion.
+- Only the signalling passes through Rhema, and RTP on the church network is not hidden from someone who can watch the network's traffic.
+
 ## Not done
 
 - TLS. (Roles per device: #78. Rate limiting and the phone remote: see above.) (Every remote command is now a "remote command" line in the service log, Archive → What went live → Save the log.)

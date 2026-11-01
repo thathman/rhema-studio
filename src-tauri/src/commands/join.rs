@@ -21,6 +21,8 @@ pub struct JoinRuntime {
     /// https with the host's certificate authority pinned (as Rhema Studio Companion does, #209).
     /// None: plain http (a host without its secure page, or an older one).
     secure: Mutex<Option<(String, SecureLink)>>,
+    /// The host this computer follows and its key, for asking it for a camera (`camera_offer`).
+    joined: Mutex<Option<(String, String)>>,
 }
 
 /// A host's https port and the fingerprint of its certificate authority (64 hex), kept at pairing.
@@ -46,6 +48,24 @@ impl JoinRuntime {
             Some((_, link)) => rhema_join::pin::pinned_host(address, link.port, &link.fingerprint),
             None => Host::plain(address),
         }
+    }
+
+    /// A camera at the router of the host this computer follows goes through that host, with this
+    /// desk's key: its router lets nobody read by name alone. None: not such a camera.
+    pub(super) async fn camera_offer(&self, url: &reqwest::Url, sdp: &str) -> Option<Result<String, String>> {
+        let (address, token) = self.joined.lock().ok()?.clone()?;
+        let same_host = url.host_str().is_some_and(|h| address.trim().split(':').next() == Some(h));
+        let name = url.path().strip_prefix('/')?.strip_suffix("/whep")?;
+        if !same_host || !rhema_api::valid_camera_name(name) {
+            return None;
+        }
+        Some(async {
+            let host = self.host(&address)?;
+            let r = host.client(Some(Duration::from_secs(10)))?.post(host.url(&format!("/api/v1/cameras/{name}/whep"))).header("X-Rhema-Key", token).header("Content-Type", "application/sdp").body(sdp.to_string()).send().await.map_err(|e| host.unreachable(&e))?;
+            let status = r.status();
+            let body = r.text().await.map_err(|e| e.to_string())?;
+            if status.is_success() && body.starts_with("v=0") { Ok(body) } else { Err(format!("The camera refused ({status})")) }
+        }.await)
     }
 }
 
@@ -193,6 +213,7 @@ pub async fn join_voice(state: State<'_, JoinRuntime>, address: String, token: S
 #[tauri::command]
 pub fn join_connect(app: AppHandle, state: State<'_, JoinRuntime>, address: String, token: String) -> Result<(), String> {
     let host = state.host(&address)?;
+    *state.joined.lock().map_err(|e| e.to_string())? = Some((address.clone(), token.clone()));
     let (tx, rx) = watch::channel(false);
     if let Some(old) = state.stop.lock().map_err(|e| e.to_string())?.replace(tx) {
         let _ = old.send(true);
@@ -206,6 +227,7 @@ pub fn join_connect(app: AppHandle, state: State<'_, JoinRuntime>, address: Stri
 /// Stop following the host.
 #[tauri::command]
 pub fn join_disconnect(state: State<'_, JoinRuntime>) -> Result<(), String> {
+    *state.joined.lock().map_err(|e| e.to_string())? = None;
     if let Some(stop) = state.stop.lock().map_err(|e| e.to_string())?.take() {
         let _ = stop.send(true);
     }

@@ -7,6 +7,19 @@ import { VideoMeter } from "@/lib/video-meter"
 import { cameraPathOf } from "@/lib/live-sources"
 import { NO_RTC, rtcReading, rtcSample, type RtcReading, type RtcSample } from "@/lib/rtc-stats"
 
+/**
+ * Where a feed page asks for a camera. The host's own router lets nobody read by name alone, so a
+ * camera there is asked for through the host with the page's key; any other address directly.
+ */
+export function feedCameraUrl(url: string, page: { hostname: string }, feedId: string, feedKey: string): string {
+  try {
+    const u = new URL(url)
+    const name = /^\/([^/]+)\/whep\/?$/.exec(u.pathname)?.[1]
+    if (name && u.hostname === page.hostname && u.port === "8889") return `/api/v1/feed/${encodeURIComponent(feedId)}/camera/${name}/whep?k=${encodeURIComponent(feedKey)}`
+  } catch { /* not an address: fetch says so */ }
+  return url
+}
+
 export type WhepSignal = (url: string, sdp: string) => Promise<string>
 
 /** One camera as this screen plays it, for Show health (#213): measured here, not guessed. */

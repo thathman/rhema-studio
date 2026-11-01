@@ -24,10 +24,13 @@ pub fn church_network_url(url: &str) -> Result<reqwest::Url, String> {
 
 /// Send a window's WebRTC offer to the camera's WHEP address; the answer comes back.
 #[tauri::command]
-pub async fn whep_offer(url: String, sdp: String) -> Result<String, String> {
+pub async fn whep_offer(join: tauri::State<'_, super::join::JoinRuntime>, url: String, sdp: String) -> Result<String, String> {
     let u = church_network_url(&url)?;
     if sdp.len() > 64 * 1024 || !sdp.starts_with("v=0") {
         return Err("not a WebRTC offer".into());
+    }
+    if let Some(answer) = join.camera_offer(&u, &sdp).await {
+        return answer;
     }
     let r = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(4))
