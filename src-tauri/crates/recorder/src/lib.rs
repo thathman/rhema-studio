@@ -763,6 +763,14 @@ mod tests {
     }
 
     #[test]
+    fn windows_cpu_check_warns_only_at_high_finite_usage() {
+        assert!(windows_busy_warning(0.0).is_none());
+        assert!(windows_busy_warning(84.9).is_none());
+        assert_eq!(windows_busy_warning(85.0).map(|warning| warning.code), Some(ProblemCode::ComputerBusy));
+        assert!(windows_busy_warning(f32::NAN).is_none());
+    }
+
+    #[test]
     fn iso_dates_are_right() {
         assert_eq!(iso_utc(SystemTime::UNIX_EPOCH), "1970-01-01T00:00:00Z");
         assert_eq!(iso_utc(SystemTime::UNIX_EPOCH + Duration::from_secs(951_782_400)), "2000-02-29T00:00:00Z");
@@ -875,6 +883,21 @@ mod tests {
             .unwrap();
 
             assert_eq!(r.archive_file_path(id, rehearsal).unwrap(), dir.join(FILE_NAME).canonicalize().unwrap());
+        }
+    }
+
+    #[test]
+    fn history_finds_a_recording_only_by_its_session_id() {
+        let t = tempfile::tempdir().unwrap();
+        let r = Recorder::new(t.path().to_path_buf());
+        let dir = t.path().join("rehearsal").join("20261030_061646-618daba0");
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(r.session_dir("20261030_061646-618daba0", true), None, "no manifest, not a recording");
+        std::fs::write(dir.join(manifest::MANIFEST), "{}").unwrap();
+        assert_eq!(r.session_dir("20261030_061646-618daba0", true), Some(dir));
+        assert_eq!(r.session_dir("20261030_061646-618daba0", false), None, "a rehearsal is not a service recording");
+        for bad in ["", ".", "..", "rehearsal/20261030_061646-618daba0", "a\\b", "/etc"] {
+            assert_eq!(r.session_dir(bad, true), None, "{bad}");
         }
     }
 
@@ -1044,6 +1067,18 @@ fn busy(load: f64, cores: usize) -> Option<RecorderProblem> {
         RecorderProblem::new(
             ProblemCode::ComputerBusy,
             format!("This computer is very busy (load {load:.0} on {cores} cores): the recording may stutter or miss slides. Close other heavy apps before the service."),
+        )
+    })
+}
+
+/// A Windows system-wide CPU sample is a percentage, not a Unix runnable-thread load average.
+/// Keep this warning advisory: a busy computer may still record, with risk of stutter or missed slides.
+#[must_use]
+pub fn windows_busy_warning(cpu_percent: f32) -> Option<RecorderProblem> {
+    (cpu_percent.is_finite() && cpu_percent >= 85.0).then(|| {
+        RecorderProblem::new(
+            ProblemCode::ComputerBusy,
+            format!("Windows CPU usage is very high ({cpu_percent:.0}%): the recording may stutter or miss slides. Close other heavy apps before the service."),
         )
     })
 }

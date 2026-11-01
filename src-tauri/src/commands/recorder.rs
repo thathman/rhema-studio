@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use rhema_api::KeyEntry;
 use rhema_broadcast::ndi::NdiRuntime;
-use rhema_recorder::{ProblemCode, Recorder, RecorderMarker, RecorderProblem, RecorderStartRequest, RecorderState, RecorderStatus, RecordingManifest};
+use rhema_recorder::{windows_busy_warning, ProblemCode, Recorder, RecorderMarker, RecorderProblem, RecorderStartRequest, RecorderState, RecorderStatus, RecordingManifest};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
@@ -74,8 +74,19 @@ pub struct RecorderPreflight {
     audio_devices: Vec<String>,
 }
 
+/// Windows does not provide the Unix load average used by the recorder crate. Sample system CPU
+/// usage over sysinfo's required interval and keep the same warning-only behavior for recording.
+#[cfg(windows)]
+async fn windows_busy_warning_from_system() -> Option<RecorderProblem> {
+    let mut system = sysinfo::System::new();
+    system.refresh_cpu_usage();
+    tokio::time::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL.max(Duration::from_millis(250))).await;
+    system.refresh_cpu_usage();
+    windows_busy_warning(system.global_cpu_usage())
+}
+
 #[tauri::command]
-pub fn recorder_preflight(app: AppHandle, host: State<'_, RecorderHost>, ndi: State<'_, Mutex<NdiRuntime>>, request: RecorderStartRequest) -> Res<RecorderPreflight> {
+pub async fn recorder_preflight(app: AppHandle, host: State<'_, RecorderHost>, ndi: State<'_, Mutex<NdiRuntime>>, request: RecorderStartRequest) -> Res<RecorderPreflight> {
     let rec = recorder(&host)?;
     let live_state = super::remote::current_live_state(&app);
     let request = host_scoped_request(request, live_state.as_deref());
@@ -84,7 +95,12 @@ pub fn recorder_preflight(app: AppHandle, host: State<'_, RecorderHost>, ndi: St
         problems.push(RecorderProblem::new(ProblemCode::OutputWindowMissing, "Open this screen first: Rhema records what its window shows."));
     }
     let (width, height) = frame_size(&ndi, &request);
-    Ok(RecorderPreflight { ok: problems.is_empty(), problems, warnings: rec.warnings(), width, height, disk_free_bytes: rhema_recorder::disk_free(rec.folder()), audio_devices: rhema_recorder::audio::devices() })
+    let mut warnings = rec.warnings();
+    #[cfg(windows)]
+    if let Some(warning) = windows_busy_warning_from_system().await {
+        warnings.push(warning);
+    }
+    Ok(RecorderPreflight { ok: problems.is_empty(), problems, warnings, width, height, disk_free_bytes: rhema_recorder::disk_free(rec.folder()), audio_devices: rhema_recorder::audio::devices() })
 }
 
 #[tauri::command]
@@ -302,4 +318,5 @@ mod tests {
         assert!(start_for_current_congregation(absent_request, None, |_| Ok(())).is_err());
         assert!(start_for_current_congregation(request("sanctuary", "congregation"), Some(r#"{"outputs":[]}"#), |_| Ok(())).is_err());
     }
+
 }

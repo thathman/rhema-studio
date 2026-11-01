@@ -6,6 +6,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useJoin } from "@/stores/join-store"
 import { useShellStore } from "@/studio/shell-store"
 import {
+  applySceneApprovalRequest,
   decideApprovalRequest,
   approvalErrorText,
   confirmPlanApprovalRequest,
@@ -65,9 +66,9 @@ function stateLabel(request: ApprovalRequest): string {
   const state = request.state
   switch (state) {
     case "submitted": return "Pending review"
-    case "approved": return request.kind === "plan_approve" ? "Approved · awaiting Prepare" : "Approved · not applied"
+    case "approved": return request.kind === "plan_approve" ? "Approved · awaiting Prepare" : request.kind.startsWith("scene_") ? "Approved · ready to apply" : "Approved · not applied"
     case "requested_changes": return "Changes requested"
-    case "applied": return request.kind === "plan_approve" ? "Revision confirmed by host" : "Marked applied by host"
+    case "applied": return request.kind === "plan_approve" ? "Revision confirmed by host" : request.kind.startsWith("scene_") ? "Saved to scene library · not taken" : "Marked applied by host"
     default: return state[0].toUpperCase() + state.slice(1)
   }
 }
@@ -79,7 +80,7 @@ function stateVariant(state: ApprovalRequest["state"]): "amber" | "green" | "ros
   return "neutral"
 }
 
-/** Host-backed approval inbox. Approval records authorization; it never saves or takes a scene. */
+/** Host-backed approval inbox. Scene changes need a separate explicit host-checked Apply action. */
 export function ApprovalRequestsPanel() {
   const joinStatus = useJoin((state) => state.status)
   const scenes = useBroadcastStore((state) => state.scenes)
@@ -130,6 +131,18 @@ export function ApprovalRequestsPanel() {
     }
   }
 
+  const applyScene = async (request: ApprovalRequest) => {
+    setBusy(request.id)
+    setRowErrors((current) => ({ ...current, [request.id]: "" }))
+    try {
+      await applySceneApprovalRequest(request.id)
+    } catch (cause) {
+      setRowErrors((current) => ({ ...current, [request.id]: approvalErrorText(cause) }))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const toggleHistory = async (request: ApprovalRequest, open: boolean) => {
     if (!open || histories[request.id]) return
     setHistoryErrors((current) => ({ ...current, [request.id]: "" }))
@@ -146,7 +159,7 @@ export function ApprovalRequestsPanel() {
         <ShieldCheckIcon aria-hidden className="size-4 text-muted-foreground" />
         <div className="min-w-0 flex-1">
           <h2 id="host-approval-requests-title" className="font-semibold">Approval Requests</h2>
-          <p className="text-xs text-muted-foreground">Durable requests recorded by this host. Approval records authorization; it does not save a scene, approve a service revision, or change Preview or Program. Those actions require their separate host-checked workflows.</p>
+          <p className="text-xs text-muted-foreground">Durable requests recorded by this host. An approved scene needs an explicit host-checked Apply to save it in the scene library; this never Takes it to Preview or Program. Service revisions use Prepare.</p>
         </div>
         <Badge variant={pending.length ? "amber" : "neutral"}>{pending.length} pending</Badge>
         <Button size="sm" variant="outline" aria-label="Refresh approval requests" disabled={!isHost || loading} onClick={reload}><RefreshCwIcon /> Refresh</Button>
@@ -167,7 +180,8 @@ export function ApprovalRequestsPanel() {
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">From {request.requester.name} · {dateWords(request.createdAt)} · {request.baseRevision === null ? "No base revision" : `Based on host revision ${request.baseRevision}`} · Expires {dateWords(request.expiresAt)}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{requestImpact(request, outputs)}</p>
-                    {request.state === "approved" && request.kind.startsWith("scene_") && <p className="mt-1 text-xs text-muted-foreground">Scene apply workflow is not available yet; approval does not save this scene or change an output.</p>}
+                    {request.state === "approved" && request.kind.startsWith("scene_") && <p className="mt-1 text-xs text-muted-foreground">Apply checks the scene revision and current output assignment on this host. Saving changes the scene library only; it does not Take the scene live.</p>}
+                    {request.state === "approved" && request.kind === "scene_delete" && outputs.some((output) => output.sceneId === request.targetId) && <p role="status" className="mt-1 text-xs text-amber-800">Move every output away from this scene before applying its deletion.</p>}
                     {request.reason && <p className="mt-1 text-xs text-muted-foreground">Reason: {request.reason}</p>}
                     {request.decisionNote && <p className="mt-1 text-xs text-muted-foreground">Decision note: {request.decisionNote}</p>}
                     {rowErrors[request.id] && <p role="alert" className="mt-2 text-xs text-destructive">{rowErrors[request.id]}</p>}
@@ -194,6 +208,17 @@ export function ApprovalRequestsPanel() {
                   </div>}
                   {isHost && request.kind === "plan_approve" && request.state === "approved" && request.baseRevision !== null && <div className="flex flex-wrap items-center gap-2">
                     <Button size="sm" variant="outline" disabled={busy === request.id} onClick={() => void confirmPlan(request)}>Confirm approved revision</Button>
+                  </div>}
+                  {isHost && request.kind.startsWith("scene_") && request.state === "approved" && <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      aria-label={request.kind === "scene_delete" ? "Apply approved scene deletion" : "Apply approved scene change"}
+                      disabled={busy === request.id || (request.kind === "scene_delete" && outputs.some((output) => output.sceneId === request.targetId))}
+                      onClick={() => void applyScene(request)}
+                    >
+                      {request.kind === "scene_delete" ? "Apply approved deletion" : "Apply approved scene change"}
+                    </Button>
                   </div>}
                   {isHost && request.kind === "plan_approve" && request.state !== "expired" && request.state !== "withdrawn" && request.state !== "superseded" && <div className="flex flex-wrap items-center gap-2">
                     <Button size="sm" variant="ghost" onClick={() => useShellStore.getState().openPrepareProgram(request.targetId)}>Open in Prepare</Button>

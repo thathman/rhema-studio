@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
+import { mergeDeskScene } from "@/lib/desk-scenes"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 import { create } from "zustand"
 
 export type ApprovalRequestState = "submitted" | "approved" | "declined" | "requested_changes" | "applied" | "expired" | "withdrawn" | "superseded"
@@ -126,6 +128,57 @@ export async function confirmPlanApprovalRequest(id: string): Promise<ApprovalRe
     // A stale apply changes the durable host state to superseded before it returns a refusal.
     // Refresh the list so the UI reflects that host truth instead of leaving an approved badge.
     await reloadApprovalRequests().catch(() => {})
+    throw error
+  }
+}
+
+/** Apply an approved remote scene request only after the host rechecks its saved revision and outputs. */
+export async function applySceneApprovalRequest(id: string): Promise<ApprovalRequest> {
+  const current = useApprovalRequestsStore.getState().requests.find((item) => item.id === id)
+  if (!current || (current.kind !== "scene_save" && current.kind !== "scene_delete")) {
+    throw new Error("Only a host-approved scene request can be applied here.")
+  }
+  if (current.state !== "approved") throw new Error("The scene request must be approved before it can be applied.")
+
+  let hostApplied = false
+  try {
+    const request = await invoke<ApprovalRequest>("approvals_apply", { id })
+    hostApplied = request?.id === id && request.state === "applied"
+    if (!hostApplied || request.kind !== current.kind || request.targetId !== current.targetId) {
+      throw new Error("The host did not confirm this exact scene request as applied.")
+    }
+
+    const broadcast = useBroadcastStore.getState()
+    if (request.kind === "scene_save") {
+      const payload = request.payload && typeof request.payload === "object" && !Array.isArray(request.payload)
+        ? request.payload as Record<string, unknown>
+        : null
+      const existing = broadcast.scenes.find((scene) => scene.id === request.targetId)
+      const scene = mergeDeskScene(payload?.scene, existing)
+      if (!scene || scene.id !== request.targetId) {
+        throw new Error("The host approved the request, but its scene payload could not be restored safely. Ask the desk to send it again.")
+      }
+      // Saving a scene changes the library only; outputs keep their current snapshots until an explicit Take.
+      broadcast.saveScene(scene)
+    } else {
+      if (broadcast.outputs.some((output) => output.sceneId === request.targetId)) {
+        throw new Error("The host marked this request applied, but the scene became active before it could be removed. Move the outputs away and send a fresh request.")
+      }
+      broadcast.deleteScene(request.targetId)
+    }
+
+    useApprovalRequestsStore.setState((state) => ({
+      requests: state.requests.map((item) => item.id === id ? request : item),
+      histories: Object.fromEntries(Object.entries(state.histories).filter(([requestId]) => requestId !== id)),
+      error: null,
+    }))
+    return request
+  } catch (error) {
+    // The host marks stale requests superseded before refusing; refresh so Permissions shows that state.
+    await reloadApprovalRequests().catch(() => {})
+    if (hostApplied) {
+      throw new Error(`The host marked this request applied, but the scene library could not be updated locally: ${approvalErrorText(error)}`)
+    }
     throw error
   }
 }

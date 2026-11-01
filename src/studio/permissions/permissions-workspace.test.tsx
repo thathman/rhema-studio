@@ -164,7 +164,7 @@ describe("Permissions workspace", () => {
 
     expect(el.textContent).toContain("Approval Requests")
     expect(el.textContent).toContain("Based on host revision 7")
-    expect(el.textContent).toContain("Approval records authorization; it does not save a scene")
+    expect(el.textContent).toContain("An approved scene needs an explicit host-checked Apply")
     expect(el.textContent).toContain("Remote scene")
     expect(el.textContent).toContain("Proposed composition: 0 visual layers")
     await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Approve"))!.click())
@@ -172,6 +172,7 @@ describe("Permissions workspace", () => {
     expect(tauri.invoke).toHaveBeenCalledWith("approvals_decide", { id: "host-request-uuid", decision: "approve" })
     expect(tauri.invoke.mock.calls.some(([command]) => command === "approvals_apply")).toBe(false)
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "host-request-uuid", state: "approved" }])
+    expect(el.textContent).toContain("Apply approved scene change")
     expect(useBroadcastStore.getState().scenes).toBe(scenesBefore)
     expect(useBroadcastStore.getState().outputs).toBe(outputsBefore)
     expect(useSceneApprovalsStore.getState().requests).toEqual([])
@@ -240,24 +241,146 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
-  it("does not expose Apply for an approved scene request", async () => {
+  it("applies an approved scene through the host check and saves it without changing outputs", async () => {
     const request = {
       id: "scene-request-uuid", kind: "scene_save", targetId: "scene-1", baseRevision: 7,
       requester: { id: "screens-key", name: "Screens desk" },
-      payload: { scene: { id: "scene-1", name: "Welcome" } },
+      payload: { scene: { id: "scene-1", name: "Welcome", background: "#000000", layers: [] } },
       reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
+    }
+    tauri.invoke.mockImplementation(async (command: string) => {
+      if (command === "approvals_list") return [request]
+      if (command === "approvals_apply") return { ...request, state: "applied" }
+      return null
+    })
+    resetApprovalRequests()
+    await reloadApprovalRequests()
+    useBroadcastStore.setState({ outputs: [{ id: "sanctuary", name: "Sanctuary", type: "display", themeId: "classic-dark", monitorIndex: 0 }] as never })
+    const outputsBefore = useBroadcastStore.getState().outputs
+    const el = await mount()
+
+    expect(el.textContent).toContain("Apply checks the scene revision and current output assignment on this host")
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Apply approved scene change"]')!.click())
+
+    expect(tauri.invoke).toHaveBeenCalledWith("approvals_apply", { id: "scene-request-uuid" })
+    expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "scene-request-uuid", state: "applied" }])
+    expect(useBroadcastStore.getState().scenes).toEqual(expect.arrayContaining([expect.objectContaining({ id: "scene-1", name: "Welcome" })]))
+    expect(useBroadcastStore.getState().outputs).toBe(outputsBefore)
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    await act(async () => root.unmount())
+  })
+
+  it("refreshes a stale scene request from the host and leaves the library unchanged", async () => {
+    const approved = {
+      id: "scene-request-uuid", kind: "scene_save", targetId: "scene-1", baseRevision: 7,
+      requester: { id: "screens-key", name: "Screens desk" },
+      payload: { scene: { id: "scene-1", name: "Welcome", background: "#000000", layers: [] } },
+      reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
+    }
+    let hostRequest = approved
+    tauri.invoke.mockImplementation(async (command: string) => {
+      if (command === "approvals_list") return [hostRequest]
+      if (command === "approvals_apply") {
+        hostRequest = { ...approved, state: "superseded" }
+        throw new Error("The scene changed after this request was approved.")
+      }
+      return null
+    })
+    resetApprovalRequests()
+    await reloadApprovalRequests()
+    const sceneStateBefore = useBroadcastStore.getState().scenes
+    const el = await mount()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Apply approved scene change"]')!.click())
+
+    expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "scene-request-uuid", state: "superseded" }])
+    expect(el.textContent).toContain("Superseded")
+    expect(el.textContent).toContain("The scene changed after this request was approved.")
+    expect(useBroadcastStore.getState().scenes).toBe(sceneStateBefore)
+    await act(async () => root.unmount())
+  })
+
+  it("shows a host rejection and never applies the rejected scene", async () => {
+    const request = {
+      id: "scene-request-uuid", kind: "scene_save", targetId: "scene-1", baseRevision: 7,
+      requester: { id: "screens-key", name: "Screens desk" },
+      payload: { scene: { id: "scene-1", name: "Welcome", background: "#000000", layers: [] } },
+      reason: null, state: "submitted", createdAt: "2026-10-30T09:00:00Z",
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: null, decidedAt: null, decisionNote: null,
+    }
+    tauri.invoke.mockImplementation(async (command: string, args?: unknown) => {
+      if (command === "approvals_list") return [request]
+      if (command === "approvals_decide") return { ...request, state: (args as { decision: string }).decision === "decline" ? "declined" : "approved" }
+      return null
+    })
+    resetApprovalRequests()
+    await reloadApprovalRequests()
+    const sceneStateBefore = useBroadcastStore.getState().scenes
+    const el = await mount()
+
+    await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Decline"))!.click())
+
+    expect(tauri.invoke).toHaveBeenCalledWith("approvals_decide", { id: "scene-request-uuid", decision: "decline" })
+    expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "scene-request-uuid", state: "declined" }])
+    expect(el.textContent).toContain("Declined")
+    expect(useBroadcastStore.getState().scenes).toBe(sceneStateBefore)
+    expect(tauri.invoke.mock.calls.some(([command]) => command === "approvals_apply")).toBe(false)
+    await act(async () => root.unmount())
+  })
+
+  it("keeps a scene request approved and reports a host failure when scene state is unavailable", async () => {
+    const request = {
+      id: "scene-request-uuid", kind: "scene_save", targetId: "scene-1", baseRevision: 7,
+      requester: { id: "screens-key", name: "Screens desk" },
+      payload: { scene: { id: "scene-1", name: "Welcome", background: "#000000", layers: [] } },
+      reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
+    }
+    tauri.invoke.mockImplementation(async (command: string) => {
+      if (command === "approvals_list") return [request]
+      if (command === "approvals_apply") throw new Error("The host has not shared its scenes yet; try again in a moment.")
+      return null
+    })
+    resetApprovalRequests()
+    await reloadApprovalRequests()
+    const sceneStateBefore = useBroadcastStore.getState().scenes
+    const el = await mount()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Apply approved scene change"]')!.click())
+
+    expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "scene-request-uuid", state: "approved" }])
+    expect(el.textContent).toContain("The host has not shared its scenes yet; try again in a moment.")
+    expect(useBroadcastStore.getState().scenes).toBe(sceneStateBefore)
+    await act(async () => root.unmount())
+  })
+
+  it("blocks deletion while an output still shows the scene", async () => {
+    const request = {
+      id: "scene-delete-request", kind: "scene_delete", targetId: "scene-1", baseRevision: 7,
+      requester: { id: "screens-key", name: "Screens desk" },
+      payload: { id: "scene-1" }, reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
       expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     }
     tauri.invoke.mockImplementation(async (command: string) => command === "approvals_list" ? [request] : null)
     resetApprovalRequests()
     await reloadApprovalRequests()
+    useBroadcastStore.setState({
+      scenes: [{ id: "scene-1", name: "Welcome", background: "#000000", createdAt: 1, updatedAt: 1, layers: [] }] as never,
+      outputs: [{ id: "sanctuary", name: "Sanctuary", type: "display", sceneId: "scene-1", themeId: "classic-dark", monitorIndex: 0 }] as never,
+    })
     const el = await mount()
 
-    expect(el.textContent).toContain("Scene apply workflow is not available yet")
-    expect([...el.querySelectorAll("button")].some((button) => button.textContent?.includes("Confirm approved revision"))).toBe(false)
-    expect([...el.querySelectorAll("button")].some((button) => button.textContent?.includes("Open in Prepare"))).toBe(false)
+    const apply = el.querySelector<HTMLButtonElement>('[aria-label="Apply approved scene deletion"]')!
+    expect(apply.disabled).toBe(true)
+    expect(el.textContent).toContain("Move every output away from this scene")
     expect(tauri.invoke.mock.calls.some(([command]) => command === "approvals_apply")).toBe(false)
+    expect(useBroadcastStore.getState().scenes).toEqual(expect.arrayContaining([expect.objectContaining({ id: "scene-1" })]))
     await act(async () => root.unmount())
   })
 
