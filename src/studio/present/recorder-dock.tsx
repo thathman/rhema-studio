@@ -5,6 +5,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
+import { useRecorderAlertStore } from "@/stores/recorder-alert-store"
 import { Button } from "@/components/ui/button"
 import { TriangleAlertIcon } from "lucide-react"
 
@@ -155,8 +156,8 @@ export function RecorderDock() {
   const [preflightKey, setPreflightKey] = useState<string | null>(null)
   const [status, setStatus] = useState<RecorderStatus | null>(null)
   const [statusEventsConnected, setStatusEventsConnected] = useState(false)
-  const [statusError, setStatusError] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
+  const [statusError, setStatusError] = useState<string | null>(() => useRecorderAlertStore.getState().alerts.status)
+  const [actionError, setActionError] = useState<string | null>(() => useRecorderAlertStore.getState().alerts.action)
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [confirmStop, setConfirmStop] = useState(false)
   const [markerLabel, setMarkerLabel] = useState("")
@@ -213,6 +214,19 @@ export function RecorderDock() {
     profile === "standard_720p30" ? "Standard · 5 Mbps" : "HD · 8 Mbps"
   const profileFallbackSize =
     profile === "standard_720p30" ? "1280×720" : "1920×1080"
+
+  // Keep transient dock errors visible in the persistent shell while this route is unmounted.
+  useEffect(() => {
+    const alerts = useRecorderAlertStore.getState()
+    if (statusError) alerts.report("status", statusError)
+    else alerts.clear("status")
+  }, [statusError])
+
+  useEffect(() => {
+    const alerts = useRecorderAlertStore.getState()
+    if (actionError) alerts.report("action", actionError)
+    else alerts.clear("action")
+  }, [actionError])
 
   useEffect(() => {
     let cancelled = false

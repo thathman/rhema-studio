@@ -5,11 +5,13 @@ const native = vi.hoisted(() => ({
   status: null as unknown,
   handler: null as ((event: { payload: unknown }) => void) | null,
   invoke: vi.fn(),
+  listenFails: false,
 }))
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }))
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(async (_event: string, handler: (event: { payload: unknown }) => void) => {
+    if (native.listenFails) throw new Error("event stream unavailable")
     native.handler = handler
     return () => { native.handler = null }
   }),
@@ -17,6 +19,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
+import { useRecorderAlertStore } from "@/stores/recorder-alert-store"
 import { useShellStore } from "@/studio/shell-store"
 import { RecorderStatusIndicator } from "./recorder-status-indicator"
 
@@ -40,8 +43,10 @@ async function render(workspace: "home" | "present" = "home") {
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   native.handler = null
+  native.listenFails = false
   native.status = recording
   native.invoke.mockReset().mockImplementation(async (command: string) => command === "recorder_status" ? native.status : null)
+  useRecorderAlertStore.getState().reset()
 })
 
 afterEach(async () => {
@@ -69,5 +74,27 @@ describe("RecorderStatusIndicator", () => {
     const el = await render("present")
     expect(el.querySelector('[aria-label="Recorder status"]')).toBeNull()
     expect(native.invoke).toHaveBeenCalledWith("recorder_status")
+  })
+
+  it("keeps a recorder action alert visible until it is dismissed", async () => {
+    useRecorderAlertStore.getState().report("action", "Recording did not start: encoder unavailable")
+    const el = await render("home")
+
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("Recording did not start: encoder unavailable")
+    await act(async () => [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.getAttribute("aria-label") === "Dismiss recorder alert")?.click())
+    expect(useRecorderAlertStore.getState().alerts.action).toBeNull()
+    expect(el.querySelector('[role="alert"]')).toBeNull()
+    expect(el.textContent).toContain("Recording is active")
+  })
+
+  it("polls for a new recording when recorder status events cannot connect", async () => {
+    native.listenFails = true
+    native.status = { state: "idle", sessionActive: false, outputId: null, problem: null }
+    const el = await render("home")
+    expect(el.querySelector('[aria-label="Recorder status"]')).toBeNull()
+
+    native.status = recording
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 1100)))
+    expect(el.querySelector('[role="status"]')?.textContent).toContain("Recording is active · sanctuary")
   })
 })
