@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { designStore, type DesignUse } from "@/design-engine/design-store"
 import { pinnedSceneForVersion } from "@/design-engine/design-document-utils"
+import { hydrateDesignSceneMedia } from "@/lib/design-media"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import type { Scene } from "@/types/scene"
 
@@ -81,6 +82,8 @@ export function DesignUsagePanel({ designId }: { designId: string }) {
         const reason = converted.issues.map((issue) => issue.message).join("; ")
         throw new Error(reason || "The design cannot be saved as a scene yet.")
       }
+      const hydrated = await hydrateDesignSceneMedia(converted.scene)
+      if (!hydrated.scene) throw new Error(hydrated.issue ?? "A Library picture is unavailable on this computer.")
       const broadcast = useBroadcastStore.getState()
       const currentScene = broadcast.scenes.find((candidate) => candidate.id === scene.id)
       if (!currentScene) throw new Error("The saved scene no longer exists. Reopen Design and review the current scene list.")
@@ -92,7 +95,7 @@ export function DesignUsagePanel({ designId }: { designId: string }) {
         throw new Error("The saved scene changed elsewhere. Reopen Design and review the current version before updating it.")
       }
       broadcast.saveScene({
-        ...converted.scene,
+        ...hydrated.scene,
         id: scene.id,
         name: scene.name,
         createdAt: scene.createdAt,

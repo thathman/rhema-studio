@@ -11,6 +11,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
+import { cleanTakeSteps, parseTakeStep, sceneStep } from "@/lib/item-intent"
+import type { DesignVersion } from "@/design-engine/design-store"
+import type { Scene } from "@/types/scene"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 import type { OutlineHeader } from "@/lib/run-of-show"
 import { useQueueStore } from "@/stores"
 import { useServiceStore } from "@/stores/service-store"
@@ -21,7 +25,7 @@ import { MediaLibrary } from "@/studio/prepare/media-library"
 import { SongFiles } from "@/studio/library/library-blocks"
 import { SlideLibrary } from "@/studio/library/slide-library"
 import { BibleLibrary } from "@/studio/library/bible-library"
-import { DesignDocumentsWorkspace } from "@/studio/design/design-documents-workspace"
+import { DesignDocumentsWorkspace, DesignVersionPicker } from "@/studio/design/design-documents-workspace"
 import type { LibrarySection, PrepareLibraryReturnContext } from "@/studio/shell-store"
 import { useShellStore } from "@/studio/shell-store"
 import {
@@ -120,6 +124,7 @@ export function LibraryWorkspace() {
   // Bumped by "New song" in the page head: the song library opens its editor.
   const [newSong, setNewSong] = useState(0)
   const [newSlide, setNewSlide] = useState(0)
+  const [designInvocation, setDesignInvocation] = useState<LibraryUseInvocation | null>(null)
   const [targetRequest, setTargetRequest] = useState<TargetRequest | null>(null)
   const [targetSelection, setTargetSelection] = useState("")
   const [targetSnapshot, setTargetSnapshot] = useState<PrepareLibraryReturnContext | null>(null)
@@ -268,6 +273,39 @@ export function LibraryWorkspace() {
     addItemAtTarget(item, invocation, target, context, true)
   }
 
+  const useDesignVersion = (scene: Scene, version: DesignVersion) => {
+    const context = designInvocation?.prepareReturn
+    if (!designInvocation || !context?.eventId || !context.momentId ||
+      !isCurrentLibraryUseInvocation(designInvocation) ||
+      !isCurrentPrepareLibraryReturn(context)) {
+      toast.error("The Prepare service or moment changed", {
+        description: "Nothing was attached. Return to the intended moment in Prepare and open Library again.",
+      })
+      return
+    }
+
+    useBroadcastStore.getState().saveScene(scene)
+    useQueueStore.getState().updateItem(context.momentId, (item) => ({
+      ...item,
+      scene_id: scene.id,
+      ...(item.kind === "slide" ? {
+        slide: { ...item.slide, designRef: { id: version.designId, version: version.version } },
+      } : {}),
+      // Follow the same plan behavior as Prepare's scene selector: replace an
+      // already-armed shared scene, preserving output-specific Take overrides.
+      on_take: item.on_take == null ? item.on_take : cleanTakeSteps(item.on_take).map((step) => {
+        const parsed = parseTakeStep(step)
+        return parsed?.kind === "scene" && parsed.outputId === null ? sceneStep(scene.id) : step
+      }),
+    }))
+    useShellStore.getState().setPrepareLibraryReturn(context)
+    useShellStore.getState().setWorkspace("prepare")
+    setDesignInvocation(null)
+    toast.success("Saved version added to the service plan", {
+      description: `“${version.title} v${version.version}” is pinned to ${context.momentTitle}. Program and screens remain unchanged until an explicit Take.`,
+    })
+  }
+
   const selectDestination = (value: string) => {
     setTargetSelection(value)
     setTargetError(null)
@@ -397,7 +435,28 @@ export function LibraryWorkspace() {
       <div role="tabpanel" aria-label={SECTIONS.find(([id]) => id === section)?.[1]} className="mx-[29px] mb-6 flex min-h-0 flex-1 flex-col max-[1200px]:mx-5">
         {section === "bible" && <BibleLibrary onUseItem={useItem} />}
         {section === "songs" && <SongLibrary layout="cards" newRequest={newSong} onUseItem={useItem} />}
-        {section === "designs" && <div className="min-h-0 flex-1 overflow-y-auto"><DesignDocumentsWorkspace /></div>}
+        {section === "designs" && <div className="min-h-0 flex-1 overflow-y-auto">
+          {designInvocation ? (
+            <section className="rounded-lg border border-border bg-card p-4" aria-label="Use a design in the current moment">
+              <Button size="sm" variant="outline" className="mb-3" onClick={() => setDesignInvocation(null)}>Back to visual designs</Button>
+              <h2 className="text-sm font-semibold">{designInvocation.prepareReturn?.eventTitle} · {designInvocation.prepareReturn?.momentTitle}</h2>
+              <DesignVersionPicker onUse={useDesignVersion} useLabel="Use this version in the current moment" />
+            </section>
+          ) : (
+            <>
+              {prepareReturnIsCurrent && prepareReturn.eventId && prepareReturn.momentId && (
+                <section className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-4" aria-label="Prepare moment destination">
+                  <div>
+                    <h2 className="text-sm font-semibold">{prepareReturn.eventTitle} · {prepareReturn.momentTitle}</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">Attach a pinned design version to this exact Prepare moment. No screen changes.</p>
+                  </div>
+                  <Button variant="outline" onClick={() => setDesignInvocation(captureLibraryUseInvocation())}>Choose a saved version for this moment</Button>
+                </section>
+              )}
+              <DesignDocumentsWorkspace />
+            </>
+          )}
+        </div>}
         {section !== "songs" && section !== "bible" && section !== "designs" && (
           <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-card p-4">
             {section === "hymns" && <HymnBook onUseItem={useItem} />}

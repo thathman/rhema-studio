@@ -286,8 +286,9 @@ function summaryOf(document: DesignDocument): DesignSummary {
 }
 
 /** Pick or customize a private copy of an immutable design version for the current Prepare moment. */
-export function DesignVersionPicker({ onUse, onDirtyChange }: {
+export function DesignVersionPicker({ onUse, onDirtyChange, useLabel }: {
   onUse: (scene: Scene, version: DesignVersion) => void
+  useLabel?: string
   onDirtyChange?: (dirty: boolean) => void
 }) {
   const operatorName = useSettingsStore((state) => state.operatorName)
@@ -397,7 +398,7 @@ export function DesignVersionPicker({ onUse, onDirtyChange }: {
                 if (editingDirty) return
                 onDirtyChange?.(false)
                 onUse(createdCompatibility.scene!, createdVersion)
-              }} disabled={editingDirty || busy}>Use version {createdVersion.version} in Prepare</Button>
+              }} disabled={editingDirty || busy}>{useLabel ?? `Use version ${createdVersion.version} in Prepare`}</Button>
             ) : (
               <div role="status" className="max-w-xl rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
                 <p className="font-semibold">Version {createdVersion.version} is saved, but cannot be used in Prepare yet.</p>
@@ -476,7 +477,7 @@ export function DesignVersionPicker({ onUse, onDirtyChange }: {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="xs" variant="outline" onClick={() => void customizeCopy(version)} disabled={busy}>Customize a copy</Button>
-                <Button size="xs" onClick={() => void attachVersion(version)} disabled={busy}>Use in Prepare</Button>
+                <Button size="xs" onClick={() => void attachVersion(version)} disabled={busy}>{useLabel ?? "Use in Prepare"}</Button>
               </div>
             </div>
           ))}

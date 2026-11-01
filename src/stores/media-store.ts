@@ -22,7 +22,7 @@ interface MediaState {
   remove: (id: string) => Promise<void>
   /** The picture as a data URL (read from the media folder, cached). Null when missing. */
   dataUrl: (id: string) => Promise<string | null>
-  /** Streamed URL for a video (asset protocol); never reads the file into memory. Null when missing. */
+  /** Local asset-protocol URL for a picture or video; never reads the file into memory. Null when missing. */
   fileUrl: (id: string) => Promise<string | null>
 }
 

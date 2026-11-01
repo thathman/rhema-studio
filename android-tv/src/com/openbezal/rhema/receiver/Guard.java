@@ -113,6 +113,34 @@ final class Guard {
         return takenOf != null && takenOf.equals(shown) && bytes > 0 && bytes <= STILL_MAX_BYTES;
     }
 
+    /**
+     * How old the retained picture is, only when its saved URL still belongs to the shown feed.
+     * Wall-clock time is persisted so the age survives process and device restarts. A missing,
+     * invalid, future (clock moved backwards), or different-feed timestamp is reported honestly.
+     */
+    static String stillAgeLabel(String takenOf, String shown, long capturedAtMillis, long nowMillis) {
+        if (takenOf == null || shown == null || !takenOf.equals(shown)
+                || capturedAtMillis <= 0 || nowMillis <= 0 || capturedAtMillis > nowMillis) {
+            return "age unknown";
+        }
+
+        long elapsedMillis = nowMillis - capturedAtMillis;
+        if (elapsedMillis < 60_000L) return "less than a minute ago";
+
+        long minutes = elapsedMillis / 60_000L;
+        if (minutes < 60L) return quantity(minutes, "minute");
+
+        long hours = elapsedMillis / 3_600_000L;
+        if (hours < 24L) return quantity(hours, "hour");
+
+        long days = elapsedMillis / 86_400_000L;
+        return quantity(days, "day");
+    }
+
+    private static String quantity(long value, String unit) {
+        return value + " " + unit + (value == 1 ? "" : "s") + " ago";
+    }
+
     private static boolean digits(String s, int max) {
         if (s.isEmpty() || s.length() > max) return false;
         for (int i = 0; i < s.length(); i++) {

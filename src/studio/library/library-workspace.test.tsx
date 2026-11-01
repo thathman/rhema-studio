@@ -22,7 +22,19 @@ vi.mock("@/studio/prepare/hymn-book", () => ({ HymnBook: () => null }))
 vi.mock("@/studio/prepare/media-library", () => ({ MediaLibrary: () => null }))
 vi.mock("@/studio/library/library-blocks", () => ({ SongFiles: () => null }))
 vi.mock("@/studio/library/slide-library", () => ({ SlideLibrary: () => null }))
+vi.mock("@chenglou/pretext", () => ({ clearCache: vi.fn() }))
+vi.mock("@chenglou/pretext/rich-inline", () => ({
+  prepareRichInline: vi.fn(() => ({})),
+  materializeRichInlineLineRange: vi.fn(() => []),
+  measureRichInlineStats: vi.fn(() => ({ width: 0, height: 0, lines: 0 })),
+  walkRichInlineLineRanges: vi.fn(),
+}))
 
+import { toast } from "sonner"
+import { designStore, type DesignVersion } from "@/design-engine/design-store"
+import { createBlankRhemaDesign } from "@/design-engine/design-document-utils"
+import { prepareLibraryReturnForMoment } from "@/studio/prepare/library-return"
+import { sceneStep } from "@/lib/item-intent"
 import { LibraryWorkspace } from "./library-workspace"
 import { useShellStore } from "@/studio/shell-store"
 import { useBibleStore } from "@/stores/bible-store"
@@ -60,6 +72,7 @@ beforeEach(() => {
   ;(
     globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true
+  vi.restoreAllMocks()
   mockInvoke.mockReset()
   mockInvoke.mockImplementation(async (command: string) =>
     command === "get_verse" ? bibleVerse : []
@@ -140,7 +153,110 @@ async function clickButton(label: string) {
   })
 }
 
+function expectNoLiveInvokeCommands() {
+  const commands = mockInvoke.mock.calls
+    .map(([command]) => command)
+    .filter((command) => command !== "content_checkpoint_service_run")
+  expect(commands).toEqual([])
+}
+
+function contextualDesign() {
+  const moment = {
+    id: "opening-moment", kind: "slide" as const,
+    slide: { title: "Opening", body: "Welcome" }, reference: "Opening",
+    confidence: 1, source: "manual" as const, added_at: 0,
+    scene_id: "old-scene",
+    on_take: [sceneStep("old-scene"), sceneStep("other-output-scene", "overflow")],
+  }
+  useQueueStore.setState({
+    items: [moment, { ...moment, id: "other-moment", reference: "Other" }],
+    headers: [{ id: "event-opening", type: "group", name: "Opening", at: 0, event: { schema_version: 1 } }],
+  })
+  const context = prepareLibraryReturnForMoment(moment.id)!
+  useShellStore.setState({ librarySection: "designs", prepareLibraryReturn: context })
+  const version: DesignVersion = {
+    designId: "design-opening", version: 2, fromRevision: 3, title: "Welcome design",
+    document: createBlankRhemaDesign("Welcome design"), note: null,
+    savedBy: "Tolu", createdAt: new Date(0).toISOString(),
+  }
+  vi.spyOn(designStore, "list").mockResolvedValue([{
+    id: version.designId, title: version.title, kind: "design", revision: 3,
+    latestVersion: 2, updatedAt: version.createdAt,
+  }])
+  vi.spyOn(designStore, "listVersions").mockResolvedValue([{ ...version, document: null }])
+  vi.spyOn(designStore, "getVersion").mockResolvedValue(version)
+  return { context, version, moment }
+}
+
 describe("Library workspace", () => {
+  it("pins the selected immutable design to the exact Prepare moment and returns without changing Live or outputs", async () => {
+    const { context, version } = contextualDesign()
+    const broadcastBefore = useBroadcastStore.getState()
+    const itemsBefore = useQueueStore.getState().items
+    await act(async () => root!.render(<LibraryWorkspace />))
+    mockInvoke.mockClear()
+    await clickButton("Choose a saved version for this moment")
+    await clickButton("Use this version in the current moment")
+
+    const [updated, other] = useQueueStore.getState().items
+    const scene = useBroadcastStore.getState().scenes.find((candidate) => candidate.id === updated.scene_id)!
+    expect(scene).toMatchObject({ design: { id: version.designId, version: 2 } })
+    expect(updated.kind === "slide" && updated.slide.designRef).toEqual({ id: version.designId, version: 2 })
+    expect(updated.on_take).toEqual([sceneStep(scene.id), sceneStep("other-output-scene", "overflow")])
+    expect(other).toBe(itemsBefore[1])
+    expect(useShellStore.getState().prepareLibraryReturn).toEqual(context)
+    expect(useShellStore.getState().workspace).toBe("prepare")
+    expect(useBroadcastStore.getState()).toMatchObject({
+      ...broadcastBefore,
+      scenes: expect.any(Array),
+    })
+    expectNoLiveInvokeCommands()
+  })
+
+  it.each(["service", "removed moment", "moved moment", "caller"])("rejects a %s changed while the design version loads", async (change) => {
+    const { version } = contextualDesign()
+    const error = vi.spyOn(toast, "error")
+    let finish!: (value: DesignVersion) => void
+    vi.mocked(designStore.getVersion).mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    await act(async () => root!.render(<LibraryWorkspace />))
+    mockInvoke.mockClear()
+    await clickButton("Choose a saved version for this moment")
+    await clickButton("Use this version in the current moment")
+    await act(async () => {
+      if (change === "service") {
+        useServiceStore.setState({ current: { ...useServiceStore.getState().current!, id: "service-b" } })
+      } else if (change === "removed moment") {
+        useQueueStore.setState({ items: useQueueStore.getState().items.slice(1) })
+      } else if (change === "moved moment") {
+        useQueueStore.setState({ headers: [
+          ...useQueueStore.getState().headers,
+          { id: "event-new", type: "group", name: "New event", at: 0, event: { schema_version: 1 } },
+        ] })
+      } else {
+        useShellStore.setState({ prepareLibraryReturn: prepareLibraryReturnForMoment("other-moment") })
+      }
+    })
+    const queueBefore = useQueueStore.getState().items
+    const broadcastBefore = useBroadcastStore.getState()
+    await act(async () => finish(version))
+    expect(error).toHaveBeenCalledWith("The Prepare service or moment changed", expect.anything())
+    expect(useQueueStore.getState().items).toBe(queueBefore)
+    expect(useBroadcastStore.getState()).toBe(broadcastBefore)
+    expect(useShellStore.getState().workspace).toBe("library")
+    expectNoLiveInvokeCommands()
+  })
+
+  it("does not invent a moment action for a standalone or event-only Library visit", async () => {
+    contextualDesign()
+    useShellStore.setState({ prepareLibraryReturn: null })
+    await act(async () => root!.render(<LibraryWorkspace />))
+    expect(button("Choose a saved version for this moment")).toBeUndefined()
+    await act(async () => useShellStore.setState({ prepareLibraryReturn: {
+      ...prepareLibraryReturnForMoment("opening-moment")!, momentId: null, momentTitle: null,
+    } }))
+    expect(button("Choose a saved version for this moment")).toBeUndefined()
+  })
+
   it("opens the canonical versioned design editor without changing the current Live output", async () => {
     await act(async () => {
       root!.render(<LibraryWorkspace />)
