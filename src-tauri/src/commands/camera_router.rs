@@ -481,13 +481,13 @@ pub fn desks_changed(app: &AppHandle) {
     });
 }
 
-/// The relay's WebRTC sessions (ids) to addresses nobody allowed reads from any more.
-fn unheld_sessions(list: &serde_json::Value, held: impl Fn(std::net::IpAddr) -> bool) -> Vec<String> {
+/// The relay's WebRTC sessions (ids) reading a camera nobody allowed reads from that address any more.
+fn unheld_sessions(list: &serde_json::Value, held: impl Fn(std::net::IpAddr, &str) -> bool) -> Vec<String> {
     list.get("items").and_then(|v| v.as_array()).map_or_else(Vec::new, |items| {
         items
             .iter()
             .filter(|c| c.get("user").and_then(|u| u.as_str()) == Some(rhema_api::RELAY_USER))
-            .filter(|c| c.get("remoteAddr").and_then(|a| a.as_str()).and_then(ip_of).is_none_or(|ip| !held(ip)))
+            .filter(|c| c.get("remoteAddr").and_then(|a| a.as_str()).and_then(ip_of).zip(c.get("path").and_then(|p| p.as_str())).is_none_or(|(ip, path)| !held(ip, path)))
             .filter_map(|c| c.get("id")?.as_str().map(str::to_string))
             .collect()
     })
@@ -548,8 +548,8 @@ fn look_regularly(router: CameraRouter, hub: rhema_api::SharedCameras, keys: rhe
                     sessions.extend(parse_sessions("rtsp", &rtsp));
                     sessions.extend(parse_sessions("webrtc", &webrtc));
                     // A TV or desk that lost its key or role: cut off here, so a failed try is tried again.
-                    rhema_api::http::camera_readers_gone(&hub, &keys, &feeds);
-                    for id in unheld_sessions(&webrtc, |ip| hub.relay_holds(ip)) {
+                    rhema_api::http::prune_camera_readers(&hub, &keys, &feeds);
+                    for id in unheld_sessions(&webrtc, |ip, path| hub.relay_holds(ip, path)) {
                         let kicked = client.post(format!("{base}/webrtc/sessions/kick/{id}")).basic_auth(API_USER, Some(&password)).send().await;
                         log::info!("camera router: a screen or desk that lost its key was disconnected ({})", kicked.map_or_else(|e| e.to_string(), |r| r.status().to_string()));
                     }
@@ -1111,12 +1111,13 @@ mod tests {
     #[test]
     fn only_the_relays_sessions_to_those_addresses_are_cut_off() {
         let list = serde_json::json!({ "items": [
-            { "id": "a", "user": "rhema-relay", "remoteAddr": "192.168.1.40:5000" },
-            { "id": "b", "user": "rhema-relay", "remoteAddr": "192.168.1.41:5000" },
-            { "id": "c", "user": "", "remoteAddr": "192.168.1.40:5001" },
+            { "id": "a", "user": "rhema-relay", "path": "pulpit", "remoteAddr": "192.168.1.40:5000" },
+            { "id": "b", "user": "rhema-relay", "path": "pulpit", "remoteAddr": "192.168.1.41:5000" },
+            { "id": "d", "user": "rhema-relay", "path": "choir", "remoteAddr": "192.168.1.41:5002" },
+            { "id": "c", "user": "", "path": "pulpit", "remoteAddr": "192.168.1.40:5001" },
         ]});
         let kept: std::net::IpAddr = "192.168.1.41".parse().unwrap();
-        assert_eq!(unheld_sessions(&list, |ip| ip == kept), ["a"]);
+        assert_eq!(unheld_sessions(&list, |ip, path| ip == kept && path == "pulpit"), ["a", "d"]);
     }
 
     #[test]

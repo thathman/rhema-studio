@@ -174,10 +174,21 @@ impl Feed {
     }
 }
 
+/// Whether a feed frame's scene has a camera layer on this camera (any other text in it counts for nothing).
+fn frame_plays_camera(frame: &str, name: &str) -> bool {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(frame) else { return false };
+    if v["off"].as_bool() == Some(true) {
+        return false;
+    }
+    v["scene"]["layers"].as_array().into_iter().flatten().filter_map(|l| l["cameraUrl"].as_str()).any(|url| {
+        reqwest::Url::parse(url).is_ok_and(|u| u.path().trim_end_matches('/') == format!("/{name}/whep"))
+    })
+}
+
 impl FeedHub {
     /// Whether this feed's frame now plays this camera (a TV reads only what its scene shows).
     pub(crate) fn plays_camera(&self, id: &str, name: &str) -> bool {
-        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).and_then(|f| f.current.as_ref()).is_some_and(|(_, frame)| frame.contains(&format!("/{name}/whep")))
+        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).and_then(|f| f.current.as_ref()).is_some_and(|(_, frame)| frame_plays_camera(frame, name))
     }
 
     /// Whether this key opens this feed now.
@@ -2250,15 +2261,15 @@ async fn feed_camera_handler<S: CommandSink + 'static>(
     state.cameras.relay_offer(&name, crate::cameras::RelayHolder::Feed(id, k.to_string()), peer.ip(), body).await
 }
 
-/// Which relayed camera readers have lost their key or role since: forgets them and returns the
-/// addresses to cut off (the app kicks them at the router). Called when keys or feeds change.
-pub fn camera_readers_gone(cameras: &crate::cameras::CameraHub, keys: &KeySet, feeds: &FeedHub) -> Vec<std::net::IpAddr> {
+/// Forget relayed camera readers that have lost their key or role, or whose scene no longer plays
+/// the camera; the app then kicks what nobody holds (`CameraHub::relay_holds`).
+pub fn prune_camera_readers(cameras: &crate::cameras::CameraHub, keys: &KeySet, feeds: &FeedHub) {
     let k = keys.read().unwrap_or_else(std::sync::PoisonError::into_inner);
-    cameras.relay_gone(|holder| match holder {
+    cameras.relay_prune(|holder, name| match holder {
         crate::cameras::RelayHolder::Key(hash) if hash.is_empty() => !k.require_auth,
         crate::cameras::RelayHolder::Key(hash) => k.require_auth && k.entries.iter().any(|e| &e.hash == hash && e.role.reads_cameras()),
-        crate::cameras::RelayHolder::Feed(id, key) => feeds.admits(id, key),
-    })
+        crate::cameras::RelayHolder::Feed(id, key) => feeds.admits(id, key) && feeds.plays_camera(id, name),
+    });
 }
 
 /// `POST /api/v1/camera/{name}/status` with `Authorization: Bearer <the camera's secret>`: Rhema
@@ -4030,12 +4041,23 @@ mod tests {
         assert_eq!(sent.len(), 2);
         assert!(sent.iter().all(|l| l.starts_with(&format!("POST /pulpit/whep auth={basic} "))), "{sent:?}");
         // Both read from one address here: it is cut off only when neither may any more.
-        assert!(camera_readers_gone(&cameras, &keys, &feeds).is_empty());
+        let here = std::net::IpAddr::from([127, 0, 0, 1]);
+        prune_camera_readers(&cameras, &keys, &feeds);
+        assert!(cameras.relay_holds(here, "pulpit"));
         keys.write().unwrap().entries.retain(|e| e.hash != hash_key("cam"));
-        assert!(camera_readers_gone(&cameras, &keys, &feeds).is_empty(), "the TV may still");
+        prune_camera_readers(&cameras, &keys, &feeds);
+        assert!(cameras.relay_holds(here, "pulpit"), "the TV may still");
         assert!(post(desk, "cam").await.starts_with("HTTP/1.1 401"));
+        // Text that merely looks like a camera's address opens nothing, and leaving the scene cuts it off.
+        feeds.publish("tv", r#"{"verse":{"text":"/pulpit/whep"},"scene":{"layers":[{"cameraUrl":"http://192.168.1.20:8889/choir/whep"}]}}"#.into());
+        assert!(post(tv, "").await.starts_with("HTTP/1.1 403"));
+        prune_camera_readers(&cameras, &keys, &feeds);
+        assert!(!cameras.relay_holds(here, "pulpit"));
+        feeds.publish("tv", r#"{"scene":{"layers":[{"cameraUrl":"http://192.168.1.20:8889/pulpit/whep"}]}}"#.into());
+        assert!(post(tv, "").await.contains("v=0 answer"));
         feeds.set(&[("tv".into(), "fedcba9876543210".into())]);
-        assert_eq!(camera_readers_gone(&cameras, &keys, &feeds), vec![std::net::IpAddr::from([127, 0, 0, 1])]);
+        prune_camera_readers(&cameras, &keys, &feeds);
+        assert!(!cameras.relay_holds(here, "pulpit"));
         assert!(post(tv, "").await.starts_with("HTTP/1.1 403"), "an old TV link stops at once");
         let mut h = server.handle;
         h.stop();
