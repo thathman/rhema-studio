@@ -243,7 +243,7 @@ where
                 emit("join:state", serde_json::json!({ "state": "reconnecting", "error": reason }).to_string());
                 // Closed by the host: it was there a moment ago.
                 failed = if closed { 1 } else { failed + 1 };
-                if failed % LOOK_EVERY == 0 {
+                if failed.is_multiple_of(LOOK_EVERY) {
                     let found = tokio::select! {
                         f = tokio::time::timeout(LOOK_FOR, find_moved()) => f.ok().flatten(),
                         _ = stop.changed() => None,
