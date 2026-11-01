@@ -11,6 +11,7 @@ import { tickerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { designStore } from "@/design-engine/design-store"
 import { resolveDesignedMoment, type DesignIssue } from "@/design-engine/rhema-scene"
+import { hydrateDesignSceneMedia } from "@/lib/design-media"
 import { presentActions } from "@/studio/present-actions"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import type { BroadcastOutput, QueueItem, Scene } from "@/types"
@@ -68,8 +69,18 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
     if (!designKey || !designRefId || designVersion === undefined || designTitle === undefined) return
     let cancelled = false
     void resolveDesignedMoment({ title: designTitle, designRef: { id: designRefId, version: designVersion } }, designStore.getVersion)
-      .then((result) => {
-        if (!cancelled) setDesignResolution({ key: designKey, scene: result.scene, issues: result.issues })
+      .then(async (result) => {
+        if (cancelled || !result.scene) {
+          if (!cancelled) setDesignResolution({ key: designKey, scene: result.scene, issues: result.issues })
+          return
+        }
+        const hydrated = await hydrateDesignSceneMedia(result.scene)
+        if (cancelled) return
+        setDesignResolution({
+          key: designKey,
+          scene: hydrated.scene,
+          issues: hydrated.issue ? [{ nodeId: "__design__", message: `"${designTitle}" shows its text instead: ${hydrated.issue}` }] : result.issues,
+        })
       })
       .catch(() => {
         if (!cancelled) {

@@ -24,11 +24,35 @@ import { createRoot, type Root } from "react-dom/client"
 import { createBlankRhemaDesign } from "@/design-engine/design-document-utils"
 import type { DesignDocument, DesignInput, DesignVersion } from "@/design-engine/design-store"
 import { designToScene } from "@/design-engine/rhema-scene"
+import { applyCommand, type SaraswatiImageNode } from "@/vendor/avnac/saraswati"
 import { DesignDocumentEditor } from "./design-document-editor"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useMediaStore } from "@/stores/media-store"
+import type { MediaAssetStatus } from "@/types"
 
 let root: Root | null = null
+
+const imageAsset: MediaAssetStatus = {
+  id: "welcome-image",
+  kind: "image",
+  name: "Welcome background",
+  file: "welcome.png",
+  hash: "a".repeat(64),
+  size: 4,
+  mime: "image/png",
+  width: 1600,
+  height: 900,
+  duration_ms: null,
+  source: "manual",
+  source_ref: "",
+  original_path: "",
+  created_at: new Date(0).toISOString(),
+  path: "/local-media/welcome.png",
+  present: true,
+}
+const imageDataUrl = "data:image/png;base64,ZmFrZQ=="
+const imageAssetUrl = `asset://localhost/%2Flocal-media%2F${imageAsset.hash}-welcome.png`
 
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -37,6 +61,11 @@ beforeEach(() => {
   store.saveDraft.mockReset()
   store.createVersion.mockReset()
   useSettingsStore.setState({ operatorName: "Tolu" })
+  useMediaStore.setState({
+    assets: [imageAsset], loading: false, loaded: true, error: null, urls: {},
+    dataUrl: vi.fn(async () => imageDataUrl),
+    fileUrl: vi.fn(async () => imageAssetUrl),
+  })
 })
 
 afterEach(() => {
@@ -93,6 +122,128 @@ function documentFixture(): DesignDocument {
 }
 
 describe("canonical design editor", () => {
+  it("adds a Library picture by content-addressed reference without embedding its bytes", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const before = useBroadcastStore.getState()
+    const liveSnapshot = {
+      scenes: before.scenes,
+      outputs: before.outputs,
+      outputStatus: before.outputStatus,
+      outputFrames: before.outputFrames,
+      sceneReturn: before.sceneReturn,
+      sceneTakes: before.sceneTakes,
+      isLive: before.isLive,
+      liveVerse: before.liveVerse,
+      liveSlide: before.liveSlide,
+    }
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Image from Library")!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Add Welcome background as image layer"]')!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const image = Object.values(saved.document.scene.nodes).find((node) => node.type === "image")
+    expect(image).toMatchObject({ type: "image", src: imageAssetUrl, width: 960, height: 540 })
+    expect(saved.document.bindings[image!.id]).toMatchObject({
+      kind: "picture", mediaId: imageAsset.id, imageUrl: imageAssetUrl,
+    })
+    expect(JSON.stringify(saved.document).length).toBeLessThan(4096)
+    expect(JSON.stringify(saved.document)).not.toContain("data:image/")
+    expect(designToScene(saved.document).issues).toEqual([])
+    expect(designToScene(saved.document).scene.layers).toContainEqual(expect.objectContaining({
+      id: image!.id, kind: "picture", mediaId: imageAsset.id, imageUrl: imageAssetUrl,
+    }))
+    const after = useBroadcastStore.getState()
+    expect({
+      scenes: after.scenes,
+      outputs: after.outputs,
+      outputStatus: after.outputStatus,
+      outputFrames: after.outputFrames,
+      sceneReturn: after.sceneReturn,
+      sceneTakes: after.sceneTakes,
+      isLive: after.isLive,
+      liveVerse: after.liveVerse,
+      liveSlide: after.liveSlide,
+    }).toEqual(liveSnapshot)
+  })
+
+  it("keeps picture bindings aligned with undo and redo after replacement", async () => {
+    const documentValue = documentFixture()
+    const rootNode = documentValue.document.scene.nodes[documentValue.document.scene.root]
+    if (!rootNode || rootNode.type !== "group") throw new Error("Fixture should have a root group")
+    const priorUrl = "data:image/png;base64,b2xk"
+    const prior: SaraswatiImageNode = {
+      id: "existing-picture",
+      parentId: rootNode.id,
+      name: "Existing picture",
+      visible: true,
+      x: 125,
+      y: 245,
+      rotation: 0,
+      scaleX: 1,
+      scaleY: 1,
+      opacity: 1,
+      originX: "left",
+      originY: "top",
+      type: "image",
+      width: 640,
+      height: 360,
+      src: priorUrl,
+      cropX: 0,
+      cropY: 0,
+      clipPath: null,
+    }
+    documentValue.document.scene = applyCommand(documentValue.document.scene, { type: "ADD_NODE", node: prior })
+    documentValue.document.bindings[prior.id] = {
+      id: prior.id, kind: "picture", mediaId: "previous-image", imageUrl: priorUrl,
+    }
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === prior.name)!.click())
+    expect([...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Replace image")).toBeTruthy()
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Replace image")!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>(`[aria-label="Replace with ${imageAsset.name}"]`)!.click())
+
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Undo design edit"]')!.click())
+    const createVersion = [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Create version"))!
+    expect(createVersion.disabled).toBe(false)
+    store.createVersion.mockResolvedValue({
+      designId: documentValue.id,
+      version: 1,
+      fromRevision: documentValue.revision,
+      title: documentValue.title,
+      document: documentValue.document,
+      note: null,
+      savedBy: "Tolu",
+      createdAt: new Date(0).toISOString(),
+    })
+    await act(async () => createVersion.click())
+    expect(store.createVersion).toHaveBeenCalledWith(documentValue.id, documentValue.revision, undefined, "Tolu")
+
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Redo design edit"]')!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const redone = store.saveDraft.mock.calls[0]![2] as DesignInput
+    expect(redone.document.scene.nodes[prior.id]).toMatchObject({
+      type: "image", name: prior.name, x: prior.x, y: prior.y, width: prior.width, height: prior.height, src: imageAssetUrl,
+    })
+    expect(redone.document.bindings[prior.id]).toMatchObject({
+      kind: "picture", mediaId: imageAsset.id, imageUrl: imageAssetUrl,
+    })
+    expect(designToScene(redone.document).issues).toEqual([])
+  })
+
   it("saves a private draft against the opened revision without changing Live state", async () => {
     const documentValue = documentFixture()
     const before = useBroadcastStore.getState()
