@@ -86,17 +86,20 @@ curl http://localhost:8080/api/v1/health
 ```
 
 ```json
-{ "status": "ok", "service": "rhema", "version": "..." }
+{ "status": "ok", "service": "rhema" }
 ```
 
 ### `GET /api/v1/status`
 
 ```bash
-curl http://localhost:8080/api/v1/status
+curl -H "X-Rhema-Key: <key>" http://localhost:8080/api/v1/status
 ```
 
 Returns a state snapshot from a Rust-side cache that the frontend
-refreshes once per second:
+refreshes once per second. While keys are required it needs a current key
+(401 otherwise), and fields a role may not read come back empty: View only and
+OBS companion keys get on air state only, and only Present and Configure keys
+get the theme and confidence threshold.
 
 ```json
 {

@@ -1248,7 +1248,9 @@ async fn serve_tls(t: &TlsListener, host: &str, app: Router, mut shutdown_rx: wa
 struct HealthResponse {
     status: &'static str,
     service: &'static str,
-    version: String,
+    /// Only for a caller with a key: nobody else needs to know what to attack.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<String>,
     /// The https port when this host runs it: a joining computer pairs and works over it, with this
     /// host's certificate pinned (absent: http only).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1262,10 +1264,12 @@ pub fn set_app_version(version: &str) {
     let _ = APP_VERSION.set(version.to_string());
 }
 
-/// The local-network health answer; public-source requests are refused.
+/// The local-network health answer: that Rhema is here and where its https port is, which a joining
+/// computer needs before it has a key. Public-source requests are refused.
 async fn health_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> axum::response::Response {
     if !is_local_network_ip(peer.ip()) {
         return StatusCode::FORBIDDEN.into_response();
@@ -1273,7 +1277,8 @@ async fn health_handler<S: CommandSink + 'static>(
     Json(HealthResponse {
         status: "ok",
         service: "rhema",
-        version: APP_VERSION.get().cloned().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string()),
+        version: matches!(check_key(&state.keys, presented_key(&headers)), Ok(Some(_)))
+            .then(|| APP_VERSION.get().cloned().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string())),
         tls_port: state.tls_port.get().copied(),
     })
     .into_response()
@@ -1352,7 +1357,7 @@ fn host_trusted(host: &str, ports: &[u16]) -> bool {
 }
 
 /// The pages a browser opens from this server (phone remote, camera, feeds) and what they load,
-/// and the two answers that need no key (status: what is on air; health): their `Host` is checked
+/// and the status and health answers: their `Host` is checked
 /// even without an `Origin`, since a rebound page's same-origin read sends none.
 fn browser_page(path: &str) -> bool {
     matches!(path, "/remote" | "/camera" | "/api/v1/status" | "/api/v1/health") || ["/feed/", "/assets/", "/api/v1/feed/", "/api/v1/camera/"].iter().any(|p| path.starts_with(p))
@@ -1397,16 +1402,41 @@ async fn remote_page() -> impl IntoResponse {
     )
 }
 
-/// The current display status for local-network pages; public-source requests are refused.
+/// The status as this key may read it, built up from nothing so a new field stays private until
+/// someone decides otherwise. Every key: whether it is on air. A desk that follows the content: what
+/// is showing. The director's desks: the settings too. `None` is keys off (the owner's open mode).
+fn status_for(all: &StatusSnapshot, reader: Option<&crate::keys::KeyEntry>) -> StatusSnapshot {
+    use crate::keys::Role;
+    let Some(reader) = reader else { return all.clone() };
+    let mut o = StatusSnapshot { on_air: all.on_air, rehearsal: all.rehearsal, waiting_for_approval: all.waiting_for_approval, ..StatusSnapshot::default() };
+    if !matches!(reader.role, Role::Viewer | Role::ObsCompanion) {
+        o.live_verse.clone_from(&all.live_verse);
+        o.queue_length = all.queue_length;
+    }
+    if matches!(reader.role, Role::Present | Role::Configure) {
+        o.active_theme.clone_from(&all.active_theme);
+        o.confidence_threshold = all.confidence_threshold;
+    }
+    o
+}
+
+/// The current display status, for a key and what its role may read (`status_for`). Without a key,
+/// or with a revoked one, nothing: `/api/v1/health` is the anonymous check.
 async fn status_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> axum::response::Response {
     if !is_local_network_ip(peer.ip()) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    let snapshot = state.status.read().await;
-    Json(snapshot.clone()).into_response()
+    if !state.rate.allow(peer.ip()) {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    match check_http_command_key(&state.keys, &headers, peer) {
+        Ok(reader) => ([(axum::http::header::CACHE_CONTROL, "no-store")], Json(status_for(&*state.status.read().await, reader.as_ref()))).into_response(),
+        Err((code, why)) => (code, Json(serde_json::json!({ "error": why }))).into_response(),
+    }
 }
 
 #[derive(Deserialize)]
@@ -2862,10 +2892,10 @@ mod tests {
         let state = app_state_for_network_tests();
         let public_peer: SocketAddr = "8.8.8.8:45000".parse().unwrap();
 
-        let health = health_handler(AxumState(state.clone()), ConnectInfo(public_peer)).await;
+        let health = health_handler(AxumState(state.clone()), ConnectInfo(public_peer), HeaderMap::new()).await;
         assert_eq!(health.status(), StatusCode::FORBIDDEN);
 
-        let status = status_handler(AxumState(state.clone()), ConnectInfo(public_peer)).await;
+        let status = status_handler(AxumState(state.clone()), ConnectInfo(public_peer), HeaderMap::new()).await;
         assert_eq!(status.status(), StatusCode::FORBIDDEN);
 
         let pair = pair_handler(
@@ -3747,6 +3777,48 @@ mod tests {
 
         let mut handle = result.handle;
         handle.stop();
+    }
+
+    #[tokio::test]
+    async fn status_needs_a_current_key_and_says_only_what_the_role_may_read() {
+        use crate::keys::{hash_key, KeyEntry, Role};
+        let keys = Arc::new(std::sync::RwLock::new(crate::keys::Keys {
+            require_auth: true,
+            entries: [("pre", Role::Present), ("bib", Role::Bible), ("vie", Role::Viewer), ("com", Role::ObsCompanion)].map(|(k, role)| KeyEntry { hash: hash_key(k), name: k.into(), role, ..serde_json::from_value(serde_json::json!({"hash":"h","name":"n"})).unwrap() }).to_vec(),
+        }));
+        let status = new_shared_status();
+        *status.write().await = StatusSnapshot { on_air: true, active_theme: Some("Sunday theme".into()), live_verse: Some("John 3:16".into()), queue_length: 4, confidence_threshold: 0.75, rehearsal: false, waiting_for_approval: false };
+        let server = start_http_server(HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), ..Default::default() }, Arc::new(MockSink::new()), status).await.expect("bind");
+        let port = server.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let read = |key: &'static str| async move {
+            let mut c = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+            tokio::io::AsyncWriteExt::write_all(&mut c, format!("GET /api/v1/status HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Rhema-Key: {key}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+            let mut out = String::new();
+            tokio::io::AsyncReadExt::read_to_string(&mut c, &mut out).await.unwrap();
+            out
+        };
+        // Anonymous: nothing of the service, and the health check says only that Rhema is here.
+        let anonymous = raw_http_request(port, "GET", "/api/v1/status", None).await;
+        assert!(anonymous.contains("401") && !anonymous.contains("John") && !anonymous.contains("on_air"), "{anonymous}");
+        let health = raw_http_request(port, "GET", "/api/v1/health", None).await;
+        assert!(health.contains("\"status\":\"ok\"") && !health.contains("version"), "{health}");
+        assert!(read("nope").await.contains("401"));
+        // Each role, what it may read.
+        let director = read("pre").await;
+        assert!(director.contains("John 3:16") && director.contains("Sunday theme"), "{director}");
+        let bible = read("bib").await;
+        assert!(bible.contains("John 3:16") && !bible.contains("Sunday theme") && bible.contains("\"on_air\":true"), "{bible}");
+        for role in ["vie", "com"] {
+            let low = read(role).await;
+            assert!(low.contains("\"on_air\":true") && !low.contains("John") && !low.contains("Sunday theme") && low.contains("\"queue_length\":0"), "{low}");
+        }
+        // Revoked: at once.
+        keys.write().unwrap().entries.retain(|e| e.hash != hash_key("pre"));
+        let revoked = read("pre").await;
+        assert!(revoked.contains("401") && !revoked.contains("John"), "{revoked}");
+        let mut h = server.handle;
+        h.stop();
     }
 
     /// The path asserted here is the one `documentation/remote-control.md`
@@ -4868,10 +4940,10 @@ mod tests {
         assert_eq!(sink.command_count(), 1);
         // The phone and feed pages by address work; by another name they are refused, origin or not.
         assert!(raw(port, "GET /remote HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await.starts_with("HTTP/1.1 200"));
-        // What is on air and the health answer need no key: by address yes, by a rebound name no.
-        for path in ["/api/v1/status", "/api/v1/health"] {
-            assert!(raw(port, &format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{{port}}\r\nConnection: close\r\n\r\n")).await.starts_with("HTTP/1.1 200"), "{path}");
-        }
+        // The health answer needs no key and the status does: by address yes, by a rebound name no.
+        assert!(raw(port, "GET /api/v1/health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await.starts_with("HTTP/1.1 200"));
+        assert!(raw(port, "GET /api/v1/status HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await.starts_with("HTTP/1.1 401"));
+        assert!(raw(port, "GET /api/v1/status HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Rhema-Key: tok\r\nConnection: close\r\n\r\n").await.starts_with("HTTP/1.1 200"));
         for path in ["/remote", "/feed/l3?k=s3cret", "/api/v1/feed/l3/events?k=s3cret", "/camera?name=pulpit&k=x", "/api/v1/status", "/api/v1/health"] {
             let r = raw(port, &format!("GET {path} HTTP/1.1\r\nHost: evil.example:{{port}}\r\nConnection: close\r\n\r\n")).await;
             assert!(r.starts_with("HTTP/1.1 421"), "{path}: {r}");

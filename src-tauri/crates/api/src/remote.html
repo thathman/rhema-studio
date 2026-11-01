@@ -205,7 +205,9 @@
     if (polling || !get() || document.hidden) return
     polling = true
     try {
-      const s = await (await fetch("/api/v1/status", { cache: "no-store" })).json()
+      const r = await fetch("/api/v1/status", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } })
+      if (r.status === 401) { set(null); show(); say("This phone is no longer paired. Pair it again.", true); polling = false; return }
+      const s = await r.json()
       $("air").textContent = s.on_air ? "On air" : "Off air"
       $("air").className = "air" + (s.on_air ? " on" : "")
       $("live").textContent = s.waiting_for_approval
