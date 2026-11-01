@@ -201,6 +201,9 @@ pub async fn follow_live(host: Host, token: String, stop: watch::Receiver<bool>,
     follow_moving(host, token, stop, emit, || async { None }).await;
 }
 
+/// The longest a look for the host elsewhere keeps the old address from being tried again.
+const LOOK_FOR: Duration = Duration::from_secs(8);
+
 /// Look for the host elsewhere after this many failed tries in a row, and again each time as many more fail.
 const LOOK_EVERY: u32 = 3;
 
@@ -242,10 +245,11 @@ where
                 failed = if closed { 1 } else { failed + 1 };
                 if failed % LOOK_EVERY == 0 {
                     let found = tokio::select! {
-                        f = find_moved() => f,
+                        f = tokio::time::timeout(LOOK_FOR, find_moved()) => f.ok().flatten(),
                         _ = stop.changed() => None,
                     };
-                    if let Some((address, moved)) = found {
+                    // Stopped meanwhile: this computer may be following another host by now.
+                    if let Some((address, moved)) = found.filter(|_| !*stop.borrow()) {
                         host = moved;
                         wait = 1;
                         failed = 0;
