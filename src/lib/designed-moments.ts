@@ -7,7 +7,8 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
-import { isSlideItem, type BroadcastOutput, type DesignedMomentRestore, type DesignPin, type QueueItem, type Scene } from "@/types"
+import { isSlideItem, type BroadcastOutput, type DesignedMomentRestore, type QueueItem, type Scene } from "@/types"
+import type { DesignPin } from "@/types/scene"
 
 /**
  * A designed moment on Live (C2, docs/contracts/design-documents-v1.md, Pinning): when the operator
@@ -32,7 +33,7 @@ function designNotApproved(itemId: string, ref: DesignPin): string | null {
   if (revision === null || revision === undefined) return null
   if (service.approvedDesignRevision !== revision || !service.approvedDesigns) return service.approvedDesignsError ?? "The approved design list is unavailable. Reload the service or refresh its approval."
   const approved = service.approvedDesigns.moments?.[itemId]
-  if (approved?.id === ref.id && approved.version === ref.version) return null
+  if (approved && approved.id === ref.id && approved.version === ref.version) return null
   return approved
     ? `This slide pins design v${ref.version}, and v${approved.version} was approved. Refresh the service approval to show it; its text is showing instead.`
     : `This design was pinned after the service was approved. Refresh the service approval to show it; the slide's text is showing instead.`
