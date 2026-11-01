@@ -39,15 +39,21 @@ pub struct Paired {
     secure: Option<SecureLink>,
 }
 
+/// How to reach `address`, given the secure link held now. With a link for another address (its host
+/// moved a moment ago) nothing is sent: never plain http, where this computer's key would be in the clear.
+fn host_for(secure: Option<&(String, SecureLink)>, address: &str) -> Result<Host, String> {
+    match secure {
+        Some((a, link)) if a == address.trim() => rhema_join::pin::pinned_host(address, link.port, &link.fingerprint),
+        Some(_) => Err("The host has moved to another address: trying again there".into()),
+        None => Host::plain(address),
+    }
+}
+
 impl JoinRuntime {
     /// How to reach this host: https with its pinned CA when pairing kept one for this address,
     /// else plain http as before.
     fn host(&self, address: &str) -> Result<Host, String> {
-        let secure = self.secure.lock().map_err(|e| e.to_string())?.clone();
-        match secure.filter(|(a, _)| a == address.trim()) {
-            Some((_, link)) => rhema_join::pin::pinned_host(address, link.port, &link.fingerprint),
-            None => Host::plain(address),
-        }
+        host_for(self.secure.lock().map_err(|e| e.to_string())?.as_ref(), address)
     }
 
     /// A camera at the router of the host this computer follows goes through that host, with this
@@ -452,6 +458,15 @@ pub async fn host_discover() -> Result<Vec<Found>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_key_never_goes_in_the_clear_to_an_address_a_secure_host_left() {
+        let link = SecureLink { port: 8081, fingerprint: "ab".repeat(32) };
+        let held = ("192.168.1.30:8080".to_string(), link);
+        assert!(host_for(Some(&held), "192.168.1.30:8080").unwrap().is_secure());
+        assert!(host_for(Some(&held), "192.168.1.20:8080").is_err(), "the address it moved from");
+        assert!(!host_for(None, "192.168.1.20:8080").unwrap().is_secure(), "a host paired over http, as before");
+    }
     // Moved to the shared crate with Rhema Studio Companion (#209); still checked here as this app uses them.
     use rhema_join::discover::{found_hosts, lan_ip as tv_ip};
     use rhema_join::host::sse_data;
@@ -756,7 +771,9 @@ mod tests {
         let other = rhema_api::tls::fingerprint(&rhema_api::tls::make_ca().unwrap()).unwrap();
         *rt.secure.lock().unwrap() = Some((address.clone(), SecureLink { port: secure.port, fingerprint: other }));
         assert_eq!(rhema_join::host::me(&rt.host(&address).unwrap(), &paired.token).await.unwrap_err(), rhema_join::pin::NOT_THE_PAIRED_HOST);
-        // Another address than the one paired: plain http (it has its own pairing).
+        // Another address than the one paired: nothing until that host's own pairing is said (`join_secure`).
+        assert!(rt.host("127.0.0.1:1").is_err());
+        *rt.secure.lock().unwrap() = None;
         assert!(!rt.host("127.0.0.1:1").unwrap().is_secure());
         let mut h = r.handle;
         h.stop();

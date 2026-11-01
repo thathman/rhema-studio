@@ -27,13 +27,15 @@ vi.mock("@tauri-apps/api/event", () => ({
   ),
 }))
 
-import { act } from "react"
+import { act, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useRecorderAlertStore } from "@/stores/recorder-alert-store"
 import type { BroadcastOutput } from "@/types/broadcast-output"
 import { RecorderDock } from "./recorder-dock"
+import { RecorderStatusIndicator } from "@/studio/shell/recorder-status-indicator"
 
 const main = {
   id: "main",
@@ -128,6 +130,23 @@ async function renderDock() {
   await act(async () => root.render(<RecorderDock />))
 }
 
+function RecorderNavigationHarness() {
+  const [workspace, setWorkspace] = useState<"present" | "home">("present")
+  return (
+    <>
+      <button type="button" onClick={() => setWorkspace("home")}>Open Home</button>
+      {workspace === "present" ? <RecorderDock /> : <RecorderStatusIndicator workspace="home" />}
+    </>
+  )
+}
+
+async function renderNavigationHarness() {
+  host = document.createElement("div")
+  document.body.append(host)
+  root = createRoot(host)
+  await act(async () => root.render(<RecorderNavigationHarness />))
+}
+
 function change(select: HTMLSelectElement, value: string) {
   select.value = value
   select.dispatchEvent(new Event("change", { bubbles: true }))
@@ -155,6 +174,7 @@ beforeEach(() => {
       return { atMs: 8_000, label: "Sermon begins", actor: "main desk" }
     return null
   })
+  useRecorderAlertStore.getState().reset()
   useBroadcastStore.setState({
     outputs: [main, overflow, stage, browser],
     rehearsal: false,
@@ -172,9 +192,43 @@ afterEach(() => {
   useBroadcastStore.setState(initialBroadcast)
   useEventClock.setState(initialEventClock)
   useQueueStore.setState(initialQueue)
+  useRecorderAlertStore.getState().reset()
 })
 
 describe("Live's Rhema recording dock", () => {
+  it("keeps a failed start alert visible after navigating away from Live", async () => {
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "recorder_status") return idleStatus
+      if (command === "recorder_preflight") return preflight
+      if (command === "recorder_start") throw new Error("encoder unavailable")
+      return null
+    })
+    await renderNavigationHarness()
+    await act(async () =>
+      change(host.querySelector<HTMLSelectElement>('[aria-label="Congregation output"]')!, "main")
+    )
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('button[aria-label="Check recording setup"]')!.click()
+    )
+    await act(async () =>
+      change(host.querySelector<HTMLSelectElement>('[aria-label="Approved mixer input"]')!, "Midas USB")
+    )
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('button[aria-label="Check recording setup"]')!.click()
+    )
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('button[aria-label="Start Rhema recording"]')!.click()
+    )
+    expect(useRecorderAlertStore.getState().alerts.action).toBe("Recording did not start: encoder unavailable")
+
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>("button")!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("Recording did not start: encoder unavailable")
+    expect(useRecorderAlertStore.getState().alerts.action).toBe("Recording did not start: encoder unavailable")
+  })
+
   it("preflights and starts with the chosen quality, and requires a fresh check after quality changes", async () => {
     native.invoke.mockImplementation(
       async (

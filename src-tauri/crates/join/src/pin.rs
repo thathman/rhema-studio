@@ -115,15 +115,29 @@ pub fn pinned_host(address: &str, tls_port: u16, ca_fingerprint: &str) -> Result
     Host::https(address, tls_port, tls(verifier(Some(ca_fingerprint.to_string())))?)
 }
 
+/// More Rhema hosts than any church network has.
+const MOVED_CANDIDATES: usize = 16;
+
 /// The paired host at another of these addresses (host:port of its Remote control), when its address
 /// changed: the first that shows a certificate from the pinned CA and accepts this computer's key. The
 /// key goes only to one that has shown that certificate, so a device merely announcing itself as a
 /// Rhema host learns nothing.
 pub async fn moved_to(candidates: &[String], current: &str, tls_port: u16, ca_fingerprint: &str, token: &str) -> Option<(String, Host)> {
-    for address in candidates.iter().filter(|a| !a.trim().eq_ignore_ascii_case(current.trim())) {
-        let Ok(host) = pinned_host(address, tls_port, ca_fingerprint) else { continue };
-        if matches!(tokio::time::timeout(Duration::from_secs(4), crate::host::me(&host, token)).await, Ok(Ok(_))) {
-            return Some((address.clone(), host));
+    use futures_util::stream::{FuturesUnordered, StreamExt};
+    // All at once, so devices that merely take the connection and wait hold up nothing.
+    let mut trying: FuturesUnordered<_> = candidates
+        .iter()
+        .filter(|a| !a.trim().eq_ignore_ascii_case(current.trim()))
+        .take(MOVED_CANDIDATES)
+        .filter_map(|address| pinned_host(address, tls_port, ca_fingerprint).ok().map(|host| (address, host)))
+        .map(|(address, host)| async move {
+            let accepted = matches!(tokio::time::timeout(Duration::from_secs(4), crate::host::me(&host, token)).await, Ok(Ok(_)));
+            accepted.then(|| (address.clone(), host))
+        })
+        .collect();
+    while let Some(tried) = trying.next().await {
+        if tried.is_some() {
+            return tried;
         }
     }
     None
@@ -265,6 +279,28 @@ mod moved_tests {
             }
         });
         format!("127.0.0.1:{port}")
+    }
+
+    #[tokio::test]
+    async fn devices_that_only_wait_do_not_hold_up_finding_the_host() {
+        let ca = make_ca().unwrap();
+        let (address, tls_port, mut handle) = real_host(&ca).await;
+        // On one address the waiting device must share the host's port number; another loopback address does that.
+        let l = tokio::net::TcpListener::bind(("127.0.0.2", tls_port)).await;
+        if let Ok(l) = l {
+            tokio::spawn(async move {
+                let mut held = Vec::new();
+                while let Ok((tcp, _)) = l.accept().await {
+                    held.push(tcp);
+                }
+            });
+        }
+        let t0 = std::time::Instant::now();
+        let candidates = ["127.0.0.2:8080".to_string(), address.clone()];
+        let found = moved_to(&candidates, "10.0.0.1:8080", tls_port, &ca_print(&ca), "desk").await;
+        assert_eq!(found.map(|f| f.0), Some(address));
+        assert!(t0.elapsed() < Duration::from_secs(3), "{:?}", t0.elapsed());
+        handle.stop();
     }
 
     #[tokio::test]
