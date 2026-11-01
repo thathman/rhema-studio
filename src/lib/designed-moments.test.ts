@@ -15,20 +15,36 @@ const { showDesignedMoment, restoreAfterDesignedMoment } = await import("./desig
 const { runTakeSteps } = await import("./take-steps")
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { useQueueStore } = await import("@/stores/queue-store")
+const { useServiceStore } = await import("@/stores/service-store")
 const { newScene, normalizeScene } = await import("@/lib/scenes")
 const { sceneToDesign } = await import("@/design-engine/rhema-scene")
 const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
+
+const { designStore } = await import("@/design-engine/design-store")
 
 const welcome = newScene("Welcome card")
 const usual = newScene("Camera and Bible")
 const versions = { "d1:2": { designId: "d1", version: 2, document: sceneToDesign(welcome) } } as Record<string, { designId: string; version: number; document: ReturnType<typeof sceneToDesign> }>
 const getVersion = vi.fn(async (id: string, version: number) => versions[`${id}:${version}`] ?? null)
+vi.spyOn(designStore, "getVersion").mockImplementation(getVersion as never)
 const moment = (designRef?: { id: string; version: number }): QueueItem =>
   ({ id: "m", kind: "slide", slide: { title: "Welcome", body: "Glad you came", ...(designRef ? { designRef } : {}) }, reference: "Welcome", confidence: 1, source: "manual", added_at: 0 }) as QueueItem
 const plain: QueueItem = { id: "p", kind: "slide", slide: { title: "Notices", body: "" }, reference: "Notices", confidence: 1, source: "manual", added_at: 0 } as QueueItem
 const out = (id: string) => useBroadcastStore.getState().outputs.find((o) => o.id === id)
 
+const approve = (moments?: Record<string, { id: string; version: number }>) => useServiceStore.setState({
+  current: { id: "svc", approved_revision: 3 } as never,
+  approvedDesignRevision: 3,
+  approvedDesigns: { version: 1, scenes: {}, looks: {}, media_ids: [], ...(moments ? { moments } : {}) },
+  approvedDesignsError: null,
+})
+const live = (item: QueueItem, isLive = true) => useBroadcastStore.setState({ isLive, liveItemId: isLive ? item.id : null })
+const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
+
 beforeEach(() => {
+  useServiceStore.setState({ current: null, approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
+  useBroadcastStore.setState({ isLive: false, liveItemId: null })
+  useQueueStore.setState({ items: [] })
   restoreAfterDesignedMoment()
   for (const f of Object.values(toast)) f.mockClear()
   const theme = useBroadcastStore.getState().themes[0].id
@@ -175,7 +191,7 @@ describe("a designed moment on Live", () => {
   it("a missing version shows the slide's own text, never another version, and says why", async () => {
     await showDesignedMoment(moment({ id: "d1", version: 3 }), getVersion)
     expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
-    expect(toast.warning).toHaveBeenCalledWith("Design not shown", { description: expect.stringContaining("version 3") })
+    expect(toast.warning).toHaveBeenCalledWith("Design not shown", expect.objectContaining({ description: expect.stringContaining("version 3") }))
   })
 
   it("a plain slide changes nothing", async () => {
@@ -201,6 +217,140 @@ describe("a designed moment on Live", () => {
     restoreAfterDesignedMoment()
     expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
     delete versions["d1:3"]
+  })
+})
+
+describe("a designed moment and the service's approval", () => {
+  const pin = { id: "d1", version: 2 }
+
+  it("shows the version the approval captured for this item", async () => {
+    approve({ m: pin })
+    await showDesignedMoment(moment(pin), getVersion)
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+    expect(toast.warning).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["pinned after approval", { other: pin }],
+    ["moved to another version", { m: { id: "d1", version: 1 } }],
+    ["moved to another design", { m: { id: "d9", version: 2 } }],
+    ["approved before pins were captured", undefined],
+  ])("%s: the screen keeps its approved scene and the operator is told", async (_why, moments) => {
+    approve(moments)
+    await showDesignedMoment(moment(pin), getVersion)
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+    expect(toast.warning).toHaveBeenCalledWith("Design needs approval", expect.objectContaining({ description: expect.stringContaining("approval") }))
+  })
+
+  it("an approved service whose list could not be read shows no design", async () => {
+    useServiceStore.setState({ current: { id: "svc", approved_revision: 3 } as never, approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: "database busy" })
+    await showDesignedMoment(moment(pin), getVersion)
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+    expect(toast.warning).toHaveBeenCalledWith("Design needs approval", expect.objectContaining({ description: "database busy" }))
+  })
+
+  it("a list from another approved revision does not count", async () => {
+    approve({ m: pin })
+    useServiceStore.setState({ approvedDesignRevision: 2 })
+    await showDesignedMoment(moment(pin), getVersion)
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+  })
+
+  it("an unapproved pin leaving the previous design gives the screen back", async () => {
+    await showDesignedMoment(moment(pin), getVersion)
+    approve({})
+    await showDesignedMoment({ ...moment(pin), id: "m2" } as QueueItem, getVersion)
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+    expect(out(MAIN_OUTPUT_ID)?.designedMomentRestore).toBeUndefined()
+  })
+
+  it("a change made while the version loads is what counts", async () => {
+    approve({ m: pin })
+    const slow = vi.fn(async (id: string, version: number) => {
+      approve({})
+      return getVersion(id, version)
+    })
+    await showDesignedMoment(moment(pin), slow)
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+  })
+})
+
+describe("the screens following Program", () => {
+  const pin = { id: "d1", version: 2 }
+
+  it("a restore from an older build, with no item, is given back when Program moves", async () => {
+    await showDesignedMoment(moment(pin), getVersion)
+    const o = out(MAIN_OUTPUT_ID)!
+    useBroadcastStore.getState().updateOutput(o.id, { designedMomentRestore: { ...o.designedMomentRestore!, itemId: undefined } })
+    live(plain)
+    live(plain, false)
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+    expect(out(MAIN_OUTPUT_ID)?.designedMomentRestore).toBeUndefined()
+  })
+
+  it("a timed move onto a pinned slide shows its design, and off it gives the scene back", async () => {
+    versions["d1:3"] = { designId: "d1", version: 3, document: versions["d1:2"].document }
+    useQueueStore.setState({ items: [moment(pin), { ...moment({ id: "d1", version: 3 }), id: "n" } as QueueItem, plain] })
+    live(moment(pin))
+    await settled()
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+    useBroadcastStore.setState({ liveItemId: "n" })
+    await settled()
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v3")
+    useBroadcastStore.setState({ liveItemId: "p" })
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+  })
+
+  it("a timed move does not get around the approval", async () => {
+    approve({})
+    useQueueStore.setState({ items: [moment(pin)] })
+    live(moment(pin))
+    await settled()
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+    expect(toast.warning).toHaveBeenCalledTimes(1)
+  })
+
+  it("a Take and the Program change together put the design up once, and it still goes back", async () => {
+    useQueueStore.setState({ items: [moment(pin), plain] })
+    live(moment(pin))
+    await runTakeSteps(moment(pin))
+    await settled()
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+    expect(out(MAIN_OUTPUT_ID)?.designedMomentRestore?.scene?.id).toBe(usual.id)
+    live(plain, false)
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+  })
+
+  it("Show this live onto a plain item gives back the design that was up before the rehearsal", async () => {
+    useQueueStore.setState({ items: [moment(pin), plain] })
+    live(moment(pin))
+    await settled()
+    useBroadcastStore.getState().setRehearsal(true)
+    useBroadcastStore.setState({ liveItemId: "p" })
+    useBroadcastStore.getState().setRehearsal(false, { keepRehearsed: true })
+    expect(useBroadcastStore.getState().liveItemId).toBe("p")
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+  })
+
+  it("Show this live onto a pinned slide shows its design", async () => {
+    useQueueStore.setState({ items: [moment(pin), plain] })
+    live(plain)
+    useBroadcastStore.getState().setRehearsal(true)
+    useBroadcastStore.setState({ liveItemId: "m" })
+    useBroadcastStore.getState().setRehearsal(false, { keepRehearsed: true })
+    await settled()
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+  })
+
+  it("leaving a rehearsal with Program as it was changes nothing", async () => {
+    useQueueStore.setState({ items: [moment(pin), plain] })
+    live(moment(pin))
+    await settled()
+    useBroadcastStore.getState().setRehearsal(true)
+    useBroadcastStore.getState().setRehearsal(false)
+    await settled()
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+    expect(toast.warning).not.toHaveBeenCalled()
   })
 })
 

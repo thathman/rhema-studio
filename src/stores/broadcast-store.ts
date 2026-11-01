@@ -548,6 +548,9 @@ function withSceneSnapshot(output: BroadcastOutput, scenes: readonly Scene[]): B
   const next = { ...output }
   if (snapshot) next.sceneSnapshot = snapshot
   else delete next.sceneSnapshot
+  // Saved by any build, read by this one: without these there is no way back to rebuild.
+  const restore = next.designedMomentRestore
+  if (restore && (typeof restore.designSceneId !== "string" || typeof restore.themeId !== "string")) delete next.designedMomentRestore
   return next
 }
 

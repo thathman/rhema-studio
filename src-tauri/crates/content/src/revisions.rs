@@ -37,6 +37,9 @@ pub struct ApprovedDesignSnapshot {
     pub scenes: serde_json::Value,
     pub looks: serde_json::Value,
     pub media_ids: Vec<String>,
+    /// Each designed moment's pinned version by item id; approvals from before it have none.
+    #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+    pub moments: serde_json::Value,
 }
 
 fn snapshot_item(it: &ProgramItem) -> ItemInput {
@@ -449,7 +452,7 @@ fn pin_songs(tx: &Transaction<'_>, program_id: &str) -> Result<()> {
 /// offline, and never with another version (docs/contracts/design-documents-v1.md, Pinning).
 fn check_design_pins(tx: &Transaction<'_>, program_id: &str, designs: &ApprovedDesignSnapshot) -> Result<()> {
     let mut pins: Vec<(String, serde_json::Value)> = designs.scenes.as_object().into_iter().flatten()
-        .filter_map(|(name, scene)| scene.get("design").map(|pin| (format!("scene {name}"), pin.clone())))
+        .filter_map(|(name, scene)| scene.get("scene").unwrap_or(scene).get("design").map(|pin| (format!("scene {name}"), pin.clone())))
         .collect();
     let mut stmt = tx.prepare(
         "SELECT reference, json_extract(payload, '$.designRef') FROM program_items
@@ -499,7 +502,7 @@ mod tests {
         let design = db.create_design(&crate::designs::DesignInput { title: "Welcome".into(), kind: "design".into(), document: doc }).unwrap();
         db.create_design_version(&design.id, design.revision, None, "tester").unwrap();
         let scenes = |version: serde_json::Value| serde_json::json!({ "s": { "design": { "id": design.id, "version": version } } });
-        let manifest = |scenes| ApprovedDesignSnapshot { version: 1, scenes, looks: serde_json::json!({}), media_ids: vec![] };
+        let manifest = |scenes| ApprovedDesignSnapshot { version: 1, scenes, looks: serde_json::json!({}), media_ids: vec![], moments: serde_json::Value::Null };
 
         let p = db.create_program("Pinned", None).unwrap();
         let held = db.approve_program_with_designs(&p.id, p.revision, &manifest(scenes(serde_json::json!(1)))).unwrap();
@@ -509,6 +512,14 @@ mod tests {
             let err = db.approve_program_with_designs(&p.id, held.revision, &manifest(scenes(version))).unwrap_err();
             assert!(matches!(&err, ContentError::Invalid(m) if m.contains("scene s") && m.contains(says)), "{err:?}");
         }
+
+        // A real manifest holds each scene under `scene`; its moments come back as approved.
+        let nested = db.create_program("Nested", None).unwrap();
+        let bad = serde_json::json!({ "s": { "scene": { "design": { "id": design.id, "version": 9 } }, "outputs": {} } });
+        assert!(matches!(db.approve_program_with_designs(&nested.id, nested.revision, &manifest(bad)).unwrap_err(), ContentError::Invalid(m) if m.contains("does not have")));
+        let with_moments = ApprovedDesignSnapshot { moments: serde_json::json!({ "item": { "id": design.id, "version": 1 } }), ..manifest(serde_json::json!({})) };
+        let kept = db.approve_program_with_designs(&nested.id, nested.revision, &with_moments).unwrap();
+        assert_eq!(db.approved_designs(&nested.id, kept.revision).unwrap(), Some(with_moments));
 
         let q = db.create_program("Moment", None).unwrap();
         let payload = format!(r#"{{"title":"Welcome","body":"","link":"","designRef":{{"id":"{}","version":3}}}}"#, design.id);
@@ -534,7 +545,7 @@ mod tests {
     fn legacy_approval_cannot_remove_a_design_aware_release_manifest() {
         let db = ContentDb::open_in_memory().unwrap();
         let p = db.create_program("Synthetic legacy caller", None).unwrap();
-        let designs = ApprovedDesignSnapshot { version: 1, scenes: serde_json::json!({}), looks: serde_json::json!({}), media_ids: vec![] };
+        let designs = ApprovedDesignSnapshot { version: 1, scenes: serde_json::json!({}), looks: serde_json::json!({}), media_ids: vec![], moments: serde_json::Value::Null };
         let approved = db.approve_program_with_designs(&p.id, p.revision, &designs).unwrap();
         assert_eq!(db.approve_program(&p.id, approved.revision).unwrap(), approved);
         assert_eq!(db.approved_designs(&p.id, approved.revision).unwrap(), Some(designs));
@@ -544,7 +555,7 @@ mod tests {
     fn explicit_design_refresh_keeps_the_previous_release_and_rejects_stale_approval() {
         let db = ContentDb::open_in_memory().unwrap();
         let p = db.create_program("Synthetic refresh", None).unwrap();
-        let before = ApprovedDesignSnapshot { version: 1, scenes: serde_json::json!({"s": {"revision": 1}}), looks: serde_json::json!({}), media_ids: vec![] };
+        let before = ApprovedDesignSnapshot { version: 1, scenes: serde_json::json!({"s": {"revision": 1}}), looks: serde_json::json!({}), media_ids: vec![], moments: serde_json::Value::Null };
         let first = db.approve_program_with_designs(&p.id, p.revision, &before).unwrap();
         let after = ApprovedDesignSnapshot { scenes: serde_json::json!({"s": {"revision": 2}}), ..before.clone() };
         let refreshed = db.approve_program_with_designs(&p.id, first.revision, &after).unwrap();
@@ -579,7 +590,7 @@ mod tests {
             version: 1,
             scenes: serde_json::json!({"scene": {"revision": 2}}),
             looks: serde_json::json!({}),
-            media_ids: vec![],
+            media_ids: vec![], moments: serde_json::Value::Null,
         };
         let refreshed = db.approve_program_with_designs(&p.id, legacy.revision, &designs).unwrap();
 
@@ -597,7 +608,7 @@ mod tests {
             version: 1,
             scenes: serde_json::json!({"scene": {"revision": 2}}),
             looks: serde_json::json!({}),
-            media_ids: vec![],
+            media_ids: vec![], moments: serde_json::Value::Null,
         };
         let first = db.approve_program_with_designs(&p.id, p.revision, &designs).unwrap();
         let repeated = db.approve_program_with_designs(&p.id, p.revision, &designs).unwrap();
@@ -612,7 +623,7 @@ mod tests {
         let p = db.create_program("Synthetic service", None).unwrap();
         let designs = ApprovedDesignSnapshot {
             version: 1, scenes: serde_json::json!({"scene": {"scene": {"updatedAt": 1}}}),
-            looks: serde_json::json!({"look": {"updatedAt": 1}}), media_ids: vec![],
+            looks: serde_json::json!({"look": {"updatedAt": 1}}), media_ids: vec![], moments: serde_json::Value::Null,
         };
         db.approve_program_with_designs(&p.id, p.revision, &designs).unwrap();
         let edited = db.update_program(&p.id, p.revision, "Draft edit", None).unwrap();
@@ -626,7 +637,7 @@ mod tests {
         let db = ContentDb::open_in_memory().unwrap();
         let p = db.create_program("Sunday", None).unwrap();
         let saved = db.replace_items(&p.id, 1, &[verse("John 3:16", 43, 3, 16)]).unwrap(); // rev 2
-        let designs = ApprovedDesignSnapshot { version: 1, scenes: serde_json::json!({ "welcome": { "scene": "pinned" } }), looks: serde_json::json!({ "look-a": { "color": "#fff" } }), media_ids: vec![] };
+        let designs = ApprovedDesignSnapshot { version: 1, scenes: serde_json::json!({ "welcome": { "scene": "pinned" } }), looks: serde_json::json!({ "look-a": { "color": "#fff" } }), media_ids: vec![], moments: serde_json::Value::Null  };
         db.approve_program_with_designs(&p.id, saved.program.revision, &designs).unwrap();
         let changed = db.replace_items(&p.id, 2, &[verse("Romans 8:28", 45, 8, 28)]).unwrap(); // rev 3
         assert_ne!(changed.program.approved_revision, Some(changed.program.revision));
@@ -762,7 +773,7 @@ mod tests {
             version: 1,
             scenes: serde_json::json!({ "scene-a": { "id": "scene-a", "updatedAt": 17 } }),
             looks: serde_json::json!({ "look-a": { "id": "look-a", "updatedAt": 4 } }),
-            media_ids: vec![],
+            media_ids: vec![], moments: serde_json::Value::Null,
         };
 
         let approved = db.approve_program_with_designs(&p.id, saved.program.revision, &approved_designs).unwrap();
@@ -771,7 +782,7 @@ mod tests {
 
         let changed = db.replace_items(&p.id, approved.revision, &[verse("John 3:17", 43, 3, 17)]).unwrap();
         assert_eq!(db.approved_designs(&p.id, saved.program.revision).unwrap(), Some(approved_designs));
-        assert!(matches!(db.approve_program_with_designs(&p.id, approved.revision - 1, &ApprovedDesignSnapshot { version: 1, scenes: serde_json::json!({}), looks: serde_json::json!({}), media_ids: vec![] }), Err(ContentError::Conflict { .. })));
+        assert!(matches!(db.approve_program_with_designs(&p.id, approved.revision - 1, &ApprovedDesignSnapshot { version: 1, scenes: serde_json::json!({}), looks: serde_json::json!({}), media_ids: vec![], moments: serde_json::Value::Null }), Err(ContentError::Conflict { .. })));
         assert_eq!(changed.program.approved_revision, Some(saved.program.revision));
     }
 

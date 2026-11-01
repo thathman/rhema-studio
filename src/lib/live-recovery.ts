@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import { create } from "zustand"
 import { enableOutput } from "@/lib/broadcast-output-control"
+import { restoreAfterDesignedMoment } from "@/lib/designed-moments"
 import { captureSceneAppearance, normalizeScene, sceneForOutput } from "@/lib/scenes"
 import { normalizeTheme } from "@/lib/theme-migrations"
 import { sourceOf, type LiveSources } from "@/lib/live-sources"
@@ -775,6 +776,8 @@ export async function startLiveRecovery(): Promise<() => void> {
   if (unclean && store) {
     try { restoreNotices(await store.get<KeptNotices>("notices")) } catch { /* Keep startup available if notices are damaged. */ }
   }
+  // No crash to put back: Program starts empty, so no screen should still hold a moment's design.
+  if (!useRecovery.getState().offer && !useBroadcastStore.getState().isLive) restoreAfterDesignedMoment()
   const offs = [
     useBroadcastStore.subscribe((s, p) => {
       // Rehearsal starting: keep what was really on the screens up to now (a change in the last

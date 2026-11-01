@@ -46,6 +46,8 @@ Open: `designStore.get` → editor works on `document.scene`; keep `bindings` an
 
 ## Pinning (agreed with Codex 2026-10-29; owner audit P0 "version pins")
 
+Owner decision 2026-11-01: a design pinned or moved after a service is approved needs fresh approval before it reaches Program. The approval manifest holds each moment's pin (`moments`, by item id); Live draws only a pin it lists, and otherwise keeps the screens on what was approved, shows the slide's text and tells the operator. An approval from before `moments` covers no pin until refreshed.
+
 A design is used only through an immutable version; a newer version never changes what already uses an older one.
 
 ```ts

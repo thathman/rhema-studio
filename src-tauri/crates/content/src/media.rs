@@ -413,7 +413,7 @@ mod tests {
                 version: 1,
                 scenes: serde_json::json!({ "welcome": { "scene": { "id": "welcome" } } }),
                 looks: serde_json::json!({}),
-                media_ids: vec![asset.id.clone()],
+                media_ids: vec![asset.id.clone()], moments: serde_json::Value::Null,
             },
         ).unwrap();
 

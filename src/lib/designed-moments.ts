@@ -5,8 +5,9 @@ import { captureSceneAppearance, normalizeScene } from "@/lib/scenes"
 import { takesSourceOnly } from "@/lib/item-intent"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
-import { isSlideItem, type BroadcastOutput, type DesignedMomentRestore, type QueueItem, type Scene } from "@/types"
+import { isSlideItem, type BroadcastOutput, type DesignedMomentRestore, type DesignPin, type QueueItem, type Scene } from "@/types"
 
 /**
  * A designed moment on Live (C2, docs/contracts/design-documents-v1.md, Pinning): when the operator
@@ -15,11 +16,27 @@ import { isSlideItem, type BroadcastOutput, type DesignedMomentRestore, type Que
  * version is ever drawn; when it cannot be (missing after a partial restore, unreadable), the slide
  * shows its own title and body as before and the operator is told why. Nothing is saved to the
  * scene library and no approval changes: the screen holds a snapshot, like a Restore.
+ *
+ * Fails closed like an approved scene: once a service is approved, a moment shows only the version
+ * its approval captured. A pin added or moved since shows the slide's text until approved again.
  */
 
 const isCongregation = (o: BroadcastOutput) => (o.role ?? "congregation") === "congregation"
 
 type GetVersion = Parameters<typeof resolveDesignedMoment>[1]
+
+/** Why the open service's approval does not cover this pin; null when it does, or nothing is approved. */
+function designNotApproved(itemId: string, ref: DesignPin): string | null {
+  const service = useServiceStore.getState()
+  const revision = service.current?.approved_revision
+  if (revision === null || revision === undefined) return null
+  if (service.approvedDesignRevision !== revision || !service.approvedDesigns) return service.approvedDesignsError ?? "The approved design list is unavailable. Reload the service or refresh its approval."
+  const approved = service.approvedDesigns.moments?.[itemId]
+  if (approved?.id === ref.id && approved.version === ref.version) return null
+  return approved
+    ? `This slide pins design v${ref.version}, and v${approved.version} was approved. Refresh the service approval to show it; its text is showing instead.`
+    : `This design was pinned after the service was approved. Refresh the service approval to show it; the slide's text is showing instead.`
+}
 
 /** Run on the operator's own Take of `item` (after its content is up). */
 export async function showDesignedMoment(
@@ -36,9 +53,16 @@ export async function showDesignedMoment(
   const sceneIds = new Map(before.outputs.map((output) => [output.id, output.sceneId]))
   const { scene: resolved, issues } = await resolveDesignedMoment(item.slide, getVersion)
   if (!isTargetCurrent()) return
+  // Checked after the load, so an approval that changed meanwhile counts. Here, because every way to Program draws through this.
+  const notApproved = designNotApproved(item.id, ref)
+  if (notApproved) {
+    restoreAfterDesignedMoment()
+    toast.warning("Design needs approval", { id: `design-approval-${item.id}`, description: notApproved })
+    return
+  }
   if (!resolved) {
     restoreAfterDesignedMoment()
-    toast.warning("Design not shown", { description: issues[0]?.message ?? `"${item.slide.title}" shows its text instead.` })
+    toast.warning("Design not shown", { id: `design-missing-${item.id}`, description: issues[0]?.message ?? `"${item.slide.title}" shows its text instead.` })
     return
   }
   // One id per pinned version, so a screen still showing it is recognised at restore.
@@ -90,16 +114,26 @@ export function restoreAfterDesignedMoment(): void {
 }
 
 /**
- * Program can leave a moment with no Take steps: Clear, a verse sent from elsewhere, a detected verse,
- * a timed move. The screens must not keep the design then, or Live would claim a verse the design hides.
- * A Take that runs steps of its own keeps its behaviour: a pinned slide goes straight from design to
- * design without flashing the old scene, and a Bible-feeds-only Take leaves the screens alone.
+ * Program can move with no Take steps: Clear, a verse sent from elsewhere, a detected verse, a timed
+ * move, Show this live. The screens follow it, or Live would claim what the design hides: onto a
+ * pinned slide they show its design (for a Take this meets `runTakeSteps`, and whichever is second
+ * finds it done), and off a moment they get their scene back. A Bible-feeds-only Take leaves the
+ * screens alone. A restore saved by an older build names no item, so any move counts as leaving it.
  */
 useBroadcastStore.subscribe((s, prev) => {
-  if ((s.isLive === prev.isLive && s.liveItemId === prev.liveItemId) || s.rehearsal || prev.rehearsal) return
-  const itemId = s.outputs.find((o) => o.designedMomentRestore?.itemId)?.designedMomentRestore?.itemId
-  if (!itemId || (s.isLive && s.liveItemId === itemId)) return
+  if (s.rehearsal) return
+  const before = prev.rehearsal ? prev.rehearsalReturn : prev
+  if (before && s.isLive === before.isLive && s.liveItemId === before.liveItemId) return
   const next = s.isLive && s.liveItemId ? useQueueStore.getState().items.find((item) => item.id === s.liveItemId) : undefined
-  if (next && ((isSlideItem(next) && next.slide.designRef) || takesSourceOnly(next))) return
-  restoreAfterDesignedMoment()
+  if (next && takesSourceOnly(next)) return
+  if (next && isSlideItem(next) && next.slide.designRef) {
+    const up = (s.outputs.find((o) => o.designedMomentRestore?.itemId === next.id))
+    if (up) return
+    void showDesignedMoment(next, undefined, () => {
+      const now = useBroadcastStore.getState()
+      return !now.rehearsal && now.isLive && now.liveItemId === next.id
+    }).catch((e) => console.warn(`[designed-moments] design for ${next.reference} failed:`, e))
+    return
+  }
+  if (s.outputs.some((o) => o.designedMomentRestore)) restoreAfterDesignedMoment()
 })
