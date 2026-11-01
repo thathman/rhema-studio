@@ -297,11 +297,13 @@ The HTTP API provides additional endpoints for querying status.
 
 ### GET /api/v1/status
 
-Returns current application status snapshot.
+Returns current application status snapshot. While keys are required it needs a current key (401
+otherwise), and fields a role may not read come back empty: View only and OBS companion keys get on
+air state only, and only Present and Configure keys get the theme and confidence threshold.
 
 **Request:**
 ```bash
-curl http://localhost:8080/api/v1/status
+curl -H "X-Rhema-Key: <key>" http://localhost:8080/api/v1/status
 ```
 
 **Response:**
