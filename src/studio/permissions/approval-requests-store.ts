@@ -1,6 +1,13 @@
 import { invoke } from "@tauri-apps/api/core"
-import { mergeDeskScene } from "@/lib/desk-scenes"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { mergeDeskScene, scenesOnScreen } from "@/lib/desk-scenes"
+import {
+  loadSceneApprovalRecovery,
+  persistSceneLibraryNow,
+  saveSceneApprovalRecovery,
+  useBroadcastStore,
+  type SceneApprovalRecovery,
+} from "@/stores/broadcast-store"
+import { useJournalStore } from "@/stores/journal-store"
 import { create } from "zustand"
 
 export type ApprovalRequestState = "submitted" | "approved" | "declined" | "requested_changes" | "applied" | "expired" | "withdrawn" | "superseded"
@@ -38,6 +45,7 @@ export interface ApprovalEvent {
 interface ApprovalRequestsState {
   requests: ApprovalRequest[]
   histories: Record<string, ApprovalEvent[]>
+  localApplicationErrors: Record<string, string>
   hydrated: boolean
   loading: boolean
   error: string | null
@@ -46,6 +54,7 @@ interface ApprovalRequestsState {
 export const useApprovalRequestsStore = create<ApprovalRequestsState>(() => ({
   requests: [],
   histories: {},
+  localApplicationErrors: {},
   hydrated: false,
   loading: false,
   error: null,
@@ -89,7 +98,7 @@ export function hydrateApprovalRequests(): Promise<void> {
 export function resetApprovalRequests(): void {
   loadSequence += 1
   hydration = null
-  useApprovalRequestsStore.setState({ requests: [], histories: {}, hydrated: false, loading: false, error: null })
+  useApprovalRequestsStore.setState({ requests: [], histories: {}, localApplicationErrors: {}, hydrated: false, loading: false, error: null })
 }
 
 export async function decideApprovalRequest(id: string, decision: ApprovalDecision, note?: string): Promise<ApprovalRequest> {
@@ -132,53 +141,148 @@ export async function confirmPlanApprovalRequest(id: string): Promise<ApprovalRe
   }
 }
 
+function recordOf(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function sceneMatchesApproval(request: ApprovalRequest, scenes: ReturnType<typeof useBroadcastStore.getState>["scenes"]): boolean {
+  const existing = scenes.find((scene) => scene.id === request.targetId)
+  if (request.kind === "scene_delete") return !existing
+  const payload = recordOf(request.payload)
+  const scene = mergeDeskScene(recordOf(payload?.scene), existing)
+  if (!scene || !existing) return false
+  return sameSceneContent(scene, existing)
+}
+
+function sameSceneContent(a: ReturnType<typeof mergeDeskScene>, b: ReturnType<typeof useBroadcastStore.getState>["scenes"][number] | null | undefined): boolean {
+  if (!a || !b) return a === b
+  const withoutLocalRevision = (value: typeof a) => Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== "createdAt" && key !== "updatedAt" && key !== "updatedBy"),
+  )
+  const stable = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(stable)
+    if (!value || typeof value !== "object") return value
+    return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, nested]) => [key, stable(nested)]))
+  }
+  return JSON.stringify(stable(withoutLocalRevision(a))) === JSON.stringify(stable(withoutLocalRevision(b)))
+}
+
+/** An applied host request can outlive a failed local disk write; expose a local-only recovery. */
+export function sceneApprovalNeedsLocalRecovery(
+  request: ApprovalRequest,
+  scenes: ReturnType<typeof useBroadcastStore.getState>["scenes"],
+  localError?: string,
+): boolean {
+  if (request.state !== "applied" || !request.kind.startsWith("scene_")) return false
+  return Boolean(localError) || !sceneMatchesApproval(request, scenes)
+}
+
+async function applyApprovedSceneLocally(request: ApprovalRequest, recovery: SceneApprovalRecovery): Promise<void> {
+  const broadcast = useBroadcastStore.getState()
+  const existing = broadcast.scenes.find((scene) => scene.id === request.targetId)
+  if (request.kind === "scene_save") {
+    const payload = recordOf(request.payload)
+    const scene = mergeDeskScene(recordOf(payload?.scene), existing)
+    if (!scene || scene.id !== request.targetId) {
+      throw new Error("The approved scene payload could not be restored safely on this computer.")
+    }
+    if (!sceneMatchesApproval(request, broadcast.scenes) && !sameSceneContent(existing ?? null, recovery.beforeScene)) {
+      throw new Error("The local scene changed after host approval, so recovery stopped to protect the newer design. Submit a fresh scene request.")
+    }
+    const changed = !sceneMatchesApproval(request, broadcast.scenes)
+    if (changed) broadcast.saveScene(scene)
+    await persistSceneLibraryNow(useBroadcastStore.getState().scenes)
+    if (changed) useJournalStore.getState().add({
+      kind: "scene",
+      label: `Scene ${scene.name} ${existing ? "changed" : "made"} by ${request.requester.name} (approved on the main desk)`,
+    })
+    await saveSceneApprovalRecovery(null)
+    return
+  }
+
+  if (existing && !sameSceneContent(existing, recovery.beforeScene)) {
+    throw new Error("The local scene changed after host approval, so recovery stopped to protect the newer design. Submit a fresh scene request.")
+  }
+  if (scenesOnScreen(useBroadcastStore.getState()).has(request.targetId)) {
+    throw new Error("That scene is now on a real screen. Move each screen to another scene before retrying its local deletion.")
+  }
+  if (existing) broadcast.deleteScene(request.targetId)
+  await persistSceneLibraryNow(useBroadcastStore.getState().scenes)
+  if (existing) useJournalStore.getState().add({
+    kind: "scene",
+    label: `Scene ${existing?.name ?? request.targetId} deleted by ${request.requester.name} (approved on the main desk)`,
+  })
+  await saveSceneApprovalRecovery(null)
+}
+
 /** Apply an approved remote scene request only after the host rechecks its saved revision and outputs. */
 export async function applySceneApprovalRequest(id: string): Promise<ApprovalRequest> {
-  const current = useApprovalRequestsStore.getState().requests.find((item) => item.id === id)
+  let current = useApprovalRequestsStore.getState().requests.find((item) => item.id === id)
   if (!current || (current.kind !== "scene_save" && current.kind !== "scene_delete")) {
     throw new Error("Only a host-approved scene request can be applied here.")
   }
-  if (current.state !== "approved") throw new Error("The scene request must be approved before it can be applied.")
+  if (current.state !== "approved" && current.state !== "applied") throw new Error("The scene request must be approved before it can be applied.")
 
-  let hostApplied = false
+  let hostApplied = current.state === "applied"
+  let recovery: SceneApprovalRecovery | null = null
+  let recoverySaved = false
   try {
-    const request = await invoke<ApprovalRequest>("approvals_apply", { id })
-    hostApplied = request?.id === id && request.state === "applied"
-    if (!hostApplied || request.kind !== current.kind || request.targetId !== current.targetId) {
-      throw new Error("The host did not confirm this exact scene request as applied.")
+    // Reject malformed saves and known active-screen deletions before consuming the one-shot host approval.
+    if (current.kind === "scene_save") {
+      const payload = recordOf(current.payload)
+      const existing = useBroadcastStore.getState().scenes.find((scene) => scene.id === current!.targetId)
+      const candidate = mergeDeskScene(recordOf(payload?.scene), existing)
+      if (!candidate || candidate.id !== current.targetId) throw new Error("The approved scene payload could not be restored safely on this computer.")
+    } else if (current.state === "approved" && scenesOnScreen(useBroadcastStore.getState()).has(current.targetId)) {
+      throw new Error("That scene is on a real screen. Move each screen to another scene before applying its deletion.")
     }
 
-    const broadcast = useBroadcastStore.getState()
-    if (request.kind === "scene_save") {
-      const payload = request.payload && typeof request.payload === "object" && !Array.isArray(request.payload)
-        ? request.payload as Record<string, unknown>
-        : null
-      const existing = broadcast.scenes.find((scene) => scene.id === request.targetId)
-      const scene = mergeDeskScene(payload?.scene, existing)
-      if (!scene || scene.id !== request.targetId) {
-        throw new Error("The host approved the request, but its scene payload could not be restored safely. Ask the desk to send it again.")
-      }
-      // Saving a scene changes the library only; outputs keep their current snapshots until an explicit Take.
-      broadcast.saveScene(scene)
-    } else {
-      if (broadcast.outputs.some((output) => output.sceneId === request.targetId)) {
-        throw new Error("The host marked this request applied, but the scene became active before it could be removed. Move the outputs away and send a fresh request.")
-      }
-      broadcast.deleteScene(request.targetId)
+    recovery = await loadSceneApprovalRecovery()
+    if (recovery && (recovery.requestId !== id || recovery.kind !== current.kind || recovery.targetId !== current.targetId)) {
+      throw new Error("Another approved scene change still needs local recovery. Finish that recovery before applying this request.")
+    }
+    if (!recovery && current.state === "applied" && !sceneMatchesApproval(current, useBroadcastStore.getState().scenes)) {
+      throw new Error("This request was applied before local recovery tracking was available. The host state is final, but the local scene changed; submit a fresh request for a safe update.")
+    }
+    if (!recovery) {
+      const beforeScene = useBroadcastStore.getState().scenes.find((scene) => scene.id === current!.targetId) ?? null
+      recovery = { requestId: id, kind: current.kind, targetId: current.targetId, beforeScene: beforeScene ? structuredClone(beforeScene) : null }
+      await saveSceneApprovalRecovery(recovery)
+      recoverySaved = true
     }
 
+    if (current.state !== "applied") {
+      const request = await invoke<ApprovalRequest>("approvals_apply", { id })
+      hostApplied = request?.id === id && request.state === "applied"
+      if (!hostApplied || request.kind !== current.kind || request.targetId !== current.targetId) {
+        throw new Error("The host did not confirm this exact scene request as applied.")
+      }
+      current = request
+      useApprovalRequestsStore.setState((state) => ({
+        requests: state.requests.map((item) => item.id === id ? request : item),
+        error: null,
+      }))
+    }
+
+    await applyApprovedSceneLocally(current, recovery)
     useApprovalRequestsStore.setState((state) => ({
-      requests: state.requests.map((item) => item.id === id ? request : item),
+      requests: state.requests.map((item) => item.id === id ? current! : item),
       histories: Object.fromEntries(Object.entries(state.histories).filter(([requestId]) => requestId !== id)),
+      localApplicationErrors: Object.fromEntries(Object.entries(state.localApplicationErrors).filter(([requestId]) => requestId !== id)),
       error: null,
     }))
-    return request
+    return current
   } catch (error) {
     // The host marks stale requests superseded before refusing; refresh so Permissions shows that state.
     await reloadApprovalRequests().catch(() => {})
     if (hostApplied) {
-      throw new Error(`The host marked this request applied, but the scene library could not be updated locally: ${approvalErrorText(error)}`)
+      const detail = approvalErrorText(error)
+      useApprovalRequestsStore.setState((state) => ({
+        localApplicationErrors: { ...state.localApplicationErrors, [id]: detail },
+      }))
+      throw new Error(`The host marked this request applied, but the scene library could not be saved locally: ${detail} Use the local recovery action here to retry without applying it at the host again.`)
     }
+    if (recoverySaved) await saveSceneApprovalRecovery(null).catch(() => {})
     throw error
   }
 }

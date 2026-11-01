@@ -6,6 +6,7 @@ import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { Button } from "@/components/ui/button"
+import { TriangleAlertIcon } from "lucide-react"
 
 type RecorderState =
   | "idle"
@@ -202,6 +203,9 @@ export function RecorderDock() {
       : pendingAction === "stop"
         ? "Stop requested · finalizing the local file"
         : engineStateLabel(status, pinnedOutputName)
+  const computerBusyWarning = preflightIsCurrent
+    ? preflight?.warnings.find((warning) => warning.code === "computer_busy")
+    : undefined
 
   useEffect(() => {
     let cancelled = false
@@ -397,6 +401,18 @@ export function RecorderDock() {
           >
             {stateLabel}
           </span>
+          {computerBusyWarning && (
+            <span
+              role="status"
+              aria-label="Computer load recording warning"
+              aria-live="polite"
+              title={computerBusyWarning.message}
+              className="inline-flex items-center gap-1 text-xs font-medium text-amber-800"
+            >
+              <TriangleAlertIcon aria-hidden className="size-3.5" />
+              Computer busy · recording may stutter
+            </span>
+          )}
           {status?.state === "recording" && (
             <span className="text-xs text-muted-foreground">
               {formatDuration(status.elapsedMs)} · {status.video.width}×

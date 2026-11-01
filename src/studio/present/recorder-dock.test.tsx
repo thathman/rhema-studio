@@ -315,6 +315,9 @@ describe("Live's Rhema recording dock", () => {
     )
 
     expect(host.textContent).toContain(warning.message)
+    const persistentWarning = host.querySelector('[aria-label="Computer load recording warning"]')
+    expect(persistentWarning).not.toBeNull()
+    expect(persistentWarning?.getAttribute("title")).toBe(warning.message)
     const warningList = host.querySelector(
       '[aria-label="Recording setup warnings"]'
     )

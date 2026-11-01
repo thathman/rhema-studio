@@ -1,0 +1,73 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+const native = vi.hoisted(() => ({
+  status: null as unknown,
+  handler: null as ((event: { payload: unknown }) => void) | null,
+  invoke: vi.fn(),
+}))
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }))
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async (_event: string, handler: (event: { payload: unknown }) => void) => {
+    native.handler = handler
+    return () => { native.handler = null }
+  }),
+}))
+
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import { useShellStore } from "@/studio/shell-store"
+import { RecorderStatusIndicator } from "./recorder-status-indicator"
+
+const recording = { state: "recording", sessionActive: true, outputId: "sanctuary", problem: null }
+const failed = { state: "failed", sessionActive: true, outputId: "sanctuary", problem: { message: "Encoder stopped unexpectedly." } }
+
+let host: HTMLDivElement
+let root: Root
+
+async function render(workspace: "home" | "present" = "home") {
+  host = document.createElement("div")
+  document.body.append(host)
+  root = createRoot(host)
+  await act(async () => {
+    root.render(<RecorderStatusIndicator workspace={workspace} />)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+  return host
+}
+
+beforeEach(() => {
+  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  native.handler = null
+  native.status = recording
+  native.invoke.mockReset().mockImplementation(async (command: string) => command === "recorder_status" ? native.status : null)
+})
+
+afterEach(async () => {
+  if (root) await act(async () => root.unmount())
+  host?.remove()
+})
+
+describe("RecorderStatusIndicator", () => {
+  it("keeps recording and failure status visible outside Live and links to recovery", async () => {
+    const goTo = vi.fn()
+    useShellStore.setState({ goTo } as never)
+    const el = await render("home")
+
+    expect(el.querySelector('[aria-label="Recorder status"]')?.textContent).toContain("Recording is active · sanctuary")
+    await act(async () => {
+      native.handler?.({ payload: failed })
+      await Promise.resolve()
+    })
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("Recording failed · Encoder stopped unexpectedly.")
+    await act(async () => [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Open History")?.click())
+    expect(goTo).toHaveBeenCalledWith("archive")
+  })
+
+  it("does not duplicate the Live recorder status beside the full recorder dock", async () => {
+    const el = await render("present")
+    expect(el.querySelector('[aria-label="Recorder status"]')).toBeNull()
+    expect(native.invoke).toHaveBeenCalledWith("recorder_status")
+  })
+})

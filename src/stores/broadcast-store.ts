@@ -1855,6 +1855,46 @@ export function flushThemeSave(): Promise<void> {
   return pendingSave
 }
 
+let pendingSceneLibrarySave: Promise<void> = Promise.resolve()
+
+/** Persist a host-approved scene library change and surface storage failures to its operator. */
+export function persistSceneLibraryNow(scenes: Scene[]): Promise<void> {
+  const persist = async () => {
+    await flushThemeSave()
+    const store = await getThemeStore()
+    await store.set("scenes", scenes)
+    await store.save()
+  }
+  const next = pendingSceneLibrarySave.then(persist, persist)
+  pendingSceneLibrarySave = next.catch(() => {})
+  return next
+}
+
+export interface SceneApprovalRecovery {
+  requestId: string
+  kind: "scene_save" | "scene_delete"
+  targetId: string
+  beforeScene: Scene | null
+}
+
+/** Keep a local compare point before consuming an approved host request, so recovery is safe after restart. */
+export async function saveSceneApprovalRecovery(recovery: SceneApprovalRecovery | null): Promise<void> {
+  await flushThemeSave()
+  const store = await getThemeStore()
+  await store.set("sceneApprovalRecovery", recovery)
+  await store.save()
+}
+
+export async function loadSceneApprovalRecovery(): Promise<SceneApprovalRecovery | null> {
+  const store = await getThemeStore()
+  const raw = await store.get("sceneApprovalRecovery") as Partial<SceneApprovalRecovery> | undefined
+  if (!raw || typeof raw.requestId !== "string" || typeof raw.targetId !== "string" || (raw.kind !== "scene_save" && raw.kind !== "scene_delete")) return null
+  const beforeScene = raw.beforeScene === null ? null : normalizeScene(raw.beforeScene)
+  if (raw.beforeScene !== null && !beforeScene) return null
+  if (beforeScene && beforeScene.id !== raw.targetId) return null
+  return { requestId: raw.requestId, kind: raw.kind, targetId: raw.targetId, beforeScene }
+}
+
 /**
  * The looks and screens as a backup file carries them (#298 E6): the church's own themes, the
  * outputs (without their browser-feed link secrets), lower thirds, the ticker and stage looks,
