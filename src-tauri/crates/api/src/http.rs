@@ -2237,7 +2237,8 @@ async fn desk_camera_handler<S: CommandSink + 'static>(
     // Camera relay always requires a paired role, even when legacy remote commands are open.
     // Host outputs use the local router directly; TV viewers use the separately scoped feed route.
     let entry = match check_http_command_key(&state.keys, &headers, peer) {
-        Ok(Some(e)) if e.role.reads_cameras() => e,
+        // Paused like an OBS companion: control taken back shuts the camera reads too.
+        Ok(Some(e)) if e.role.reads_cameras() && !e.paused => e,
         Ok(Some(_)) => return StatusCode::FORBIDDEN.into_response(),
         Ok(None) => return StatusCode::UNAUTHORIZED.into_response(),
         Err((code, _)) => return code.into_response(),
@@ -2264,15 +2265,15 @@ async fn feed_camera_handler<S: CommandSink + 'static>(
 }
 
 /// Forget relayed camera readers that have lost their key or role, or whose scene no longer plays
-/// the camera; the app then kicks what nobody holds (`CameraHub::relay_holds`).
-pub fn prune_camera_readers(cameras: &crate::cameras::CameraHub, keys: &KeySet, feeds: &FeedHub) {
+/// the camera; how many went. The app then kicks what nobody holds (`CameraHub::relay_kick_unheld`).
+pub fn prune_camera_readers(cameras: &crate::cameras::CameraHub, keys: &KeySet, feeds: &FeedHub) -> usize {
     let k = keys.read().unwrap_or_else(std::sync::PoisonError::into_inner);
     cameras.relay_prune(|holder, name| match holder {
         // Anonymous camera relays are no longer permitted, even if legacy commands remain open.
         crate::cameras::RelayHolder::Key(hash) if hash.is_empty() => false,
-        crate::cameras::RelayHolder::Key(hash) => k.require_auth && k.entries.iter().any(|e| &e.hash == hash && e.role.reads_cameras()),
+        crate::cameras::RelayHolder::Key(hash) => k.require_auth && k.entries.iter().any(|e| &e.hash == hash && e.role.reads_cameras() && !e.paused),
         crate::cameras::RelayHolder::Feed(id, key) => feeds.admits(id, key) && feeds.plays_camera(id, name),
-    });
+    })
 }
 
 /// `POST /api/v1/camera/{name}/status` with `Authorization: Bearer <the camera's secret>`: Rhema
@@ -4043,24 +4044,23 @@ mod tests {
         let sent = seen.lock().unwrap().clone();
         assert_eq!(sent.len(), 2);
         assert!(sent.iter().all(|l| l.starts_with(&format!("POST /pulpit/whep auth={basic} "))), "{sent:?}");
-        // Both read from one address here: it is cut off only when neither may any more.
-        let here = std::net::IpAddr::from([127, 0, 0, 1]);
+        // Both read from one address here, each cut off by itself.
         prune_camera_readers(&cameras, &keys, &feeds);
-        assert!(cameras.relay_holds(here, "pulpit"));
+        assert_eq!(cameras.relay_readers("pulpit"), 2);
         keys.write().unwrap().entries.retain(|e| e.hash != hash_key("cam"));
         prune_camera_readers(&cameras, &keys, &feeds);
-        assert!(cameras.relay_holds(here, "pulpit"), "the TV may still");
+        assert_eq!(cameras.relay_readers("pulpit"), 1, "the TV may still");
         assert!(post(desk, "cam").await.starts_with("HTTP/1.1 401"));
         // Text that merely looks like a camera's address opens nothing, and leaving the scene cuts it off.
         feeds.publish("tv", r#"{"verse":{"text":"/pulpit/whep"},"scene":{"layers":[{"cameraUrl":"http://192.168.1.20:8889/choir/whep"}]}}"#.into());
         assert!(post(tv, "").await.starts_with("HTTP/1.1 403"));
         prune_camera_readers(&cameras, &keys, &feeds);
-        assert!(!cameras.relay_holds(here, "pulpit"));
+        assert_eq!(cameras.relay_readers("pulpit"), 0);
         feeds.publish("tv", r#"{"scene":{"layers":[{"cameraUrl":"http://192.168.1.20:8889/pulpit/whep"}]}}"#.into());
         assert!(post(tv, "").await.contains("v=0 answer"));
         feeds.set(&[("tv".into(), "fedcba9876543210".into())]);
         prune_camera_readers(&cameras, &keys, &feeds);
-        assert!(!cameras.relay_holds(here, "pulpit"));
+        assert_eq!(cameras.relay_readers("pulpit"), 0);
         assert!(post(tv, "").await.starts_with("HTTP/1.1 403"), "an old TV link stops at once");
         let mut h = server.handle;
         h.stop();
@@ -4119,7 +4119,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CREATED);
 
         prune_camera_readers(&cameras, &keys, &feeds);
-        assert!(!cameras.relay_holds(peer, "pulpit"));
+        assert_eq!(cameras.relay_readers("pulpit"), 0);
     }
 
     #[tokio::test]

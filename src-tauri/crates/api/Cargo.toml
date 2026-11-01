@@ -27,3 +27,6 @@ hyper-util = { version = "0.1", features = ["server-auto", "tokio", "service"] }
 tower = { version = "0.5", features = ["util"] }
 # Passes a phone camera page's WHIP requests to the camera router on this computer (#209); plain http to 127.0.0.1.
 reqwest = { version = "0.12", default-features = false }
+
+[dev-dependencies]
+tempfile = "3"

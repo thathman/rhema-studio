@@ -103,6 +103,13 @@ jobs:
         working-directory: src-tauri
         run: |
           if [ -d crates/content ]; then cargo test -p rhema-content; else echo "no content crate on this branch"; fi
+      - name: API crate tests, with the real camera router
+        working-directory: src-tauri
+        env:
+          RHEMA_REQUIRE_ROUTER: "1"
+        run: |
+          ../scripts/fetch-mediamtx.sh x86_64-unknown-linux-gnu
+          RHEMA_MEDIAMTX="$PWD/binaries/mediamtx-x86_64-unknown-linux-gnu" cargo test -p rhema-api
       - name: Content crate clippy (strict)
         working-directory: src-tauri
         run: |
