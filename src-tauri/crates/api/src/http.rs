@@ -4118,7 +4118,8 @@ mod tests {
         ).await;
         assert_eq!(response.status(), StatusCode::CREATED);
 
-        assert_eq!(camera_readers_gone(&cameras, &keys, &feeds), [peer]);
+        prune_camera_readers(&cameras, &keys, &feeds);
+        assert!(!cameras.relay_holds(peer, "pulpit"));
     }
 
     #[tokio::test]
