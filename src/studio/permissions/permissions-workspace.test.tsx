@@ -21,6 +21,7 @@ const { createSceneEditApproval, reloadSceneApprovals, useSceneApprovalsStore } 
 const { useJoin } = await import("@/stores/join-store")
 const { useSettingsStore } = await import("@/stores/settings-store")
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
+const { sceneForOutput } = await import("@/lib/scenes")
 const { useShellStore } = await import("@/studio/shell-store")
 const { reloadApprovalRequests, resetApprovalRequests, useApprovalRequestsStore } = await import("./approval-requests-store")
 
@@ -257,7 +258,12 @@ describe("Permissions workspace", () => {
     })
     resetApprovalRequests()
     await reloadApprovalRequests()
-    useBroadcastStore.setState({ outputs: [{ id: "sanctuary", name: "Sanctuary", type: "display", themeId: "classic-dark", monitorIndex: 0 }] as never })
+    const takenScene = { id: "scene-1", name: "Welcome · taken revision", background: "#111111", createdAt: 1, updatedAt: 1, layers: [] }
+    useBroadcastStore.setState({
+      scenes: [takenScene] as never,
+      outputs: [{ id: "sanctuary", name: "Sanctuary", type: "display", sceneId: "scene-1", sceneSnapshot: takenScene, themeId: "classic-dark", monitorIndex: 0 }] as never,
+      isLive: true,
+    })
     const outputsBefore = useBroadcastStore.getState().outputs
     const el = await mount()
 
@@ -270,7 +276,8 @@ describe("Permissions workspace", () => {
     expect(el.textContent).toContain("Verify the scene library after a restart")
     expect(useBroadcastStore.getState().scenes).toEqual(expect.arrayContaining([expect.objectContaining({ id: "scene-1", name: "Welcome" })]))
     expect(useBroadcastStore.getState().outputs).toBe(outputsBefore)
-    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(sceneForOutput(useBroadcastStore.getState().outputs[0], useBroadcastStore.getState().scenes)?.name).toBe("Welcome · taken revision")
+    expect(useBroadcastStore.getState().isLive).toBe(true)
     await act(async () => root.unmount())
   })
 
