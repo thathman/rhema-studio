@@ -253,7 +253,7 @@ export function AppShell() {
 
       {/* The live console is always dark (its own deeper palette), top bar included. */}
       <div className={cn("flex min-h-0 min-w-0 flex-col bg-background text-foreground", activeWorkspace === "present" && "dark present-surface")}>
-        <TopBar title={TITLES[activeWorkspace]} />
+        <TopBar title={TITLES[activeWorkspace]} workspace={activeWorkspace} />
         <RecoveryBanner />
         <SignalWatch />
         {paired && <ShareReadiness />}

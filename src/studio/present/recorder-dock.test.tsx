@@ -6,6 +6,14 @@ const native = vi.hoisted(() => ({
   eventHandler: null as ((event: { payload: unknown }) => void) | null,
 }))
 
+vi.mock("@chenglou/pretext", () => ({ clearCache: vi.fn() }))
+vi.mock("@chenglou/pretext/rich-inline", () => ({
+  prepareRichInline: vi.fn(() => ({})),
+  materializeRichInlineLineRange: vi.fn(() => []),
+  measureRichInlineStats: vi.fn(() => ({ width: 0, height: 0, lines: 0 })),
+  walkRichInlineLineRanges: vi.fn(),
+}))
+
 vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }))
 vi.mock("@tauri-apps/api/event", () => ({
   emitTo: vi.fn(async () => {}),
@@ -167,6 +175,100 @@ afterEach(() => {
 })
 
 describe("Live's Rhema recording dock", () => {
+  it("preflights and starts with the chosen quality, and requires a fresh check after quality changes", async () => {
+    native.invoke.mockImplementation(
+      async (
+        command: string,
+        args?: { request?: { profile?: string } }
+      ) => {
+        if (command === "recorder_status") return idleStatus
+        if (command === "recorder_preflight") {
+          const hd = args?.request?.profile === "hd_1080p30"
+          return {
+            ...preflight,
+            width: hd ? 1920 : 1280,
+            height: hd ? 1080 : 720,
+          }
+        }
+        if (command === "recorder_start") return recordingStatus
+        return null
+      }
+    )
+
+    await renderDock()
+    await act(async () =>
+      change(
+        host.querySelector<HTMLSelectElement>(
+          '[aria-label="Congregation output"]'
+        )!,
+        "overflow"
+      )
+    )
+    const quality = host.querySelector<HTMLSelectElement>(
+      '[aria-label="Recording quality"]'
+    )!
+    expect(quality.value).toBe("standard_720p30")
+    expect(host.textContent).toContain(
+      "NDI sets the recorded resolution when available"
+    )
+
+    const checkSetup = () =>
+      host
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Check recording setup"]'
+        )!
+        .click()
+    await act(async () => checkSetup())
+    await act(async () =>
+      change(
+        host.querySelector<HTMLSelectElement>(
+          '[aria-label="Approved mixer input"]'
+        )!,
+        "Midas USB"
+      )
+    )
+    await act(async () => checkSetup())
+
+    expect(
+      host.querySelector<HTMLButtonElement>(
+        'button[aria-label="Start Rhema recording"]'
+      )!.disabled
+    ).toBe(false)
+    await act(async () => change(quality, "hd_1080p30"))
+    expect(
+      host.querySelector<HTMLButtonElement>(
+        'button[aria-label="Start Rhema recording"]'
+      )!.disabled
+    ).toBe(true)
+
+    await act(async () => checkSetup())
+    expect(native.invoke).toHaveBeenCalledWith(
+      "recorder_preflight",
+      expect.objectContaining({
+        request: expect.objectContaining({ profile: "hd_1080p30" }),
+      })
+    )
+    expect(host.textContent).toContain("Setup check passed for 1920×1080")
+    await act(async () =>
+      host
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Start Rhema recording"]'
+        )!
+        .click()
+    )
+    expect(native.invoke).toHaveBeenCalledWith(
+      "recorder_start",
+      expect.objectContaining({
+        request: expect.objectContaining({
+          profile: "hd_1080p30",
+          rehearsal: false,
+        }),
+      })
+    )
+    expect(host.textContent).toContain("HD · 8 Mbps")
+    expect(quality.disabled).toBe(true)
+  })
+
   it("requires an explicit local congregation output and does not default to the first screen", async () => {
     await renderDock()
 
@@ -315,6 +417,9 @@ describe("Live's Rhema recording dock", () => {
     )
 
     expect(host.textContent).toContain(warning.message)
+    const persistentWarning = host.querySelector('[aria-label="Computer load recording warning"]')
+    expect(persistentWarning).not.toBeNull()
+    expect(persistentWarning?.getAttribute("title")).toBe(warning.message)
     const warningList = host.querySelector(
       '[aria-label="Recording setup warnings"]'
     )
@@ -430,6 +535,9 @@ describe("Live's Rhema recording dock", () => {
     expect(host.textContent).toContain(
       "Recording is disabled during private rehearsal"
     )
+    expect(host.textContent).toContain(
+      "This dock creates service recordings only"
+    )
     expect(
       host.querySelector<HTMLButtonElement>(
         'button[aria-label="Check recording setup"]'
@@ -528,10 +636,11 @@ describe("Live's Rhema recording dock", () => {
     expect(host.textContent).toContain("Marker added: Sermon begins · 00:08")
     expect(host.textContent).toContain("service clock: Sermon begins")
     expect(host.textContent).toContain("does not confirm what is visible")
-    expect(native.invoke.mock.calls.map(([command]) => command)).toEqual([
-      "recorder_status",
-      "recorder_marker",
-    ])
+    expect(
+      native.invoke.mock.calls
+        .map(([command]) => command)
+        .filter((command) => command.startsWith("recorder_"))
+    ).toEqual(["recorder_status", "recorder_marker"])
     expect(useBroadcastStore.getState()).toMatchObject({
       isLive: true,
       liveVerse: { reference: "Program item" },

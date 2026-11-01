@@ -18,11 +18,13 @@ import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { runOfShowClockRows } from "@/lib/run-of-show"
 import { RuntimeSourceBadge } from "@/studio/shell/runtime-source-badge"
+import { RecorderStatusIndicator } from "@/studio/shell/recorder-status-indicator"
+import type { Workspace } from "@/studio/shell-store"
 
 const ICON = "flex size-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4"
 
 /** The bar over every page (approved design): where you are, Find anything, shortcuts, the team's activity, and that the studio works offline. */
-export function TopBar({ title }: { title: string }) {
+export function TopBar({ title, workspace }: { title: string; workspace: Workspace }) {
   const [shortcuts, setShortcuts] = useState(false)
   return (
     <header className="sticky top-0 z-10 flex min-h-[57px] shrink-0 items-center justify-between gap-3 border-b border-border bg-topbar px-[25px] py-2.5 max-[600px]:px-3">
@@ -41,6 +43,7 @@ export function TopBar({ title }: { title: string }) {
           <span className="max-[600px]:sr-only">Find anything…</span>
           <kbd className="ml-auto rounded-[5px] border border-border bg-muted px-[5px] py-px font-sans text-[0.6875rem] max-[600px]:hidden">⌘ K</kbd>
         </button>
+        <RecorderStatusIndicator workspace={workspace} />
         <button type="button" className={ICON} aria-label="Keyboard shortcuts" title="Keyboard shortcuts" onClick={() => setShortcuts(true)}><InfoIcon /></button>
         <HostTalk />
         <HostNotices />
