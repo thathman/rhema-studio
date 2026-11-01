@@ -2,6 +2,7 @@ import { toast } from "sonner"
 import { designStore } from "@/design-engine/design-store"
 import { resolveDesignedMoment } from "@/design-engine/rhema-scene"
 import { captureSceneAppearance, normalizeScene } from "@/lib/scenes"
+import { hydrateDesignSceneMedia } from "@/lib/design-media"
 import { takesSourceOnly } from "@/lib/item-intent"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -60,19 +61,27 @@ export async function showDesignedMoment(
   const sceneIds = new Map(before.outputs.map((output) => [output.id, output.sceneId]))
   const { scene: resolved, issues } = await resolveDesignedMoment(item.slide, getVersion)
   if (!isTargetCurrent()) return
-  // Checked after the load, so an approval that changed meanwhile counts. Here, because every way to Program draws through this.
+  if (!resolved) {
+    restoreAfterDesignedMoment()
+    toast.warning("Design not shown", { id: `design-missing-${item.id}`, description: issues[0]?.message ?? `"${item.slide.title}" shows its text instead.` })
+    return
+  }
+  const hydrated = await hydrateDesignSceneMedia(resolved)
+  if (!isTargetCurrent()) return
+  if (!hydrated.scene) {
+    restoreAfterDesignedMoment()
+    toast.warning("Design not shown", { id: `design-media-${item.id}`, description: hydrated.issue ?? `"${item.slide.title}" shows its text instead because a Library picture is unavailable.` })
+    return
+  }
+  // Checked after all asynchronous design and media reads, so a refreshed approval counts.
+  // Every path to Program draws through this function.
   const notApproved = designNotApproved(item.id, ref)
   if (notApproved) {
     restoreAfterDesignedMoment()
     toast.warning("Design needs approval", { id: `design-approval-${item.id}`, description: notApproved })
     return
   }
-  if (!resolved) {
-    restoreAfterDesignedMoment()
-    toast.warning("Design not shown", { id: `design-missing-${item.id}`, description: issues[0]?.message ?? `"${item.slide.title}" shows its text instead.` })
-    return
-  }
-  const scene: Scene = { ...resolved, id: momentSceneId(ref), name: resolved.name?.trim() ? resolved.name : item.slide.title || "Design", design: ref }
+  const scene: Scene = { ...hydrated.scene, id: momentSceneId(ref), name: hydrated.scene.name?.trim() ? hydrated.scene.name : item.slide.title || "Design", design: ref }
   const b = useBroadcastStore.getState()
   const logo = useSettingsStore.getState().brandKit.logoUrl
   // ponytail: every congregation screen, like a scene step with no screen named; a per-moment target when Prepare offers one.

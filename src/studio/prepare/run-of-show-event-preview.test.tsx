@@ -14,6 +14,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { drawScene } from "@/lib/scene-renderer"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useMediaStore } from "@/stores/media-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { newScene } from "@/lib/scenes"
 import { sceneToDesign } from "@/design-engine/rhema-scene"
@@ -170,6 +171,17 @@ describe("Run of Show event preview", () => {
   it("renders the exact pinned design version instead of a newer local scene copy", async () => {
     const pinnedVersionScene = newScene("Welcome look v1")
     pinnedVersionScene.id = "welcome-v1"
+    pinnedVersionScene.layers = [{
+      id: "welcome-image",
+      name: "Welcome background",
+      kind: "picture",
+      mediaId: "welcome-media",
+      imageUrl: "asset://localhost/%2Fmedia%2Fabc123-welcome.png",
+      box: { x: 0, y: 0, w: 100, h: 100 },
+      opacity: 1,
+      visible: true,
+    }]
+    useMediaStore.setState({ dataUrl: vi.fn(async () => "data:image/png;base64,preview-output") })
     const localLatestScene = newScene("Mutable local copy v2")
     localLatestScene.id = "welcome-local"
     localLatestScene.design = { id: "design-1", version: 2 }
@@ -224,6 +236,10 @@ describe("Run of Show event preview", () => {
     expect(el.textContent).not.toContain("Mutable local copy v2")
     expect(el.textContent).not.toContain("This screen keeps its current scene for this moment")
     expect(el.querySelector('[aria-label="Preview of Welcome look v1"]')).not.toBeNull()
+    expect(vi.mocked(drawScene).mock.calls.at(-1)?.[3]).toMatchObject({
+      sceneId: "welcome-v1",
+      layers: [expect.objectContaining({ id: "welcome-image", imageUrl: "data:image/png;base64,preview-output" })],
+    })
     expect(useBroadcastStore.getState()).toMatchObject({
       isLive: before.isLive,
       liveItemId: before.liveItemId,

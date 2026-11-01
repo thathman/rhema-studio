@@ -18,6 +18,7 @@ import type { Scene } from "@/types/scene"
 import { sceneToDesign } from "@/design-engine/rhema-scene"
 import type { DesignVersion } from "@/design-engine/design-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useMediaStore } from "@/stores/media-store"
 import { DesignUsagePanel } from "./design-usage-panel"
 
 let root: Root | null = null
@@ -31,6 +32,7 @@ beforeEach(() => {
   mockListVersions.mockReset()
   mockListVersions.mockResolvedValue([])
   mockGetVersion.mockReset()
+  useMediaStore.setState({ dataUrl: vi.fn(async () => "data:image/png;base64,usage-preview") })
 })
 
 afterEach(() => {
@@ -116,7 +118,10 @@ describe("Design usage details", () => {
       id: "design-source",
       name: "Opening design",
       background: "#222222",
-      layers: [{ id: "new-layer", name: "New background", kind: "color", color: "#222222", box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true }],
+      layers: [
+        { id: "new-layer", name: "New background", kind: "color", color: "#222222", box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true },
+        { id: "design-picture", name: "Announcement image", kind: "picture", mediaId: "media-announcement", imageUrl: "asset://localhost/%2Fmedia%2Fabc123-announcement.png", box: { x: 0, y: 0, w: 50, h: 50 }, opacity: 1, visible: true },
+      ],
       createdAt: 1,
       updatedAt: 1,
     } as Scene
@@ -159,6 +164,7 @@ describe("Design usage details", () => {
       background: "#222222",
     })
     expect(updated.layers[0]).toMatchObject({ id: "new-layer", color: "#222222" })
+    expect(updated.layers[1]).toMatchObject({ id: "design-picture", mediaId: "media-announcement", imageUrl: "data:image/png;base64,usage-preview" })
     const after = useBroadcastStore.getState()
     expect({
       outputs: after.outputs,
