@@ -397,6 +397,44 @@ describe("a designed moment put back by a recovery", () => {
   })
 })
 
+describe("the approval changing with a moment up compares what is on the screen", () => {
+  const v2 = { id: "d1", version: 2 }
+  const v3 = { id: "d1", version: 3 }
+
+  it("v2 on screen with the item now pinning an approved v3 goes back, and v3 is not claimed", async () => {
+    versions["d1:3"] = { designId: "d1", version: 3, document: versions["d1:2"].document }
+    await showDesignedMoment(moment(v2), getVersion)
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+    useQueueStore.setState({ items: [moment(v3)] })
+    approve({ m: v3 })
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+    expect(out(MAIN_OUTPUT_ID)?.designedMomentRestore).toBeUndefined()
+    expect(toast.warning).toHaveBeenCalledWith("Design needs approval", expect.anything())
+  })
+
+  it("the approved version on screen stays", async () => {
+    await showDesignedMoment(moment(v2), getVersion)
+    useQueueStore.setState({ items: [moment(v2)] })
+    approve({ m: v2 })
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+  })
+
+  it("a moment whose item is gone from an approved service goes back", async () => {
+    await showDesignedMoment(moment(v2), getVersion)
+    useQueueStore.setState({ items: [plain] })
+    approve({ m: v2 })
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+  })
+
+  it("a restore from an older build, with no item, goes back once a service is approved", async () => {
+    await showDesignedMoment(moment(v2), getVersion)
+    const o = out(MAIN_OUTPUT_ID)!
+    useBroadcastStore.getState().updateOutput(o.id, { designedMomentRestore: { ...o.designedMomentRestore!, itemId: undefined } })
+    approve({ m: v2 })
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+  })
+})
+
 describe("a scene's design pin", () => {
   it("survives normalising; a malformed pin is dropped", () => {
     expect(normalizeScene({ ...usual, design: { id: "d1", version: 2 } })?.design).toEqual({ id: "d1", version: 2 })

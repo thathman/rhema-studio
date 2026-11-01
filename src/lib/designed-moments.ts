@@ -100,7 +100,15 @@ export function restoreAfterDesignedMoment(): void {
   const b = useBroadcastStore.getState()
   for (const o of [...b.outputs]) {
     const before = o.designedMomentRestore
-    if (!before) continue
+    if (!before) {
+      // A moment's design with no way back (a recovery put it up after its way back was used):
+      // there is nothing to return to, but it must not stay up unchecked.
+      if (o.sceneSnapshot?.design && o.sceneId === momentSceneId(o.sceneSnapshot.design)) {
+        b.releaseScene(o.id)
+        toast.warning("Scene not restored", { description: "The previous scene could not be recovered, so this screen was released to its normal feed." })
+      }
+      continue
+    }
     if (o.sceneId === before.designSceneId) {
       const scene = before.scene ? normalizeScene(before.scene) : null
       if (scene) {
@@ -153,11 +161,16 @@ useServiceStore.subscribe((s, prev) => {
   const b = useBroadcastStore.getState()
   if (b.rehearsal) return
   const items = useQueueStore.getState().items
+  const approved = s.current?.approved_revision !== null && s.current?.approved_revision !== undefined
+  // What counts is the design on the screen, not what the item pins now: v2 up with the item moved
+  // to an approved v3 is still v2, unapproved. One whose item can't be found can't be shown to be covered.
   const uncovered = b.outputs.some((o) => {
     const restore = o.designedMomentRestore
-    const item = restore?.itemId ? items.find((i) => i.id === restore.itemId) : undefined
-    if (!restore || !item || o.sceneId !== restore.designSceneId) return false
-    return !isSlideItem(item) || !item.slide.designRef || designNotApproved(item.id, item.slide.designRef) !== null
+    if (!restore || o.sceneId !== restore.designSceneId) return false
+    const item = restore.itemId ? items.find((i) => i.id === restore.itemId) : undefined
+    if (!item) return approved
+    if (!isSlideItem(item) || !item.slide.designRef) return true
+    return o.sceneId !== momentSceneId(item.slide.designRef) || designNotApproved(item.id, item.slide.designRef) !== null
   })
   if (!uncovered) return
   restoreAfterDesignedMoment()

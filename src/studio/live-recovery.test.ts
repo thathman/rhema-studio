@@ -939,3 +939,62 @@ describe("live recovery", () => {
   })
 
 })
+
+describe("putting back a designed moment", () => {
+  const pin = { id: "d1", version: 2 }
+  const moment = { id: "m", kind: "slide", slide: { title: "Welcome", body: "Glad you came", designRef: pin }, reference: "Welcome", confidence: 1, source: "manual", added_at: 0 } as never
+  const crash = async (moments: Record<string, typeof pin>) => {
+    const { useServiceStore } = await import("@/stores/service-store")
+    const { captureSceneAppearance, newScene } = await import("@/lib/scenes")
+    const usual = newScene("Usual")
+    const design = { ...newScene("Welcome design"), id: "design-d1-v2", design: pin }
+    const { outputs, themes } = useBroadcastStore.getState()
+    const up = {
+      ...outputs[0],
+      sceneId: design.id,
+      sceneSnapshot: design,
+      // As a real moment captures it.
+      sceneAppearanceSnapshot: captureSceneAppearance(design, outputs[0], themes, null),
+      designedMomentRestore: { designSceneId: design.id, itemId: "m", scene: usual, themeId: outputs[0].themeId },
+    }
+    const approve = (approved: Record<string, typeof pin>) => useServiceStore.setState({ current: { id: "svc", title: "Sunday", approved_revision: 3 } as never, approvedDesignRevision: 3, approvedDesigns: { version: 1, scenes: {}, looks: {}, media_ids: [], moments: approved }, approvedDesignsError: null })
+    approve({ m: pin })
+    useQueueStore.setState({ items: [moment] })
+    useBroadcastStore.setState({ scenes: [usual], outputs: [up] })
+    useBroadcastStore.getState().setLiveVerse({ reference: "Welcome", segments: [{ text: "Glad you came" }], content: "bible" }, null, { goLive: true, itemId: "m" })
+    useEventClock.setState({ currentId: null, currentMomentId: null })
+    const snap = { ...takeSnapshot(), eventId: null, outputsOn: [] }
+    expect(snap.liveItemId).toBe("m")
+    // Restarted: Program is empty, the screen's saved state is as it was, and the approval has its own say.
+    useBroadcastStore.setState({ isLive: false, liveVerse: null, liveItemId: null, sources: {} })
+    useBroadcastStore.setState({ outputs: [up] })
+    approve(moments)
+    useRecovery.setState({ offer: snap })
+    expect(await putBack(snap)).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    return { usual, output: useBroadcastStore.getState().outputs[0], clean: () => useServiceStore.setState({ current: null, approvedDesigns: null, approvedDesignRevision: null }) }
+  }
+
+  it("keeps the design when the approval covers that exact version", async () => {
+    const { output, clean } = await crash({ m: pin })
+    expect(useBroadcastStore.getState().liveItemId).toBe("m")
+    expect(output.sceneId).toBe("design-d1-v2")
+    clean()
+  })
+
+  it.each([["missing from", {}], ["another version in", { m: { id: "d1", version: 3 } }]])("takes it down when the pin is %s the approval known before putting back", async (_why, moments) => {
+    const { output, clean } = await crash(moments as Record<string, typeof pin>)
+    expect(useBroadcastStore.getState().liveItemId).toBe("m")
+    expect(output.sceneId).not.toBe("design-d1-v2")
+    expect(output.designedMomentRestore).toBeUndefined()
+    clean()
+  })
+
+  it("gives the scene back when the approval arrives after putting back and no longer covers it", async () => {
+    const { usual, clean } = await crash({ m: pin })
+    const { useServiceStore } = await import("@/stores/service-store")
+    useServiceStore.setState({ approvedDesigns: { version: 1, scenes: {}, looks: {}, media_ids: [], moments: { m: { id: "d1", version: 3 } } } })
+    expect(useBroadcastStore.getState().outputs[0].sceneId).toBe(usual.id)
+    clean()
+  })
+})
