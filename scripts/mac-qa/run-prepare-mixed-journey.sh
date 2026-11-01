@@ -143,8 +143,16 @@ output_path.write_text(source, encoding="utf-8")
 PY
 
 export QA_DIR="$QA_RUN"
+# Left by an earlier build or journey, it would be loaded instead of the fixture above.
+rm -f "$ROOT/src-tauri/target/debug/rhema.db"
 HOME="$QA_HOME" RHEMA_QA_DIR="$QA_RUN" "$APP_BIN" >"$QA_SCRATCH/app.log" 2>&1 &
 APP_PID=$!
+# A second copy with this identifier exits 0 at once, whatever its HOME: the lock is /tmp/<identifier>_si.sock.
+sleep 2
+if ! kill -0 "$APP_PID" 2>/dev/null; then
+  echo "The QA app exited at launch: another Rhema QA app is probably running on this computer. Wait for it, then run this again." >&2
+  exit 3
+fi
 set +e
 "$ROOT/scripts/mac-qa/qa.py" main open-program-window "$ROOT/scripts/mac-qa/open-program-window.js" 30 >"$QA_SCRATCH/open-program-window.json"
 OPEN_STATUS=$?

@@ -99,7 +99,7 @@ async function listenOnce() {
       if (live?.v !== 1) return
       // An in-flight host snapshot can arrive after its refusal event. Keep the
       // desk cleared until the user successfully pairs or reconnects again.
-      if (useJoin.getState().status === "refused") return
+      if (useJoin.getState().status === "refused" || useJoin.getState().status === "off") return
       const name = useJoin.getState().me?.name
       // The host lists the desks it has taken back control from; an older host does not say.
       const paused = Array.isArray(live.paused) && name ? live.paused.includes(name) : useJoin.getState().paused

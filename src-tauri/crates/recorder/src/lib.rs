@@ -358,7 +358,7 @@ impl Recorder {
                 };
                 drop(audio);
                 let _ = tx.send(Msg::Stop);
-                let _ = writer.join();
+                let _ = join_within(writer, Duration::from_secs(2));
                 return fail(RecorderProblem::new(ProblemCode::EncoderFailed, format!("The encoder did not start: {e}")));
             }
         };
@@ -465,7 +465,8 @@ impl Recorder {
         manifest.state = RecorderState::Finalizing;
         let _ = manifest::write(&dir, &manifest);
         let _ = tx.send(Msg::Stop);
-        let result = writer.join().unwrap_or_else(|_| Err("the writer stopped unexpectedly".into()));
+        // Longer than the writer's own limits (3 s of backlog, 60 s to close).
+        let result = join_within(writer, Duration::from_secs(70));
         manifest.stopped_at = Some(iso_utc(SystemTime::now()));
         manifest.duration_ms = Some(t0.elapsed().as_millis() as u64);
         manifest.frames_written = shared.frames_written.load(Ordering::Relaxed);
@@ -748,6 +749,20 @@ fn run_writer(
     }
 }
 
+/// The writer's result, without waiting past `wait`. The system's encoder can block with no limit
+/// (`VTCompressionSessionCreate` on a wedged service, seen 1 Nov): that thread is left behind, so
+/// Start, Stop and quitting still end. If it wakes up it finds Stop and closes its file.
+fn join_within(writer: std::thread::JoinHandle<Result<(), String>>, wait: Duration) -> Result<(), String> {
+    let until = Instant::now() + wait;
+    while !writer.is_finished() {
+        if Instant::now() >= until {
+            return Err("the encoder stopped responding".into());
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    writer.join().unwrap_or_else(|_| Err("the writer stopped unexpectedly".into()))
+}
+
 /// Write ticks up to `last`, retrying a busy encoder every 5 ms until `within` has passed:
 /// `(written, left unwritten)`.
 fn drain(tick: &mut i64, last: i64, within: Duration, mut write: impl FnMut(i64) -> Result<bool, String>) -> Result<(u64, u64), String> {
@@ -924,6 +939,17 @@ mod tests {
         assert!(windows_busy_warning(84.9).is_none());
         assert_eq!(windows_busy_warning(85.0).map(|warning| warning.code), Some(ProblemCode::ComputerBusy));
         assert!(windows_busy_warning(f32::NAN).is_none());
+    }
+
+    #[test]
+    fn a_blocked_encoder_thread_cannot_hold_up_start_or_stop() {
+        let (release, blocked) = crossbeam_channel::bounded::<()>(0);
+        let writer = std::thread::spawn(move || { let _ = blocked.recv(); Ok(()) });
+        let t = Instant::now();
+        assert_eq!(join_within(writer, Duration::from_millis(50)).unwrap_err(), "the encoder stopped responding");
+        assert!(t.elapsed() < Duration::from_secs(1));
+        drop(release);
+        assert_eq!(join_within(std::thread::spawn(|| Err("closed badly".to_string())), Duration::from_secs(5)).unwrap_err(), "closed badly");
     }
 
     #[test]

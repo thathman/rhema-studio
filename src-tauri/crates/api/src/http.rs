@@ -1775,6 +1775,10 @@ async fn live_events_handler<S: CommandSink + 'static>(
             tokio::select! {
                 r = s.rx.recv() => match r {
                     Ok(json) => {
+                        // Checked here too: a state published just after a revoke or demotion must not go out as the old role.
+                        if !still_reads(&s.keys, &s.entry) {
+                            return Some((Ok(Event::default().event("rejoin").data("the host changed this desk")), None));
+                        }
                         let data = shape(&json, &s.keys, &s.presence);
                         return Some((Ok(Event::default().event("live").data(data)), Some(s)));
                     }
@@ -4938,6 +4942,33 @@ mod tests {
         assert!(foreign.starts_with("HTTP/1.1 403"), "{foreign}");
         let mut h = result.handle;
         h.stop();
+    }
+
+    #[tokio::test]
+    async fn a_state_published_after_a_role_change_never_goes_out_as_the_old_role() {
+        use crate::keys::{KeyEntry, Keys, Role};
+        let desk = KeyEntry {
+            hash: hash_key("tok"),
+            name: "Desk C".into(),
+            role: Role::Present,
+            paused: false,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+            record: false,
+        };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![desk.clone()] }));
+        let live = new_live_hub();
+        live.publish(r#"{"v":1,"now":"Sermon"}"#.into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), live: live.clone(), presence: crate::presence::new_presence(), ..Default::default() };
+        let server = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let port = server.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let stream = tokio::spawn(async move { get_with(port, "/api/v1/live/events", "X-Rhema-Key: tok\r\n", None).await });
+        tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+        keys.write().unwrap().entries[0].role = Role::Viewer;
+        live.publish(r#"{"v":1,"now":"AFTERCHANGE"}"#.into());
+        let out = tokio::time::timeout(std::time::Duration::from_secs(3), stream).await.expect("the stream ends").unwrap();
+        assert!(out.contains("event: rejoin") && !out.contains("AFTERCHANGE"), "{out}");
     }
 
     #[tokio::test]
