@@ -718,10 +718,9 @@ pub fn notices_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String
 pub fn live_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String {
     let filtered = notices_for(json, reader);
     let Some(reader) = reader else { return filtered };
-    // View only follows the service: no production state, whatever its page chooses to show. A desk
-    // granted the recorder picks an output, so it keeps the rest.
-    if reader.role == crate::keys::Role::Viewer && !reader.record {
-        return viewer_live(&filtered);
+    // View only follows the service: no production state, whatever its page chooses to show.
+    if reader.role == crate::keys::Role::Viewer {
+        return viewer_live(&filtered, reader.record);
     }
     let scenes = !reader.role.edits_scenes() && filtered.contains("\"layers\"");
     let mut hidden: Vec<&str> = hidden_from(reader.role).to_vec();
@@ -811,26 +810,37 @@ fn hidden_from(role: crate::keys::Role) -> &'static [&'static str] {
     }
 }
 
-/// The Live State for a View only desk: the lists stay, empty, because every desk page reads them;
-/// a source keeps only what is on screen, not who put it there, and never a camera's state.
-fn viewer_live(json: &str) -> String {
-    let Ok(mut v) = serde_json::from_str::<serde_json::Value>(json) else { return json.to_string() };
-    let Some(o) = v.as_object_mut() else { return json.to_string() };
-    for k in ["readiness", "presence", "heard", "graphicsQueue", "groupTakeResults", "takeAttempts", "obs", "revisions", "churchLook", "timeChange", "requireApproval"] {
-        o.remove(k);
+/// The Live State for a View only desk, built from what it may have so a new field stays private
+/// until someone decides otherwise. The lists stay, empty, because every desk page reads them; a
+/// source keeps only what is on screen. A desk granted the recorder also gets each output's id, name
+/// and role, to choose what to record.
+fn viewer_live(json: &str, record: bool) -> String {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(json) else { return "{}".to_string() };
+    let Some(all) = v.as_object() else { return "{}".to_string() };
+    let mut o = serde_json::Map::new();
+    for k in ["v", "at", "church", "service", "program", "event", "rundown", "timing", "timer", "notices", "voice", "talkRights", "crew", "paused", "lyrics", "heartbeatMs", "hold"] {
+        if let Some(value) = all.get(k) {
+            o.insert(k.into(), value.clone());
+        }
     }
     for k in ["scenes", "outputs", "outputMap", "auxTimers", "cameraFeeds"] {
-        if o.contains_key(k) {
-            o.insert(k.into(), serde_json::json!([]));
-        }
+        o.insert(k.into(), serde_json::json!([]));
     }
-    if let Some(sources) = o.get_mut("sources").and_then(serde_json::Value::as_array_mut) {
-        sources.retain(|s| !s["id"].as_str().is_some_and(|id| id.starts_with("camera:")));
-        for s in sources.iter_mut().filter_map(serde_json::Value::as_object_mut) {
-            s.retain(|k, _| matches!(k.as_str(), "id" | "reference" | "on" | "revision"));
-        }
+    o.insert("stageMessage".into(), serde_json::json!(""));
+    if let Some(timing) = o.get_mut("timing").and_then(serde_json::Value::as_object_mut) {
+        timing.remove("offsetBy");
     }
-    v.to_string()
+    if let Some(hold) = o.get_mut("hold").and_then(serde_json::Value::as_object_mut) {
+        hold.remove("by");
+    }
+    let keep = |item: &serde_json::Value, fields: &[&str]| serde_json::Value::Object(item.as_object().into_iter().flatten().filter(|(k, _)| fields.contains(&k.as_str())).map(|(k, x)| (k.clone(), x.clone())).collect());
+    let sources: Vec<_> = all.get("sources").and_then(serde_json::Value::as_array).into_iter().flatten().filter(|s| !s["id"].as_str().is_some_and(|id| id.starts_with("camera:"))).map(|s| keep(s, &["id", "reference", "on", "revision"])).collect();
+    o.insert("sources".into(), serde_json::Value::Array(sources));
+    if record {
+        let outputs: Vec<_> = all.get("outputs").and_then(serde_json::Value::as_array).into_iter().flatten().map(|x| keep(x, &["id", "name", "role"])).collect();
+        o.insert("outputs".into(), serde_json::Value::Array(outputs));
+    }
+    serde_json::Value::Object(o).to_string()
 }
 
 /// Whether a reader gets who is connected (`presence`): this computer itself, and the director.
@@ -4223,7 +4233,12 @@ mod tests {
         assert_eq!(v["sources"], serde_json::json!([{"id":"bible","reference":"John 3:16","on":true,"revision":1}]));
         assert_eq!((v["rundown"][0]["reference"].as_str(), v["program"]["onAir"].as_bool(), v["timing"]["expectedEnd"].as_i64()), (Some("Sermon"), Some(true), Some(5)));
         let granted: serde_json::Value = serde_json::from_str(&live_for(json, Some(&desk(true)))).unwrap();
-        assert_eq!(granted["outputs"][0]["id"], "o", "a granted recorder desk still picks an output");
+        assert_eq!(granted["outputs"], serde_json::json!([{"id":"o"}]), "a granted recorder desk picks an output and gets nothing more");
+        assert_eq!(granted["scenes"], serde_json::json!([]));
+        assert!(granted.get("obs").is_none());
+        let unknown: serde_json::Value = serde_json::from_str(&live_for(r#"{"v":1,"notices":[],"somethingNew":1,"hold":{"reason":"Prayer","by":"Ada"},"timing":{"expectedEnd":5,"offsetBy":"Ada"}}"#, Some(&desk(false)))).unwrap();
+        assert!(unknown.get("somethingNew").is_none(), "a new field stays private until someone allows it");
+        assert_eq!((unknown["hold"].get("by"), unknown["timing"].get("offsetBy")), (None, None));
     }
 
     #[test]
