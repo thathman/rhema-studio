@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { openSettings } from "@/lib/settings-dialog"
 import { newLayer } from "@/lib/scenes"
-import { cameraAppLink, cameraName, cameraPageUrl, newCameraSecret, phoneWords, routerStatus, rtmpUrl, rtspUrl, srtUrl, startRouter, stopRouter, whepUrl, type RouterPath, type RouterStatus } from "@/lib/cameras"
+import { cameraAppLink, cameraName, cameraPageUrl, newCameraSecret, phoneWords, routerStatus, rtmpsUrl, rtmpUrl, rtspUrl, srtUrl, startRouter, stopRouter, whepUrl, type RouterPath, type RouterStatus } from "@/lib/cameras"
 import { cameraTestWords, testCamera } from "@/lib/camera-test"
 import { latencyWords, measuresOf } from "@/lib/glass-latency"
 import { useBroadcastStore } from "@/stores/broadcast-store"
@@ -385,6 +385,7 @@ function CameraCard({ cam, host, router, path, phonePage, onObs }: { cam: Camera
               <details className="text-muted-foreground">
                 <summary className="cursor-pointer">Using a camera app instead (Moblin, StreamCaster, an encoder)</summary>
                 <div className="mt-2 flex flex-col gap-2">
+                  {rtmpsUrl(host, ports, cam, router?.rtspsFingerprint) && <Copyable label="RTMPS (encrypted: use this if the app can)" value={rtmpsUrl(host, ports, cam, router?.rtspsFingerprint)!} />}
                   <Copyable label="RTMP" value={rtmpUrl(host, ports, cam)} />
                   <Copyable label="SRT" value={srtUrl(host, ports, cam)} />
                   <p>These carry this camera's own password (the same as its link): give them only to the person running this camera; New link changes it. Use H.264 video without B-frames so screens and TVs can play it.</p>

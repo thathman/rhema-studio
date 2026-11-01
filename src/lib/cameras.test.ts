@@ -1,6 +1,6 @@
 import { feedCameraUrl } from "@/lib/whep"
 import { describe, expect, it } from "vitest"
-import { cameraAppLink, type RouterPorts } from "@/lib/cameras"
+import { cameraAppLink, rtmpsUrl, type RouterPorts } from "@/lib/cameras"
 
 const PORTS: RouterPorts = { webrtc: 8889, webrtcUdp: 8189, rtsp: 8554, rtsps: 8322, rtmp: 1935, srt: 8890, api: 9997 }
 const FP = "0123456789abcdef".repeat(4)
@@ -35,5 +35,14 @@ describe("a feed page asks for a camera", () => {
   })
   it("directly anywhere else", () => {
     for (const url of ["http://192.168.1.30:8889/pulpit/whep", "http://192.168.1.20:9000/pulpit/whep", "http://192.168.1.20:8889/other", "not a url"]) expect(feedCameraUrl(url, page, "tv", "k")).toBe(url)
+  })
+})
+
+describe("rtmpsUrl", () => {
+  const cam = { id: "c", name: "pulpit", label: "Pulpit", token: "s3cret" } as unknown as Parameters<typeof rtmpsUrl>[2]
+  it("offers encrypted RTMP only while the router has the certificate", () => {
+    expect(rtmpsUrl("192.168.1.20", { ...PORTS, rtmps: 1936 }, cam, "ab")).toBe("rtmps://192.168.1.20:1936/pulpit?user=cam-pulpit&pass=s3cret")
+    expect(rtmpsUrl("192.168.1.20", { ...PORTS, rtmps: 1936 }, cam, null)).toBeNull()
+    expect(rtmpsUrl("192.168.1.20", PORTS, cam, "ab")).toBeNull()
   })
 })

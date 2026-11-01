@@ -92,6 +92,22 @@ Windows needs the owner's go-ahead (section 6). Set the computer's sleep timer t
 
 **Fallback:** run from the main desk alone. A joined desk never holds up the screens.
 
+## 7b. Camera access and network change (pending: automated runs used simulated clients)
+
+Use two TVs or desks reading the same camera, ideally behind one address.
+
+1. Revoke one desk's key while both play. Its picture stops within about 2 s, the other carries on, and it cannot reconnect.
+2. Change a desk's role to View only, then pause another. Each stops within about 2 s.
+3. Move a TV's scene to another camera. It stops reading the old one, and desks keep theirs.
+4. Move the host to another address while a phone camera sends and OBS and TVs play (renew DHCP, or switch Wi-Fi). Record what each does:
+   - Output on the host: keeps running.
+   - Joined desk and OBS companion with a pinned host: reconnect by themselves within about 30 s. Confirm mDNS works on the church network.
+   - Companion's OBS: its camera address updates within seconds after that.
+   - A phone opening the camera page at the new address: no new warning if the CA is installed.
+   - Google TV: needs its feed sent again. Rhema Studio Cam: needs its link scanned again. Both are expected.
+5. Return the host to the first address. A TV still on that address recovers with no new send.
+6. Set up a third-party app with the RTMPS address (1936). Record whether it accepts Rhema's certificate.
+
 ## 8. Supervised rehearsal: full run
 
 Build a plan in Prepare, pin a design, approve it in Permissions, start recording, then Take through the whole service: verse, song, designed moment, manual scene change, timed move, Clear, rehearsal in and out, and a desk request. Then force-quit, reopen and Put back. Stop the recording and watch the file from start to end.

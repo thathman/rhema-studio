@@ -337,6 +337,7 @@ Everything stays on the church network; nothing needs the internet. Allowing **t
 | 8322 | TCP | RTSPS (encrypted RTSP, with Rhema Studio's certificate), once the secure page has been on | Rhema Studio Cam |
 | 8890 | UDP | SRT: OBS companions read the cameras (encrypted); camera apps and encoders may send | OBS companions and Rhema Studio Companion; Moblin, StreamCaster, encoders |
 | 1935 | TCP | RTMP | Camera apps and encoders |
+| 1936 | TCP | RTMPS | The same, encrypted, while Rhema has its https certificate |
 | 9997 | TCP | The router's control API, on 127.0.0.1 only | Nothing: no firewall rule needed |
 
 **On the OBS computer (Rhema Studio Companion or companion mode):** nothing listens for other devices. It reaches the main computer on 8081 (TCP) and 8890 (UDP), OBS on the same computer on 4455, and uses mDNS to find hosts. On Windows, allow it on **Private networks** when Windows asks.
