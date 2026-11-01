@@ -177,7 +177,7 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 if (problem == null && shown() != null) {
                     hideInfo();
-                    note.setVisibility(View.GONE);
+                    if (still.getVisibility() != View.VISIBLE) note.setVisibility(View.GONE);
                     // The page draws its first frame a moment after it loads; then the kept picture goes.
                     ui.removeCallbacks(hideStill);
                     ui.postDelayed(hideStill, 2_000);
@@ -280,8 +280,7 @@ public class MainActivity extends Activity {
         problem = why;
         if (still.getVisibility() == View.VISIBLE && panel.getVisibility() != View.VISIBLE) {
             // The last picture stays up (1.5); a small line says it is not live. OK shows the code.
-            note.setText("Not updating · " + why);
-            note.setVisibility(View.VISIBLE);
+            showStillNotice(why);
         } else {
             showInfo(true);
         }
@@ -303,9 +302,22 @@ public class MainActivity extends Activity {
             if (b == null) return;
             still.setImageBitmap(b);
             still.setVisibility(View.VISIBLE);
+            showStillNotice(null);
         } catch (Throwable e) {
             // A broken file: start without it.
         }
+    }
+
+    /** Labels the cached picture as stale while it is standing in for the live feed. */
+    private void showStillNotice(String why) {
+        if (still.getVisibility() != View.VISIBLE) return;
+        String age = Guard.stillAgeLabel(
+                prefs.getString("stillOf", null), shown(),
+                prefs.getLong("stillCapturedAt", 0L), System.currentTimeMillis());
+        String message = "Not updating · last picture " + age;
+        if (why != null && !why.trim().isEmpty()) message += " · " + why.trim();
+        note.setText(message);
+        note.setVisibility(View.VISIBLE);
     }
 
     private final Runnable hideStill = new Runnable() {
@@ -314,6 +326,7 @@ public class MainActivity extends Activity {
             if (problem != null) return;
             still.setVisibility(View.GONE);
             still.setImageDrawable(null);
+            note.setVisibility(View.GONE);
         }
     };
 
@@ -323,7 +336,7 @@ public class MainActivity extends Activity {
         still.setVisibility(View.GONE);
         still.setImageDrawable(null);
         note.setVisibility(View.GONE);
-        prefs.edit().remove("stillOf").apply();
+        prefs.edit().remove("stillOf").remove("stillCapturedAt").apply();
         //noinspection ResultOfMethodCallIgnored
         stillFile().delete();
     }
@@ -353,7 +366,7 @@ public class MainActivity extends Activity {
                     PixelCopy.request(getWindow(), bmp, new PixelCopy.OnPixelCopyFinishedListener() {
                         @Override
                         public void onPixelCopyFinished(int result) {
-                            if (result == PixelCopy.SUCCESS) saveStill(bmp, url);
+                            if (result == PixelCopy.SUCCESS) saveStill(bmp, url, System.currentTimeMillis());
                             else bmp.recycle();
                         }
                     }, ui);
@@ -364,13 +377,13 @@ public class MainActivity extends Activity {
                 Canvas c = new Canvas(bmp);
                 c.scale((float) size[0] / web.getWidth(), (float) size[1] / web.getHeight());
                 web.draw(c);
-                saveStill(bmp, url);
+                saveStill(bmp, url, System.currentTimeMillis());
             }
         }
     };
 
     /** Writes the picture away from the screen's thread, whole or not at all. */
-    private void saveStill(final Bitmap bmp, final String url) {
+    private void saveStill(final Bitmap bmp, final String url, final long capturedAtMillis) {
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -393,7 +406,9 @@ public class MainActivity extends Activity {
                     @Override
                     public void run() {
                         // Kept only for the feed it was taken of (a new one may have come meanwhile).
-                        if (url.equals(shown())) prefs.edit().putString("stillOf", url).apply();
+                        if (url.equals(shown())) {
+                            prefs.edit().putString("stillOf", url).putLong("stillCapturedAt", capturedAtMillis).apply();
+                        }
                     }
                 });
             }
