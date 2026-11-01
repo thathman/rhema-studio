@@ -330,6 +330,8 @@ export interface SceneAppearanceSnapshot {
 /** A temporary designed moment and the output snapshot to restore after it, including after restart. */
 export interface DesignedMomentRestore {
   designSceneId: string
+  /** The rundown item this moment belongs to: the screen goes back when Program leaves it. */
+  itemId?: string
   scene: Scene | null
   appearance?: SceneAppearanceSnapshot
   themeId: string

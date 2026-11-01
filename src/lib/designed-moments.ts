@@ -2,7 +2,9 @@ import { toast } from "sonner"
 import { designStore } from "@/design-engine/design-store"
 import { resolveDesignedMoment } from "@/design-engine/rhema-scene"
 import { captureSceneAppearance, normalizeScene } from "@/lib/scenes"
+import { takesSourceOnly } from "@/lib/item-intent"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useQueueStore } from "@/stores/queue-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { isSlideItem, type BroadcastOutput, type DesignedMomentRestore, type QueueItem, type Scene } from "@/types"
 
@@ -30,6 +32,8 @@ export async function showDesignedMoment(
   const ref = item.slide.designRef
   const before = useBroadcastStore.getState()
   const takeRevisions = new Map(before.outputs.map((output) => [output.id, before.sceneTakes[output.id]?.revision ?? null]))
+  // A rehearsal Take records no revision, so its scene is compared as well.
+  const sceneIds = new Map(before.outputs.map((output) => [output.id, output.sceneId]))
   const { scene: resolved, issues } = await resolveDesignedMoment(item.slide, getVersion)
   if (!isTargetCurrent()) return
   if (!resolved) {
@@ -44,12 +48,13 @@ export async function showDesignedMoment(
   // ponytail: every congregation screen, like a scene step with no screen named; a per-moment target when Prepare offers one.
   for (const o of b.outputs.filter(isCongregation)) {
     // A manual Take can happen while the pinned design is loading. Keep that newer per-output choice.
-    if (!takeRevisions.has(o.id) || (b.sceneTakes[o.id]?.revision ?? null) !== takeRevisions.get(o.id)) continue
+    if (!takeRevisions.has(o.id) || (b.sceneTakes[o.id]?.revision ?? null) !== takeRevisions.get(o.id) || o.sceneId !== sceneIds.get(o.id)) continue
     const earlier = o.designedMomentRestore
     const restore: DesignedMomentRestore = earlier && o.sceneId === earlier.designSceneId
-      ? { ...earlier, designSceneId: scene.id }
+      ? { ...earlier, designSceneId: scene.id, itemId: item.id }
       : {
           designSceneId: scene.id,
+          itemId: item.id,
           scene: o.sceneId ? (o.sceneSnapshot ?? b.scenes.find((s) => s.id === o.sceneId) ?? null) : null,
           ...(o.sceneAppearanceSnapshot ? { appearance: o.sceneAppearanceSnapshot } : {}),
           themeId: o.themeId,
@@ -83,3 +88,18 @@ export function restoreAfterDesignedMoment(): void {
     b.updateOutput(o.id, { designedMomentRestore: undefined })
   }
 }
+
+/**
+ * Program can leave a moment with no Take steps: Clear, a verse sent from elsewhere, a detected verse,
+ * a timed move. The screens must not keep the design then, or Live would claim a verse the design hides.
+ * A Take that runs steps of its own keeps its behaviour: a pinned slide goes straight from design to
+ * design without flashing the old scene, and a Bible-feeds-only Take leaves the screens alone.
+ */
+useBroadcastStore.subscribe((s, prev) => {
+  if ((s.isLive === prev.isLive && s.liveItemId === prev.liveItemId) || s.rehearsal || prev.rehearsal) return
+  const itemId = s.outputs.find((o) => o.designedMomentRestore?.itemId)?.designedMomentRestore?.itemId
+  if (!itemId || (s.isLive && s.liveItemId === itemId)) return
+  const next = s.isLive && s.liveItemId ? useQueueStore.getState().items.find((item) => item.id === s.liveItemId) : undefined
+  if (next && ((isSlideItem(next) && next.slide.designRef) || takesSourceOnly(next))) return
+  restoreAfterDesignedMoment()
+})

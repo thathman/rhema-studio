@@ -14,6 +14,7 @@ vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn().mockResolvedValue(unde
 const { showDesignedMoment, restoreAfterDesignedMoment } = await import("./designed-moments")
 const { runTakeSteps } = await import("./take-steps")
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
+const { useQueueStore } = await import("@/stores/queue-store")
 const { newScene, normalizeScene } = await import("@/lib/scenes")
 const { sceneToDesign } = await import("@/design-engine/rhema-scene")
 const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
@@ -42,6 +43,57 @@ beforeEach(() => {
 })
 
 describe("a designed moment on Live", () => {
+  it("gives the screens back when Program leaves the moment without a Take", async () => {
+    useBroadcastStore.setState({ isLive: true, liveItemId: "m" })
+    await showDesignedMoment(moment({ id: "d1", version: 2 }), getVersion)
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+    useBroadcastStore.setState({ isLive: false })
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+    expect(out(MAIN_OUTPUT_ID)?.designedMomentRestore).toBeUndefined()
+  })
+
+  it("stays up while the moment is live, and across a Take that shows another design", async () => {
+    useBroadcastStore.setState({ isLive: true, liveItemId: "m" })
+    await showDesignedMoment(moment({ id: "d1", version: 2 }), getVersion)
+    useBroadcastStore.setState({ liveItemId: "m" })
+    useQueueStore.setState({ items: [{ ...moment({ id: "d1", version: 2 }), id: "m2" }] })
+    useBroadcastStore.setState({ liveItemId: "m2" })
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+    useQueueStore.setState({ items: [] })
+  })
+
+  it("survives a rehearsal: the design and its way back both return", async () => {
+    await showDesignedMoment(moment({ id: "d1", version: 2 }), getVersion)
+    useBroadcastStore.getState().setRehearsal(true)
+    restoreAfterDesignedMoment()
+    useBroadcastStore.getState().setRehearsal(false)
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+    restoreAfterDesignedMoment()
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+  })
+
+  it("does not bring back a scene deleted during the moment", async () => {
+    await showDesignedMoment(moment({ id: "d1", version: 2 }), getVersion)
+    useBroadcastStore.getState().deleteScene(usual.id)
+    restoreAfterDesignedMoment()
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBeUndefined()
+    useBroadcastStore.setState({ scenes: [usual] })
+  })
+
+  it("keeps a rehearsal's manual scene chosen while the design loads", async () => {
+    useBroadcastStore.getState().setRehearsal(true)
+    const other = newScene("Manual")
+    useBroadcastStore.setState({ scenes: [usual, other] })
+    let release = (_: unknown) => {}
+    const slow = vi.fn(() => new Promise((resolve) => { release = resolve })) as unknown as typeof getVersion
+    const showing = showDesignedMoment(moment({ id: "d1", version: 2 }), slow)
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, other.id)
+    release(versions["d1:2"])
+    await showing
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(other.id)
+    useBroadcastStore.getState().setRehearsal(false)
+  })
+
   it("shows the pinned version on congregation screens and gives them back after", async () => {
     await showDesignedMoment(moment({ id: "d1", version: 2 }), getVersion)
     expect(getVersion).toHaveBeenCalledWith("d1", 2)

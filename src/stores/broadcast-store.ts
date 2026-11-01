@@ -6,6 +6,7 @@ import type { QueueItem } from "@/types"
 import type {
   SongWithSections,
   BroadcastOutput,
+  DesignedMomentRestore,
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
@@ -71,6 +72,8 @@ export interface RehearsalReturn extends ProgramSnapshot {
   outputSceneAppearances: Record<string, SceneAppearanceSnapshot>
   /** The scene each output's Restore offered. */
   sceneReturn: Record<string, string>
+  /** What each output goes back to after a designed moment that was up when rehearsal began. */
+  outputMomentRestores?: Record<string, DesignedMomentRestore>
 }
 
 /** The outputs as the real screens have them: in rehearsal, each with the scene it had before (what is saved). */
@@ -1244,19 +1247,27 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         return scene ? [[o.id, scene]] : []
       }))
       const outputSceneAppearances = Object.fromEntries(s.outputs.flatMap((o) => o.sceneAppearanceSnapshot ? [[o.id, o.sceneAppearanceSnapshot]] : []))
-      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex, lowerThird, ticker, stageMessage, timer: useTimerStore.getState().timer, outputScenes, outputSceneSnapshots, outputSceneAppearances, sceneReturn } })
+      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex, lowerThird, ticker, stageMessage, timer: useTimerStore.getState().timer, outputScenes, outputSceneSnapshots, outputSceneAppearances, outputMomentRestores: Object.fromEntries(s.outputs.flatMap((o) => o.designedMomentRestore ? [[o.id, o.designedMomentRestore]] : [])), sceneReturn } })
       return
     }
     const back = s.rehearsalReturn
     if (back) {
-      const { activeIndex, lowerThird, ticker, stageMessage, timer, outputScenes, outputSceneSnapshots, outputSceneAppearances, sceneReturn, ...program } = back
+      const { activeIndex, lowerThird, ticker, stageMessage, timer, outputScenes, outputSceneSnapshots, outputSceneAppearances, outputMomentRestores, sceneReturn, ...program } = back
       // The lower third, ticker, stage message, timer and each screen's scene always come back
       // (a scene deleted meanwhile leaves its screen on its own feed); the program too unless the
       // operator chose Show this live.
       useTimerStore.setState({ timer })
       if (!opts.keepRehearsed) useQueueStore.setState({ activeIndex })
-      const kept = Object.fromEntries(Object.entries(outputScenes).filter(([, id]) => s.scenes.some((x) => x.id === id)))
-      set({ ...(opts.keepRehearsed ? {} : program), lowerThird, ticker, stageMessage, outputs: withScenes(s.outputs, kept, outputSceneSnapshots, outputSceneAppearances), sceneReturn, rehearsal, rehearsalReturn: null })
+      // A designed moment is in no library: its screen holds the snapshot.
+      const kept = Object.fromEntries(Object.entries(outputScenes).filter(([outputId, id]) => s.scenes.some((x) => x.id === id) || outputSceneSnapshots[outputId]?.design))
+      const outputs = withScenes(s.outputs, kept, outputSceneSnapshots, outputSceneAppearances).map((o) => {
+        const next = { ...o }
+        delete next.designedMomentRestore
+        const restore = outputMomentRestores?.[o.id]
+        if (restore) next.designedMomentRestore = restore
+        return next
+      })
+      set({ ...(opts.keepRehearsed ? {} : program), lowerThird, ticker, stageMessage, outputs, sceneReturn, rehearsal, rehearsalReturn: null })
     } else {
       set({ rehearsal, rehearsalReturn: null })
     }
@@ -1429,7 +1440,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   },
   deleteScene: (id) => {
     set({ scenes: get().scenes.filter((x) => x.id !== id) })
-    for (const o of get().outputs) if (o.sceneId === id) get().updateOutput(o.id, { sceneId: undefined })
+    for (const o of get().outputs) {
+      if (o.sceneId === id) get().updateOutput(o.id, { sceneId: undefined })
+      // A deleted scene does not come back when a designed moment ends.
+      if (o.designedMomentRestore?.scene?.id === id) get().updateOutput(o.id, { designedMomentRestore: { ...o.designedMomentRestore, scene: null } })
+    }
   },
   takeScene: (outputId, sceneId, by = currentActor()) => {
     const s = get()
