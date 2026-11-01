@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
-vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: vi.fn(async () => true) }))
+const mockAsk = vi.hoisted(() => vi.fn(async (...args: unknown[]) => { void args; return true }))
+vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: (...args: unknown[]) => mockAsk(...args) }))
 const toasts = vi.hoisted(() => [] as unknown[])
 vi.mock("sonner", () => ({ toast: Object.assign((...a: unknown[]) => void toasts.push(a), { error: (...a: unknown[]) => void toasts.push(["error", ...a]), success: (...a: unknown[]) => void toasts.push(a) }) }))
 vi.mock("@tauri-apps/plugin-store", () => ({ load: vi.fn(async () => ({ get: async () => undefined, set: async () => {}, save: async () => {} })) }))
@@ -16,12 +17,13 @@ import { BUILTIN_THEMES } from "@/lib/builtin-themes"
 import { DEFAULT_STAGE_STYLE } from "@/lib/stage-style"
 import { DEFAULT_TICKER_STYLE } from "@/lib/ticker"
 import { useBroadcastStore } from "@/stores/broadcast-store"
-import { useShellStore } from "@/studio/shell-store"
+import { useShellStore, type DesignTab } from "@/studio/shell-store"
 import { useProductionTab } from "@/studio/production/production-tab"
 import { resetDesignPacksForTests, useDesignPackStore } from "@/lib/design-packs"
 import { SceneDesignPicker } from "@/studio/prepare/scene-design-picker"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
+import { useUnsavedStore } from "@/stores/unsaved-store"
 import type { QueueItem } from "@/types"
 import pack from "../../../design-packs/rhema-worship-expressions.rhema-design.json?raw"
 
@@ -38,6 +40,8 @@ beforeEach(() => {
   useShellStore.setState({ prepareDesignReturn: null, goRequest: null })
   useQueueStore.setState({ items: [], headers: [], activeIndex: null })
   useServiceStore.setState({ current: null })
+  useUnsavedStore.setState({ songEditor: null, designEditor: null })
+  mockAsk.mockReset().mockResolvedValue(true)
   resetDesignPacksForTests()
   toasts.length = 0
 })
@@ -50,10 +54,10 @@ async function render() {
   return el
 }
 
-async function renderDesignWorkspace() {
+async function renderDesignWorkspace(tab: DesignTab = "library") {
   const el = document.createElement("div")
   document.body.appendChild(el)
-  useShellStore.setState({ designTab: "library" })
+  useShellStore.setState({ designTab: tab })
   root = createRoot(el)
   await act(async () => root!.render(<DesignWorkspace />))
   return el
@@ -78,6 +82,19 @@ afterEach(() => {
 const card = (el: HTMLElement, name: string) => [...el.querySelectorAll("li")].find((li) => li.querySelector("h4")?.textContent === name) as HTMLLIElement
 
 describe("Design → Templates (#299)", () => {
+  it("keeps the current Design section when an unsaved document must stay open", async () => {
+    mockAsk.mockReset().mockResolvedValue(false)
+    const el = await renderDesignWorkspace("library")
+    useUnsavedStore.getState().setDesignEditor("First design")
+    const tools = el.querySelector<HTMLButtonElement>('button[aria-label^="Design tools"]')!
+    await act(async () => tools.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })))
+    const brand = [...document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find((item) => item.textContent?.trim() === "Brand kit")!
+    await act(async () => brand.click())
+
+    expect(mockAsk).toHaveBeenCalledWith("Your changes to ‘First design’ are not saved. Discard them?", expect.any(Object))
+    expect(useShellStore.getState().designTab).toBe("library")
+  })
+
   it("keeps My Designs and Templates primary, with specialist tools grouped accessibly", async () => {
     const el = await renderDesignWorkspace()
     const nav = el.querySelector<HTMLElement>('nav[aria-label="Design sections"]')!
