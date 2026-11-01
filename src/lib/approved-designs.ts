@@ -1,7 +1,7 @@
 import { captureSceneAppearance, normalizeScene } from "@/lib/scenes"
 import { takeSteps } from "@/lib/item-intent"
 import { themeIdsOf } from "@/lib/output-themes"
-import { isImageItem, type ApprovedDesignSnapshot, type BroadcastOutput, type BroadcastTheme, type MediaAssetStatus, type QueueItem, type Scene } from "@/types"
+import { isImageItem, isSlideItem, type ApprovedDesignSnapshot, type BroadcastOutput, type BroadcastTheme, type MediaAssetStatus, type QueueItem, type Scene } from "@/types"
 
 /** Capture exactly the reusable scene/look revisions named by this saved Run of Show. */
 export function captureApprovedDesigns(
@@ -54,7 +54,10 @@ export function captureApprovedDesigns(
     scenes[id] = { scene, outputs: sceneOutputs }
   }
 
-  return { version: 1, scenes, looks, media_ids: [...mediaIds].sort() }
+  const moments: NonNullable<ApprovedDesignSnapshot["moments"]> = {}
+  for (const item of items) if (isSlideItem(item) && item.slide.designRef) moments[item.id] = { ...item.slide.designRef }
+
+  return { version: 1, scenes, looks, media_ids: [...mediaIds].sort(), moments }
 }
 
 /** References which cannot be pinned on this computer are unsafe to approve as stable designs. */

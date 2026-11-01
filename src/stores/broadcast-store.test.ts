@@ -1,3 +1,4 @@
+import { BUILTIN_THEMES } from "@/lib/builtin-themes"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const emitToMock = vi.fn()
@@ -590,6 +591,29 @@ describe("broadcast store sync", () => {
           expect.objectContaining({ kind: "logo", imageUrl: approvedLogo }),
         ]),
       })
+    } finally {
+      vi.doUnmock("@tauri-apps/plugin-store")
+    }
+  })
+
+  it("reads a moment's way back from any older save, dropping one it could not use", async () => {
+    const theme = BUILTIN_THEMES[0].id
+    const output = (id: string, restore: unknown) => ({ id, name: id, type: "display", themeId: theme, monitorIndex: 0, ndi: {}, sceneId: "design-d1-v2", designedMomentRestore: restore })
+    const saved = new Map<string, unknown>([["outputs", [
+      output("older", { designSceneId: "design-d1-v2", scene: null, themeId: theme }),
+      output("broken", { scene: null }),
+      output("none", undefined),
+    ]]])
+    const store = { get: vi.fn(async (key: string) => structuredClone(saved.get(key))), set: vi.fn(async () => {}), save: vi.fn(async () => {}) }
+    vi.resetModules()
+    vi.doMock("@tauri-apps/plugin-store", () => ({ load: async () => store }))
+    try {
+      const { hydrateBroadcastThemes, useBroadcastStore } = await import("./broadcast-store")
+      await hydrateBroadcastThemes()
+      const restoreOf = (id: string) => useBroadcastStore.getState().outputs.find((o) => o.id === id)?.designedMomentRestore
+      expect(restoreOf("older")).toMatchObject({ designSceneId: "design-d1-v2" })
+      expect(restoreOf("broken")).toBeUndefined()
+      expect(restoreOf("none")).toBeUndefined()
     } finally {
       vi.doUnmock("@tauri-apps/plugin-store")
     }

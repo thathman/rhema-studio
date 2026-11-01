@@ -85,6 +85,26 @@ struct Session {
     audio: Option<audio::Capture>,
 }
 
+/// What a recording is going through. One lock decides every change of it, so a start, a stop and
+/// the quit can't each act on a different view. Taken before the session's lock, never after.
+#[derive(Default)]
+struct Lifecycle {
+    phase: Phase,
+    /// The app is quitting: nothing new may start or be installed, so no file is left unclosed.
+    closing: bool,
+}
+
+#[derive(Default, PartialEq)]
+enum Phase {
+    #[default]
+    Idle,
+    /// The session is only set once the file is open, so without this a second start would pass
+    /// preflight too and replace the first. Holds the output: NDI must not change its picture size.
+    Starting(String),
+    /// One stop owns closing the file, until it has told the output's window to stop sending.
+    Stopping,
+}
+
 pub struct Recorder {
     folder: PathBuf,
     session: Mutex<Option<Session>>,
@@ -93,6 +113,8 @@ pub struct Recorder {
     /// The main desk's last recording setup: what a granted remote desk's "start" reuses (it never
     /// chooses the screen or the sound input itself).
     last_request: Mutex<Option<RecorderStartRequest>>,
+    /// Which start or stop is under way, and whether the app is quitting (`Lifecycle`).
+    lifecycle: Mutex<Lifecycle>,
 }
 
 impl Recorder {
@@ -106,7 +128,7 @@ impl Recorder {
                 log::warn!("recorder: {} interrupted recording(s) marked recoverable: {marked:?}", marked.len());
             }
         }
-        Self { folder, session: Mutex::new(None), last: Mutex::new(RecorderStatus::idle()), last_request: Mutex::new(None) }
+        Self { folder, session: Mutex::new(None), last: Mutex::new(RecorderStatus::idle()), last_request: Mutex::new(None), lifecycle: Mutex::default() }
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Option<Session>> {
@@ -122,6 +144,32 @@ impl Recorder {
     #[must_use]
     pub fn last_request(&self) -> Option<RecorderStartRequest> {
         self.last_request.lock().unwrap_or_else(PoisonError::into_inner).clone()
+    }
+
+    /// The picture size output `output_id` is being recorded at, if it is.
+    #[must_use]
+    pub fn recording_size(&self, output_id: &str) -> Option<(u32, u32)> {
+        self.lock().as_ref().filter(|s| s.manifest.output_id == output_id).map(|s| (s.width, s.height))
+    }
+
+    /// Why NDI may not start on this output at this size now, if so: a recording of it is starting,
+    /// or is running at another size (one window sends one size; another would freeze the picture).
+    #[must_use]
+    pub fn ndi_refusal(&self, output_id: &str, size: (u32, u32)) -> Option<String> {
+        if self.is_starting(output_id) {
+            return Some("This screen's recording is starting. Try NDI again in a moment.".into());
+        }
+        self.recording_size(output_id).filter(|s| *s != size).map(|(w, h)| format!("This screen is recording at {w}×{h}. Stop the recording, or choose {w}×{h} for NDI."))
+    }
+
+    /// A start for this output is under way, its picture size chosen or about to be.
+    #[must_use]
+    pub fn is_starting(&self, output_id: &str) -> bool {
+        matches!(&self.state().phase, Phase::Starting(output) if output == output_id)
+    }
+
+    fn state(&self) -> std::sync::MutexGuard<'_, Lifecycle> {
+        self.lifecycle.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// The output the running session is pinned to.
@@ -165,6 +213,60 @@ impl Recorder {
 
     /// Start recording `req.output_id` at `width`×`height` (what its window will send).
     pub fn start(&self, req: &RecorderStartRequest, width: u32, height: u32) -> Result<RecorderStatus, RecorderProblem> {
+        self.start_sized(req, || (width, height))
+    }
+
+    /// `start`, with the size read only once the output is reserved: from then on NDI refuses to
+    /// start on it (`is_starting`), so the size read stays the size the window sends.
+    pub fn start_sized(&self, req: &RecorderStartRequest, size: impl FnOnce() -> (u32, u32)) -> Result<RecorderStatus, RecorderProblem> {
+        struct Reserved<'a>(&'a Recorder);
+        impl Drop for Reserved<'_> {
+            fn drop(&mut self) {
+                self.0.state().phase = Phase::Idle;
+            }
+        }
+        {
+            let mut state = self.state();
+            if state.closing {
+                return Err(RecorderProblem::new(ProblemCode::NotAllowed, "Rhema is closing."));
+            }
+            match state.phase {
+                Phase::Idle => state.phase = Phase::Starting(req.output_id.clone()),
+                Phase::Starting(_) => return Err(RecorderProblem::new(ProblemCode::AlreadyRecording, "A recording is already starting.")),
+                Phase::Stopping => return Err(RecorderProblem::new(ProblemCode::AlreadyRecording, "The last recording is still closing. Start again in a moment.")),
+            }
+        }
+        let _reserved = Reserved(self);
+        let (width, height) = size();
+        self.start_one(req, width, height)
+    }
+
+    /// The session goes in unless quitting began while it was opening, however late: the quit has
+    /// stopped looking by then, so its file is closed here. Under the lifecycle lock, so either the
+    /// quit sees this session or this sees the quit.
+    fn install(&self, session: Session) -> Result<(), RecorderProblem> {
+        let state = self.state();
+        if state.closing {
+            drop(state);
+            let _ = self.finish(session);
+            return Err(RecorderProblem::new(ProblemCode::NotAllowed, "Rhema is closing."));
+        }
+        *self.lock() = Some(session);
+        Ok(())
+    }
+
+    /// The app is quitting: refuse new starts, let a start or stop under way finish, then close the
+    /// file properly. `wait` bounds that wait; a start outlasting it closes its own file (`install`).
+    pub fn shut_down(&self, wait: Duration) -> Option<Result<RecorderStatus, RecorderProblem>> {
+        self.state().closing = true;
+        let deadline = Instant::now() + wait;
+        while self.state().phase != Phase::Idle && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        self.pinned_output().map(|_| self.stop())
+    }
+
+    fn start_one(&self, req: &RecorderStartRequest, width: u32, height: u32) -> Result<RecorderStatus, RecorderProblem> {
         if let Some(p) = self.preflight(req).into_iter().next() {
             return Err(p);
         }
@@ -266,7 +368,7 @@ impl Recorder {
         let _ = manifest::write(&dir, &m);
         let session = Session { dir, manifest: m, width, height, fps, t0, tx, shared, writer, frame: Vec::new(), audio };
         let status = status_of(&session, &self.folder);
-        *self.lock() = Some(session);
+        self.install(session)?;
         *self.last_request.lock().unwrap_or_else(PoisonError::into_inner) = Some(req.clone());
         Ok(status)
     }
@@ -316,8 +418,48 @@ impl Recorder {
 
     /// Stop and close the file: saved when it closed properly, recoverable when only its fragments remain.
     pub fn stop(&self) -> Result<RecorderStatus, RecorderProblem> {
+        self.stop_then(|| {})
+    }
+
+    /// `stop`, with `closed` run once the file is closed and before another start can begin, so what
+    /// it tells the output's window cannot land on the next recording.
+    pub fn stop_then(&self, closed: impl FnOnce()) -> Result<RecorderStatus, RecorderProblem> {
+        struct Stopping<'a>(&'a Recorder);
+        impl Drop for Stopping<'_> {
+            fn drop(&mut self) {
+                self.0.state().phase = Phase::Idle;
+            }
+        }
+        // A start under way is let through first (one refused at once if a session is running),
+        // so it can't pass its checks on the session this is about to take.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            {
+                let mut state = self.state();
+                match state.phase {
+                    Phase::Idle => {
+                        state.phase = Phase::Stopping;
+                        break;
+                    }
+                    Phase::Stopping => return Err(RecorderProblem::new(ProblemCode::NotRecording, "The recording is already closing.")),
+                    Phase::Starting(_) => {}
+                }
+            }
+            if Instant::now() >= deadline {
+                return Err(RecorderProblem::new(ProblemCode::AlreadyRecording, "A recording is still starting. Stop again in a moment."));
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let _stopping = Stopping(self);
         // Out of the lock first: frames for NDI keep flowing while the file closes.
         let s = self.lock().take().ok_or_else(|| RecorderProblem::new(ProblemCode::NotRecording, "Nothing is recording."))?;
+        let status = self.finish(s);
+        closed();
+        Ok(status)
+    }
+
+    /// Close a session's file and record how it ended.
+    fn finish(&self, s: Session) -> RecorderStatus {
         let Session { dir, mut manifest, t0, tx, shared, writer, width, height, fps, audio, .. } = s;
         drop(audio);
         manifest.state = RecorderState::Finalizing;
@@ -341,7 +483,12 @@ impl Recorder {
                 }
             }
         };
-        manifest::write(&dir, &manifest).map_err(|e| RecorderProblem::new(ProblemCode::WriteFailed, e.to_string()))?;
+        // The session is over whatever happens here: a failed write is reported on the status, or
+        // the desk would stay on "Recording" with nothing left to stop.
+        let manifest_error = manifest::write(&dir, &manifest).err();
+        if let Some(e) = &manifest_error {
+            manifest.problem = Some(RecorderProblem::new(ProblemCode::WriteFailed, format!("The recording's details could not be saved: {e}")));
+        }
         let status = RecorderStatus {
             state: manifest.state,
             session_active: false,
@@ -351,11 +498,11 @@ impl Recorder {
             elapsed_ms: manifest.duration_ms.unwrap_or(0),
             video: VideoStatus { width, height, fps, frames_written: manifest.frames_written, frames_dropped: manifest.frames_dropped, last_frame_ago_ms: None },
             audio: AudioStatus { device_id: manifest.audio_device_id.clone(), receiving: false, peak_db: None, samples_written: shared.samples_written.load(Ordering::Relaxed) },
-            file: FileStatus { path: Some(file.to_string_lossy().into_owned()), bytes: std::fs::metadata(&file).map_or(0, |x| x.len()), disk_free_bytes: disk_free(&dir), last_write_ok: manifest.state == RecorderState::Saved },
+            file: FileStatus { path: Some(file.to_string_lossy().into_owned()), bytes: std::fs::metadata(&file).map_or(0, |x| x.len()), disk_free_bytes: disk_free(&dir), last_write_ok: manifest.state == RecorderState::Saved && manifest_error.is_none() },
             problem: manifest.problem.clone(),
         };
         *self.last.lock().unwrap_or_else(PoisonError::into_inner) = status.clone();
-        Ok(status)
+        status
     }
 
     /// The truthful state right now (a REC indicator must come from this).
@@ -439,10 +586,12 @@ fn status_of(s: &Session, folder: &Path) -> RecorderStatus {
     let file = s.dir.join(FILE_NAME);
     let disk_free_bytes = disk_free(folder);
     let mut problem = sh.problem();
-    if problem.is_none() {
+    // A lost sound input stays on the status, but must not hide a lost picture or a filling disk.
+    let sound_only = problem.as_ref().is_some_and(|p| matches!(p.code, ProblemCode::AudioDeviceLost | ProblemCode::AudioMissing));
+    if problem.is_none() || sound_only {
         if Duration::from_millis(last_frame_ago.unwrap_or(elapsed_ms)) >= NO_FRAMES_AFTER {
             problem = Some(RecorderProblem::new(ProblemCode::NoFrames, "No picture from the screen for 5 seconds: is its window open?"));
-        } else if s.manifest.audio_device_id.is_some() && !receiving && elapsed > Duration::from_secs(3) {
+        } else if !sound_only && s.manifest.audio_device_id.is_some() && !receiving && elapsed > Duration::from_secs(3) {
             problem = Some(RecorderProblem::new(ProblemCode::AudioMissing, "No sound arriving from the sound desk input."));
         } else if disk_free_bytes.is_some_and(|f| f < DISK_LOW) {
             problem = Some(RecorderProblem::new(ProblemCode::DiskLow, "Less than 1 GB free: the recording will close before the disk fills."));
@@ -511,7 +660,9 @@ fn run_writer(
     loop {
         let due = t0 + Duration::from_micros((tick * period_us) as u64);
         let wait = due.saturating_duration_since(Instant::now());
-        match rx.recv_timeout(if retry { wait.max(Duration::from_millis(5)) } else { wait }) {
+        // Once the writer has failed nothing is due: only wait for Stop, without spinning a core.
+        let timeout = if failed.is_some() { Duration::from_millis(100) } else if retry { wait.max(Duration::from_millis(5)) } else { wait };
+        match rx.recv_timeout(timeout) {
             Ok(Msg::Video(frame)) => {
                 shared.video_queued.fetch_sub(1, Ordering::Relaxed);
                 if failed.is_none() {
@@ -524,7 +675,12 @@ fn run_writer(
                 if failed.is_none() {
                     match writer.append_audio(&samples, at) {
                         Ok(true) => _ = shared.samples_written.fetch_add((samples.len() / 2) as u64, Ordering::Relaxed),
-                        Ok(false) => {}
+                        // Real-time audio the encoder was not ready for is gone: say so, not a silent gap.
+                        Ok(false) => {
+                            if shared.problem().is_none() {
+                                shared.set_problem(RecorderProblem::new(ProblemCode::AudioMissing, "The computer could not keep up with the sound: the recording may have short gaps in it."));
+                            }
+                        }
                         Err(e) => failed = Some(e),
                     }
                 }
@@ -763,6 +919,14 @@ mod tests {
     }
 
     #[test]
+    fn windows_cpu_check_warns_only_at_high_finite_usage() {
+        assert!(windows_busy_warning(0.0).is_none());
+        assert!(windows_busy_warning(84.9).is_none());
+        assert_eq!(windows_busy_warning(85.0).map(|warning| warning.code), Some(ProblemCode::ComputerBusy));
+        assert!(windows_busy_warning(f32::NAN).is_none());
+    }
+
+    #[test]
     fn iso_dates_are_right() {
         assert_eq!(iso_utc(SystemTime::UNIX_EPOCH), "1970-01-01T00:00:00Z");
         assert_eq!(iso_utc(SystemTime::UNIX_EPOCH + Duration::from_secs(951_782_400)), "2000-02-29T00:00:00Z");
@@ -878,6 +1042,21 @@ mod tests {
         }
     }
 
+    #[test]
+    fn history_finds_a_recording_only_by_its_session_id() {
+        let t = tempfile::tempdir().unwrap();
+        let r = Recorder::new(t.path().to_path_buf());
+        let dir = t.path().join("rehearsal").join("20261030_061646-618daba0");
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(r.session_dir("20261030_061646-618daba0", true), None, "no manifest, not a recording");
+        std::fs::write(dir.join(manifest::MANIFEST), "{}").unwrap();
+        assert_eq!(r.session_dir("20261030_061646-618daba0", true), Some(dir));
+        assert_eq!(r.session_dir("20261030_061646-618daba0", false), None, "a rehearsal is not a service recording");
+        for bad in ["", ".", "..", "rehearsal/20261030_061646-618daba0", "a\\b", "/etc"] {
+            assert_eq!(r.session_dir(bad, true), None, "{bad}");
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn archive_file_resolution_rejects_symlinks_outside_the_recordings_folder() {
@@ -973,16 +1152,12 @@ mod tests {
         assert!(r.session_dir("../etc", false).is_none());
     }
 
-    #[test]
-    fn a_failed_writer_session_remains_active_until_stop_closes_it() {
-        let t = tempfile::tempdir().unwrap();
+    fn stub_session(dir: &std::path::Path) -> Session {
         let shared = Arc::new(Shared::default());
-        shared.writer_gone.store(true, Ordering::Relaxed);
-        shared.set_problem(RecorderProblem::new(ProblemCode::EncoderFailed, "writer stopped"));
         let (tx, _rx) = crossbeam_channel::unbounded();
         let writer = std::thread::spawn(|| Ok(()));
-        let session = Session {
-            dir: t.path().to_path_buf(),
+        Session {
+            dir: dir.to_path_buf(),
             manifest: RecordingManifest {
                 version: 1,
                 session_id: "failed-session".into(),
@@ -1012,7 +1187,258 @@ mod tests {
             writer,
             frame: Vec::new(),
             audio: None,
-        };
+        }
+    }
+
+    #[test]
+    fn stop_ends_the_session_even_when_its_manifest_cannot_be_written() {
+        let t = tempfile::tempdir().unwrap();
+        let blocker = t.path().join("a-file");
+        std::fs::write(&blocker, b"x").unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        *rec.lock() = Some(stub_session(&blocker.join("session")));
+        let status = rec.stop().expect("the desk must learn the session ended");
+        assert!(!status.session_active);
+        assert_eq!(status.problem.map(|p| p.code), Some(ProblemCode::WriteFailed));
+        assert!(!status.file.last_write_ok);
+        assert!(!rec.status().session_active, "nothing is left on Recording");
+    }
+
+    #[test]
+    fn a_second_start_is_refused_while_one_is_under_way() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        rec.state().phase = Phase::Starting("sanctuary".into());
+        let req = RecorderStartRequest { output_id: "sanctuary".into(), output_name: "Sanctuary".into(), output_role: "congregation".into(), audio_device_id: None, allow_silent: true, profile: RecorderProfile::Standard720p30, service_run_id: None, program_id: None, rehearsal: false };
+        assert_eq!(rec.start(&req, 1280, 720).unwrap_err().code, ProblemCode::AlreadyRecording);
+    }
+
+    fn silent_request() -> RecorderStartRequest {
+        RecorderStartRequest { output_id: "sanctuary".into(), output_name: "Sanctuary".into(), output_role: "congregation".into(), audio_device_id: None, allow_silent: true, profile: RecorderProfile::Standard720p30, service_run_id: None, program_id: None, rehearsal: false }
+    }
+
+    #[test]
+    fn the_output_stays_reserved_while_its_start_reads_the_size_and_is_released_after_a_failure() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        // An odd size is refused or fails further on: either way the output must be free again.
+        let mut seen = false;
+        let _ = rec.start_sized(&RecorderStartRequest { output_role: "stage".into(), ..silent_request() }, || {
+            seen = rec.is_starting("sanctuary") && !rec.is_starting("other");
+            (1280, 720)
+        });
+        assert!(seen, "NDI is refused on this output from before the size is read");
+        assert!(!rec.is_starting("sanctuary"), "a failed start frees the output");
+        assert!(rec.pinned_output().is_none());
+    }
+
+    #[test]
+    fn a_panicking_size_read_does_not_block_recording_for_good() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = rec.start_sized(&silent_request(), || panic!("size"));
+        }));
+        assert!(panicked.is_err());
+        assert!(!rec.is_starting("sanctuary"));
+    }
+
+    #[test]
+    fn quitting_waits_for_a_start_under_way_and_refuses_new_ones() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (go_tx, go_rx) = std::sync::mpsc::channel::<()>();
+        std::thread::scope(|scope| {
+            let recorder = &rec;
+            scope.spawn(move || {
+                let _ = recorder.start_sized(&RecorderStartRequest { output_role: "stage".into(), ..silent_request() }, || {
+                    entered_tx.send(()).unwrap();
+                    go_rx.recv().unwrap();
+                    (1280, 720)
+                });
+            });
+            entered_rx.recv().unwrap();
+            let release = scope.spawn(move || {
+                std::thread::sleep(Duration::from_millis(80));
+                go_tx.send(()).unwrap();
+            });
+            let began = Instant::now();
+            assert!(rec.shut_down(Duration::from_secs(10)).is_none(), "that start failed, so nothing is left to close");
+            assert!(began.elapsed() >= Duration::from_millis(50), "quitting waited for the start");
+            release.join().unwrap();
+        });
+        assert_eq!(rec.start(&silent_request(), 1280, 720).unwrap_err().code, ProblemCode::NotAllowed);
+    }
+
+    #[test]
+    fn quitting_closes_a_running_session_and_gives_up_on_a_stuck_start() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        *rec.lock() = Some(stub_session(t.path()));
+        assert!(rec.shut_down(Duration::ZERO).is_some_and(|r| r.is_ok()));
+        assert!(rec.pinned_output().is_none());
+        let stuck = Recorder::new(t.path().to_path_buf());
+        stuck.state().phase = Phase::Starting("sanctuary".into());
+        let began = Instant::now();
+        assert!(stuck.shut_down(Duration::from_millis(30)).is_none());
+        assert!(began.elapsed() < Duration::from_secs(5), "a stuck start must not hang the quit");
+    }
+
+    #[test]
+    fn ndi_is_refused_while_a_start_holds_the_output_and_at_another_size_while_it_records() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        assert_eq!(rec.ndi_refusal("sanctuary", (1920, 1080)), None);
+        rec.state().phase = Phase::Starting("sanctuary".into());
+        assert!(rec.ndi_refusal("sanctuary", (1280, 720)).is_some_and(|m| m.contains("starting")));
+        assert_eq!(rec.ndi_refusal("other", (1920, 1080)), None);
+        rec.state().phase = Phase::Idle;
+        let session = stub_session(t.path());
+        let (w, h) = (session.width, session.height);
+        *rec.lock() = Some(session);
+        assert_eq!(rec.ndi_refusal("sanctuary", (w, h)), None, "the size it already sends is fine");
+        assert!(rec.ndi_refusal("sanctuary", (w + 2, h)).is_some_and(|m| m.contains("is recording at")));
+    }
+
+    #[test]
+    fn a_start_during_a_stop_is_refused_until_the_window_has_been_told() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        let mut session = stub_session(t.path());
+        // A writer that has not finished closing its file.
+        let (close_tx, close_rx) = std::sync::mpsc::channel::<()>();
+        session.writer = std::thread::spawn(move || {
+            let _ = close_rx.recv();
+            Ok(())
+        });
+        *rec.lock() = Some(session);
+        let (closing_tx, closing_rx) = std::sync::mpsc::channel();
+        let order = Mutex::new(Vec::new());
+        std::thread::scope(|scope| {
+            let (recorder, log) = (&rec, &order);
+            scope.spawn(move || {
+                recorder.stop_then(|| {
+                    assert!((recorder.state().phase == Phase::Stopping), "still held while the window is told");
+                    log.lock().unwrap().push("window told");
+                    closing_tx.send(()).unwrap();
+                }).unwrap();
+            });
+            while !(rec.state().phase == Phase::Stopping) || rec.pinned_output().is_some() {
+                std::thread::yield_now();
+            }
+            let refused = rec.start(&silent_request(), 1280, 720).unwrap_err();
+            assert_eq!(refused.code, ProblemCode::AlreadyRecording);
+            assert!(refused.message.contains("closing"));
+            order.lock().unwrap().push("start refused");
+            close_tx.send(()).unwrap();
+            closing_rx.recv().unwrap();
+        });
+        assert_eq!(*order.lock().unwrap(), ["start refused", "window told"]);
+        assert!(!(rec.state().phase == Phase::Stopping), "the next start is not blocked for good");
+    }
+
+    /// A session whose writer only closes when told; the sender is the file finishing.
+    fn closing_session(dir: &std::path::Path) -> (Session, std::sync::mpsc::Sender<()>) {
+        let mut session = stub_session(dir);
+        let (close_tx, close_rx) = std::sync::mpsc::channel::<()>();
+        session.writer = std::thread::spawn(move || {
+            let _ = close_rx.recv();
+            Ok(())
+        });
+        (session, close_tx)
+    }
+
+    #[test]
+    fn a_second_stop_cannot_release_the_first_stops_hold() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        let (session, close_tx) = closing_session(t.path());
+        *rec.lock() = Some(session);
+        let told = AtomicU32::new(0);
+        std::thread::scope(|scope| {
+            let (recorder, told) = (&rec, &told);
+            let first = scope.spawn(move || recorder.stop_then(|| { told.fetch_add(1, Ordering::SeqCst); }));
+            while !(rec.state().phase == Phase::Stopping) || rec.pinned_output().is_some() {
+                std::thread::yield_now();
+            }
+            let second = rec.stop_then(|| { told.fetch_add(1, Ordering::SeqCst); }).unwrap_err();
+            assert_eq!(second.code, ProblemCode::NotRecording);
+            assert!(second.message.contains("already closing"));
+            assert!((rec.state().phase == Phase::Stopping), "the first stop still holds it");
+            assert_eq!(rec.start(&silent_request(), 1280, 720).unwrap_err().code, ProblemCode::AlreadyRecording, "so a start is still refused");
+            close_tx.send(()).unwrap();
+            assert!(first.join().unwrap().is_ok());
+        });
+        assert_eq!(told.load(Ordering::SeqCst), 1, "only the owner tells the window");
+        assert!(!(rec.state().phase == Phase::Stopping));
+    }
+
+    #[test]
+    fn a_start_finishing_after_the_quit_gave_up_closes_its_own_file() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        rec.state().phase = Phase::Starting("sanctuary".into());
+        assert!(rec.shut_down(Duration::from_millis(10)).is_none(), "the wait ran out");
+        let session = stub_session(t.path());
+        let dir = session.dir.clone();
+        assert_eq!(rec.install(session).unwrap_err().code, ProblemCode::NotAllowed);
+        assert!(rec.pinned_output().is_none(), "nothing is left recording with nobody to stop it");
+        assert!(!rec.status().session_active);
+        assert_eq!(manifest::read(&dir).map(|m| m.state).ok(), Some(RecorderState::Saved), "the file was closed and its ending written");
+    }
+
+    #[test]
+    fn quitting_waits_for_a_stop_closing_its_file_without_closing_it_twice() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        let (session, close_tx) = closing_session(t.path());
+        *rec.lock() = Some(session);
+        std::thread::scope(|scope| {
+            let recorder = &rec;
+            let stop = scope.spawn(move || recorder.stop());
+            while rec.state().phase != Phase::Stopping || rec.pinned_output().is_some() {
+                std::thread::yield_now();
+            }
+            assert!(rec.shut_down(Duration::from_millis(30)).is_none(), "that stop owns the file");
+            assert_eq!(rec.start(&silent_request(), 1280, 720).unwrap_err().code, ProblemCode::NotAllowed);
+            close_tx.send(()).unwrap();
+            assert!(stop.join().unwrap().is_ok());
+        });
+    }
+
+    #[test]
+    fn a_start_finishing_before_the_quit_is_closed_by_the_quit() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        rec.install(stub_session(t.path())).unwrap();
+        assert!(rec.shut_down(Duration::ZERO).is_some_and(|r| r.is_ok()));
+        assert!(rec.pinned_output().is_none());
+    }
+
+    #[test]
+    fn a_stop_with_nothing_to_stop_leaves_starting_possible() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        assert_eq!(rec.stop().unwrap_err().code, ProblemCode::NotRecording);
+        assert!(!(rec.state().phase == Phase::Stopping));
+    }
+
+    #[test]
+    fn a_lost_sound_input_does_not_hide_a_lost_picture() {
+        let t = tempfile::tempdir().unwrap();
+        let mut session = stub_session(t.path());
+        session.t0 = Instant::now() - Duration::from_secs(10);
+        session.shared.set_problem(RecorderProblem::new(ProblemCode::AudioDeviceLost, "gone"));
+        assert_eq!(status_of(&session, t.path()).problem.map(|p| p.code), Some(ProblemCode::NoFrames));
+    }
+
+    #[test]
+    fn a_failed_writer_session_remains_active_until_stop_closes_it() {
+        let t = tempfile::tempdir().unwrap();
+        let session = stub_session(t.path());
+        session.shared.writer_gone.store(true, Ordering::Relaxed);
+        session.shared.set_problem(RecorderProblem::new(ProblemCode::EncoderFailed, "writer stopped"));
 
         let status = status_of(&session, t.path());
         assert_eq!(status.state, RecorderState::Failed);
@@ -1044,6 +1470,18 @@ fn busy(load: f64, cores: usize) -> Option<RecorderProblem> {
         RecorderProblem::new(
             ProblemCode::ComputerBusy,
             format!("This computer is very busy (load {load:.0} on {cores} cores): the recording may stutter or miss slides. Close other heavy apps before the service."),
+        )
+    })
+}
+
+/// A Windows system-wide CPU sample is a percentage, not a Unix runnable-thread load average.
+/// Keep this warning advisory: a busy computer may still record, with risk of stutter or missed slides.
+#[must_use]
+pub fn windows_busy_warning(cpu_percent: f32) -> Option<RecorderProblem> {
+    (cpu_percent.is_finite() && cpu_percent >= 85.0).then(|| {
+        RecorderProblem::new(
+            ProblemCode::ComputerBusy,
+            format!("Windows CPU usage is very high ({cpu_percent:.0}%): the recording may stutter or miss slides. Close other heavy apps before the service."),
         )
     })
 }

@@ -6,6 +6,7 @@ import type { QueueItem } from "@/types"
 import type {
   SongWithSections,
   BroadcastOutput,
+  DesignedMomentRestore,
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
@@ -71,6 +72,8 @@ export interface RehearsalReturn extends ProgramSnapshot {
   outputSceneAppearances: Record<string, SceneAppearanceSnapshot>
   /** The scene each output's Restore offered. */
   sceneReturn: Record<string, string>
+  /** What each output goes back to after a designed moment that was up when rehearsal began. */
+  outputMomentRestores?: Record<string, DesignedMomentRestore>
 }
 
 /** The outputs as the real screens have them: in rehearsal, each with the scene it had before (what is saved). */
@@ -545,6 +548,9 @@ function withSceneSnapshot(output: BroadcastOutput, scenes: readonly Scene[]): B
   const next = { ...output }
   if (snapshot) next.sceneSnapshot = snapshot
   else delete next.sceneSnapshot
+  // Saved by any build, read by this one: without these there is no way back to rebuild.
+  const restore = next.designedMomentRestore
+  if (restore && (typeof restore.designSceneId !== "string" || typeof restore.themeId !== "string")) delete next.designedMomentRestore
   return next
 }
 
@@ -1244,19 +1250,27 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         return scene ? [[o.id, scene]] : []
       }))
       const outputSceneAppearances = Object.fromEntries(s.outputs.flatMap((o) => o.sceneAppearanceSnapshot ? [[o.id, o.sceneAppearanceSnapshot]] : []))
-      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex, lowerThird, ticker, stageMessage, timer: useTimerStore.getState().timer, outputScenes, outputSceneSnapshots, outputSceneAppearances, sceneReturn } })
+      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex, lowerThird, ticker, stageMessage, timer: useTimerStore.getState().timer, outputScenes, outputSceneSnapshots, outputSceneAppearances, outputMomentRestores: Object.fromEntries(s.outputs.flatMap((o) => o.designedMomentRestore ? [[o.id, o.designedMomentRestore]] : [])), sceneReturn } })
       return
     }
     const back = s.rehearsalReturn
     if (back) {
-      const { activeIndex, lowerThird, ticker, stageMessage, timer, outputScenes, outputSceneSnapshots, outputSceneAppearances, sceneReturn, ...program } = back
+      const { activeIndex, lowerThird, ticker, stageMessage, timer, outputScenes, outputSceneSnapshots, outputSceneAppearances, outputMomentRestores, sceneReturn, ...program } = back
       // The lower third, ticker, stage message, timer and each screen's scene always come back
       // (a scene deleted meanwhile leaves its screen on its own feed); the program too unless the
       // operator chose Show this live.
       useTimerStore.setState({ timer })
       if (!opts.keepRehearsed) useQueueStore.setState({ activeIndex })
-      const kept = Object.fromEntries(Object.entries(outputScenes).filter(([, id]) => s.scenes.some((x) => x.id === id)))
-      set({ ...(opts.keepRehearsed ? {} : program), lowerThird, ticker, stageMessage, outputs: withScenes(s.outputs, kept, outputSceneSnapshots, outputSceneAppearances), sceneReturn, rehearsal, rehearsalReturn: null })
+      // A designed moment is in no library: its screen holds the snapshot.
+      const kept = Object.fromEntries(Object.entries(outputScenes).filter(([outputId, id]) => s.scenes.some((x) => x.id === id) || outputSceneSnapshots[outputId]?.design))
+      const outputs = withScenes(s.outputs, kept, outputSceneSnapshots, outputSceneAppearances).map((o) => {
+        const next = { ...o }
+        delete next.designedMomentRestore
+        const restore = outputMomentRestores?.[o.id]
+        if (restore) next.designedMomentRestore = restore
+        return next
+      })
+      set({ ...(opts.keepRehearsed ? {} : program), lowerThird, ticker, stageMessage, outputs, sceneReturn, rehearsal, rehearsalReturn: null })
     } else {
       set({ rehearsal, rehearsalReturn: null })
     }
@@ -1429,7 +1443,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   },
   deleteScene: (id) => {
     set({ scenes: get().scenes.filter((x) => x.id !== id) })
-    for (const o of get().outputs) if (o.sceneId === id) get().updateOutput(o.id, { sceneId: undefined })
+    for (const o of get().outputs) {
+      if (o.sceneId === id) get().updateOutput(o.id, { sceneId: undefined })
+      // A deleted scene does not come back when a designed moment ends.
+      if (o.designedMomentRestore?.scene?.id === id) get().updateOutput(o.id, { designedMomentRestore: { ...o.designedMomentRestore, scene: null } })
+    }
   },
   takeScene: (outputId, sceneId, by = currentActor()) => {
     const s = get()
@@ -1853,6 +1871,47 @@ export function flushThemeSave(): Promise<void> {
     pendingSave = pendingSave.then(() => persistBroadcastThemes(useBroadcastStore.getState()))
   }
   return pendingSave
+}
+
+let pendingSceneLibrarySave: Promise<void> = Promise.resolve()
+
+/** Persist a host-approved scene library change and surface storage failures to its operator. */
+export function persistSceneLibraryNow(scenes: Scene[]): Promise<void> {
+  const persist = async () => {
+    await flushThemeSave()
+    const store = await getThemeStore()
+    await store.set("scenes", scenes)
+    await store.save()
+  }
+  const next = pendingSceneLibrarySave.then(persist, persist)
+  pendingSceneLibrarySave = next.catch(() => {})
+  return next
+}
+
+export interface SceneApprovalRecovery {
+  requestId: string
+  kind: "scene_save" | "scene_delete"
+  targetId: string
+  beforeScene: Scene | null
+  status: "pending" | "kept_local"
+}
+
+/** Keep a local compare point before consuming an approved host request, so recovery is safe after restart. */
+export async function saveSceneApprovalRecovery(requestId: string, recovery: SceneApprovalRecovery | null): Promise<void> {
+  await flushThemeSave()
+  const store = await getThemeStore()
+  await store.set(`sceneApprovalRecovery:${requestId}`, recovery)
+  await store.save()
+}
+
+export async function loadSceneApprovalRecovery(requestId: string): Promise<SceneApprovalRecovery | null> {
+  const store = await getThemeStore()
+  const raw = await store.get(`sceneApprovalRecovery:${requestId}`) as Partial<SceneApprovalRecovery> | undefined
+  if (!raw || raw.requestId !== requestId || typeof raw.targetId !== "string" || (raw.kind !== "scene_save" && raw.kind !== "scene_delete") || (raw.status !== "pending" && raw.status !== "kept_local")) return null
+  const beforeScene = raw.beforeScene === null ? null : normalizeScene(raw.beforeScene)
+  if (raw.beforeScene !== null && !beforeScene) return null
+  if (beforeScene && beforeScene.id !== raw.targetId) return null
+  return { requestId: raw.requestId, kind: raw.kind, targetId: raw.targetId, beforeScene, status: raw.status }
 }
 
 /**

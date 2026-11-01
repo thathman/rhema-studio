@@ -186,6 +186,20 @@ describe("the approval rule (the default until the owner chooses another)", () =
     expect(useBroadcastStore.getState().outputs).toBe(outputsBefore)
   })
 
+  it("a request kept through a restart is refused if the scene changed, and applies if it did not", async () => {
+    await send("on")
+    const stale = useNotices.getState().notices[0].action!.value
+    useSceneRequests.setState({ requests: [] })
+    await reloadSceneApprovals()
+    expect(useSceneRequests.getState().requests).toMatchObject([{ id: stale, status: "pending" }])
+    useBroadcastStore.getState().saveScene({ ...scene("on"), name: "changed while closed" })
+    expect(await acceptSceneRequest(stale)).toContain("changed here since")
+    expect(useBroadcastStore.getState().scenes.find((s) => s.id === "on")?.name).toBe("changed while closed")
+    await reloadSceneApprovals()
+    expect(useSceneRequests.getState().requests).toMatchObject([{ id: stale, status: "needs-review" }])
+    expect(await acceptSceneRequest(stale)).toContain("fresh review")
+  })
+
   it("a waiting change is not put in once the scene changed here", async () => {
     await send("on")
     const req = useNotices.getState().notices[0].action!.value

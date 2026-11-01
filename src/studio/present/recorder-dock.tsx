@@ -6,6 +6,7 @@ import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { Button } from "@/components/ui/button"
+import { TriangleAlertIcon } from "lucide-react"
 
 type RecorderState =
   | "idle"
@@ -61,13 +62,15 @@ interface RecorderPreflight {
   audioDevices: string[]
 }
 
+type RecorderProfile = "standard_720p30" | "hd_1080p30"
+
 interface RecorderStartRequest {
   outputId: string
   outputName: string
   outputRole: "congregation"
   audioDeviceId: string | null
   allowSilent: boolean
-  profile: "standard_720p30"
+  profile: RecorderProfile
   serviceRunId: null
   programId: string | null
   rehearsal: false
@@ -144,6 +147,7 @@ export function RecorderDock() {
     [outputs]
   )
   const [outputId, setOutputId] = useState("")
+  const [profile, setProfile] = useState<RecorderProfile>("standard_720p30")
   const [audioDeviceId, setAudioDeviceId] = useState("")
   const [allowSilent, setAllowSilent] = useState(false)
   const [audioDevices, setAudioDevices] = useState<string[]>([])
@@ -180,7 +184,7 @@ export function RecorderDock() {
     outputRole: "congregation",
     audioDeviceId: allowSilent ? null : audioDeviceId || null,
     allowSilent,
-    profile: "standard_720p30",
+    profile,
     serviceRunId: null,
     programId: currentProgramId,
     rehearsal: false,
@@ -202,6 +206,13 @@ export function RecorderDock() {
       : pendingAction === "stop"
         ? "Stop requested · finalizing the local file"
         : engineStateLabel(status, pinnedOutputName)
+  const computerBusyWarning = preflightIsCurrent
+    ? preflight?.warnings.find((warning) => warning.code === "computer_busy")
+    : undefined
+  const profileLabel =
+    profile === "standard_720p30" ? "Standard · 5 Mbps" : "HD · 8 Mbps"
+  const profileFallbackSize =
+    profile === "standard_720p30" ? "1280×720" : "1920×1080"
 
   useEffect(() => {
     let cancelled = false
@@ -397,6 +408,18 @@ export function RecorderDock() {
           >
             {stateLabel}
           </span>
+          {computerBusyWarning && (
+            <span
+              role="status"
+              aria-label="Computer load recording warning"
+              aria-live="polite"
+              title={computerBusyWarning.message}
+              className="inline-flex items-center gap-1 text-xs font-medium text-amber-800"
+            >
+              <TriangleAlertIcon aria-hidden className="size-3.5" />
+              Computer busy · recording may stutter
+            </span>
+          )}
           {status?.state === "recording" && (
             <span className="text-xs text-muted-foreground">
               {formatDuration(status.elapsedMs)} · {status.video.width}×
@@ -405,6 +428,7 @@ export function RecorderDock() {
               {status.file.diskFreeBytes === null
                 ? " · free space unknown"
                 : ` · ${formatBytes(status.file.diskFreeBytes)} free`}
+              {` · ${profileLabel}`}
             </span>
           )}
           {audioLine && (
@@ -429,7 +453,7 @@ export function RecorderDock() {
               Hide recording controls
             </span>
           </summary>
-          <div className="mt-2 grid gap-3 border-t border-border pt-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(14rem,1fr)_auto] lg:items-end">
+          <div className="mt-2 grid gap-3 border-t border-border pt-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_minmax(14rem,1fr)_auto] lg:items-end">
             <label className="grid gap-1 text-xs font-medium">
               Congregation screen
               <select
@@ -451,6 +475,28 @@ export function RecorderDock() {
                   </option>
                 ))}
               </select>
+            </label>
+
+            <label className="grid gap-1 text-xs font-medium">
+              Recording quality
+              <select
+                aria-label="Recording quality"
+                value={profile}
+                disabled={!output || Boolean(active || pendingAction)}
+                onChange={(event) => {
+                  setProfile(event.target.value as RecorderProfile)
+                  invalidatePreflight()
+                }}
+                className="h-9 min-w-0 rounded-md border border-input bg-background px-2 text-xs disabled:opacity-60"
+              >
+                <option value="standard_720p30">Standard · 30 fps · 5 Mbps</option>
+                <option value="hd_1080p30">HD · 30 fps · 8 Mbps</option>
+              </select>
+              <span className="font-normal text-muted-foreground">
+                NDI sets the recorded resolution when available; otherwise this
+                profile uses {profileFallbackSize}. Both profiles record at 30
+                fps.
+              </span>
             </label>
 
             <div className="grid gap-1 text-xs font-medium">
@@ -615,6 +661,10 @@ export function RecorderDock() {
             )}
 
             <div className="lg:col-span-3" aria-live="polite">
+              <p className="text-xs text-muted-foreground">
+                This dock creates service recordings only; rehearsal Preview
+                cannot be recorded here.
+              </p>
               {rehearsal && (
                 <p className="text-xs text-amber-800">
                   Recording is disabled during private rehearsal. The native

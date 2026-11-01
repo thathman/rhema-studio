@@ -634,6 +634,36 @@ pub(crate) fn current_live_state(app: &AppHandle) -> Option<String> {
     runtime.live.current()
 }
 
+/// Start this run's live revisions past every earlier run's (`reserve_revision_floor`).
+pub fn start_revisions(app: &AppHandle, dir: &std::path::Path) {
+    let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+    match rhema_api::reserve_revision_floor(&dir.join("live-revisions"), now_ms) {
+        Ok(floor) => {
+            if let Ok(runtime) = app.state::<Mutex<HttpRuntime>>().lock() {
+                runtime.live.start_revisions_from(floor);
+            }
+        }
+        // `approval_authority` then refuses scene approvals on this run; the show itself goes on.
+        Err(e) => log::error!("could not reserve live revisions; scene approvals are off for this run: {e}"),
+    }
+}
+
+/// Whether this process is the host that may issue and judge scene approvals: its server is bound,
+/// so desks reach this one, and its revisions are reserved, so no other run shares them. A second
+/// copy that lost the port has a Live State of its own and is neither.
+pub(crate) fn approval_authority(app: &AppHandle) -> (bool, bool) {
+    let Some(state) = app.try_state::<Mutex<HttpRuntime>>() else { return (false, false) };
+    let Ok(runtime) = state.lock() else { return (false, false) };
+    runtime.approval_authority()
+}
+
+impl HttpRuntime {
+    /// `handle` and `bound_port` are set only after `start_http_server` has bound, and cleared on stop.
+    fn approval_authority(&self) -> (bool, bool) {
+        (self.handle.is_some() && self.bound_port.is_some(), self.live.revisions_reserved())
+    }
+}
+
 /// The host's own revision of one part of the live service (`scene:<id>`), None before it was shown.
 pub(crate) fn current_revision(app: &AppHandle, part: &str) -> Option<u64> {
     let state = app.try_state::<Mutex<HttpRuntime>>()?;
@@ -1298,6 +1328,14 @@ pub fn feed_status(state: State<'_, Mutex<HttpRuntime>>, id: String) -> Result<O
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_copy_that_never_bound_the_port_is_not_the_approval_authority() {
+        let runtime = HttpRuntime::new();
+        assert_eq!(runtime.approval_authority(), (false, false));
+        runtime.live.start_revisions_from(1);
+        assert_eq!(runtime.approval_authority(), (false, true), "revisions alone are not authority");
+    }
 
     #[test]
     fn approval_persistence_failure_prevents_scene_event_emission() {
