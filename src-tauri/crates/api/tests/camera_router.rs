@@ -284,6 +284,53 @@ async fn a_new_network_address_interrupts_nobody() {
     s.stop.store(true, Ordering::Relaxed);
 }
 
+fn rss_kb(pid: u32) -> u64 {
+    let out = Command::new("ps").args(["-o", "rss=", "-p", &pid.to_string()]).output().unwrap();
+    String::from_utf8_lossy(&out.stdout).trim().parse().unwrap_or(0)
+}
+
+fn open_files(pid: u32) -> usize {
+    let out = Command::new("lsof").args(["-n", "-P", "-p", &pid.to_string()]).output().unwrap();
+    String::from_utf8_lossy(&out.stdout).lines().count()
+}
+
+/// Readers come and go for `RHEMA_SOAK_SECS` (by hand with `--ignored`): some are revoked, some simply
+/// abandon their session. Prints memory and open files of the router and of Rhema's server here.
+#[tokio::test]
+#[ignore = "takes as long as it is asked to"]
+async fn soak_readers_coming_and_going() {
+    let secs: u64 = std::env::var("RHEMA_SOAK_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(600);
+    let s = setup(&["leaver"]).await.expect("a router program");
+    let (router, me) = (s._router.0.id(), std::process::id());
+    let (t0, mut next, mut opened, mut refused, mut peak) = (Instant::now(), Duration::ZERO, 0u64, 0u64, 0usize);
+    let mut round = 0u64;
+    while t0.elapsed() < Duration::from_secs(secs) {
+        round += 1;
+        // One reader each round: every other one is revoked, the rest abandon their session.
+        match s.rig.desk("leaver").await {
+            201 => opened += 1,
+            _ => refused += 1,
+        }
+        if round % 2 == 0 {
+            let entry = key("leaver", Role::Present);
+            s.keys.write().unwrap().entries.retain(|e| e.hash != entry.hash);
+            prune_camera_readers(&s.cameras, &s.keys, &s.feeds);
+            s.keys.write().unwrap().entries.push(entry);
+        }
+        let list = s.rig.list().await;
+        s.cameras.relay_kick_unheld(&s.rig.client, &s.rig.api, "rhema-api", API_PASS, &list).await;
+        peak = peak.max(s.cameras.relay_readers("pulpit"));
+        if t0.elapsed() >= next {
+            eprintln!("t={:>5}s router rss={}KB files={} | rhema rss={}KB files={} | opened={opened} refused={refused} held={} sessions={}", t0.elapsed().as_secs(), rss_kb(router), open_files(router), rss_kb(me), open_files(me), s.cameras.relay_readers("pulpit"), list["items"].as_array().map_or(0, Vec::len));
+            next += Duration::from_secs(60);
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    eprintln!("done: opened={opened} refused={refused} peak held={peak}");
+    assert!(!s.camera.is_finished(), "the camera's connection was dropped");
+    s.stop.store(true, Ordering::Relaxed);
+}
+
 /// For a real browser (run by hand with `--ignored`): holds the relay open on the port it writes to
 /// `RHEMA_HOLD_DIR/port`, and revokes key `revoked` when that folder gets a file `revoke`.
 #[tokio::test]
