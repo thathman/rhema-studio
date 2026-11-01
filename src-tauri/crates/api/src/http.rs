@@ -52,7 +52,53 @@ pub struct TlsListener {
     pub port: u16,
     pub server: crate::tls::Pem,
     pub ca_cert: String,
+    /// Certificates for addresses this computer took on since (`TlsLeaves`).
+    pub leaves: TlsLeaves,
 }
+
+/// The https certificate for each address this computer has moved to while serving. Whoever dials an
+/// address gets that address's certificate: a phone at the new one is not warned, and a TV pinned to
+/// the old one (still reachable, say when a VPN only took the default route) keeps its picture.
+#[derive(Clone, Default)]
+pub struct TlsLeaves(Arc<std::sync::RwLock<std::collections::HashMap<std::net::IpAddr, tokio_rustls::TlsAcceptor>>>);
+
+impl std::fmt::Debug for TlsLeaves {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TlsLeaves")
+    }
+}
+
+impl TlsLeaves {
+    /// Serve this certificate to whoever dials this address, from the next connection on.
+    pub fn add(&self, ip: std::net::IpAddr, server: &crate::tls::Pem, ca_cert: &str) -> Result<(), String> {
+        let acceptor = tokio_rustls::TlsAcceptor::from(crate::tls::server_config(server, ca_cert)?);
+        self.0.write().unwrap_or_else(std::sync::PoisonError::into_inner).insert(ip, acceptor);
+        Ok(())
+    }
+
+    /// Whether this is the same running listener's set.
+    #[must_use]
+    pub fn same(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+
+    fn for_address(&self, ip: std::net::IpAddr) -> Option<tokio_rustls::TlsAcceptor> {
+        self.0.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(&ip).cloned()
+    }
+}
+
+/// How long a device that went away silently (off the Wi-Fi) holds a connection open.
+fn keep_alive(stream: &mut tokio::net::TcpStream) {
+    let probe = socket2::TcpKeepalive::new().with_time(std::time::Duration::from_secs(30)).with_interval(std::time::Duration::from_secs(10));
+    let _ = socket2::SockRef::from(&*stream).set_tcp_keepalive(&probe);
+}
+
+/// At most this many https connections at once: more waiting devices than any church has, and well
+/// under what the system allows this app.
+const TLS_CONNECTIONS: usize = 512;
+
+/// How long an https connection may wait for a first request and for a request's headers.
+const TLS_SILENCE: std::time::Duration = std::time::Duration::from_secs(if cfg!(test) { 1 } else { 30 });
 
 impl Default for HttpConfig {
     fn default() -> Self {
@@ -1251,7 +1297,8 @@ where
     tokio::spawn(async move {
         log::info!("HTTP API server started on {bind_addr} (port {bound_port})");
 
-        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        use axum::serve::ListenerExt;
+        axum::serve(listener.tap_io(keep_alive), app.into_make_service_with_connect_info::<SocketAddr>())
             .with_graceful_shutdown(async move {
                 while !*shutdown_rx.borrow_and_update() {
                     if shutdown_rx.changed().await.is_err() {
@@ -1283,16 +1330,31 @@ async fn serve_tls(t: &TlsListener, host: &str, app: Router, mut shutdown_rx: wa
     let addr: SocketAddr = format!("{host}:{}", t.port).parse().map_err(|e| CommandError::DispatchFailed(format!("Invalid https address: {e}")))?;
     let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| CommandError::DispatchFailed(format!("Failed to bind https on {addr}: {e}")))?;
     let port = listener.local_addr().map(|a| a.port()).unwrap_or(t.port);
+    let leaves = t.leaves.clone();
+    let slots = Arc::new(tokio::sync::Semaphore::new(TLS_CONNECTIONS));
     tokio::spawn(async move {
         log::info!("HTTPS (phone pages) on {addr} (port {port})");
         loop {
-            let (stream, peer) = tokio::select! {
-                r = listener.accept() => match r { Ok(x) => x, Err(_) => continue },
+            let accepted = tokio::select! {
+                r = listener.accept() => r,
                 _ = shutdown_rx.changed() => break,
             };
-            let acceptor = acceptor.clone();
+            let (mut stream, peer) = match accepted {
+                Ok(x) => x,
+                Err(e) => {
+                    // Out of file descriptors, usually: retrying at once would only spin.
+                    log::warn!("HTTPS: could not accept a connection: {e}");
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
+            let Ok(slot) = slots.clone().try_acquire_owned() else { continue };
+            keep_alive(&mut stream);
+            let acceptor = stream.local_addr().ok().and_then(|a| leaves.for_address(a.ip())).unwrap_or_else(|| acceptor.clone());
             let app = app.clone();
+            let mut stopping = shutdown_rx.clone();
             tokio::spawn(async move {
+                let _slot = slot;
                 // A slow or failed handshake costs only its own task.
                 let Ok(Ok(tls)) = tokio::time::timeout(std::time::Duration::from_secs(10), acceptor.accept(stream)).await else { return };
                 let svc = tower::ServiceBuilder::new()
@@ -1301,9 +1363,24 @@ async fn serve_tls(t: &TlsListener, host: &str, app: Router, mut shutdown_rx: wa
                         req
                     })
                     .service(app);
-                let _ = hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new())
-                    .serve_connection_with_upgrades(hyper_util::rt::TokioIo::new(tls), hyper_util::service::TowerToHyperService::new(svc))
-                    .await;
+                // A device that opens a connection and says nothing does not keep it, whether it sends no
+                // request (the server only times headers once they start) or never finishes one.
+                let mut tls = tokio::io::BufReader::new(tls);
+                let first = tokio::select! {
+                    r = tokio::time::timeout(TLS_SILENCE, tokio::io::AsyncBufReadExt::fill_buf(&mut tls)) => r.is_ok_and(|read| read.is_ok_and(|b| !b.is_empty())),
+                    _ = stopping.changed() => false,
+                };
+                if !first {
+                    return;
+                }
+                let mut builder = hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
+                builder.http1().timer(hyper_util::rt::TokioTimer::new()).header_read_timeout(TLS_SILENCE);
+                let serving = builder.serve_connection_with_upgrades(hyper_util::rt::TokioIo::new(tls), hyper_util::service::TowerToHyperService::new(svc));
+                // Hosting stopped: this connection stops too, never answering commands after it.
+                tokio::select! {
+                    _ = serving => {}
+                    _ = stopping.changed() => {}
+                }
             });
         }
         log::info!("HTTPS (phone pages) stopped");
@@ -3463,7 +3540,7 @@ mod tests {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let ca = crate::tls::make_ca().unwrap();
         let server = crate::tls::make_server(&ca, &["127.0.0.1".into()]).unwrap();
-        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), tls: Some(TlsListener { port: 0, server, ca_cert: ca.cert.clone() }), ..Default::default() };
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), tls: Some(TlsListener { port: 0, server, ca_cert: ca.cert.clone(), leaves: TlsLeaves::default() }), ..Default::default() };
         let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
         let tls_port = result.tls_port.expect("https port");
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -3489,6 +3566,66 @@ mod tests {
         h.stop();
     }
 
+    /// A client that accepts any certificate, as a pinned one reads it: what it was shown, and the connection.
+    async fn dial_https(ca: &crate::tls::Pem, port: u16) -> (Vec<u8>, tokio_rustls::client::TlsStream<tokio::net::TcpStream>) {
+        let mut roots = rustls::RootCertStore::empty();
+        use rustls::pki_types::pem::PemObject;
+        for c in rustls::pki_types::CertificateDer::pem_slice_iter(ca.cert.as_bytes()) {
+            roots.add(c.unwrap()).unwrap();
+        }
+        let client = rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider())).with_safe_default_protocol_versions().unwrap().with_root_certificates(roots).with_no_client_auth();
+        let tcp = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        let tls = tokio_rustls::TlsConnector::from(Arc::new(client)).connect(rustls::pki_types::ServerName::try_from("127.0.0.1").unwrap(), tcp).await.unwrap();
+        (tls.get_ref().1.peer_certificates().unwrap()[0].as_ref().to_vec(), tls)
+    }
+
+    #[tokio::test]
+    async fn whoever_dials_a_new_address_gets_its_certificate_and_an_open_connection_carries_on() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let ca = crate::tls::make_ca().unwrap();
+        let first = crate::tls::make_server(&ca, &["127.0.0.1".into()]).unwrap();
+        let second = crate::tls::make_server(&ca, &["127.0.0.1".into()]).unwrap();
+        let leaves = TlsLeaves::default();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), tls: Some(TlsListener { port: 0, server: first, ca_cert: ca.cert.clone(), leaves: leaves.clone() }), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let port = result.tls_port.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let (before, mut open) = dial_https(&ca, port).await;
+        // Another address's certificate leaves this one's alone.
+        leaves.add("192.0.2.9".parse().unwrap(), &second, &ca.cert).unwrap();
+        assert_eq!(dial_https(&ca, port).await.0, before, "a TV pinned to this address keeps its certificate");
+        leaves.add("127.0.0.1".parse().unwrap(), &second, &ca.cert).unwrap();
+        let (now, _new) = dial_https(&ca, port).await;
+        assert_ne!(now, before, "this address has its own now");
+        open.write_all(format!("GET /api/v1/health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n").as_bytes()).await.unwrap();
+        let mut b = [0u8; 256];
+        let n = open.read(&mut b).await.unwrap();
+        assert!(String::from_utf8_lossy(&b[..n]).contains("200 OK"), "the connection already open carries on");
+        // Hosting stops: the idle connection ends too.
+        let mut h = result.handle;
+        h.stop();
+        let ended = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            let mut sink = Vec::new();
+            let _ = open.read_to_end(&mut sink).await;
+        }).await;
+        assert!(ended.is_ok(), "a connection outlived its server");
+    }
+
+    #[tokio::test]
+    async fn a_device_that_says_nothing_does_not_hold_a_connection() {
+        use tokio::io::AsyncReadExt;
+        let ca = crate::tls::make_ca().unwrap();
+        let server = crate::tls::make_server(&ca, &["127.0.0.1".into()]).unwrap();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), tls: Some(TlsListener { port: 0, server, ca_cert: ca.cert.clone(), leaves: TlsLeaves::default() }), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let (_, mut silent) = dial_https(&ca, result.tls_port.unwrap()).await;
+        let mut sink = Vec::new();
+        let read = tokio::time::timeout(std::time::Duration::from_secs(5), silent.read_to_end(&mut sink)).await;
+        assert!(read.is_ok(), "still open after the wait for its first request");
+        let mut h = result.handle;
+        h.stop();
+    }
+
     #[tokio::test]
     async fn a_browser_feed_is_served_over_https_with_the_certificate_a_tv_insists_on() {
         // A Google TV (#198) opens the feed's https link and checks the certificate it is shown
@@ -3499,7 +3636,7 @@ mod tests {
         let fingerprint = crate::tls::fingerprint(&server).unwrap();
         let feeds = new_feed_hub();
         feeds.set(&[("l3".into(), "s3cret".into())]);
-        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds, tls: Some(TlsListener { port: 0, server, ca_cert: ca.cert.clone() }), ..Default::default() };
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds, tls: Some(TlsListener { port: 0, server, ca_cert: ca.cert.clone(), leaves: TlsLeaves::default() }), ..Default::default() };
         let result = start_http_server(config, Arc::new(PageSink), new_shared_status()).await.expect("bind");
         let tls_port = result.tls_port.expect("https port");
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -5433,7 +5570,7 @@ mod tests {
     async fn health_says_the_https_port_so_a_joining_computer_pairs_over_it() {
         let ca = crate::tls::make_ca().unwrap();
         let server = crate::tls::make_server(&ca, &["127.0.0.1".into()]).unwrap();
-        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), tls: Some(TlsListener { port: 0, server, ca_cert: ca.cert.clone() }), ..Default::default() };
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), tls: Some(TlsListener { port: 0, server, ca_cert: ca.cert.clone(), leaves: TlsLeaves::default() }), ..Default::default() };
         let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
         let tls_port = result.tls_port.expect("https port");
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;

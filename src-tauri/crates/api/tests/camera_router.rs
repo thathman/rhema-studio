@@ -262,6 +262,28 @@ async fn setup(tokens: &[&str]) -> Option<Setup> {
     Some(Setup { _dir: dir, _router: router, stop, camera, keys, feeds, cameras, handle: server.handle, rig })
 }
 
+#[tokio::test]
+async fn a_new_network_address_interrupts_nobody() {
+    let Some(s) = setup(&["steady"]).await else { return };
+    let desk = s.rig.opened(s.rig.desk("steady")).await;
+    let tv = s.rig.opened(s.rig.tv()).await;
+    // What `follow_address` changes: the address this computer's own readers may use.
+    let config = s._dir.path().join("mediamtx.yml");
+    let yaml = std::fs::read_to_string(&config).unwrap();
+    let new = config.with_extension("yml.new");
+    std::fs::write(&new, yaml.replace(r#"ips: ["127.0.0.1", "::1"]
+    permissions:
+      - action: read"#, r#"ips: ["127.0.0.1", "::1", "10.0.0.7"]
+    permissions:
+      - action: read"#)).unwrap();
+    std::fs::rename(&new, &config).unwrap();
+    tokio::time::sleep(Duration::from_millis(2500)).await;
+    let left = s.rig.sessions().await;
+    assert!(left.contains(&desk) && left.contains(&tv), "{left:?}");
+    assert!(!s.camera.is_finished(), "the camera's RTSP connection was dropped");
+    s.stop.store(true, Ordering::Relaxed);
+}
+
 /// For a real browser (run by hand with `--ignored`): holds the relay open on the port it writes to
 /// `RHEMA_HOLD_DIR/port`, and revokes key `revoked` when that folder gets a file `revoke`.
 #[tokio::test]
