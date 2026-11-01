@@ -623,6 +623,13 @@ export function LookAndScene({ item, eventId, eventTitle }: { item: QueueItem; e
     const shared = takeSteps(current).find((s) => s.kind === "scene" && s.outputId === null)
     if (shared?.kind === "scene") setTakeStep(item.id, "scene", id ? sceneStep(id) : null, null)
   }
+  // Choosing another scene replaces a pinned design; otherwise Take would still show the old one.
+  const clearPin = () => useQueueStore.getState().updateItem(item.id, (i) => {
+    if (i.kind !== "slide" || !i.slide.designRef) return i
+    const slide = { ...i.slide }
+    delete slide.designRef
+    return { ...i, slide }
+  })
   const pick = (value: string) => (value === "" ? null : value)
   // A saved choice this computer does not have stays selected, and says so.
   const unknown = (id: string | null | undefined, known: boolean) => (id && !known ? <option value={id}>Not on this computer</option> : null)
@@ -633,7 +640,7 @@ export function LookAndScene({ item, eventId, eventTitle }: { item: QueueItem; e
       <div className="grid gap-2 sm:grid-cols-3">
         <label className="min-w-0">
           <span className={fieldLabel}>Scene</span>
-          <select aria-label={`Scene for ${item.reference}`} value={item.scene_id ?? ""} onChange={(e) => setScene(pick(e.target.value))} className={fieldSelect}>
+          <select aria-label={`Scene for ${item.reference}`} value={item.scene_id ?? ""} onChange={(e) => { clearPin(); setScene(pick(e.target.value)) }} className={fieldSelect}>
             <option value="">None</option>
             {unknown(item.scene_id, scenes.some((s) => s.id === item.scene_id))}
             {scenes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}

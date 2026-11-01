@@ -1996,7 +1996,7 @@ lines"}"#.to_string(), false),
             db.approve_program(&p.id, saved.program.revision).unwrap();
             (p.id, saved.program.revision)
         };
-        let manifest = ApprovedDesignSnapshot { version: 1, scenes: serde_json::json!({"scene": {"scene": {"updatedAt": 17}}}), looks: serde_json::json!({"look": {"updatedAt": 9}}), media_ids: vec![] };
+        let manifest = ApprovedDesignSnapshot { version: 1, scenes: serde_json::json!({"scene": {"scene": {"updatedAt": 17}}}), looks: serde_json::json!({"look": {"updatedAt": 9}}), media_ids: vec![], moments: serde_json::Value::Null  };
         let refreshed_revision = {
             let db = ContentDb::open(&tmp.db()).unwrap();
             assert!(db.last_backup().unwrap().exists());
