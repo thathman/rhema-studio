@@ -524,7 +524,10 @@ export function parseSlidePayload(raw: string | null | undefined): SlideItemPayl
     const sourceId = typeof p.source_asset_id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(p.source_asset_id) ? p.source_asset_id : undefined
     const sourceRevision = Number.isSafeInteger(p.source_revision) && Number(p.source_revision) > 0 ? Number(p.source_revision) : undefined
     const ref = p.designRef
-    const designRef = ref && typeof ref.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(ref.id) && Number.isSafeInteger(ref.version) && ref.version > 0 ? { id: ref.id, version: ref.version } : undefined
+    const validPage = ref?.pageId === undefined || (typeof ref.pageId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(ref.pageId))
+    const designRef = ref && validPage && typeof ref.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(ref.id) && Number.isSafeInteger(ref.version) && ref.version > 0
+      ? { id: ref.id, version: ref.version, ...(typeof ref.pageId === "string" ? { pageId: ref.pageId } : {}) }
+      : undefined
     return title.trim() || body.trim() || link ? { title, body, ...(link ? { link } : {}), ...(sourceId && sourceRevision ? { source_asset_id: sourceId, source_revision: sourceRevision } : {}), ...(designRef ? { designRef } : {}) } : null
   } catch {
     return null

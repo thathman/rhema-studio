@@ -218,9 +218,13 @@ function crop(raw: unknown): SceneCrop | undefined {
 
 /** A scene as saved, made safe to use (a damaged or newer file never breaks an output). */
 /** A scene's design pin (C2): a whole positive version of a design id, else none. */
-const designPin = (d: unknown): d is { id: string; version: number } =>
-  !!d && typeof d === "object" && typeof (d as { id?: unknown }).id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test((d as { id: string }).id) &&
-  Number.isSafeInteger((d as { version?: unknown }).version) && (d as { version: number }).version > 0
+const designPin = (d: unknown): d is { id: string; version: number; pageId?: string } => {
+  if (!d || typeof d !== "object") return false
+  const pin = d as { id?: unknown; version?: unknown; pageId?: unknown }
+  return typeof pin.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(pin.id) &&
+    Number.isSafeInteger(pin.version) && Number(pin.version) > 0 &&
+    (pin.pageId === undefined || (typeof pin.pageId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(pin.pageId)))
+}
 
 export function normalizeScene(raw: unknown): Scene | null {
   if (!raw || typeof raw !== "object") return null
@@ -255,7 +259,7 @@ export function normalizeScene(raw: unknown): Scene | null {
     const ellipseColor = l.kind === "ellipse" ? (typeof l.color === "string" && TEXT_COLOR.test(l.color) ? l.color : "#3157a4") : undefined
     return [{ ...l, ...staticText, ...(ellipseColor ? { color: ellipseColor } : {}), clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
-  return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0), ...(typeof s.updatedBy === "string" ? { updatedBy: s.updatedBy.trim().slice(0, 60) || null } : s.updatedBy === null ? { updatedBy: null } : {}), ...(typeof s.libraryLookId === "string" && s.libraryLookId ? { libraryLookId: s.libraryLookId } : {}), ...(designPin(s.design) ? { design: { id: s.design!.id, version: s.design!.version } } : {}) }
+  return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0), ...(typeof s.updatedBy === "string" ? { updatedBy: s.updatedBy.trim().slice(0, 60) || null } : s.updatedBy === null ? { updatedBy: null } : {}), ...(typeof s.libraryLookId === "string" && s.libraryLookId ? { libraryLookId: s.libraryLookId } : {}), ...(designPin(s.design) ? { design: { id: s.design.id, version: s.design.version, ...(s.design.pageId ? { pageId: s.design.pageId } : {}) } } : {}) }
 }
 
 interface LiveState {

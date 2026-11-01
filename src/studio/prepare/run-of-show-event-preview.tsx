@@ -35,10 +35,11 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
   const designRef = designedSlide?.designRef
   const designRefId = designRef?.id
   const designVersion = designRef?.version
+  const designPageId = designRef?.pageId
   const designTitle = designedSlide?.title
   const hasExplicitTakeScene = sceneSelection?.source === "screen" || sceneSelection?.source === "shared"
   const requestedDesignKey = designRefId && designVersion !== undefined
-    ? `${moment?.id ?? ""}:${designRefId}@${designVersion}:${designTitle ?? ""}`
+    ? `${moment?.id ?? ""}:${designRefId}@${designVersion}:${designPageId ?? ""}:${designTitle ?? ""}`
     : null
   // Explicit screen/shared Take scenes are more specific than the slide's general design pin.
   const designKey = hasExplicitTakeScene ? null : requestedDesignKey
@@ -68,7 +69,7 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
   useEffect(() => {
     if (!designKey || !designRefId || designVersion === undefined || designTitle === undefined) return
     let cancelled = false
-    void resolveDesignedMoment({ title: designTitle, designRef: { id: designRefId, version: designVersion } }, designStore.getVersion)
+    void resolveDesignedMoment({ title: designTitle, designRef: { id: designRefId, version: designVersion, ...(designPageId ? { pageId: designPageId } : {}) } }, designStore.getVersion)
       .then(async (result) => {
         if (cancelled || !result.scene) {
           if (!cancelled) setDesignResolution({ key: designKey, scene: result.scene, issues: result.issues })
@@ -92,7 +93,7 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
         }
       })
     return () => { cancelled = true }
-  }, [designKey, designRefId, designVersion, designTitle])
+  }, [designKey, designRefId, designVersion, designPageId, designTitle])
 
   if (!moments.length) {
     return <p className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">Add a moment to {eventTitle} before previewing this event.</p>

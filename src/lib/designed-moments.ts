@@ -28,7 +28,7 @@ const isCongregation = (o: BroadcastOutput) => (o.role ?? "congregation") === "c
 type GetVersion = Parameters<typeof resolveDesignedMoment>[1]
 
 /** One id per pinned version, so a screen still showing it is recognised at restore. */
-const momentSceneId = (ref: DesignPin) => `design-${ref.id}-v${ref.version}`
+const momentSceneId = (ref: DesignPin) => `design-${ref.id}-v${ref.version}${ref.pageId ? `-page-${encodeURIComponent(ref.pageId)}` : ""}`
 
 /** A moment's design on this screen, with or without a way back. */
 const showsMoment = (o: BroadcastOutput) => !!o.sceneSnapshot?.design && o.sceneId === momentSceneId(o.sceneSnapshot.design)
@@ -40,7 +40,12 @@ function designNotApproved(itemId: string, ref: DesignPin): string | null {
   if (revision === null || revision === undefined) return null
   if (service.approvedDesignRevision !== revision || !service.approvedDesigns) return service.approvedDesignsError ?? "The approved design list is unavailable. Reload the service or refresh its approval."
   const approved = service.approvedDesigns.moments?.[itemId]
-  if (approved && approved.id === ref.id && approved.version === ref.version) return null
+  if (approved && approved.id === ref.id && approved.version === ref.version && approved.pageId === ref.pageId) return null
+  if (approved && approved.id === ref.id && approved.version === ref.version) {
+    const requestedPage = ref.pageId ? `page ${ref.pageId}` : "the legacy first page"
+    const approvedPage = approved.pageId ? `page ${approved.pageId}` : "the legacy first page"
+    return `This slide pins ${requestedPage} of design v${ref.version}, while ${approvedPage} was approved. Refresh the service approval to show it; the slide's text is showing instead.`
+  }
   return approved
     ? `This slide pins design v${ref.version}, and v${approved.version} was approved. Refresh the service approval to show it; its text is showing instead.`
     : `This design was pinned after the service was approved. Refresh the service approval to show it; the slide's text is showing instead.`
@@ -212,5 +217,5 @@ function takeDownUncovered(): void {
   })
   if (!uncovered) return
   restoreAfterDesignedMoment()
-  toast.warning("Design needs approval", { description: "The service's approval no longer covers the design on screen, so the screens went back. Refresh the approval to show it." })
+  toast.warning("Design needs approval", { description: "The service's approval no longer covers the design version or page on screen, so the screens went back. Refresh the approval to show it." })
 }

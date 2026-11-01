@@ -18,6 +18,7 @@ const { store } = vi.hoisted(() => ({
 
 vi.mock("@/design-engine/design-store", () => ({ designStore: store }))
 vi.mock("@/vendor/avnac/renderer/offscreen-render", () => ({ renderSceneToCanvas: vi.fn(async () => null) }))
+vi.mock("@/lib/verse-renderer", () => ({ drawLowerThird: vi.fn(), onThemeFontsLoaded: vi.fn(() => () => {}), renderVerse: vi.fn() }))
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -122,6 +123,73 @@ function documentFixture(): DesignDocument {
 }
 
 describe("canonical design editor", () => {
+  it("edits multiple pages in one saved scene graph and scopes layers to the selected page", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Add page"]')!.click())
+    const pageSelect = element.querySelector<HTMLSelectElement>('[aria-label="Design page"]')!
+    expect(pageSelect.options).toHaveLength(2)
+    expect(pageSelect.selectedOptions[0]?.textContent).toContain("Page 2")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Text")!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const savedRoot = saved.document.scene.nodes[saved.document.scene.root]
+    expect(savedRoot).toMatchObject({ type: "group", children: saved.document.pages?.map((page) => page.nodeId) })
+    expect(saved.document.pages).toHaveLength(2)
+    const firstPage = saved.document.pages![0]!
+    const secondPage = saved.document.pages![1]!
+    const secondGroup = saved.document.scene.nodes[secondPage.nodeId]
+    if (!secondGroup || secondGroup.type !== "group") throw new Error("Expected the second page group")
+    expect(secondGroup).toMatchObject({ type: "group", name: "Page 2" })
+    expect(saved.document.scene.nodes[secondGroup.children[0]!]?.parentId).toBe(secondPage.nodeId)
+    expect(designToScene(saved.document, firstPage.id).issues).toEqual([])
+    expect(designToScene(saved.document, firstPage.id).scene.layers).toEqual([expect.objectContaining({ id: expect.any(String), kind: "color" })])
+    expect(designToScene(saved.document, secondPage.id).issues).toEqual([])
+    expect(designToScene(saved.document, secondPage.id).scene.layers).toEqual([expect.objectContaining({ kind: "text", text: "Your text" })])
+  })
+
+  it("duplicates and reorders pages without reusing their layer or binding IDs", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Add page"]')!.click())
+    const pageSelect = element.querySelector<HTMLSelectElement>('[aria-label="Design page"]')!
+    const originalPageId = pageSelect.options[0]!.value
+    await act(async () => setSelectValue(pageSelect, originalPageId))
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Duplicate page"]')!.click())
+    expect(pageSelect.options).toHaveLength(3)
+    const duplicatePageId = pageSelect.value
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Move page earlier"]')!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const rootNode = saved.document.scene.nodes[saved.document.scene.root]
+    if (!rootNode || rootNode.type !== "group") throw new Error("Expected the design root group")
+    expect(saved.document.pages?.map((page) => page.id)).toEqual([originalPageId, duplicatePageId, expect.any(String)])
+    expect(rootNode.children).toEqual(saved.document.pages?.map((page) => page.nodeId))
+    const original = saved.document.pages![0]!
+    const duplicate = saved.document.pages![1]!
+    const originalGroup = saved.document.scene.nodes[original.nodeId]
+    const duplicateGroup = saved.document.scene.nodes[duplicate.nodeId]
+    if (!originalGroup || originalGroup.type !== "group" || !duplicateGroup || duplicateGroup.type !== "group") throw new Error("Expected page groups")
+    const originalLayerId = originalGroup.children[0]!
+    const duplicateLayerId = duplicateGroup.children[0]!
+    expect(duplicateLayerId).not.toBe(originalLayerId)
+    expect(saved.document.bindings[duplicateLayerId]).toMatchObject({ id: duplicateLayerId, kind: "color", color: "#111827" })
+    expect(designToScene(saved.document, duplicate.id).issues).toEqual([])
+  })
+
   it("adds a Library picture by content-addressed reference without embedding its bytes", async () => {
     const documentValue = documentFixture()
     store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({

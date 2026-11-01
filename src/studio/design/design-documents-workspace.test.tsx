@@ -30,6 +30,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), e
 vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: (...args: unknown[]) => mockAsk(...args) }))
 vi.mock("@tauri-apps/plugin-store", () => ({ load: vi.fn(async () => ({ get: async () => undefined, set: async () => {}, save: async () => {} })) }))
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }))
+vi.mock("@/lib/verse-renderer", () => ({ drawLowerThird: vi.fn(), onThemeFontsLoaded: vi.fn(() => () => {}), renderVerse: vi.fn() }))
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -236,6 +237,65 @@ describe("My Designs workspace", () => {
       liveSlide: after.liveSlide,
       sceneTakes: after.sceneTakes,
     }).toEqual(liveBefore)
+  })
+
+  it("requires an explicit page choice when attaching a multi-page version", async () => {
+    const designId = "design-pages"
+    const design = createBlankRhemaDesign("Bilingual welcome")
+    const rootNode = design.scene.nodes[design.scene.root]
+    const background = Object.values(design.scene.nodes).find((node) => node.type === "rect")
+    if (!rootNode || rootNode.type !== "group" || !background || background.type !== "rect") throw new Error("Expected a design root and background")
+    const secondBackground = { ...background, id: "page-two-background", parentId: "page-two-group", name: "Yoruba background", fill: { type: "solid" as const, color: "#264060" } }
+    const multiPage = {
+      ...design,
+      pages: [
+        { id: "page-one", nodeId: "page-one-group", title: "English" },
+        { id: "page-two", nodeId: "page-two-group", title: "Yoruba" },
+      ],
+      scene: {
+        ...design.scene,
+        nodes: {
+          ...design.scene.nodes,
+          [rootNode.id]: { ...rootNode, children: ["page-one-group", "page-two-group"] },
+          "page-one-group": { id: "page-one-group", type: "group" as const, parentId: rootNode.id, name: "English", visible: true, opacity: 1, children: [background.id] },
+          "page-two-group": { id: "page-two-group", type: "group" as const, parentId: rootNode.id, name: "Yoruba", visible: true, opacity: 1, children: [secondBackground.id] },
+          [background.id]: { ...background, parentId: "page-one-group" },
+          [secondBackground.id]: secondBackground,
+        },
+      },
+      bindings: {
+        ...design.bindings,
+        [secondBackground.id]: { ...design.bindings[background.id], id: secondBackground.id, color: "#264060" },
+      },
+    }
+    const summary: DesignSummary = { id: designId, title: "Bilingual welcome", kind: "design", revision: 1, latestVersion: 1, updatedAt: new Date(0).toISOString() }
+    const version: DesignVersion = { designId, version: 1, fromRevision: 1, title: summary.title, document: multiPage, note: null, savedBy: "Tolu", createdAt: new Date(0).toISOString() }
+    store.list.mockResolvedValue([summary])
+    store.listVersions.mockResolvedValue([{ ...version, document: null }])
+    store.getVersion.mockResolvedValue(version)
+    const onUse = vi.fn()
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => root!.render(<DesignVersionPicker onUse={onUse} />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
+
+    await act(async () => {
+      ;[...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use in Prepare"))!.click()
+      await Promise.resolve()
+    })
+    expect(onUse).not.toHaveBeenCalled()
+    const pageSelect = host.querySelector<HTMLSelectElement>('[aria-label="Saved version page"]')!
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!
+    await act(async () => {
+      setter.call(pageSelect, "page-two")
+      pageSelect.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use selected page in Prepare"))!.click())
+
+    expect(onUse).toHaveBeenCalledTimes(1)
+    expect(onUse.mock.calls[0]?.[0]).toMatchObject({ design: { id: designId, version: 1, pageId: "page-two" }, layers: [expect.objectContaining({ id: "page-two-background", color: "#264060" })] })
+    expect(onUse.mock.calls[0]?.[2]).toBe("page-two")
   })
 
   it("keeps an unsaved draft open when the operator cancels switching designs", async () => {

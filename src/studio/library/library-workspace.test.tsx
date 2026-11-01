@@ -190,18 +190,46 @@ function contextualDesign() {
 
 describe("Library workspace", () => {
   it("pins the selected immutable design to the exact Prepare moment and returns without changing Live or outputs", async () => {
-    const { context, version } = contextualDesign()
+    const { context, version: originalVersion } = contextualDesign()
+    const version = { ...originalVersion, document: { ...originalVersion.document! } }
+    const rootNode = version.document.scene.nodes[version.document.scene.root]
+    const background = Object.values(version.document.scene.nodes).find((node) => node.type === "rect")
+    if (!rootNode || rootNode.type !== "group" || !background || background.type !== "rect") throw new Error("Expected a design root and background")
+    const secondBackground = { ...background, id: "page-two-background", parentId: "page-two-group", name: "Yoruba background", fill: { type: "solid" as const, color: "#264060" } }
+    version.document.pages = [
+      { id: "page-one", nodeId: "page-one-group", title: "English" },
+      { id: "page-two", nodeId: "page-two-group", title: "Yoruba" },
+    ]
+    version.document.scene = {
+      ...version.document.scene,
+      nodes: {
+        ...version.document.scene.nodes,
+        [rootNode.id]: { ...rootNode, children: ["page-one-group", "page-two-group"] },
+        "page-one-group": { id: "page-one-group", type: "group", parentId: rootNode.id, name: "English", visible: true, opacity: 1, children: [background.id] },
+        "page-two-group": { id: "page-two-group", type: "group", parentId: rootNode.id, name: "Yoruba", visible: true, opacity: 1, children: [secondBackground.id] },
+        [background.id]: { ...background, parentId: "page-one-group" },
+        [secondBackground.id]: secondBackground,
+      },
+    }
+    version.document.bindings[secondBackground.id] = { ...version.document.bindings[background.id], id: secondBackground.id, color: "#264060" }
+    vi.mocked(designStore.getVersion).mockResolvedValue(version)
     const broadcastBefore = useBroadcastStore.getState()
     const itemsBefore = useQueueStore.getState().items
     await act(async () => root!.render(<LibraryWorkspace />))
     mockInvoke.mockClear()
     await clickButton("Choose a saved version for this moment")
     await clickButton("Use this version in the current moment")
+    const pageSelect = document.querySelector<HTMLSelectElement>("[aria-label='Saved version page']")!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(pageSelect, "page-two")
+      pageSelect.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    await act(async () => document.querySelector<HTMLDivElement>("[aria-label='Attach a page from this version'] button")!.click())
 
     const [updated, other] = useQueueStore.getState().items
     const scene = useBroadcastStore.getState().scenes.find((candidate) => candidate.id === updated.scene_id)!
-    expect(scene).toMatchObject({ design: { id: version.designId, version: 2 } })
-    expect(updated.kind === "slide" && updated.slide.designRef).toEqual({ id: version.designId, version: 2 })
+    expect(scene).toMatchObject({ design: { id: version.designId, version: 2, pageId: "page-two" }, layers: [expect.objectContaining({ id: "page-two-background", color: "#264060" })] })
+    expect(updated.kind === "slide" && updated.slide.designRef).toEqual({ id: version.designId, version: 2, pageId: "page-two" })
     expect(updated.on_take).toEqual([sceneStep(scene.id), sceneStep("other-output-scene", "overflow")])
     expect(other).toBe(itemsBefore[1])
     expect(useShellStore.getState().prepareLibraryReturn).toEqual(context)

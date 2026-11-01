@@ -28,11 +28,20 @@ export type RhemaBinding = Omit<SceneLayer, "box" | "opacity" | "visible" | "nam
   textBoxHeight?: number
 }
 
+/** A page is a named top-level group in the one canonical Saraswati scene graph. */
+export interface RhemaDesignPage {
+  id: string
+  title: string
+  nodeId: string
+}
+
 export interface RhemaDesign {
   scene: SaraswatiScene
   bindings: Record<string, RhemaBinding>
   /** The Rhema scene's own fields (id, name, fade, dates, library look). */
   meta: Omit<Scene, "layers" | "background">
+  /** Absent on legacy single-page documents; existing scene/bindings then form page one. */
+  pages?: RhemaDesignPage[]
 }
 
 export interface DesignIssue {
@@ -134,7 +143,7 @@ interface LayerEntry {
   groupOpacity: number
 }
 
-function layerEntries(scene: SaraswatiScene, issues: DesignIssue[] = []): LayerEntry[] {
+function layerEntries(scene: SaraswatiScene, issues: DesignIssue[] = [], rootId = scene.root): LayerEntry[] {
   const out: LayerEntry[] = []
   const seen = new Set<string>()
   const walk = (id: string, visible: boolean, groupOpacity: number) => {
@@ -150,8 +159,62 @@ function layerEntries(scene: SaraswatiScene, issues: DesignIssue[] = []): LayerE
       out.push({ node, visible: visible && node.visible, groupOpacity })
     }
   }
-  walk(scene.root, true, 1)
+  walk(rootId, true, 1)
   return out
+}
+
+function groupNodesUnder(scene: SaraswatiScene, rootId: string): SaraswatiGroupNode[] {
+  const groups: SaraswatiGroupNode[] = []
+  const seen = new Set<string>()
+  const walk = (id: string) => {
+    if (seen.has(id)) return
+    seen.add(id)
+    const node = scene.nodes[id]
+    if (!node || node.type !== "group") return
+    groups.push(node)
+    if (Array.isArray(node.children)) node.children.forEach(walk)
+  }
+  walk(rootId)
+  return groups
+}
+
+function pageIssues(design: RhemaDesign): DesignIssue[] {
+  if (design.pages === undefined) return []
+  const issues: DesignIssue[] = []
+  const root = design.scene.nodes[design.scene.root]
+  if (!Array.isArray(design.pages) || design.pages.length === 0 || design.pages.length > 50) {
+    return [{ nodeId: "__pages__", message: "A design needs between 1 and 50 valid pages" }]
+  }
+  if (!root || root.type !== "group") return [{ nodeId: "__pages__", message: "Design pages need a document root group" }]
+  const ids = new Set<string>()
+  const nodeIds = new Set<string>()
+  for (const page of design.pages) {
+    if (!page || typeof page.id !== "string" || !page.id.trim() || typeof page.title !== "string" || !page.title.trim() || page.title.length > 80 || typeof page.nodeId !== "string" || !page.nodeId.trim()) {
+      issues.push({ nodeId: "__pages__", message: "Each design page needs a stable ID, a title up to 80 characters, and a page group" })
+      continue
+    }
+    if (ids.has(page.id) || nodeIds.has(page.nodeId)) {
+      issues.push({ nodeId: page.nodeId, message: "Design page IDs and page groups must be unique" })
+      continue
+    }
+    ids.add(page.id)
+    nodeIds.add(page.nodeId)
+    const node = design.scene.nodes[page.nodeId]
+    if (!node || node.type !== "group" || node.parentId !== root.id || !root.children.includes(page.nodeId)) {
+      issues.push({ nodeId: page.nodeId, message: `Page “${page.title}” is not a direct group under the design root` })
+    } else if (node.name !== page.title) {
+      issues.push({ nodeId: page.nodeId, message: `Page “${page.title}” does not match its saved group name` })
+    }
+  }
+  if (root.children.length !== design.pages.length || root.children.some((id, index) => id !== design.pages?.[index]?.nodeId)) {
+    issues.push({ nodeId: "__pages__", message: "The design root order must match its saved page order" })
+  }
+  return issues
+}
+
+export function designPages(design: RhemaDesign): RhemaDesignPage[] {
+  if (Array.isArray(design.pages) && design.pages.length) return design.pages
+  return [{ id: design.scene.root, nodeId: design.scene.root, title: "Page 1" }]
 }
 
 /**
@@ -159,8 +222,15 @@ function layerEntries(scene: SaraswatiScene, issues: DesignIssue[] = []): LayerE
  * come back in the editor's order with its position, size, visibility and name; unsupported paint,
  * crop and transform edits are reported instead of being silently dropped.
  */
-export function designToScene(design: RhemaDesign): { scene: Scene; issues: DesignIssue[] } {
-  const issues: DesignIssue[] = []
+export function designToScene(design: RhemaDesign, pageId?: string): { scene: Scene; issues: DesignIssue[] } {
+  const issues = pageIssues(design)
+  const pages = designPages(design)
+  const savedPages = Array.isArray(design.pages) ? design.pages : undefined
+  const page = savedPages === undefined
+    ? pageId === undefined || pageId === design.scene.root ? pages[0] : undefined
+    : savedPages.find((candidate) => candidate.id === (pageId ?? pages[0]?.id))
+  if (pageId !== undefined && !page) issues.push({ nodeId: "__pages__", message: `The selected design page “${pageId}” is not available in this version` })
+  const pageRoot = page?.nodeId ?? pages[0]?.nodeId ?? design.scene.root
   const layers: SceneLayer[] = []
   if (design.scene.artboard.width !== DESIGN_WIDTH || design.scene.artboard.height !== DESIGN_HEIGHT) {
     issues.push({ nodeId: "__artboard__", message: "Rhema scenes must keep the 1920 × 1080 artboard size" })
@@ -168,15 +238,15 @@ export function designToScene(design: RhemaDesign): { scene: Scene; issues: Desi
   if (design.scene.artboard.bg.type !== "solid") {
     issues.push({ nodeId: "__artboard__", message: "Rhema scenes cannot save gradient backgrounds yet" })
   }
-  for (const node of Object.values(design.scene.nodes)) {
-    if (node.type === "group" && Math.abs(node.opacity - 1) > 0.0001) {
+  for (const node of groupNodesUnder(design.scene, pageRoot)) {
+    if (Math.abs(node.opacity - 1) > 0.0001) {
       issues.push({ nodeId: node.id, message: "Group opacity cannot be saved into a flat Rhema scene yet" })
     }
-    if (node.type === "group" && Math.abs(node.rotation ?? 0) > 0.0001) {
+    if (Math.abs(node.rotation ?? 0) > 0.0001) {
       issues.push({ nodeId: node.id, message: "Group rotation cannot be saved into a Rhema scene yet" })
     }
   }
-  for (const { node, visible } of layerEntries(design.scene, issues)) {
+  for (const { node, visible } of layerEntries(design.scene, issues, pageRoot)) {
     const binding = design.bindings[node.id]
     if (!binding) {
       issues.push({ nodeId: node.id, message: `"${node.name ?? node.id}" was drawn in the editor; Rhema scenes cannot show it yet` })
@@ -288,9 +358,10 @@ export function designToScene(design: RhemaDesign): { scene: Scene; issues: Desi
  * A scene made from one version of a design, pinned to it (docs/contracts/design-documents-v1.md,
  * Pinning). Saving it is the ordinary scene save and approval path: never a Take.
  */
-export function sceneFromVersion(v: { designId: string; version: number; document: RhemaDesign }): { scene: Scene; issues: DesignIssue[] } {
-  const { scene, issues } = designToScene(v.document)
-  return { scene: { ...scene, design: { id: v.designId, version: v.version } }, issues }
+export function sceneFromVersion(v: { designId: string; version: number; document: RhemaDesign }, pageId?: string): { scene: Scene; issues: DesignIssue[] } {
+  const { scene, issues } = designToScene(v.document, pageId)
+  const resolvedPageId = pageId ?? v.document.pages?.[0]?.id
+  return { scene: { ...scene, design: { id: v.designId, version: v.version, ...(resolvedPageId ? { pageId: resolvedPageId } : {}) } }, issues }
 }
 
 /** A pinned scene and the design's newest version: `update` is the version to offer ("Update to v N"),
@@ -319,7 +390,7 @@ export async function resolveDesignedMoment(
     return missing(`design ${ref.id} version ${ref.version} could not be read`)
   }
   if (!found?.document) return missing(`design ${ref.id} version ${ref.version} is not in this computer's designs`)
-  const { scene, issues } = sceneFromVersion({ designId: ref.id, version: ref.version, document: found.document })
+  const { scene, issues } = sceneFromVersion({ designId: ref.id, version: ref.version, document: found.document }, ref.pageId)
   return issues.length ? { scene: null, issues } : { scene, issues }
 }
 

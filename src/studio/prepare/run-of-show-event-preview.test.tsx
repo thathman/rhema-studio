@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/scene-renderer", () => ({ drawScene: vi.fn() }))
+vi.mock("@/lib/verse-renderer", () => ({ drawLowerThird: vi.fn(), onThemeFontsLoaded: vi.fn(() => () => {}), renderVerse: vi.fn() }))
 const { getVersionMock } = vi.hoisted(() => ({ getVersionMock: vi.fn() }))
 vi.mock("@/design-engine/design-store", () => ({ designStore: { getVersion: (...args: unknown[]) => getVersionMock(...args) } }))
 
@@ -181,6 +182,27 @@ describe("Run of Show event preview", () => {
       opacity: 1,
       visible: true,
     }]
+    const versionDocument = sceneToDesign(pinnedVersionScene)
+    const documentRoot = versionDocument.scene.nodes[versionDocument.scene.root]
+    const firstImage = versionDocument.scene.nodes["welcome-image"]
+    if (!documentRoot || documentRoot.type !== "group" || !firstImage || firstImage.type !== "image") throw new Error("Expected a design root and image")
+    const secondImage = { ...firstImage, id: "welcome-image-page-two", parentId: "page-two-group", name: "Yoruba welcome background" }
+    versionDocument.pages = [
+      { id: "welcome-page-one", nodeId: "page-one-group", title: "English" },
+      { id: "welcome-page-two", nodeId: "page-two-group", title: "Yoruba" },
+    ]
+    versionDocument.scene = {
+      ...versionDocument.scene,
+      nodes: {
+        ...versionDocument.scene.nodes,
+        [documentRoot.id]: { ...documentRoot, children: ["page-one-group", "page-two-group"] },
+        "page-one-group": { id: "page-one-group", type: "group", parentId: documentRoot.id, name: "English", visible: true, opacity: 1, children: [firstImage.id] },
+        "page-two-group": { id: "page-two-group", type: "group", parentId: documentRoot.id, name: "Yoruba", visible: true, opacity: 1, children: [secondImage.id] },
+        [firstImage.id]: { ...firstImage, parentId: "page-one-group" },
+        [secondImage.id]: secondImage,
+      },
+    }
+    versionDocument.bindings[secondImage.id] = { ...versionDocument.bindings[firstImage.id], id: secondImage.id }
     useMediaStore.setState({ dataUrl: vi.fn(async () => "data:image/png;base64,preview-output") })
     const localLatestScene = newScene("Mutable local copy v2")
     localLatestScene.id = "welcome-local"
@@ -188,7 +210,7 @@ describe("Run of Show event preview", () => {
     const designedMoment: QueueItem = {
       id: "designed-welcome",
       kind: "slide",
-      slide: { title: "Welcome", body: "The service begins soon", designRef: { id: "design-1", version: 1 } },
+      slide: { title: "Welcome", body: "The service begins soon", designRef: { id: "design-1", version: 1, pageId: "welcome-page-two" } },
       reference: "Welcome",
       confidence: 1,
       source: "manual",
@@ -199,7 +221,7 @@ describe("Run of Show event preview", () => {
       version: 1,
       fromRevision: 1,
       title: "Sunday welcome",
-      document: sceneToDesign(pinnedVersionScene),
+      document: versionDocument,
       note: null,
       savedBy: "host",
       createdAt: "2026-10-30T10:00:00Z",
@@ -238,7 +260,7 @@ describe("Run of Show event preview", () => {
     expect(el.querySelector('[aria-label="Preview of Welcome look v1"]')).not.toBeNull()
     expect(vi.mocked(drawScene).mock.calls.at(-1)?.[3]).toMatchObject({
       sceneId: "welcome-v1",
-      layers: [expect.objectContaining({ id: "welcome-image", imageUrl: "data:image/png;base64,preview-output" })],
+      layers: [expect.objectContaining({ id: "welcome-image-page-two", imageUrl: "data:image/png;base64,preview-output" })],
     })
     expect(useBroadcastStore.getState()).toMatchObject({
       isLive: before.isLive,

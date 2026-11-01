@@ -4,11 +4,11 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { designStore, type DesignDocument, type DesignInput, type DesignVersion } from "@/design-engine/design-store"
-import { designToScene, type RhemaBinding } from "@/design-engine/rhema-scene"
+import { designPages, designToScene, type RhemaBinding, type RhemaDesignPage } from "@/design-engine/rhema-scene"
 import { createColorLayer, createLiveFeedLayer } from "@/design-engine/design-document-utils"
 import { createSaraswatiEditorStore, getNodeBounds, pointerDown, pointerMove, pointerUp, type SaraswatiCommand, type SaraswatiPointerState } from "@/vendor/avnac/saraswati"
 import { renderSceneToCanvas } from "@/vendor/avnac/renderer/offscreen-render"
-import type { SaraswatiEllipseNode, SaraswatiNode, SaraswatiRenderableNode, SaraswatiScene, SaraswatiTextNode } from "@/vendor/avnac/saraswati"
+import type { SaraswatiEllipseNode, SaraswatiGroupNode, SaraswatiNode, SaraswatiRenderableNode, SaraswatiScene, SaraswatiTextNode } from "@/vendor/avnac/saraswati"
 import { cn } from "@/lib/utils"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
@@ -35,7 +35,7 @@ function paintNode(node: SaraswatiRenderableNode): node is Extract<SaraswatiRend
   return node.type === "rect" || node.type === "ellipse" || node.type === "polygon"
 }
 
-function layerIds(scene: SaraswatiScene): string[] {
+function layerIds(scene: SaraswatiScene, rootId = scene.root): string[] {
   const out: string[] = []
   const walk = (id: string) => {
     const node = scene.nodes[id]
@@ -43,8 +43,12 @@ function layerIds(scene: SaraswatiScene): string[] {
     if (node.type === "group") node.children.forEach(walk)
     else out.push(id)
   }
-  walk(scene.root)
+  walk(rootId)
   return out
+}
+
+function stableId(prefix: string) {
+  return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`
 }
 
 type PictureBindingSnapshot = Record<string, { mediaId?: string; imageUrl?: string }>
@@ -120,6 +124,11 @@ export function DesignDocumentEditor({
   const [title, setTitle] = useState(document.title)
   const [editor] = useState(() => createSaraswatiEditorStore(document.document.scene))
   const [scene, setScene] = useState(() => editor.getState().scene)
+  const [pageMetadata, setPageMetadata] = useState(() => new Map<string, RhemaDesignPage>(designPages(document.document).map((page) => [page.nodeId, page])))
+  const initialPages = Array.isArray(document.document.pages) ? document.document.pages : []
+  const pageNodeIds = useRef(new Set(initialPages.map((page) => page.nodeId)))
+  const [hasExplicitPages, setHasExplicitPages] = useState(initialPages.length > 0)
+  const [activePageId, setActivePageId] = useState(initialPages[0]?.id ?? document.document.scene.root)
   const [bindings, setBindingsState] = useState(document.document.bindings)
   const bindingsRef = useRef(bindings)
   const setBindings = (update: Record<string, RhemaBinding> | ((current: Record<string, RhemaBinding>) => Record<string, RhemaBinding>)) => {
@@ -152,12 +161,44 @@ export function DesignDocumentEditor({
     return editor.subscribe((next) => {
       setScene(next.scene)
       setEditorFlags({ canUndo: next.canUndo, canRedo: next.canRedo })
+      const rootNode = next.scene.nodes[next.scene.root]
+      const explicit = rootNode?.type === "group" && rootNode.children.length > 0 && rootNode.children.every((id) => {
+        const node = next.scene.nodes[id]
+        return pageNodeIds.current.has(id) && node?.type === "group"
+      })
+      setHasExplicitPages((current) => {
+        if (explicit) return true
+        return Array.isArray(document.document.pages) && document.document.pages.length ? current : false
+      })
       const pictureBindings = pictureBindingScenes.current.get(next.scene)
       if (pictureBindings) setBindings((current) => applyPictureBindingSnapshot(current, pictureBindings))
     })
-  }, [editor])
+  }, [editor, document.document.pages])
 
-  const orderedIds = useMemo(() => layerIds(scene), [scene])
+  const pageRoot = scene.nodes[scene.root]
+  const pages = useMemo<RhemaDesignPage[]>(() => {
+    if (hasExplicitPages && pageRoot?.type === "group") {
+      const resolved = pageRoot.children.flatMap((nodeId) => {
+        const node = scene.nodes[nodeId]
+        const saved = pageMetadata.get(nodeId)
+        if (!saved || node?.type !== "group") return []
+        return [{ ...saved, title: node.name?.trim() || saved.title }]
+      })
+      if (resolved.length) return resolved
+    }
+    return [{ id: scene.root, nodeId: scene.root, title: "Page 1" }]
+  }, [hasExplicitPages, pageMetadata, pageRoot, scene])
+  const activePage = pages.find((page) => page.id === activePageId) ?? pages[0]!
+  const activeRootId = activePage.nodeId
+  const pageScene = useMemo<SaraswatiScene>(
+    () => activeRootId === scene.root ? scene : { ...scene, root: activeRootId },
+    [activeRootId, scene],
+  )
+  const orderedIds = useMemo(() => layerIds(scene, activeRootId), [scene, activeRootId])
+  const pagesForDocument = hasExplicitPages ? pages : undefined
+  const designForEditor = useMemo(() => {
+    return { ...document.document, pages: pagesForDocument, scene, bindings }
+  }, [document.document, pagesForDocument, scene, bindings])
   // Keep bindings in editor state so Undo/Redo can restore deleted nodes with their Rhema data.
   // Orphaned bindings are removed only from the document sent to storage.
   const savedBindings = Object.fromEntries(
@@ -168,14 +209,13 @@ export function DesignDocumentEditor({
   const selectedPaintNode = selectedRenderable && paintNode(selectedRenderable) ? selectedRenderable : undefined
   const selectedBinding = selectedRenderable ? bindings[selectedRenderable.id] : undefined
   const issues = useMemo(() => designToScene({
-    ...document.document,
-    scene,
-    bindings,
+    ...designForEditor,
     meta: { ...document.document.meta, name: title },
-  }).issues, [document.document, scene, bindings, title])
+  }, activePage.id).issues, [designForEditor, document.document.meta, title, activePage.id])
   const dirty = title !== base.title ||
     JSON.stringify(scene) !== JSON.stringify(base.document.scene) ||
-    JSON.stringify(savedBindings) !== JSON.stringify(base.document.bindings)
+    JSON.stringify(savedBindings) !== JSON.stringify(base.document.bindings) ||
+    JSON.stringify(pagesForDocument) !== JSON.stringify(base.document.pages)
 
   useEffect(() => {
     onDirtyChange?.(dirty)
@@ -187,12 +227,12 @@ export function DesignDocumentEditor({
       const canvas = canvasRef.current
       const ctx = canvas?.getContext("2d")
       if (!canvas || !ctx) return
-      const rendered = await renderSceneToCanvas(scene, { multiplier: 1 })
+      const rendered = await renderSceneToCanvas(pageScene, { multiplier: 1 })
       if (cancelled || !rendered) return
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.drawImage(rendered, 0, 0, canvas.width, canvas.height)
       if (selectedId) {
-        const selected = scene.nodes[selectedId]
+        const selected = pageScene.nodes[selectedId]
         if (renderable(selected)) {
           const box = getNodeBounds(selected)
           ctx.save()
@@ -206,7 +246,7 @@ export function DesignDocumentEditor({
     }
     void draw().catch(() => setMessage("The editor preview could not be drawn. Your document remains available to edit and save."))
     return () => { cancelled = true }
-  }, [scene, selectedId])
+  }, [pageScene, selectedId])
 
   useEffect(() => {
     void designStore.listVersions(document.id).then(setVersions).catch(() => setVersions([]))
@@ -214,6 +254,99 @@ export function DesignDocumentEditor({
 
   const dispatch = (command: SaraswatiCommand) => {
     editor.dispatch(command)
+  }
+  const materializeFirstPage = () => {
+    if (hasExplicitPages) return pages[0]
+    const current = editor.getState().scene
+    const root = current.nodes[current.root]
+    if (!root || root.type !== "group") return undefined
+    const pageId = stableId("page")
+    const page: RhemaDesignPage = { id: pageId, nodeId: pageId, title: "Page 1" }
+    const group: SaraswatiGroupNode = { id: pageId, type: "group", parentId: root.id, name: page.title, visible: true, opacity: 1, children: [] }
+    pageNodeIds.current.add(pageId)
+    setPageMetadata((current) => new Map(current).set(pageId, page))
+    editor.beginBatch()
+    dispatch({ type: "ADD_NODE", node: group })
+    dispatch({ type: "SET_GROUP_CHILDREN", id: pageId, children: [...root.children] })
+    dispatch({ type: "SET_GROUP_CHILDREN", id: root.id, children: [pageId] })
+    editor.endBatch()
+    setHasExplicitPages(true)
+    setActivePageId(pageId)
+    setSelectedId(null)
+    return page
+  }
+  const addPage = () => {
+    if (document.kind === "template") return
+    if (!hasExplicitPages) materializeFirstPage()
+    const current = editor.getState().scene
+    const root = current.nodes[current.root]
+    if (!root || root.type !== "group") return
+    const pageId = stableId("page")
+    const page: RhemaDesignPage = { id: pageId, nodeId: pageId, title: `Page ${root.children.length + 1}` }
+    const group: SaraswatiGroupNode = { id: pageId, type: "group", parentId: root.id, name: page.title, visible: true, opacity: 1, children: [] }
+    pageNodeIds.current.add(pageId)
+    setPageMetadata((current) => new Map(current).set(pageId, page))
+    dispatch({ type: "ADD_NODE", node: group })
+    setHasExplicitPages(true)
+    setActivePageId(pageId)
+    setSelectedId(null)
+  }
+  const duplicatePage = () => {
+    if (document.kind === "template") return
+    const sourcePage = hasExplicitPages ? activePage : materializeFirstPage()
+    if (!sourcePage) return
+    const sourceScene = editor.getState().scene
+    const root = sourceScene.nodes[sourceScene.root]
+    if (!root || root.type !== "group") return
+    const duplicateId = stableId("page")
+    const duplicateTitle = `${sourcePage.title} copy`.slice(0, 80)
+    const newBindings: Record<string, RhemaBinding> = {}
+    const cloneNode = (sourceId: string, parentId: string, forcedId?: string): string | null => {
+      const original = sourceScene.nodes[sourceId]
+      if (!original) return null
+      const id = forcedId ?? stableId("layer")
+      const cloned: SaraswatiNode = original.type === "group"
+        ? { ...original, id, parentId, name: sourceId === sourcePage.nodeId ? duplicateTitle : original.name, children: [] }
+        : { ...original, id, parentId }
+      dispatch({ type: "ADD_NODE", node: cloned })
+      const binding = bindingsRef.current[sourceId]
+      if (binding) newBindings[id] = { ...binding, id }
+      if (original.type !== "group") return id
+      const children = original.children.flatMap((childId) => {
+        const child = cloneNode(childId, id)
+        return child ? [child] : []
+      })
+      dispatch({ type: "SET_GROUP_CHILDREN", id, children })
+      return id
+    }
+    editor.beginBatch()
+    cloneNode(sourcePage.nodeId, root.id, duplicateId)
+    editor.endBatch()
+    setBindings((current) => ({ ...current, ...newBindings }))
+    const duplicate: RhemaDesignPage = { id: duplicateId, nodeId: duplicateId, title: duplicateTitle }
+    pageNodeIds.current.add(duplicateId)
+    setPageMetadata((current) => new Map(current).set(duplicateId, duplicate))
+    setHasExplicitPages(true)
+    setActivePageId(duplicateId)
+    setSelectedId(null)
+  }
+  const movePage = (direction: -1 | 1) => {
+    const root = editor.getState().scene.nodes[scene.root]
+    if (!root || root.type !== "group") return
+    const children = [...root.children]
+    const from = children.indexOf(activePage.nodeId)
+    const to = from + direction
+    if (from < 0 || to < 0 || to >= children.length) return
+    ;[children[from], children[to]] = [children[to]!, children[from]!]
+    dispatch({ type: "SET_GROUP_CHILDREN", id: root.id, children })
+  }
+  const deletePage = () => {
+    if (pages.length <= 1 || document.kind === "template") return
+    const index = pages.findIndex((page) => page.id === activePage.id)
+    const nextPage = pages[index - 1] ?? pages[index + 1]
+    dispatch({ type: "DELETE_NODE", id: activePage.nodeId })
+    setActivePageId(nextPage?.id ?? scene.root)
+    setSelectedId(null)
   }
   const moveByArrow = (event: React.KeyboardEvent<HTMLElement>, id: string | null) => {
     if (!id) return
@@ -246,7 +379,7 @@ export function DesignDocumentEditor({
   }
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const point = pointInScene(event)
-    const next = pointerDown(scene, event.pointerId, point.x, point.y)
+    const next = pointerDown(pageScene, event.pointerId, point.x, point.y)
     pointerRef.current = next.state
     setSelectedId(next.selectedIds[0] ?? null)
     if (next.selectedIds.length) {
@@ -270,6 +403,7 @@ export function DesignDocumentEditor({
     const made = kind === "color"
       ? createColorLayer({ x: Math.round(scene.artboard.width * 0.35), y: Math.round(scene.artboard.height * 0.35) })
       : createLiveFeedLayer({ x: Math.round(scene.artboard.width * 0.1), y: Math.round(scene.artboard.height * 0.15) })
+    made.node.parentId = activeRootId
     setBindings((current) => ({ ...current, [made.node.id]: made.binding }))
     dispatch({ type: "ADD_NODE", node: made.node })
     setSelectedId(made.node.id)
@@ -278,7 +412,7 @@ export function DesignDocumentEditor({
     const id = "text-" + (globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2))
     const node: SaraswatiTextNode = {
       id,
-      parentId: scene.root,
+      parentId: activeRootId,
       name: "Text",
       visible: true,
       x: Math.round(scene.artboard.width * 0.1),
@@ -311,7 +445,7 @@ export function DesignDocumentEditor({
     const id = "ellipse-" + (globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2))
     const node: SaraswatiEllipseNode = {
       id,
-      parentId: scene.root,
+      parentId: activeRootId,
       name: "Ellipse",
       visible: true,
       x: Math.round(scene.artboard.width * 0.32),
@@ -402,7 +536,7 @@ export function DesignDocumentEditor({
         const id = "image-" + globalThis.crypto.randomUUID()
         const node = {
           id,
-          parentId: scene.root,
+          parentId: activeRootId,
           name: asset.name,
           visible: true,
           x: Math.round((scene.artboard.width - width) / 2),
@@ -439,7 +573,7 @@ export function DesignDocumentEditor({
   }
   const reorder = (direction: -1 | 1) => {
     if (!selectedId) return
-    const root = scene.nodes[scene.root]
+    const root = scene.nodes[scene.nodes[selectedId]?.parentId ?? activeRootId]
     if (!root || root.type !== "group") return
     const children = [...root.children]
     const from = children.indexOf(selectedId)
@@ -452,7 +586,7 @@ export function DesignDocumentEditor({
     title: title.trim(),
     kind: document.kind,
     document: {
-      ...document.document,
+      ...designForEditor,
       scene,
       bindings: savedBindings,
       meta: { ...document.document.meta, name: title.trim() },
@@ -532,6 +666,25 @@ export function DesignDocumentEditor({
       {!conflicted && message && <p role="status" className="border-b border-border px-4 py-2 text-xs text-muted-foreground">{message}</p>}
       <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <section className="flex min-w-0 flex-col gap-2 p-3" aria-label="Design canvas">
+          <div className="flex flex-wrap items-end gap-2 rounded-md border border-border p-2" aria-label="Design pages">
+            <label className="flex min-w-40 flex-1 flex-col gap-1 text-[0.6875rem] font-semibold">Page
+              <select aria-label="Design page" value={activePage.id} onChange={(event) => { setActivePageId(event.currentTarget.value); setSelectedId(null) }} className="h-8 rounded-md border border-input bg-background px-2 text-xs font-normal">
+                {pages.map((page, index) => <option key={page.id} value={page.id}>{index + 1}. {page.title}</option>)}
+              </select>
+            </label>
+            {hasExplicitPages ? (
+              <label className="flex min-w-32 flex-1 flex-col gap-1 text-[0.6875rem] font-semibold">Page name
+                <Input aria-label="Page name" value={activePage.title} maxLength={80} onChange={(event) => dispatch({ type: "SET_NODE_NAME", id: activePage.nodeId, name: event.currentTarget.value.slice(0, 80) })} className="h-8 text-xs font-normal" />
+              </label>
+            ) : <p className="max-w-56 text-[0.6875rem] text-muted-foreground">This saved design opens as one page. Add a page to make the layout multi-page.</p>}
+            <div className="flex flex-wrap gap-1">
+              <Button size="xs" variant="outline" onClick={addPage} disabled={document.kind === "template"} aria-label="Add page"><PlusIcon /> Add page</Button>
+              <Button size="xs" variant="outline" onClick={duplicatePage} disabled={document.kind === "template"} aria-label="Duplicate page">Duplicate</Button>
+              <Button size="icon-xs" variant="ghost" onClick={() => movePage(-1)} disabled={!hasExplicitPages || pages.findIndex((page) => page.id === activePage.id) <= 0} aria-label="Move page earlier"><ArrowUpIcon /></Button>
+              <Button size="icon-xs" variant="ghost" onClick={() => movePage(1)} disabled={!hasExplicitPages || pages.findIndex((page) => page.id === activePage.id) >= pages.length - 1} aria-label="Move page later"><ArrowDownIcon /></Button>
+              <Button size="icon-xs" variant="ghost" onClick={deletePage} disabled={!hasExplicitPages || pages.length <= 1 || document.kind === "template"} aria-label="Delete page"><Trash2Icon /></Button>
+            </div>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button size="xs" variant="outline" onClick={addTextLayer} disabled={document.kind === "template"}><TextIcon /> Text</Button>
             <Button size="xs" variant="outline" onClick={addEllipseLayer} disabled={document.kind === "template"}><CircleIcon /> Ellipse</Button>
