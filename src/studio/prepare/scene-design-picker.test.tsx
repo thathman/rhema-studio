@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const { mockInvoke } = vi.hoisted(() => ({ mockInvoke: vi.fn() }))
+const { mockInvoke, mockSceneChoose } = vi.hoisted(() => ({ mockInvoke: vi.fn(), mockSceneChoose: vi.fn() }))
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
-vi.mock("@/studio/design/look-library-view", () => ({ LookLibraryView: () => null }))
+vi.mock("@/studio/design/look-library-view", () => ({
+  LookLibraryView: ({ scenePicker }: { scenePicker?: { onChoose: (look: unknown, customize: boolean) => void } }) => {
+    if (scenePicker) mockSceneChoose.mockImplementation(scenePicker.onChoose)
+    return null
+  },
+}))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), emit: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
 vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: vi.fn(async () => false) }))
 vi.mock("@/lib/verse-renderer", () => ({ drawLowerThird: vi.fn(), onThemeFontsLoaded: vi.fn(() => () => {}), renderVerse: vi.fn() }))
@@ -12,6 +17,7 @@ vi.mock("@/lib/verse-renderer", () => ({ drawLowerThird: vi.fn(), onThemeFontsLo
 import { createElement, act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { createBlankRhemaDesign, pinnedSceneForVersion } from "@/design-engine/design-document-utils"
+import { LIBRARY_LOOKS } from "@/lib/look-library-data"
 import type { DesignDocument, DesignInput, DesignSummary, DesignVersion } from "@/design-engine/design-store"
 import type { RhemaDesign } from "@/design-engine/rhema-scene"
 import type { SaraswatiTextNode } from "@/vendor/avnac/saraswati"
@@ -29,6 +35,7 @@ beforeEach(() => {
   HTMLCanvasElement.prototype.getContext = (() => null) as never
   originalScenes = useBroadcastStore.getState().scenes
   mockInvoke.mockReset()
+  mockSceneChoose.mockReset()
 })
 
 afterEach(() => {
@@ -534,5 +541,145 @@ describe("Prepare design version picker", () => {
     await act(async () => useVersion!.click())
     expect(onSceneSelected).toHaveBeenCalledTimes(1)
     expect(useQueueStore.getState().items[0]).toMatchObject({ slide: { designRef: { id: copy.id, version: 1 } } })
+  })
+
+  it("creates a canonical template draft, versions it, and uses it only on the selected moment", async () => {
+    const template = LIBRARY_LOOKS.find((look) => look.id === "look-classic-scene-bible")
+    if (template?.kind !== "scene") throw new Error("Expected the built-in scene template")
+    const moment = serviceMoment()
+    useQueueStore.setState({ items: [moment] })
+    const before = useBroadcastStore.getState()
+    const liveBefore = {
+      outputs: before.outputs,
+      outputStatus: before.outputStatus,
+      isLive: before.isLive,
+      liveVerse: before.liveVerse,
+      liveSlide: before.liveSlide,
+      sceneTakes: before.sceneTakes,
+    }
+    const onSceneSelected = vi.fn()
+    let created: DesignDocument | null = null
+    let version: DesignVersion | null = null
+    mockInvoke.mockImplementation(async (command: string, args: Record<string, unknown>) => {
+      if (command === "design_create") {
+        const input = args.input as DesignInput
+        created = {
+          id: "design-template-copy",
+          title: input.title,
+          kind: "design",
+          document: input.document,
+          revision: 1,
+          latestVersion: null,
+          createdAt: new Date(1).toISOString(),
+          updatedAt: new Date(1).toISOString(),
+        }
+        return created
+      }
+      if (command === "design_list") return created ? [{ id: created.id, title: created.title, kind: "design", revision: created.revision, latestVersion: created.latestVersion, updatedAt: created.updatedAt }] : []
+      if (command === "design_get" && created && args.id === created.id) return created
+      if (command === "design_list_versions") return []
+      if (command === "design_save_draft" && created) {
+        const input = args.input as DesignInput
+        created = { ...created, title: input.title, document: input.document, revision: 2, updatedAt: new Date(2).toISOString() }
+        return created
+      }
+      if (command === "design_create_version" && created) {
+        version = {
+          designId: created.id,
+          version: 1,
+          fromRevision: created.revision,
+          title: created.title,
+          document: created.document,
+          note: null,
+          savedBy: "Tolu",
+          createdAt: new Date(3).toISOString(),
+        }
+        return version
+      }
+      throw new Error(`Unexpected host command: ${command}`)
+    })
+    const container = await render(createElement(SceneDesignPicker, {
+      eventId: "event-1",
+      eventTitle: "Sunday worship",
+      momentId: moment.id,
+      momentTitle: moment.reference,
+      onSceneSelected,
+    }))
+
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Choose a scene design for Welcome"]')!.click())
+    await act(async () => mockSceneChoose(template, true))
+    expect(mockInvoke).toHaveBeenCalledWith("design_create", expect.objectContaining({ input: expect.objectContaining({ kind: "design" }) }))
+    expect(document.body.querySelector<HTMLInputElement>("#design-document-title")).not.toBeNull()
+    const itemBeforeUse = useQueueStore.getState().items[0]
+    if (itemBeforeUse?.kind !== "slide") throw new Error("Expected the selected service moment to remain a slide")
+    expect(itemBeforeUse.slide).not.toHaveProperty("designRef")
+    expect(onSceneSelected).not.toHaveBeenCalled()
+
+    await act(async () => setInputValue(document.body.querySelector<HTMLInputElement>("#design-document-title")!, "Sunday welcome"))
+    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+    expect(mockInvoke).toHaveBeenCalledWith("design_save_draft", expect.objectContaining({ id: "design-template-copy", expectedRevision: 1, input: expect.objectContaining({ title: "Sunday welcome" }) }))
+    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Create version"))!.click())
+    expect(document.body.textContent).toContain("Use version 1 in Prepare")
+    const itemBeforeVersionUse = useQueueStore.getState().items[0]
+    if (itemBeforeVersionUse?.kind !== "slide") throw new Error("Expected the selected service moment to remain a slide")
+    expect(itemBeforeVersionUse.slide).not.toHaveProperty("designRef")
+    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use version 1 in Prepare")!.click())
+
+    expect(onSceneSelected).toHaveBeenCalledTimes(1)
+    expect(useQueueStore.getState().items[0]).toMatchObject({ slide: { designRef: { id: "design-template-copy", version: 1 } } })
+    const after = useBroadcastStore.getState()
+    expect({ outputs: after.outputs, outputStatus: after.outputStatus, isLive: after.isLive, liveVerse: after.liveVerse, liveSlide: after.liveSlide, sceneTakes: after.sceneTakes }).toEqual(liveBefore)
+  })
+
+  it("uses a template only after creating an immutable version", async () => {
+    const template = LIBRARY_LOOKS.find((look) => look.id === "look-classic-scene-bible")
+    if (template?.kind !== "scene") throw new Error("Expected the built-in scene template")
+    const moment = serviceMoment()
+    useQueueStore.setState({ items: [moment] })
+    const created = {
+      id: "design-template-ready",
+      title: "Classic · Camera and scripture",
+      kind: "design" as const,
+      document: createBlankRhemaDesign("Template copy"),
+      revision: 1,
+      latestVersion: null,
+      createdAt: new Date(1).toISOString(),
+      updatedAt: new Date(1).toISOString(),
+    }
+    const createdVersion: DesignVersion = {
+      designId: created.id,
+      version: 1,
+      fromRevision: 1,
+      title: created.title,
+      document: created.document,
+      note: "Started from template",
+      savedBy: "Tolu",
+      createdAt: new Date(2).toISOString(),
+    }
+    let createdDocument = created
+    mockInvoke.mockImplementation(async (command: string, args: Record<string, unknown>) => {
+      if (command === "design_create") {
+        const input = args.input as DesignInput
+        createdDocument = { ...created, title: input.title, document: input.document }
+        return createdDocument
+      }
+      if (command === "design_create_version") return { ...createdVersion, title: createdDocument.title, document: createdDocument.document }
+      throw new Error(`Unexpected host command: ${command}`)
+    })
+    const onSceneSelected = vi.fn()
+    const container = await render(createElement(SceneDesignPicker, {
+      eventId: "event-1",
+      eventTitle: "Sunday worship",
+      momentId: moment.id,
+      momentTitle: moment.reference,
+      onSceneSelected,
+    }))
+
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Choose a scene design for Welcome"]')!.click())
+    await act(async () => mockSceneChoose(template, false))
+
+    expect(mockInvoke).toHaveBeenCalledWith("design_create_version", expect.objectContaining({ id: created.id, expectedRevision: 1, note: "Started from template" }))
+    expect(onSceneSelected).toHaveBeenCalledTimes(1)
+    expect(useQueueStore.getState().items[0]).toMatchObject({ slide: { designRef: { id: created.id, version: 1 } } })
   })
 })

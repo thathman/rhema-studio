@@ -298,10 +298,12 @@ function summaryOf(document: DesignDocument): DesignSummary {
 }
 
 /** Pick or customize a private copy of an immutable design version for the current Prepare moment. */
-export function DesignVersionPicker({ onUse, onDirtyChange, useLabel }: {
+export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDesignId }: {
   onUse: (scene: Scene, version: DesignVersion, pageId?: string) => void
   useLabel?: string
   onDirtyChange?: (dirty: boolean) => void
+  /** Open a newly created template document directly in the shared editor. */
+  initialDesignId?: string
 }) {
   const operatorName = useSettingsStore((state) => state.operatorName)
   const [documents, setDocuments] = useState<DesignSummary[]>([])
@@ -325,12 +327,30 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel }: {
       if (cancelled) return
       const usable = items.filter((item) => item.kind !== "template")
       setDocuments(usable)
-      setSelectedId(usable[0]?.id ?? "")
+      setSelectedId(usable.find((item) => item.id === initialDesignId)?.id ?? usable[0]?.id ?? "")
     }).catch((failure) => {
       if (!cancelled) setError("Saved designs could not be loaded: " + messageOf(failure))
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [])
+  }, [initialDesignId])
+
+  useEffect(() => {
+    if (!initialDesignId) return
+    let cancelled = false
+    void designStore.get(initialDesignId).then((document) => {
+      if (cancelled) return
+      if (!document) throw new Error("This new design is no longer available.")
+      setSelectedId(document.id)
+      setEditing(document)
+      setEditingDirty(false)
+      setCreatedVersion(null)
+      setPendingVersion(null)
+      onDirtyChange?.(false)
+    }).catch((failure) => {
+      if (!cancelled) setError("The new design could not be opened: " + messageOf(failure))
+    })
+    return () => { cancelled = true }
+  }, [initialDesignId, onDirtyChange])
 
   useEffect(() => {
     let cancelled = false
