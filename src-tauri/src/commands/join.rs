@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use rhema_join::discover::{browse, found, Found};
@@ -218,8 +218,34 @@ pub fn join_connect(app: AppHandle, state: State<'_, JoinRuntime>, address: Stri
     if let Some(old) = state.stop.lock().map_err(|e| e.to_string())?.replace(tx) {
         let _ = old.send(true);
     }
-    tauri::async_runtime::spawn(rhema_join::host::follow_live(host, token, rx, move |event, payload| {
+    // Only a host with its certificate pinned is looked for elsewhere: over plain http, nothing shows
+    // that a device answering at another address is the same host, and this computer's key would reach it.
+    let pinned = state.secure.lock().map_err(|e| e.to_string())?.clone().filter(|(a, _)| a == address.trim()).map(|(_, link)| link);
+    let current = Arc::new(Mutex::new(address));
+    let (seen, secret) = (current.clone(), token.clone());
+    tauri::async_runtime::spawn(rhema_join::host::follow_moving(host, token, rx, move |event, payload| {
+        if event == "join:moved" {
+            if let Some(moved) = serde_json::from_str::<serde_json::Value>(&payload).ok().and_then(|v| v["address"].as_str().map(str::to_string)) {
+                let state = tauri::Manager::state::<JoinRuntime>(&app);
+                if let Ok(mut joined) = state.joined.lock() {
+                    *joined = joined.take().map(|(_, token)| (moved.clone(), token));
+                }
+                if let Ok(mut secure) = state.secure.lock() {
+                    *secure = secure.take().map(|(_, link)| (moved.clone(), link));
+                }
+                if let Ok(mut c) = current.lock() {
+                    moved.clone_into(&mut c);
+                }
+            }
+        }
         let _ = app.emit(event, payload);
+    }, move || {
+        let (pinned, secret) = (pinned.clone(), secret.clone());
+        let address = seen.lock().map(|a| a.clone()).unwrap_or_default();
+        async move {
+            let link = pinned?;
+            rhema_join::pin::find_moved(&address, link.port, &link.fingerprint, &secret).await
+        }
     }));
     Ok(())
 }

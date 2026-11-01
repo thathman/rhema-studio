@@ -20,13 +20,19 @@ pub fn base_url(address: &str) -> Result<String, String> {
     Ok(format!("http://{host}:{port}"))
 }
 
-/// A plain http client: a short wait to connect, and `timeout` for the whole request when given.
+/// A host's stream says something at least every 15 s; silence this long means the host has hung.
+const STREAM_SILENCE: Duration = Duration::from_secs(if cfg!(test) { 1 } else { 45 });
+
+/// A plain http client: a short wait to connect, and `timeout` for the whole request when given;
+/// with none (a stream that never ends), a limit on how long it may go silent.
 pub fn client(timeout: Option<Duration>) -> Result<reqwest::Client, String> {
-    let mut b = reqwest::Client::builder().connect_timeout(Duration::from_secs(5));
-    if let Some(t) = timeout {
-        b = b.timeout(t);
+    let b = reqwest::Client::builder().connect_timeout(Duration::from_secs(5));
+    match timeout {
+        Some(t) => b.timeout(t),
+        None => b.read_timeout(STREAM_SILENCE),
     }
-    b.build().map_err(|e| e.to_string())
+    .build()
+    .map_err(|e| e.to_string())
 }
 
 /// A host to talk to: plain http (Rhema), or https with the host's certificate pinned (Rhema
@@ -71,11 +77,13 @@ impl Host {
         #[cfg(feature = "pinned")]
         if let Some(tls) = &self.tls {
             // Straight to the host, never through a proxy: the certificate is the host's own.
-            let mut b = reqwest::Client::builder().use_preconfigured_tls((**tls).clone()).no_proxy().connect_timeout(Duration::from_secs(5));
-            if let Some(t) = timeout {
-                b = b.timeout(t);
+            let b = reqwest::Client::builder().use_preconfigured_tls((**tls).clone()).no_proxy().connect_timeout(Duration::from_secs(5));
+            return match timeout {
+                Some(t) => b.timeout(t),
+                None => b.read_timeout(STREAM_SILENCE),
             }
-            return b.build().map_err(|e| e.to_string());
+            .build()
+            .map_err(|e| e.to_string());
         }
         client(timeout)
     }
@@ -189,8 +197,22 @@ enum Ended {
 /// makes of this desk now (`me`), "reconnecting" with the reason, "refused", "stopped"). Reconnects
 /// by itself, waiting a little longer each time (at most 10 s); at once when the host changed this
 /// desk, which ends its stream.
-pub async fn follow_live(host: Host, token: String, mut stop: watch::Receiver<bool>, emit: impl Fn(&'static str, String)) {
+pub async fn follow_live(host: Host, token: String, stop: watch::Receiver<bool>, emit: impl Fn(&'static str, String)) {
+    follow_moving(host, token, stop, emit, || async { None }).await;
+}
+
+/// Look for the host elsewhere after this many failed tries in a row, and again each time as many more fail.
+const LOOK_EVERY: u32 = 3;
+
+/// `follow_live`, and when the host stays out of reach, ask `find_moved` whether it answers at
+/// another address now (its address changed): if so, carry on there and say `join:moved`.
+pub async fn follow_moving<F, Fut>(mut host: Host, token: String, mut stop: watch::Receiver<bool>, emit: impl Fn(&'static str, String), find_moved: F)
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Option<(String, Host)>>,
+{
     let mut wait = 1u64;
+    let mut failed = 0u32;
     loop {
         if *stop.borrow() {
             break;
@@ -202,6 +224,7 @@ pub async fn follow_live(host: Host, token: String, mut stop: watch::Receiver<bo
         match result {
             Ok(Ended::Rejoin) => {
                 wait = 1;
+                failed = 0;
                 continue;
             }
             Err(Refused(status)) => {
@@ -209,11 +232,27 @@ pub async fn follow_live(host: Host, token: String, mut stop: watch::Receiver<bo
                 return;
             }
             Ok(Ended::Closed) | Err(Lost(_)) => {
+                let closed = matches!(result, Ok(Ended::Closed));
                 let reason = match result {
                     Err(Lost(e)) => e,
                     _ => "the host closed the connection".into(),
                 };
                 emit("join:state", serde_json::json!({ "state": "reconnecting", "error": reason }).to_string());
+                // Closed by the host: it was there a moment ago.
+                failed = if closed { 1 } else { failed + 1 };
+                if failed % LOOK_EVERY == 0 {
+                    let found = tokio::select! {
+                        f = find_moved() => f,
+                        _ = stop.changed() => None,
+                    };
+                    if let Some((address, moved)) = found {
+                        host = moved;
+                        wait = 1;
+                        failed = 0;
+                        emit("join:moved", serde_json::json!({ "address": address }).to_string());
+                        continue;
+                    }
+                }
             }
         }
         tokio::select! {
@@ -226,15 +265,12 @@ pub async fn follow_live(host: Host, token: String, mut stop: watch::Receiver<bo
 }
 
 async fn follow(host: &Host, token: &str, stop: &mut watch::Receiver<bool>, emit: &impl Fn(&'static str, String)) -> Result<Ended, FollowError> {
-    let r = host
-        .client(None)
-        .map_err(Lost)?
-        .get(host.url("/api/v1/live/events"))
-        .header("X-Rhema-Key", token)
-        .header("Accept", "text/event-stream")
-        .send()
-        .await
-        .map_err(|e| Lost(lost_reason(host, &e)))?;
+    let asked = host.client(None).map_err(Lost)?.get(host.url("/api/v1/live/events")).header("X-Rhema-Key", token).header("Accept", "text/event-stream").send();
+    // Disconnecting works even while a hung host keeps this waiting.
+    let r = tokio::select! {
+        r = asked => r.map_err(|e| Lost(lost_reason(host, &e)))?,
+        _ = stop.changed() => return Ok(Ended::Closed),
+    };
     let status = r.status().as_u16();
     if status == 401 || status == 403 {
         return Err(Refused(status));

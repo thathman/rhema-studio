@@ -157,8 +157,36 @@ pub fn join_connect(app: AppHandle, link: State<'_, Link>, address: String, toke
     if let Some(old) = link.stop.lock().map_err(|e| e.to_string())?.replace(tx) {
         let _ = old.send(true);
     }
-    tauri::async_runtime::spawn(rhema_join::host::follow_live(host, token, rx, move |event, payload| {
+    let paired = link.paired(&app).filter(|p| same(&p.address, &address));
+    let current = std::sync::Arc::new(Mutex::new(paired));
+    let (seen, secret) = (current.clone(), token.clone());
+    tauri::async_runtime::spawn(rhema_join::host::follow_moving(host, token, rx, move |event, payload| {
+        if event == "join:moved" {
+            if let Some(moved) = serde_json::from_str::<serde_json::Value>(&payload).ok().and_then(|v| v["address"].as_str().map(str::to_string)) {
+                // Kept with the new address, so this computer finds its host there from now on.
+                let now = current.lock().ok().and_then(|mut c| {
+                    let p = c.as_mut()?;
+                    p.address.clone_from(&moved);
+                    Some(p.clone())
+                });
+                if let Some(now) = now {
+                    let link = app.state::<Link>();
+                    if let Ok(mut cache) = link.paired.lock() {
+                        cache.host = Some(now.clone());
+                    }
+                    if let Err(e) = kept_path(&app).and_then(|path| write_kept(&path, Some(&now))) {
+                        log::warn!("The host's new address was not kept: {e}");
+                    }
+                }
+            }
+        }
         let _ = app.emit(event, payload);
+    }, move || {
+        let (now, secret) = (seen.lock().ok().and_then(|c| c.clone()), secret.clone());
+        async move {
+            let p = now?;
+            pin::find_moved(&p.address, p.tls_port, &p.certificate, &secret).await
+        }
     }));
     Ok(())
 }
