@@ -3807,8 +3807,10 @@ mod tests {
     /// or refused when made from an older copy; full scenes only for desks that change them.
     #[tokio::test]
     async fn a_view_only_desk_cannot_attach_an_action_to_a_notice() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
         let sink = Arc::new(MockSink::new());
-        let keys: KeySet = Arc::new(std::sync::RwLock::new(crate::keys::Keys { require_auth: true, entries: vec![entry("vie", "Pastor", Role::Viewer)] }));
+        let viewer = KeyEntry { hash: hash_key("vie"), name: "Pastor".into(), role: Role::Viewer, ..serde_json::from_value(serde_json::json!({"hash":"h","name":"Pastor"})).unwrap() };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![viewer] }));
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, ..Default::default() };
         let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
