@@ -14,6 +14,8 @@ import { CONTENT_NAMES } from "@/lib/content-names"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import type { BroadcastOutputLanguage } from "@/types/broadcast-output"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useMediaStore } from "@/stores/media-store"
+import type { MediaAssetStatus } from "@/types"
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message
@@ -43,6 +45,33 @@ function layerIds(scene: SaraswatiScene): string[] {
   }
   walk(scene.root)
   return out
+}
+
+type PictureBindingSnapshot = Record<string, { mediaId?: string; imageUrl?: string }>
+
+function pictureBindingSnapshot(scene: SaraswatiScene, bindings: Record<string, RhemaBinding>): PictureBindingSnapshot {
+  const snapshot: PictureBindingSnapshot = {}
+  for (const [id, node] of Object.entries(scene.nodes)) {
+    const binding = bindings[id]
+    if (node.type === "image" && binding?.kind === "picture") {
+      snapshot[id] = { mediaId: binding.mediaId, imageUrl: binding.imageUrl }
+    }
+  }
+  return snapshot
+}
+
+function applyPictureBindingSnapshot(
+  bindings: Record<string, RhemaBinding>,
+  snapshot: PictureBindingSnapshot,
+): Record<string, RhemaBinding> {
+  let next = bindings
+  for (const [id, picture] of Object.entries(snapshot)) {
+    const existing = bindings[id]
+    if (existing?.kind === "picture" && existing.mediaId === picture.mediaId && existing.imageUrl === picture.imageUrl) continue
+    if (next === bindings) next = { ...bindings }
+    next[id] = { ...existing, id, kind: "picture", ...picture }
+  }
+  return next
 }
 
 function moveValue(node: SaraswatiRenderableNode, field: "x" | "y" | "width" | "height", value: number): SaraswatiRenderableNode {
@@ -91,21 +120,40 @@ export function DesignDocumentEditor({
   const [title, setTitle] = useState(document.title)
   const [editor] = useState(() => createSaraswatiEditorStore(document.document.scene))
   const [scene, setScene] = useState(() => editor.getState().scene)
-  const [bindings, setBindings] = useState(document.document.bindings)
+  const [bindings, setBindingsState] = useState(document.document.bindings)
+  const bindingsRef = useRef(bindings)
+  const setBindings = (update: Record<string, RhemaBinding> | ((current: Record<string, RhemaBinding>) => Record<string, RhemaBinding>)) => {
+    const next = typeof update === "function" ? update(bindingsRef.current) : update
+    bindingsRef.current = next
+    setBindingsState(next)
+  }
+  const pictureBindingScenes = useRef(new WeakMap<SaraswatiScene, PictureBindingSnapshot>())
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [versions, setVersions] = useState<DesignVersion[]>([])
   const [versionNote, setVersionNote] = useState("")
   const [conflicted, setConflicted] = useState(false)
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState("")
+  const [imagePickerOpen, setImagePickerOpen] = useState(false)
+  const [imagePickerBusy, setImagePickerBusy] = useState(false)
+  const [imagePickerMessage, setImagePickerMessage] = useState("")
   const [editorFlags, setEditorFlags] = useState({ canUndo: false, canRedo: false })
   const operatorName = useSettingsStore((state) => state.operatorName)
+  const mediaAssets = useMediaStore((state) => state.assets)
+  const mediaLoaded = useMediaStore((state) => state.loaded)
+  const mediaError = useMediaStore((state) => state.error)
+  const libraryPictures = useMemo(
+    () => mediaAssets.filter((asset) => asset.kind === "image" && asset.present),
+    [mediaAssets],
+  )
   const pointerRef = useRef<SaraswatiPointerState | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     return editor.subscribe((next) => {
       setScene(next.scene)
       setEditorFlags({ canUndo: next.canUndo, canRedo: next.canRedo })
+      const pictureBindings = pictureBindingScenes.current.get(next.scene)
+      if (pictureBindings) setBindings((current) => applyPictureBindingSnapshot(current, pictureBindings))
     })
   }, [editor])
 
@@ -285,6 +333,108 @@ export function DesignDocumentEditor({
     dispatch({ type: "ADD_NODE", node })
     setSelectedId(id)
   }
+  const openImagePicker = () => {
+    setImagePickerOpen(true)
+    setImagePickerMessage("")
+    if (!mediaLoaded) void useMediaStore.getState().list()
+  }
+  const importPictures = async () => {
+    setImagePickerBusy(true)
+    setImagePickerMessage("")
+    try {
+      const results = await useMediaStore.getState().importFiles()
+      if (!results) return
+      const imported = results.filter((result) => result.status === "imported")
+      const failures = results.filter((result) => result.status === "failed")
+      if (imported.length) setImagePickerMessage("Pictures added to the Library. Choose one to add it to this design.")
+      else if (failures.length) setImagePickerMessage(failures.map((result) => result.message).join(" "))
+      else setImagePickerMessage("No pictures were added.")
+    } catch (error) {
+      setImagePickerMessage("The picture could not be added to the Library: " + errorMessage(error))
+    } finally {
+      setImagePickerBusy(false)
+    }
+  }
+  const addLibraryPicture = async (asset: MediaAssetStatus) => {
+    if (!asset.present) {
+      setImagePickerMessage("That picture is no longer available in the Library. Refresh the list and try again.")
+      return
+    }
+    setImagePickerBusy(true)
+    setImagePickerMessage("")
+    try {
+      const imageUrl = await useMediaStore.getState().dataUrl(asset.id)
+      if (!imageUrl) throw new Error("The picture file is missing or could not be read.")
+
+      const selectedImage = selectedRenderable?.type === "image" ? selectedRenderable : null
+      if (selectedImage) {
+        const sceneBeforeReplace = editor.getState().scene
+        const bindingsBeforeReplace = bindingsRef.current
+        pictureBindingScenes.current.set(
+          sceneBeforeReplace,
+          pictureBindingSnapshot(sceneBeforeReplace, bindingsBeforeReplace),
+        )
+        const replacementBinding: RhemaBinding = {
+          ...bindingsBeforeReplace[selectedImage.id],
+          id: selectedImage.id,
+          kind: "picture",
+          mediaId: asset.id,
+          imageUrl,
+        }
+        updateNode({ ...selectedImage, src: imageUrl })
+        const sceneAfterReplace = editor.getState().scene
+        pictureBindingScenes.current.set(sceneAfterReplace, pictureBindingSnapshot(sceneAfterReplace, {
+          ...bindingsBeforeReplace,
+          [selectedImage.id]: replacementBinding,
+        }))
+        setBindings((current) => ({ ...current, [selectedImage.id]: replacementBinding }))
+      } else {
+        const sourceAspect = asset.width && asset.height && asset.width > 0 && asset.height > 0
+          ? asset.width / asset.height
+          : 16 / 9
+        const aspect = Math.max(0.1, Math.min(10, sourceAspect))
+        const maxWidth = scene.artboard.width * 0.5
+        const maxHeight = scene.artboard.height * 0.5
+        const width = Math.round(Math.min(maxWidth, maxHeight * aspect))
+        const height = Math.round(width / aspect)
+        const id = "image-" + globalThis.crypto.randomUUID()
+        const node = {
+          id,
+          parentId: scene.root,
+          name: asset.name,
+          visible: true,
+          x: Math.round((scene.artboard.width - width) / 2),
+          y: Math.round((scene.artboard.height - height) / 2),
+          rotation: 0,
+          scaleX: 1,
+          scaleY: 1,
+          opacity: 1,
+          originX: "left" as const,
+          originY: "top" as const,
+          type: "image" as const,
+          width,
+          height,
+          src: imageUrl,
+          cropX: 0,
+          cropY: 0,
+          clipPath: null,
+        }
+        setBindings((current) => ({
+          ...current,
+          [id]: { id, kind: "picture", mediaId: asset.id, imageUrl },
+        }))
+        dispatch({ type: "ADD_NODE", node })
+        setSelectedId(id)
+      }
+      setImagePickerOpen(false)
+      setImagePickerMessage("")
+      setMessage(selectedRenderable?.type === "image" ? "Library picture replaced. Save the draft to keep the change." : "Library picture added as a layer. Save the draft to keep the change.")
+    } catch (error) {
+      setImagePickerMessage("The picture could not be added to this design: " + errorMessage(error))
+    } finally {
+      setImagePickerBusy(false)
+    }
+  }
   const reorder = (direction: -1 | 1) => {
     if (!selectedId) return
     const root = scene.nodes[scene.root]
@@ -383,10 +533,50 @@ export function DesignDocumentEditor({
           <div className="flex flex-wrap items-center gap-2">
             <Button size="xs" variant="outline" onClick={addTextLayer} disabled={document.kind === "template"}><TextIcon /> Text</Button>
             <Button size="xs" variant="outline" onClick={addEllipseLayer} disabled={document.kind === "template"}><CircleIcon /> Ellipse</Button>
+            <Button size="xs" variant="outline" onClick={openImagePicker} disabled={document.kind === "template" || imagePickerBusy}>
+              {selectedRenderable?.type === "image" ? "Replace image" : "Image from Library"}
+            </Button>
             <Button size="xs" variant="outline" onClick={() => addLayer("feed")} disabled={document.kind === "template"}><PlusIcon /> Live content</Button>
             <Button size="xs" variant="outline" onClick={() => addLayer("color")} disabled={document.kind === "template"}><PlusIcon /> Colour layer</Button>
             <span className="ml-auto text-[0.6875rem] text-muted-foreground">Drag on canvas or focus a layer and use arrow keys; Shift + arrow moves 10 px.</span>
           </div>
+          {imagePickerOpen && (
+            <section aria-label="Image library" className="rounded-md border border-border bg-card p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-semibold">Pictures from your Library</h3>
+                  <p className="mt-0.5 text-[0.6875rem] text-muted-foreground">Choose a local image to add as an editable layer. It stays with this design when you save it.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="xs" variant="outline" onClick={() => void importPictures()} disabled={imagePickerBusy}>Import picture</Button>
+                  <Button size="xs" variant="ghost" onClick={() => setImagePickerOpen(false)} disabled={imagePickerBusy}>Close</Button>
+                </div>
+              </div>
+              {imagePickerMessage && <p role="status" className="mt-2 text-xs text-muted-foreground">{imagePickerMessage}</p>}
+              {mediaError && libraryPictures.length === 0 && <p role="alert" className="mt-2 text-xs text-destructive">The Library pictures could not be loaded: {mediaError}</p>}
+              {libraryPictures.length ? (
+                <ul className="mt-3 flex flex-wrap gap-2">
+                  {libraryPictures.map((asset) => (
+                    <li key={asset.id}>
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() => void addLibraryPicture(asset)}
+                        disabled={imagePickerBusy}
+                        aria-label={`${selectedRenderable?.type === "image" ? "Replace with" : "Add"} ${asset.name}${selectedRenderable?.type === "image" ? "" : " as image layer"}`}
+                      >
+                        {asset.name}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : !mediaError && (
+                <p className="mt-3 rounded border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                  No pictures are in the Library yet. Import a picture here, then choose it to add it to this design.
+                </p>
+              )}
+            </section>
+          )}
           <div className="relative mx-auto w-full max-w-5xl overflow-hidden rounded-md border border-border bg-neutral-950">
             <canvas
               ref={canvasRef}
