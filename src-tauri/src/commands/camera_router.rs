@@ -490,13 +490,14 @@ fn readers_differ(config: &Path, readers: &[(String, String)]) -> bool {
 
 /// This computer moved to another network address: this computer's own readers by that address (the
 /// address OBS is given) follow. Changing that sign-in rule disconnects nobody; other readers, the
-/// cameras and the companions carry on. With no network now the address stays: nothing to follow yet.
+/// cameras and the companions carry on. With no network only this computer itself reads without a
+/// sign-in: an address it no longer holds could soon be another device's.
 fn follow_address(router: &CameraRouter, hub: &rhema_api::SharedCameras, now: Option<String>) {
     let mut s = router.lock();
-    if now.is_none() || now == s.lan {
+    if now == s.lan {
         return;
     }
-    log::info!("camera router: this computer's address is now {}", now.as_deref().unwrap_or(""));
+    log::info!("camera router: this computer's address is now {}", now.as_deref().unwrap_or("none"));
     s.lan = now;
     let Some(config) = s.config.clone() else { return };
     if let Err(e) = config_yaml(&PORTS, s.lan.as_deref(), &hub.list(), &hub.reader_list(), &new_api_password()).and_then(|y| write_config(&config, &with_rtsps(y, &PORTS, s.tls.as_ref()))) {
@@ -546,6 +547,8 @@ fn look_regularly(router: CameraRouter, hub: rhema_api::SharedCameras, keys: rhe
                 (s.api_password.clone(), s.child.as_mut().is_some_and(|c| matches!(c.try_wait(), Ok(None))))
             };
             if running {
+                let address = super::remote::remote_lan_address();
+                follow_address(&router, &hub, address.clone());
                 let base = format!("http://127.0.0.1:{}/v3", PORTS.api);
                 let get = |what: &'static str| {
                     let req = client.get(format!("{base}/{what}")).basic_auth(API_USER, Some(&password));
@@ -559,9 +562,7 @@ fn look_regularly(router: CameraRouter, hub: rhema_api::SharedCameras, keys: rhe
                     // A TV or desk that lost its key or role: cut off here, so a failed try is tried again.
                     rhema_api::http::prune_camera_readers(&hub, &keys, &feeds);
                     hub.relay_kick_unheld(&client, &base, API_USER, &password, &webrtc).await;
-                    let address = super::remote::remote_lan_address();
                     let local = local_addresses(address.as_deref());
-                    follow_address(&router, &hub, address);
                     let now = Instant::now();
                     let watch = build_watch(&paths, &sessions, &Names { reader: &|u| hub.reader_name(u), desk: &|ip| hub.desk_at(ip) }, &local, &mut before, now);
                     hub.set_watch(watch);
@@ -936,7 +937,7 @@ mod tests {
     }
 
     #[test]
-    fn the_address_follows_the_network_and_stays_while_there_is_none() {
+    fn the_address_follows_the_network_and_is_dropped_while_there_is_none() {
         let dir = std::env::temp_dir().join(format!("rhema-follow-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let config = dir.join("mediamtx.yml");
@@ -948,8 +949,8 @@ mod tests {
         follow_address(&router, &hub, Some("192.168.1.20".into()));
         assert!(!config.exists(), "nothing changed: nothing is written");
         follow_address(&router, &hub, None);
-        assert!(!config.exists(), "offline: nothing changed");
-        assert_eq!(router.lock().lan.as_deref(), Some("192.168.1.20"));
+        assert!(!std::fs::read_to_string(&config).unwrap().contains("192.168.1.20"), "an address this computer lost opens nothing");
+        assert_eq!(router.lock().lan, None);
         follow_address(&router, &hub, Some("10.0.0.7".into()));
         assert!(std::fs::read_to_string(&config).unwrap().contains("\"10.0.0.7\"]"));
         assert_eq!(router.lock().lan.as_deref(), Some("10.0.0.7"));

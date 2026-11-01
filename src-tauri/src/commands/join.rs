@@ -707,7 +707,7 @@ mod tests {
         let server = rhema_api::tls::make_server(&ca, &["127.0.0.1".into()]).unwrap();
         let pairing = rhema_api::new_pairing_window();
         let code = rhema_api::open_pairing(&pairing);
-        let config = rhema_api::HttpConfig { port: 0, host: "127.0.0.1".into(), pairing, tls: tls.then(|| rhema_api::TlsListener { port: 0, server, ca_cert: ca.cert.clone() }), ..Default::default() };
+        let config = rhema_api::HttpConfig { port: 0, host: "127.0.0.1".into(), pairing, tls: tls.then(|| rhema_api::TlsListener { port: 0, server, ca_cert: ca.cert.clone(), leaves: rhema_api::TlsLeaves::default() }), ..Default::default() };
         let r = rhema_api::start_http_server(config, std::sync::Arc::new(Quiet), rhema_api::new_shared_status()).await.unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
         (r, code, ca)
