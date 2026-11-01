@@ -95,6 +95,18 @@ public final class CodeProofCheck {
         check("an empty picture", !Guard.stillFits(feed, feed, 0));
         check("a picture too big", !Guard.stillFits(feed, feed, Guard.STILL_MAX_BYTES + 1));
 
+        long capturedAt = 1_700_000_000_000L;
+        check("a fresh retained frame has a bounded age label", "less than a minute ago".equals(Guard.stillAgeLabel(feed, feed, capturedAt, capturedAt + 59_999)));
+        check("a retained frame reports elapsed age", "1 minute ago".equals(Guard.stillAgeLabel(feed, feed, capturedAt, capturedAt + 60_000)));
+        check("an hour-old frame uses hours", "1 hour ago".equals(Guard.stillAgeLabel(feed, feed, capturedAt, capturedAt + 3_600_000)));
+        check("a day-old frame uses days", "1 day ago".equals(Guard.stillAgeLabel(feed, feed, capturedAt, capturedAt + 86_400_000)));
+        check("a future frame timestamp has unknown age", "age unknown".equals(Guard.stillAgeLabel(feed, feed, capturedAt, capturedAt - 1)));
+        check("an invalid frame timestamp has unknown age", "age unknown".equals(Guard.stillAgeLabel(feed, feed, 0, capturedAt)));
+        check("an invalid clock has unknown age", "age unknown".equals(Guard.stillAgeLabel(feed, feed, capturedAt, 0)));
+        check("a changed feed does not reuse the cached frame age", "age unknown".equals(Guard.stillAgeLabel(feed, "https://192.168.3.10:8081/feed/new?k=z", capturedAt, capturedAt + 60_000)));
+        String veryOldAge = Guard.stillAgeLabel(feed, feed, 1, Long.MAX_VALUE);
+        check("a very old frame age remains bounded without overflow", veryOldAge.endsWith(" days ago") && veryOldAge.length() <= 24);
+
         if (failed > 0) {
             System.err.println("CodeProofCheck: " + failed + " check(s) failed");
             System.exit(1);
