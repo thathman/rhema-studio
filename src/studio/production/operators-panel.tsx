@@ -232,13 +232,14 @@ function JoinedDesk() {
   const address = useSettingsStore((s) => s.joinAddress)
   const secure = useJoin((s) => s.secure)
   const fingerprint = useSettingsStore((s) => s.joinSecure?.fingerprint)
-  const viewer = me?.role === "viewer"
-  const desks = DESKS[me?.role ?? "present"] ?? []
-  const deskLive = live && me?.role === "screens"
+  const role = me && REMOTE_ROLES.some((item) => item.id === me.role) ? me.role : "viewer"
+  const viewer = role === "viewer"
+  const desks = DESKS[role] ?? []
+  const deskLive = live && role === "screens"
     ? {
       ...live,
-      outputs: live.outputs.filter((output) => (me.outputScope ?? []).includes(output.id)),
-      outputMap: live.outputMap?.filter((output) => output.role === "congregation" && (me.outputScope ?? []).includes(output.id)),
+      outputs: live.outputs.filter((output) => (me?.outputScope ?? []).includes(output.id)),
+      outputMap: live.outputMap?.filter((output) => output.role === "congregation" && (me?.outputScope ?? []).includes(output.id)),
     }
     : live
   const fresh = useFreshness()
@@ -248,7 +249,8 @@ function JoinedDesk() {
         <span role="status" className={cn("rounded-full px-2 py-0.5 text-[0.625rem] font-bold uppercase", status === "connected" ? "bg-primary/10 text-primary-text" : "bg-muted text-muted-foreground")}>
           {status === "connected" ? "Connected" : status === "reconnecting" ? "Reconnecting…" : status === "refused" ? "Refused" : "Connecting…"}
         </span>
-        {me && <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === me.role)?.may}>as {me.name} · {roleLabel(me.role)}</span>}
+        {me && role !== "viewer" && <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === role)?.may}>as {me.name} · {roleLabel(role)}</span>}
+        {viewer && (!me || !REMOTE_ROLES.some((item) => item.id === me.role)) && <span role="status" className="text-muted-foreground">Role not confirmed · showing View only</span>}
         {live && fresh.showSince && <span role="status" className="font-semibold text-confidence-mid">Last update {Math.round(fresh.sinceMs / 1000)} s ago</span>}
         {secure === true && <span className="text-muted-foreground" title="This computer checks the host's certificate, kept when it paired: compare it with the host's card (Live → Production tools → Operators).">Encrypted{fingerprint ? ` · certificate ${certificateWords(fingerprint)}` : ""}</span>}
         <span className="flex-1" />
@@ -273,7 +275,7 @@ function JoinedDesk() {
         </p>
       )}
       {error && <p role="alert" className="text-destructive">{error}</p>}
-      {live && (me?.role === "viewer" ? (
+      {live && (viewer ? (
         <ViewerDesk live={viewerLiveProjection(live)} stale={fresh.stale} connected={status === "connected"} now={fresh.now} receivedAt={fresh.receivedAt} />
       ) : (
         <>
@@ -283,7 +285,7 @@ function JoinedDesk() {
             {live.sources.filter((s) => s.on).length > 0 && <p className="mt-1 truncate text-[0.6875rem] text-[#9fb2b0]">Live sources: {live.sources.filter((s) => s.on).map((s) => [sourceName(s.id), s.reference, activatedLabel(s)].filter(Boolean).join(" · ")).join("   ")}</p>}
           </div>
           <TakeAttemptNotice attempts={live.takeAttempts} />
-          {me?.role === "screens" && <UpcomingGraphics queue={live.graphicsQueue} stale={fresh.stale} />}
+          {role === "screens" && <UpcomingGraphics queue={live.graphicsQueue} stale={fresh.stale} />}
           {desks.includes("director") && <DirectorBoard readiness={live.readiness} crew={live.presence} />}
           {desks.includes("clock") && <ClockDesk live={live} stale={fresh.stale} />}
           {desks.includes("prepare") && <PrepareDesk />}
@@ -292,10 +294,10 @@ function JoinedDesk() {
           {desks.includes("cameras") && <CameraDesk live={live} />}
           {desks.includes("outputs") && deskLive && <OutputMap live={deskLive} />}
           {desks.includes("outputs") && deskLive && <ScreenSources live={deskLive} />}
-          {desks.includes("scenes") && deskLive && <ScenesDesk live={deskLive} role={me?.role ?? "present"} outputScope={me?.outputScope ?? []} groupTakeScope={me?.groupTakeScope ?? []} />}
+          {desks.includes("scenes") && deskLive && <ScenesDesk live={deskLive} role={role} outputScope={me?.outputScope ?? []} groupTakeScope={me?.groupTakeScope ?? []} />}
           {desks.includes("stage") && <StageDesk live={live} />}
           {desks.includes("obs") && <ObsDesk live={live} />}
-          <DeskAuxTimers live={live} role={me?.role ?? "present"} stale={fresh.stale} />
+          <DeskAuxTimers live={live} role={role} stale={fresh.stale} />
           <RunOfShowView live={live} stale={fresh.stale} />
         </>
       ))}
@@ -309,15 +311,15 @@ function JoinedDesk() {
         <p className="font-semibold">Notices</p>
         <NoticesPanel
           notices={live.notices ?? []}
-          role={me?.role ?? "present"}
+          role={role}
           me={me?.name ?? ""}
-          allowProductionActions={me?.role !== "viewer"}
+          allowProductionActions={!viewer}
           allowCommunications={!viewer || (status === "connected" && !fresh.stale)}
           eventTitle={(live.event.targets ?? live.rundown).find((r) => r.id === live.event.currentId)?.reference ?? null}
           onSend={(n) => void useJoin.getState().send({ command: "notice_send", value: { text: n.text, to: n.to, priority: n.priority, ...(live.event.currentId ? { event: live.event.currentId } : {}), ...(n.action ? { action: n.action } : {}) } })}
           onAnswer={(id, state) => void useJoin.getState().send({ command: "notice_ack", value: { id, state } })}
           onAction={async (a, mode) => {
-            if (me?.role === "viewer") return "View only desks cannot run production actions"
+            if (viewer) return "View only desks cannot run production actions"
             // The host checks this desk's role for each, as for its own buttons; its refusal is the
             // reason. Preview puts a verse or a song in the main desk's Preview only.
             if (a.kind === "camera") return null // answering is the action
@@ -333,7 +335,7 @@ function JoinedDesk() {
             const refused = results.find((r) => !r.ok)
             return refused && !refused.ok ? refused.error : null
           }}
-          onQueue={QUEUE_ROLES.has(me?.role ?? "present") ? (a) => queueOnHost(a) : undefined}
+          onQueue={QUEUE_ROLES.has(role) ? (a) => queueOnHost(a) : undefined}
           scenes={viewer ? [] : live.scenes}
           rundown={live.rundown}
           people={live.crew ?? []}
@@ -345,7 +347,6 @@ function JoinedDesk() {
 }
 
 type ViewerShowMode = "live" | "rehearsal" | "idle"
-type ViewerLiveStateWithStatus = LiveStateV1 & { showMode?: ViewerShowMode }
 
 type ViewerEventRow = Pick<LiveStateV1["rundown"][number], "id" | "reference" | "plannedMinutes"> & {
   time?: Pick<NonNullable<LiveStateV1["rundown"][number]["time"]>, "expected" | "state">
@@ -355,7 +356,7 @@ type ViewerEventRow = Pick<LiveStateV1["rundown"][number], "id" | "reference" | 
 type ViewerLiveProjection = {
   at: number
   heartbeatMs?: number
-  showMode?: ViewerShowMode
+  showMode: ViewerShowMode
   event: { currentId: string | null; targets?: ViewerEventRow[] }
   rundown: ViewerEventRow[]
   timing?: { expectedEnd: number; timeZone?: string } | null
@@ -368,11 +369,11 @@ function viewerLiveProjection(live: LiveStateV1): ViewerLiveProjection {
     plannedMinutes,
     ...(time ? { time: { expected: time.expected, state: time.state } } : {}),
   })
-  const showMode = (live as ViewerLiveStateWithStatus).showMode
+  const showMode: ViewerShowMode = live.program.rehearsal ? "rehearsal" : live.program.onAir ? "live" : "idle"
   return {
     at: live.at,
     ...(live.heartbeatMs !== undefined ? { heartbeatMs: live.heartbeatMs } : {}),
-    ...(showMode === "live" || showMode === "rehearsal" || showMode === "idle" ? { showMode } : {}),
+    showMode,
     event: {
       currentId: live.event.currentId,
       ...(live.event.targets ? { targets: live.event.targets.map(row) } : {}),

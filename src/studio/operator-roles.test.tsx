@@ -51,9 +51,9 @@ describe("the desks a joined computer gets", () => {
     event: { mode: "own", currentId: null }, rundown: [{ id: "w", reference: "Welcome", plannedMinutes: 5 }], timing: null, stageMessage: "",
     scenes: [{ id: "split", name: "Sermon split" }], outputs: [{ id: "main", name: "Projector", sceneId: null }], notices: [],
   }
-  const render = async (role: string, state: LiveStateV1 & { showMode?: "live" | "rehearsal" | "idle" } = live, status: JoinStatus = "connected", receivedAt = performance.now()) => {
+  const render = async (role: string | null, state: LiveStateV1 & { showMode?: "live" | "rehearsal" | "idle" } = live, status: JoinStatus = "connected", receivedAt = performance.now()) => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-    useJoin.setState({ status, me: { name: "Op", role }, live: state, receivedAt, clockSkewMs: 0, error: null, paused: false, note: null })
+    useJoin.setState({ status, me: role === null ? null : { name: "Op", role }, live: state, receivedAt, clockSkewMs: 0, error: null, paused: false, note: null })
     const el = document.createElement("div")
     const root = createRoot(el)
     mountedRoots.push(root)
@@ -74,14 +74,25 @@ describe("the desks a joined computer gets", () => {
     expect([has(all, "Event clock desk"), has(all, "Bible desk"), has(all, "Scenes desk")]).toEqual([true, true, true])
   })
 
+  it("fails closed to View only when the joined role is missing or unrecognized", async () => {
+    for (const role of [null, "unrecognized-role"]) {
+      const el = await render(role)
+      expect(el.textContent).toContain("Role not confirmed · showing View only")
+      expect(el.querySelector('[aria-label="Show status"]')).not.toBeNull()
+      expect(el.querySelector('[aria-label="Event clock desk"]')).toBeNull()
+      expect(el.querySelector('[aria-label="Scenes desk"]')).toBeNull()
+      expect(el.querySelector('[aria-label="Notices desk"]')).not.toBeNull()
+    }
+  })
+
   it("gives View only a stale-aware Now/Next desk without Program details or production actions", async () => {
     const at = Date.UTC(2026, 9, 31, 9, 0)
     const viewerLive: LiveStateV1 & { showMode?: "live" | "rehearsal" | "idle" } = {
       ...live,
       at,
-      showMode: "rehearsal",
+      showMode: undefined,
       service: { title: "Sunday service" },
-      program: { onAir: true, reference: "PRIVATE PROGRAM DETAIL", rehearsal: false },
+      program: { onAir: true, reference: "PRIVATE PROGRAM DETAIL", rehearsal: true },
       sources: [{ id: "bible", reference: "PRIVATE SOURCE DETAIL", on: true, revision: 1 }],
       takeAttempts: [{ id: 1, itemId: "welcome", reference: "PRIVATE TAKE DETAIL", status: "succeeded", startedAt: at, finishedAt: at, outcome: "presented" }],
       event: {
@@ -145,9 +156,11 @@ describe("the desks a joined computer gets", () => {
     expect(serviceClockDesk.querySelector('[aria-label="Service countdown"]')?.textContent).toBe("1:05:00")
     expect(serviceClockDesk.textContent).toContain("until expected service end · host estimate")
 
-    const statusUnavailable = await render("viewer", { ...viewerLive, showMode: undefined }, "connected")
-    expect(statusUnavailable.querySelector('[aria-label="Show status"]')?.textContent).toContain("Show status unavailable")
-    expect(statusUnavailable.textContent).not.toContain("PRIVATE PROGRAM DETAIL")
+    const liveStatus = await render("viewer", { ...viewerLive, showMode: undefined, program: { onAir: true, reference: "PRIVATE PROGRAM DETAIL", rehearsal: false } }, "connected")
+    expect(liveStatus.querySelector('[aria-label="Show status"]')?.textContent).toContain("Live")
+    expect(liveStatus.textContent).not.toContain("PRIVATE PROGRAM DETAIL")
+    const idleStatus = await render("viewer", { ...viewerLive, showMode: undefined, program: { onAir: false, reference: null, rehearsal: false } }, "connected")
+    expect(idleStatus.querySelector('[aria-label="Show status"]')?.textContent).toContain("Not on air")
   })
 
   it("ticks its service estimate while fresh, then freezes at the last trusted host time", async () => {
