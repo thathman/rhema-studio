@@ -6,6 +6,14 @@ const native = vi.hoisted(() => ({
   eventHandler: null as ((event: { payload: unknown }) => void) | null,
 }))
 
+vi.mock("@chenglou/pretext", () => ({ clearCache: vi.fn() }))
+vi.mock("@chenglou/pretext/rich-inline", () => ({
+  prepareRichInline: vi.fn(() => ({})),
+  materializeRichInlineLineRange: vi.fn(() => []),
+  measureRichInlineStats: vi.fn(() => ({ width: 0, height: 0, lines: 0 })),
+  walkRichInlineLineRanges: vi.fn(),
+}))
+
 vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }))
 vi.mock("@tauri-apps/api/event", () => ({
   emitTo: vi.fn(async () => {}),

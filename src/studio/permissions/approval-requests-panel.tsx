@@ -12,9 +12,11 @@ import {
   approvalErrorText,
   confirmPlanApprovalRequest,
   hydrateApprovalRequests,
+  keepNewerLocalSceneAfterApproval,
   loadApprovalHistory,
   reloadApprovalRequests,
   sceneApprovalNeedsLocalRecovery,
+  sceneApprovalHasNewerLocalConflict,
   useApprovalRequestsStore,
   type ApprovalDecision,
   type ApprovalRequest,
@@ -94,6 +96,9 @@ export function ApprovalRequestsPanel() {
   const sceneIdsOnScreens = scenesOnScreen(screenState)
   const requests = useApprovalRequestsStore((state) => state.requests)
   const localApplicationErrors = useApprovalRequestsStore((state) => state.localApplicationErrors)
+  const localSceneRecoveries = useApprovalRequestsStore((state) => state.localSceneRecoveries)
+  const localRecoveryDismissed = useApprovalRequestsStore((state) => state.localRecoveryDismissed)
+  const localRecoveryUnavailable = useApprovalRequestsStore((state) => state.localRecoveryUnavailable)
   const hydrated = useApprovalRequestsStore((state) => state.hydrated)
   const loading = useApprovalRequestsStore((state) => state.loading)
   const error = useApprovalRequestsStore((state) => state.error)
@@ -151,6 +156,18 @@ export function ApprovalRequestsPanel() {
     }
   }
 
+  const keepLocalScene = async (request: ApprovalRequest) => {
+    setBusy(request.id)
+    setRowErrors((current) => ({ ...current, [request.id]: "" }))
+    try {
+      await keepNewerLocalSceneAfterApproval(request.id)
+    } catch (cause) {
+      setRowErrors((current) => ({ ...current, [request.id]: cause instanceof Error ? cause.message : String(cause) }))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const toggleHistory = async (request: ApprovalRequest, open: boolean) => {
     if (!open || histories[request.id]) return
     setHistoryErrors((current) => ({ ...current, [request.id]: "" }))
@@ -179,7 +196,9 @@ export function ApprovalRequestsPanel() {
           <ul className="divide-y divide-border">
             {requests.map((request) => {
               const open = request.state === "submitted"
-              const needsLocalRecovery = sceneApprovalNeedsLocalRecovery(request, scenes, localApplicationErrors[request.id])
+              const recovery = localSceneRecoveries[request.id]
+              const needsLocalRecovery = sceneApprovalNeedsLocalRecovery(request, scenes, localApplicationErrors[request.id], localRecoveryDismissed[request.id])
+              const hasNewerLocalConflict = sceneApprovalHasNewerLocalConflict(request, scenes, recovery)
               return (
                 <li key={request.id} className="flex flex-wrap items-start gap-3 py-3 first:pt-0 last:pb-0">
                   <div className="min-w-0 flex-1">
@@ -191,8 +210,10 @@ export function ApprovalRequestsPanel() {
                     <p className="mt-1 text-xs text-muted-foreground">{requestImpact(request, outputsOnScreens)}</p>
                     {request.state === "approved" && request.kind.startsWith("scene_") && <p className="mt-1 text-xs text-muted-foreground">Apply checks the scene revision and current output assignment on this host. Saving changes the scene library only; it does not Take the scene live.</p>}
                     {request.state === "approved" && request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId) && <p role="status" className="mt-1 text-xs text-amber-800">Move every real screen away from this scene before applying its deletion.</p>}
-                    {request.state === "applied" && request.kind.startsWith("scene_") && needsLocalRecovery && <p role="status" className="mt-1 text-xs text-amber-800">The host recorded this approval, but local scene recovery is still needed. Program has not changed. Retry applies only this approved version and stops if the local scene changed since approval.</p>}
-                    {request.state === "applied" && request.kind.startsWith("scene_") && !needsLocalRecovery && <p role="status" className="mt-1 text-xs text-muted-foreground">Saved in the local scene library after host approval. No scene was Taken live; Program stays unchanged.</p>}
+                    {request.state === "applied" && request.kind.startsWith("scene_") && needsLocalRecovery && !localRecoveryUnavailable[request.id] && <p role="status" className="mt-1 text-xs text-amber-800">The host recorded this approval, but local scene recovery is still needed. Program has not changed. Retry applies only this approved version and stops if the local scene changed since approval.</p>}
+                    {request.state === "applied" && request.kind.startsWith("scene_") && needsLocalRecovery && localRecoveryUnavailable[request.id] && <p role="alert" className="mt-1 text-xs text-amber-800">This applied request has no safe local recovery record. The current scene was preserved. Send a fresh request to synchronize it.</p>}
+                    {request.state === "applied" && request.kind.startsWith("scene_") && localRecoveryDismissed[request.id] && <p role="status" className="mt-1 text-xs text-amber-800">You kept the newer local scene. The host request remains applied; send a fresh request to synchronize this version. Program was not changed.</p>}
+                    {request.state === "applied" && request.kind.startsWith("scene_") && !needsLocalRecovery && !localRecoveryDismissed[request.id] && <p role="status" className="mt-1 text-xs text-muted-foreground">Saved in the local scene library after host approval. No scene was Taken live; Program stays unchanged.</p>}
                     {request.reason && <p className="mt-1 text-xs text-muted-foreground">Reason: {request.reason}</p>}
                     {request.decisionNote && <p className="mt-1 text-xs text-muted-foreground">Decision note: {request.decisionNote}</p>}
                     {rowErrors[request.id] && <p role="alert" className="mt-2 text-xs text-destructive">{rowErrors[request.id]}</p>}
@@ -225,22 +246,23 @@ export function ApprovalRequestsPanel() {
                       size="sm"
                       variant="outline"
                       aria-label={request.kind === "scene_delete" ? "Apply approved scene deletion" : "Apply approved scene change"}
-                      disabled={busy === request.id || (request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId))}
+                      disabled={busy !== null || (request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId))}
                       onClick={() => void applyScene(request)}
                     >
                       {request.kind === "scene_delete" ? "Apply approved deletion" : "Apply approved scene change"}
                     </Button>
                   </div>}
-                  {isHost && request.kind.startsWith("scene_") && request.state === "applied" && needsLocalRecovery && <div className="flex flex-wrap items-center gap-2">
+                  {isHost && request.kind.startsWith("scene_") && request.state === "applied" && needsLocalRecovery && !localRecoveryUnavailable[request.id] && <div className="flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
                       variant="outline"
                       aria-label={request.kind === "scene_delete" ? "Retry local approved scene deletion" : "Retry local approved scene save"}
-                      disabled={busy === request.id || (request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId))}
+                      disabled={busy !== null || (request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId))}
                       onClick={() => void applyScene(request)}
                     >
                       {request.kind === "scene_delete" ? "Retry local deletion" : "Retry local scene save"}
                     </Button>
+                    {hasNewerLocalConflict && <Button size="sm" variant="outline" aria-label="Keep newer local scene" disabled={busy !== null} onClick={() => void keepLocalScene(request)}>Keep newer local scene</Button>}
                   </div>}
                   {isHost && request.kind === "plan_approve" && request.state !== "expired" && request.state !== "withdrawn" && request.state !== "superseded" && <div className="flex flex-wrap items-center gap-2">
                     <Button size="sm" variant="ghost" onClick={() => useShellStore.getState().openPrepareProgram(request.targetId)}>Open in Prepare</Button>

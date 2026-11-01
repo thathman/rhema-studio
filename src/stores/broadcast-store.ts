@@ -1875,24 +1875,25 @@ export interface SceneApprovalRecovery {
   kind: "scene_save" | "scene_delete"
   targetId: string
   beforeScene: Scene | null
+  status: "pending" | "kept_local"
 }
 
 /** Keep a local compare point before consuming an approved host request, so recovery is safe after restart. */
-export async function saveSceneApprovalRecovery(recovery: SceneApprovalRecovery | null): Promise<void> {
+export async function saveSceneApprovalRecovery(requestId: string, recovery: SceneApprovalRecovery | null): Promise<void> {
   await flushThemeSave()
   const store = await getThemeStore()
-  await store.set("sceneApprovalRecovery", recovery)
+  await store.set(`sceneApprovalRecovery:${requestId}`, recovery)
   await store.save()
 }
 
-export async function loadSceneApprovalRecovery(): Promise<SceneApprovalRecovery | null> {
+export async function loadSceneApprovalRecovery(requestId: string): Promise<SceneApprovalRecovery | null> {
   const store = await getThemeStore()
-  const raw = await store.get("sceneApprovalRecovery") as Partial<SceneApprovalRecovery> | undefined
-  if (!raw || typeof raw.requestId !== "string" || typeof raw.targetId !== "string" || (raw.kind !== "scene_save" && raw.kind !== "scene_delete")) return null
+  const raw = await store.get(`sceneApprovalRecovery:${requestId}`) as Partial<SceneApprovalRecovery> | undefined
+  if (!raw || raw.requestId !== requestId || typeof raw.targetId !== "string" || (raw.kind !== "scene_save" && raw.kind !== "scene_delete") || (raw.status !== "pending" && raw.status !== "kept_local")) return null
   const beforeScene = raw.beforeScene === null ? null : normalizeScene(raw.beforeScene)
   if (raw.beforeScene !== null && !beforeScene) return null
   if (beforeScene && beforeScene.id !== raw.targetId) return null
-  return { requestId: raw.requestId, kind: raw.kind, targetId: raw.targetId, beforeScene }
+  return { requestId: raw.requestId, kind: raw.kind, targetId: raw.targetId, beforeScene, status: raw.status }
 }
 
 /**
