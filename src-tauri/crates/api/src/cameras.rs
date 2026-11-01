@@ -10,6 +10,8 @@
 //!
 //! A TV's feed page or a joined desk reads a camera through Rhema too (`relay_offer`): knowing a
 //! camera's name is not enough, the reader shows its own key, and losing that key cuts it off.
+//! Each relayed session carries its own tag in its address, so cutting off one reader leaves another
+//! at the same address playing.
 //!
 //! An OBS companion (a computer that runs OBS only, #209) reads every camera over SRT, encrypted,
 //! as its own router user (`read-<8 characters of its key>`, a secret made afresh each time Rhema
@@ -37,6 +39,14 @@ pub const READ_PREFIX: &str = "read-";
 /// Rhema's own router user for a screen or desk it has checked (`relay_offer`); only Rhema knows its
 /// secret, made afresh each time the router starts.
 pub const RELAY_USER: &str = "rhema-relay";
+
+/// The query name carrying a relayed session's tag: the router lists a session's query, so Rhema can
+/// tell two readers at one address apart.
+const RELAY_TAG: &str = "rhema_relay";
+
+/// A relayed session the router does not list after this has ended (or its offer never got there;
+/// longer than `relay_offer`'s 15 s timeout, so an offer on its way is not forgotten).
+const RELAY_ENDED: Duration = Duration::from_secs(30);
 
 /// Where an OBS companion reads a camera: its own name for the companion (`companion/pulpit`), so
 /// the router lets only companions in and asks for the encrypted link's passphrase.
@@ -208,14 +218,22 @@ pub enum RelayHolder {
     Feed(String, String),
 }
 
+/// One relayed reader: who was let in, to which camera.
+#[derive(Debug, Clone)]
+struct RelaySession {
+    holder: RelayHolder,
+    name: String,
+    at: Instant,
+}
+
 /// The cameras the operator added (name and the secret in its camera-page link) and the running
 /// router, if any. The app keeps both in step; a removed camera's link stops working at once.
 #[derive(Default)]
 pub struct CameraHub {
     cameras: RwLock<HashMap<String, String>>,
     router: RwLock<Option<RouterTarget>>,
-    /// Who was let in to read cameras, by address (`relay_offer`).
-    relayed: RwLock<HashMap<IpAddr, std::collections::HashSet<(RelayHolder, String)>>>,
+    /// Who was let in to read cameras, by session tag (`relay_offer`).
+    relayed: RwLock<HashMap<String, RelaySession>>,
     /// Paired OBS companions' sign-ins, by key hash (#209).
     readers: RwLock<HashMap<String, Reader>>,
     /// The router's cameras as it last answered (the app looks every few seconds while it runs).
@@ -407,9 +425,10 @@ impl CameraHub {
     /// in as that camera, and hand back its answer. The session address in `Location` is rewritten to
     /// this route so the page's next request comes here too.
     /// Pass the WHEP offer of a screen or desk Rhema has checked to the router, as `RELAY_USER` with
-    /// the reader's own address, so Production → Cameras still names it and `relay_gone` can cut it.
+    /// the reader's own address, so Production → Cameras still names it, and a tag of its own, so
+    /// `relay_kick_unheld` can cut this session and no other.
     /// Only the signalling passes through Rhema; the video flows from the router to the reader.
-    pub(crate) async fn relay_offer(&self, name: &str, holder: RelayHolder, peer: IpAddr, body: Bytes) -> Response {
+    pub async fn relay_offer(&self, name: &str, holder: RelayHolder, peer: IpAddr, body: Bytes) -> Response {
         if !self.cameras.read().unwrap_or_else(PoisonError::into_inner).contains_key(name) {
             return StatusCode::NOT_FOUND.into_response();
         }
@@ -422,12 +441,18 @@ impl CameraHub {
         let Ok(client) = reqwest::Client::builder().connect_timeout(Duration::from_secs(3)).timeout(Duration::from_secs(15)).build() else {
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         };
-        self.relayed.write().unwrap_or_else(PoisonError::into_inner).entry(peer).or_default().insert((holder, name.to_string()));
-        let sent = client.post(format!("{}/{name}/whep", router.base)).basic_auth(RELAY_USER, Some(&router.relay_secret)).header("x-forwarded-for", peer.to_string()).header("content-type", "application/sdp").body(body.to_vec()).send().await;
+        let tag = uuid::Uuid::new_v4().simple().to_string();
+        // Before the offer: a session the router has made is never without its holder.
+        self.relayed.write().unwrap_or_else(PoisonError::into_inner).insert(tag.clone(), RelaySession { holder, name: name.to_string(), at: Instant::now() });
+        let sent = client.post(format!("{}/{name}/whep?{RELAY_TAG}={tag}", router.base)).basic_auth(RELAY_USER, Some(&router.relay_secret)).header("x-forwarded-for", peer.to_string()).header("content-type", "application/sdp").body(body.to_vec()).send().await;
         let Ok(resp) = sent else {
+            self.relayed.write().unwrap_or_else(PoisonError::into_inner).remove(&tag);
             return (StatusCode::BAD_GATEWAY, "The camera router did not answer").into_response();
         };
         let status = resp.status();
+        if !status.is_success() {
+            self.relayed.write().unwrap_or_else(PoisonError::into_inner).remove(&tag);
+        }
         // The router refusing Rhema's sign-in is Rhema's fault: never ask the reader to sign in.
         if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
             log::warn!("camera {name}: the router refused Rhema's relay");
@@ -437,21 +462,49 @@ impl CameraHub {
         (StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY), [(axum::http::header::CONTENT_TYPE, "application/sdp")], answer).into_response()
     }
 
-    /// Whether someone allowed reads this camera from this address. ponytail: by address and camera,
-    /// so a revoked key keeps a picture it already has while another allowed key reads the same camera
-    /// from the same computer (it can start nothing new); per-session if one address serves separate people.
+    /// How many relayed readers of this camera are still allowed.
     #[must_use]
-    pub fn relay_holds(&self, ip: IpAddr, name: &str) -> bool {
-        self.relayed.read().unwrap_or_else(PoisonError::into_inner).get(&ip).is_some_and(|held| held.iter().any(|(_, n)| n == name))
+    pub fn relay_readers(&self, name: &str) -> usize {
+        self.relayed.read().unwrap_or_else(PoisonError::into_inner).values().filter(|s| s.name == name).count()
     }
 
-    /// Forget readers no longer allowed to read that camera.
-    pub fn relay_prune(&self, allowed: impl Fn(&RelayHolder, &str) -> bool) {
+    /// Forget readers no longer allowed to read that camera; how many went.
+    pub fn relay_prune(&self, allowed: impl Fn(&RelayHolder, &str) -> bool) -> usize {
         let mut relayed = self.relayed.write().unwrap_or_else(PoisonError::into_inner);
-        relayed.retain(|_, held| {
-            held.retain(|(holder, name)| allowed(holder, name));
-            !held.is_empty()
-        });
+        let before = relayed.len();
+        relayed.retain(|_, s| allowed(&s.holder, &s.name));
+        before - relayed.len()
+    }
+
+    /// The relay's sessions in the router's list (`/v3/webrtc/sessions/list`) that nobody allowed holds
+    /// now: their ids. Sessions that are not the relay's (this computer's screens) are not looked at.
+    #[must_use]
+    pub fn relay_unheld(&self, list: &serde_json::Value) -> Vec<String> {
+        let relayed = self.relayed.read().unwrap_or_else(PoisonError::into_inner);
+        let text = |c: &serde_json::Value, k: &str| c.get(k).and_then(serde_json::Value::as_str).unwrap_or("").to_string();
+        list.get("items").and_then(serde_json::Value::as_array).into_iter().flatten()
+            .filter(|c| text(c, "user") == RELAY_USER)
+            .filter(|c| relay_tag(&text(c, "query")).and_then(|tag| relayed.get(tag)).is_none_or(|s| s.name != text(c, "path")))
+            .filter_map(|c| c.get("id")?.as_str().map(str::to_string))
+            .collect()
+    }
+
+    /// Forget sessions the router no longer lists (a reader that left; the router restarted), so
+    /// reconnecting readers do not pile up here. Only with an answer from the router.
+    pub fn relay_forget_ended(&self, list: &serde_json::Value) {
+        let Some(items) = list.get("items").and_then(serde_json::Value::as_array) else { return };
+        let listed: Vec<&str> = items.iter().filter_map(|c| relay_tag(c.get("query")?.as_str()?)).collect();
+        self.relayed.write().unwrap_or_else(PoisonError::into_inner).retain(|tag, s| s.at.elapsed() < RELAY_ENDED || listed.contains(&tag.as_str()));
+    }
+
+    /// Disconnect the relay's sessions nobody allowed holds now, through the router's control API (`api`
+    /// is its address with `/v3`), and tidy the list. Another reader at the same address carries on.
+    pub async fn relay_kick_unheld(&self, client: &reqwest::Client, api: &str, user: &str, password: &str, list: &serde_json::Value) {
+        for id in self.relay_unheld(list) {
+            let kicked = client.post(format!("{api}/webrtc/sessions/kick/{id}")).basic_auth(user, Some(password)).send().await;
+            log::info!("camera router: a screen or desk that may no longer read a camera was disconnected ({})", kicked.map_or_else(|e| e.to_string(), |r| r.status().to_string()));
+        }
+        self.relay_forget_ended(list);
     }
 
     pub(crate) async fn forward(&self, method: Method, name: &str, session: Option<&str>, headers: &HeaderMap, body: Bytes) -> Response {
@@ -514,6 +567,11 @@ impl CameraHub {
     }
 }
 
+/// A relayed session's tag in the query the router lists.
+fn relay_tag(query: &str) -> Option<&str> {
+    query.split('&').find_map(|q| q.strip_prefix(RELAY_TAG)?.strip_prefix('='))
+}
+
 /// The router's session address (`/pulpit/whip/<id>`, or a full URL ending so) as this route.
 fn rewrite_location(name: &str, location: &str) -> Option<String> {
     let path = location.split_once("://").map_or(location, |(_, rest)| rest.find('/').map_or("", |i| &rest[i..]));
@@ -546,6 +604,34 @@ mod tests {
 
     fn target() -> RouterTarget {
         RouterTarget { base: "http://127.0.0.1:8889".into(), srt_port: 8890, srt_passphrase: "Passphrase0123456789".into(), relay_secret: "Relaysecret0123456789".into() }
+    }
+
+    #[tokio::test]
+    async fn two_readers_at_one_address_are_told_apart_and_ended_sessions_are_forgotten() {
+        let hub = CameraHub::default();
+        hub.set(&[("pulpit".into(), "0123456789abcdef".into())]);
+        let tag = |t: &str| format!("{RELAY_TAG}={t}");
+        let session = |at| RelaySession { holder: RelayHolder::Key(if at == 0 { "a".into() } else { "b".into() }), name: "pulpit".into(), at: Instant::now() };
+        hub.relayed.write().unwrap().extend([("t1".to_string(), session(0)), ("t2".to_string(), session(1))]);
+        let list = serde_json::json!({ "items": [
+            { "id": "one", "user": RELAY_USER, "path": "pulpit", "remoteAddr": "192.168.1.40:5000", "query": tag("t1") },
+            { "id": "two", "user": RELAY_USER, "path": "pulpit", "remoteAddr": "192.168.1.40:5001", "query": tag("t2") },
+            { "id": "wrong-camera", "user": RELAY_USER, "path": "choir", "remoteAddr": "192.168.1.40:5002", "query": tag("t2") },
+            { "id": "no-tag", "user": RELAY_USER, "path": "pulpit", "remoteAddr": "192.168.1.40:5003", "query": "" },
+            { "id": "this-computer", "user": "", "path": "pulpit", "remoteAddr": "127.0.0.1:5004", "query": "" },
+        ]});
+        assert_eq!(hub.relay_unheld(&list), ["wrong-camera", "no-tag"]);
+        assert_eq!(hub.relay_prune(|h, _| h == &RelayHolder::Key("b".into())), 1);
+        assert_eq!(hub.relay_unheld(&list), ["one", "wrong-camera", "no-tag"], "only the reader that lost its key");
+        // No answer from the router: nothing is forgotten; an offer on its way is not either.
+        hub.relay_forget_ended(&serde_json::Value::Null);
+        hub.relay_forget_ended(&serde_json::json!({ "items": [] }));
+        assert_eq!(hub.relay_readers("pulpit"), 1);
+        hub.relayed.write().unwrap().get_mut("t2").unwrap().at = Instant::now().checked_sub(RELAY_ENDED).unwrap();
+        hub.relay_forget_ended(&list);
+        assert_eq!(hub.relay_readers("pulpit"), 1, "still in the router's list");
+        hub.relay_forget_ended(&serde_json::json!({ "items": [] }));
+        assert_eq!(hub.relay_readers("pulpit"), 0, "the reader left");
     }
 
     #[test]

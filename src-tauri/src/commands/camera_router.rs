@@ -481,23 +481,15 @@ pub fn desks_changed(app: &AppHandle) {
     });
 }
 
-/// The relay's WebRTC sessions (ids) reading a camera nobody allowed reads from that address any more.
-fn unheld_sessions(list: &serde_json::Value, held: impl Fn(std::net::IpAddr, &str) -> bool) -> Vec<String> {
-    list.get("items").and_then(|v| v.as_array()).map_or_else(Vec::new, |items| {
-        items
-            .iter()
-            .filter(|c| c.get("user").and_then(|u| u.as_str()) == Some(rhema_api::RELAY_USER))
-            .filter(|c| c.get("remoteAddr").and_then(|a| a.as_str()).and_then(ip_of).zip(c.get("path").and_then(|p| p.as_str())).is_none_or(|(ip, path)| !held(ip, path)))
-            .filter_map(|c| c.get("id")?.as_str().map(str::to_string))
-            .collect()
-    })
-}
-
 /// Whether the settings file lacks one of these companions (a new one paired since it was written).
 fn readers_differ(config: &Path, readers: &[(String, String)]) -> bool {
     let text = std::fs::read_to_string(config).unwrap_or_default();
     readers.iter().any(|(user, pass)| !text.contains(&format!("user: \"{user}\"\n    pass: \"{pass}\"")))
 }
+
+/// How often Rhema checks that each relayed reader may still read: no network, so a lost key or role
+/// or a scene that left the camera cuts its picture within a moment.
+const RELAY_CHECK: Duration = Duration::from_millis(250);
 
 /// Disconnect these companions' OBS (their SRT connections), through the router's control API.
 async fn disconnect_readers(users: &[String], api_password: &str) {
@@ -549,10 +541,7 @@ fn look_regularly(router: CameraRouter, hub: rhema_api::SharedCameras, keys: rhe
                     sessions.extend(parse_sessions("webrtc", &webrtc));
                     // A TV or desk that lost its key or role: cut off here, so a failed try is tried again.
                     rhema_api::http::prune_camera_readers(&hub, &keys, &feeds);
-                    for id in unheld_sessions(&webrtc, |ip, path| hub.relay_holds(ip, path)) {
-                        let kicked = client.post(format!("{base}/webrtc/sessions/kick/{id}")).basic_auth(API_USER, Some(&password)).send().await;
-                        log::info!("camera router: a screen or desk that lost its key was disconnected ({})", kicked.map_or_else(|e| e.to_string(), |r| r.status().to_string()));
-                    }
+                    hub.relay_kick_unheld(&client, &base, API_USER, &password, &webrtc).await;
                     let local = local_addresses(super::remote::remote_lan_address().as_deref());
                     let now = Instant::now();
                     let watch = build_watch(&paths, &sessions, &Names { reader: &|u| hub.reader_name(u), desk: &|ip| hub.desk_at(ip) }, &local, &mut before, now);
@@ -561,7 +550,13 @@ fn look_regularly(router: CameraRouter, hub: rhema_api::SharedCameras, keys: rhe
             } else {
                 hub.set_watch(Vec::new());
             }
-            tokio::time::sleep(Duration::from_secs(2)).await;
+            // Two seconds to the next look, or at once when a reader has just lost its right.
+            for _ in 0..8 {
+                tokio::time::sleep(RELAY_CHECK).await;
+                if rhema_api::http::prune_camera_readers(&hub, &keys, &feeds) > 0 {
+                    break;
+                }
+            }
         }
     });
 }
@@ -1106,18 +1101,6 @@ mod tests {
     fn this_computers_own_address_reads_without_a_sign_in_and_no_other() {
         let y = config_yaml(&PORTS, Some("192.168.1.20"), &cams(), &[], API).unwrap();
         assert!(y.contains("  - user: any\n    pass:\n    ips: [\"127.0.0.1\", \"::1\", \"192.168.1.20\"]\n"), "{y}");
-    }
-
-    #[test]
-    fn only_the_relays_sessions_to_those_addresses_are_cut_off() {
-        let list = serde_json::json!({ "items": [
-            { "id": "a", "user": "rhema-relay", "path": "pulpit", "remoteAddr": "192.168.1.40:5000" },
-            { "id": "b", "user": "rhema-relay", "path": "pulpit", "remoteAddr": "192.168.1.41:5000" },
-            { "id": "d", "user": "rhema-relay", "path": "choir", "remoteAddr": "192.168.1.41:5002" },
-            { "id": "c", "user": "", "path": "pulpit", "remoteAddr": "192.168.1.40:5001" },
-        ]});
-        let kept: std::net::IpAddr = "192.168.1.41".parse().unwrap();
-        assert_eq!(unheld_sessions(&list, |ip, path| ip == kept && path == "pulpit"), ["a", "d"]);
     }
 
     #[test]
