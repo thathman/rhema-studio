@@ -35,7 +35,7 @@ const activateButton = async (button, label) => {
 const clickButton = async (name, { startsWith = false } = {}) => {
   const button = await waitFor(
     () => buttons().find((candidate) => {
-      const label = normal(candidate.getAttribute("aria-label") || candidate.innerText)
+      const label = normal(candidate.getAttribute("aria-label") || candidate.textContent)
       return startsWith ? label.startsWith(name) : label === name
     }),
     "button “" + name + "”",
@@ -65,7 +65,7 @@ const setControlValue = async (input, value, label) => {
 }
 const setLabeledColor = async (labelText, value) => {
   const label = await waitFor(
-    () => [...document.querySelectorAll("label")].find((candidate) => normal(candidate.innerText).startsWith(labelText)),
+    () => [...document.querySelectorAll("label")].find((candidate) => normal(candidate.textContent).startsWith(labelText)),
     "colour control “" + labelText + "”",
   )
   const input = label.querySelector('input[type="color"]')
@@ -148,7 +148,7 @@ async function runScenario() {
     await waitFor(() => qa.shell.getState().workspace === "design", "Design workspace")
     await clickWithin('nav[aria-label="Design sections"]', "My Designs")
     await waitFor(
-      () => document.querySelector('nav[aria-label="Design sections"] button[aria-current="page"]')?.innerText === "My Designs",
+      () => normal(document.querySelector('nav[aria-label="Design sections"] button[aria-current="page"]')?.textContent) === "My Designs",
       "My Designs section",
     )
     await clickWithin('aside[aria-label="My designs"]', "Templates")
@@ -160,7 +160,7 @@ async function runScenario() {
     await setInput('input[aria-label="Version note"]', "QA approved scene baseline")
     await clickButton("Save draft")
     await waitFor(
-      () => [...document.querySelectorAll("button")].find((button) => normal(button.innerText) === "Save draft")?.disabled,
+      () => [...document.querySelectorAll("button")].find((button) => normal(button.textContent) === "Save draft")?.disabled,
       "Design draft to save",
     )
     const designDocument = await waitForAsync(
@@ -296,10 +296,10 @@ async function runScenario() {
     await clickButton("Home")
     const serviceRow = await waitFor(
       () => [...document.querySelectorAll('[aria-labelledby="services"] li')]
-        .find((row) => normal(row.innerText).startsWith(serviceTitle)),
+        .find((row) => normal(row.textContent).startsWith(serviceTitle)),
       "saved service in Home",
     )
-    const openService = [...serviceRow.querySelectorAll("button")].find((button) => normal(button.innerText) === "Open")
+    const openService = [...serviceRow.querySelectorAll("button")].find((button) => normal(button.textContent) === "Open")
     if (!openService) throw new Error("Home did not offer an Open action for the saved service")
     await openService.click()
     await waitFor(() => qa.service.getState().current?.id === serviceId, "saved service to reopen")
@@ -356,7 +356,7 @@ async function runScenario() {
     await clickButton("Design")
     const designRow = await waitFor(
       () => [...document.querySelectorAll('aside[aria-label="My designs"] button')]
-        .find((button) => normal(button.innerText).startsWith("QA Approved Design")),
+        .find((button) => normal(button.textContent).startsWith("QA Approved Design")),
       "QA design in My Designs",
     )
     await designRow.click()
@@ -364,7 +364,7 @@ async function runScenario() {
     await setLabeledColor("Background colour", "#405060")
     await clickButton("Save draft")
     await waitFor(
-      () => [...document.querySelectorAll("button")].find((button) => normal(button.innerText) === "Save draft")?.disabled,
+      () => [...document.querySelectorAll("button")].find((button) => normal(button.textContent) === "Save draft")?.disabled,
       "newer design draft to save",
     )
     await clickButton("Create version")
@@ -382,7 +382,7 @@ async function runScenario() {
     await clickButton("Live")
     const rundownRowFor = async (reference) => waitFor(
       () => [...document.querySelectorAll('ol[aria-label="Service rundown"] button[title^="Click to preview"]')]
-        .find((button) => normal(button.innerText).includes(reference)),
+        .find((button) => normal(button.textContent).includes(reference)),
       reference + " in Live's service rundown",
     )
     const manualRow = await rundownRowFor(manualItem.reference)
@@ -559,7 +559,7 @@ async function runScenario() {
       setup: {
         open: qa.shell.getState().setupOpen,
         dismissedAt: qa.settings.getState().setup.dismissedAt,
-        dialogs: [...document.querySelectorAll('[role="dialog"]')].map((dialog) => ({ state: dialog.getAttribute("data-state"), text: normal(dialog.innerText).slice(0, 160) })),
+        dialogs: [...document.querySelectorAll('[role="dialog"]')].map((dialog) => ({ state: dialog.getAttribute("data-state"), text: normal(dialog.textContent).slice(0, 160) })),
       },
       body: normal(document.body.innerText).slice(0, 2400),
     }))
