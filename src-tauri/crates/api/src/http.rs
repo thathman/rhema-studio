@@ -357,12 +357,14 @@ struct Revisions {
     /// its base across restarts: counting from 1 each run would let a request made before a restart
     /// match a scene changed since.
     first: u64,
+    /// `first` came from `reserve_revision_floor`, not only the clock.
+    reserved: bool,
 }
 
 impl Default for Revisions {
     fn default() -> Self {
         let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_millis() as u64);
-        Self { parts: std::collections::HashMap::new(), first: ms.saturating_mul(1000) }
+        Self { parts: std::collections::HashMap::new(), first: ms.saturating_mul(1000), reserved: false }
     }
 }
 
@@ -370,19 +372,27 @@ impl Default for Revisions {
 const REVISIONS_PER_RUN: u64 = 1_000_000_000;
 
 /// Where this run's revisions start, kept in `path` so no two runs of this host can ever share one,
-/// even if the clock moved back. Losing the file falls back on the clock, so a collision needs both.
-/// Past 2^53 a desk's JavaScript could not tell two revisions apart, so a stored value that high is
-/// treated as damage. If it can't be saved, this run still has the clock, and the log says so.
-#[must_use]
-pub fn reserve_revision_floor(path: &std::path::Path, now_ms: u64) -> u64 {
+/// even if the clock moved back or two start at once: an OS lock on a file beside it (let go by the
+/// OS if a process dies holding it) covers the read and the write, and the new value is on disk
+/// before this returns. Losing the file falls back on the clock. Past 2^53 a desk's JavaScript could
+/// not tell two revisions apart, so a stored value that high is treated as damage.
+///
+/// An error means nothing was reserved: this run must not act as the approval authority.
+pub fn reserve_revision_floor(path: &std::path::Path, now_ms: u64) -> std::io::Result<u64> {
     const LIMIT: u64 = 1 << 52;
+    let lock = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(path.with_extension("lock"))?;
+    lock.lock()?;
     let stored = std::fs::read_to_string(path).ok().and_then(|text| text.trim().parse::<u64>().ok()).filter(|n| *n < LIMIT).unwrap_or(0);
     let floor = stored.max(now_ms.saturating_mul(1000));
     let tmp = path.with_extension("tmp");
-    if let Err(e) = std::fs::write(&tmp, (floor + REVISIONS_PER_RUN).to_string()).and_then(|()| std::fs::rename(&tmp, path)) {
-        log::error!("could not keep the live revision floor at {}: {e}", path.display());
-    }
-    floor
+    let mut file = std::fs::File::create(&tmp)?;
+    std::io::Write::write_all(&mut file, (floor + REVISIONS_PER_RUN).to_string().as_bytes())?;
+    file.sync_all()?;
+    std::fs::rename(&tmp, path)?;
+    // The rename itself must survive a power cut too. Windows can't open a folder like this.
+    #[cfg(unix)]
+    std::fs::File::open(path.parent().unwrap_or(std::path::Path::new(".")))?.sync_all()?;
+    Ok(floor)
 }
 
 impl Revisions {
@@ -658,6 +668,13 @@ impl LiveHub {
     pub fn start_revisions_from(&self, floor: u64) {
         let mut revisions = self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         revisions.first = revisions.first.max(floor);
+        revisions.reserved = true;
+    }
+
+    /// This run's revisions come from a reservation no other run shares.
+    #[must_use]
+    pub fn revisions_reserved(&self) -> bool {
+        self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner).reserved
     }
 
     /// The revision of one part of the live service now (see `Revisions`), None before the host
@@ -2927,6 +2944,14 @@ mod tests {
         assert!(!result.handle.is_active());
     }
 
+    #[tokio::test]
+    async fn a_port_already_taken_fails_the_start_so_no_handle_makes_this_copy_a_host() {
+        let taken = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = taken.local_addr().unwrap().port();
+        let config = HttpConfig { port, host: "127.0.0.1".into(), ..Default::default() };
+        assert!(start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.is_err());
+    }
+
     /// Helper: send a raw HTTP request and return the response as a string.
     async fn raw_http_request(port: u16, method: &str, path: &str, body: Option<&str>) -> String {
         raw_http_request_with(port, method, path, body, "").await
@@ -4379,8 +4404,9 @@ mod tests {
         let state = r#"{"v":1,"scenes":[{"id":"s1","name":"Sermon","layers":[]}]}"#;
         let run = |now_ms: u64| {
             let hub = new_live_hub();
-            let floor = reserve_revision_floor(&path, now_ms);
-            hub.start_revisions_from(floor);
+            assert!(!hub.revisions_reserved());
+            hub.start_revisions_from(reserve_revision_floor(&path, now_ms).unwrap());
+            assert!(hub.revisions_reserved());
             hub.publish(state.into());
             hub.revision("scene:s1").unwrap()
         };
@@ -4394,11 +4420,44 @@ mod tests {
         assert!(again > after_restart);
 
         std::fs::write(&path, "damaged").unwrap();
-        assert_eq!(reserve_revision_floor(&path, 5), 5_000, "a damaged file falls back on the clock");
+        assert_eq!(reserve_revision_floor(&path, 5).unwrap(), 5_000, "a damaged file falls back on the clock");
         std::fs::write(&path, u64::MAX.to_string()).unwrap();
-        assert_eq!(reserve_revision_floor(&path, 5), 5_000, "and a number a desk could not hold is damage");
-        let unwritable = dir.join("missing").join("live-revisions");
-        assert_eq!(reserve_revision_floor(&unwritable, 7), 7_000, "a run still starts if it can't be kept");
+        assert_eq!(reserve_revision_floor(&path, 5).unwrap(), 5_000, "and a number a desk could not hold is damage");
+        assert!(reserve_revision_floor(&dir.join("missing").join("live-revisions"), 7).is_err(), "nothing reserved is said, not hidden");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Real processes, because an OS file lock says nothing between threads of one. Each child is
+    /// this same test binary, re-entering here with the path set.
+    #[test]
+    fn processes_starting_together_never_share_a_revision_floor() {
+        const CHILD: &str = "RHEMA_REVISION_FLOOR_CHILD";
+        const EACH: usize = 40;
+        if let Ok(path) = std::env::var(CHILD) {
+            for _ in 0..EACH {
+                println!("FLOOR {}", reserve_revision_floor(std::path::Path::new(&path), 1).unwrap());
+            }
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("rhema-revisions-procs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("live-revisions");
+        let children: Vec<_> = (0..4).map(|_| {
+            std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "http::tests::processes_starting_together_never_share_a_revision_floor", "--nocapture", "--test-threads=1"])
+                .env(CHILD, &path)
+                .stdout(std::process::Stdio::piped())
+                .spawn().unwrap()
+        }).collect();
+        let mut floors: Vec<u64> = Vec::new();
+        for child in children {
+            let out = child.wait_with_output().unwrap();
+            assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stdout));
+            floors.extend(String::from_utf8_lossy(&out.stdout).lines().filter_map(|line| line.split("FLOOR ").nth(1)?.trim().parse::<u64>().ok()));
+        }
+        assert_eq!(floors.len(), 4 * EACH, "every child reported every floor");
+        floors.sort_unstable();
+        assert!(floors.windows(2).all(|pair| pair[1] - pair[0] >= REVISIONS_PER_RUN), "two processes shared a run's revisions: {floors:?}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
