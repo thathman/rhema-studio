@@ -363,7 +363,9 @@ export function DesignDocumentEditor({
     setImagePickerBusy(true)
     setImagePickerMessage("")
     try {
-      const imageUrl = await useMediaStore.getState().dataUrl(asset.id)
+      // Persist the content-addressed local asset URL in the design. The file name keeps the
+      // media library's deletion guard effective and avoids copying image bytes into every version.
+      const imageUrl = await useMediaStore.getState().fileUrl(asset.id)
       if (!imageUrl) throw new Error("The picture file is missing or could not be read.")
 
       const selectedImage = selectedRenderable?.type === "image" ? selectedRenderable : null

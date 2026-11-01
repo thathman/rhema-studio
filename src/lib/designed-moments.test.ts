@@ -16,6 +16,7 @@ const { runTakeSteps } = await import("./take-steps")
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { useQueueStore } = await import("@/stores/queue-store")
 const { useServiceStore } = await import("@/stores/service-store")
+const { useMediaStore } = await import("@/stores/media-store")
 const { newScene, normalizeScene } = await import("@/lib/scenes")
 const { sceneToDesign } = await import("@/design-engine/rhema-scene")
 const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
@@ -45,6 +46,7 @@ beforeEach(() => {
   useServiceStore.setState({ current: null, approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
   useBroadcastStore.setState({ isLive: false, liveItemId: null })
   useQueueStore.setState({ items: [] })
+  useMediaStore.setState({ dataUrl: vi.fn(async () => "data:image/png;base64,hydrated") })
   restoreAfterDesignedMoment()
   for (const f of Object.values(toast)) f.mockClear()
   const theme = useBroadcastStore.getState().themes[0].id
@@ -123,6 +125,61 @@ describe("a designed moment on Live", () => {
 
     await showDesignedMoment(plain, getVersion)
     expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+  })
+
+  it("materializes a saved Library reference before sending the scene to outputs", async () => {
+    const pictured = newScene("Welcome with image")
+    pictured.layers = [{
+      id: "welcome-image",
+      name: "Welcome background",
+      kind: "picture",
+      mediaId: "welcome-media",
+      imageUrl: "asset://localhost/%2Fmedia%2Fabc123-welcome.png",
+      box: { x: 0, y: 0, w: 100, h: 100 },
+      opacity: 1,
+      visible: true,
+    }]
+    versions["d1:5"] = { designId: "d1", version: 5, document: sceneToDesign(pictured) }
+    useMediaStore.setState({ dataUrl: vi.fn(async () => "data:image/png;base64,hydrated-output") })
+
+    await showDesignedMoment(moment({ id: "d1", version: 5 }), getVersion)
+
+    expect(out(MAIN_OUTPUT_ID)?.sceneSnapshot?.layers[0]).toMatchObject({
+      mediaId: "welcome-media",
+      imageUrl: "data:image/png;base64,hydrated-output",
+    })
+  })
+
+  it("keeps a manual Take and rechecks approval while a Library picture is loading", async () => {
+    const pictured = newScene("Welcome with image")
+    pictured.layers = [{
+      id: "welcome-image",
+      name: "Welcome background",
+      kind: "picture",
+      mediaId: "welcome-media",
+      imageUrl: "asset://localhost/%2Fmedia%2Fabc123-welcome.png",
+      box: { x: 0, y: 0, w: 100, h: 100 },
+      opacity: 1,
+      visible: true,
+    }]
+    versions["d1:6"] = { designId: "d1", version: 6, document: sceneToDesign(pictured) }
+    let finishImage: (url: string) => void = () => {}
+    const imageRead = new Promise<string>((resolve) => { finishImage = resolve })
+    const dataUrl = vi.fn(() => imageRead)
+    useMediaStore.setState({ dataUrl })
+    approve({ m: { id: "d1", version: 6 } })
+
+    const delayedTake = showDesignedMoment(moment({ id: "d1", version: 6 }), getVersion)
+    await vi.waitFor(() => expect(dataUrl).toHaveBeenCalledWith("welcome-media"))
+    const manual = newScene("Operator choice")
+    useBroadcastStore.setState({ scenes: [usual, manual] })
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, manual.id)
+    approve({ m: { id: "d1", version: 5 } })
+    finishImage("data:image/png;base64,hydrated-output")
+    await delayedTake
+
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(manual.id)
+    expect(toast.warning).toHaveBeenCalledWith("Design needs approval", expect.objectContaining({ description: expect.stringContaining("v5 was approved") }))
   })
 
   it("does not let a delayed design replace a newer Take", async () => {

@@ -52,6 +52,7 @@ const imageAsset: MediaAssetStatus = {
   present: true,
 }
 const imageDataUrl = "data:image/png;base64,ZmFrZQ=="
+const imageAssetUrl = `asset://localhost/%2Flocal-media%2F${imageAsset.hash}-welcome.png`
 
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -63,6 +64,7 @@ beforeEach(() => {
   useMediaStore.setState({
     assets: [imageAsset], loading: false, loaded: true, error: null, urls: {},
     dataUrl: vi.fn(async () => imageDataUrl),
+    fileUrl: vi.fn(async () => imageAssetUrl),
   })
 })
 
@@ -120,7 +122,7 @@ function documentFixture(): DesignDocument {
 }
 
 describe("canonical design editor", () => {
-  it("adds a Library picture as an editable layer that saves as a usable Rhema scene", async () => {
+  it("adds a Library picture by content-addressed reference without embedding its bytes", async () => {
     const documentValue = documentFixture()
     store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
       ...documentValue,
@@ -147,13 +149,15 @@ describe("canonical design editor", () => {
 
     const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
     const image = Object.values(saved.document.scene.nodes).find((node) => node.type === "image")
-    expect(image).toMatchObject({ type: "image", src: imageDataUrl, width: 960, height: 540 })
+    expect(image).toMatchObject({ type: "image", src: imageAssetUrl, width: 960, height: 540 })
     expect(saved.document.bindings[image!.id]).toMatchObject({
-      kind: "picture", mediaId: imageAsset.id, imageUrl: imageDataUrl,
+      kind: "picture", mediaId: imageAsset.id, imageUrl: imageAssetUrl,
     })
+    expect(JSON.stringify(saved.document).length).toBeLessThan(4096)
+    expect(JSON.stringify(saved.document)).not.toContain("data:image/")
     expect(designToScene(saved.document).issues).toEqual([])
     expect(designToScene(saved.document).scene.layers).toContainEqual(expect.objectContaining({
-      id: image!.id, kind: "picture", mediaId: imageAsset.id, imageUrl: imageDataUrl,
+      id: image!.id, kind: "picture", mediaId: imageAsset.id, imageUrl: imageAssetUrl,
     }))
     const after = useBroadcastStore.getState()
     expect({
@@ -232,10 +236,10 @@ describe("canonical design editor", () => {
 
     const redone = store.saveDraft.mock.calls[0]![2] as DesignInput
     expect(redone.document.scene.nodes[prior.id]).toMatchObject({
-      type: "image", name: prior.name, x: prior.x, y: prior.y, width: prior.width, height: prior.height, src: imageDataUrl,
+      type: "image", name: prior.name, x: prior.x, y: prior.y, width: prior.width, height: prior.height, src: imageAssetUrl,
     })
     expect(redone.document.bindings[prior.id]).toMatchObject({
-      kind: "picture", mediaId: imageAsset.id, imageUrl: imageDataUrl,
+      kind: "picture", mediaId: imageAsset.id, imageUrl: imageAssetUrl,
     })
     expect(designToScene(redone.document).issues).toEqual([])
   })
