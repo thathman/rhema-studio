@@ -340,6 +340,7 @@ pub fn run() {
                     if let Ok(mut v) = app.state::<commands::store_check::DamagedStoreFiles>().0.lock() {
                         *v = moved;
                     }
+                    commands::remote::start_revisions(app.handle(), &dir);
                     // Imported media lives beside the database.
                     let _ = app.state::<commands::media::MediaState>().0.set(dir.join("media"));
                     // Native recordings (and any a crash interrupted, marked recoverable now).
@@ -483,6 +484,7 @@ pub fn run() {
         // no "closed unexpectedly" offer next time.
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
+                commands::recorder::shutdown(app);
                 commands::camera_router::shutdown(app);
                 commands::remote::shutdown(app);
                 commands::app_close::clear_running(app);

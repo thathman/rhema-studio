@@ -27,9 +27,29 @@ pub fn approvals_list(state: State<'_, ContentState>, status: Option<String>, re
 }
 
 #[tauri::command]
-pub fn approvals_decide(window: WebviewWindow, state: State<'_, ContentState>, id: String, decision: Decision, note: Option<String>) -> CmdResult<ApprovalRequest> {
+pub fn approvals_decide(app: AppHandle, window: WebviewWindow, state: State<'_, ContentState>, id: String, decision: Decision, note: Option<String>) -> CmdResult<ApprovalRequest> {
     main_window_only(&window)?;
+    scene_authority(&app, &with_db(&state, |db| db.approval_request(&id))?)?;
     with_db(&state, |db| db.decide_approval_request(&id, &main_desk(), decision, note.as_deref()))
+}
+
+/// A scene request is issued and judged only by the authoritative host (`remote::approval_authority`).
+fn check_authority(bound: bool, reserved: bool) -> Result<(), &'static str> {
+    if !bound {
+        return Err("This copy of Rhema Studio is not hosting, so it cannot handle scene approvals. Start hosting here, or use the copy that is.");
+    }
+    if !reserved {
+        return Err("Rhema Studio could not reserve its revision numbers in its data folder, so scene approvals are off until it restarts. Check the disk.");
+    }
+    Ok(())
+}
+
+fn scene_authority(app: &AppHandle, request: &ApprovalRequest) -> CmdResult<()> {
+    if !matches!(request.kind.as_str(), "scene_save" | "scene_delete") {
+        return Ok(());
+    }
+    let (bound, reserved) = super::remote::approval_authority(app);
+    check_authority(bound, reserved).map_err(|message| ContentCommandError::Refused { message: message.into(), code: "not-authority" })
 }
 
 /// The revision a scene request is judged against, read by the host and never taken from the caller.
@@ -53,6 +73,7 @@ fn scene_apply_revision(kind: &str, target: &str, live: Option<&str>, revision: 
 pub fn approvals_apply(app: AppHandle, window: WebviewWindow, state: State<'_, ContentState>, id: String, current_revision: Option<i64>) -> CmdResult<ApprovalRequest> {
     main_window_only(&window)?;
     let request = with_db(&state, |db| db.approval_request(&id))?;
+    scene_authority(&app, &request)?;
     let current_revision = match request.kind.as_str() {
         "scene_save" | "scene_delete" => {
             let live = super::remote::current_live_state(&app);
@@ -121,6 +142,11 @@ pub(super) fn record_scene_request_with(
 /// missing or failed database path returns an error so the caller cannot emit an untracked request.
 pub fn record_scene_request(app: &tauri::AppHandle, event: &str, payload: &str) -> Result<String, String> {
     record_scene_request_with(event, payload, |requester, input| {
+        let (bound, reserved) = super::remote::approval_authority(app);
+        check_authority(bound, reserved).map_err(|why| {
+            log::warn!("approval request not recorded: {why}");
+            why.to_string()
+        })?;
         let Some(state) = app.try_state::<ContentState>() else {
             return Err("The host approval database is unavailable.".into());
         };
@@ -144,6 +170,14 @@ pub fn record_scene_request(app: &tauri::AppHandle, event: &str, payload: &str) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_bound_host_with_reserved_revisions_handles_scene_approvals() {
+        assert!(check_authority(true, true).is_ok());
+        assert!(check_authority(false, true).unwrap_err().contains("not hosting"), "a second copy that lost the port");
+        assert!(check_authority(true, false).unwrap_err().contains("reserve"), "revisions another run might share");
+        assert!(check_authority(false, false).is_err());
+    }
 
     #[test]
     fn only_a_scene_change_the_server_marked_as_a_request_becomes_one() {

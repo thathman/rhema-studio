@@ -1,5 +1,5 @@
 import type { BroadcastTheme } from "./broadcast"
-import type { Scene } from "./scene"
+import type { DesignPin, Scene } from "./scene"
 import type { SceneAppearanceSnapshot } from "./broadcast-output"
 
 export interface ApprovedSceneSnapshot {
@@ -15,4 +15,6 @@ export interface ApprovedDesignSnapshot {
   looks: Record<string, BroadcastTheme>
   /** Media files retained while this approved service revision remains in History. */
   media_ids: string[]
+  /** Each designed moment's pinned design version by item id. Absent from approvals made before pins were captured. */
+  moments?: Record<string, DesignPin>
 }

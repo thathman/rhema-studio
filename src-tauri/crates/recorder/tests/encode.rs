@@ -173,3 +173,12 @@ fn a_silent_recording_whose_first_picture_is_late_closes_properly() {
     let p = probe(&path);
     assert!(p.duration_s >= 5.5, "{p:?}");
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_sound_rate_aac_cannot_take_is_refused_not_a_crash() {
+    let _one = ONE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let dir = tempfile::tempdir().unwrap();
+    let Err(why) = Writer::start(&dir.path().join("t.mp4"), W, H, 30, 5_000_000, Some(192_000)) else { panic!("192 kHz should be refused") };
+    assert!(why.contains("192000"), "{why}");
+}

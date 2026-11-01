@@ -299,9 +299,15 @@ pub async fn close_broadcast_window(
 pub fn start_ndi(
     output_id: String,
     runtime: State<'_, Mutex<NdiRuntime>>,
+    recorder: State<'_, super::recorder::RecorderHost>,
     request: NdiStartRequest,
 ) -> Result<NdiSessionInfo, String> {
+    // Holding the NDI lock while checking: a recorder start reserves the output first and reads the
+    // size under this lock, so it sees this NDI, or this sees its reservation.
     let mut runtime = runtime.lock().map_err(|e| e.to_string())?;
+    if let Some(why) = recorder.0.get().and_then(|r| r.ndi_refusal(&output_id, request.resolution.dimensions())) {
+        return Err(why);
+    }
     runtime.start(output_id, request).map_err(|e| {
         log::error!("start_ndi failed: {e}");
         e.to_string()
