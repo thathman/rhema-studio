@@ -102,6 +102,12 @@ fi
 export QA_DIR="$QA_RUN"
 HOME="$QA_HOME" RHEMA_QA_DIR="$QA_RUN" "$APP_BIN" >"$QA_SCRATCH/app.log" 2>&1 &
 APP_PID=$!
+# A second copy with this identifier exits 0 at once, whatever its HOME: the lock is /tmp/<identifier>_si.sock.
+sleep 2
+if ! kill -0 "$APP_PID" 2>/dev/null; then
+  echo "The QA app exited at launch: another Rhema QA app is probably running on this computer. Wait for it, then run this again." >&2
+  exit 3
+fi
 set +e
 {
   cat "$ROOT/scripts/mac-qa/hymn-journey.js"

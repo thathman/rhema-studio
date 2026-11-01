@@ -39,7 +39,8 @@ export async function runTakeSteps(item: QueueItem, isTargetCurrent: () => boole
   for (const step of takeSteps(item)) {
     if (!isTargetCurrent()) return
     try {
-      if (step.kind === "scene") takeItemScene(step)
+      // "Bible feeds only" promises the main screens keep what they show, whatever else was armed.
+      if (step.kind === "scene") { if (!takesSourceOnly(item)) takeItemScene(step) }
       else if (step.kind === "obs") await switchObs(step.scene, item.reference)
     } catch (e) {
       console.warn(`[take-steps] ${step.kind} for ${item.reference} failed:`, e)

@@ -45,6 +45,11 @@ pub fn judge(live: Option<&str>, role: Role, cmd: &AuxTimerIn) -> Result<(), Str
 mod tests {
     use super::*;
 
+    #[test]
+    fn view_only_runs_no_timer_even_one_naming_it() {
+        assert!(!Role::Viewer.allows(&crate::command::RemoteCommand::AuxTimer(AuxTimerIn { id: "mine".into(), action: "start".into() })));
+    }
+
     const LIVE: &str = r#"{"v":1,"auxTimers":[{"id":"communion","label":"Communion prep","owner":"worship"},{"id":"free","label":"Interpreter"}]}"#;
     fn cmd(id: &str, action: &str) -> AuxTimerIn {
         AuxTimerIn { id: id.into(), action: action.into() }

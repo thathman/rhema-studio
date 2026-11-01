@@ -79,6 +79,8 @@ describe("a designed moment on Live", () => {
   })
 
   it("survives a rehearsal: the design and its way back both return", async () => {
+    useQueueStore.setState({ items: [moment({ id: "d1", version: 2 })] })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "m" })
     await showDesignedMoment(moment({ id: "d1", version: 2 }), getVersion)
     useBroadcastStore.getState().setRehearsal(true)
     restoreAfterDesignedMoment()

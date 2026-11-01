@@ -10,6 +10,7 @@ import { useMediaStore } from "@/stores/media-store"
 import { serviceSongNow } from "@/stores/song-pins-store"
 import { approvalHolds, useApprovalGateStore } from "@/stores/approval-gate-store"
 import { runTakeSteps, takesSourceOnly } from "@/lib/take-steps"
+import { settleDesignedMoments } from "@/lib/designed-moments"
 import { toast } from "sonner"
 import { useJournalStore } from "@/stores/journal-store"
 import { useTakeAttemptStore, type TakeAttemptOutcome } from "@/stores/take-attempt-store"
@@ -27,6 +28,8 @@ let latestVisualTake = 0
 function afterTake(item: QueueItem, entering: boolean) {
   return (outcome: PresentOutcome | void) => {
     if (outcome === "presented" && entering && !isSoundItem(item)) void runTakeSteps(item, () => isUp(item))
+    // Taking the live slide again: a re-pinned or newly approved design goes up with no other Take between.
+    else if (outcome === "presented" && isSlideItem(item)) settleDesignedMoments()
   }
 }
 
@@ -199,6 +202,8 @@ function findLiveQueueIndex(): number | null {
 export async function presentQueueItem(index: number, slide: number | "last" = 0, songAs?: { arrangement_id: string | null; languages: string[]; song?: SongWithSections }, opts: { automatic?: boolean } = {}): Promise<void> {
   const item = useQueueStore.getState().items[index]
   if (!item) return
+  // ponytail: a timed move yields to any Take still loading; if that Take then fails, the operator moves on by hand.
+  if (opts.automatic && useTakeAttemptStore.getState().attempts.some((attempt) => attempt.status === "pending")) return
   const id = item.id
   const serviceId = useServiceStore.getState().current?.id ?? null
   const isTargetCurrent = () => {

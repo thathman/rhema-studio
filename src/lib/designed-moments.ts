@@ -80,6 +80,7 @@ export async function showDesignedMoment(
     // A manual Take can happen while the pinned design is loading. Keep that newer per-output choice.
     if (!takeRevisions.has(o.id) || (b.sceneTakes[o.id]?.revision ?? null) !== takeRevisions.get(o.id) || o.sceneId !== sceneIds.get(o.id)) continue
     const earlier = o.designedMomentRestore
+    if (!earlier && showsMoment(o)) toast.warning("Earlier scene lost", { id: `design-no-way-back-${o.id}`, description: `${o.name} is showing this design with no earlier scene to return to. When Program moves on, it goes back to its normal feed.` })
     const restore: DesignedMomentRestore = earlier && o.sceneId === earlier.designSceneId
       ? { ...earlier, designSceneId: scene.id, itemId: item.id }
       : {
@@ -119,6 +120,8 @@ export function restoreAfterDesignedMoment(): void {
         const originalOutput = { ...o, themeId: before.themeId, themeFor: before.themeFor }
         const appearance = before.appearance ?? captureSceneAppearance(scene, originalOutput, b.themes, useSettingsStore.getState().brandKit.logoUrl)
         b.restoreSceneSnapshot(o.id, scene, appearance, { themeId: before.themeId, themeFor: before.themeFor })
+        // Refused (the screen is no longer a congregation screen): the design must not stay with no way back.
+        if (useBroadcastStore.getState().outputs.find((x) => x.id === o.id)?.sceneId === before.designSceneId) b.releaseScene(o.id)
       } else {
         b.releaseScene(o.id)
         if (before.scene) toast.warning("Scene not restored", { description: "The previous scene could not be recovered, so this screen was released to its normal feed." })
@@ -138,10 +141,11 @@ export function settleDesignedMoments(): void {
   const next = s.isLive && s.liveItemId ? useQueueStore.getState().items.find((item) => item.id === s.liveItemId) : undefined
   if (next && takesSourceOnly(next)) return
   if (next && isSlideItem(next) && next.slide.designRef) {
-    // Already up, as this version and still approved (a Take arriving second, or a recovery putting
-    // Program back): leave it. Anything else goes through the same check as a Take.
+    // Already taken, as this version and still approved (a Take arriving second, a recovery putting
+    // Program back, or an operator's own scene on top of it, which stays): leave it. Anything else
+    // goes through the same check as a Take.
     const ref = next.slide.designRef
-    const up = s.outputs.some((o) => o.designedMomentRestore?.itemId === next.id && o.designedMomentRestore.designSceneId === momentSceneId(ref) && o.sceneId === momentSceneId(ref))
+    const up = s.outputs.some((o) => o.designedMomentRestore?.itemId === next.id && o.designedMomentRestore.designSceneId === momentSceneId(ref))
     if (up && !designNotApproved(next.id, ref)) return
     void showDesignedMoment(next, undefined, () => {
       const now = useBroadcastStore.getState()
@@ -161,8 +165,13 @@ export function settleDesignedMoments(): void {
  */
 useBroadcastStore.subscribe((s, prev) => {
   if (s.rehearsal) return
+  // Rehearsal over: the checks it held back run now, for approval changes and recovery choices made during it.
+  if (prev.rehearsal) takeDownUncovered()
   const before = prev.rehearsal ? prev.rehearsalReturn : prev
-  if (before && s.isLive === before.isLive && s.liveItemId === before.liveItemId) return
+  if (before && s.isLive === before.isLive && s.liveItemId === before.liveItemId) {
+    // Program did not move. Only a rehearsal's end still settles, and only an item it can find.
+    if (!prev.rehearsal || (s.isLive && !useQueueStore.getState().items.some((item) => item.id === s.liveItemId))) return
+  }
   settleDesignedMoments()
 })
 
@@ -172,8 +181,12 @@ useBroadcastStore.subscribe((s, prev) => {
  */
 useServiceStore.subscribe((s, prev) => {
   if (s.approvedDesigns === prev.approvedDesigns && s.approvedDesignRevision === prev.approvedDesignRevision && s.current?.approved_revision === prev.current?.approved_revision) return
+  if (!useBroadcastStore.getState().rehearsal) takeDownUncovered()
+})
+
+function takeDownUncovered(): void {
+  const s = useServiceStore.getState()
   const b = useBroadcastStore.getState()
-  if (b.rehearsal) return
   const items = useQueueStore.getState().items
   const approved = s.current?.approved_revision !== null && s.current?.approved_revision !== undefined
   // What counts is the design on the screen, not what the item pins now: v2 up with the item moved
@@ -191,4 +204,4 @@ useServiceStore.subscribe((s, prev) => {
   if (!uncovered) return
   restoreAfterDesignedMoment()
   toast.warning("Design needs approval", { description: "The service's approval no longer covers the design on screen, so the screens went back. Refresh the approval to show it." })
-})
+}

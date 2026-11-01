@@ -518,6 +518,11 @@ export function worthOffering(value: unknown, now = Date.now()): boolean {
 
 /** Put back what was on the screens: the sources, the program, each output and its scene, the event. */
 export async function putBack(value: unknown): Promise<boolean> {
+  // Rehearsal screens are a sandbox: what is put back there is gone at exit, so the offer must stay.
+  if (useBroadcastStore.getState().rehearsal) {
+    useRecovery.setState({ dismissed: false, restoreError: "Leave rehearsal first, then put back what was on the screens." })
+    return false
+  }
   useRecovery.setState({ restoreError: null })
   const s = parseLiveSnapshot(value)
   if (!s) {

@@ -121,7 +121,8 @@ impl Role {
             RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsRecord(_) | RemoteCommand::ObsTransition(_) => self == Role::Obs,
             // An extra timer (#196 R2.5): the timekeeping desks, or the role the timer belongs to; the
             // server checks the owner against the host's Live State (crate::aux_timers).
-            RemoteCommand::AuxTimer(_) => self != Role::ObsCompanion,
+            // View only changes nothing, whichever timer names it.
+            RemoteCommand::AuxTimer(_) => !matches!(self, Role::ObsCompanion | Role::Viewer),
             // Rhema's own recorder: no role grants it (see `KeyEntry::record`).
             RemoteCommand::Record(_) => false,
             _ if !matches!(self, Role::Present | Role::Configure) => false,
