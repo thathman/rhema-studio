@@ -29,6 +29,9 @@ type GetVersion = Parameters<typeof resolveDesignedMoment>[1]
 /** One id per pinned version, so a screen still showing it is recognised at restore. */
 const momentSceneId = (ref: DesignPin) => `design-${ref.id}-v${ref.version}`
 
+/** A moment's design on this screen, with or without a way back. */
+const showsMoment = (o: BroadcastOutput) => !!o.sceneSnapshot?.design && o.sceneId === momentSceneId(o.sceneSnapshot.design)
+
 /** Why the open service's approval does not cover this pin; null when it does, or nothing is approved. */
 function designNotApproved(itemId: string, ref: DesignPin): string | null {
   const service = useServiceStore.getState()
@@ -82,7 +85,8 @@ export async function showDesignedMoment(
       : {
           designSceneId: scene.id,
           itemId: item.id,
-          scene: o.sceneId ? (o.sceneSnapshot ?? b.scenes.find((s) => s.id === o.sceneId) ?? null) : null,
+          // A moment with no way back (recovery put it up) is never what to return to: that would bring it back.
+          scene: o.sceneId && !showsMoment(o) ? (o.sceneSnapshot ?? b.scenes.find((s) => s.id === o.sceneId) ?? null) : null,
           ...(o.sceneAppearanceSnapshot ? { appearance: o.sceneAppearanceSnapshot } : {}),
           themeId: o.themeId,
           ...(o.themeFor ? { themeFor: o.themeFor } : {}),
@@ -103,7 +107,7 @@ export function restoreAfterDesignedMoment(): void {
     if (!before) {
       // A moment's design with no way back (a recovery put it up after its way back was used):
       // there is nothing to return to, but it must not stay up unchecked.
-      if (o.sceneSnapshot?.design && o.sceneId === momentSceneId(o.sceneSnapshot.design)) {
+      if (showsMoment(o)) {
         b.releaseScene(o.id)
         toast.warning("Scene not restored", { description: "The previous scene could not be recovered, so this screen was released to its normal feed." })
       }
@@ -125,16 +129,12 @@ export function restoreAfterDesignedMoment(): void {
 }
 
 /**
- * Program can move with no Take steps: Clear, a verse sent from elsewhere, a detected verse, a timed
- * move, Show this live. The screens follow it, or Live would claim what the design hides: onto a
- * pinned slide they show its design (for a Take this meets `runTakeSteps`, and whichever is second
- * finds it done), and off a moment they get their scene back. A Bible-feeds-only Take leaves the
- * screens alone. A restore saved by an older build names no item, so any move counts as leaving it.
+ * Make the screens match Program: on a pinned slide they show its checked design, off one they hold
+ * no moment. Recovery calls this too, since it can change screens without moving Program.
  */
-useBroadcastStore.subscribe((s, prev) => {
+export function settleDesignedMoments(): void {
+  const s = useBroadcastStore.getState()
   if (s.rehearsal) return
-  const before = prev.rehearsal ? prev.rehearsalReturn : prev
-  if (before && s.isLive === before.isLive && s.liveItemId === before.liveItemId) return
   const next = s.isLive && s.liveItemId ? useQueueStore.getState().items.find((item) => item.id === s.liveItemId) : undefined
   if (next && takesSourceOnly(next)) return
   if (next && isSlideItem(next) && next.slide.designRef) {
@@ -149,7 +149,21 @@ useBroadcastStore.subscribe((s, prev) => {
     }).catch((e) => console.warn(`[designed-moments] design for ${next.reference} failed:`, e))
     return
   }
-  if (s.outputs.some((o) => o.designedMomentRestore)) restoreAfterDesignedMoment()
+  if (s.outputs.some((o) => o.designedMomentRestore || showsMoment(o))) restoreAfterDesignedMoment()
+}
+
+/**
+ * Program can move with no Take steps: Clear, a verse sent from elsewhere, a detected verse, a timed
+ * move, Show this live. The screens follow it, or Live would claim what the design hides: onto a
+ * pinned slide they show its design (for a Take this meets `runTakeSteps`, and whichever is second
+ * finds it done), and off a moment they get their scene back. A Bible-feeds-only Take leaves the
+ * screens alone. A restore saved by an older build names no item, so any move counts as leaving it.
+ */
+useBroadcastStore.subscribe((s, prev) => {
+  if (s.rehearsal) return
+  const before = prev.rehearsal ? prev.rehearsalReturn : prev
+  if (before && s.isLive === before.isLive && s.liveItemId === before.liveItemId) return
+  settleDesignedMoments()
 })
 
 /**
@@ -166,7 +180,9 @@ useServiceStore.subscribe((s, prev) => {
   // to an approved v3 is still v2, unapproved. One whose item can't be found can't be shown to be covered.
   const uncovered = b.outputs.some((o) => {
     const restore = o.designedMomentRestore
-    if (!restore || o.sceneId !== restore.designSceneId) return false
+    // No way back means recovery put it up unchecked: nothing shows it is covered.
+    if (!restore) return showsMoment(o)
+    if (o.sceneId !== restore.designSceneId) return false
     const item = restore.itemId ? items.find((i) => i.id === restore.itemId) : undefined
     if (!item) return approved
     if (!isSlideItem(item) || !item.slide.designRef) return true

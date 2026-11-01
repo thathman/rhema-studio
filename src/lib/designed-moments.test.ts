@@ -222,6 +222,23 @@ describe("a designed moment on Live", () => {
 
 describe("a designed moment and the service's approval", () => {
   const pin = { id: "d1", version: 2 }
+  const stray = () => {
+    const design = { ...welcome, id: "design-d1-v2", design: pin }
+    useBroadcastStore.setState({ outputs: useBroadcastStore.getState().outputs.map((o) => o.id === MAIN_OUTPUT_ID ? { ...o, sceneId: design.id, sceneSnapshot: design, designedMomentRestore: undefined } : o) })
+  }
+
+  it("releases a design with no way back when the approval changes", () => {
+    stray()
+    approve({})
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBeUndefined()
+  })
+
+  it("releases a design with no way back when Program moves off", () => {
+    useBroadcastStore.setState({ isLive: true, liveItemId: "other" })
+    stray()
+    useBroadcastStore.setState({ isLive: false, liveItemId: null })
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBeUndefined()
+  })
 
   it("shows the version the approval captured for this item", async () => {
     approve({ m: pin })

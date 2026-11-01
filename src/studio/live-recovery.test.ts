@@ -943,7 +943,7 @@ describe("live recovery", () => {
 describe("putting back a designed moment", () => {
   const pin = { id: "d1", version: 2 }
   const moment = { id: "m", kind: "slide", slide: { title: "Welcome", body: "Glad you came", designRef: pin }, reference: "Welcome", confidence: 1, source: "manual", added_at: 0 } as never
-  const crash = async (moments: Record<string, typeof pin>) => {
+  const crash = async (moments: Record<string, typeof pin>, opts: { waiting?: (approve: (approved: Record<string, typeof pin>) => void) => void; saved?: Partial<ReturnType<typeof takeSnapshot>> } = {}) => {
     const { useServiceStore } = await import("@/stores/service-store")
     const { captureSceneAppearance, newScene } = await import("@/lib/scenes")
     const usual = newScene("Usual")
@@ -963,13 +963,14 @@ describe("putting back a designed moment", () => {
     useBroadcastStore.setState({ scenes: [usual], outputs: [up] })
     useBroadcastStore.getState().setLiveVerse({ reference: "Welcome", segments: [{ text: "Glad you came" }], content: "bible" }, null, { goLive: true, itemId: "m" })
     useEventClock.setState({ currentId: null, currentMomentId: null })
-    const snap = { ...takeSnapshot(), eventId: null, outputsOn: [] }
-    expect(snap.liveItemId).toBe("m")
+    const snap = { ...takeSnapshot(), eventId: null, outputsOn: [], ...opts.saved }
+    expect(takeSnapshot().liveItemId).toBe("m")
     // Restarted: Program is empty, the screen's saved state is as it was, and the approval has its own say.
     useBroadcastStore.setState({ isLive: false, liveVerse: null, liveItemId: null, sources: {} })
     useBroadcastStore.setState({ outputs: [up] })
     approve(moments)
     useRecovery.setState({ offer: snap })
+    opts.waiting?.(approve)
     expect(await putBack(snap)).toBe(true)
     await new Promise((resolve) => setTimeout(resolve, 0))
     return { usual, output: useBroadcastStore.getState().outputs[0], clean: () => useServiceStore.setState({ current: null, approvedDesigns: null, approvedDesignRevision: null }) }
@@ -994,6 +995,35 @@ describe("putting back a designed moment", () => {
     const { usual, clean } = await crash({ m: pin })
     const { useServiceStore } = await import("@/stores/service-store")
     useServiceStore.setState({ approvedDesigns: { version: 1, scenes: {}, looks: {}, media_ids: [], moments: { m: { id: "d1", version: 3 } } } })
+    expect(useBroadcastStore.getState().outputs[0].sceneId).toBe(usual.id)
+    clean()
+  })
+
+  it("never returns to the design when its way back was used while the offer waited", async () => {
+    const { designStore } = await import("@/design-engine/design-store")
+    const { sceneToDesign } = await import("@/design-engine/rhema-scene")
+    const { newScene } = await import("@/lib/scenes")
+    const load = vi.spyOn(designStore, "getVersion").mockResolvedValue({ designId: "d1", version: 2, document: sceneToDesign(newScene("Welcome")) } as never)
+    const { output, clean } = await crash({ m: pin }, { waiting: (approve) => { approve({}); approve({ m: pin }) } })
+    expect(output.sceneId).toBe("design-d1-v2")
+    useBroadcastStore.setState({ isLive: false, liveItemId: null })
+    expect(useBroadcastStore.getState().outputs[0].sceneId).toBeUndefined()
+    load.mockRestore()
+    clean()
+  })
+
+  it("takes the design down when the saved Program was empty, with no Program move to catch it", async () => {
+    const { usual, clean } = await crash({ m: pin }, { saved: { isLive: false, liveVerse: null, liveItemId: null } })
+    expect(useBroadcastStore.getState().outputs[0].sceneId).toBe(usual.id)
+    clean()
+  })
+
+  it("Not now gives the scene back while Program stays empty", async () => {
+    const { usual, clean } = await crash({ m: pin })
+    useBroadcastStore.setState({ isLive: false, liveItemId: null })
+    const design = { ...usual, id: "design-d1-v2", design: pin }
+    useBroadcastStore.setState({ outputs: [{ ...useBroadcastStore.getState().outputs[0], sceneId: design.id, sceneSnapshot: design, designedMomentRestore: { designSceneId: design.id, itemId: "m", scene: usual, themeId: useBroadcastStore.getState().outputs[0].themeId } }] })
+    dismissRecovery()
     expect(useBroadcastStore.getState().outputs[0].sceneId).toBe(usual.id)
     clean()
   })

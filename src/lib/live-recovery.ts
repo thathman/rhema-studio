@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import { create } from "zustand"
 import { enableOutput } from "@/lib/broadcast-output-control"
-import { restoreAfterDesignedMoment } from "@/lib/designed-moments"
+import { restoreAfterDesignedMoment, settleDesignedMoments } from "@/lib/designed-moments"
 import { captureSceneAppearance, normalizeScene, sceneForOutput } from "@/lib/scenes"
 import { normalizeTheme } from "@/lib/theme-migrations"
 import { sourceOf, type LiveSources } from "@/lib/live-sources"
@@ -329,6 +329,8 @@ export const useRecovery = create<{
 /** "Not now" on the banner: hide it, keep the offer for the Desk menu. */
 export function dismissRecovery(): void {
   useRecovery.setState({ dismissed: true })
+  // Program stays empty for now, so no screen keeps a moment's design meanwhile.
+  settleDesignedMoments()
 }
 
 /** Explicitly continue with the state that could be recovered after a partial attempt. */
@@ -598,6 +600,8 @@ export async function putBack(value: unknown): Promise<boolean> {
     }
   }
   if (s.isLive && s.liveVerse && !liveAlreadyRestored) useBroadcastStore.getState().setLiveVerse(s.liveVerse, null, { goLive: true, itemId: s.liveItemId })
+  // The saved scenes may include a moment that Program or the approval no longer backs, with no Program move to catch it.
+  settleDesignedMoments()
   for (const id of s.outputsOn) {
     // Trimmed recovery omits live content and sources; no output can be safely re-enabled.
     if (s.trimmed) continue
