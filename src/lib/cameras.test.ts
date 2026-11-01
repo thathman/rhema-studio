@@ -1,3 +1,4 @@
+import { feedCameraUrl } from "@/lib/whep"
 import { describe, expect, it } from "vitest"
 import { cameraAppLink, type RouterPorts } from "@/lib/cameras"
 
@@ -24,5 +25,15 @@ describe("Rhema Camera pairing link (#209)", () => {
 
   it("a new link (a new secret) makes a different pairing link", () => {
     expect(cameraAppLink("192.168.1.20", PORTS, { ...CAM, token: "f".repeat(32) }, FP)).not.toEqual(cameraAppLink("192.168.1.20", PORTS, CAM, FP))
+  })
+})
+
+describe("a feed page asks for a camera", () => {
+  const page = { hostname: "192.168.1.20" }
+  it("through the host, with its key, when the camera is at the host's router", () => {
+    expect(feedCameraUrl("http://192.168.1.20:8889/pulpit/whep", page, "tv 1", "k&1")).toBe("/api/v1/feed/tv%201/camera/pulpit/whep?k=k%261")
+  })
+  it("directly anywhere else", () => {
+    for (const url of ["http://192.168.1.30:8889/pulpit/whep", "http://192.168.1.20:9000/pulpit/whep", "http://192.168.1.20:8889/other", "not a url"]) expect(feedCameraUrl(url, page, "tv", "k")).toBe(url)
   })
 })

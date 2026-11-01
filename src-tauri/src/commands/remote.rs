@@ -609,6 +609,10 @@ impl HttpRuntime {
         }
     }
 
+    pub fn feeds(&self) -> SharedFeeds {
+        self.feeds.clone()
+    }
+
     /// The camera list and router target the camera page's requests are checked against.
     pub fn cameras(&self) -> rhema_api::SharedCameras {
         self.cameras.clone()

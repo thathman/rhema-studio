@@ -175,6 +175,16 @@ impl Feed {
 }
 
 impl FeedHub {
+    /// Whether this feed's frame now plays this camera (a TV reads only what its scene shows).
+    pub(crate) fn plays_camera(&self, id: &str, name: &str) -> bool {
+        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).and_then(|f| f.current.as_ref()).is_some_and(|(_, frame)| frame.contains(&format!("/{name}/whep")))
+    }
+
+    /// Whether this key opens this feed now.
+    pub(crate) fn admits(&self, id: &str, key: &str) -> bool {
+        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).is_some_and(|f| f.admits(key).is_some())
+    }
+
     /// Replace the list of feeds (id, secret) with no TV keys; frames of feeds that stay are kept.
     pub fn set(&self, list: &[(String, String)]) {
         self.set_keys(&list.iter().map(|(id, token)| FeedKeys { id: id.clone(), token: token.clone(), tvs: Vec::new() }).collect::<Vec<_>>());
@@ -1145,6 +1155,8 @@ where
         .route("/api/v1/camera/{name}/whip", post(camera_whip_handler::<S>))
         .route("/api/v1/camera/{name}/whip/{session}", axum::routing::patch(camera_session_handler::<S>).delete(camera_session_handler::<S>))
         .route("/api/v1/camera/{name}/status", post(camera_status_handler::<S>))
+        .route("/api/v1/cameras/{name}/whep", post(desk_camera_handler::<S>))
+        .route("/api/v1/feed/{id}/camera/{name}/whep", post(feed_camera_handler::<S>))
         .route("/api/v1/cameras/watch", get(companion_cameras_handler::<S>))
         .route("/api/v1/cameras/tally", post(companion_tally_handler::<S>))
         // Undocumented alias for the path the code shipped with before #146.
@@ -2152,6 +2164,55 @@ async fn camera_whip_handler<S: CommandSink + 'static>(
         return code.into_response();
     }
     state.cameras.forward(axum::http::Method::POST, &name, None, &headers, body).await
+}
+
+/// `POST /api/v1/cameras/{name}/whep`: a joined desk plays a camera, with its key and a role that may.
+async fn desk_camera_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> axum::response::Response {
+    if !state.rate.allow(peer.ip()) {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    let hash = match check_http_command_key(&state.keys, &headers, peer) {
+        Ok(None) => String::new(),
+        Ok(Some(e)) if e.role.reads_cameras() => e.hash,
+        Ok(Some(_)) => return StatusCode::FORBIDDEN.into_response(),
+        Err((code, _)) => return code.into_response(),
+    };
+    state.cameras.relay_offer(&name, crate::cameras::RelayHolder::Key(hash), peer.ip(), body).await
+}
+
+/// `POST /api/v1/feed/{id}/camera/{name}/whep?k=<secret>`: a TV's feed page plays a camera in its scene.
+async fn feed_camera_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::Path((id, name)): axum::extract::Path<(String, String)>,
+    axum::extract::Query(q): Query,
+    body: axum::body::Bytes,
+) -> axum::response::Response {
+    if !state.rate.allow(peer.ip()) {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    let k = q.get("k").map_or("", String::as_str);
+    if !state.feeds.admits(&id, k) || !state.feeds.plays_camera(&id, &name) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    state.cameras.relay_offer(&name, crate::cameras::RelayHolder::Feed(id, k.to_string()), peer.ip(), body).await
+}
+
+/// Which relayed camera readers have lost their key or role since: forgets them and returns the
+/// addresses to cut off (the app kicks them at the router). Called when keys or feeds change.
+pub fn camera_readers_gone(cameras: &crate::cameras::CameraHub, keys: &KeySet, feeds: &FeedHub) -> Vec<std::net::IpAddr> {
+    let k = keys.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+    cameras.relay_gone(|holder| match holder {
+        crate::cameras::RelayHolder::Key(hash) if hash.is_empty() => !k.require_auth,
+        crate::cameras::RelayHolder::Key(hash) => k.require_auth && k.entries.iter().any(|e| &e.hash == hash && e.role.reads_cameras()),
+        crate::cameras::RelayHolder::Feed(id, key) => feeds.admits(id, key),
+    })
 }
 
 /// `POST /api/v1/camera/{name}/status` with `Authorization: Bearer <the camera's secret>`: Rhema
@@ -3665,7 +3726,7 @@ mod tests {
         assert!(off.contains("503"), "{off}");
 
         let (router, seen) = fake_router().await;
-        cameras.set_router(Some(crate::cameras::RouterTarget { base: format!("http://127.0.0.1:{router}"), srt_port: 8890, srt_passphrase: "Passphrase0123456789".into() }));
+        cameras.set_router(Some(crate::cameras::RouterTarget { base: format!("http://127.0.0.1:{router}"), srt_port: 8890, srt_passphrase: "Passphrase0123456789".into(), relay_secret: "Relaysecret0123456789".into() }));
         // Without the secret nothing reaches the router.
         assert!(send("POST", "/api/v1/camera/pulpit/whip", "v=0 offer", "Content-Type: application/sdp\r\n").await.contains("403"));
         assert!(send("POST", "/api/v1/camera/pulpit/whip?k=wrong", "v=0 offer", "Content-Type: application/sdp\r\n").await.contains("403"));
@@ -3826,6 +3887,62 @@ mod tests {
     /// router happened to mount instead, so the two could drift apart and
     /// still pass.
     #[tokio::test]
+    async fn a_camera_is_read_only_with_a_key_that_may_and_losing_the_key_cuts_it_off() {
+        use crate::keys::{hash_key, KeyEntry, Role};
+        let keys = Arc::new(std::sync::RwLock::new(crate::keys::Keys {
+            require_auth: true,
+            entries: [("cam", Role::Camera), ("vie", Role::Viewer), ("com", Role::ObsCompanion)].map(|(k, role)| KeyEntry { hash: hash_key(k), name: k.into(), role, ..serde_json::from_value(serde_json::json!({"hash":"h","name":"n"})).unwrap() }).to_vec(),
+        }));
+        let feeds = new_feed_hub();
+        feeds.set(&[("tv".into(), "0123456789abcdef".into())]);
+        let cameras = crate::cameras::new_camera_hub();
+        cameras.set(&[("pulpit".into(), "0123456789abcdef".into())]);
+        let (router, seen) = fake_router().await;
+        cameras.set_router(Some(crate::cameras::RouterTarget { base: format!("http://127.0.0.1:{router}"), srt_port: 8890, srt_passphrase: "Passphrase0123456789".into(), relay_secret: "Relaysecret0123456789".into() }));
+        let server = start_http_server(HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), feeds: feeds.clone(), cameras: cameras.clone(), ..Default::default() }, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let port = server.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let post = |path: &'static str, key: &'static str| async move {
+            let head = if key.is_empty() { String::new() } else { format!("X-Rhema-Key: {key}\r\n") };
+            raw(port, &format!("POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{head}Content-Type: application/sdp\r\nContent-Length: 9\r\nConnection: close\r\n\r\nv=0 offer")).await
+        };
+        let desk = "/api/v1/cameras/pulpit/whep";
+        let tv = "/api/v1/feed/tv/camera/pulpit/whep?k=0123456789abcdef";
+        // By name alone, or with a key that may not: nothing reaches the router.
+        for (path, key, code) in [(desk, "", "401"), (desk, "wrong", "401"), (desk, "vie", "403"), (desk, "com", "403"), ("/api/v1/feed/tv/camera/pulpit/whep", "", "403"), ("/api/v1/feed/tv/camera/pulpit/whep?k=wrong", "", "403"), ("/api/v1/feed/nope/camera/pulpit/whep?k=0123456789abcdef", "", "403")] {
+            let r = post(path, key).await;
+            assert!(r.starts_with(&format!("HTTP/1.1 {code}")), "{path} {key}: {r}");
+        }
+        assert!(seen.lock().unwrap().is_empty());
+        // A camera that is not the church's: no.
+        assert!(post("/api/v1/cameras/other/whep", "cam").await.starts_with("HTTP/1.1 404"));
+        // A TV reads only what its scene plays.
+        assert!(post(tv, "").await.starts_with("HTTP/1.1 403"), "nothing in its frame yet");
+        assert!(seen.lock().unwrap().is_empty());
+        feeds.publish("tv", r#"{"scene":{"layers":[{"cameraUrl":"http://192.168.1.20:8889/pulpit/whep"}]}}"#.into());
+        // A desk that may, and a TV: as the relay, never the camera's own sign-in.
+        for (path, key) in [(desk, "cam"), (tv, "")] {
+            let r = post(path, key).await;
+            assert!(r.contains("v=0 answer"), "{r}");
+            assert!(!r.to_ascii_lowercase().contains("www-authenticate"), "{r}");
+        }
+        let basic = "Basic cmhlbWEtcmVsYXk6UmVsYXlzZWNyZXQwMTIzNDU2Nzg5"; // rhema-relay:<its secret>
+        let sent = seen.lock().unwrap().clone();
+        assert_eq!(sent.len(), 2);
+        assert!(sent.iter().all(|l| l.starts_with(&format!("POST /pulpit/whep auth={basic} "))), "{sent:?}");
+        // Both read from one address here: it is cut off only when neither may any more.
+        assert!(camera_readers_gone(&cameras, &keys, &feeds).is_empty());
+        keys.write().unwrap().entries.retain(|e| e.hash != hash_key("cam"));
+        assert!(camera_readers_gone(&cameras, &keys, &feeds).is_empty(), "the TV may still");
+        assert!(post(desk, "cam").await.starts_with("HTTP/1.1 401"));
+        feeds.set(&[("tv".into(), "fedcba9876543210".into())]);
+        assert_eq!(camera_readers_gone(&cameras, &keys, &feeds), vec![std::net::IpAddr::from([127, 0, 0, 1])]);
+        assert!(post(tv, "").await.starts_with("HTTP/1.1 403"), "an old TV link stops at once");
+        let mut h = server.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
     async fn a_retried_press_reaches_the_app_once_and_old_clients_still_work() {
         let sink = Arc::new(MockSink::new());
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), ..Default::default() };
@@ -3923,7 +4040,7 @@ mod tests {
         let cameras = crate::cameras::new_camera_hub();
         cameras.set(&[("pulpit".into(), "0123456789abcdef0123".into())]);
         cameras.sync_readers(&[(hash_key("comp"), "Media desk".into())]);
-        cameras.set_router(Some(crate::cameras::RouterTarget { base: "http://127.0.0.1:8889".into(), srt_port: 8890, srt_passphrase: "Passphrase0123456789".into() }));
+        cameras.set_router(Some(crate::cameras::RouterTarget { base: "http://127.0.0.1:8889".into(), srt_port: 8890, srt_passphrase: "Passphrase0123456789".into(), relay_secret: "Relaysecret0123456789".into() }));
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), cameras: cameras.clone(), ..Default::default() };
         let result = start_http_server(config, sink, new_shared_status()).await.expect("should bind");
         let port = result.bound_port;
