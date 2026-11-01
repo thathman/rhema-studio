@@ -31,6 +31,58 @@ describe("Rhema scenes in the Avnac engine", () => {
     expect(scene).toEqual(sermon)
   })
 
+  it("resolves exactly the selected page from one versioned scene graph", () => {
+    const base = sceneToDesign({ ...sermon, layers: [layer("first", "text", { text: "First page" })] })
+    const root = base.scene.nodes[base.scene.root]
+    const first = base.scene.nodes.first
+    if (root.type !== "group" || first.type !== "text") throw new Error("Expected a root group and text layer")
+    const pageOne: SaraswatiGroupNode = { id: "page-one", type: "group", parentId: root.id, name: "Page 1", visible: true, opacity: 1, children: [first.id] }
+    const pageTwo: SaraswatiGroupNode = { id: "page-two", type: "group", parentId: root.id, name: "Page 2", visible: true, opacity: 0.5, rotation: 15, children: ["second"] }
+    const second = { ...first, id: "second", parentId: pageTwo.id, text: "Second page" }
+    const multiPage = {
+      ...base,
+      pages: [
+        { id: pageOne.id, nodeId: pageOne.id, title: pageOne.name! },
+        { id: pageTwo.id, nodeId: pageTwo.id, title: pageTwo.name! },
+      ],
+      scene: {
+        ...base.scene,
+        nodes: {
+          ...base.scene.nodes,
+          [root.id]: { ...root, children: [pageOne.id, pageTwo.id] },
+          [pageOne.id]: pageOne,
+          [pageTwo.id]: pageTwo,
+          [first.id]: { ...first, parentId: pageOne.id },
+          [second.id]: second,
+        },
+      },
+      bindings: {
+        ...base.bindings,
+        second: { id: "second", kind: "text" as const, textBoxHeight: 216 },
+      },
+    }
+
+    const selected = designToScene(multiPage, pageTwo.id)
+    expect(selected.issues).toEqual([
+      { nodeId: pageTwo.id, message: "Group opacity cannot be saved into a flat Rhema scene yet" },
+      { nodeId: pageTwo.id, message: "Group rotation cannot be saved into a Rhema scene yet" },
+    ])
+    expect(selected.scene.layers).toEqual([expect.objectContaining({ id: "second", kind: "text", text: "Second page" })])
+    expect(designToScene(multiPage, pageOne.id).issues).toEqual([])
+    expect(designToScene(multiPage, "deleted-page").issues).toEqual([
+      expect.objectContaining({ nodeId: "__pages__", message: expect.stringContaining("page") }),
+    ])
+  })
+
+  it("fails closed on malformed page metadata without throwing", () => {
+    const malformed = { ...sceneToDesign(sermon), pages: { length: 2 } } as never
+    expect(() => designToScene(malformed)).not.toThrow()
+    expect(designToScene(malformed).issues).toContainEqual(expect.objectContaining({
+      nodeId: "__pages__",
+      message: expect.stringContaining("between 1 and 50"),
+    }))
+  })
+
   it("roundtrips solid Avnac ellipses as editable Rhema scene layers and refuses unsupported paint", () => {
     const ellipseScene: Scene = { ...sermon, layers: [layer("oval", "ellipse", { color: "#d14c62" })] }
     const design = sceneToDesign(ellipseScene)

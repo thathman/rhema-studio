@@ -7,6 +7,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInv
 vi.mock("@/studio/design/look-library-view", () => ({ LookLibraryView: () => null }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), emit: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
 vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: vi.fn(async () => false) }))
+vi.mock("@/lib/verse-renderer", () => ({ drawLowerThird: vi.fn(), onThemeFontsLoaded: vi.fn(() => () => {}), renderVerse: vi.fn() }))
 
 import { createElement, act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -250,6 +251,26 @@ describe("Prepare design version picker", () => {
 
   it("uses a native static-text version in Prepare without changing Live", async () => {
     const design = withNativeText(createBlankRhemaDesign("Opening"))
+    const designRoot = design.scene.nodes[design.scene.root]
+    const englishText = design.scene.nodes["native-text"]
+    if (!designRoot || designRoot.type !== "group" || !englishText || englishText.type !== "text") throw new Error("Expected the design root and text layer")
+    const yorubaText = { ...englishText, id: "native-text-page-two", parentId: "page-two-group", text: "Ẹ káàbọ̀" }
+    design.pages = [
+      { id: "english-page", nodeId: "page-one-group", title: "English" },
+      { id: "yoruba-page", nodeId: "page-two-group", title: "Yoruba" },
+    ]
+    design.scene = {
+      ...design.scene,
+      nodes: {
+        ...design.scene.nodes,
+        [designRoot.id]: { ...designRoot, children: ["page-one-group", "page-two-group"] },
+        "page-one-group": { id: "page-one-group", type: "group", parentId: designRoot.id, name: "English", visible: true, opacity: 1, children: [englishText.id] },
+        "page-two-group": { id: "page-two-group", type: "group", parentId: designRoot.id, name: "Yoruba", visible: true, opacity: 1, children: [yorubaText.id] },
+        [englishText.id]: { ...englishText, parentId: "page-one-group" },
+        [yorubaText.id]: yorubaText,
+      },
+    }
+    design.bindings[yorubaText.id] = { ...design.bindings[englishText.id], id: yorubaText.id }
     const version: DesignVersion = {
       designId: "design-native",
       version: 1,
@@ -305,13 +326,20 @@ describe("Prepare design version picker", () => {
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Choose a scene design for Welcome"]')!.click())
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent === "My Designs")!.click())
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use in Prepare")!.click())
+    const pageSelect = document.body.querySelector<HTMLSelectElement>('[aria-label="Saved version page"]')!
+    const setPageValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!
+    await act(async () => {
+      setPageValue.call(pageSelect, "yoruba-page")
+      pageSelect.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use selected page in Prepare")!.click())
 
     expect(document.body.querySelector('[role="alert"]')).toBeNull()
     expect(onSceneSelected).toHaveBeenCalledTimes(1)
     const selectedSceneId = onSceneSelected.mock.calls[0]?.[0]
-    expect(useQueueStore.getState().items[0]).toMatchObject({ slide: { designRef: { id: version.designId, version: version.version } } })
+    expect(useQueueStore.getState().items[0]).toMatchObject({ slide: { designRef: { id: version.designId, version: version.version, pageId: "yoruba-page" } } })
     expect(useBroadcastStore.getState().scenes.find((scene) => scene.id === selectedSceneId)?.layers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: "text", text: "Welcome to worship" }),
+      expect.objectContaining({ kind: "text", text: "Ẹ káàbọ̀" }),
     ]))
     const after = useBroadcastStore.getState()
     expect({

@@ -397,7 +397,7 @@ export interface SlideItemPayload {
   source_asset_id?: string
   source_revision?: number
   /** A designed moment: the design version it shows (design-documents-v1.md, Pinning). */
-  designRef?: { id: string; version: number }
+  designRef?: { id: string; version: number; pageId?: string }
 }
 
 /** `payload` of a `kind = "song"` program item. */

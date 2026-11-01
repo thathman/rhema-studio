@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { designStore, type DesignDocument, type DesignSummary, type DesignVersion } from "@/design-engine/design-store"
 import { createBlankRhemaDesign, pinnedSceneForVersion } from "@/design-engine/design-document-utils"
-import { sceneToDesign } from "@/design-engine/rhema-scene"
+import { designPages, sceneToDesign } from "@/design-engine/rhema-scene"
 import { adoptLook, type LibraryLook } from "@/lib/look-library"
 import { libraryLooks } from "@/lib/design-packs"
 import { useBroadcastStore, useSettingsStore } from "@/stores"
@@ -299,7 +299,7 @@ function summaryOf(document: DesignDocument): DesignSummary {
 
 /** Pick or customize a private copy of an immutable design version for the current Prepare moment. */
 export function DesignVersionPicker({ onUse, onDirtyChange, useLabel }: {
-  onUse: (scene: Scene, version: DesignVersion) => void
+  onUse: (scene: Scene, version: DesignVersion, pageId?: string) => void
   useLabel?: string
   onDirtyChange?: (dirty: boolean) => void
 }) {
@@ -311,6 +311,9 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel }: {
   const [editing, setEditing] = useState<DesignDocument | null>(null)
   const [editingDirty, setEditingDirty] = useState(false)
   const [createdVersion, setCreatedVersion] = useState<DesignVersion | null>(null)
+  const [createdPageId, setCreatedPageId] = useState("")
+  const [pendingVersion, setPendingVersion] = useState<DesignVersion | null>(null)
+  const [pendingPageId, setPendingPageId] = useState("")
   const [editingError, setEditingError] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -344,16 +347,25 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel }: {
   }, [selectedId])
 
   const visibleVersions = versionsForId === selectedId ? versions : []
+  const createdPages = createdVersion?.document ? designPages(createdVersion.document) : []
+  const effectiveCreatedPageId = createdVersion?.document?.pages?.some((page) => page.id === createdPageId)
+    ? createdPageId
+    : createdVersion?.document?.pages?.[0]?.id
   const createdCompatibility = useMemo(
-    () => createdVersion ? pinnedSceneForVersion(createdVersion, operatorName) : null,
-    [createdVersion, operatorName],
+    () => createdVersion ? pinnedSceneForVersion(createdVersion, operatorName, effectiveCreatedPageId) : null,
+    [createdVersion, operatorName, effectiveCreatedPageId],
   )
+  const pendingPages = pendingVersion?.document ? designPages(pendingVersion.document) : []
+  const effectivePendingPageId = pendingVersion?.document?.pages?.some((page) => page.id === pendingPageId)
+    ? pendingPageId
+    : pendingVersion?.document?.pages?.[0]?.id
 
   const customizeCopy = async (listed: DesignVersion) => {
     setBusy(true)
     setError("")
     setEditingError("")
     setCreatedVersion(null)
+    setPendingVersion(null)
     try {
       const copy = await designStore.duplicate(listed.designId, listed.version, listed.title + " copy")
       setEditing(copy)
@@ -409,7 +421,7 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel }: {
               <Button size="sm" onClick={() => {
                 if (editingDirty) return
                 onDirtyChange?.(false)
-                onUse(createdCompatibility.scene!, createdVersion)
+                onUse(createdCompatibility.scene!, createdVersion, effectiveCreatedPageId)
               }} disabled={editingDirty || busy}>{useLabel ?? `Use version ${createdVersion.version} in Prepare`}</Button>
             ) : (
               <div role="status" className="max-w-xl rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
@@ -417,6 +429,13 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel }: {
                 <ul className="mt-1 list-disc pl-5">{createdCompatibility.issues.map((issue) => <li key={issue.nodeId + issue.message}>{issue.message}</li>)}</ul>
               </div>
             )
+          )}
+          {createdVersion && createdPages.length > 1 && (
+            <label className="flex min-w-48 flex-col gap-1 text-xs font-semibold">Version page
+              <select aria-label="Created version page" value={effectiveCreatedPageId ?? ""} onChange={(event) => setCreatedPageId(event.currentTarget.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm font-normal">
+                {createdPages.map((page, index) => <option key={page.id} value={page.id}>{index + 1}. {page.title}</option>)}
+              </select>
+            </label>
           )}
         </div>
         {editingError && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs">{editingError}</p>}
@@ -443,18 +462,30 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel }: {
     setError("")
     try {
       const version = await designStore.getVersion(listed.designId, listed.version)
-      if (!version) throw new Error("This version is no longer available on this computer.")
-      const converted = pinnedSceneForVersion(version, operatorName)
-      if (!converted.scene) {
-        const reason = converted.issues.map((issue) => issue.message).join("; ")
-        throw new Error(reason || "This version cannot be shown as a Rhema scene.")
+      if (!version?.document) throw new Error("This version is no longer available on this computer.")
+      if ((version.document.pages?.length ?? 0) > 1) {
+        setPendingVersion(version)
+        setPendingPageId(version.document.pages![0]!.id)
+        return
       }
-      onUse(converted.scene, version)
+      attachResolvedVersion(version, version.document.pages?.[0]?.id)
     } catch (failure) {
       setError("This version could not be used: " + messageOf(failure))
     } finally {
       setBusy(false)
     }
+  }
+
+  const attachResolvedVersion = (version: DesignVersion, pageId?: string) => {
+    const converted = pinnedSceneForVersion(version, operatorName, pageId)
+    if (!converted.scene) {
+      const reason = converted.issues.map((issue) => issue.message).join("; ")
+      setError(reason || "This version cannot be shown as a Rhema scene.")
+      return
+    }
+    onUse(converted.scene, version, pageId)
+    setPendingVersion(null)
+    setPendingPageId("")
   }
 
   return (
@@ -493,6 +524,17 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel }: {
               </div>
             </div>
           ))}
+        </div>
+      )}
+      {pendingVersion && pendingVersion.document && pendingPages.length > 1 && (
+        <div className="flex flex-wrap items-end gap-2 rounded-md border border-primary/30 bg-primary/5 p-3" aria-label="Attach a page from this version">
+          <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs font-semibold">Choose a page from version {pendingVersion.version}
+            <select aria-label="Saved version page" value={effectivePendingPageId ?? ""} onChange={(event) => setPendingPageId(event.currentTarget.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm font-normal">
+              {pendingPages.map((page, index) => <option key={page.id} value={page.id}>{index + 1}. {page.title}</option>)}
+            </select>
+          </label>
+          <Button size="sm" onClick={() => attachResolvedVersion(pendingVersion, effectivePendingPageId)} disabled={busy || !effectivePendingPageId}>{useLabel ?? "Use selected page in Prepare"}</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setPendingVersion(null); setPendingPageId("") }} disabled={busy}>Cancel</Button>
         </div>
       )}
       {error && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs">{error}</p>}

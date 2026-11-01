@@ -56,6 +56,50 @@ describe("Rhema design document helpers", () => {
     expect(result.scene?.id).not.toBe(design.meta.id)
   })
 
+  it("pins the selected page of an immutable design version and refuses missing pages", () => {
+    const design = createBlankRhemaDesign("Three-page sermon")
+    const root = design.scene.nodes[design.scene.root]
+    const background = Object.values(design.scene.nodes).find((node) => node.type === "rect")
+    if (root.type !== "group" || background?.type !== "rect") throw new Error("Expected a root and background rectangle")
+    const first = { id: "page-one", nodeId: "page-one", title: "Opening" }
+    const second = { id: "page-two", nodeId: "page-two", title: "Main point" }
+    const secondBackground = { ...background, id: "background-two", parentId: second.nodeId, fill: { type: "solid" as const, color: "#254060" } }
+    const version: DesignVersion = {
+      designId: "design-pages", version: 2, fromRevision: 4, title: "Three-page sermon",
+      document: {
+        ...design,
+        pages: [first, second],
+        scene: {
+          ...design.scene,
+          nodes: {
+            ...design.scene.nodes,
+            [root.id]: { ...root, children: [first.nodeId, second.nodeId] },
+            [first.nodeId]: { id: first.nodeId, type: "group", parentId: root.id, name: first.title, visible: true, opacity: 1, children: [background.id] },
+            [second.nodeId]: { id: second.nodeId, type: "group", parentId: root.id, name: second.title, visible: true, opacity: 1, children: [secondBackground.id] },
+            [background.id]: { ...background, parentId: first.nodeId },
+            [secondBackground.id]: secondBackground,
+          },
+        },
+        bindings: {
+          ...design.bindings,
+          [secondBackground.id]: { ...design.bindings[background.id]!, id: secondBackground.id, color: "#254060" },
+        },
+      },
+      note: null, savedBy: "Main desk", createdAt: new Date(0).toISOString(),
+    }
+
+    const selected = pinnedSceneForVersion(version, "Main desk", second.id)
+    expect(selected.issues).toEqual([])
+    expect(selected.scene).toMatchObject({
+      name: "Three-page sermon v2 · Main point",
+      design: { id: "design-pages", version: 2, pageId: "page-two" },
+      layers: [expect.objectContaining({ id: "background-two", kind: "color", color: "#254060" })],
+    })
+    const missing = pinnedSceneForVersion(version, "Main desk", "removed-page")
+    expect(missing.scene).toBeNull()
+    expect(missing.issues[0]?.message).toContain("page")
+  })
+
   it("refuses a version whose Avnac scene cannot map to a Rhema scene", () => {
     const design = createBlankRhemaDesign("Unsupported")
     const unsupported = {

@@ -132,6 +132,8 @@ export interface Scene {
 export interface DesignPin {
   id: string
   version: number
+  /** Optional artboard within the immutable versioned document. Missing means the legacy first page. */
+  pageId?: string
 }
 
 /** One layer as an output draws it. */

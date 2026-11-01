@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { QueueItem } from "@/types"
+import type { DesignPin } from "@/types/scene"
 
 /**
  * A designed moment on Live (C2): the pinned version is shown on the congregation screens while it
@@ -26,14 +27,45 @@ const { designStore } = await import("@/design-engine/design-store")
 const welcome = newScene("Welcome card")
 const usual = newScene("Camera and Bible")
 const versions = { "d1:2": { designId: "d1", version: 2, document: sceneToDesign(welcome) } } as Record<string, { designId: string; version: number; document: ReturnType<typeof sceneToDesign> }>
+const pageBase = sceneToDesign({
+  ...welcome,
+  layers: [{ id: "page-one-color", name: "Page one", kind: "color", color: "#111111", box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true }],
+})
+const pageRoot = pageBase.scene.nodes[pageBase.scene.root]
+const pageLayer = pageBase.scene.nodes["page-one-color"]
+if (pageRoot.type !== "group" || pageLayer.type !== "rect") throw new Error("Expected a design root and page layer")
+const pageTwoLayer = { ...pageLayer, id: "page-two-color", parentId: "page-two-group", name: "Page two", fill: { type: "solid" as const, color: "#222222" } }
+const twoPageDocument = {
+  ...pageBase,
+  pages: [
+    { id: "page-one", title: "Page 1", nodeId: "page-one-group" },
+    { id: "page-two", title: "Page 2", nodeId: "page-two-group" },
+  ],
+  scene: {
+    ...pageBase.scene,
+    nodes: {
+      ...pageBase.scene.nodes,
+      [pageRoot.id]: { ...pageRoot, children: ["page-one-group", "page-two-group"] },
+      "page-one-group": { id: "page-one-group", type: "group" as const, parentId: pageRoot.id, name: "Page 1", visible: true, opacity: 1, children: [pageLayer.id] },
+      "page-two-group": { id: "page-two-group", type: "group" as const, parentId: pageRoot.id, name: "Page 2", visible: true, opacity: 1, children: [pageTwoLayer.id] },
+      [pageLayer.id]: { ...pageLayer, parentId: "page-one-group" },
+      [pageTwoLayer.id]: pageTwoLayer,
+    },
+  },
+  bindings: {
+    ...pageBase.bindings,
+    [pageTwoLayer.id]: { ...pageBase.bindings[pageLayer.id], id: pageTwoLayer.id, color: "#222222" },
+  },
+}
+versions["d1:7"] = { designId: "d1", version: 7, document: twoPageDocument }
 const getVersion = vi.fn(async (id: string, version: number) => versions[`${id}:${version}`] ?? null)
 vi.spyOn(designStore, "getVersion").mockImplementation(getVersion as never)
-const moment = (designRef?: { id: string; version: number }): QueueItem =>
+const moment = (designRef?: DesignPin): QueueItem =>
   ({ id: "m", kind: "slide", slide: { title: "Welcome", body: "Glad you came", ...(designRef ? { designRef } : {}) }, reference: "Welcome", confidence: 1, source: "manual", added_at: 0 }) as QueueItem
 const plain: QueueItem = { id: "p", kind: "slide", slide: { title: "Notices", body: "" }, reference: "Notices", confidence: 1, source: "manual", added_at: 0 } as QueueItem
 const out = (id: string) => useBroadcastStore.getState().outputs.find((o) => o.id === id)
 
-const approve = (moments?: Record<string, { id: string; version: number }>) => useServiceStore.setState({
+const approve = (moments?: Record<string, DesignPin>) => useServiceStore.setState({
   current: { id: "svc", approved_revision: 3 } as never,
   approvedDesignRevision: 3,
   approvedDesigns: { version: 1, scenes: {}, looks: {}, media_ids: [], ...(moments ? { moments } : {}) },
@@ -148,6 +180,23 @@ describe("a designed moment on Live", () => {
       mediaId: "welcome-media",
       imageUrl: "data:image/png;base64,hydrated-output",
     })
+  })
+
+  it("takes only the pinned page and takes it down when that page is no longer approved", async () => {
+    const pageTwo = { id: "d1", version: 7, pageId: "page-two" }
+    approve({ m: pageTwo })
+
+    await showDesignedMoment(moment(pageTwo), getVersion)
+
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v7-page-page-two")
+    expect(out(MAIN_OUTPUT_ID)?.sceneSnapshot?.layers).toMatchObject([{ id: "page-two-color", color: "#222222" }])
+    expect(out(MAIN_OUTPUT_ID)?.sceneSnapshot?.design).toEqual(pageTwo)
+
+    approve({ m: { id: "d1", version: 7, pageId: "page-one" } })
+
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+    expect(out(MAIN_OUTPUT_ID)?.designedMomentRestore).toBeUndefined()
+    expect(toast.warning).toHaveBeenCalledWith("Design needs approval", expect.objectContaining({ description: expect.stringContaining("page") }))
   })
 
   it("keeps a manual Take and rechecks approval while a Library picture is loading", async () => {
@@ -513,9 +562,10 @@ describe("the approval changing with a moment up compares what is on the screen"
 
 describe("a scene's design pin", () => {
   it("survives normalising; a malformed pin is dropped", () => {
-    expect(normalizeScene({ ...usual, design: { id: "d1", version: 2 } })?.design).toEqual({ id: "d1", version: 2 })
+    expect(normalizeScene({ ...usual, design: { id: "d1", version: 2, pageId: "page-two" } })?.design).toEqual({ id: "d1", version: 2, pageId: "page-two" })
     for (const bad of [{ id: "d1", version: 0 }, { id: "d1", version: 1.5 }, { id: "../x", version: 1 }, "d1"]) {
       expect(normalizeScene({ ...usual, design: bad })?.design).toBeUndefined()
     }
+    expect(normalizeScene({ ...usual, design: { id: "d1", version: 2, pageId: "../other" } })?.design).toBeUndefined()
   })
 })

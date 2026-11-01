@@ -99,16 +99,17 @@ export function createLiveFeedLayer(input: { x: number; y: number; name?: string
 }
 
 /** Make a fresh local scene snapshot from an immutable version without reusing its source scene ID. */
-export function pinnedSceneForVersion(version: DesignVersion, operatorName: string): {
+export function pinnedSceneForVersion(version: DesignVersion, operatorName: string, pageId?: string): {
   scene: Scene | null
   issues: DesignIssue[]
 } {
   if (!version.document) return { scene: null, issues: [{ nodeId: "__design__", message: "This saved version has no readable design document." }] }
+  const selectedPage = version.document.pages?.find((page) => page.id === (pageId ?? version.document?.pages?.[0]?.id))
   const converted = sceneFromVersion({
     designId: version.designId,
     version: version.version,
     document: version.document,
-  })
+  }, pageId)
   if (converted.issues.length) return { scene: null, issues: converted.issues }
   const now = Date.now()
   return {
@@ -116,7 +117,7 @@ export function pinnedSceneForVersion(version: DesignVersion, operatorName: stri
     scene: {
     ...converted.scene,
     id: newId("scene"),
-    name: version.title + " v" + version.version,
+    name: version.title + " v" + version.version + (selectedPage ? " · " + selectedPage.title : ""),
     createdAt: now,
     updatedAt: now,
     updatedBy: operatorName.trim() || null,

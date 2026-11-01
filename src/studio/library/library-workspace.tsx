@@ -273,7 +273,7 @@ export function LibraryWorkspace() {
     addItemAtTarget(item, invocation, target, context, true)
   }
 
-  const useDesignVersion = (scene: Scene, version: DesignVersion) => {
+  const useDesignVersion = (scene: Scene, version: DesignVersion, pageId?: string) => {
     const context = designInvocation?.prepareReturn
     if (!designInvocation || !context?.eventId || !context.momentId ||
       !isCurrentLibraryUseInvocation(designInvocation) ||
@@ -285,11 +285,12 @@ export function LibraryWorkspace() {
     }
 
     useBroadcastStore.getState().saveScene(scene)
+    const pinnedPageId = pageId ?? scene.design?.pageId
     useQueueStore.getState().updateItem(context.momentId, (item) => ({
       ...item,
       scene_id: scene.id,
       ...(item.kind === "slide" ? {
-        slide: { ...item.slide, designRef: { id: version.designId, version: version.version } },
+        slide: { ...item.slide, designRef: { id: version.designId, version: version.version, ...(pinnedPageId ? { pageId: pinnedPageId } : {}) } },
       } : {}),
       // Follow the same plan behavior as Prepare's scene selector: replace an
       // already-armed shared scene, preserving output-specific Take overrides.

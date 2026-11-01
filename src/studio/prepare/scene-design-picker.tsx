@@ -50,7 +50,7 @@ export function SceneDesignPicker({
     if (!nextOpen) setDesignEditorDirty(false)
   }
 
-  const attachSavedVersion = (scene: Scene, version: DesignVersion) => {
+  const attachSavedVersion = (scene: Scene, version: DesignVersion, pageId?: string) => {
     const queueItem = useQueueStore.getState().items.find((item) => item.id === momentId)
     if (!queueItem) {
       setOpen(false)
@@ -61,8 +61,9 @@ export function SceneDesignPicker({
     }
 
     useBroadcastStore.getState().saveScene(scene)
+    const pinnedPageId = pageId ?? scene.design?.pageId
     useQueueStore.getState().updateItem(momentId, (item) => item.kind === "slide"
-      ? { ...item, slide: { ...item.slide, designRef: { id: version.designId, version: version.version } } }
+      ? { ...item, slide: { ...item.slide, designRef: { id: version.designId, version: version.version, ...(pinnedPageId ? { pageId: pinnedPageId } : {}) } } }
       : item)
     onSceneSelected(scene.id)
     setOpen(false)
