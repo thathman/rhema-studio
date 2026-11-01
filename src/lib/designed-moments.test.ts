@@ -84,7 +84,7 @@ describe("a designed moment on Live", () => {
     useBroadcastStore.getState().setRehearsal(true)
     const other = newScene("Manual")
     useBroadcastStore.setState({ scenes: [usual, other] })
-    let release = (_: unknown) => {}
+    let release: (value: unknown) => void = () => {}
     const slow = vi.fn(() => new Promise((resolve) => { release = resolve })) as unknown as typeof getVersion
     const showing = showDesignedMoment(moment({ id: "d1", version: 2 }), slow)
     useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, other.id)
