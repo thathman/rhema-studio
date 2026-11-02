@@ -277,6 +277,8 @@ async function runScenario() {
     await clickButton("Event scenes")
     await clickButton("Choose a scene design for QA Designed Moment")
     await clickButton("My Designs")
+    await clickButton("Preview version 1")
+    await waitFor(() => document.body.innerText.includes("Private artwork preview"), "saved design artwork preview")
     await clickButton("Use in Prepare")
     const pinnedItem = await waitFor(() => {
       const item = qa.queue.getState().items.find((candidate) => candidate.id === designedItem.id)
