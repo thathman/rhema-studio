@@ -119,6 +119,25 @@ describe("each specialist desk sees only its part", () => {
     expect(sent).toEqual([{ command: "stage_message", value: "Wrap up" }])
   })
 
+  it("shows the host service clock read only and does not claim the Stage display received a cue", async () => {
+    const state: LiveStateV1 = {
+      ...live,
+      timer: { durationMs: 600_000, elapsedMs: 120_000, running: false },
+      event: { mode: "own", currentId: "sermon" },
+      rundown: [{ id: "sermon", reference: "Sermon", plannedMinutes: 10 }],
+    }
+    const el = await render("stage", state)
+    const clock = el.querySelector('[aria-label="Host service clock"]')!
+    expect(clock.querySelector('[role="timer"]')?.textContent).toBe("8:00")
+    expect(clock.textContent).toContain("Current event: Sermon")
+
+    const receiver = el.querySelector('[aria-label="Stage receiver status"]')!
+    expect(receiver.textContent).toContain("Display not confirmed")
+    expect(receiver.textContent).toContain("does not currently send Stage display receipts")
+    expect(receiver.textContent).toContain("Host connection: current")
+    expect([...el.querySelectorAll("button")].map((item) => item.textContent?.trim())).not.toContain("Pause")
+  })
+
   it("an OBS director previews and takes on the host's OBS, and not in rehearsal", async () => {
     const el = await render("obs")
     await click(button(el, "Preview Pulpit"))

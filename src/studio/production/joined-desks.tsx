@@ -1,9 +1,10 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ArrowDownIcon, ArrowUpIcon, EyeIcon, EyeOffIcon, TrashIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { activatedLabel } from "@/lib/live-sources"
+import { formatMs } from "@/lib/timer"
 import { newLayer, newScene, SCENE_PRESETS } from "@/lib/scenes"
 import type { LiveStateV1 } from "@/lib/live-state"
 import { useCanSend, useJoin, type SendResult } from "@/stores/join-store"
@@ -79,14 +80,45 @@ export function SongsDesk({ live }: { live: LiveStateV1 }) {
 }
 
 /** The stage message (Stage): write it, take it off, put it back. Only stage screens show it. */
-export function StageDesk({ live }: { live: LiveStateV1 }) {
+export function StageDesk({ live, stale = false }: { live: LiveStateV1; stale?: boolean }) {
   const ok = useCanSend()
   const [text, setText] = useState("")
   const [result, setResult] = useState<SendResult | null>(null)
   const send = async (command: { command: string; value?: string }) => setResult(await useJoin.getState().send(command))
+  const receivedAt = useJoin((s) => s.receivedAt)
+  const connection = useJoin((s) => s.status)
+  const [now, setNow] = useState(() => performance.now())
+  const timer = live.timer
+  useEffect(() => {
+    if (!timer?.running) return
+    const id = setInterval(() => setNow(performance.now()), 500)
+    return () => clearInterval(id)
+  }, [timer?.running])
+  const elapsed = timer ? timer.elapsedMs + (timer.running ? Math.max(0, now - receivedAt) : 0) : null
+  const left = timer?.durationMs && elapsed !== null ? timer.durationMs - elapsed : null
+  const currentEvent = (live.event.targets ?? live.rundown).find((item) => item.id === live.event.currentId)?.reference
   const stage = live.sources.find((s) => s.id === "stage")
   return (
     <section aria-label="Stage desk" className={box}>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <section aria-label="Host service clock" className="flex min-h-24 flex-col justify-center rounded-md bg-[#16242b] p-3 text-[#d6e2df]">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#9fb2b0]">Host service clock</p>
+          {timer && elapsed !== null ? <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
+            <span role="timer" aria-label="Host service timer" className={cn("font-mono text-3xl font-semibold tabular-nums", left !== null && left < 0 && "text-destructive", left !== null && left >= 0 && left <= 120_000 && "text-confidence-mid", stale && "opacity-70")}>
+              {left === null ? formatMs(elapsed) : left < 0 ? `+${formatMs(-left)}` : formatMs(left)}
+            </span>
+            <span className="text-sm text-[#9fb2b0]">{left === null ? "elapsed" : left < 0 ? "over" : "left"}{timer.running ? "" : " · paused"}</span>
+          </div> : <p className="mt-1 text-sm">The host has not supplied service timer data.</p>}
+          {currentEvent && <p className="mt-1 truncate text-xs text-[#9fb2b0]">Current event: {currentEvent}</p>}
+          {stale && <p role="status" className="mt-1 text-xs font-semibold text-confidence-mid">Host update may be out of date.</p>}
+        </section>
+        <section aria-label="Stage receiver status" className="flex min-h-24 flex-col justify-center rounded-md border border-border p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stage receiver status</p>
+          <p className="mt-1 font-semibold">Display not confirmed</p>
+          <p className="text-xs text-muted-foreground">The host does not currently send Stage display receipts to this desk, so it cannot confirm what a monitor shows.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Host connection: {stale || connection !== "connected" ? "not current" : "current"}</p>
+        </section>
+      </div>
       <p className="font-semibold">Stage message <span className="font-normal text-muted-foreground">· {live.stageMessage ? `“${live.stageMessage}”` : "none up"}</span></p>
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (text.trim()) { void send({ command: "stage_message", value: text.trim() }); setText("") } }}>
         <input aria-label="Message to stage" value={text} onChange={(e) => setText(e.target.value)} placeholder="Wrap up in 2 minutes" maxLength={120} className={cn(field, "flex-1")} />
