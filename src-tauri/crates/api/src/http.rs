@@ -711,6 +711,18 @@ fn validate_group_take_live(
     Ok(())
 }
 
+/// A stage message's display (#410, page 6): one of the host's stage outputs now. An older host's
+/// Live State without an outputs list is not checked here.
+fn stage_target_live(live_json: Option<&str>, target: &str) -> Result<(), (StatusCode, &'static str)> {
+    let Some(live) = live_json.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()) else { return Ok(()) };
+    let Some(outputs) = live.get("outputs").and_then(serde_json::Value::as_array) else { return Ok(()) };
+    match outputs.iter().find(|o| o.get("id").and_then(serde_json::Value::as_str) == Some(target)) {
+        None => Err((StatusCode::CONFLICT, "That stage display is no longer on the host; refresh")),
+        Some(o) if o.get("role").and_then(serde_json::Value::as_str) != Some("stage") => Err((StatusCode::FORBIDDEN, "Stage messages go only to stage displays")),
+        Some(_) => Ok(()),
+    }
+}
+
 /// The one part of a Live State the server reads: `service.id` ("" when no saved service is open).
 #[derive(Deserialize)]
 struct LiveService {
@@ -892,6 +904,13 @@ pub fn live_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String {
         scoped_outputs(all.get("outputs"), &filtered, reader)
     } else if role_fields(reader.role).contains(&"outputs") {
         keep_each(all.get("outputs"), &["id", "name", "type", "role", "sceneId", "sceneName", "sceneNeedsUpdate", "sceneRevision"])
+    } else if reader.role == Role::Stage {
+        // The stage displays this desk may send to (page 6): their names only.
+        all.get("outputs").and_then(serde_json::Value::as_array).into_iter().flatten()
+            .filter(|o| o.get("role").and_then(serde_json::Value::as_str) == Some("stage")
+                && o.get("id").and_then(serde_json::Value::as_str).is_some_and(|id| reader.output_scope.iter().any(|a| a == id)))
+            .map(|o| serde_json::json!({ "id": o["id"], "name": o["name"], "role": "stage" }))
+            .collect()
     } else if reader.record {
         keep_each(all.get("outputs"), &["id", "name", "role"])
     } else {
@@ -2811,6 +2830,12 @@ async fn command_handler<S: CommandSink + 'static>(
             return (StatusCode::FORBIDDEN, CommandResponse::refused(why));
         }
     }
+    if let RemoteCommand::StageSend(send) = &command {
+        if let Err((status, why)) = stage_target_live(state.live.current().as_deref(), &send.target) {
+            log::info!("HTTP stage message from {by} refused: {why}");
+            return (status, CommandResponse::refused(why));
+        }
+    }
     if matches!(command, RemoteCommand::SongSection(_)) && !lyrics_up(state.live.current().as_deref()) {
         return (StatusCode::UNPROCESSABLE_ENTITY, CommandResponse::refused(NO_LYRICS_MESSAGE));
     }
@@ -3924,6 +3949,50 @@ mod tests {
         feeds.publish("tv", "{}".into());
         assert!(matches!(feeds.ack("tv", "tv-own-key", 4, None, None), Ok(Some(_))), "a TV's own key opens the ack too");
         assert_eq!(feeds.ack("tv", "s3cret", 4, None, None), Ok(None), "the second page on the same frame is not news");
+    }
+
+    /// #410, page 6: a Stage desk sends a message to one stage display it was assigned, never to
+    /// another stage display or a congregation screen; it sees only its displays' names.
+    #[tokio::test]
+    async fn a_stage_desk_sends_only_to_its_assigned_stage_displays() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        #[derive(Default)]
+        struct Events(Mutex<Vec<(String, String)>>);
+        impl CommandSink for Events {
+            fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
+                self.0.lock().unwrap().push((event.to_string(), payload.to_string()));
+                Ok(())
+            }
+            fn invoke_backend(&self, _: &str, _: &str) -> Result<(), CommandError> { Ok(()) }
+        }
+        let entry = |key: &str, role: Role, scope: &[&str]| KeyEntry { hash: hash_key(key), name: key.into(), role, paused: false, output_scope: scope.iter().map(|s| (*s).to_string()).collect(), group_take_scope: Vec::new(), record: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("stg", Role::Stage, &["pulpit"]), entry("pres", Role::Present, &[])] }));
+        let live = new_live_hub();
+        live.publish(r#"{"v":1,"outputs":[{"id":"main","name":"Main","role":"congregation"},{"id":"pulpit","name":"Pulpit confidence","role":"stage"},{"id":"choir","name":"Choir monitor","role":"stage"}]}"#.into());
+        let sink = Arc::new(Events::default());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live, ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let send = |target: &str| serde_json::json!({ "command": "stage_send", "value": { "text": "  Two   minutes ", "target": target } });
+
+        assert_eq!(press(port, "stg", send("pulpit")).await.0, 200);
+        assert_eq!(press(port, "stg", send("choir")).await.0, 403, "a stage display not assigned to this desk");
+        assert_eq!(press(port, "stg", send("main")).await.0, 403, "never a congregation screen");
+        assert_eq!(press(port, "pres", send("main")).await.0, 403, "a presenter too: stage messages go only to stage displays");
+        assert_eq!(press(port, "pres", send("gone")).await.0, 409, "a display the host no longer has");
+        assert_eq!(press(port, "pres", send("choir")).await.0, 200, "the presenter may send to any stage display");
+        let events = sink.0.lock().unwrap().clone();
+        let sends: Vec<_> = events.iter().filter(|(e, _)| e == "remote:stage_send").map(|(_, p)| serde_json::from_str::<serde_json::Value>(p).unwrap()).collect();
+        assert_eq!(sends.iter().map(|p| p["target"].as_str().unwrap()).collect::<Vec<_>>(), vec!["pulpit", "choir"]);
+        assert_eq!(sends[0]["text"], "Two minutes");
+        assert!(!events.iter().any(|(e, _)| e == "remote:stage_message"), "never the all-stages event");
+
+        let view = get_with(port, "/api/v1/live", "X-Rhema-Key: stg\r\n", None).await;
+        let body: serde_json::Value = serde_json::from_str(view.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(body["outputs"], serde_json::json!([{ "id": "pulpit", "name": "Pulpit confidence", "role": "stage" }]), "{body}");
+        let mut handle = result.handle;
+        handle.stop();
     }
 
     /// #410: a desk reads, per output it may see, whether a receiver drew the newest frame;
