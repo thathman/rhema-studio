@@ -220,6 +220,28 @@ describe("design editors keep edits in draft until applied (#442)", () => {
     expect(useBroadcastStore.getState().stageStyle.showTimer).toBe(false)
   })
 
+  it("copies Brand Kit colors into a Stage draft without changing its active output", async () => {
+    const style = { ...DEFAULT_STAGE_STYLE, background: "#111111", words: "#eeeeee" }
+    const defaults = defaultBrandKit()
+    const kit = { ...defaults, colors: { ...defaults.colors, primary: "#172a44", text: "#e8c271" } }
+    const state = useBroadcastStore.getState()
+    useBroadcastStore.setState({
+      stageStyle: style,
+      outputs: [{ ...state.outputs[0], id: "stage", name: "Sanctuary stage", role: "stage" }],
+    })
+    useSettingsStore.setState({ brandKit: kit })
+    const element = await render(<StageDesigner />)
+
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit stage background colour"]')!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit stage text colour"]')!.click())
+
+    expect(useBroadcastStore.getState().stageStyle).toEqual(style)
+    expect(element.textContent).toContain("Draft changes · outputs unchanged")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: "stage:default", value: { background: "#172a44", words: "#e8c271" } }])
+    expect(useBroadcastStore.getState().stageStyle).toEqual(style)
+  })
+
   it("names the affected output before a stage design is applied", async () => {
     const state = useBroadcastStore.getState()
     useBroadcastStore.setState({ outputs: [{ ...state.outputs[0], id: "stage", name: "Sanctuary stage", role: "stage" }] })
