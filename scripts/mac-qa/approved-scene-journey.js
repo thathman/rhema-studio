@@ -459,7 +459,7 @@ async function runScenario() {
 
     stage = "Take the approved pinned design version"
     await clickButton("Take live")
-    const designRef = designedItem.slide.designRef
+    const designRef = reopenedDesigned.slide.designRef
     const designSceneId = designedMomentSceneId(designRef)
     await waitFor(() => {
       const state = qa.broadcast.getState()
