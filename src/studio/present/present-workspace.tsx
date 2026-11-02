@@ -34,6 +34,7 @@ import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 import { useProductionTab } from "@/studio/production/production-tab"
 import { usePreviewLabel } from "@/hooks/use-preview-label"
+import { nextVisibleItem, plannedTimes } from "@/lib/run-of-show"
 
 export function PresentWorkspace() {
   const [selectedPreviewOutputId, setSelectedPreviewOutputId] = useState<string | null>(null)
@@ -285,6 +286,7 @@ function LiveConsoleSurface({
             <TimedMoves />
           </div>
         )}
+        {!emptyRundown && <NowNextSummary />}
         {emptyRundown ? (
           <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-2" role="region" aria-label="Live setup actions">
             <div className="shrink-0">
@@ -398,6 +400,39 @@ function LiveConsoleSurface({
       </div>
     </div>
     </div>
+  )
+}
+
+/** The run-of-show cursor and upcoming item, kept separate from the actual Program panel. */
+function NowNextSummary() {
+  const items = useQueueStore((s) => s.items)
+  const headers = useQueueStore((s) => s.headers)
+  const activeIndex = useQueueStore((s) => s.activeIndex)
+  const current = activeIndex === null ? null : items[activeIndex] ?? null
+  const next = nextVisibleItem(items, headers, activeIndex)
+  const planned = plannedTimes(items, headers)
+  const timeFor = (index: number) => planned.get(index)
+
+  const itemDetails = (index: number, item: { planned_minutes?: number | null }) => {
+    const at = timeFor(index)
+    const minutes = item.planned_minutes
+    return [at ? `Planned ${at}` : null, typeof minutes === "number" && minutes > 0 ? `${minutes} min` : null].filter(Boolean).join(" · ")
+  }
+  const currentDetails = current && activeIndex !== null ? itemDetails(activeIndex, current) : ""
+
+  return (
+    <section aria-label="Run of show Now and Next" className="grid grid-cols-2 gap-2 border-b border-border px-3 py-2">
+      <div role="group" aria-label="Now in the run of show" className="min-w-0 rounded-md bg-background/60 px-2 py-1.5">
+        <span className="block text-[0.625rem] font-bold tracking-wide text-muted-foreground uppercase">Now</span>
+        <span className="block truncate text-xs font-semibold" title={current?.reference ?? "No active run-of-show item"}>{current?.reference ?? "Not started"}</span>
+        {current && <span className="block truncate text-[0.6875rem] text-muted-foreground">{currentDetails || "Current run position"}</span>}
+      </div>
+      <div role="group" aria-label="Next in the run of show" className="min-w-0 rounded-md bg-background/60 px-2 py-1.5">
+        <span className="block text-[0.625rem] font-bold tracking-wide text-muted-foreground uppercase">Next</span>
+        <span className="block truncate text-xs font-semibold" title={next?.label ?? "No next run-of-show item"}>{next?.label ?? "No next item"}</span>
+        {next && <span className="block truncate text-[0.6875rem] text-muted-foreground">{itemDetails(next.index, next.item) || "Up next in the running order"}</span>}
+      </div>
+    </section>
   )
 }
 

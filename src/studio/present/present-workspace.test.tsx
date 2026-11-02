@@ -185,6 +185,25 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[data-tour="present-rundown"]')?.className).toContain("row-span-3")
   })
 
+  it("shows the run-of-show Now and Next with planned timing, separately from Program", async () => {
+    const program = useBroadcastStore.getState().liveVerse
+    useQueueStore.setState({
+      items: [
+        { ...queueItem, planned_minutes: 12 },
+        { ...secondQueueItem, planned_minutes: 8 },
+      ],
+      headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }],
+      activeIndex: 0,
+    })
+    await renderWorkspace()
+
+    const summary = element.querySelector<HTMLElement>('[aria-label="Run of show Now and Next"]')!
+    expect(summary.querySelector('[aria-label="Now in the run of show"]')?.textContent).toContain("John 3:16")
+    expect(summary.querySelector('[aria-label="Next in the run of show"]')?.textContent).toContain("Welcome")
+    expect(summary.querySelector('[aria-label="Next in the run of show"]')?.textContent).toContain("10:12")
+    expect(useBroadcastStore.getState().liveVerse).toEqual(program)
+  })
+
   it("takes an open but empty service to Prepare to add its first event", async () => {
     useServiceStore.setState({ current: emptyService })
     useQueueStore.setState({ items: [], headers: [] })
