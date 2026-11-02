@@ -42,6 +42,7 @@ const state = vi.hoisted(() => {
     diskValues: new Map<string, unknown>(),
     diskPending: new Map<string, unknown>(),
     localPrefs,
+    programData: null as unknown,
   }
 })
 
@@ -72,6 +73,34 @@ vi.mock("@tauri-apps/api/core", () => ({
       state.requests = state.requests.map((candidate) => candidate.id === applied.id ? applied : candidate)
       return applied
     }
+    if (command === "content_replace_items") {
+      const rows = args?.items as Array<Record<string, unknown>>
+      const items = rows.map((row, position) => ({
+        id: String(row.id),
+        program_id: "service-1",
+        position,
+        kind: String(row.kind),
+        reference: String(row.reference),
+        book_number: typeof row.book_number === "number" ? row.book_number : null,
+        chapter: typeof row.chapter === "number" ? row.chapter : null,
+        verse: typeof row.verse === "number" ? row.verse : null,
+        translation: typeof row.translation === "string" ? row.translation : null,
+        secondary_translation: typeof row.secondary_translation === "string" ? row.secondary_translation : null,
+        notes: typeof row.notes === "string" ? row.notes : null,
+        payload: typeof row.payload === "string" ? row.payload : null,
+      }))
+      const savedProgram = { ...program, revision: 5, item_count: items.filter((entry) => entry.kind !== "phase" && entry.kind !== "group").length }
+      state.programData = { program: savedProgram, items }
+      return state.programData
+    }
+    if (command === "content_get_program") return state.programData
+    if (command === "content_approve_program_with_designs") {
+      const saved = state.programData as { program: Program; items: unknown[] }
+      const approved = { ...saved.program, approved_revision: saved.program.revision, approved_at: "2026-11-02T10:00:00Z" }
+      state.programData = { ...saved, program: approved }
+      return approved
+    }
+    if (command === "content_approved_designs") return null
     if (command === "get_verse") {
       return state.verses.find((verse) => verse.translation_id === args?.translationId) ?? null
     }
@@ -173,6 +202,7 @@ beforeEach(() => {
   state.requests = [{ ...state.request }]
   state.diskValues.clear()
   state.diskPending.clear()
+  state.programData = null
   state.localPrefs.clear()
   useShellStore.setState({ workspace: "prepare", sidebarCollapsed: false })
   useQueueStore.setState({ items: [item], headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }], activeIndex: null })
@@ -229,5 +259,63 @@ describe("Prepare → Permissions → Live journey", () => {
     expect(useBroadcastStore.getState().liveVerse).toMatchObject({ reference: "John 3:16 (KJV)", content: "bible" })
     expect(useBroadcastStore.getState().liveSourceVerse).toMatchObject({ book_number: 43, chapter: 3, verse: 16 })
     expect(useBroadcastStore.getState().liveItemId).toBe("moment-1")
+  })
+
+  it("saves and reopens a reordered mixed-content service before approval and an explicit Take", async () => {
+    await act(async () => root.render(<WorkspaceJourney />))
+    const programBefore = useBroadcastStore.getState().liveVerse
+    const welcome: QueueItem = {
+      id: "welcome-slide",
+      kind: "slide",
+      slide: { title: "Welcome", body: "Welcome to the service." },
+      reference: "Welcome",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+    }
+    act(() => {
+      useQueueStore.getState().addItem(welcome, "end")
+      useQueueStore.getState().reorderItems(0, 1)
+    })
+    expect(useQueueStore.getState().items.map((entry) => entry.id)).toEqual(["welcome-slide", "moment-1"])
+    expect(useServiceStore.getState().dirty).toBe(true)
+
+    const save = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save")!
+    await act(async () => save.click())
+    expect(useServiceStore.getState()).toMatchObject({ current: { revision: 5 }, dirty: false })
+    expect((state.programData as { items: Array<{ id: string; kind: string }> }).items.filter((entry) => entry.kind !== "phase").map((entry) => entry.id)).toEqual(["welcome-slide", "moment-1"])
+    expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
+
+    expect(useServiceStore.getState().closeProgram()).toBe("closed")
+    expect(await useServiceStore.getState().openProgram("service-1")).toBe("ok")
+    expect(useServiceStore.getState().current).toMatchObject({ revision: 5, approved_revision: 4 })
+    expect(useQueueStore.getState().items.map((entry) => entry.id)).toEqual(["welcome-slide", "moment-1"])
+    expect(useQueueStore.getState().items[0]).toMatchObject({ kind: "slide", slide: { title: "Welcome", body: "Welcome to the service." } })
+
+    const request = { ...state.request, baseRevision: 5, payload: { ...state.request.payload, revision: 5 } }
+    state.requests = [request]
+    useApprovalRequestsStore.setState({ requests: [request as ApprovalRequest], hydrated: true, loading: false, error: null })
+    const slideRow = host.querySelector<HTMLElement>('[data-rundown-item-id="welcome-slide"]')!
+    await act(async () => slideRow.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    expect(useBibleStore.getState().selectedSlide?.item.id).toBe("welcome-slide")
+    expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
+
+    const approve = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Approve"))!
+    await act(async () => approve.click())
+    expect(useServiceStore.getState().current).toMatchObject({ revision: 5, approved_revision: 5 })
+    expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
+
+    await act(async () => navButton("Permissions").click())
+    expect(host.textContent).toContain("revision 5")
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Confirm approved revision"))!.click())
+    expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "approval-1", state: "applied", payload: { revision: 5 } }])
+    expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
+
+    await act(async () => navButton("Live").click())
+    expect(host.textContent).toContain("Welcome")
+    expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
+    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Take live"]')!.click())
+    expect(useBroadcastStore.getState().liveVerse).toMatchObject({ reference: "Welcome", kind: "slide", content: "slide" })
+    expect(useBroadcastStore.getState().liveItemId).toBe("welcome-slide")
   })
 })
