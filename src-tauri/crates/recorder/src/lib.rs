@@ -29,6 +29,12 @@ use crossbeam_channel::{Receiver, Sender};
 
 pub use model::*;
 
+/// A block whose loudest sample is below this (-60 dBFS) is silence: a muted channel or an
+/// unplugged cable sends this rather than nothing.
+const SILENT_PEAK: f32 = 0.001;
+/// Sound arriving but silent this long is said on the status (a quiet moment in a service is shorter).
+const SILENT_AFTER: Duration = Duration::from_secs(10);
+
 /// Refuse to start below this much free space; warn below `DISK_LOW`; close the file below `DISK_FULL`.
 pub const DISK_START_MIN: u64 = 2 << 30;
 pub const DISK_LOW: u64 = 1 << 30;
@@ -54,6 +60,8 @@ struct Shared {
     peak_bits: AtomicU32,
     /// Milliseconds since the start of the last audio block / frame, plus one (0 = none yet).
     last_audio_ms: AtomicU64,
+    /// When a block last had sound in it (above `SILENT_PEAK`), the same way; 0 = never.
+    last_sound_ms: AtomicU64,
     last_frame_ms: AtomicU64,
     problem: Mutex<Option<RecorderProblem>>,
     /// The writer takes nothing more (it failed, or closed the file on a full disk).
@@ -323,6 +331,9 @@ impl Recorder {
                         let peak = block.iter().fold(0f32, |m, s| m.max(s.abs()));
                         sh_a.peak_bits.store(peak.to_bits(), Ordering::Relaxed);
                         sh_a.last_audio_ms.store(now.as_millis() as u64 + 1, Ordering::Relaxed);
+                        if peak > SILENT_PEAK {
+                            sh_a.last_sound_ms.store(now.as_millis() as u64 + 1, Ordering::Relaxed);
+                        }
                         if let Some(at) = placer.place(host, frames, *rate) {
                             let _ = tx_a.send(Msg::Audio(block.to_vec(), at));
                         }
@@ -594,6 +605,8 @@ fn status_of(s: &Session, folder: &Path) -> RecorderStatus {
             problem = Some(RecorderProblem::new(ProblemCode::NoFrames, "No picture from the screen for 5 seconds: is its window open?"));
         } else if !sound_only && s.manifest.audio_device_id.is_some() && !receiving && elapsed > Duration::from_secs(3) {
             problem = Some(RecorderProblem::new(ProblemCode::AudioMissing, "No sound arriving from the sound desk input."));
+        } else if !sound_only && receiving && Duration::from_millis(ago(sh.last_sound_ms.load(Ordering::Relaxed)).unwrap_or(elapsed_ms)) >= SILENT_AFTER {
+            problem = Some(RecorderProblem::new(ProblemCode::AudioMissing, "The sound desk input is silent: is its channel muted or its cable out? The recording has no sound while it is."));
         } else if disk_free_bytes.is_some_and(|f| f < DISK_LOW) {
             problem = Some(RecorderProblem::new(ProblemCode::DiskLow, "Less than 1 GB free: the recording will close before the disk fills."));
         }
@@ -1457,6 +1470,30 @@ mod tests {
         session.t0 = Instant::now() - Duration::from_secs(10);
         session.shared.set_problem(RecorderProblem::new(ProblemCode::AudioDeviceLost, "gone"));
         assert_eq!(status_of(&session, t.path()).problem.map(|p| p.code), Some(ProblemCode::NoFrames));
+    }
+
+    #[test]
+    fn a_silent_sound_input_is_said_after_ten_seconds_and_not_before() {
+        let t = tempfile::tempdir().unwrap();
+        let mut session = stub_session(t.path());
+        session.manifest.audio_device_id = Some("Mixer".into());
+        session.t0 = Instant::now() - Duration::from_secs(30);
+        let at = |ago_s: u64| 30_000 - ago_s * 1000 + 1;
+        // Pictures and sound blocks keep arriving.
+        session.shared.last_frame_ms.store(at(0), Ordering::Relaxed);
+        session.shared.last_audio_ms.store(at(0), Ordering::Relaxed);
+        session.shared.last_sound_ms.store(at(4), Ordering::Relaxed);
+        assert_eq!(status_of(&session, t.path()).problem, None, "a quiet moment is not silence");
+        session.shared.last_sound_ms.store(at(12), Ordering::Relaxed);
+        let p = status_of(&session, t.path()).problem.expect("said");
+        assert_eq!(p.code, ProblemCode::AudioMissing);
+        assert!(p.message.contains("silent"), "{}", p.message);
+        // Never any sound since the start, 30 s ago: the same.
+        session.shared.last_sound_ms.store(0, Ordering::Relaxed);
+        assert!(status_of(&session, t.path()).problem.is_some_and(|p| p.message.contains("silent")));
+        // A recording with no sound input chosen says nothing about silence.
+        session.manifest.audio_device_id = None;
+        assert_eq!(status_of(&session, t.path()).problem, None);
     }
 
     #[test]
