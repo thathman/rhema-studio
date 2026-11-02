@@ -148,6 +148,7 @@ export function DesignDocumentEditor({
   const [imagePickerMessage, setImagePickerMessage] = useState("")
   const [editorFlags, setEditorFlags] = useState({ canUndo: false, canRedo: false })
   const operatorName = useSettingsStore((state) => state.operatorName)
+  const brandKit = useSettingsStore((state) => state.brandKit)
   const mediaAssets = useMediaStore((state) => state.assets)
   const mediaLoaded = useMediaStore((state) => state.loaded)
   const mediaError = useMediaStore((state) => state.error)
@@ -254,6 +255,18 @@ export function DesignDocumentEditor({
 
   const dispatch = (command: SaraswatiCommand) => {
     editor.dispatch(command)
+  }
+  const applyBrandTextFont = (fontFamily: string) => {
+    if (selectedRenderable?.type !== "text" || document.kind === "template") return
+    dispatch({ type: "SET_TEXT_FORMAT", id: selectedRenderable.id, fontFamily })
+  }
+  const applyBrandTextColor = (color: string) => {
+    if (selectedRenderable?.type !== "text" || document.kind === "template") return
+    dispatch({ type: "SET_TEXT_FORMAT", id: selectedRenderable.id, color: { type: "solid", color } })
+  }
+  const applyBrandFill = (color: string) => {
+    if (!selectedPaintNode || document.kind === "template") return
+    dispatch({ type: "SET_NODE_FILL", id: selectedPaintNode.id, fill: { type: "solid", color } })
   }
   const materializeFirstPage = () => {
     if (hasExplicitPages) return pages[0]
@@ -876,6 +889,39 @@ export function DesignDocumentEditor({
                       ? <Input type="color" value={selectedPaintNode.fill.color} onChange={(event) => dispatch({ type: "SET_NODE_FILL", id: selectedPaintNode.id, fill: { type: "solid", color: event.currentTarget.value } })} className="h-8 w-14 p-1" />
                       : <span className="text-[0.6875rem]">Gradient preserved</span>}
                   </label>
+                )}
+                {(selectedRenderable.type === "text" || !!selectedPaintNode) && (
+                  <section className="space-y-2 border-t border-border pt-3" aria-label="Brand Kit styles">
+                    <h4 className="text-[0.6875rem] font-semibold">Brand Kit</h4>
+                    <p className="text-[0.6875rem] text-muted-foreground">Apply a one-time copy to this draft. Later Brand Kit changes will not update this layer.</p>
+                    {selectedRenderable.type === "text" ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        <Button size="xs" variant="outline" aria-label="Apply Brand Kit heading font" disabled={document.kind === "template"} onClick={() => applyBrandTextFont(brandKit.fonts.heading)}>
+                          Heading · {brandKit.fonts.heading}
+                        </Button>
+                        <Button size="xs" variant="outline" aria-label="Apply Brand Kit body font" disabled={document.kind === "template"} onClick={() => applyBrandTextFont(brandKit.fonts.body)}>
+                          Body · {brandKit.fonts.body}
+                        </Button>
+                        <Button size="xs" variant="outline" aria-label="Apply Brand Kit text colour" disabled={document.kind === "template"} onClick={() => applyBrandTextColor(brandKit.colors.text)}>
+                          <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: brandKit.colors.text }} /> Text · {brandKit.colors.text}
+                        </Button>
+                        <Button size="xs" variant="outline" aria-label="Apply Brand Kit accent colour" disabled={document.kind === "template"} onClick={() => applyBrandTextColor(brandKit.colors.accent)}>
+                          <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: brandKit.colors.accent }} /> Accent · {brandKit.colors.accent}
+                        </Button>
+                      </div>
+                    ) : selectedPaintNode && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["primary", "accent", "text", "background"] as const).map((token) => {
+                          const color = brandKit.colors[token]
+                          return (
+                            <Button key={token} size="xs" variant="outline" aria-label={`Apply Brand Kit ${token} fill`} disabled={document.kind === "template"} onClick={() => applyBrandFill(color)}>
+                              <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: color }} /> {token} · {color}
+                            </Button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </section>
                 )}
                 {selectedBinding?.kind === "feed" && (
                   <section className="space-y-3 border-t border-border pt-3" aria-label="Live content binding">

@@ -29,6 +29,7 @@ import { applyCommand, type SaraswatiImageNode } from "@/vendor/avnac/saraswati"
 import { DesignDocumentEditor } from "./design-document-editor"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { defaultBrandKit } from "@/lib/brand-kit"
 import { useMediaStore } from "@/stores/media-store"
 import type { MediaAssetStatus } from "@/types"
 
@@ -61,7 +62,7 @@ beforeEach(() => {
   store.listVersions.mockResolvedValue([])
   store.saveDraft.mockReset()
   store.createVersion.mockReset()
-  useSettingsStore.setState({ operatorName: "Tolu" })
+  useSettingsStore.setState({ operatorName: "Tolu", brandKit: defaultBrandKit() })
   useMediaStore.setState({
     assets: [imageAsset], loading: false, loaded: true, error: null, urls: {},
     dataUrl: vi.fn(async () => imageDataUrl),
@@ -123,6 +124,138 @@ function documentFixture(): DesignDocument {
 }
 
 describe("canonical design editor", () => {
+  it("copies Brand Kit text tokens into the editable draft and versions it without changing Live", async () => {
+    const documentValue = documentFixture()
+    const kit = {
+      ...defaultBrandKit(),
+      colors: { primary: "#224466", accent: "#dda355", text: "#f4f4f4", background: "#101820" },
+      fonts: { heading: "Inter Variable", body: "Geist Mono" },
+    }
+    useSettingsStore.setState({ brandKit: kit })
+    const before = useBroadcastStore.getState()
+    const liveSnapshot = {
+      scenes: before.scenes,
+      outputs: before.outputs,
+      outputStatus: before.outputStatus,
+      outputFrames: before.outputFrames,
+      sceneReturn: before.sceneReturn,
+      sceneTakes: before.sceneTakes,
+      isLive: before.isLive,
+      liveVerse: before.liveVerse,
+      liveSlide: before.liveSlide,
+    }
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    store.createVersion.mockResolvedValue({
+      designId: documentValue.id,
+      version: 1,
+      fromRevision: 5,
+      title: documentValue.title,
+      document: documentValue.document,
+      note: null,
+      savedBy: "Tolu",
+      createdAt: new Date(0).toISOString(),
+    })
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Text")!.click())
+    const fontInput = [...element.querySelectorAll<HTMLInputElement>("input")].find((input) => input.value === "Arial")!
+    const textColourInput = element.querySelector<HTMLInputElement>('input[type="color"]')!
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit heading font"]')!.click())
+    expect(fontInput.value).toBe(kit.fonts.heading)
+    await act(async () => useSettingsStore.setState({ brandKit: { ...kit, fonts: { ...kit.fonts, heading: "Geist Variable" } } }))
+    expect(fontInput.value).toBe(kit.fonts.heading)
+    await act(async () => useSettingsStore.setState({ brandKit: kit }))
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit body font"]')!.click())
+    expect(fontInput.value).toBe(kit.fonts.body)
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit heading font"]')!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit text colour"]')!.click())
+    expect(textColourInput.value).toBe(kit.colors.text)
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit accent colour"]')!.click())
+    expect(textColourInput.value).toBe(kit.colors.accent)
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const text = Object.values(saved.document.scene.nodes).find((node) => node.type === "text")
+    expect(text).toMatchObject({ fontFamily: kit.fonts.heading, color: { type: "solid", color: kit.colors.accent } })
+    expect(element.textContent).toContain("Draft saved. Screens and Program are unchanged.")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Create version"))!.click())
+    expect(store.createVersion).toHaveBeenCalledWith(documentValue.id, 5, undefined, "Tolu")
+    const after = useBroadcastStore.getState()
+    expect({
+      scenes: after.scenes,
+      outputs: after.outputs,
+      outputStatus: after.outputStatus,
+      outputFrames: after.outputFrames,
+      sceneReturn: after.sceneReturn,
+      sceneTakes: after.sceneTakes,
+      isLive: after.isLive,
+      liveVerse: after.liveVerse,
+      liveSlide: after.liveSlide,
+    }).toEqual(liveSnapshot)
+  })
+
+  it("copies each Brand Kit colour token into a selected shape fill as a draft edit", async () => {
+    const documentValue = documentFixture()
+    const kit = {
+      ...defaultBrandKit(),
+      colors: { primary: "#224466", accent: "#dda355", text: "#f4f4f4", background: "#101820" },
+    }
+    useSettingsStore.setState({ brandKit: kit })
+    const before = useBroadcastStore.getState()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Rectangle")!.click())
+    const fillInput = element.querySelector<HTMLInputElement>('input[type="color"]')!
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit primary fill"]')!.click())
+    expect(fillInput.value).toBe(kit.colors.primary)
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Undo design edit"]')!.click())
+    expect(fillInput.value).toBe("#3157a4")
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Redo design edit"]')!.click())
+    expect(fillInput.value).toBe(kit.colors.primary)
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit accent fill"]')!.click())
+    expect(fillInput.value).toBe(kit.colors.accent)
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit text fill"]')!.click())
+    expect(fillInput.value).toBe(kit.colors.text)
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit background fill"]')!.click())
+    expect(fillInput.value).toBe(kit.colors.background)
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const shape = Object.values(saved.document.scene.nodes).find((node) => node.type === "rect" && node.name === "Rectangle")
+    expect(shape).toMatchObject({ fill: { type: "solid", color: kit.colors.background } })
+    const after = useBroadcastStore.getState()
+    expect({
+      scenes: after.scenes,
+      outputs: after.outputs,
+      outputStatus: after.outputStatus,
+      outputFrames: after.outputFrames,
+      sceneReturn: after.sceneReturn,
+      sceneTakes: after.sceneTakes,
+      isLive: after.isLive,
+      liveVerse: after.liveVerse,
+      liveSlide: after.liveSlide,
+    }).toEqual({
+      scenes: before.scenes,
+      outputs: before.outputs,
+      outputStatus: before.outputStatus,
+      outputFrames: before.outputFrames,
+      sceneReturn: before.sceneReturn,
+      sceneTakes: before.sceneTakes,
+      isLive: before.isLive,
+      liveVerse: before.liveVerse,
+      liveSlide: before.liveSlide,
+    })
+  })
+
   it("edits multiple pages in one saved scene graph and scopes layers to the selected page", async () => {
     const documentValue = documentFixture()
     store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
