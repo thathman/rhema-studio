@@ -1,7 +1,6 @@
 import { AlarmClockIcon, PaletteIcon, PauseIcon, PlayIcon, PlusIcon, RotateCcwIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Switch } from "@/components/ui/switch"
 import { formatMs, isRunning, remainingMs, timerTone } from "@/lib/timer"
 import { cn } from "@/lib/utils"
@@ -31,24 +30,20 @@ import { monotonicNow } from "@/stores/timer-store"
 
 const toneClass = (tone: "ok" | "warn" | "over") => (tone === "over" ? "text-destructive" : tone === "warn" ? "text-confidence-mid" : "")
 
-/** Present: a few named countdowns beside the service timer (issue #196), each on its own; any can show on the stage. */
-export function AuxTimers() {
+/** Read-only at-a-glance status for the running auxiliary timer; management lives in the Timekeeper tools. */
+export function AuxTimerStatus() {
   const timers = useAuxTimers((s) => s.timers)
   useAuxTimers((s) => s.tick)
   const now = monotonicNow()
   const running = timers.find((t) => isRunning(t.timer))
+  if (!running) return null
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button type="button" className="flex h-8 items-center gap-2 rounded-full border border-border bg-card px-3 text-xs font-medium tabular-nums outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50" title="Other timers: a few named countdowns beside the service timer">
-          <AlarmClockIcon className="size-3.5" />
-          {running ? <span className={toneClass(timerTone(running.timer, now))}>{running.label} {formatMs(remainingMs(running.timer, now))}</span> : <span className="max-[1200px]:sr-only">Timers</span>}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-[30rem] max-w-[calc(100vw-2rem)]">
-        <AuxTimersPanel />
-      </PopoverContent>
-    </Popover>
+    <div className="flex h-8 max-w-56 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium tabular-nums" title={`Running auxiliary timer: ${running.label}`}>
+      <AlarmClockIcon className="size-3.5 shrink-0" aria-hidden="true" />
+      <span className="sr-only">Running timer: </span>
+      <span className="min-w-0 truncate">{running.label}</span>
+      <span className={cn("shrink-0", toneClass(timerTone(running.timer, now)))}>{formatMs(remainingMs(running.timer, now))}</span>
+    </div>
   )
 }
 

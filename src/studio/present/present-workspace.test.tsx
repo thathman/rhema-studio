@@ -25,14 +25,14 @@ vi.mock("@/studio/present/phase-strip", () => ({ PhaseStrip: () => null }))
 vi.mock("@/studio/present/rundown-list", () => ({ RundownList: () => <div data-testid="rundown-list" /> }))
 vi.mock("@/studio/present/quick-find", () => ({ QuickFind: () => <input aria-label="Quick find" /> }))
 vi.mock("@/studio/present/service-timer", () => ({ ServiceTimer: () => null }))
-vi.mock("@/studio/present/aux-timers", () => ({ AuxTimers: () => null }))
-vi.mock("@/studio/present/stage-message", () => ({ StageMessage: () => null }))
-vi.mock("@/studio/present/lower-third", () => ({ LowerThirdControl: () => null }))
+vi.mock("@/studio/present/stage-message", () => ({ StageMessage: () => <button type="button">Stage messages</button> }))
+vi.mock("@/studio/present/lower-third", () => ({ LowerThirdControl: () => <button type="button">Lower thirds</button> }))
 vi.mock("@/studio/present/ticker", () => ({ TickerRow: () => null }))
 vi.mock("@/studio/present/obs-chip", () => ({ ObsChip: () => null }))
-vi.mock("@/studio/present/sound-chip", () => ({ SoundChip: () => null }))
+vi.mock("@/studio/present/sound-chip", () => ({ SoundChip: () => <button type="button">Sound controls</button> }))
 vi.mock("@/studio/present/recorder-dock", () => ({ RecorderDock: () => <section aria-label="Rhema recording dock">Rhema recording controls</section> }))
-vi.mock("@/studio/present/cue-menu", () => ({ CueMenu: () => null }))
+vi.mock("@/studio/present/cue-menu", () => ({ CueMenu: () => <button type="button">Cues</button> }))
+vi.mock("@/studio/engage/host-control", () => ({ EngageHostControl: () => <button type="button">Engage host</button> }))
 vi.mock("@/studio/present/transport-bar", () => ({ TransportBar: () => <div role="toolbar" aria-label="Presentation controls"><button>Take live</button></div> }))
 vi.mock("@/studio/present/scenes-strip", () => ({ ScenesStrip: () => null }))
 vi.mock("@/studio/production/production-workspace", () => ({
@@ -42,6 +42,7 @@ vi.mock("@/studio/production/production-workspace", () => ({
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { useBibleStore, useBroadcastStore, useDetectionStore, useQueueStore, useTranscriptStore } from "@/stores"
+import { useAuxTimers } from "@/stores/aux-timers-store"
 import { useShellStore } from "@/studio/shell-store"
 import { openProductionTab, useProductionTab } from "@/studio/production/production-tab"
 import { useServiceStore } from "@/stores/service-store"
@@ -125,6 +126,7 @@ beforeEach(() => {
   useQueueStore.setState({ items: [queueItem, secondQueueItem], headers: [] })
   useTranscriptStore.setState({ segments: [transcript], isTranscribing: true })
   useDetectionStore.setState({ detections: [{ verse_ref: "John 3:16", verse_text: verse.text, book_name: "John", book_number: 43, chapter: 3, verse: 16, confidence: 1, source: "direct", auto_queued: false, transcript_snippet: transcript.text, is_chapter_only: false }] })
+  useAuxTimers.setState({ timers: [] })
 })
 
 afterEach(() => {
@@ -136,12 +138,24 @@ afterEach(() => {
   useQueueStore.setState(initialQueue)
   useTranscriptStore.setState(initialTranscript)
   useDetectionStore.setState(initialDetections)
+  useAuxTimers.setState({ timers: [] })
   useServiceStore.setState(initialService)
   useProductionTab.setState(useProductionTab.getInitialState())
   vi.restoreAllMocks()
 })
 
 describe("Present's unified Live console", () => {
+  it("keeps a running auxiliary timer visible as read-only status while management stays in Timekeeper", async () => {
+    useAuxTimers.setState({ timers: [{ id: "communion-prep", label: "Communion prep", timer: { durationMs: 300_000, startedAt: performance.now(), accumulatedMs: 0 }, onStage: false, owner: "" }] })
+    await renderWorkspace()
+
+    const timerStatus = element.querySelector<HTMLElement>('[title="Running auxiliary timer: Communion prep"]')
+    expect(timerStatus?.textContent).toContain("Communion prep")
+    expect(timerStatus?.textContent).toMatch(/\d:\d{2}/)
+    expect(timerStatus?.querySelector("button")).toBeNull()
+    expect(element.querySelector('[role="toolbar"][aria-label="Live tools"] [title*="Other timers"]')).toBeNull()
+  })
+
   it("offers safe next steps when no service is open without changing Program or the rundown", async () => {
     const program = useBroadcastStore.getState().liveVerse
     const wasLive = useBroadcastStore.getState().isLive
@@ -302,6 +316,36 @@ describe("Present's unified Live console", () => {
     expect(useTranscriptStore.getState().segments).toEqual([transcript])
     expect(useDetectionStore.getState().detections[0]?.verse_ref).toBe("John 3:16")
     expect(useShellStore.getState().presentView).toBe("production")
+  })
+
+  it("keeps secondary controls out of the Live toolbar and opens them in an accessible drawer", async () => {
+    await renderWorkspace()
+
+    const toolbar = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Live tools"]')!
+    const moreControls = toolbar.querySelector<HTMLButtonElement>('[aria-label="Open other controls"]')!
+    expect(toolbar.textContent).not.toContain("Cues")
+    expect(toolbar.textContent).not.toContain("Sound controls")
+    expect(toolbar.textContent).not.toContain("Lower thirds")
+    expect(toolbar.textContent).not.toContain("Stage messages")
+    expect(toolbar.textContent).not.toContain("Engage host")
+    expect(moreControls.getAttribute("aria-expanded")).toBe("false")
+
+    await act(async () => moreControls.click())
+
+    expect(moreControls.getAttribute("aria-expanded")).toBe("true")
+    expect(element.querySelector('[data-slot="live-tools-panel"] [role="tab"][aria-selected="true"]')?.textContent).toContain("More controls")
+    const controls = element.querySelector<HTMLElement>('[role="group"][aria-label="Secondary Live controls"]')!
+    expect(controls.textContent).toContain("Cues")
+    expect(controls.textContent).toContain("Sound controls")
+    expect(controls.textContent).toContain("Lower thirds")
+    expect(controls.textContent).toContain("Stage messages")
+    expect(controls.textContent).toContain("Engage host")
+    expect(element.querySelector('[data-tour="live-tools"]')?.getAttribute("aria-expanded")).toBe("false")
+
+    const close = element.querySelector<HTMLButtonElement>('[data-slot="live-tools-panel"] button[aria-label="Close Live tools"]')!
+    await act(async () => close.click())
+    expect(document.querySelector('[data-slot="live-tools-panel"]')).toBeNull()
+    expect(document.activeElement).toBe(moreControls)
   })
 
   it("opens Production tools inside the same Live console with one rundown, Preview, Program and Take", async () => {

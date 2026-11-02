@@ -2,7 +2,7 @@ import { create } from "zustand"
 import { useShellStore } from "@/studio/shell-store"
 
 export type ProductionTab = "timekeeper" | "screens" | "health" | "programs" | "obs" | "cameras" | "operators"
-export type LiveToolsTab = "bible" | "listening" | "production"
+export type LiveToolsTab = "bible" | "listening" | "production" | "controls"
 
 /**
  * Another page asking Production to open at a tab (the setup's "Join an existing church host" opens
