@@ -22,6 +22,8 @@ import { useNotices } from "@/stores/notices-store"
 import { OBS_REHEARSAL_REASON, useObsStore } from "@/stores/obs-store"
 import { queueRequest } from "@/lib/queue-request"
 import { receiveDeskScene } from "@/lib/desk-scenes"
+import { applyWorshipSet } from "@/lib/worship-set"
+import { reloadApprovalRequests } from "@/studio/permissions/approval-requests-store"
 import { asRemoteRole } from "@/lib/remote-roles"
 
 /** Every remote command lands in the service log, so "who pressed Next?" has an answer (QA-006). */
@@ -232,6 +234,30 @@ export function useRemoteControl() {
       await withPayload(REMOTE_EVENTS.delete_scene, (p) => receiveDeskScene(p, true))
       // The stage message from a Stage desk: as the main desk's own box, stage screens only.
       await withPayload(REMOTE_EVENTS.stage_message, (p) => { if (typeof p.text === "string") useBroadcastStore.getState().setStageMessage(p.text.trim().slice(0, 120)) })
+      // A Stage desk's message for one stage display (#617; or the main desk approved it, #632): that display only.
+      await withPayload(REMOTE_EVENTS.stage_send, (p) => { if (typeof p.target === "string" && typeof p.text === "string") useBroadcastStore.getState().setStageMessageFor(p.target, p.text.trim().slice(0, 120)) })
+      // A Worship desk's change to today's song order (#623).
+      await withPayload(REMOTE_EVENTS.worship_set, (p) => {
+        void applyWorshipSet(p).then((why) => {
+          if (why) toast.warning("Song order not changed", { description: `${byOf(p)}${why}` })
+          else useJournalStore.getState().add({ kind: "remote", label: `${byOf(p)}${typeof p.op === "string" ? p.op : "changed"} in the song order` })
+        })
+      })
+      // Requests the main desk must decide: a Stage message for an unassigned display (#632), or one
+      // withdrawn by its desk (#612). The Approval Requests list reloads from the host.
+      for (const event of ["remote:stage_send_request", "remote:request_withdrawn"]) await withPayload(event, () => void reloadApprovalRequests())
+      // An automatic Timekeeper reminder (#631): a Comms notice from the host's clock to each destination.
+      await withPayload("timing:reminder", (p) => {
+        if (typeof p.text !== "string" || !Array.isArray(p.to)) return
+        const event = typeof p.eventId === "string" && typeof p.reference === "string" ? { id: p.eventId, title: p.reference } : null
+        for (const to of p.to.filter((t): t is string => typeof t === "string").slice(0, 8)) {
+          useNotices.getState().send({ from: "Timekeeper (automatic)", to: to.startsWith("role:") ? to.slice(5) : { name: to }, priority: p.urgent === true ? "urgent" : "normal", text: p.text.slice(0, 200), event })
+        }
+      })
+      // The pinned recording's screen became a stage display (#622): the host stopped the recording.
+      await withPayload("recorder:output_left", (p) => {
+        toast.warning("Recording stopped", { description: `${typeof p.outputId === "string" ? p.outputId : "Its screen"} is no longer a congregation screen${p.stopped === false ? ", and the recording could not be closed cleanly" : ""}.` })
+      })
       // OBS from the OBS director's desk, on this computer's OBS connection; the OBS store refuses it in rehearsal.
       const obsScene = (p: Record<string, unknown>) => (typeof p.scene === "string" && useObsStore.getState().scenes.includes(p.scene) ? p.scene : null)
       await withPayload(REMOTE_EVENTS.obs_preview, (p) => { const scene = obsScene(p); if (scene) void useObsStore.getState().setPreview(scene) })
