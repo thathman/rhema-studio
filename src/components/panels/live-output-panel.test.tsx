@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+const receiverState = vi.hoisted(() => ({ health: null as null | { watching: number; current: boolean; behind: boolean; tvs?: Record<string, number> } }))
+
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
+vi.mock("@/lib/browser-feeds", () => ({ useFeedHealth: () => receiverState.health }))
+vi.mock("@/studio/present/live-sources-strip", () => ({ LiveSourcesStrip: () => null }))
 // The picture itself needs a real canvas; these tests are about the words around it.
 vi.mock("@/components/ui/canvas-verse", () => ({ CanvasVerse: () => null }))
 
@@ -27,6 +31,7 @@ async function render(node: React.ReactNode) {
 
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  receiverState.health = null
   useBroadcastStore.setState({ isLive: false, liveVerse: null, rehearsal: false })
   useBibleStore.setState({ selectedVerse: null, selectedSlide: null })
   useQueueStore.setState({ items: [] })
@@ -92,6 +97,42 @@ describe("Present's Program and Preview panels", () => {
     useBroadcastStore.setState({ liveVerse: { reference: "John 3:16", segments: [] }, isLive: true })
     useBroadcastStore.getState().setVideoPaused(true)
     expect(useBroadcastStore.getState().liveVerse?.video).toBeUndefined()
+  })
+
+  it("reports a current browser page acknowledgement for the selected Program output", async () => {
+    const base = useBroadcastStore.getState().outputs[0]!
+    const output = { ...base, id: "foyer", name: "Foyer TV", type: "browser" as const, role: "congregation" as const }
+    receiverState.health = { watching: 1, current: true, behind: false, tvs: { livingRoom: 1 } }
+    useBroadcastStore.setState({
+      outputs: [output],
+      outputStatus: { foyer: { previewOpen: false, ndiActive: false, feedActive: true } },
+      isLive: true,
+      rehearsal: false,
+      liveVerse: { reference: "John 3:16", segments: [{ text: "For God so loved the world" }] },
+    })
+
+    await render(<LiveOutputPanel outputId="foyer" />)
+
+    expect(el.textContent).toContain("Foyer TV")
+    expect(el.querySelector('[role="status"]')?.textContent).toContain("Receiver confirmed · 1 browser page showing the latest Program frame · 1 Google TV.")
+  })
+
+  it("does not claim receiver confirmation for a local host display window", async () => {
+    const output = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({
+      outputs: [{ ...output, id: "sanctuary", name: "Sanctuary", type: "display" }],
+      outputStatus: { sanctuary: { previewOpen: true, ndiActive: false } },
+      isLive: true,
+      rehearsal: false,
+      liveVerse: { reference: "John 3:16", segments: [{ text: "For God so loved the world" }] },
+    })
+
+    await render(<LiveOutputPanel outputId="sanctuary" />)
+
+    const status = el.querySelector('[role="status"]')?.textContent ?? ""
+    expect(status).toContain("Host output window is open")
+    expect(status).toContain("local displays do not report receiver acknowledgement")
+    expect(status).not.toContain("Receiver confirmed")
   })
 
   it("the scene presets keep their ids and order; Closing announcements and Countdown over a live camera come after (#208 U3)", () => {

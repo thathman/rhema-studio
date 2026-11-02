@@ -12,8 +12,8 @@ const presentCalls = vi.hoisted(() => ({
 }))
 
 vi.mock("@/studio/present-actions", () => ({ presentActions: presentCalls }))
-vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, outputLanguageId, onOutputLanguageIdChange }: { compact?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"}>Preview stays private<button type="button" onClick={() => onOutputLanguageIdChange?.("yoruba-output")}>Select Yoruba preview</button></section> }))
-vi.mock("@/components/panels/live-output-panel", () => ({ LiveOutputPanel: () => <section data-studio-live>Program</section> }))
+vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, outputLanguageId, onOutputLanguageIdChange }: { compact?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"}>Preview stays private<select aria-label="Output for Preview and Scene Take" value={outputLanguageId ?? ""} onChange={(event) => onOutputLanguageIdChange?.(event.currentTarget.value)}><option value="english-output">English screen</option><option value="yoruba-output">Yoruba screen</option></select></section> }))
+vi.mock("@/components/panels/live-output-panel", () => ({ LiveOutputPanel: ({ outputId }: { outputId?: string | null }) => <section data-studio-live data-program-output={outputId ?? "none"}>Program</section> }))
 vi.mock("@/components/panels/search-panel", () => ({ SearchPanel: () => <div data-testid="bible-search-panel">Bible search</div> }))
 vi.mock("@/components/panels/transcript-panel", () => ({ TranscriptPanel: () => <div data-testid="transcript-panel">Transcript</div> }))
 vi.mock("@/components/panels/detections-panel", () => ({ DetectionsPanel: () => <div data-testid="detections-panel">Detections</div> }))
@@ -34,7 +34,7 @@ vi.mock("@/studio/present/recorder-dock", () => ({ RecorderDock: () => <section 
 vi.mock("@/studio/present/cue-menu", () => ({ CueMenu: () => <button type="button">Cues</button> }))
 vi.mock("@/studio/engage/host-control", () => ({ EngageHostControl: () => <button type="button">Engage host</button> }))
 vi.mock("@/studio/present/transport-bar", () => ({ TransportBar: ({ className }: { className?: string }) => <div className={className} role="toolbar" aria-label="Presentation controls"><button>Take live</button></div> }))
-vi.mock("@/studio/present/scenes-strip", () => ({ ScenesStrip: () => null }))
+vi.mock("@/studio/present/scenes-strip", () => ({ ScenesStrip: ({ outputId }: { outputId?: string | null }) => <section data-testid="scene-target" data-scene-output={outputId ?? "none"} /> }))
 vi.mock("@/studio/production/production-workspace", () => ({
   ProductionWorkspace: ({ embedded }: { embedded?: boolean }) => <section data-testid="production-tools" data-embedded={embedded ? "true" : "false"}>Production tools</section>,
 }))
@@ -255,7 +255,7 @@ describe("Present's unified Live console", () => {
     expect(useQueueStore.getState()).toMatchObject({ items: [], headers: [] })
   })
 
-  it("routes the Preview output picker to a congregation output and keeps the selected choice in the Live workspace", async () => {
+  it("shares one named congregation output across private Preview, Program and scene Take", async () => {
     const baseOutput = useBroadcastStore.getState().outputs[0]!
     useBroadcastStore.setState({ outputs: [
       { ...baseOutput, id: "stage-output", name: "Stage monitor", role: "stage", language: "both" },
@@ -267,8 +267,15 @@ describe("Present's unified Live console", () => {
 
     const preview = element.querySelector<HTMLElement>('[aria-label="Preview"]')!
     expect(preview.dataset.previewOutput).toBe("english-output")
-    await act(async () => preview.querySelector<HTMLButtonElement>("button")!.click())
+    await act(async () => {
+      const selector = preview.querySelector<HTMLSelectElement>('[aria-label="Output for Preview and Scene Take"]')!
+      selector.value = "yoruba-output"
+      selector.dispatchEvent(new Event("change", { bubbles: true }))
+    })
     expect(preview.dataset.previewOutput).toBe("yoruba-output")
+    expect(element.querySelector<HTMLElement>("[data-program-output]")?.dataset.programOutput).toBe("yoruba-output")
+    expect(element.querySelector<HTMLElement>("[data-testid=scene-target]")?.dataset.sceneOutput).toBe("yoruba-output")
+    expect(element.querySelectorAll('[aria-label="Output for Preview and Scene Take"]')).toHaveLength(1)
     expect(useBroadcastStore.getState().liveVerse).toEqual(program)
   })
 

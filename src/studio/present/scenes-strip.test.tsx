@@ -38,8 +38,8 @@ const sceneButton = (name: string) => [...el.querySelectorAll('[aria-label^="Sce
 const output = (id: string) => useBroadcastStore.getState().outputs.find((o) => o.id === id)!
 const click = (b: HTMLElement) => act(async () => b.click())
 
-async function render() {
-  await act(async () => root.render(<ScenesStrip />))
+async function render(outputId = MAIN_OUTPUT_ID) {
+  await act(async () => root.render(<ScenesStrip outputId={outputId} />))
 }
 
 beforeEach(() => {
@@ -87,11 +87,10 @@ describe("Present's scenes", () => {
     expect(el.textContent).toContain("Sanctuary: its own feed")
   })
 
-  it("takes the picked scene to the chosen congregation screen, and only there", async () => {
+  it("takes the picked scene to the shared congregation output, and only there", async () => {
     await render()
-    // Only congregation screens can take scenes: the stage screen is not offered.
-    const screens = [...el.querySelectorAll('[aria-label="Which screen"] button')].map((b) => b.textContent)
-    expect(screens).toEqual(["Sanctuary", "Overflow"])
+    // Output choice lives once in Preview and is shared here; stage screens are never Take targets.
+    expect(el.querySelector('[aria-label="Which screen"]')).toBeNull()
     await click(sceneButton("Camera with the Bible"))
     await click(button("Take scene Camera with the Bible to Sanctuary"))
     expect(take).toHaveBeenCalledExactlyOnceWith(MAIN_OUTPUT_ID, "cam")
@@ -99,7 +98,7 @@ describe("Present's scenes", () => {
     expect(output("overflow").sceneId).toBeUndefined()
     expect(sceneButton("Camera with the Bible").getAttribute("aria-label")).toBe("Camera with the Bible, on air")
 
-    await click([...el.querySelectorAll('[aria-label="Which screen"] button')].find((b) => b.textContent === "Overflow") as HTMLButtonElement)
+    await render("overflow")
     await click(sceneButton("Lyrics on a picture"))
     await click(button("Take scene Lyrics on a picture to Overflow"))
     expect(take).toHaveBeenLastCalledWith("overflow", "lyr")
@@ -194,7 +193,7 @@ describe("Present's scenes", () => {
     await click(sceneButton("Camera with the Bible"))
     // Distinct from Take live: its own words and a scene icon, never the solid Take live button.
     const takeBtn = button("Take scene Camera with the Bible to Sanctuary")
-    expect(takeBtn.textContent).toBe("Take scene")
+    expect(takeBtn.textContent).toBe("Take to Sanctuary")
     expect(takeBtn.className).not.toContain("bg-primary ")
     await click(takeBtn)
     const after = useBroadcastStore.getState()

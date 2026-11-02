@@ -234,9 +234,9 @@ export function PreviewPanel({ itemLook = false, compact = false, outputLanguage
   const outputVerseData = selectedPreviewOutput ? forOutputLanguage(verseData, previewLanguage) : verseData
   const outputPicker = onOutputLanguageIdChange && congregationOutputs.length > 0 ? (
     <label className="flex items-center gap-1 text-[0.6875rem] font-medium text-muted-foreground">
-      <span className="sr-only">Preview output</span>
+      <span className="sr-only">Output for Preview and Scene Take</span>
       <select
-        aria-label="Preview output"
+        aria-label="Output for Preview and Scene Take"
         value={selectedPreviewOutput?.id ?? ""}
         onChange={(event) => onOutputLanguageIdChange(event.currentTarget.value)}
         className="max-w-44 rounded border border-border bg-background px-1.5 py-1 text-[0.6875rem] text-foreground"
