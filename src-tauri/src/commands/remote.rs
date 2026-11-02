@@ -1080,6 +1080,8 @@ pub fn publish_live_state(app: AppHandle, state: State<'_, Mutex<HttpRuntime>>, 
     }
     // A recording's output that became a stage screen stops recording before it draws one (doc 42).
     super::recorder::guard_pinned_output(&app, &json);
+    // Automatic Timekeeper reminders run on the host's own clock (doc 35 C).
+    super::reminders::observe(&app, &json);
     let live = state.lock().map_err(|e| e.to_string())?.live.clone();
     live.publish(json);
     Ok(())

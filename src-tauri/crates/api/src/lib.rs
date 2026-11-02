@@ -11,6 +11,7 @@ pub mod keys;
 pub mod lookup;
 pub mod plans;
 pub mod rate;
+pub mod reminders;
 pub mod scene_edits;
 pub mod dispatch;
 pub mod error;
