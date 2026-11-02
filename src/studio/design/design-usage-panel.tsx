@@ -156,7 +156,7 @@ export function DesignUsagePanel({ designId }: { designId: string }) {
             type="button"
             aria-label={`Open ${use.reference} in Prepare`}
             title="Open this exact service moment in Prepare. Program will not change."
-            className="mt-1 min-h-10 rounded px-2 text-left text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="mt-1 min-h-10 rounded px-2 text-left text-xs font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => useShellStore.getState().openPrepareMoment({
               programId: use.programId,
               itemId: use.itemId,
