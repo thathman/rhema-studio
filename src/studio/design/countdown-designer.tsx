@@ -9,6 +9,7 @@ import type { CountdownCounts, CountdownFrame, CountdownLook, CountdownStep } fr
 import { Colour, Row } from "@/studio/design/lower-third-designer"
 import { DesignDraftActions } from "@/studio/design/design-draft-actions"
 import { useDesignDraft } from "@/studio/design/use-design-draft"
+import { useSettingsStore } from "@/stores/settings-store"
 
 const COUNTS: ReadonlyArray<readonly [CountdownCounts, string]> = [
   ["timer", "The service timer (Present)"],
@@ -60,6 +61,7 @@ export function CountdownDesigner() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const auxTimers = useAuxTimers((s) => s.timers)
   const targets = useBroadcastStore((s) => s.countdowns)
+  const brandKit = useSettingsStore((s) => s.brandKit)
   const draft = useDesignDraft("countdown", "default", publishedLook, normalizeCountdownLook)
   const look = draft.value
   const targetChoices = Object.entries((look.counts === "groupEnd" ? targets?.groupEnds : targets?.starts) ?? {})
@@ -193,6 +195,28 @@ export function CountdownDesigner() {
               <label className="flex items-center gap-1.5">text <Colour label="Text colour before any step" value={look.text} onChange={(text) => patch({ text })} /></label>
             </span>
           </div>
+          <section className="space-y-2 border-t border-border pt-3" aria-label="Brand Kit base colours">
+            <h4 className="text-[0.6875rem] font-semibold">Brand Kit · before any step</h4>
+            <p className="text-[0.6875rem] text-muted-foreground">Copy Brand Kit colours into the countdown's starting look. Timed warning steps keep their own colours. Later Brand Kit changes will not update this draft; outputs stay unchanged until you apply it.</p>
+            <Button
+              size="xs"
+              variant="outline"
+              aria-label="Apply Brand Kit countdown base background"
+              onClick={() => patch({ background: brandKit.colors.primary })}
+            >
+              <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: brandKit.colors.primary }} />
+              Background · {brandKit.colors.primary}
+            </Button>
+            <Button
+              size="xs"
+              variant="outline"
+              aria-label="Apply Brand Kit countdown base text colour"
+              onClick={() => patch({ text: brandKit.colors.text })}
+            >
+              <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: brandKit.colors.text }} />
+              Text · {brandKit.colors.text}
+            </Button>
+          </section>
 
           <fieldset className="flex flex-col gap-2 text-xs">
             <legend className="mb-1 text-muted-foreground">Colour steps (each holds until a later one comes on; the order here does not matter)</legend>

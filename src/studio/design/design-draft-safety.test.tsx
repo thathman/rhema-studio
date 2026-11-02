@@ -286,6 +286,28 @@ describe("design editors keep edits in draft until applied (#442)", () => {
     expect(useBroadcastStore.getState().countdownLook.counts).toBe("item")
   })
 
+  it("copies Brand Kit base colors into a countdown draft while preserving warning steps and active output", async () => {
+    const look = { ...DEFAULT_COUNTDOWN_LOOK, background: "#101010", text: "#ededed", steps: DEFAULT_COUNTDOWN_LOOK.steps.map((step) => ({ ...step })) }
+    const defaults = defaultBrandKit()
+    const kit = { ...defaults, colors: { ...defaults.colors, primary: "#172a44", text: "#e8c271" } }
+    const state = useBroadcastStore.getState()
+    useBroadcastStore.setState({
+      countdownLook: look,
+      outputs: [{ ...state.outputs[0], id: "stage-countdown", name: "Stage countdown", role: "stage", stageLayout: "countdown" }],
+    })
+    useSettingsStore.setState({ brandKit: kit })
+    const element = await render(<CountdownDesigner />)
+
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit countdown base background"]')!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit countdown base text colour"]')!.click())
+
+    expect(useBroadcastStore.getState().countdownLook).toEqual(look)
+    expect(element.textContent).toContain("Draft changes · outputs unchanged")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: "countdown:default", value: { background: "#172a44", text: "#e8c271", steps: look.steps } }])
+    expect(useBroadcastStore.getState().countdownLook).toEqual(look)
+  })
+
   it("keeps the countdown built-in reset in the draft until applied", async () => {
     const published = { ...DEFAULT_COUNTDOWN_LOOK, counts: "item" as const }
     useBroadcastStore.setState({ countdownLook: published })
