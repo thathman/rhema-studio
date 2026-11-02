@@ -21,11 +21,13 @@ export function RunOfShowEventEditor({
   onOpenMoment,
   defaultTab = "content",
   focusMomentId,
+  onFocusHandled,
 }: {
   header: OutlineHeader
   onOpenMoment: (item: QueueItem) => void
   defaultTab?: RunOfShowEventTab
   focusMomentId?: string | null
+  onFocusHandled?: () => void
 }) {
   const items = useQueueStore((state) => state.items)
   const headers = useQueueStore((state) => state.headers)
@@ -60,7 +62,8 @@ export function RunOfShowEventEditor({
     const target = document.getElementById(targetId)
     target?.scrollIntoView?.({ block: "nearest" })
     target?.focus({ preventScroll: true })
-  }, [activeTab, focusMomentId, header.id])
+    onFocusHandled?.()
+  }, [activeTab, focusMomentId, header.id, onFocusHandled])
 
   const update = (patch: Partial<NonNullable<OutlineHeader["event"]>>) => {
     const current = useQueueStore.getState().headers.find((candidate) => candidate.id === header.id)

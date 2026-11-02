@@ -39,6 +39,23 @@ export interface PrepareLibraryReturnContext {
   momentTitle: string | null
 }
 
+/** A verified service design pin to focus after a guarded Prepare navigation finishes. */
+export interface PrepareMomentFocusRequest {
+  programId: string
+  itemId: string
+  designId: string
+  version: number
+}
+
+export interface PrepareProgramRequest {
+  programId: string
+  moment?: Omit<PrepareMomentFocusRequest, "programId">
+}
+
+export interface PrepareMomentSelection extends PrepareMomentFocusRequest {
+  eventId: string
+}
+
 export interface ShellPrefs {
   workspace: Workspace
   presentView: PresentView
@@ -105,8 +122,14 @@ interface ShellState extends ShellPrefs {
   goRequest: Workspace | null
   goTo: (workspace: Workspace) => void
   /** Ask the shell to open a saved service in Prepare after its navigation guards pass. */
-  prepareProgramRequest: string | null
+  prepareProgramRequest: PrepareProgramRequest | null
   openPrepareProgram: (programId: string) => void
+  openPrepareMoment: (request: PrepareMomentFocusRequest) => void
+  prepareMomentFocus: PrepareMomentFocusRequest | null
+  setPrepareMomentFocus: (request: PrepareMomentFocusRequest | null) => void
+  clearPrepareMomentFocus: (expected: PrepareMomentFocusRequest) => void
+  prepareMomentSelection: PrepareMomentSelection | null
+  setPrepareMomentSelection: (selection: PrepareMomentSelection | null) => void
   /** Prepare's New service form, also opened from Home. */
   newServiceOpen: boolean
   setNewServiceOpen: (open: boolean) => void
@@ -168,7 +191,21 @@ export const useShellStore = create<ShellState>((set) => ({
   goRequest: null,
   goTo: (workspace) => set({ goRequest: canonicalWorkspace(workspace) }),
   prepareProgramRequest: null,
-  openPrepareProgram: (programId) => set({ prepareProgramRequest: programId }),
+  openPrepareProgram: (programId) => set({
+    prepareProgramRequest: { programId },
+    prepareMomentFocus: null,
+    prepareMomentSelection: null,
+  }),
+  openPrepareMoment: ({ programId, itemId, designId, version }) => set({
+    prepareProgramRequest: { programId, moment: { itemId, designId, version } },
+    prepareMomentFocus: null,
+    prepareMomentSelection: null,
+  }),
+  prepareMomentFocus: null,
+  setPrepareMomentFocus: (prepareMomentFocus) => set({ prepareMomentFocus }),
+  clearPrepareMomentFocus: (expected) => set((state) => state.prepareMomentFocus === expected ? { prepareMomentFocus: null } : state),
+  prepareMomentSelection: null,
+  setPrepareMomentSelection: (prepareMomentSelection) => set({ prepareMomentSelection }),
   newServiceOpen: false,
   setNewServiceOpen: (newServiceOpen) => set({ newServiceOpen }),
   searchOpen: false,

@@ -87,6 +87,7 @@ import type { BroadcastOutput, QueueItem } from "@/types"
 import { projectRunOfShowEvents } from "@/lib/run-of-show"
 import { toItemInputs } from "@/stores/service-store"
 import { newScene } from "@/lib/scenes"
+import { toast } from "sonner"
 
 const slide = (id: string): QueueItem =>
   ({ id, kind: "slide", slide: { title: id, body: "words" }, reference: id, confidence: 1, source: "manual", added_at: 0, planned_minutes: 3 }) as unknown as QueueItem
@@ -122,7 +123,8 @@ afterEach(() => {
   mockService.items = []
   document.body.replaceChildren()
   useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false, unsupportedItems: [], corruptItems: [] })
-  useShellStore.setState({ prepareDesignReturn: null, prepareLibraryReturn: null, goRequest: null })
+  useShellStore.setState({ prepareDesignReturn: null, prepareLibraryReturn: null, prepareMomentFocus: null, prepareMomentSelection: null, goRequest: null })
+  vi.restoreAllMocks()
 })
 
 async function renderPrepare(withLiveControls = false) {
@@ -136,6 +138,80 @@ async function renderPrepare(withLiveControls = false) {
 }
 
 describe("Prepare never takes anything live (#299)", () => {
+  it("opens the exact current design moment from Used On without changing Program", async () => {
+    const moment = {
+      ...slide("Welcome"),
+      slide: { title: "Welcome", body: "Welcome words", designRef: { id: "design-opening", version: 2 } },
+    } as QueueItem
+    const liveVerse = { kind: "slide" as const, reference: "Current Program", segments: [], lines: ["Keep this live"] }
+    const output = display("sanctuary", "Sanctuary", "scene-current")
+    useQueueStore.setState({
+      items: [moment],
+      headers: [{ id: "event-opening", type: "group", name: "Opening", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+    })
+    useServiceStore.setState({ current: { id: "program-sunday", title: "Sunday service", revision: 8 } as never, dirty: false, loading: false })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "program-live", liveVerse, outputs: [output] })
+    const before = useBroadcastStore.getState()
+    const liveBefore = { isLive: before.isLive, liveItemId: before.liveItemId, liveVerse: before.liveVerse, outputs: before.outputs }
+    useShellStore.getState().setPrepareMomentFocus({ programId: "program-sunday", itemId: moment.id, designId: "design-opening", version: 2 })
+
+    const el = await renderPrepare()
+
+    expect(el.querySelector('[role="tab"][aria-label="Event scenes"]')?.getAttribute("aria-selected")).toBe("true")
+    expect(document.activeElement).toBe(document.getElementById(`event-scene-moment-${moment.id}`))
+    expect(useShellStore.getState().prepareMomentFocus).toBeNull()
+    expect(useShellStore.getState().prepareMomentSelection).toMatchObject({ programId: "program-sunday", eventId: "event-opening", itemId: moment.id })
+    expect(useQueueStore.getState().items[0]).toMatchObject({ id: moment.id, slide: { designRef: { id: "design-opening", version: 2 } } })
+    const after = useBroadcastStore.getState()
+    expect({ isLive: after.isLive, liveItemId: after.liveItemId, liveVerse: after.liveVerse, outputs: after.outputs }).toEqual(liveBefore)
+  })
+
+  it("reports a stale Used On pin and does not focus a different design version", async () => {
+    const moment = {
+      ...slide("Welcome"),
+      slide: { title: "Welcome", body: "Welcome words", designRef: { id: "design-opening", version: 3 } },
+    } as QueueItem
+    useQueueStore.setState({
+      items: [moment],
+      headers: [{ id: "event-opening", type: "group", name: "Opening", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+    })
+    useServiceStore.setState({ current: { id: "program-sunday", title: "Sunday service", revision: 8 } as never, dirty: false, loading: false })
+    const toastError = vi.spyOn(toast, "error")
+    useShellStore.getState().setPrepareMomentFocus({ programId: "program-sunday", itemId: moment.id, designId: "design-opening", version: 2 })
+
+    const el = await renderPrepare()
+
+    expect(toastError).toHaveBeenCalledWith("This design use has changed", expect.objectContaining({ description: expect.stringContaining("exact design version") }))
+    expect(useShellStore.getState().prepareMomentFocus).toBeNull()
+    expect(el.querySelector('[role="tab"][aria-label="Event scenes"]')?.getAttribute("aria-selected")).not.toBe("true")
+    expect(useQueueStore.getState().items[0]).toMatchObject({ slide: { designRef: { id: "design-opening", version: 3 } } })
+  })
+
+  it("selects a standalone used slide in private Preview without changing Program", async () => {
+    const moment = {
+      ...slide("Standalone welcome"),
+      slide: { title: "Standalone welcome", body: "Preview only", designRef: { id: "design-opening", version: 2 } },
+    } as QueueItem
+    const liveVerse = { kind: "verse" as const, reference: "Current Program", segments: [{ text: "Keep this live" }] }
+    const output = display("sanctuary", "Sanctuary", "scene-current")
+    useQueueStore.setState({ items: [moment], headers: [], activeIndex: null })
+    useServiceStore.setState({ current: { id: "program-sunday", title: "Sunday service", revision: 8 } as never, dirty: false, loading: false })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "program-live", liveVerse, outputs: [output] })
+    const before = useBroadcastStore.getState()
+    const liveBefore = { isLive: before.isLive, liveItemId: before.liveItemId, liveVerse: before.liveVerse, outputs: before.outputs }
+    useShellStore.getState().setPrepareMomentFocus({ programId: "program-sunday", itemId: moment.id, designId: "design-opening", version: 2 })
+
+    await renderPrepare()
+
+    expect(useBibleStore.getState().selectedQueueItemId).toBe(moment.id)
+    expect(useBibleStore.getState().selectedSlide?.item.id).toBe(moment.id)
+    expect(useShellStore.getState().prepareMomentFocus).toBeNull()
+    const after = useBroadcastStore.getState()
+    expect({ isLive: after.isLive, liveItemId: after.liveItemId, liveVerse: after.liveVerse, outputs: after.outputs }).toEqual(liveBefore)
+  })
+
   it("clicking, double-clicking and keys on rundown items only preview", async () => {
     useQueueStore.setState({
       items: [slide("Welcome"), slide("Notices"), slide("Blessing")],

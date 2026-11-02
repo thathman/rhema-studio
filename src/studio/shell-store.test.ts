@@ -82,3 +82,40 @@ describe("the old Design → Output looks link (#299 UX15-4)", () => {
     expect(useShellStore.getState().editOutputRequest).not.toBe(first)
   })
 })
+
+describe("Design Used On navigation", () => {
+  it("opens the saved program and carries the exact design pin for Prepare to verify", () => {
+    useShellStore.getState().openPrepareMoment({
+      programId: "program-sunday",
+      itemId: "moment-opening",
+      designId: "design-opening",
+      version: 2,
+    })
+    expect(useShellStore.getState().prepareProgramRequest).toEqual({
+      programId: "program-sunday",
+      moment: { itemId: "moment-opening", designId: "design-opening", version: 2 },
+    })
+    expect(useShellStore.getState().prepareMomentFocus).toBeNull()
+  })
+
+  it("only clears the moment focus request it was given", () => {
+    const first = { programId: "p1", itemId: "i1", designId: "d1", version: 1 }
+    const newer = { programId: "p2", itemId: "i2", designId: "d2", version: 2 }
+    useShellStore.getState().setPrepareMomentFocus(first)
+    useShellStore.getState().setPrepareMomentFocus(newer)
+    useShellStore.getState().clearPrepareMomentFocus(first)
+    expect(useShellStore.getState().prepareMomentFocus).toBe(newer)
+  })
+
+  it("drops prior moment focus when a regular service request opens", () => {
+    const focus = { programId: "p1", itemId: "i1", designId: "d1", version: 1 }
+    useShellStore.getState().setPrepareMomentFocus(focus)
+    useShellStore.getState().setPrepareMomentSelection({ ...focus, eventId: "event-1" })
+
+    useShellStore.getState().openPrepareProgram("p2")
+
+    expect(useShellStore.getState().prepareProgramRequest).toEqual({ programId: "p2" })
+    expect(useShellStore.getState().prepareMomentFocus).toBeNull()
+    expect(useShellStore.getState().prepareMomentSelection).toBeNull()
+  })
+})

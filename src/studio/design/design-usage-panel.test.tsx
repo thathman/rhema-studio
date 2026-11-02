@@ -19,6 +19,7 @@ import { sceneToDesign } from "@/design-engine/rhema-scene"
 import type { DesignVersion } from "@/design-engine/design-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useMediaStore } from "@/stores/media-store"
+import { useShellStore } from "@/studio/shell-store"
 import { DesignUsagePanel } from "./design-usage-panel"
 
 let root: Root | null = null
@@ -39,10 +40,47 @@ afterEach(() => {
   act(() => root?.unmount())
   root = null
   useBroadcastStore.setState({ scenes: originalScenes })
+  useShellStore.setState({ prepareProgramRequest: null, prepareMomentFocus: null, prepareMomentSelection: null })
   document.body.replaceChildren()
 })
 
 describe("Design usage details", () => {
+  it("opens the exact saved service moment in Prepare without changing Program", async () => {
+    mockUsedOn.mockResolvedValue([{
+      programId: "program-sunday",
+      title: "Sunday service",
+      serviceDate: "2026-11-01",
+      revision: 8,
+      approvedRevision: 7,
+      itemId: "moment-opening",
+      reference: "Opening",
+      version: 2,
+    }])
+    useBroadcastStore.setState({
+      isLive: true,
+      liveItemId: "program-moment",
+      liveVerse: { reference: "Current Program", segments: [] },
+      outputs: [{ id: "sanctuary", name: "Sanctuary", type: "display", role: "congregation", sceneId: null, themeId: "default", monitorIndex: 0 }],
+    } as never)
+    const before = useBroadcastStore.getState()
+    const liveBefore = { liveItemId: before.liveItemId, liveVerse: before.liveVerse, outputs: before.outputs, isLive: before.isLive }
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => root!.render(createElement(DesignUsagePanel, { designId: "design-opening" })))
+
+    const open = document.querySelector<HTMLButtonElement>('button[aria-label="Open Opening in Prepare"]')!
+    expect(open).toBeTruthy()
+    await act(async () => open.click())
+    expect(useShellStore.getState().prepareProgramRequest).toEqual({
+      programId: "program-sunday",
+      moment: { itemId: "moment-opening", designId: "design-opening", version: 2 },
+    })
+    const after = useBroadcastStore.getState()
+    expect({ liveItemId: after.liveItemId, liveVerse: after.liveVerse, outputs: after.outputs, isLive: after.isLive }).toEqual(liveBefore)
+  })
+
   it("shows plan pins, approved revision separately, and local scene pins without changing Live", async () => {
     const localScene = {
       id: "scene-opening",
