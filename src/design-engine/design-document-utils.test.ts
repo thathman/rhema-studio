@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { createBlankRhemaDesign, createColorLayer, createLiveFeedLayer, pinnedSceneForVersion } from "./design-document-utils"
+import { createBlankRhemaDesign, createClockLayer, createColorLayer, createLiveFeedLayer, createLogoLayer, createLowerThirdLayer, createTickerLayer, pinnedSceneForVersion } from "./design-document-utils"
 import { designToScene } from "./rhema-scene"
 import type { DesignVersion } from "./design-store"
 
@@ -32,6 +32,41 @@ describe("Rhema design document helpers", () => {
       bindings: { ...design.bindings, [color.node.id]: color.binding, [feed.node.id]: feed.binding },
     }
     expect(designToScene(combined).issues).toEqual([])
+  })
+
+  it("adds live clock, ticker, lower third and logo layers that save with their bindings (#448)", () => {
+    const layers = [
+      createClockLayer({ x: 40, y: 40, shows: "until", until: "10:30" }),
+      createClockLayer({ x: 40, y: 260, shows: "countdown" }),
+      createClockLayer({ x: 40, y: 480, shows: "timer" }),
+      createTickerLayer(),
+      createLowerThirdLayer(),
+      createLogoLayer(),
+    ]
+    const design = createBlankRhemaDesign("Announcements")
+    const root = design.scene.nodes[design.scene.root]
+    if (root.type !== "group") throw new Error("Expected a root group")
+    const combined = {
+      ...design,
+      scene: {
+        ...design.scene,
+        nodes: { ...design.scene.nodes, ...Object.fromEntries(layers.map((l) => [l.node.id, l.node])), [root.id]: { ...root, children: [...root.children, ...layers.map((l) => l.node.id)] } },
+      },
+      bindings: { ...design.bindings, ...Object.fromEntries(layers.map((l) => [l.node.id, l.binding])) },
+    }
+    const { scene, issues } = designToScene(combined)
+    expect(issues).toEqual([])
+    expect(scene.layers.slice(1).map((l) => [l.kind, l.clockShows, l.until, l.countdownTo])).toEqual([
+      ["clock", "until", "10:30", undefined],
+      ["clock", "countdown", undefined, "next"],
+      ["clock", undefined, undefined, undefined],
+      ["ticker", undefined, undefined, undefined],
+      ["lowerThird", undefined, undefined, undefined],
+      ["logo", undefined, undefined, undefined],
+    ])
+    // The ticker spans the bottom of the artboard.
+    expect(scene.layers[4].box).toEqual({ x: 0, y: expect.closeTo(89.815, 2), w: 100, h: expect.closeTo(10.185, 2) })
+    expect(() => createClockLayer({ x: 0, y: 0, shows: "until", until: "25:00" })).toThrow("HH:MM")
   })
 
   it("pins a fresh local scene to the selected immutable version", () => {
