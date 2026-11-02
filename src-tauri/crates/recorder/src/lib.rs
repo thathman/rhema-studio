@@ -851,6 +851,7 @@ fn write_loop<W: FrameSink>(mut writer: W, t0: Instant, fps: u32, rx: &Receiver<
     let period_us = 1_000_000 / i64::from(fps.max(1));
     let delay_us = AV_DELAY_US;
     let mut pending: std::collections::VecDeque<(i64, Vec<u8>)> = std::collections::VecDeque::new();
+    let mut has_picture = false;
     let mut tick: i64 = 0;
     // The encoder could not take the next tick yet (or there is no picture yet): try it again shortly.
     let mut retry = false;
@@ -894,7 +895,7 @@ fn write_loop<W: FrameSink>(mut writer: W, t0: Instant, fps: u32, rx: &Receiver<
             // encoder could not take) makes fragmented MPEG-4 fail to close (-11800/-16341). A tick
             // written late still shows the picture drawn at its moment, so it is not a dropped one.
             let current = now_us / period_us;
-            let written = write_due(&mut tick, current, |t| write_tick(&mut writer, &mut pending, t * period_us));
+            let written = write_due(&mut tick, current, |t| write_tick(&mut writer, &mut pending, t * period_us, &mut has_picture));
             match written {
                 Ok((n, again)) => {
                     shared.frames_written.fetch_add(n, Ordering::Relaxed);
@@ -921,7 +922,7 @@ fn write_loop<W: FrameSink>(mut writer: W, t0: Instant, fps: u32, rx: &Receiver<
         // Stop while the encoder is behind: write the backlog up to the moment Stop was asked, so the
         // end of the service is not cut off. If the encoder cannot take it within 3 s, say exactly
         // how much is missing rather than closing a shorter file silently.
-        match drain(&mut tick, stop_us / period_us, Duration::from_secs(3), |t| write_tick(&mut writer, &mut pending, t * period_us)) {
+        match drain(&mut tick, stop_us / period_us, Duration::from_secs(3), |t| write_tick(&mut writer, &mut pending, t * period_us, &mut has_picture)) {
             Ok((n, 0)) => _ = shared.frames_written.fetch_add(n, Ordering::Relaxed),
             Ok((n, left)) => {
                 shared.frames_written.fetch_add(n, Ordering::Relaxed);
@@ -961,14 +962,20 @@ fn hold_picture(pending: &mut std::collections::VecDeque<(i64, Vec<u8>)>, frame:
     }
 }
 
-/// Write the tick at `pts` with the newest picture drawn by then.
-fn write_tick<W: FrameSink>(writer: &mut W, pending: &mut std::collections::VecDeque<(i64, Vec<u8>)>, pts: i64) -> Result<bool, String> {
+/// Write the tick at `pts` with the newest picture drawn by then. Before the encoder has had any
+/// picture (it writes no tick without one), the first picture waiting covers the moments before it
+/// was drawn, as the first picture of a recording always has.
+fn write_tick<W: FrameSink>(writer: &mut W, pending: &mut std::collections::VecDeque<(i64, Vec<u8>)>, pts: i64, has_picture: &mut bool) -> Result<bool, String> {
     let mut newest = None;
     while pending.front().is_some_and(|(drawn, _)| *drawn <= pts) {
         newest = pending.pop_front();
     }
+    if newest.is_none() && !*has_picture {
+        newest = pending.pop_front();
+    }
     if let Some((_, frame)) = newest {
         writer.set_frame(&frame)?;
+        *has_picture = true;
     }
     writer.tick(pts)
 }
@@ -1736,6 +1743,10 @@ mod tests {
             Ok(())
         }
         fn tick(&self, pts_us: i64) -> Result<bool, String> {
+            // As the platform encoders: no tick is written before there is a picture.
+            if self.current.is_none() {
+                return Ok(false);
+            }
             self.log.lock().unwrap().push((pts_us, self.current));
             Ok(true)
         }
@@ -1777,8 +1788,10 @@ mod tests {
         let pictures: Vec<(u8, i64, u64)> = (0u8..8).map(|i| (i + 1, 50 + i64::from(i) * 100, 130 + u64::from(i) * 100)).collect();
         let (ticks, dropped) = run_ticks(&pictures, 900);
         assert!(ticks.len() >= 8, "{ticks:?}");
+        assert_eq!(ticks.first().map(|t| t.0), Some(0), "the file starts at its first moment, not when the first picture's moment comes");
         for (pts, shown) in &ticks {
-            let expected = pictures.iter().rev().find(|(_, drawn, _)| drawn * 1000 <= *pts).map(|(id, _, _)| *id);
+            // The first picture covers the moments before it was drawn.
+            let expected = pictures.iter().rev().find(|(_, drawn, _)| drawn * 1000 <= *pts).map_or(Some(1), |(id, _, _)| Some(*id));
             assert_eq!(*shown, expected, "the tick at {} ms shows the picture drawn by then: {ticks:?}", pts / 1000);
         }
         assert_eq!(dropped, 0, "nothing arrived too late to be placed");
@@ -1820,6 +1833,37 @@ mod tests {
         assert!(near(Some(now_ms + 5_000), 10_000), "a clock from the future: now");
         assert!(near(Some(now_ms - 60_000), 10_000), "too old to believe: now");
         assert!(near(None, 10_000), "not said: now");
+    }
+
+    /// The real encoder, as the native journey drives it: pictures arriving live from just after the
+    /// start, 30 a second, for 2 s. Every moment is written while recording, none left for Stop (the
+    /// first picture covers the moments before it, or the encoder never starts writing).
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_platform_encoder_writes_every_moment_with_pictures_drawn_live() {
+        let t = tempfile::tempdir().unwrap();
+        let (tx, rx) = crossbeam_channel::unbounded::<Msg>();
+        let shared = Shared::default();
+        let t0 = Instant::now();
+        let result = std::thread::scope(|scope| {
+            // The encoder lives on its own thread, as in a session.
+            let looped = scope.spawn(|| {
+                let writer = backend::Writer::start(&t.path().join(FILE_NAME), 320, 180, 30, 1_000_000, None).expect("encoder starts");
+                write_loop(writer, t0, 30, &rx, &shared, t.path())
+            });
+            for i in 0u32..60 {
+                std::thread::sleep((t0 + Duration::from_millis(40 + u64::from(i) * 33)).saturating_duration_since(Instant::now()));
+                shared.video_queued.fetch_add(1, Ordering::Relaxed);
+                // Placed when it arrives, as from a page that does not send its drawing time yet.
+                tx.send(Msg::Video(vec![u8::try_from(i % 200).unwrap(); 320 * 180 * 4], drawn_us(t0, None))).unwrap();
+            }
+            tx.send(Msg::Stop).unwrap();
+            looped.join().unwrap()
+        });
+        assert_eq!(result, Ok(()), "{:?}", shared.problem());
+        let written = shared.frames_written.load(Ordering::Relaxed);
+        assert!(written >= 55, "about 2 s at 30 fps written, got {written}");
+        assert!(shared.problem().is_none(), "nothing left for Stop to write: {:?}", shared.problem());
     }
 
     /// An encoder that writes three ticks, then fails like a disk that went away.
