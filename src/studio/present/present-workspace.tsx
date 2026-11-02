@@ -290,7 +290,7 @@ function LiveConsoleSurface({
             <div className="shrink-0">
               <h3 className="text-sm font-semibold">{service ? "No events in this service" : "No service open"}</h3>
               <p className="text-[0.6875rem] leading-tight text-muted-foreground">Open or create a plan, or find a private cue.</p>
-              <p className="mt-0.5 text-[0.625rem] leading-tight text-muted-foreground" title={preview
+              <p className="mt-0.5 text-[0.6875rem] leading-tight text-muted-foreground" title={preview
                 ? "Plan changes never update Program by themselves. Preview stays private until you choose Take live."
                 : "Plan changes never update Program by themselves. Take is unavailable until you choose a moment for Preview."}>
                 {preview ? "Only Take changes an output." : "Take waits for a Preview item."}
