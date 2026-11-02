@@ -122,7 +122,7 @@ impl Role {
             // at once or waits for the main desk (crate::scene_edits); a camera desk only its camera boxes.
             RemoteCommand::SaveScene(_) => self.edits_scenes(),
             RemoteCommand::DeleteScene(_) => matches!(self, Role::Configure | Role::Screens | Role::Editor),
-            RemoteCommand::StageMessage(_) => matches!(self, Role::Present | Role::Configure | Role::Stage),
+            RemoteCommand::StageMessage(_) | RemoteCommand::StageSend(_) => matches!(self, Role::Present | Role::Configure | Role::Stage),
             // OBS is the online stream: only a desk the main desk made OBS director switches it.
             // Its recording and its transition too (#197 OBS.3 obs:record): the OBS director only.
             RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsRecord(_) | RemoteCommand::ObsTransition(_) => self == Role::Obs,
@@ -201,6 +201,10 @@ impl KeyEntry {
             }
             RemoteCommand::ReleaseScene(output) if self.role == Role::Screens => {
                 self.output_scope.iter().any(|id| id == output)
+            }
+            // A Stage desk sends only to the stage displays the main desk assigned it (page 6).
+            RemoteCommand::StageSend(send) if self.role == Role::Stage => {
+                self.output_scope.iter().any(|id| id == &send.target)
             }
             _ => true,
         }
