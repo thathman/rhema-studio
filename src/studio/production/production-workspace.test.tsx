@@ -76,7 +76,12 @@ describe("Production control", () => {
     expect(el.textContent).toContain("Use the service timer in Live’s top bar")
     expect(el.textContent).toContain("Manage them here; the main service timer stays in Live’s top bar.")
     expect(el.textContent).toContain("Communion prep")
-    expect(el.querySelector('[aria-label="Start Communion prep"]')).not.toBeNull()
+    const startAuxTimer = el.querySelector<HTMLButtonElement>('[aria-label="Start Communion prep"]')!
+    await act(async () => startAuxTimer.click())
+    expect(useAuxTimers.getState().timers[0]?.timer.startedAt).not.toBeNull()
+    const pauseAuxTimer = el.querySelector<HTMLButtonElement>('[aria-label="Pause Communion prep"]')!
+    await act(async () => pauseAuxTimer.click())
+    expect(useAuxTimers.getState().timers[0]?.timer.startedAt).toBeNull()
     expect([...el.querySelectorAll("button")].some((button) => /^(Start|Pause|Resume|Reset)$/.test(button.textContent?.trim() ?? ""))).toBe(false)
   })
 
