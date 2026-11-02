@@ -305,7 +305,7 @@ export function UpcomingGraphics({ queue, stale }: { queue: UpcomingGraphicsQueu
 const SCREEN_SOURCES = [["ticker", "Ticker"], ["lowerThird", "Lower third"]] as const
 
 /** The ticker and the lower third on the host's screens: what each shows, Take off or Put back. */
-export function ScreenSources({ live, canChange = false }: { live: LiveStateV1; canChange?: boolean }) {
+export function ScreenSources({ live }: { live: LiveStateV1 }) {
   const ok = useCanSend()
   const [result, setResult] = useState<SendResult | null>(null)
   const [confirming, setConfirming] = useState<{ id: string; command: "clear_source" | "restore_source"; expectedOn: boolean; revision?: number } | null>(null)
@@ -324,12 +324,10 @@ export function ScreenSources({ live, canChange = false }: { live: LiveStateV1; 
         {rows.map(({ s, name }) => (
           <li key={s.id} className="flex flex-wrap items-center gap-2">
             <span className="min-w-0 flex-1 truncate">{name} · host reports {s.on ? "on" : "off"}{s.reference ? <span className="text-muted-foreground"> · {s.reference}</span> : null}{activatedLabel(s) ? <span className="text-muted-foreground"> · {activatedLabel(s)}</span> : null}</span>
-            {canChange ? (
-              <Button size="xs" variant="outline" disabled={!ok} onClick={() => {
-                setResult(null)
-                setConfirming({ id: s.id, command: s.on ? "clear_source" : "restore_source", expectedOn: s.on, ...(live.revisions?.[`source:${s.id}`] !== undefined ? { revision: live.revisions[`source:${s.id}`] } : {}) })
-              }}>{s.on ? `Take off ${name.toLowerCase()}…` : `Put back ${name.toLowerCase()}…`}</Button>
-            ) : <span className="text-xs text-muted-foreground">View only</span>}
+            <Button size="xs" variant="outline" disabled={!ok} onClick={() => {
+              setResult(null)
+              setConfirming({ id: s.id, command: s.on ? "clear_source" : "restore_source", expectedOn: s.on, ...(live.revisions?.[`source:${s.id}`] !== undefined ? { revision: live.revisions[`source:${s.id}`] } : {}) })
+            }}>{s.on ? `Take off ${name.toLowerCase()}…` : `Put back ${name.toLowerCase()}…`}</Button>
           </li>
         ))}
       </ul>

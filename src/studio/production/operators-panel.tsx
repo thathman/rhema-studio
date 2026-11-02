@@ -293,7 +293,7 @@ function JoinedDesk() {
           {desks.includes("songs") && <SongsDesk live={live} />}
           {desks.includes("cameras") && <CameraDesk live={live} />}
           {desks.includes("outputs") && deskLive && <OutputMap live={deskLive} />}
-          {desks.includes("outputs") && deskLive && <ScreenSources live={deskLive} canChange={role === "screens"} />}
+          {desks.includes("outputs") && deskLive && <ScreenSources live={deskLive} />}
           {desks.includes("scenes") && deskLive && <ScenesDesk live={deskLive} role={role} outputScope={me?.outputScope ?? []} groupTakeScope={me?.groupTakeScope ?? []} />}
           {desks.includes("stage") && <StageDesk live={live} />}
           {desks.includes("obs") && <ObsDesk live={live} />}

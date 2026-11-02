@@ -167,10 +167,13 @@ describe("screens desk and the director's output map", () => {
     expect(sent).toHaveLength(0)
   })
 
-  it.each(["present", "configure"])("the %s desk can see, but not change, shared sources", async (role) => {
+  it.each(["present", "configure"])("the %s desk can change a shared source only after confirmation", async (role) => {
     const box = (await render(role)).querySelector('[aria-label="Ticker and lower third"]')!
-    expect(box.textContent).toContain("View only")
-    expect([...box.querySelectorAll("button")].map((item) => item.textContent)).toEqual([])
+    await click(button(box, "Take off ticker…"))
+    expect(sent).toHaveLength(0)
+    expect(box.textContent).toContain("cannot limit the change to one screen")
+    await click(button(box, "Confirm take off the shared ticker"))
+    expect(sent.at(-1)).toMatchObject({ command: "clear_source", value: "ticker" })
   })
 
   it("shows the next three graphics, expands without changing target or live state, and marks narrow layouts for two readable rows", async () => {
