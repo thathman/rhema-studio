@@ -24,14 +24,14 @@ function messageOf(error: unknown) {
   return String(error)
 }
 
-export function DesignDocumentsWorkspace() {
+export function DesignDocumentsWorkspace({ initialBrowseTemplates = false }: { initialBrowseTemplates?: boolean }) {
   const [documents, setDocuments] = useState<DesignSummary[]>([])
   const [active, setActive] = useState<DesignDocument | null>(null)
   const [chosenDesign, setChosenDesign] = useState<DesignDocument | null>(null)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [activeDirty, setActiveDirty] = useState(false)
-  const [browseTemplates, setBrowseTemplates] = useState(false)
+  const [browseTemplates, setBrowseTemplates] = useState(initialBrowseTemplates)
   const [query, setQuery] = useState("")
   const [error, setError] = useState("")
   const [reloadToken, setReloadToken] = useState(0)

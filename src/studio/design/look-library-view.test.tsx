@@ -45,7 +45,7 @@ beforeEach(() => {
   useServiceStore.setState({ current: null })
   useUnsavedStore.setState({ songEditor: null, designEditor: null })
   mockAsk.mockReset().mockResolvedValue(true)
-  mockInvoke.mockReset().mockResolvedValue(null)
+  mockInvoke.mockReset().mockImplementation(async (command: string) => command === "design_list" ? [] : null)
   resetDesignPacksForTests()
   toasts.length = 0
 })
@@ -128,6 +128,43 @@ describe("Design → Templates (#299)", () => {
     expect(useShellStore.getState().designTab).toBe("brand")
     expect(tools.getAttribute("aria-current")).toBe("page")
     expect(tools.getAttribute("aria-label")).toBe("Design tools, Brand kit selected")
+  })
+
+  it("starts primary Templates from a canonical private design instead of a legacy scene", async () => {
+    const createdDesign = {
+      id: "design-template-copy",
+      title: "Clean · Camera and scripture",
+      kind: "design",
+      document: {},
+      revision: 1,
+      latestVersion: null,
+      createdAt: "2026-11-02T00:00:00Z",
+      updatedAt: "2026-11-02T00:00:00Z",
+    }
+    mockInvoke.mockImplementation(async (command: string) => {
+      if (command === "design_list") return []
+      if (command === "design_create") return createdDesign
+      return null
+    })
+    const before = useBroadcastStore.getState()
+    const el = await renderDesignWorkspace("library")
+    const scene = card(el, "Clean · Camera and scripture")
+    const choose = [...scene.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Choose template"))!
+
+    await act(async () => choose.click())
+
+    expect(mockInvoke).toHaveBeenCalledWith("design_create", expect.objectContaining({
+      input: expect.objectContaining({ kind: "design", document: expect.any(Object) }),
+    }))
+    expect(el.textContent).toContain("Added to My Designs")
+    expect(useBroadcastStore.getState().scenes).toEqual([])
+    expect(useBroadcastStore.getState()).toMatchObject({
+      outputs: before.outputs,
+      liveVerse: before.liveVerse,
+      isLive: before.isLive,
+    })
+    expect(useProductionTab.getState()).toMatchObject({ requested: null, scene: null })
+    expect(useShellStore.getState().goRequest).toBeNull()
   })
 
   it("shows the bundled Worship Expressions gallery on a clean install; Use creates a copy without taking it live", async () => {
