@@ -16,6 +16,7 @@ import { DesignDraftActions } from "@/studio/design/design-draft-actions"
 import { useDesignDraft } from "@/studio/design/use-design-draft"
 import { followsLowerThird } from "@/lib/live-sources"
 import { designDraftId } from "@/lib/design-drafts"
+import { useSettingsStore } from "@/stores/settings-store"
 
 type Sample = "name" | "scripture" | "lyrics"
 const SAMPLES: Record<Sample, { lt: LowerThird; verse: VerseRenderData | null }> = {
@@ -58,6 +59,7 @@ export function LowerThirdDesigner({ initialId }: { initialId?: string } = {}) {
   const outputs = useBroadcastStore((s) => s.outputs)
   const scenes = useBroadcastStore((s) => s.scenes)
   const liveLowerThird = useBroadcastStore((s) => s.lowerThird)
+  const brandKit = useSettingsStore((s) => s.brandKit)
   const themes = useBroadcastStore((s) => s.themes)
   const assets = useMediaStore((s) => s.assets)
   const [selectedId, setSelectedId] = useState(() => initialId ?? useBroadcastStore.getState().lowerThirdStyles[0]?.id ?? "")
@@ -196,6 +198,48 @@ export function LowerThirdDesigner({ initialId }: { initialId?: string } = {}) {
               <Colour label="Accent colour" value={style.accent.color} onChange={(color) => patch({ accent: { ...style.accent, color } })} />
               <NumberField label="Accent thickness" value={style.accent.width} min={1} max={60} suffix="px" onChange={(width) => patch({ accent: { ...style.accent, width } })} />
             </Row>
+            <section className="space-y-2 border-t border-border pt-3" aria-label="Brand Kit styles">
+              <h4 className="text-[0.6875rem] font-semibold">Brand Kit</h4>
+              <p className="text-[0.6875rem] text-muted-foreground">Copy a Brand Kit colour or body font into this draft. Later Brand Kit changes will not update this style; connected outputs stay unchanged until you apply it.</p>
+              <Button
+                size="xs"
+                variant="outline"
+                aria-label="Apply Brand Kit text colour"
+                onClick={() => patch({
+                  line1: { ...style.line1, color: brandKit.colors.text },
+                  line2: { ...style.line2, color: brandKit.colors.text },
+                })}
+              >
+                <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: brandKit.colors.text }} />
+                Text · {brandKit.colors.text}
+              </Button>
+              <Button
+                size="xs"
+                variant="outline"
+                aria-label="Apply Brand Kit accent colour"
+                onClick={() => patch({ accent: { ...style.accent, color: brandKit.colors.accent } })}
+              >
+                <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: brandKit.colors.accent }} />
+                Accent · {brandKit.colors.accent}
+              </Button>
+              <Button
+                size="xs"
+                variant="outline"
+                aria-label="Apply Brand Kit primary band colour"
+                onClick={() => patch({ background: { ...style.background, color: brandKit.colors.primary } })}
+              >
+                <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: brandKit.colors.primary }} />
+                Band · {brandKit.colors.primary}
+              </Button>
+              <Button
+                size="xs"
+                variant="outline"
+                aria-label="Apply Brand Kit body font"
+                onClick={() => patch({ fontFamily: brandKit.fonts.body })}
+              >
+                Body font · {brandKit.fonts.body}
+              </Button>
+            </section>
             <Row label="Comes on">
               {(["none", "fade", "slide"] as const).map((a) => (
                 <Button key={a} size="xs" variant={style.animation === a ? "default" : "outline"} onClick={() => patch({ animation: a })}>{a === "none" ? "At once" : a === "fade" ? "Fade" : "Slide up"}</Button>
