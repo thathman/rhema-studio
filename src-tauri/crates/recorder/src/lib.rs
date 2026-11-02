@@ -638,7 +638,7 @@ fn run_writer(
     // Awake for the whole recording: a napping app's frame ticks stall (see `Awake`).
     let _awake = backend::Awake::hold();
     let t0 = Instant::now();
-    let mut writer = match backend::Writer::start(path, width, height, fps, bitrate, audio_rate) {
+    let writer = match backend::Writer::start(path, width, height, fps, bitrate, audio_rate) {
         Ok(w) => {
             let _ = ready.send(Ok(t0));
             w
@@ -649,6 +649,38 @@ fn run_writer(
             return Err(e);
         }
     };
+    write_loop(writer, t0, fps, rx, shared, folder)
+}
+
+/// What the writer loop drives: the platform's encoder (`backend::Writer`), a fake in tests.
+#[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
+trait FrameSink: Sized {
+    fn set_frame(&mut self, rgba: &[u8]) -> Result<(), String>;
+    fn tick(&self, pts_us: i64) -> Result<bool, String>;
+    fn append_audio(&self, samples: &[f32], pts_frames: i64) -> Result<bool, String>;
+    fn finish(self) -> Result<(), String>;
+}
+
+#[cfg(any(target_os = "macos", windows))]
+impl FrameSink for backend::Writer {
+    fn set_frame(&mut self, rgba: &[u8]) -> Result<(), String> {
+        backend::Writer::set_frame(self, rgba)
+    }
+    fn tick(&self, pts_us: i64) -> Result<bool, String> {
+        backend::Writer::tick(self, pts_us)
+    }
+    fn append_audio(&self, samples: &[f32], pts_frames: i64) -> Result<bool, String> {
+        backend::Writer::append_audio(self, samples, pts_frames)
+    }
+    fn finish(self) -> Result<(), String> {
+        backend::Writer::finish(self)
+    }
+}
+
+/// Write the session's file at a constant frame rate until Stop, a full disk or a write error. On
+/// a write error the file is closed at once with what was recorded, never left open until Stop.
+#[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
+fn write_loop<W: FrameSink>(mut writer: W, t0: Instant, fps: u32, rx: &Receiver<Msg>, shared: &Shared, folder: &Path) -> Result<(), String> {
     let mut failed: Option<String> = None;
     let mut last_disk_check = Instant::now();
     // Constant frame rate: on every tick the latest picture is written (a still slide repeats).
@@ -715,8 +747,9 @@ fn run_writer(
         }
         if let Some(e) = &failed {
             if !shared.writer_gone.swap(true, Ordering::Relaxed) {
-                shared.set_problem(RecorderProblem::new(ProblemCode::EncoderFailed, format!("Recording stopped writing ({e}). What was recorded so far is kept.")));
+                shared.set_problem(RecorderProblem::new(ProblemCode::EncoderFailed, format!("Recording stopped writing ({e}). The file was closed with what was recorded so far.")));
             }
+            break;
         } else if last_disk_check.elapsed() >= Duration::from_secs(5) {
             last_disk_check = Instant::now();
             if disk_free(folder).is_some_and(|f| f < DISK_FULL) {
@@ -744,7 +777,13 @@ fn run_writer(
         }
     }
     match failed {
-        Some(e) => Err(e),
+        Some(e) => {
+            // Close what was written (best effort: the writer may refuse after its own failure).
+            if let Err(close) = writer.finish() {
+                log::warn!("recorder: closing the file after a write error also failed: {close}");
+            }
+            Err(e)
+        }
         None => writer.finish(),
     }
 }
@@ -1457,6 +1496,53 @@ mod tests {
         session.t0 = Instant::now() - Duration::from_secs(10);
         session.shared.set_problem(RecorderProblem::new(ProblemCode::AudioDeviceLost, "gone"));
         assert_eq!(status_of(&session, t.path()).problem.map(|p| p.code), Some(ProblemCode::NoFrames));
+    }
+
+    /// An encoder that writes three ticks, then fails like a disk that went away.
+    struct FailingWriter {
+        ticks: std::cell::Cell<u32>,
+        closed: Arc<AtomicBool>,
+    }
+
+    impl FrameSink for FailingWriter {
+        fn set_frame(&mut self, _: &[u8]) -> Result<(), String> {
+            Ok(())
+        }
+        fn tick(&self, _: i64) -> Result<bool, String> {
+            self.ticks.set(self.ticks.get() + 1);
+            if self.ticks.get() > 3 { Err("the drive went away".into()) } else { Ok(true) }
+        }
+        fn append_audio(&self, _: &[f32], _: i64) -> Result<bool, String> {
+            Ok(true)
+        }
+        fn finish(self) -> Result<(), String> {
+            self.closed.store(true, Ordering::Relaxed);
+            Err("already failed".into())
+        }
+    }
+
+    #[test]
+    fn a_write_error_closes_the_file_at_once_not_at_stop() {
+        let t = tempfile::tempdir().unwrap();
+        let closed = Arc::new(AtomicBool::new(false));
+        let writer = FailingWriter { ticks: std::cell::Cell::new(0), closed: closed.clone() };
+        let (_tx, rx) = crossbeam_channel::unbounded::<Msg>();
+        let shared = Shared::default();
+        let (done_tx, done_rx) = crossbeam_channel::bounded(1);
+        let folder = t.path().to_path_buf();
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                let _ = done_tx.send(write_loop(writer, Instant::now(), 30, &rx, &shared, &folder));
+            });
+            // Nobody pressed Stop (the sender is still open): the loop ends by itself.
+            let result = done_rx.recv_timeout(Duration::from_secs(5)).expect("the loop ends without waiting for Stop");
+            assert_eq!(result, Err("the drive went away".to_string()));
+        });
+        assert!(closed.load(Ordering::Relaxed), "the file was closed");
+        assert!(shared.writer_gone.load(Ordering::Relaxed));
+        let p = shared.problem().expect("said");
+        assert_eq!(p.code, ProblemCode::EncoderFailed);
+        assert!(p.message.contains("closed"), "{}", p.message);
     }
 
     #[test]
