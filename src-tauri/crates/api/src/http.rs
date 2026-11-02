@@ -3889,6 +3889,8 @@ mod tests {
         assert!(get_with(result.bound_port, "/api/v1/requests", "", None).await.contains("403"));
         let mut handle = result.handle;
         handle.stop();
+    }
+
     /// #410: a desk that comes back after a long drop retries with the same id; the host still
     /// knows it (it is not done twice), even after thousands of other presses.
     #[test]
