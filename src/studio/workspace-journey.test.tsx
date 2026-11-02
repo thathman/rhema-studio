@@ -43,6 +43,17 @@ const state = vi.hoisted(() => {
     diskPending: new Map<string, unknown>(),
     localPrefs,
     programData: null as unknown,
+    reusableSlides: [] as Array<{
+      id: string
+      kind: "slide" | "announcement"
+      title: string
+      body: string
+      link: string | null
+      background_media_id: string | null
+      revision: number
+      created_at: string
+      updated_at: string
+    }>,
   }
 })
 
@@ -66,6 +77,8 @@ vi.hoisted(() => {
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (command: string, args?: Record<string, unknown>) => {
     if (command === "approvals_list") return state.requests
+    if (command === "content_list_reusable_slides") return state.reusableSlides
+    if (command === "media_list") return []
     if (command === "approvals_apply") {
       const request = state.requests.find((candidate) => candidate.id === args?.id)
       if (!request) throw new Error("Approval request not found")
@@ -149,7 +162,9 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { useBibleStore, useBroadcastStore, useQueueStore } from "@/stores"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useSlideStore } from "@/stores/slide-store"
 import { useJoin } from "@/stores/join-store"
+import { useAddDialog } from "@/studio/prepare/add-target"
 import { resetApprovalRequests, useApprovalRequestsStore, type ApprovalRequest } from "@/studio/permissions/approval-requests-store"
 import { useSceneApprovalsStore } from "@/stores/scene-approvals-store"
 import { Sidebar } from "@/studio/shell/sidebar"
@@ -158,6 +173,7 @@ import { useShellStore, type Workspace } from "@/studio/shell-store"
 import { PrepareWorkspace } from "@/studio/prepare/prepare-workspace"
 import { PermissionsWorkspace } from "@/studio/permissions/permissions-workspace"
 import { PresentWorkspace } from "@/studio/present/present-workspace"
+import { LibraryWorkspace } from "@/studio/library/library-workspace"
 import type { Program, QueueItem, Verse } from "@/types"
 
 const verse = state.verses[0] as Verse
@@ -184,7 +200,7 @@ function WorkspaceJourney() {
       <TooltipProvider>
         <Sidebar workspace={workspace} isLive={isLive} church={churchItems(1)} onWorkspace={onWorkspace} onSettings={() => {}} />
         <main>
-          {workspace === "prepare" ? <PrepareWorkspace /> : workspace === "permissions" ? <PermissionsWorkspace /> : workspace === "present" ? <PresentWorkspace /> : null}
+          {workspace === "prepare" ? <PrepareWorkspace /> : workspace === "permissions" ? <PermissionsWorkspace /> : workspace === "present" ? <PresentWorkspace /> : workspace === "library" ? <LibraryWorkspace /> : null}
         </main>
       </TooltipProvider>
     </ThemeProvider>
@@ -203,6 +219,7 @@ beforeEach(() => {
   state.diskValues.clear()
   state.diskPending.clear()
   state.programData = null
+  state.reusableSlides = []
   state.localPrefs.clear()
   useShellStore.setState({ workspace: "prepare", sidebarCollapsed: false })
   useQueueStore.setState({ items: [item], headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }], activeIndex: null })
@@ -210,6 +227,8 @@ beforeEach(() => {
   useBroadcastStore.setState({ outputs: [], outputStatus: {}, isLive: true, liveVerse: previousProgram as never, liveSourceVerse: null, liveSlide: null, liveItemId: "previous-item", rehearsal: false, scenes: [] })
   useServiceStore.setState({ programs: [program], current: program, dirty: false, loading: false, saving: false, error: null, conflict: null, unsupportedItems: [], corruptItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: 4, approvedDesignsError: null })
   useSettingsStore.setState({ operatorName: "Main desk", remoteDevices: [] })
+  useSlideStore.setState({ slides: [], loading: false, error: null, query: "", pendingSourceId: null })
+  useAddDialog.getState().close()
   useJoin.setState({ status: "off", me: null, live: null })
   resetApprovalRequests()
   useApprovalRequestsStore.setState({ requests: [{ ...state.request } as ApprovalRequest], hydrated: true, loading: false, error: null })
@@ -286,15 +305,17 @@ describe("Prepare → Permissions → Live journey", () => {
     expect((state.programData as { items: Array<{ id: string; kind: string }> }).items.filter((entry) => entry.kind !== "phase").map((entry) => entry.id)).toEqual(["welcome-slide", "moment-1"])
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
-    expect(useServiceStore.getState().closeProgram()).toBe("closed")
-    expect(await useServiceStore.getState().openProgram("service-1")).toBe("ok")
+    await act(async () => {
+      expect(useServiceStore.getState().closeProgram()).toBe("closed")
+      expect(await useServiceStore.getState().openProgram("service-1")).toBe("ok")
+    })
     expect(useServiceStore.getState().current).toMatchObject({ revision: 5, approved_revision: 4 })
     expect(useQueueStore.getState().items.map((entry) => entry.id)).toEqual(["welcome-slide", "moment-1"])
     expect(useQueueStore.getState().items[0]).toMatchObject({ kind: "slide", slide: { title: "Welcome", body: "Welcome to the service." } })
 
     const request = { ...state.request, baseRevision: 5, payload: { ...state.request.payload, revision: 5 } }
     state.requests = [request]
-    useApprovalRequestsStore.setState({ requests: [request as ApprovalRequest], hydrated: true, loading: false, error: null })
+    await act(async () => useApprovalRequestsStore.setState({ requests: [request as ApprovalRequest], hydrated: true, loading: false, error: null }))
     const slideRow = host.querySelector<HTMLElement>('[data-rundown-item-id="welcome-slide"]')!
     await act(async () => slideRow.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
     expect(useBibleStore.getState().selectedSlide?.item.id).toBe("welcome-slide")
@@ -317,5 +338,110 @@ describe("Prepare → Permissions → Live journey", () => {
     await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Take live"]')!.click())
     expect(useBroadcastStore.getState().liveVerse).toMatchObject({ reference: "Welcome", kind: "slide", content: "slide" })
     expect(useBroadcastStore.getState().liveItemId).toBe("welcome-slide")
+  })
+
+  it("adds from the Library to the originating Event, returns focus, and keeps Program unchanged until an explicit Take", async () => {
+    const source = {
+      id: "reusable-welcome",
+      kind: "slide" as const,
+      title: "Welcome",
+      body: "Reusable welcome words",
+      link: null,
+      background_media_id: null,
+      revision: 3,
+      created_at: "2026-11-02T08:00:00Z",
+      updated_at: "2026-11-02T08:00:00Z",
+    }
+    state.reusableSlides = [source]
+    const sermonMoment: QueueItem = {
+      id: "sermon-moment",
+      kind: "slide",
+      slide: { title: "Sermon", body: "Sermon outline" },
+      reference: "Sermon",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+    }
+    useQueueStore.setState({
+      items: [item, sermonMoment],
+      headers: [
+        { id: "event-opening", type: "group", name: "Opening", at: 0, event: { schema_version: 1 } },
+        { id: "event-sermon", type: "group", name: "Sermon", at: 1, event: { schema_version: 1 } },
+      ],
+      activeIndex: null,
+      addTarget: null,
+    })
+    useServiceStore.setState({ programs: [program], current: program, dirty: false, loading: false, saving: false, error: null })
+    useBroadcastStore.setState({ isLive: true, liveVerse: previousProgram as never, liveItemId: "previous-item", liveSlide: null })
+    await act(async () => root.render(<WorkspaceJourney />))
+
+    const programBefore = useBroadcastStore.getState().liveVerse
+    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Opening"]')!.click())
+    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.getAttribute("aria-label") === "Add content to Opening")!.click())
+    const addDialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+    const slidesTab = [...addDialog.querySelectorAll<HTMLButtonElement>('button[role="tab"]')].find((button) => button.textContent?.trim() === "Slides")!
+    await act(async () => { slidesTab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); slidesTab.click() })
+    await vi.waitFor(() => expect([...addDialog.querySelectorAll<HTMLButtonElement>("button")].some((button) => button.textContent?.includes("Browse reusable slides"))).toBe(true))
+    await act(async () => [...addDialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse reusable slides"))!.click())
+
+    expect(useShellStore.getState()).toMatchObject({
+      workspace: "library",
+      prepareLibraryReturn: { serviceId: "service-1", targetHeaderId: "event-opening", eventId: "event-opening", momentId: null },
+    })
+    await vi.waitFor(() => expect([...document.body.querySelectorAll<HTMLButtonElement>("button")].some((button) => button.getAttribute("aria-pressed") === "false" && button.textContent?.includes("Welcome"))).toBe(true))
+    const sourceButton = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.getAttribute("aria-pressed") === "false" && button.textContent?.includes("Welcome"))!
+    await act(async () => sourceButton.click())
+    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add to service")!.click())
+
+    expect(useShellStore.getState().workspace).toBe("prepare")
+    const insertedQueue = useQueueStore.getState()
+    expect(insertedQueue.items.map((entry) => entry.id)).toEqual(["moment-1", expect.any(String), "sermon-moment"])
+    expect(insertedQueue.headers.map(({ id, at }) => [id, at])).toEqual([["event-opening", 0], ["event-sermon", 2]])
+    const added = insertedQueue.items[1]!
+    expect(added).toMatchObject({ kind: "slide", slide: { title: "Welcome", body: "Reusable welcome words", source_asset_id: source.id, source_revision: 3 } })
+    expect(useQueueStore.getState().addTarget).toBeNull()
+    expect(host.querySelector<HTMLButtonElement>('[aria-label="Event content"]')?.getAttribute("aria-selected")).toBe("true")
+    const focusedMoment = host.querySelector<HTMLElement>(`#event-content-moment-${added.id}`)!
+    expect(focusedMoment.className).toContain("ring-2")
+    expect(document.activeElement).toBe(focusedMoment)
+    expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
+
+    const save = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save")!
+    await act(async () => save.click())
+    expect(useServiceStore.getState()).toMatchObject({ current: { revision: 5 }, dirty: false })
+    expect((state.programData as { items: Array<{ id: string; kind: string }> }).items.filter((entry) => entry.kind !== "phase" && entry.kind !== "group").map((entry) => entry.id)).toEqual(["moment-1", added.id, "sermon-moment"])
+    expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
+
+    expect(useServiceStore.getState().closeProgram()).toBe("closed")
+    expect(await useServiceStore.getState().openProgram("service-1")).toBe("ok")
+    expect(useServiceStore.getState().current).toMatchObject({ revision: 5, approved_revision: 4 })
+    expect(useQueueStore.getState().items.map((entry) => entry.id)).toEqual(["moment-1", added.id, "sermon-moment"])
+    expect(useQueueStore.getState().headers.map(({ id, at }) => [id, at])).toEqual([["event-opening", 0], ["event-sermon", 2]])
+
+    const request = { ...state.request, baseRevision: 5, payload: { ...state.request.payload, revision: 5 } }
+    state.requests = [request]
+    useApprovalRequestsStore.setState({ requests: [request as ApprovalRequest], hydrated: true, loading: false, error: null })
+    const slideRow = host.querySelector<HTMLElement>(`[data-rundown-item-id="${added.id}"]`)!
+    await act(async () => slideRow.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    expect(useBibleStore.getState().selectedSlide?.item.id).toBe(added.id)
+    expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
+
+    const approve = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Approve"))!
+    await act(async () => approve.click())
+    expect(useServiceStore.getState().current).toMatchObject({ revision: 5, approved_revision: 5 })
+    expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
+
+    await act(async () => navButton("Permissions").click())
+    expect(host.textContent).toContain("revision 5")
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Confirm approved revision"))!.click())
+    expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "approval-1", state: "applied", payload: { revision: 5 } }])
+    expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
+
+    await act(async () => navButton("Live").click())
+    expect(host.textContent).toContain("Welcome")
+    expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
+    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Take live"]')!.click())
+    expect(useBroadcastStore.getState().liveVerse).toMatchObject({ reference: "Welcome", kind: "slide", content: "slide" })
+    expect(useBroadcastStore.getState().liveItemId).toBe(added.id)
   })
 })
