@@ -291,6 +291,7 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         else if (!TEXT_COLOR.test(node.color.color)) refuse("Text gradients and non-hex colours cannot be used in Rhema scene output yet")
         if (node.stroke || node.strokeWidth !== 0 || node.clipPath || (node.clipPathStack?.length ?? 0) > 0) refuse("Text stroke and clipping cannot be used in Rhema scene output yet")
         if (node.text.length > 2000) refuse("Static text is limited to 2,000 characters in Rhema scene output")
+        if (typeof binding.textSecond === "string" && binding.textSecond.length > 2000) refuse("Second-language text is limited to 2,000 characters in Rhema scene output")
         if (!TEXT_WEIGHTS.has(node.fontWeight)) refuse("This text weight is not supported by Rhema scene output yet")
         if (!SAFE_FONT_FAMILY.test(node.fontFamily.trim())) refuse("Use a font family made of letters, numbers, spaces, commas, underscores or hyphens")
         const effectiveFontSize = node.fontSize * node.scaleY
