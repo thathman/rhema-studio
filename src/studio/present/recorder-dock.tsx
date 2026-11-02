@@ -5,7 +5,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
-import { useRecorderAlertStore } from "@/stores/recorder-alert-store"
+import { recorderOutputLeftMessage, useRecorderAlertStore } from "@/stores/recorder-alert-store"
 import { Button } from "@/components/ui/button"
 import { TriangleAlertIcon } from "lucide-react"
 
@@ -232,6 +232,7 @@ export function RecorderDock() {
     let cancelled = false
     let eventReceived = false
     let unlisten: (() => void) | undefined
+    let unlistenOutputLeft: (() => void) | undefined
     const listening = listen<RecorderStatus>("recorder:status", (event) => {
       eventReceived = true
       eventSequence.current += 1
@@ -256,6 +257,17 @@ export function RecorderDock() {
           )
         }
       })
+    const outputLeftListening = listen<{ outputId?: unknown; stopped?: unknown }>("recorder:output_left", (event) => {
+      const outputId = event.payload?.outputId
+      if (typeof outputId !== "string" || !outputId.trim()) return
+      const outputName = useBroadcastStore.getState().outputs.find((candidate) => candidate.id === outputId)?.name ?? outputId
+      const message = recorderOutputLeftMessage({ outputId, stopped: event.payload.stopped === true }, outputName)
+      setStatusError(message)
+      useRecorderAlertStore.getState().report("safety", message)
+    }).then((stop) => {
+      if (cancelled) stop()
+      else unlistenOutputLeft = stop
+    }).catch(() => {})
     const initialSequence = eventSequence.current
     void invoke<RecorderStatus>("recorder_status")
       .then((next) => {
@@ -277,7 +289,9 @@ export function RecorderDock() {
     return () => {
       cancelled = true
       unlisten?.()
+      unlistenOutputLeft?.()
       void listening
+      void outputLeftListening
     }
   }, [])
 

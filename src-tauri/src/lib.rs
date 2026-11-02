@@ -220,6 +220,8 @@ pub fn run() {
             commands::join::join_me,
             commands::join::join_command,
             commands::join::join_lookup,
+            commands::join::join_requests,
+            commands::join::join_withdraw_request,
             commands::join::join_cameras,
             commands::join::join_tally,
             commands::companion::app_restart,

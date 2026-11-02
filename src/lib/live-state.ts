@@ -287,7 +287,8 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     stageMessage: b.stageMessage,
     timer: (() => { const t = useTimerStore.getState().timer; return { durationMs: t.durationMs, elapsedMs: Math.round(elapsedMs(t, monotonicNow())), running: t.startedAt !== null, revision: timerRevision } })(),
     scenes: (() => { const on = scenesOnScreen(b); return b.scenes.map((s) => sceneForDesk(s, on.has(s.id))) })(),
-    outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => {
+    outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation" || o.role === "stage").map((o) => {
+      if (o.role === "stage") return { id: o.id, name: o.name, type: o.type, role: "stage" as const, sceneId: null }
       const take = b.sceneTakes[o.id]
       const saved = b.scenes.find((scene) => scene.id === o.sceneId)
       const showing = sceneForOutput(o, b.scenes)

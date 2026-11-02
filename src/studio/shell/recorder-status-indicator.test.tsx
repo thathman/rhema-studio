@@ -3,17 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const native = vi.hoisted(() => ({
   status: null as unknown,
-  handler: null as ((event: { payload: unknown }) => void) | null,
+  handlers: new Map<string, (event: { payload: unknown }) => void>(),
   invoke: vi.fn(),
   listenFails: false,
 }))
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }))
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn(async (_event: string, handler: (event: { payload: unknown }) => void) => {
+  listen: vi.fn(async (event: string, handler: (event: { payload: unknown }) => void) => {
     if (native.listenFails) throw new Error("event stream unavailable")
-    native.handler = handler
-    return () => { native.handler = null }
+    native.handlers.set(event, handler)
+    return () => { native.handlers.delete(event) }
   }),
 }))
 
@@ -42,7 +42,7 @@ async function render(workspace: "home" | "present" = "home") {
 
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  native.handler = null
+  native.handlers.clear()
   native.listenFails = false
   native.status = recording
   native.invoke.mockReset().mockImplementation(async (command: string) => command === "recorder_status" ? native.status : null)
@@ -62,7 +62,7 @@ describe("RecorderStatusIndicator", () => {
 
     expect(el.querySelector('[aria-label="Recorder status"]')?.textContent).toContain("Recording is active · sanctuary")
     await act(async () => {
-      native.handler?.({ payload: failed })
+      native.handlers.get("recorder:status")?.({ payload: failed })
       await Promise.resolve()
     })
     expect(el.querySelector('[role="alert"]')?.textContent).toContain("Recording failed · Encoder stopped unexpectedly.")
@@ -74,6 +74,21 @@ describe("RecorderStatusIndicator", () => {
     const el = await render("present")
     expect(el.querySelector('[aria-label="Recorder status"]')).toBeNull()
     expect(native.invoke).toHaveBeenCalledWith("recorder_status")
+  })
+
+  it("keeps backend automatic-stop notices visible and actionable after leaving Live", async () => {
+    const goTo = vi.fn()
+    useShellStore.setState({ goTo } as never)
+    const el = await render("home")
+    await act(async () => native.handlers.get("recorder:output_left")?.({ payload: { outputId: "sanctuary", stopped: true } }))
+
+    expect(useRecorderAlertStore.getState().alerts.safety).toContain("Recording stopped automatically because sanctuary is no longer a congregation screen")
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("Recording stopped automatically because sanctuary is no longer a congregation screen")
+    expect(el.textContent).toContain("Review the saved recording in History")
+    await act(async () => native.handlers.get("recorder:status")?.({ payload: { state: "idle", sessionActive: false, outputId: null, problem: null } }))
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("Recording stopped automatically")
+    await act(async () => [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Open Live")?.click())
+    expect(goTo).toHaveBeenCalledWith("present")
   })
 
   it("keeps a recorder action alert visible until it is dismissed", async () => {

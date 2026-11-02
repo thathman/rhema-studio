@@ -167,6 +167,28 @@ export async function confirmPlanApprovalRequest(id: string): Promise<ApprovalRe
   }
 }
 
+/** Apply a host-approved private Stage message; the receiver never confirms human playback. */
+export async function applyStageSendApprovalRequest(id: string): Promise<ApprovalRequest> {
+  const current = useApprovalRequestsStore.getState().requests.find((item) => item.id === id)
+  if (!current || current.kind !== "stage_send") throw new Error("Only a Stage message request can be sent here.")
+  if (current.state !== "approved") throw new Error("The Stage message request must be approved before it can be sent.")
+  try {
+    const request = await invoke<ApprovalRequest>("approvals_apply", { id })
+    if (!request || request.id !== id || request.kind !== "stage_send" || request.targetId !== current.targetId || request.state !== "applied") {
+      throw new Error("The host did not confirm this Stage message request as applied.")
+    }
+    useApprovalRequestsStore.setState((state) => ({
+      requests: state.requests.map((item) => item.id === id ? request : item),
+      histories: Object.fromEntries(Object.entries(state.histories).filter(([requestId]) => requestId !== id)),
+      error: null,
+    }))
+    return request
+  } catch (error) {
+    await reloadApprovalRequests().catch(() => {})
+    throw error
+  }
+}
+
 function recordOf(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null
 }

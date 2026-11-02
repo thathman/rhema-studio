@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const native = vi.hoisted(() => ({
   invoke: vi.fn(),
-  eventHandler: null as ((event: { payload: unknown }) => void) | null,
+  eventHandlers: new Map<string, (event: { payload: unknown }) => void>(),
 }))
 
 vi.mock("@chenglou/pretext", () => ({ clearCache: vi.fn() }))
@@ -18,10 +18,10 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }))
 vi.mock("@tauri-apps/api/event", () => ({
   emitTo: vi.fn(async () => {}),
   listen: vi.fn(
-    async (_event: string, handler: (event: { payload: unknown }) => void) => {
-      native.eventHandler = handler
+    async (event: string, handler: (event: { payload: unknown }) => void) => {
+      native.eventHandlers.set(event, handler)
       return () => {
-        native.eventHandler = null
+        native.eventHandlers.delete(event)
       }
     }
   ),
@@ -165,7 +165,7 @@ beforeEach(() => {
   ;(
     globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true
-  native.eventHandler = null
+  native.eventHandlers.clear()
   native.invoke.mockReset().mockImplementation(async (command: string) => {
     if (command === "recorder_status") return idleStatus
     if (command === "recorder_preflight") return preflight
@@ -188,7 +188,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root?.unmount())
   host?.remove()
-  native.eventHandler = null
+  native.eventHandlers.clear()
   useBroadcastStore.setState(initialBroadcast)
   useEventClock.setState(initialEventClock)
   useQueueStore.setState(initialQueue)
@@ -635,7 +635,7 @@ describe("Live's Rhema recording dock", () => {
           "No picture from the screen for 5 seconds: is its window open?",
       },
     }
-    await act(async () => native.eventHandler?.({ payload: warningStatus }))
+    await act(async () => native.eventHandlers.get("recorder:status")?.({ payload: warningStatus }))
 
     expect(host.textContent).toContain("Recording · Overflow")
     expect(host.textContent).toContain(
@@ -646,6 +646,16 @@ describe("Live's Rhema recording dock", () => {
       isLive: true,
       liveVerse: { reference: "Program item" },
     })
+  })
+
+  it("shows backend automatic-stop alerts in Live and keeps them for the shell after navigation", async () => {
+    await renderNavigationHarness()
+    await act(async () => native.eventHandlers.get("recorder:output_left")?.({ payload: { outputId: "overflow", stopped: true } }))
+
+    expect(host.textContent).toContain("Recording stopped automatically because Overflow is no longer a congregation screen")
+    expect(useRecorderAlertStore.getState().alerts.safety).toContain("Review the saved recording in History")
+    await act(async () => host.querySelector<HTMLButtonElement>("button")!.click())
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("Recording stopped automatically because Overflow is no longer a congregation screen")
   })
 
   it("writes a named marker through the native recorder without touching Live or OBS", async () => {

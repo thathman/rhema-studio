@@ -10,7 +10,7 @@ import type { LiveStateV1 } from "@/lib/live-state"
 import { useCanSend, useJoin, type SendResult } from "@/stores/join-store"
 import { deskEditable } from "@/lib/desk-scenes"
 import { NoSignalChoice } from "@/studio/production/scene-composer"
-import { SectionStepper, SongLibrary } from "@/studio/production/desk-consoles"
+import { SectionStepper, SongLibrary, type HostSong } from "@/studio/production/desk-consoles"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import type { SceneLayer, SceneLayerKind } from "@/types"
 
@@ -39,24 +39,37 @@ function Result({ result }: { result: SendResult | null }) {
 export function SongsDesk({ live }: { live: LiveStateV1 }) {
   const ok = useCanSend()
   const [result, setResult] = useState<SendResult | null>(null)
-  const send = async (command: { command: string; value?: string | number }) => setResult(await useJoin.getState().send(command))
+  const send = async (command: { command: string; value?: string | number | Record<string, unknown> }) => setResult(await useJoin.getState().send(command))
+  const setOrder = async (change: { op: "move" | "skip" | "repeat" | "insert"; item: string; before?: string; song?: string }) => {
+    const response = await useJoin.getState().send({ command: "worship_set", value: change })
+    setResult(response.ok ? { ok: true, note: "Sent to the host; waiting for today's temporary order to update." } : response)
+  }
   const lyrics = live.sources.filter((s) => s.id === "song" || s.id === "hymn")
+  const worshipSet = live.worshipSet ?? []
+  const addSong = (song: HostSong) => {
+    const last = worshipSet.at(-1)
+    if (last) void setOrder({ op: "insert", item: last.id, song: song.title })
+  }
   return (
     <section aria-label="Worship desk" className={box}>
       <p className="font-semibold">Songs and hymns</p>
-      <SongLibrary onSend={(c) => void send(c)} />
+      <SongLibrary onSend={(c) => void send(c)} onChooseSong={addSong} canChooseSong={worshipSet.length > 0} />
       <SectionStepper live={live} onSend={(c) => void send(c)} />
       {live.worshipSet && (
-        <div role="group" aria-label="Worship set" className="flex flex-col gap-1">
-          <p className="font-semibold">Worship set <span className="font-normal text-muted-foreground">· the service's songs and hymns, in order</span></p>
-          {live.worshipSet.length === 0 ? <p className="text-muted-foreground">No songs or hymns in the service yet.</p> : (
+        <div role="group" aria-label="Temporary Worship order" className="flex flex-col gap-1">
+          <p className="font-semibold">Today's temporary order <span className="font-normal text-muted-foreground">· not saved to Prepare</span></p>
+          {worshipSet.length === 0 ? <p className="text-muted-foreground">No songs or hymns in the service yet. Add one in Prepare before changing today's order.</p> : (
             <ol className="flex flex-col divide-y divide-border rounded-md border border-border">
-              {live.worshipSet.map((w, i) => (
-                <li key={w.id} className={cn("flex items-center gap-2 px-2 py-1", w.live && "bg-primary/10")}>
+              {worshipSet.map((w, i) => (
+                <li key={w.id} className={cn("flex flex-wrap items-center gap-2 px-2 py-1", w.live && "bg-primary/10")}>
                   <span className="w-5 text-right text-muted-foreground tabular-nums">{i + 1}</span>
                   <span className={cn("min-w-0 flex-1 truncate", w.live && "font-semibold")}>{w.title}</span>
                   {w.key && <span className="text-muted-foreground" title="The song's key, for the band">Key {w.key}</span>}
                   {w.live && <span className="text-[0.625rem] font-bold text-primary-text uppercase">On the screens</span>}
+                  <Button size="xs" variant="ghost" aria-label={`Move ${w.title} earlier`} disabled={!ok || i === 0} onClick={() => void setOrder({ op: "move", item: w.id, before: worshipSet[i - 1]!.id })}>↑</Button>
+                  <Button size="xs" variant="ghost" aria-label={`Move ${w.title} later`} disabled={!ok || i === worshipSet.length - 1} onClick={() => void setOrder({ op: "move", item: w.id, ...(worshipSet[i + 2] ? { before: worshipSet[i + 2]!.id } : {}) })}>↓</Button>
+                  <Button size="xs" variant="outline" aria-label={`Skip ${w.title} today`} disabled={!ok || w.live} title={w.live ? "The song on the screens cannot be skipped from the temporary order" : "Leave this song out of today's temporary order"} onClick={() => void setOrder({ op: "skip", item: w.id })}>Skip today</Button>
+                  <Button size="xs" variant="outline" aria-label={`Repeat ${w.title} today`} disabled={!ok} onClick={() => void setOrder({ op: "repeat", item: w.id })}>Repeat</Button>
                 </li>
               ))}
             </ol>
@@ -74,7 +87,8 @@ export function SongsDesk({ live }: { live: LiveStateV1 }) {
         </ul>
       )}
       <Result result={result} />
-      <p className="text-muted-foreground">A song or hymn shows from its first slide on the main screens and every lyrics feed. Sections move only within the song on the screens; the main desk moves on through the service.</p>
+      {result && !result.ok && result.stale && <Button size="xs" variant="outline" onClick={() => void useJoin.getState().connect()}>Refresh today's order</Button>}
+      <p className="text-muted-foreground">A song or hymn shows from its first slide on the main screens and every lyrics feed. Sections move only within the song on the screens; today's ordering stays temporary and never rewrites the saved plan.</p>
     </section>
   )
 }
@@ -83,8 +97,14 @@ export function SongsDesk({ live }: { live: LiveStateV1 }) {
 export function StageDesk({ live, stale = false }: { live: LiveStateV1; stale?: boolean }) {
   const ok = useCanSend()
   const [text, setText] = useState("")
+  const [privateText, setPrivateText] = useState("")
+  const [target, setTarget] = useState("")
   const [result, setResult] = useState<SendResult | null>(null)
-  const send = async (command: { command: string; value?: string }) => setResult(await useJoin.getState().send(command))
+  const send = async (command: { command: string; value?: string | Record<string, unknown> }) => {
+    const sent = await useJoin.getState().send(command)
+    setResult(sent)
+    return sent
+  }
   const receivedAt = useJoin((s) => s.receivedAt)
   const connection = useJoin((s) => s.status)
   const [now, setNow] = useState(() => performance.now())
@@ -98,6 +118,9 @@ export function StageDesk({ live, stale = false }: { live: LiveStateV1; stale?: 
   const left = timer?.durationMs && elapsed !== null ? timer.durationMs - elapsed : null
   const currentEvent = (live.event.targets ?? live.rundown).find((item) => item.id === live.event.currentId)?.reference
   const stage = live.sources.find((s) => s.id === "stage")
+  const stageOutputs = live.outputs.filter((output) => output.role === "stage")
+  const selectedTarget = stageOutputs.some((output) => output.id === target) ? target : (stageOutputs[0]?.id ?? "")
+  const selectedOutputName = stageOutputs.find((output) => output.id === selectedTarget)?.name ?? "selected display"
   return (
     <section aria-label="Stage desk" className={box}>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -128,6 +151,25 @@ export function StageDesk({ live, stale = false }: { live: LiveStateV1; stale?: 
         {live.stageMessage && <Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "clear_source", value: "stage" })}>Take it off</Button>}
         {!live.stageMessage && stage?.reference && <Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "restore_source", value: "stage" })}>Put back “{stage.reference}”</Button>}
       </div>
+      <section aria-label="Send to one Stage display" className="flex flex-col gap-2 rounded-md border border-border p-2">
+        <p className="text-sm font-semibold">Private message to one Stage display</p>
+        {stageOutputs.length === 0 ? <p role="status" className="text-xs text-muted-foreground">No Stage display is assigned to this desk. Ask the host to assign one in Permissions.</p> : (
+          <form className="flex flex-wrap gap-2" onSubmit={(event) => {
+            event.preventDefault()
+            const clean = privateText.trim()
+            if (!clean || !selectedTarget) return
+            void send({ command: "stage_send", value: { target: selectedTarget, text: clean } }).then((response) => { if (response.ok) setPrivateText("") })
+          }}>
+            <select aria-label="Stage display for private message" value={selectedTarget} onChange={(event) => setTarget(event.currentTarget.value)} className={cn(field, "max-w-full flex-1 sm:max-w-64")}>
+              {stageOutputs.map((output) => <option key={output.id} value={output.id}>{output.name}</option>)}
+            </select>
+            <input aria-label="Private message text" value={privateText} onChange={(event) => setPrivateText(event.currentTarget.value)} placeholder="For this display only" maxLength={120} className={cn(field, "min-w-40 flex-1")} />
+            <Button size="sm" type="submit" disabled={!ok || !selectedTarget || !privateText.trim()}>Send privately</Button>
+            <Button size="sm" type="button" variant="outline" aria-label={`Clear private message from ${selectedOutputName}`} disabled={!ok || !selectedTarget} onClick={() => void send({ command: "stage_send", value: { target: selectedTarget, text: "" } })}>Clear private message</Button>
+          </form>
+        )}
+        <p className="text-xs text-muted-foreground">Only the selected display receives this message. The host can update its frame, but the receiver does not confirm playback.</p>
+      </section>
       <Result result={result} />
       <p className="text-muted-foreground">Shown big on the stage screens only; the congregation never sees it.</p>
     </section>

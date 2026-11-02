@@ -51,6 +51,7 @@ async function mount() {
   document.body.append(host)
   root = createRoot(host)
   await act(async () => root.render(<PermissionsWorkspace />))
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 10)))
   return host
 }
 
@@ -81,6 +82,59 @@ describe("Permissions workspace", () => {
     expect(el.textContent).toContain("View only · needs a role")
     expect(el.querySelector<HTMLSelectElement>('select[aria-label="Role for Legacy phone"]')?.value).toBe("viewer")
     expect(el.querySelector<HTMLInputElement>('input[aria-label="Rhema Recorder access for Legacy phone"]')?.checked).toBe(false)
+    await act(async () => root.unmount())
+  })
+
+  it("shows a joined desk the host's durable approval status and lets it withdraw only its own pending request", async () => {
+    const pending = { id: "request-1", kind: "scene_save", targetId: "scene-1", baseRevision: 4, state: "submitted", reason: "Use this for Sunday", createdAt: "2026-11-02T10:00:00Z", expiresAt: "2026-11-03T10:00:00Z", decidedBy: null, decidedAt: null, decisionNote: null }
+    useJoin.setState({ status: "connected", me: { name: "Stage desk", role: "stage" }, live: null, paused: false })
+    tauri.invoke.mockImplementation(async (command: string, args?: unknown) => {
+      if (command === "join_requests") return { requests: [pending] }
+      if (command === "join_withdraw_request") return { ...pending, state: "withdrawn" }
+      if (command === "remote_set_keys") return null
+      if (command === "approvals_list") return []
+      void args
+      return null
+    })
+    const el = await mount()
+    expect(el.textContent).toContain("My approval requests")
+    expect(el.textContent).toContain("Waiting for the host")
+    expect(el.textContent).toContain("Use this for Sunday")
+    const withdraw = [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Withdraw request")) as HTMLButtonElement
+    await act(async () => { withdraw.click(); await Promise.resolve(); await Promise.resolve() })
+    expect(tauri.invoke).toHaveBeenCalledWith("join_withdraw_request", { address: expect.any(String), token: expect.any(String), id: "request-1" })
+    expect(el.textContent).toContain("Withdrawn")
+    await act(async () => root.unmount())
+  })
+
+  it("shows host decisions, requested changes and load failures in the joined request tracker", async () => {
+    const request = (id: string, state: string, decisionNote: string | null = null) => ({
+      id, kind: "scene_save", targetId: `scene-${id}`, baseRevision: 4, state, reason: "Prepare this scene",
+      createdAt: "2026-11-02T10:00:00Z", expiresAt: "2026-11-03T10:00:00Z", decidedBy: state === "submitted" ? null : "Main desk",
+      decidedAt: state === "submitted" ? null : "2026-11-02T11:00:00Z", decisionNote,
+    })
+    useJoin.setState({ status: "connected", me: { name: "Stage desk", role: "stage" }, live: null, paused: false })
+    tauri.invoke.mockImplementation(async (command: string) => {
+      if (command === "join_requests") return { requests: [request("approved", "approved"), request("declined", "declined", "Use the approved welcome design"), request("changes", "requested_changes", "Please adjust the title")] }
+      if (command === "approvals_list") return []
+      return null
+    })
+    const el = await mount()
+    expect(el.textContent).toContain("Approved")
+    expect(el.textContent).toContain("Declined")
+    expect(el.textContent).toContain("Changes requested")
+    expect(el.textContent).toContain("Host note: Use the approved welcome design")
+    expect(el.textContent).toContain("Host note: Please adjust the title")
+    await act(async () => root.unmount())
+
+    useJoin.setState({ status: "connected", me: { name: "Stage desk", role: "stage" }, live: null, paused: false })
+    tauri.invoke.mockImplementation(async (command: string) => {
+      if (command === "join_requests") throw new Error("host unavailable")
+      if (command === "approvals_list") return []
+      return null
+    })
+    const failed = await mount()
+    expect(failed.querySelector('[role="alert"]')?.textContent).toContain("host unavailable")
     await act(async () => root.unmount())
   })
 
@@ -151,6 +205,28 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
+  it("assigns Stage desks only Stage outputs and saves the scope after host acknowledgement", async () => {
+    useSettingsStore.setState({ remoteDevices: [{ hash: "stage-hash", name: "Stage tablet", paired_at: "2026-10-01T00:00:00Z", role: "stage" }] })
+    useBroadcastStore.setState({ outputs: [
+      { id: "main", name: "Sanctuary", type: "display", themeId: "classic-dark", monitorIndex: 0 },
+      { id: "stage-east", name: "Stage East", type: "display", role: "stage", themeId: "classic-dark", monitorIndex: 0 },
+      { id: "stage-west", name: "Stage West", type: "display", role: "stage", themeId: "classic-dark", monitorIndex: 0 },
+      { id: "lobby", name: "Lobby", type: "display", role: "signage", themeId: "classic-dark", monitorIndex: 0 },
+    ] as never })
+    const el = await mount()
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Stage East Stage access for Stage tablet"]')).not.toBeNull()
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Stage West Stage access for Stage tablet"]')).not.toBeNull()
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Sanctuary Stage access for Stage tablet"]')).toBeNull()
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Lobby Stage access for Stage tablet"]')).toBeNull()
+
+    await act(async () => el.querySelector<HTMLInputElement>('input[aria-label="Stage East Stage access for Stage tablet"]')!.click())
+    expect(useSettingsStore.getState().remoteDevices[0]?.outputScope).toEqual(["stage-east"])
+    expect(tauri.invoke).toHaveBeenCalledWith("remote_set_keys", expect.objectContaining({
+      devices: [expect.objectContaining({ hash: "stage-hash", role: "stage", output_scope: ["stage-east"], group_take_scope: [] })],
+    }))
+    await act(async () => root.unmount())
+  })
+
   it("accepts a saved request on the host and applies the scene without taking it live", async () => {
     await createSceneEditApproval({
       scene: { id: "remote-scene", name: "Remote scene", background: "#000000", createdAt: 1, updatedAt: 2, layers: [] },
@@ -187,7 +263,7 @@ describe("Permissions workspace", () => {
 
     expect(el.textContent).toContain("Approval Requests")
     expect(el.textContent).toContain("New scene · no prior host revision")
-    expect(el.textContent).toContain("An approved scene needs an explicit host-checked Apply")
+    expect(el.textContent).toContain("Approved scenes need an explicit Apply and never Take to Program")
     expect(el.textContent).toContain("Remote scene")
     expect(el.textContent).toContain("Blank composition · no visual layers")
     expect(el.textContent).toContain("No current local scene")
@@ -257,6 +333,61 @@ describe("Permissions workspace", () => {
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "plan-request-uuid", state: "applied" }])
     expect(useBroadcastStore.getState().scenes).toBe(sceneStateBefore)
     expect(useBroadcastStore.getState().outputs).toBe(outputStateBefore)
+    await act(async () => root.unmount())
+  })
+
+  it("shows a Stage request privately, requires host approval and Apply, and does not claim receiver playback", async () => {
+    const request = {
+      id: "stage-request-uuid", kind: "stage_send", targetId: "stage-east", baseRevision: null,
+      requester: { id: "stage-key", name: "Stage desk" },
+      payload: { target: "stage-east", text: "Choir enters now" },
+      reason: "Choir needs a private cue", state: "submitted", createdAt: "2026-11-02T09:00:00Z",
+      expiresAt: "2026-11-02T09:10:00Z", decidedBy: null, decidedAt: null, decisionNote: null,
+    }
+    tauri.invoke.mockImplementation(async (command: string) => {
+      if (command === "approvals_list") return [request]
+      if (command === "approvals_decide") return { ...request, state: "approved", decidedBy: { id: "main-desk", name: "Main desk" }, decidedAt: "2026-11-02T09:01:00Z" }
+      if (command === "approvals_apply") return { ...request, state: "applied", decidedBy: { id: "main-desk", name: "Main desk" }, decidedAt: "2026-11-02T09:01:00Z" }
+      return null
+    })
+    resetApprovalRequests()
+    await reloadApprovalRequests()
+    const outputsBefore = useBroadcastStore.getState().outputs
+    const el = await mount()
+    expect(el.textContent).toContain("Private Stage message to stage-east")
+    expect(el.textContent).toContain("Choir enters now")
+    expect(el.textContent).toContain("It is not sent until the host applies this approval")
+
+    await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Approve"))!.click())
+    expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ kind: "stage_send", state: "approved" }])
+    expect(el.textContent).toContain("Approved · ready to send")
+    await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Send approved Stage message"))!.click())
+    expect(tauri.invoke).toHaveBeenCalledWith("approvals_apply", { id: "stage-request-uuid" })
+    expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ kind: "stage_send", state: "applied" }])
+    expect(el.textContent).toContain("Applied · receiver not confirmed")
+    expect(el.textContent).toContain("Receiver playback and whether anyone read it are not confirmed")
+    expect(useBroadcastStore.getState().outputs).toBe(outputsBefore)
+    await act(async () => root.unmount())
+  })
+
+  it("keeps an approved Stage cue visible with an actionable error when the target is gone", async () => {
+    const request = {
+      id: "stage-request-uuid", kind: "stage_send", targetId: "stage-east", baseRevision: null,
+      requester: { id: "stage-key", name: "Stage desk" }, payload: { target: "stage-east", text: "Choir enters now" },
+      reason: null, state: "approved", createdAt: "2026-11-02T09:00:00Z", expiresAt: "2026-11-02T09:10:00Z",
+      decidedBy: { id: "main-desk", name: "Main desk" }, decidedAt: "2026-11-02T09:01:00Z", decisionNote: null,
+    }
+    tauri.invoke.mockImplementation(async (command: string) => {
+      if (command === "approvals_list") return [request]
+      if (command === "approvals_apply") throw new Error("That stage display is no longer on the host.")
+      return null
+    })
+    resetApprovalRequests()
+    await reloadApprovalRequests()
+    const el = await mount()
+    await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Send approved Stage message"))!.click())
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("no longer on the host")
+    expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ kind: "stage_send", state: "approved" }])
     await act(async () => root.unmount())
   })
 

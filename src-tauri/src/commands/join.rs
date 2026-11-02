@@ -148,6 +148,18 @@ pub async fn join_lookup(state: State<'_, JoinRuntime>, address: String, token: 
     rhema_join::host::lookup(&state.host(&address)?, &token, &asked).await
 }
 
+/// Read this paired desk's own host approval requests and their current status.
+#[tauri::command]
+pub async fn join_requests(state: State<'_, JoinRuntime>, address: String, token: String) -> Result<serde_json::Value, String> {
+    rhema_join::host::requests(&state.host(&address)?, &token).await
+}
+
+/// Withdraw one of this paired desk's own approval requests before the host decides it.
+#[tauri::command]
+pub async fn join_withdraw_request(state: State<'_, JoinRuntime>, address: String, token: String, id: String) -> Result<serde_json::Value, String> {
+    rhema_join::host::withdraw_request(&state.host(&address)?, &token, &id).await
+}
+
 /// The body of one command: a fresh `id` (a retry is harmless) and, when known, the service this
 /// desk is looking at (#246 C16), so the host refuses it if it has moved to another one.
 fn command_body(command: serde_json::Value, service: Option<String>) -> serde_json::Value {

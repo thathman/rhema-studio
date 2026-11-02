@@ -12,6 +12,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { sceneLayerReviewSummary, scenePlanReferenceLabels, sceneRequestReviewModel, type SceneRequestReviewModel } from "./scene-request-review"
 import {
   applySceneApprovalRequest,
+  applyStageSendApprovalRequest,
   decideApprovalRequest,
   approvalErrorText,
   confirmPlanApprovalRequest,
@@ -38,6 +39,7 @@ function record(value: unknown): Record<string, unknown> | null {
 function requestDescription(request: ApprovalRequest, scenes: ReturnType<typeof useBroadcastStore.getState>["scenes"]): string {
   const payload = record(request.payload)
   const scene = record(payload?.scene)
+  if (request.kind === "stage_send") return `Private Stage message to ${request.targetId}`
   if (request.kind === "plan_approve") {
     const title = typeof payload?.title === "string" && payload.title.trim() ? payload.title.trim() : request.targetId
     return `Approve service “${title}”${request.baseRevision === null ? " · revision missing" : ` · revision ${request.baseRevision}`}`
@@ -53,6 +55,11 @@ function requestDescription(request: ApprovalRequest, scenes: ReturnType<typeof 
 function requestImpact(
   request: ApprovalRequest,
 ): string {
+  if (request.kind === "stage_send") {
+    const payload = record(request.payload)
+    const text = typeof payload?.text === "string" ? payload.text : "Message unavailable"
+    return `Private Stage display · ${request.targetId} · Message: “${text}”. It is not sent until the host applies this approval; receiver playback is not confirmed.`
+  }
   if (request.kind === "plan_approve") {
     if (request.baseRevision === null) return "This request has no host-checked base revision and cannot be confirmed safely."
     return `Submitted revision ${request.baseRevision}. Approve this exact revision in Prepare first; the host verifies it before confirmation.`
@@ -156,9 +163,9 @@ function stateLabel(request: ApprovalRequest): string {
   const state = request.state
   switch (state) {
     case "submitted": return "Pending review"
-    case "approved": return request.kind === "plan_approve" ? "Approved · awaiting Prepare" : request.kind.startsWith("scene_") ? "Approved · ready to apply" : "Approved · not applied"
+    case "approved": return request.kind === "plan_approve" ? "Approved · awaiting Prepare" : request.kind === "stage_send" ? "Approved · ready to send" : request.kind.startsWith("scene_") ? "Approved · ready to apply" : "Approved · not applied"
     case "requested_changes": return "Changes requested"
-    case "applied": return request.kind === "plan_approve" ? "Revision confirmed by host" : request.kind.startsWith("scene_") ? "Applied by host · no Live change" : "Marked applied by host"
+    case "applied": return request.kind === "plan_approve" ? "Revision confirmed by host" : request.kind === "stage_send" ? "Applied · receiver not confirmed" : request.kind.startsWith("scene_") ? "Applied by host · no Live change" : "Marked applied by host"
     default: return state[0].toUpperCase() + state.slice(1)
   }
 }
@@ -247,6 +254,18 @@ export function ApprovalRequestsPanel() {
     }
   }
 
+  const applyStageSend = async (request: ApprovalRequest) => {
+    setBusy(request.id)
+    setRowErrors((current) => ({ ...current, [request.id]: "" }))
+    try {
+      await applyStageSendApprovalRequest(request.id)
+    } catch (cause) {
+      setRowErrors((current) => ({ ...current, [request.id]: approvalErrorText(cause) }))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const keepLocalScene = async (request: ApprovalRequest) => {
     setBusy(request.id)
     setRowErrors((current) => ({ ...current, [request.id]: "" }))
@@ -287,7 +306,7 @@ export function ApprovalRequestsPanel() {
         <ShieldCheckIcon aria-hidden className="size-4 text-muted-foreground" />
         <div className="min-w-0 flex-1">
           <h2 id="host-approval-requests-title" className="font-semibold">Approval Requests</h2>
-          <p className="text-xs text-muted-foreground">Durable requests recorded by this host. An approved scene needs an explicit host-checked Apply to save it in the scene library; this never Takes it to Preview or Program. Service revisions use Prepare.</p>
+          <p className="text-xs text-muted-foreground">Durable requests recorded by this host. Approved scenes need an explicit Apply and never Take to Program. An approved Stage cue needs explicit host Apply before it reaches its private display. Service revisions use Prepare.</p>
         </div>
         <Badge variant={pending.length ? "amber" : "neutral"}>{pending.length} pending</Badge>
         <Button size="sm" variant="outline" aria-label="Refresh approval requests" disabled={!isHost || loading} onClick={reload}><RefreshCwIcon /> Refresh</Button>
@@ -322,6 +341,8 @@ export function ApprovalRequestsPanel() {
                     {request.state === "applied" && request.kind.startsWith("scene_") && needsLocalRecovery && localRecoveryUnavailable[request.id] && <p role="alert" className="mt-1 text-xs text-amber-800">This applied request has no safe local recovery record. The current scene was preserved. Send a fresh request to synchronize it.</p>}
                     {request.state === "applied" && request.kind.startsWith("scene_") && localRecoveryDismissed[request.id] && <p role="status" className="mt-1 text-xs text-amber-800">You kept the newer local scene. The host request remains applied; send a fresh request to synchronize this version. Program was not changed.</p>}
                     {request.state === "applied" && request.kind.startsWith("scene_") && !needsLocalRecovery && !localRecoveryDismissed[request.id] && <p role="status" className="mt-1 text-xs text-muted-foreground">Saved in the local scene library after host approval. No scene was Taken live; Program stays unchanged.</p>}
+                    {request.state === "approved" && request.kind === "stage_send" && <p role="status" className="mt-1 text-xs text-muted-foreground">The message remains private and unsent until the host applies it. Stage display playback is not acknowledged.</p>}
+                    {request.state === "applied" && request.kind === "stage_send" && <p role="status" className="mt-1 text-xs text-muted-foreground">The host applied this private cue to the Stage display. Receiver playback and whether anyone read it are not confirmed.</p>}
                     {request.reason && <p className="mt-1 text-xs text-muted-foreground">Reason: {request.reason}</p>}
                     {request.decisionNote && <p className="mt-1 text-xs text-muted-foreground">Decision note: {request.decisionNote}</p>}
                     {rowErrors[request.id] && <p role="alert" className="mt-2 text-xs text-destructive">{rowErrors[request.id]}</p>}
@@ -348,6 +369,9 @@ export function ApprovalRequestsPanel() {
                   </div>}
                   {isHost && request.kind === "plan_approve" && request.state === "approved" && request.baseRevision !== null && <div className="flex flex-wrap items-center gap-2">
                     <Button size="sm" variant="outline" disabled={busy === request.id} onClick={() => void confirmPlan(request)}>Confirm approved revision</Button>
+                  </div>}
+                  {isHost && request.kind === "stage_send" && request.state === "approved" && <div className="flex flex-wrap items-center gap-2">
+                    <Button size="sm" variant="outline" aria-label="Apply approved private Stage message" disabled={busy !== null} onClick={() => void applyStageSend(request)}>Send approved Stage message</Button>
                   </div>}
                   {isHost && request.kind.startsWith("scene_") && request.state === "approved" && !localHostStatusUnknown[request.id] && <div className="flex flex-wrap items-center gap-2">
                     <Button

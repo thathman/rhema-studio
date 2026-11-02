@@ -732,6 +732,9 @@ fn worship_set_live(live_json: Option<&str>, w: &crate::command::WorshipSetIn) -
     if !has(&w.item) || w.before.as_deref().is_some_and(|b| !has(b)) {
         return Err((StatusCode::CONFLICT, "That song is no longer in today's order; refresh", Some("stale")));
     }
+    if w.op == WorshipSetOp::Skip && set.iter().any(|item| item.get("id").and_then(serde_json::Value::as_str) == Some(&w.item) && item.get("live").and_then(serde_json::Value::as_bool) == Some(true)) {
+        return Err((StatusCode::CONFLICT, "The song on the screens cannot be skipped from today's order", Some("stale")));
+    }
     Ok(())
 }
 
@@ -739,6 +742,9 @@ fn worship_set_live(live_json: Option<&str>, w: &crate::command::WorshipSetIn) -
 /// Live State without an outputs list is not checked here.
 fn stage_target_live(live_json: Option<&str>, target: &str) -> Result<(), (StatusCode, &'static str)> {
     let Some(live) = live_json.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()) else { return Ok(()) };
+    if live.get("program").and_then(|program| program.get("rehearsal")).and_then(serde_json::Value::as_bool) == Some(true) {
+        return Err((StatusCode::CONFLICT, "Stage displays are paused during rehearsal"));
+    }
     let Some(outputs) = live.get("outputs").and_then(serde_json::Value::as_array) else { return Ok(()) };
     match outputs.iter().find(|o| o.get("id").and_then(serde_json::Value::as_str) == Some(target)) {
         None => Err((StatusCode::CONFLICT, "That stage display is no longer on the host; refresh")),
@@ -4032,7 +4038,7 @@ mod tests {
         let live = new_live_hub();
         live.publish(r#"{"v":1,"outputs":[{"id":"main","name":"Main","role":"congregation"},{"id":"pulpit","name":"Pulpit confidence","role":"stage"},{"id":"choir","name":"Choir monitor","role":"stage"}]}"#.into());
         let sink = Arc::new(Events::default());
-        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live, ..Default::default() };
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
         let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
         let port = result.bound_port;
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -4057,6 +4063,14 @@ mod tests {
         let asked: Vec<serde_json::Value> = events.iter().filter(|(e, _)| e == "remote:stage_send_request").map(|(_, p)| serde_json::from_str(p).unwrap()).collect();
         assert_eq!(asked.len(), 1, "one request for the unassigned display, nothing delivered to it");
         assert_eq!((asked[0]["target"].as_str(), asked[0]["by"].as_str(), asked[0]["text"].as_str()), (Some("choir"), Some("stg"), Some("Two minutes")));
+
+        live.publish(r#"{"v":1,"program":{"rehearsal":true},"outputs":[{"id":"pulpit","name":"Pulpit confidence","role":"stage"}]}"#.into());
+        assert_eq!(press(port, "pres", send("pulpit")).await.0, 409, "rehearsal keeps stage displays frozen");
+        assert_eq!(
+            sink.0.lock().unwrap().iter().filter(|(event, _)| event == "remote:stage_send").count(),
+            2,
+            "no stage-send event is emitted during rehearsal"
+        );
 
         let view = get_with(port, "/api/v1/live", "X-Rhema-Key: stg\r\n", None).await;
         let body: serde_json::Value = serde_json::from_str(view.split("\r\n\r\n").nth(1).unwrap()).unwrap();
@@ -4211,6 +4225,12 @@ mod tests {
         assert!(status == 409 && body.contains(r#""code":"stale""#), "{status} {body}");
         let fresh = read_revisions(port, "wor").await;
         assert_eq!(press(port, "wor", change(serde_json::json!({ "op": "insert", "item": "b", "before": "b", "song": "Amazing Grace" }), &fresh)).await.0, 200);
+        live.publish(r#"{"v":1,"service":{"id":"s1"},"worshipSet":[{"id":"a","title":"Alpha"},{"id":"b","title":"Beta","live":true},{"id":"c","title":"Gamma"}]}"#.into());
+        let playing = read_revisions(port, "wor").await;
+        let (status, body) = press(port, "wor", change(serde_json::json!({ "op": "skip", "item": "b" }), &playing)).await;
+        assert!(status == 409 && body.contains("cannot be skipped") && body.contains(r#""code":"stale""#), "{status} {body}");
+        let events = sink.0.lock().unwrap().clone();
+        assert_eq!(events.iter().filter(|(event, _)| event == "remote:worship_set").count(), 2, "a Live song cannot be removed from the temporary order");
         let mut handle = result.handle;
         handle.stop();
     }
@@ -6127,6 +6147,27 @@ mod tests {
             Some(&entry),
         )).unwrap();
         assert!(malformed_map["outputMap"].as_array().unwrap().is_empty(), "a non-array map is never passed through unfiltered");
+    }
+
+    #[test]
+    fn stage_live_state_contains_only_assigned_display_names() {
+        use crate::keys::{KeyEntry, Role};
+        let entry = KeyEntry {
+            hash: "stage-key".into(),
+            name: "Stage desk".into(),
+            role: Role::Stage,
+            paused: false,
+            output_scope: vec!["stage-east".into()],
+            group_take_scope: Vec::new(),
+            record: false,
+        };
+        let json = r#"{"v":1,"outputs":[{"id":"sanctuary","name":"Sanctuary","role":"congregation","sceneId":"private-scene"},{"id":"stage-east","name":"Stage East","role":"stage","sceneId":null},{"id":"stage-west","name":"Stage West","role":"stage","sceneId":null},{"id":"lobby","name":"Lobby","role":"signage"}],"notices":[]}"#;
+        let live: serde_json::Value = serde_json::from_str(&live_for(json, Some(&entry))).unwrap();
+        assert_eq!(
+            live["outputs"],
+            serde_json::json!([{ "id": "stage-east", "name": "Stage East", "role": "stage" }]),
+            "other Stage IDs, all congregation data and signage stay private"
+        );
     }
 
     #[test]
