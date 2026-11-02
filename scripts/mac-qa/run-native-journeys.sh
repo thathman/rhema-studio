@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 QA_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/rhema-native-qa.XXXXXX")"
 QA_RUN="$QA_SCRATCH/qa-run"
 QA_HOME="$QA_SCRATCH/home"
-APP_BIN="$ROOT/src-tauri/target/debug/Rhema"
+APP_BIN="${CARGO_TARGET_DIR:-$ROOT/src-tauri/target}/debug/Rhema"
 CREATED_BIBLE_DB=0
 BACKED_UP_BIBLE_SIDECARS=0
 HAD_BIBLE_SHM=0
@@ -36,6 +36,8 @@ cleanup() {
       "$QA_RUN/out/setup-recording-output.json" \
       "$QA_RUN/out/recording-output-ready.json" \
       "$QA_RUN/out/native-recording-journey.json" \
+      "$QA_RUN/out/live-empty-service.json" \
+      "$QA_RUN/out/live-configured-service.json" \
       "$QA_SCRATCH/result.json" \
       "$QA_SCRATCH/scene-result.json" \
       "$QA_SCRATCH/take-failure-result.json" \
@@ -108,6 +110,43 @@ if ! kill -0 "$APP_PID" 2>/dev/null; then
   echo "The QA app exited at launch: another Rhema QA app is probably running on this computer. Wait for it, then run this again." >&2
   exit 3
 fi
+
+capture_live_state() {
+  local name="$1"
+  local scenario="$2"
+  local screenshot="$QA_SCRATCH/artifacts/live-${name}.png"
+  mkdir -p "$QA_SCRATCH/artifacts"
+  "$ROOT/scripts/mac-qa/qa.py" main "live-${name}" "$ROOT/scripts/mac-qa/${scenario}" 60 > "$QA_SCRATCH/live-${name}.json"
+  cp "$QA_RUN/out/live-${name}.json" "$QA_SCRATCH/artifacts/live-${name}-state.json"
+  sleep 1
+  local window_id
+  window_id="$(swift "$ROOT/scripts/mac-qa/rhema-window-id.swift")"
+  screencapture -x -l "$window_id" "$screenshot"
+  python3 - "$screenshot" <<'PY'
+import struct
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = path.read_bytes()
+if len(data) < 8000 or data[:8] != b"\x89PNG\r\n\x1a\n":
+    raise SystemExit(f"Native Live screenshot is missing, empty, or not PNG: {path}")
+width, height = struct.unpack(">II", data[16:24])
+if width < 640 or height < 400:
+    raise SystemExit(f"Native Live screenshot is too small ({width}x{height}): {path}")
+print(f"Captured {path.name}: {width}x{height}, {len(data)} bytes")
+PY
+}
+
+# Capture both states from the built Tauri window. These PNGs come from the
+# native app window, not the browser shim or an illustrative mockup.
+capture_live_state empty-service live-empty-service.js
+capture_live_state configured-service live-configured-service.js
+if [[ "${LIVE_SCREENSHOTS_ONLY:-0}" == 1 ]]; then
+  echo "Native Live screenshots captured; LIVE_SCREENSHOTS_ONLY=1 skips the longer recorder and scene journeys."
+  exit 0
+fi
+
 set +e
 {
   cat "$ROOT/scripts/mac-qa/hymn-journey.js"

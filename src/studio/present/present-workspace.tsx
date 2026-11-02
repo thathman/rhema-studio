@@ -2,7 +2,7 @@ import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
 import { useEffect, useRef, useState, useSyncExternalStore } from "react"
-import { ArrowUpIcon, BookOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
+import { ArrowUpIcon, BookOpenIcon, FolderOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, PlusIcon, SearchIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { LiveOutputPanel } from "@/components/panels/live-output-panel"
@@ -33,6 +33,7 @@ import { EngageHostControl } from "@/studio/engage/host-control"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 import { useProductionTab } from "@/studio/production/production-tab"
+import { usePreviewLabel } from "@/hooks/use-preview-label"
 
 export function PresentWorkspace() {
   const [selectedPreviewOutputId, setSelectedPreviewOutputId] = useState<string | null>(null)
@@ -243,17 +244,35 @@ function LiveConsoleSurface({
   const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => false)
   const isLive = useBroadcastStore((s) => s.isLive)
   const count = useQueueStore((s) => s.items.length)
+  const headers = useQueueStore((s) => s.headers)
   const hasTimedItems = useQueueStore((s) => s.items.some((i) => i.auto_advance))
   const held = useBroadcastStore((s) => s.heldLive !== null)
   const quickOnAir = useBroadcastStore((s) => s.liveVerse?.quickScreen ?? null)
   const service = useServiceStore((s) => s.current)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const emptyRundown = count === 0 && headers.length === 0
+  const preview = usePreviewLabel()
+
+  const focusQuickFind = () => {
+    const focus = () => {
+      const input = document.querySelector<HTMLInputElement>('[data-tour="quick-find"] input[aria-label="Quick find"]')
+      input?.scrollIntoView?.({ block: "nearest" })
+      input?.focus()
+    }
+    if (toolsOpen) {
+      onCloseTools()
+      window.setTimeout(focus, 0)
+    } else {
+      focus()
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3 [@media(max-height:860px)]:gap-2 [@media(max-height:860px)]:pt-2.5">
     <PhaseStrip />
     <RecorderDock />
     <div className="grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,14.5rem)] gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2">
-      <section className="row-span-3 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken" data-tour="present-rundown">
+      <section className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken ${emptyRundown ? "row-span-1" : "row-span-3"}`} data-tour="present-rundown">
         <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold tracking-tight">Running order</h2>
@@ -266,9 +285,48 @@ function LiveConsoleSurface({
             <TimedMoves />
           </div>
         )}
-        <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
-          <RundownList mode="present" />
-        </div>
+        {emptyRundown ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-2" role="region" aria-label="Live setup actions">
+            <div className="shrink-0">
+              <h3 className="text-sm font-semibold">{service ? "No events in this service" : "No service open"}</h3>
+              <p className="text-[0.6875rem] leading-tight text-muted-foreground">Open or create a plan, or find a private cue.</p>
+              <p className="mt-0.5 text-[0.625rem] leading-tight text-muted-foreground" title={preview
+                ? "Plan changes never update Program by themselves. Preview stays private until you choose Take live."
+                : "Plan changes never update Program by themselves. Take is unavailable until you choose a moment for Preview."}>
+                {preview ? "Only Take changes an output." : "Take waits for a Preview item."}
+              </p>
+            </div>
+            <div className="grid shrink-0 grid-cols-2 gap-1">
+              {service ? (
+                <Button type="button" size="xs" aria-label="Add event in Prepare" title="Add an event in Prepare" className="h-7 min-h-7 min-w-0 justify-start gap-1 px-2 text-[0.6875rem] [&_svg]:size-3.5" onClick={() => useShellStore.getState().goTo("prepare")}>
+                  <PlusIcon /> Add event
+                </Button>
+              ) : (
+                <>
+                  <Button type="button" size="xs" aria-label="Open a saved service" title="Choose a saved service" className="h-7 min-h-7 min-w-0 justify-start gap-1 px-2 text-[0.6875rem] [&_svg]:size-3.5" onClick={() => useShellStore.getState().goTo("archive")}>
+                    <FolderOpenIcon /> Open saved
+                  </Button>
+                  <Button type="button" size="xs" aria-label="Create a service" title="Create a new service" variant="outline" className="h-7 min-h-7 min-w-0 justify-start gap-1 px-2 text-[0.6875rem] [&_svg]:size-3.5" onClick={() => {
+                    useShellStore.getState().setNewServiceOpen(true)
+                    useShellStore.getState().goTo("prepare")
+                  }}>
+                    <PlusIcon /> New service
+                  </Button>
+                </>
+              )}
+              <Button type="button" size="xs" aria-label="Find Scripture or hymn" title="Find Scripture or hymn" variant="outline" className="h-7 min-h-7 min-w-0 justify-start gap-1 px-2 text-[0.6875rem] [&_svg]:size-3.5" onClick={focusQuickFind}>
+                <SearchIcon /> Find cue
+              </Button>
+              <Button type="button" size="xs" aria-label={outputs.length === 0 ? "Add an output" : "Review outputs"} title="Review or connect an output" variant="ghost" className="h-7 min-h-7 min-w-0 justify-start gap-1 px-2 text-[0.6875rem] [&_svg]:size-3.5" onClick={() => useShellStore.getState().openOutputs()}>
+                <MonitorCogIcon /> {outputs.length === 0 ? "Add output" : "Outputs"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+            <RundownList mode="present" />
+          </div>
+        )}
       </section>
       {/* On a wide window these sit in the grid itself; on a narrow one (1024×600 and up) they share one
           column that scrolls when it must, so nothing in it is ever drawn over another part. */}
