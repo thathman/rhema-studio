@@ -203,6 +203,7 @@ impl CommandDispatcher {
             RemoteCommand::GroupTakeScene(t) => sink.emit_event("remote:group_take_scene", &serde_json::json!({ "outputs": t.outputs, "scene": t.scene }).to_string()),
             RemoteCommand::ReleaseScene(output) => sink.emit_event("remote:release_scene", &serde_json::json!({ "output": output }).to_string()),
             // One line of at most 120 characters, as the main desk's own stage message box.
+            RemoteCommand::WorshipSet(w) => sink.emit_event("remote:worship_set", &serde_json::json!({ "op": w.op.as_str(), "item": w.item, "before": w.before, "song": w.song.as_deref().map(|s| s.chars().take(120).collect::<String>()) }).to_string()),
             // Its own event: a host app that cannot yet deliver to one display delivers nothing,
             // rather than a private message on every stage screen.
             RemoteCommand::StageSend(m) => sink.emit_event("remote:stage_send", &serde_json::json!({ "target": m.target, "text": m.text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(120).collect::<String>() }).to_string()),

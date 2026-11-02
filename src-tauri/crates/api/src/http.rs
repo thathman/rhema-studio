@@ -477,6 +477,8 @@ impl Revisions {
             // The run of show's items (Comms C2): queueing a request acts on the list it saw, so two
             // desks answering the same request do not queue it twice. Times are not a change.
             ("queue".to_string(), serde_json::Value::Array(v["rundown"].as_array().into_iter().flatten().map(|i| i["id"].clone()).collect()).to_string()),
+            // Today's song order (Worship, page 3): a move or skip acts on the order the desk saw.
+            ("worship".to_string(), serde_json::Value::Array(v["worshipSet"].as_array().into_iter().flatten().map(|i| i["id"].clone()).collect()).to_string()),
             // OBS's recording on or off, and its transition (#197): an OBS desk acts on what it saw.
             ("obs:record".to_string(), v["obs"]["recording"].to_string()),
             ("obs:transition".to_string(), v["obs"]["transition"].to_string()),
@@ -589,6 +591,7 @@ fn revision_part(cmd: &RemoteCommand) -> Option<String> {
         RemoteCommand::SaveScene(sc) => format!("scene:{}", sc.id()),
         RemoteCommand::DeleteScene(d) => format!("scene:{}", d.id),
         RemoteCommand::SongSection(_) => "lyrics".into(),
+        RemoteCommand::WorshipSet(_) => "worship".into(),
         RemoteCommand::AuxTimer(t) => format!("aux:{}", t.id),
         RemoteCommand::QueueRequest(_) => "queue".into(),
         RemoteCommand::ObsRecord(_) => "obs:record".into(),
@@ -707,6 +710,27 @@ fn validate_group_take_live(
             StatusCode::FORBIDDEN,
             "Group Take is limited to current congregation outputs",
         ));
+    }
+    Ok(())
+}
+
+/// A song order change against today's set as the host last published it: the songs it names must
+/// be in it, and an insert must name a library song. A host whose Live State has no set (older) is
+/// not checked here.
+fn worship_set_live(live_json: Option<&str>, w: &crate::command::WorshipSetIn) -> Result<(), (StatusCode, &'static str, Option<&'static str>)> {
+    use crate::command::WorshipSetOp;
+    let ok_id = |id: &str| !id.is_empty() && id.len() <= 128 && !id.chars().any(char::is_control);
+    if !ok_id(&w.item) || w.before.as_deref().is_some_and(|b| !ok_id(b)) {
+        return Err((StatusCode::UNPROCESSABLE_ENTITY, "That is not a song in today's order", None));
+    }
+    if w.op == WorshipSetOp::Insert && w.song.as_deref().is_none_or(|s| s.trim().is_empty()) {
+        return Err((StatusCode::UNPROCESSABLE_ENTITY, "Choose the song to add", None));
+    }
+    let Some(live) = live_json.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()) else { return Ok(()) };
+    let Some(set) = live.get("worshipSet").and_then(serde_json::Value::as_array) else { return Ok(()) };
+    let has = |id: &str| set.iter().any(|i| i.get("id").and_then(serde_json::Value::as_str) == Some(id));
+    if !has(&w.item) || w.before.as_deref().is_some_and(|b| !has(b)) {
+        return Err((StatusCode::CONFLICT, "That song is no longer in today's order; refresh", Some("stale")));
     }
     Ok(())
 }
@@ -2830,6 +2854,12 @@ async fn command_handler<S: CommandSink + 'static>(
             return (StatusCode::FORBIDDEN, CommandResponse::refused(why));
         }
     }
+    if let RemoteCommand::WorshipSet(w) = &command {
+        if let Err((status, why, code)) = worship_set_live(state.live.current().as_deref(), w) {
+            log::info!("HTTP song order change from {by} refused: {why}");
+            return (status, Json(CommandResponse { success: false, error: Some(why.into()), code, ..Default::default() }));
+        }
+    }
     if let RemoteCommand::StageSend(send) = &command {
         if let Err((status, why)) = stage_target_live(state.live.current().as_deref(), &send.target) {
             log::info!("HTTP stage message from {by} refused: {why}");
@@ -4099,6 +4129,50 @@ mod tests {
         assert_eq!(recent.status("first", "take main choir"), RecentIdStatus::Conflict);
         assert_eq!(recent.status("unseen", "verse next"), RecentIdStatus::New);
         assert!(RecentIds::KEEP >= std::time::Duration::from_mins(10));
+    }
+
+    /// #410, page 3: a Worship desk changes today's song order (never the approved plan); the host
+    /// checks the songs it names against the order it published and that nobody changed it since.
+    #[tokio::test]
+    async fn a_worship_desk_changes_todays_song_order_against_the_order_it_saw() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        #[derive(Default)]
+        struct Events(Mutex<Vec<(String, String)>>);
+        impl CommandSink for Events {
+            fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
+                self.0.lock().unwrap().push((event.to_string(), payload.to_string()));
+                Ok(())
+            }
+            fn invoke_backend(&self, _: &str, _: &str) -> Result<(), CommandError> { Ok(()) }
+        }
+        let entry = |key: &str, role: Role| KeyEntry { hash: hash_key(key), name: key.into(), role, paused: false, output_scope: Vec::new(), group_take_scope: Vec::new(), record: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("wor", Role::Worship), entry("bib", Role::Bible)] }));
+        let live = new_live_hub();
+        let order = |ids: &[&str]| format!(r#"{{"v":1,"service":{{"id":"s1"}},"worshipSet":[{}]}}"#, ids.iter().map(|i| format!(r#"{{"id":"{i}","title":"{i}"}}"#)).collect::<Vec<_>>().join(","));
+        live.publish(order(&["a", "b", "c"]));
+        let sink = Arc::new(Events::default());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let seen = read_revisions(port, "wor").await;
+        let change = |value: serde_json::Value, seen: &serde_json::Value| serde_json::json!({ "command": "worship_set", "value": value, "seen": seen });
+
+        assert_eq!(press(port, "bib", change(serde_json::json!({ "op": "skip", "item": "b" }), &seen)).await.0, 403, "a Bible desk does not change the song order");
+        assert_eq!(press(port, "wor", change(serde_json::json!({ "op": "move", "item": "z", "before": "a" }), &seen)).await.0, 409, "a song not in today's order");
+        assert_eq!(press(port, "wor", change(serde_json::json!({ "op": "insert", "item": "a" }), &seen)).await.0, 422, "an insert names its song");
+        assert_eq!(press(port, "wor", change(serde_json::json!({ "op": "move", "item": "c", "before": "a" }), &seen)).await.0, 200);
+        let events = sink.0.lock().unwrap().clone();
+        let sent: Vec<serde_json::Value> = events.iter().filter(|(e, _)| e == "remote:worship_set").map(|(_, p)| serde_json::from_str(p).unwrap()).collect();
+        assert_eq!(sent, vec![serde_json::json!({ "op": "move", "item": "c", "before": "a", "song": null, "by": "wor" })], "with who sent it");
+        // The host applies it: the order changes. A desk still acting on the old order is told to look again.
+        live.publish(order(&["c", "a", "b"]));
+        let (status, body) = press(port, "wor", change(serde_json::json!({ "op": "skip", "item": "b" }), &seen)).await;
+        assert!(status == 409 && body.contains(r#""code":"stale""#), "{status} {body}");
+        let fresh = read_revisions(port, "wor").await;
+        assert_eq!(press(port, "wor", change(serde_json::json!({ "op": "insert", "item": "b", "before": "b", "song": "Amazing Grace" }), &fresh)).await.0, 200);
+        let mut handle = result.handle;
+        handle.stop();
     }
 
     async fn ack_clock(port: u16, clock: i64) -> String {
