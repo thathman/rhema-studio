@@ -375,8 +375,8 @@ function LiveConsoleSurface({
               </div>
               <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
             </div>
-            {/* Four across on wide windows, two across when the panel narrows. Actions wrap vertically instead of scrolling sideways. */}
-            <div data-testid="quick-screen-actions" className="-m-1 grid min-h-0 min-w-0 grid-cols-4 content-start gap-2 overflow-y-auto overflow-x-hidden p-1 max-[1200px]:grid-cols-2 max-[1200px]:gap-1.5">
+            {/* Four across on wide windows, three at the 1392px desktop capture width, two on small windows. */}
+            <div data-testid="quick-screen-actions" className="-m-1 grid min-h-0 min-w-0 grid-cols-4 content-start gap-2 overflow-y-auto overflow-x-hidden p-1 max-[1500px]:grid-cols-3 max-[1200px]:grid-cols-2 max-[1200px]:gap-1.5">
               {(["welcome", "stand", "pray", "offering", "technical", "logo", "black"] as const).map((s) => {
                 // Calm until pressed: only the screen that is on air turns red, so the row also says what is showing.
                 const onAir = isLive && quickOnAir === s

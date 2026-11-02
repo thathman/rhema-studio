@@ -247,6 +247,7 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[aria-label="Rhema recording dock"]')?.textContent).toContain("Rhema recording controls")
     expect(element.querySelector('[role="toolbar"][aria-label="Presentation controls"] button')?.textContent).toBe("Take live")
     const quickActions = element.querySelector<HTMLElement>('[data-testid="quick-screen-actions"]')!
+    expect(quickActions.className).toContain("max-[1500px]:grid-cols-3")
     expect(quickActions.className).toContain("max-[1200px]:grid-cols-2")
     expect(quickActions.className).toContain("overflow-x-hidden")
     expect(quickActions.textContent).toContain("Technical issue")
