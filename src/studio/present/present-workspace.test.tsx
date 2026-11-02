@@ -25,14 +25,14 @@ vi.mock("@/studio/present/phase-strip", () => ({ PhaseStrip: () => null }))
 vi.mock("@/studio/present/rundown-list", () => ({ RundownList: () => <div data-testid="rundown-list" /> }))
 vi.mock("@/studio/present/quick-find", () => ({ QuickFind: () => <input aria-label="Quick find" /> }))
 vi.mock("@/studio/present/service-timer", () => ({ ServiceTimer: () => null }))
-vi.mock("@/studio/present/aux-timers", () => ({ AuxTimers: () => null }))
-vi.mock("@/studio/present/stage-message", () => ({ StageMessage: () => null }))
-vi.mock("@/studio/present/lower-third", () => ({ LowerThirdControl: () => null }))
+vi.mock("@/studio/present/stage-message", () => ({ StageMessage: () => <button type="button">Stage messages</button> }))
+vi.mock("@/studio/present/lower-third", () => ({ LowerThirdControl: () => <button type="button">Lower thirds</button> }))
 vi.mock("@/studio/present/ticker", () => ({ TickerRow: () => null }))
 vi.mock("@/studio/present/obs-chip", () => ({ ObsChip: () => null }))
-vi.mock("@/studio/present/sound-chip", () => ({ SoundChip: () => null }))
+vi.mock("@/studio/present/sound-chip", () => ({ SoundChip: () => <button type="button">Sound controls</button> }))
 vi.mock("@/studio/present/recorder-dock", () => ({ RecorderDock: () => <section aria-label="Rhema recording dock">Rhema recording controls</section> }))
-vi.mock("@/studio/present/cue-menu", () => ({ CueMenu: () => null }))
+vi.mock("@/studio/present/cue-menu", () => ({ CueMenu: () => <button type="button">Cues</button> }))
+vi.mock("@/studio/engage/host-control", () => ({ EngageHostControl: () => <button type="button">Engage host</button> }))
 vi.mock("@/studio/present/transport-bar", () => ({ TransportBar: () => <div role="toolbar" aria-label="Presentation controls"><button>Take live</button></div> }))
 vi.mock("@/studio/present/scenes-strip", () => ({ ScenesStrip: () => null }))
 vi.mock("@/studio/production/production-workspace", () => ({
@@ -42,9 +42,11 @@ vi.mock("@/studio/production/production-workspace", () => ({
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { useBibleStore, useBroadcastStore, useDetectionStore, useQueueStore, useTranscriptStore } from "@/stores"
+import { useAuxTimers } from "@/stores/aux-timers-store"
 import { useShellStore } from "@/studio/shell-store"
 import { openProductionTab, useProductionTab } from "@/studio/production/production-tab"
-import type { QueueItem, TranscriptSegment, Verse } from "@/types"
+import { useServiceStore } from "@/stores/service-store"
+import type { Program, QueueItem, TranscriptSegment, Verse } from "@/types"
 import { PresentWorkspace } from "./present-workspace"
 
 const verse: Verse = {
@@ -82,6 +84,15 @@ const transcript: TranscriptSegment = {
   words: [],
   timestamp: 1,
 }
+const emptyService: Program = {
+  id: "empty-service",
+  title: "Sunday Service",
+  service_date: null,
+  revision: 1,
+  created_at: "2026-11-02T00:00:00Z",
+  updated_at: "2026-11-02T00:00:00Z",
+  item_count: 0,
+}
 
 const initialShell = useShellStore.getState()
 const initialBible = useBibleStore.getState()
@@ -89,6 +100,7 @@ const initialBroadcast = useBroadcastStore.getState()
 const initialQueue = useQueueStore.getState()
 const initialTranscript = useTranscriptStore.getState()
 const initialDetections = useDetectionStore.getState()
+const initialService = useServiceStore.getState()
 
 let element: HTMLDivElement
 let root: Root
@@ -111,9 +123,10 @@ beforeEach(() => {
   useProductionTab.setState({ requested: null, selected: "timekeeper", scene: null, open: false })
   useBibleStore.setState({ selectedVerse: verse, selectedSlide: null, selectedQueueItemId: "stable-item" })
   useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "Program item", segments: [] } })
-  useQueueStore.setState({ items: [queueItem, secondQueueItem] })
+  useQueueStore.setState({ items: [queueItem, secondQueueItem], headers: [] })
   useTranscriptStore.setState({ segments: [transcript], isTranscribing: true })
   useDetectionStore.setState({ detections: [{ verse_ref: "John 3:16", verse_text: verse.text, book_name: "John", book_number: 43, chapter: 3, verse: 16, confidence: 1, source: "direct", auto_queued: false, transcript_snippet: transcript.text, is_chapter_only: false }] })
+  useAuxTimers.setState({ timers: [] })
 })
 
 afterEach(() => {
@@ -125,11 +138,101 @@ afterEach(() => {
   useQueueStore.setState(initialQueue)
   useTranscriptStore.setState(initialTranscript)
   useDetectionStore.setState(initialDetections)
+  useAuxTimers.setState({ timers: [] })
+  useServiceStore.setState(initialService)
   useProductionTab.setState(useProductionTab.getInitialState())
   vi.restoreAllMocks()
 })
 
 describe("Present's unified Live console", () => {
+  it("keeps a running auxiliary timer visible as read-only status while management stays in Timekeeper", async () => {
+    useAuxTimers.setState({ timers: [{ id: "communion-prep", label: "Communion prep", timer: { durationMs: 300_000, startedAt: performance.now(), accumulatedMs: 0 }, onStage: false, owner: "" }] })
+    await renderWorkspace()
+
+    const timerStatus = element.querySelector<HTMLElement>('[title="Running auxiliary timer: Communion prep"]')
+    expect(timerStatus?.textContent).toContain("Communion prep")
+    expect(timerStatus?.textContent).toMatch(/\d:\d{2}/)
+    expect(timerStatus?.querySelector("button")).toBeNull()
+    expect(element.querySelector('[role="toolbar"][aria-label="Live tools"] [title*="Other timers"]')).toBeNull()
+  })
+
+  it("offers safe next steps when no service is open without changing Program or the rundown", async () => {
+    const program = useBroadcastStore.getState().liveVerse
+    const wasLive = useBroadcastStore.getState().isLive
+    useServiceStore.setState({ current: null })
+    useBibleStore.setState({ selectedVerse: null, selectedSlide: null })
+    useQueueStore.setState({ items: [], headers: [] })
+    await renderWorkspace()
+
+    const recovery = element.querySelector<HTMLElement>('[role="region"][aria-label="Live setup actions"]')!
+    expect(recovery.textContent).toContain("No service open")
+    expect(recovery.querySelector('p[title*="Plan changes never update Program"]')).not.toBeNull()
+    expect(recovery.textContent).toContain("Take waits for a Preview item")
+    expect(element.querySelector('[data-studio-live]')?.textContent).toContain("Program")
+    expect(element.querySelector('[data-tour="present-rundown"]')?.className).toContain("row-span-1")
+    expect(element.querySelector('[data-testid="rundown-list"]')).toBeNull()
+
+    const button = (label: string) => [...recovery.querySelectorAll("button")].find((candidate) => candidate.getAttribute("aria-label") === label)!
+    await act(async () => button("Open a saved service").click())
+    expect(useShellStore.getState().goRequest).toBe("archive")
+
+    await act(async () => button("Find Scripture or hymn").click())
+    expect(document.activeElement).toBe(element.querySelector('[data-tour="quick-find"] input[aria-label="Quick find"]'))
+
+    await act(async () => button("Review outputs").click())
+    expect(useShellStore.getState().outputsDialogOpen).toBe(true)
+
+    await act(async () => button("Create a service").click())
+    expect(useShellStore.getState()).toMatchObject({ goRequest: "prepare", newServiceOpen: true })
+    expect(useServiceStore.getState().current).toBeNull()
+    expect(useQueueStore.getState()).toMatchObject({ items: [], headers: [] })
+    expect(useBroadcastStore.getState()).toMatchObject({ isLive: wasLive, liveVerse: program })
+  })
+
+  it("keeps a zero-moment event visible instead of treating its plan as no service", async () => {
+    useServiceStore.setState({ current: null })
+    useQueueStore.setState({ items: [], headers: [{ id: "event", type: "group", name: "Welcome", at: 0, event: { schema_version: 1 } }] })
+    await renderWorkspace()
+
+    expect(element.querySelector('[role="region"][aria-label="Live setup actions"]')).toBeNull()
+    expect(element.querySelector('[data-testid="rundown-list"]')).not.toBeNull()
+    expect(element.querySelector('[data-tour="present-rundown"]')?.className).toContain("row-span-3")
+  })
+
+  it("shows the run-of-show Now and Next with planned timing, separately from Program", async () => {
+    const program = useBroadcastStore.getState().liveVerse
+    useQueueStore.setState({
+      items: [
+        { ...queueItem, planned_minutes: 12 },
+        { ...secondQueueItem, planned_minutes: 8 },
+      ],
+      headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }],
+      activeIndex: 0,
+    })
+    await renderWorkspace()
+
+    const summary = element.querySelector<HTMLElement>('[aria-label="Run of show Now and Next"]')!
+    expect(summary.querySelector('[aria-label="Now in the run of show"]')?.textContent).toContain("John 3:16")
+    expect(summary.querySelector('[aria-label="Next in the run of show"]')?.textContent).toContain("Welcome")
+    expect(summary.querySelector('[aria-label="Next in the run of show"]')?.textContent).toContain("10:12")
+    expect(useBroadcastStore.getState().liveVerse).toEqual(program)
+  })
+
+  it("takes an open but empty service to Prepare to add its first event", async () => {
+    useServiceStore.setState({ current: emptyService })
+    useQueueStore.setState({ items: [], headers: [] })
+    await renderWorkspace()
+
+    const recovery = element.querySelector<HTMLElement>('[role="region"][aria-label="Live setup actions"]')!
+    expect(recovery.textContent).toContain("No events in this service")
+    const addEvent = recovery.querySelector<HTMLButtonElement>('[aria-label="Add event in Prepare"]')!
+    await act(async () => addEvent.click())
+    expect(useShellStore.getState().goRequest).toBe("prepare")
+    expect(useShellStore.getState().newServiceOpen).toBe(false)
+    expect(useServiceStore.getState().current).toEqual(emptyService)
+    expect(useQueueStore.getState()).toMatchObject({ items: [], headers: [] })
+  })
+
   it("routes the Preview output picker to a congregation output and keeps the selected choice in the Live workspace", async () => {
     const baseOutput = useBroadcastStore.getState().outputs[0]!
     useBroadcastStore.setState({ outputs: [
@@ -157,6 +260,12 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector("[data-studio-live]")?.textContent).toContain("Program")
     expect(element.querySelector('[aria-label="Rhema recording dock"]')?.textContent).toContain("Rhema recording controls")
     expect(element.querySelector('[role="toolbar"][aria-label="Presentation controls"] button')?.textContent).toBe("Take live")
+    const quickActions = element.querySelector<HTMLElement>('[data-testid="quick-screen-actions"]')!
+    expect(quickActions.className).toContain("max-[1500px]:grid-cols-3")
+    expect(quickActions.className).toContain("max-[800px]:grid-cols-2")
+    expect(quickActions.className).toContain("overflow-x-hidden")
+    expect(quickActions.textContent).toContain("Technical issue")
+    expect(quickActions.textContent).toContain("Black")
     expect(useShellStore.getState().presentView).toBe("production")
     expect(addListener.mock.calls.filter(([event]) => event === "keydown")).toHaveLength(1)
 
@@ -207,6 +316,36 @@ describe("Present's unified Live console", () => {
     expect(useTranscriptStore.getState().segments).toEqual([transcript])
     expect(useDetectionStore.getState().detections[0]?.verse_ref).toBe("John 3:16")
     expect(useShellStore.getState().presentView).toBe("production")
+  })
+
+  it("keeps secondary controls out of the Live toolbar and opens them in an accessible drawer", async () => {
+    await renderWorkspace()
+
+    const toolbar = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Live tools"]')!
+    const moreControls = toolbar.querySelector<HTMLButtonElement>('[aria-label="Open other controls"]')!
+    expect(toolbar.textContent).not.toContain("Cues")
+    expect(toolbar.textContent).not.toContain("Sound controls")
+    expect(toolbar.textContent).not.toContain("Lower thirds")
+    expect(toolbar.textContent).not.toContain("Stage messages")
+    expect(toolbar.textContent).not.toContain("Engage host")
+    expect(moreControls.getAttribute("aria-expanded")).toBe("false")
+
+    await act(async () => moreControls.click())
+
+    expect(moreControls.getAttribute("aria-expanded")).toBe("true")
+    expect(element.querySelector('[data-slot="live-tools-panel"] [role="tab"][aria-selected="true"]')?.textContent).toContain("More controls")
+    const controls = element.querySelector<HTMLElement>('[role="group"][aria-label="Secondary Live controls"]')!
+    expect(controls.textContent).toContain("Cues")
+    expect(controls.textContent).toContain("Sound controls")
+    expect(controls.textContent).toContain("Lower thirds")
+    expect(controls.textContent).toContain("Stage messages")
+    expect(controls.textContent).toContain("Engage host")
+    expect(element.querySelector('[data-tour="live-tools"]')?.getAttribute("aria-expanded")).toBe("false")
+
+    const close = element.querySelector<HTMLButtonElement>('[data-slot="live-tools-panel"] button[aria-label="Close Live tools"]')!
+    await act(async () => close.click())
+    expect(document.querySelector('[data-slot="live-tools-panel"]')).toBeNull()
+    expect(document.activeElement).toBe(moreControls)
   })
 
   it("opens Production tools inside the same Live console with one rundown, Preview, Program and Take", async () => {

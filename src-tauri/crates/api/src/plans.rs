@@ -74,6 +74,8 @@ pub fn redact_notes_for_role(plan: &mut serde_json::Value, role: Role) {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlanError {
     NotFound,
+    /// The host will not do it as asked (a request already decided, or someone else's): 409.
+    Refused(String),
     /// Someone saved since this desk opened it: reopen, never overwrite (409).
     Conflict { expected: i64, actual: i64 },
     Invalid(String),
@@ -165,5 +167,25 @@ mod tests {
             editor.pointer("/items/0/notes").and_then(serde_json::Value::as_str),
             Some("private pastoral note")
         );
+    }
+}
+
+/// A paired desk's own approval requests (#410): what it asked the main desk for (a plan to
+/// approve, a scene change) and where each stands, and taking one back before it is decided.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RequestQuery {
+    Mine,
+    Withdraw(String),
+}
+
+impl RequestQuery {
+    /// A request id the host could have made: short, without spaces or control characters.
+    pub fn checked(self) -> Result<Self, PlanError> {
+        if let Self::Withdraw(id) = &self {
+            if id.is_empty() || id.len() > 128 || id.chars().any(|c| c.is_whitespace() || c.is_control()) {
+                return Err(PlanError::Invalid("That is not a request id".into()));
+            }
+        }
+        Ok(self)
     }
 }

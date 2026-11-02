@@ -1,10 +1,15 @@
-import { BookOpenIcon, MicIcon, MonitorCogIcon, XIcon } from "lucide-react"
+import { BookOpenIcon, MicIcon, MonitorCogIcon, SlidersHorizontalIcon, XIcon } from "lucide-react"
 import { DetectionsPanel } from "@/components/panels/detections-panel"
 import { SearchPanel } from "@/components/panels/search-panel"
 import { TranscriptPanel } from "@/components/panels/transcript-panel"
 import { Button } from "@/components/ui/button"
 import { EmbeddingWarningBanner } from "@/components/ui/embedding-warning-banner"
 import { ProductionWorkspace } from "@/studio/production/production-workspace"
+import { CueMenu } from "@/studio/present/cue-menu"
+import { LowerThirdControl } from "@/studio/present/lower-third"
+import { SoundChip } from "@/studio/present/sound-chip"
+import { StageMessage } from "@/studio/present/stage-message"
+import { EngageHostControl } from "@/studio/engage/host-control"
 import type { LiveToolsTab } from "@/studio/production/production-tab"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -38,7 +43,9 @@ export function LiveToolsDrawer({
           <p className="text-xs text-muted-foreground">
             {tab === "production"
               ? "Timing, scenes, cameras, OBS and health tools share this Live state. Preview stays private until an explicit action."
-              : "Bible search previews verses. Listening results stay here until you choose Queue, Bible feeds, or Show live."}
+              : tab === "controls"
+                ? "Open secondary cues, local sound, lower thirds, Stage messages and Engage when needed."
+                : "Bible search previews verses. Listening results stay here until you choose Queue, Bible feeds, or Show live."}
           </p>
         </div>
         <Button type="button" variant="ghost" size="icon-sm" aria-label="Close Live tools" title="Close Live tools" onClick={onClose}>
@@ -54,6 +61,7 @@ export function LiveToolsDrawer({
           <TabsTrigger value="bible"><BookOpenIcon /> Bible search</TabsTrigger>
           <TabsTrigger value="listening"><MicIcon /> Listening</TabsTrigger>
           <TabsTrigger value="production"><MonitorCogIcon /> Production tools</TabsTrigger>
+          <TabsTrigger value="controls"><SlidersHorizontalIcon /> More controls</TabsTrigger>
         </TabsList>
         <TabsContent value="bible" className="mt-2 min-h-0 flex-1 overflow-hidden">
           <div className="flex h-full min-h-0 flex-col gap-2">
@@ -69,6 +77,18 @@ export function LiveToolsDrawer({
         </TabsContent>
         <TabsContent value="production" className="mt-2 min-h-0 flex-1 overflow-hidden">
           <ProductionWorkspace embedded />
+        </TabsContent>
+        <TabsContent value="controls" className="mt-2 min-h-0 flex-1 overflow-y-auto">
+          <section role="group" aria-label="Secondary Live controls" className="flex flex-col gap-2 rounded-md border border-border bg-surface-sunken p-3">
+            <p className="text-xs text-muted-foreground">These controls stay out of the main console until needed. Each shows where its action goes.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <CueMenu />
+              <SoundChip />
+              <LowerThirdControl />
+              <StageMessage />
+              <EngageHostControl />
+            </div>
+          </section>
         </TabsContent>
       </Tabs>
     </section>

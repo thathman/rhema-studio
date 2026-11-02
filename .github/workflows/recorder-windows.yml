@@ -2,11 +2,8 @@ name: Recorder on Windows
 
 # Real encodes through Media Foundation, read back by Windows: no installer is built (those stay
 # manual in build-windows-installer.yml).
+# Manual only while CI builds for the church's Intel Mac alone (owner, 2 Nov 2026).
 on:
-  pull_request:
-    paths:
-      - src-tauri/crates/recorder/**
-      - .github/workflows/recorder-windows.yml
   workflow_dispatch:
 
 permissions:

@@ -17,6 +17,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { openProductionTab, useProductionTab } from "./production-tab"
 import { useShellStore } from "@/studio/shell-store"
 import { newScene } from "@/lib/scenes"
+import { useAuxTimers } from "@/stores/aux-timers-store"
 
 // Each test's page is taken down after it, so a composer left open does not answer the next test's request.
 const roots: Root[] = []
@@ -32,6 +33,7 @@ afterEach(() => {
   act(() => { for (const r of roots.splice(0)) r.unmount() })
   useSettingsStore.setState({ operatorName: originalOperatorName })
   useBroadcastStore.setState({ takeScene: originalTakeScene })
+  useAuxTimers.setState({ timers: [] })
   useShellStore.setState({ workspace: "home", goRequest: null, prepareDesignReturn: null })
 })
 
@@ -66,12 +68,20 @@ describe("Production control", () => {
 
   it("keeps one service-clock control surface when Timekeeper is docked inside Live", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    useAuxTimers.setState({ timers: [{ id: "communion-prep", label: "Communion prep", timer: { durationMs: 300_000, startedAt: null, accumulatedMs: 0 }, onStage: false, owner: "" }] })
     const el = document.createElement("div")
     document.body.appendChild(el)
     await act(async () => mount(el, true))
     expect(el.querySelector('[role="tablist"][aria-label="Live operation tools"]')).not.toBeNull()
     expect(el.textContent).toContain("Use the service timer in Live’s top bar")
-    expect(el.textContent).toContain("Manage these from the Timers control in Live’s toolbar.")
+    expect(el.textContent).toContain("Manage them here; the main service timer stays in Live’s top bar.")
+    expect(el.textContent).toContain("Communion prep")
+    const startAuxTimer = el.querySelector<HTMLButtonElement>('[aria-label="Start Communion prep"]')!
+    await act(async () => startAuxTimer.click())
+    expect(useAuxTimers.getState().timers[0]?.timer.startedAt).not.toBeNull()
+    const pauseAuxTimer = el.querySelector<HTMLButtonElement>('[aria-label="Pause Communion prep"]')!
+    await act(async () => pauseAuxTimer.click())
+    expect(useAuxTimers.getState().timers[0]?.timer.startedAt).toBeNull()
     expect([...el.querySelectorAll("button")].some((button) => /^(Start|Pause|Resume|Reset)$/.test(button.textContent?.trim() ?? ""))).toBe(false)
   })
 
@@ -183,6 +193,7 @@ describe("Production control", () => {
     await open("OBS")
     expect(el.querySelector('[aria-label="OBS program"] h3')?.textContent).toBe("Online program (OBS, 720p30)")
     await open("Screens")
+    expect(el.querySelector('[role="group"][aria-label="News ticker controls"]')).not.toBeNull()
     expect(el.querySelector('[aria-label="Hall NDI"]')?.textContent).toContain("Congregation program (screens, 1080p30)")
     // A screen sets no format of its own: the usual one.
     expect(el.querySelector(`[aria-label="${main.name}"]`)?.textContent).toContain("Congregation program (screens, 1080p)")

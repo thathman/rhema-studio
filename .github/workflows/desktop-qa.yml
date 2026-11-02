@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   native-journeys:
-    name: Hymn, scene, failed-Take and recorder journeys in native macOS app
+    name: Live screenshots, hymn, scene, failed-Take and recorder journeys in native macOS app
     runs-on: macos-15-intel
     timeout-minutes: 40
     env:
@@ -42,7 +42,7 @@ jobs:
         run: bash scripts/mac-qa/run-native-journeys.sh
         env:
           TMPDIR: ${{ runner.temp }}
-      - name: Keep synthetic QA reports and app log
+      - name: Keep native Live screenshots, synthetic QA reports and app log
         if: always()
         uses: actions/upload-artifact@v4
         with:
