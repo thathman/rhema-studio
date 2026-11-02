@@ -38,7 +38,7 @@ beforeEach(() => {
   useBroadcastStore.setState({
     themes: applyBrandKit(kit, []),
     outputs,
-    outputStatus: { sanctuary: { previewOpen: true } },
+    outputStatus: { sanctuary: { previewOpen: true, ndiActive: false } },
   })
 })
 
