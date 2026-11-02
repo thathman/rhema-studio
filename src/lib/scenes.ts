@@ -4,7 +4,7 @@ import { cameraPathOf, cameraSourceId, feedFrame, withCameraPath, type LiveSourc
 import { CONTENT_TYPES } from "@/types/broadcast"
 import type { ContentType } from "@/types/broadcast"
 import { NO_SIGNALS } from "@/types/scene"
-import type { BroadcastOutput, BroadcastTheme, LowerThird, NoSignal, Scene, SceneAppearanceSnapshot, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind, Ticker, VerseRenderData } from "@/types"
+import type { BroadcastOutput, BroadcastOutputLanguage, BroadcastTheme, LowerThird, NoSignal, Scene, SceneAppearanceSnapshot, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind, Ticker, VerseRenderData } from "@/types"
 import { elapsedMs, formatMs, remainingMs, type TimerState } from "@/lib/timer"
 import { countdownTarget, isCountdownTo, type CountdownTargets } from "@/lib/countdown"
 
@@ -338,6 +338,25 @@ export function layerContent(s: LiveState, output: Pick<BroadcastOutput, "themeI
   return { verse: shown ? forOutputLanguage(shown, layer.language ?? output.language) : null, theme }
 }
 
+/** A design's artboard shape (`src/design-engine/rhema-scene.ts`: 1920×1080). */
+const DESIGN_ASPECT = 1920 / 1080
+
+/**
+ * A static text layer's words for an output's language (#448): the second language's when it has
+ * them, both stacked for "both", else the first language's (and `staticTextFallsBack` says so).
+ */
+export function staticText(layer: Pick<SceneLayer, "text" | "textSecond">, language: BroadcastOutputLanguage | undefined): string {
+  const first = layer.text ?? ""
+  const second = layer.textSecond?.trim() ? layer.textSecond : undefined
+  if (!second || !language || language === "first") return first
+  return language === "second" || !first.trim() ? second : `${first}\n${second}`
+}
+
+/** Whether a static text layer shows its first language because its second is missing. */
+export function staticTextFallsBack(layer: Pick<SceneLayer, "text" | "textSecond">, language: BroadcastOutputLanguage | undefined): boolean {
+  return (language === "second" || language === "both") && !!layer.text?.trim() && !layer.textSecond?.trim()
+}
+
 /** Whether visible text in a taken scene falls back because a selected second language is absent. */
 export function sceneHasLanguageFallback(
   s: Pick<LiveState, "isLive" | "liveVerse" | "sources">,
@@ -351,10 +370,11 @@ export function sceneHasLanguageFallback(
     layer.visible && layer.kind === "feed" &&
     isOutputLanguageFallback(layer.held ?? feedFrame(s, layer.shows), layer.language ?? output.language),
   )
+  const textFallback = scene.layers.some((layer) => layer.visible && layer.kind === "text" && staticTextFallsBack(layer, layer.language ?? output.language))
   const hasVisibleOverlay = outputOverlayVisible || scene.layers.some((layer) => layer.visible && layer.kind === "lowerThird")
   const overlayFallback = !!overlay?.follow && hasVisibleOverlay &&
     isOutputLanguageFallback(shown, output.language)
-  return feedFallback || overlayFallback
+  return feedFallback || textFallback || overlayFallback
 }
 
 /** A short fingerprint of a text, so a frame can say "this layer shows something new" without carrying it twice. */
@@ -391,6 +411,7 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
     sceneId: scene.id,
     background: scene.background,
     ...(scene.fadeMs ? { fadeMs: scene.fadeMs } : {}),
+    ...(scene.design ? { aspect: DESIGN_ASPECT } : {}),
     layers: scene.layers.filter((l) => l.visible).map((l): SceneLayerFrame => {
       const f = layerFrame(l)
       return l.fadeMs && FADES(l.kind) ? { ...f, fadeMs: l.fadeMs, key: contentKey(f) } : f
@@ -420,7 +441,7 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
     if (l.kind === "text") {
       return {
         ...base,
-        text: l.text ?? "",
+        text: staticText(l, l.language ?? output.language),
         fontFamily: l.fontFamily ?? "Arial",
         fontSize: l.fontSize ?? 72,
         fontWeight: l.fontWeight ?? "600",

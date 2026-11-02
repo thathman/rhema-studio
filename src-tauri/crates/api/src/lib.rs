@@ -28,7 +28,7 @@ pub use command::RemoteCommand;
 pub use dispatch::{CommandDispatcher, CommandSink};
 pub use error::CommandError;
 pub use lookup::Lookup;
-pub use plans::{Desk, PlanError, PlanRequest};
+pub use plans::{Desk, PlanError, PlanRequest, RequestQuery};
 pub use feed_video::{CameraPlayback, PageVideo};
 pub use http::{reserve_revision_floor, set_app_version, start_http_server, FeedHub, FeedKeys, FeedStatus, TvWatching, HttpConfig, HttpHandle, HttpStartResult, LiveHub, SharedFeeds, SharedLive, SharedStatus, SharedVoice, StatusSnapshot, TlsLeaves, TlsListener, VoiceHub, new_feed_hub, new_live_hub, new_voice_hub, new_shared_status};
 pub use presence::{new_presence, DeskPresence, Presence, SharedPresence};

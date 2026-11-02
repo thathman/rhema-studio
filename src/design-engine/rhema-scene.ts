@@ -53,6 +53,8 @@ const PLACEHOLDER: Record<string, string> = {
   feed: "#2b3a67", camera: "#1f4d3a", clock: "#5a3d1f", ticker: "#4d1f3a", lowerThird: "#3a1f4d", video: "#1f3a4d", logo: "#4d4d1f",
 }
 export const VIDEO_LAYER_PLACEHOLDER_COLOR = PLACEHOLDER.video
+/** The editor's placeholder colour for each live layer kind (what an output fills with live data). */
+export const LIVE_LAYER_PLACEHOLDER: Readonly<Record<"clock" | "ticker" | "lowerThird" | "logo", string>> = { clock: PLACEHOLDER.clock, ticker: PLACEHOLDER.ticker, lowerThird: PLACEHOLDER.lowerThird, logo: PLACEHOLDER.logo }
 const TEXT_WEIGHTS = new Set(["400", "500", "600", "700", "800", "900"])
 const TEXT_COLOR = /^#[0-9a-f]{6}$/i
 const SAFE_FONT_FAMILY = /^[\p{L}\p{N}, _-]{1,120}$/u
@@ -289,6 +291,7 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         else if (!TEXT_COLOR.test(node.color.color)) refuse("Text gradients and non-hex colours cannot be used in Rhema scene output yet")
         if (node.stroke || node.strokeWidth !== 0 || node.clipPath || (node.clipPathStack?.length ?? 0) > 0) refuse("Text stroke and clipping cannot be used in Rhema scene output yet")
         if (node.text.length > 2000) refuse("Static text is limited to 2,000 characters in Rhema scene output")
+        if (typeof binding.textSecond === "string" && binding.textSecond.length > 2000) refuse("Second-language text is limited to 2,000 characters in Rhema scene output")
         if (!TEXT_WEIGHTS.has(node.fontWeight)) refuse("This text weight is not supported by Rhema scene output yet")
         if (!SAFE_FONT_FAMILY.test(node.fontFamily.trim())) refuse("Use a font family made of letters, numbers, spaces, commas, underscores or hyphens")
         const effectiveFontSize = node.fontSize * node.scaleY

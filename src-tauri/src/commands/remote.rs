@@ -277,6 +277,10 @@ impl CommandSink for TauriSink {
         answer_plan(&self.app, by, q)
     }
 
+    fn requests(&self, by: &rhema_api::Desk, q: &rhema_api::RequestQuery) -> Result<serde_json::Value, rhema_api::PlanError> {
+        answer_requests(&self.app, by, q)
+    }
+
     fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
         // A scene change that must wait for the main desk becomes a host approval request first.
         emit_recorded_event(
@@ -395,6 +399,40 @@ fn answer_plan(app: &AppHandle, by: &rhema_api::Desk, q: &rhema_api::PlanRequest
             log::info!("Plan {id} revision {revision} submitted for review by {}", by.name);
             let _ = app.emit_to("main", "remote:plan_submitted", serde_json::json!({ "id": id, "revision": revision, "requestId": request.id, "by": by.name }));
             json(&request)
+        }
+    }
+}
+
+/// A paired desk's own approval requests (#410), by the key it is paired with: newest first, with
+/// where each stands and the main desk's note; or withdrawing one it sent that nobody has decided.
+/// The main desk hears of a withdrawal so its Requests inbox can drop it.
+fn answer_requests(app: &AppHandle, by: &rhema_api::Desk, q: &rhema_api::RequestQuery) -> Result<serde_json::Value, rhema_api::PlanError> {
+    use rhema_api::{PlanError, RequestQuery};
+    use rhema_content::ContentError;
+    let unavailable = || PlanError::Unavailable("Requests are not available on the host".into());
+    let content = app.try_state::<super::content::ContentState>().ok_or_else(unavailable)?;
+    let guard = content.0.lock().map_err(|_| unavailable())?;
+    let db = guard.as_ref().ok_or_else(unavailable)?;
+    let row = |r: &rhema_content::ApprovalRequest| serde_json::json!({
+        "id": r.id, "kind": r.kind, "targetId": r.target_id, "baseRevision": r.base_revision, "state": r.state,
+        "reason": r.reason, "createdAt": r.created_at, "expiresAt": r.expires_at, "decidedAt": r.decided_at,
+        "decidedBy": r.decided_by.as_ref().map(|a| a.name.clone()), "decisionNote": r.decision_note,
+    });
+    match q {
+        RequestQuery::Mine => {
+            let mine = db.list_approval_requests(None, Some(&by.id)).map_err(|e| PlanError::Unavailable(e.to_string()))?;
+            Ok(serde_json::json!({ "requests": mine.iter().take(100).map(row).collect::<Vec<_>>() }))
+        }
+        RequestQuery::Withdraw(id) => {
+            let done = db.withdraw_approval_request(id, &rhema_content::Actor { id: by.id.clone(), name: by.name.clone() }).map_err(|e| match e {
+                ContentError::NotFound(_) => PlanError::NotFound,
+                ContentError::Refused { message, .. } => PlanError::Refused(message),
+                ContentError::Invalid(m) => PlanError::Invalid(m),
+                other => PlanError::Unavailable(other.to_string()),
+            })?;
+            log::info!("Approval request {} withdrawn by {}", done.id, by.name);
+            let _ = app.emit_to("main", "remote:request_withdrawn", serde_json::json!({ "id": done.id, "kind": done.kind, "by": by.name }));
+            Ok(row(&done))
         }
     }
 }
