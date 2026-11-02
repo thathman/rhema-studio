@@ -3,29 +3,41 @@ import { PanelHeader } from "@/components/ui/panel-header"
 import { Button } from "@/components/ui/button"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useFeedHealth } from "@/lib/browser-feeds"
 import { cn } from "@/lib/utils"
 import { useBroadcastStore } from "@/stores"
 import { autoModeOf, type AutoMode } from "@/stores/broadcast-store"
+import { outputOnAir } from "@/lib/output-on-air"
+import { forOutputLanguage } from "@/lib/output-language"
 import { LiveSourcesStrip } from "@/studio/present/live-sources-strip"
 import { StatusChip } from "@/studio/ui/status-chip"
+import type { BroadcastOutput, BroadcastOutputStatus } from "@/types"
 
 /**
  * What the screens show. The transport is the only ordinary place to Take or
  * Clear live; this panel reports Program status and offers its scoped controls.
  */
-export function LiveOutputPanel() {
+export function LiveOutputPanel({ outputId }: { outputId?: string | null } = {}) {
   const isLive = useBroadcastStore((s) => s.isLive)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
   const autoMode = useBroadcastStore(autoModeOf)
   const liveVerse = useBroadcastStore((s) => s.liveVerse)
   const themes = useBroadcastStore((s) => s.themes)
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const congregationOutputs = outputs.filter((output) => (output.role ?? "congregation") === "congregation")
+  const output = congregationOutputs.find((candidate) => candidate.id === outputId) ?? congregationOutputs[0]
+  const status = useBroadcastStore((s) => (output ? s.outputStatus[output.id] : undefined))
+  const outputLive = output ? outputOnAir(output, status) : false
+  const feed = useFeedHealth(output?.id ?? "", !!output && output.type === "browser" && outputLive)
 
-  const activeTheme = themes.find((t) => t.id === activeThemeId) ?? themes[0]
+  const outputContent = liveVerse?.content ?? "bible"
+  const outputThemeId = output?.themeFor?.[outputContent] ?? output?.themeId ?? activeThemeId
+  const activeTheme = themes.find((t) => t.id === outputThemeId) ?? themes.find((t) => t.id === activeThemeId) ?? themes[0]
 
   // The live output renders only what was explicitly presented — it no longer
   // follows the preview selection, so detections can't override the operator.
-  const verseData = isLive ? liveVerse : null
+  const verseData = isLive ? forOutputLanguage(liveVerse, output?.language ?? "both") : null
   // A video item on air can be paused and resumed on every screen (MD-002, #36).
   const video = isLive && liveVerse?.content === "picture" ? liveVerse.video : undefined
 
@@ -99,7 +111,51 @@ export function LiveOutputPanel() {
           )}
         </div>
       </div>
+      <div className="flex min-h-9 shrink-0 items-center gap-2 border-t border-border px-3 py-1.5">
+        <span title={output?.name} className="max-w-28 shrink-0 truncate text-[0.6875rem] font-semibold text-foreground">{output?.name ?? "No output"}</span>
+        <StatusChip tone={!isLive ? "off" : rehearsal ? "warn" : "live"} label={!output ? "No output" : rehearsal ? "Rehearsal" : isLive ? "Host applied" : "Off air"} className="h-6 shrink-0 px-2 text-[0.625rem]" />
+        <p role="status" aria-live="polite" aria-atomic="true" className="min-w-0 truncate text-[0.6875rem] text-muted-foreground">
+          {programDelivery(output, status, isLive, rehearsal, feed)}
+        </p>
+      </div>
       <LiveSourcesStrip />
     </div>
   )
+}
+
+function programDelivery(
+  output: BroadcastOutput | undefined,
+  status: BroadcastOutputStatus | undefined,
+  isLive: boolean,
+  rehearsal: boolean,
+  feed: ReturnType<typeof useFeedHealth>,
+): string {
+  if (!output) return "Add a congregation output to see its Program state."
+  if (rehearsal) return "Rehearsal · public Program stays on the frame shown before practice."
+  if (!isLive) return "Host Program is off air."
+
+  if (output.type === "browser") {
+    if (!status?.feedActive) return "Host is not sending to this browser feed."
+    if (!feed) return "Feed is publishing · checking for a receiver."
+    if (feed.watching === 0) return "Feed is publishing · no receiver is connected."
+    const pages = `${feed.watching} browser ${feed.watching === 1 ? "page" : "pages"}`
+    const televisions = Object.values(feed.tvs ?? {}).reduce((total, count) => total + count, 0)
+    const tvs = televisions > 0 ? ` · ${televisions} Google ${televisions === 1 ? "TV" : "TVs"}` : ""
+    if (feed.behind) return `${pages} connected · behind; the latest Program frame is not confirmed${tvs}.`
+    if (feed.current) return `Receiver confirmed · ${pages} showing the latest Program frame${tvs}.`
+    return `${pages} connected · waiting for a draw acknowledgement${tvs}.`
+  }
+
+  if (output.type === "ndi") {
+    if (status?.ndiError) return `NDI sender error · ${status.ndiError}`
+    if (!status?.ndiActive) return "NDI sender is stopped."
+    if (typeof status.ndiReceivers === "number" && status.ndiReceivers > 0) {
+      return `NDI sender active · ${status.ndiReceivers} ${status.ndiReceivers === 1 ? "receiver" : "receivers"} connected; frame acknowledgement is unavailable.`
+    }
+    return "NDI sender active · no receiver connection is reported."
+  }
+
+  return status?.previewOpen
+    ? "Host output window is open · local displays do not report receiver acknowledgement."
+    : "Host output window is closed · local displays do not report receiver acknowledgement."
 }

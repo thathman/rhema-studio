@@ -27,17 +27,16 @@ export const SCENES_REHEARSAL_NOTE = "Rehearsal: a Take here is practice. The sc
  * made and edited in Live → Production tools → Scenes (a basic one here too: New / Edit scene); this takes them, goes back to the screen's own
  * feed, and restores the last one. Shown only when there is a congregation screen and a saved scene.
  */
-export function ScenesStrip({ className }: { className?: string }) {
+export function ScenesStrip({ className, outputId }: { className?: string; outputId?: string | null }) {
   const scenes = useBroadcastStore((s) => s.scenes)
   const outputs = useBroadcastStore((s) => s.outputs)
   const congregation = outputs.filter(isCongregation)
   // Folded at first on a short window, so the Live panel keeps its room; one click opens it.
   const [open, setOpen] = useState(() => !(typeof window.matchMedia === "function" && window.matchMedia(SCENES_FOLDED_QUERY).matches))
-  const [targetId, setTargetId] = useState<string | null>(null)
   const bodyId = useId()
   const planned = usePlannedScene(scenes)
   if (congregation.length === 0 || scenes.length === 0) return null
-  const target = congregation.find((o) => o.id === targetId) ?? congregation[0]
+  const target = congregation.find((o) => o.id === outputId) ?? congregation[0]
   const sceneName = (o: BroadcastOutput) => sceneForOutput(o, scenes)?.name ?? "its own feed"
 
   return (
@@ -60,21 +59,6 @@ export function ScenesStrip({ className }: { className?: string }) {
       </button>
       {open && (
         <div id={bodyId} className="flex flex-col gap-2 border-t border-border px-3 pt-2 pb-2.5">
-          {congregation.length > 1 && (
-            <div role="group" aria-label="Which screen" className="flex flex-wrap items-center gap-1">
-              {congregation.map((o) => (
-                <button
-                  key={o.id}
-                  type="button"
-                  aria-pressed={o.id === target.id}
-                  onClick={() => setTargetId(o.id)}
-                  className={cn("h-11 rounded-full border px-3 text-xs font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50", o.id === target.id ? "border-foreground/40 bg-muted text-foreground" : "border-border text-muted-foreground hover:bg-muted")}
-                >
-                  {o.name}
-                </button>
-              ))}
-            </div>
-          )}
           <ScenePicker key={target.id} output={target} scenes={scenes} planned={planned} />
         </div>
       )}
@@ -177,7 +161,7 @@ function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; sce
         <SceneAction
           icon={<LayersIcon />}
           label={picked ? `Take scene ${picked.name} to ${output.name}` : "Take scene"}
-          text="Take scene"
+          text={`Take to ${output.name}`}
           title={picked ? (rehearsal ? `Rehearse ${picked.name} on ${output.name}. The screen keeps its scene.` : `Arrange ${output.name} as ${picked.name}. What is live stays live.`) : "Take scene"}
           reason={takeReason}
           descriptionId={details ? takeDetailsId : undefined}
