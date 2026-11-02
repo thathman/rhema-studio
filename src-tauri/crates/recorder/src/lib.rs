@@ -330,10 +330,9 @@ impl Recorder {
                         let host = (now.as_secs_f64() * f64::from(*rate)) as i64 - frames;
                         let peak = block.iter().fold(0f32, |m, s| m.max(s.abs()));
                         sh_a.peak_bits.store(peak.to_bits(), Ordering::Relaxed);
-                        sh_a.last_audio_ms.store(now.as_millis() as u64 + 1, Ordering::Relaxed);
-                        if peak > SILENT_PEAK {
-                            sh_a.last_sound_ms.store(now.as_millis() as u64 + 1, Ordering::Relaxed);
-                        }
+                        let stamp = now.as_millis() as u64 + 1;
+                        sh_a.last_audio_ms.store(stamp, Ordering::Relaxed);
+                        sh_a.last_sound_ms.fetch_max(if peak > SILENT_PEAK { stamp } else { 0 }, Ordering::Relaxed);
                         if let Some(at) = placer.place(host, frames, *rate) {
                             let _ = tx_a.send(Msg::Audio(block.to_vec(), at));
                         }
@@ -1477,8 +1476,8 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         let mut session = stub_session(t.path());
         session.manifest.audio_device_id = Some("Mixer".into());
-        session.t0 = Instant::now() - Duration::from_secs(30);
-        let at = |ago_s: u64| 30_000 - ago_s * 1000 + 1;
+        session.t0 = Instant::now().checked_sub(Duration::from_secs(30)).expect("30 s after boot");
+        let at = |ago_s: u64| (30 - ago_s) * 1000 + 1;
         // Pictures and sound blocks keep arriving.
         session.shared.last_frame_ms.store(at(0), Ordering::Relaxed);
         session.shared.last_audio_ms.store(at(0), Ordering::Relaxed);
