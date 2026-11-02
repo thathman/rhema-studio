@@ -1,4 +1,4 @@
-import { drawLowerThird, renderVerse } from "@/lib/verse-renderer"
+import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
 import { clockText } from "@/lib/scenes"
 import { drawTicker } from "@/lib/ticker-draw"
 import { entranceProgress } from "@/lib/lower-third-style"
@@ -238,6 +238,21 @@ function paintNoSignal(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x
   else if (mode === "words" && l.fallback && !opts.preview) fitText(ctx, l.fallback, r, l.theme)
 }
 
+/**
+ * What each feed layer's canvas last rendered (#448): the same frame's verse in the same look, with
+ * no picture or font loaded since, draws the same, so a redraw (every video frame, when the scene
+ * also plays a camera) copies it instead of laying the verse out again.
+ */
+const feedRendered = new WeakMap<HTMLCanvasElement, { verse: unknown; theme: unknown; images: number; fonts: number; w: number; h: number }>()
+let fontsLoaded = 0
+onThemeFontsLoaded(() => { fontsLoaded++ })
+
+/** Whether a feed layer's canvas already holds this frame's verse as it would be rendered now. */
+export function feedLayerFresh(canvas: HTMLCanvasElement, l: Pick<SceneLayerFrame, "verse" | "theme">, images: number, w: number, h: number): boolean {
+  const last = feedRendered.get(canvas)
+  return !!last && last.verse === l.verse && last.theme === l.theme && last.images === images && last.fonts === fontsLoaded && last.w === w && last.h === h
+}
+
 /** One layer's content in its box (`ctx`'s alpha is already the layer's opacity). */
 function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions): void {
   if (l.kind === "color") {
@@ -296,13 +311,15 @@ function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: n
       lc.width = tw
       lc.height = th
     }
-    const lctx = lc.getContext("2d")
+    const images = opts.imageCache?.size ?? 0
+    const lctx = feedLayerFresh(lc, l, images, tw, th) ? null : lc.getContext("2d")
     if (lctx) {
       lctx.clearRect(0, 0, tw, th)
       renderVerse(lctx, l.theme, l.verse, { scale: 1, imageCache: opts.imageCache })
-      const s = source(l, tw, th)
-      ctx.drawImage(lc, s.sx, s.sy, s.sw, s.sh, r.x, r.y, r.w, r.h)
+      feedRendered.set(lc, { verse: l.verse, theme: l.theme, images, fonts: fontsLoaded, w: tw, h: th })
     }
+    const s = source(l, tw, th)
+    ctx.drawImage(lc, s.sx, s.sy, s.sw, s.sh, r.x, r.y, r.w, r.h)
   }
 }
 
