@@ -136,15 +136,41 @@ describe("screens desk and the director's output map", () => {
     }
   })
 
-  it("the screens desk takes the ticker off and puts the lower third back, with what it saw", async () => {
+  it("the screens desk confirms shared ticker and lower-third changes before sending them", async () => {
     const el = await render("screens")
     const box = el.querySelector('[aria-label="Ticker and lower third"]')!
-    expect(box.textContent).toContain("Ticker · on · Welcome to CAC")
-    await click(button(box, "Take off"))
+    expect(box.textContent).toContain("Ticker · host reports on · Welcome to CAC")
+    await click(button(box, "Take off ticker…"))
+    expect(sent).toHaveLength(0)
+    expect(box.textContent).toContain("shared ticker anywhere a congregation output uses it")
+    expect(box.textContent).toContain("cannot limit the change to one screen")
+    await click(button(box, "Confirm take off the shared ticker"))
     expect(sent.at(-1)).toMatchObject({ command: "clear_source", value: "ticker", seen: { "source:ticker": 2 } })
-    await click(button(box, "Put back"))
+    await click(button(box, "Put back lower third…"))
+    await click(button(box, "Confirm put back the shared lower third"))
     expect(sent.at(-1)).toMatchObject({ command: "restore_source", value: "lowerThird" })
     expect((await render("worship")).querySelector('[aria-label="Ticker and lower third"]')).toBeNull()
+  })
+
+  it("does not confirm a shared source change after that source changes during review", async () => {
+    const el = await render("screens")
+    const box = el.querySelector('[aria-label="Ticker and lower third"]')!
+    await click(button(box, "Take off ticker…"))
+    const changed: LiveStateV1 = {
+      ...live,
+      sources: live.sources.map((source) => source.id === "ticker" ? { ...source, on: false } : source),
+      revisions: { ...live.revisions, "source:ticker": 3 },
+    }
+    await act(async () => useJoin.setState({ live: changed }))
+    expect(box.querySelector('[role="alert"]')?.textContent).toContain("changed while you were reviewing")
+    expect(button(box, "Confirm take off the shared ticker")).toBeUndefined()
+    expect(sent).toHaveLength(0)
+  })
+
+  it.each(["present", "configure"])("the %s desk can see, but not change, shared sources", async (role) => {
+    const box = (await render(role)).querySelector('[aria-label="Ticker and lower third"]')!
+    expect(box.textContent).toContain("View only")
+    expect([...box.querySelectorAll("button")].map((item) => item.textContent)).toEqual([])
   })
 
   it("shows the next three graphics, expands without changing target or live state, and marks narrow layouts for two readable rows", async () => {

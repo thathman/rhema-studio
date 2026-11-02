@@ -305,22 +305,48 @@ export function UpcomingGraphics({ queue, stale }: { queue: UpcomingGraphicsQueu
 const SCREEN_SOURCES = [["ticker", "Ticker"], ["lowerThird", "Lower third"]] as const
 
 /** The ticker and the lower third on the host's screens: what each shows, Take off or Put back. */
-export function ScreenSources({ live }: { live: LiveStateV1 }) {
+export function ScreenSources({ live, canChange = false }: { live: LiveStateV1; canChange?: boolean }) {
   const ok = useCanSend()
   const [result, setResult] = useState<SendResult | null>(null)
+  const [confirming, setConfirming] = useState<{ id: string; command: "clear_source" | "restore_source"; expectedOn: boolean; revision?: number } | null>(null)
   const rows = SCREEN_SOURCES.flatMap(([id, name]) => { const s = live.sources.find((x) => x.id === id); return s ? [{ s, name }] : [] })
   if (rows.length === 0) return null
+  const pending = confirming && rows.find(({ s }) => s.id === confirming.id)
+  const revision = confirming ? live.revisions?.[`source:${confirming.id}`] : undefined
+  const staleConfirmation = !!pending && !!confirming && (pending.s.on !== confirming.expectedOn || (confirming.revision !== undefined && revision !== confirming.revision))
+  const confirmLabel = pending && confirming
+    ? `Confirm ${confirming.command === "clear_source" ? "take off" : "put back"} the shared ${pending.name.toLowerCase()}`
+    : "Confirm shared source change"
   return (
     <div role="group" aria-label="Ticker and lower third" className="flex flex-col gap-1">
       <p className="font-semibold">Ticker and lower third</p>
       <ul className="flex flex-col gap-1">
         {rows.map(({ s, name }) => (
           <li key={s.id} className="flex flex-wrap items-center gap-2">
-            <span className="min-w-0 flex-1 truncate">{name} · {s.on ? "on" : "off"}{s.reference ? <span className="text-muted-foreground"> · {s.reference}</span> : null}{activatedLabel(s) ? <span className="text-muted-foreground"> · {activatedLabel(s)}</span> : null}</span>
-            <Button size="xs" variant="outline" disabled={!ok} onClick={async () => setResult(await useJoin.getState().send({ command: s.on ? "clear_source" : "restore_source", value: s.id }))}>{s.on ? "Take off" : "Put back"}</Button>
+            <span className="min-w-0 flex-1 truncate">{name} · host reports {s.on ? "on" : "off"}{s.reference ? <span className="text-muted-foreground"> · {s.reference}</span> : null}{activatedLabel(s) ? <span className="text-muted-foreground"> · {activatedLabel(s)}</span> : null}</span>
+            {canChange ? (
+              <Button size="xs" variant="outline" disabled={!ok} onClick={() => {
+                setResult(null)
+                setConfirming({ id: s.id, command: s.on ? "clear_source" : "restore_source", expectedOn: s.on, ...(live.revisions?.[`source:${s.id}`] !== undefined ? { revision: live.revisions[`source:${s.id}`] } : {}) })
+              }}>{s.on ? `Take off ${name.toLowerCase()}…` : `Put back ${name.toLowerCase()}…`}</Button>
+            ) : <span className="text-xs text-muted-foreground">View only</span>}
           </li>
         ))}
       </ul>
+      {pending && confirming && (
+        <div role="group" aria-label="Confirm shared source change" className="flex flex-col gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 p-2">
+          <p className="text-sm">This changes the shared {pending.name.toLowerCase()} anywhere a congregation output uses it. This desk cannot limit the change to one screen; ask the main host for an output-specific change.</p>
+          <div className="flex flex-wrap gap-2">
+            {staleConfirmation
+              ? <p role="alert" className="font-medium text-confidence-mid">The shared source changed while you were reviewing. Cancel, check its current state, then choose again.</p>
+              : <Button size="sm" disabled={!ok} onClick={async () => {
+                setResult(await useJoin.getState().send({ command: confirming.command, value: confirming.id, ...(confirming.revision !== undefined ? { seen: { [`source:${confirming.id}`]: confirming.revision } } : {}) }))
+                setConfirming(null)
+              }}>{confirmLabel}</Button>}
+            <Button size="sm" variant="ghost" onClick={() => setConfirming(null)}>Cancel</Button>
+          </div>
+        </div>
+      )}
       <Said result={result} />
     </div>
   )
