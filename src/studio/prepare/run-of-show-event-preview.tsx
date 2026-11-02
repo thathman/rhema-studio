@@ -23,9 +23,12 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
   const scenes = useBroadcastStore((state) => state.scenes)
   const [momentId, setMomentId] = useState(moments[0]?.id ?? "")
   const [outputId, setOutputId] = useState(() => {
-    const steps = moments[0] ? plannedSceneSteps(moments[0]) : []
+    const first = moments[0]
+    const designOutputs = first?.kind === "slide" ? first.slide.designRef?.outputs : undefined
+    const designedOutputId = designOutputs?.find((id) => outputs.some((output) => output.id === id))
+    const steps = first ? plannedSceneSteps(first) : []
     const scoped = steps.find((step) => step.outputId && outputs.some((output) => output.id === step.outputId))
-    return scoped?.outputId ?? outputs[0]?.id ?? ""
+    return scoped?.outputId ?? designedOutputId ?? outputs[0]?.id ?? ""
   })
   const moment = moments.find((item) => item.id === momentId) ?? moments[0]
   const output = outputs.find((item) => item.id === outputId) ?? outputs[0]
@@ -37,8 +40,9 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
   const designVersion = designRef?.version
   const designPageId = designRef?.pageId
   const designTitle = designedSlide?.title
+  const designTargetsOutput = !designRef?.outputs?.length || !!output && designRef.outputs.includes(output.id)
   const hasExplicitTakeScene = sceneSelection?.source === "screen" || sceneSelection?.source === "shared"
-  const requestedDesignKey = designRefId && designVersion !== undefined
+  const requestedDesignKey = designTargetsOutput && designRefId && designVersion !== undefined
     ? `${moment?.id ?? ""}:${designRefId}@${designVersion}:${designPageId ?? ""}:${designTitle ?? ""}`
     : null
   // Explicit screen/shared Take scenes are more specific than the slide's general design pin.
@@ -49,9 +53,10 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
     issues: DesignIssue[]
   } | null>(null)
   const currentDesignResolution = designKey && designResolution?.key === designKey ? designResolution : null
+  const sceneIdForOutput = designRef && !designTargetsOutput && !hasExplicitTakeScene ? output?.sceneId : sceneId
   const scene = designKey
     ? currentDesignResolution?.scene ?? undefined
-    : scenes.find((candidate) => candidate.id === sceneId)
+    : scenes.find((candidate) => candidate.id === sceneIdForOutput)
   const lastPreviewedMoment = useRef<QueueItem | null>(null)
 
   const previewMoment = useCallback((item: QueueItem) => {
@@ -121,7 +126,10 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
                 const nextSteps = next ? plannedSceneSteps(next) : []
                 if (!nextSteps.some((step) => step.outputId === null)) {
                   const scoped = nextSteps.find((step) => step.outputId && outputs.some((screen) => screen.id === step.outputId))
+                  const designOutputs = next?.kind === "slide" ? next.slide.designRef?.outputs : undefined
+                  const designedOutputId = designOutputs?.find((id) => outputs.some((screen) => screen.id === id))
                   if (scoped?.outputId) setOutputId(scoped.outputId)
+                  else if (designedOutputId) setOutputId(designedOutputId)
                 }
               }}
             >
@@ -142,7 +150,10 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
           </label>
         </div>
 
-        {sceneSelection?.source === "current" && !designKey && (
+        {designRef && !designTargetsOutput && !hasExplicitTakeScene && (
+          <p role="status" className="text-xs text-muted-foreground">This designed moment is assigned to other congregation screens. This screen keeps its current scene.</p>
+        )}
+        {sceneSelection?.source === "current" && !designKey && !designRef && (
           <p className="text-xs text-muted-foreground">This screen keeps its current scene for this moment.</p>
         )}
         {requestedDesignKey && hasExplicitTakeScene && (
