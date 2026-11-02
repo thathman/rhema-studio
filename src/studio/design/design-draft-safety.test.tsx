@@ -16,6 +16,8 @@ import { DEFAULT_LOWER_THIRD_STYLE } from "@/lib/lower-third-style"
 import { DEFAULT_TICKER_STYLE } from "@/lib/ticker"
 import { DEFAULT_STAGE_STYLE } from "@/lib/stage-style"
 import { DEFAULT_COUNTDOWN_LOOK } from "@/lib/countdown-display"
+import { defaultBrandKit } from "@/lib/brand-kit"
+import { useSettingsStore } from "@/stores/settings-store"
 
 let root: Root | null = null
 
@@ -35,6 +37,7 @@ beforeEach(() => {
     outputs: state.outputs.slice(0, 1),
     outputFrames: {},
   })
+  useSettingsStore.setState({ brandKit: defaultBrandKit() })
 })
 
 afterEach(() => {
@@ -84,6 +87,94 @@ describe("design editors keep edits in draft until applied (#442)", () => {
     await saveAndApply(element)
     expect(useBroadcastStore.getState().lowerThirdStyles[0].name).toBe("Evening band")
     expect(useBroadcastStore.getState().lowerThird?.style?.name).toBe("Evening band")
+  })
+
+  it("copies a Brand Kit text colour into a lower-third draft and keeps it detached from later token changes", async () => {
+    const style = { ...DEFAULT_LOWER_THIRD_STYLE }
+    const kit = { ...defaultBrandKit(), colors: { ...defaultBrandKit().colors, text: "#c49a56" } }
+    useBroadcastStore.setState({
+      lowerThirdStyles: [style],
+      lowerThird: { line1: "Pastor Tolu", line2: "Senior Pastor", style },
+    })
+    useSettingsStore.setState({ brandKit: kit })
+    const element = await render(<LowerThirdDesigner />)
+
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit text colour"]')!.click())
+
+    expect(useBroadcastStore.getState().lowerThirdStyles[0]).toEqual(style)
+    expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
+    expect(element.textContent).toContain("Draft changes · outputs unchanged")
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: `lower-third:${style.id}`, value: { line1: { color: "#c49a56" }, line2: { color: "#c49a56" } } }])
+    expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
+
+    act(() => root?.unmount())
+    root = null
+    document.body.replaceChildren()
+    useSettingsStore.setState({ brandKit: { ...kit, colors: { ...kit.colors, text: "#12ab34" } } })
+    const reopened = await render(<LowerThirdDesigner />)
+    expect(reopened.querySelector<HTMLInputElement>('[aria-label="First line colour"]')?.value).toBe("#c49a56")
+    expect(reopened.querySelector<HTMLInputElement>('[aria-label="Second line colour"]')?.value).toBe("#c49a56")
+    expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
+  })
+
+  it("copies the Brand Kit accent into the lower-third accent draft without changing its on-air style", async () => {
+    const style = { ...DEFAULT_LOWER_THIRD_STYLE, accent: { ...DEFAULT_LOWER_THIRD_STYLE.accent, enabled: true } }
+    const kit = { ...defaultBrandKit(), colors: { ...defaultBrandKit().colors, accent: "#d66b42" } }
+    useBroadcastStore.setState({
+      lowerThirdStyles: [style],
+      lowerThird: { line1: "Pastor Tolu", line2: "Senior Pastor", style },
+    })
+    useSettingsStore.setState({ brandKit: kit })
+    const element = await render(<LowerThirdDesigner />)
+
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit accent colour"]')!.click())
+
+    expect(useBroadcastStore.getState().lowerThirdStyles[0]).toEqual(style)
+    expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
+    expect(element.textContent).toContain("Draft changes · outputs unchanged")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: `lower-third:${style.id}`, value: { accent: { color: "#d66b42" } } }])
+    expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
+  })
+
+  it("copies the Brand Kit primary colour into the lower-third band draft", async () => {
+    const style = { ...DEFAULT_LOWER_THIRD_STYLE }
+    const kit = { ...defaultBrandKit(), colors: { ...defaultBrandKit().colors, primary: "#182a43" } }
+    useBroadcastStore.setState({
+      lowerThirdStyles: [style],
+      lowerThird: { line1: "Pastor Tolu", line2: "Senior Pastor", style },
+    })
+    useSettingsStore.setState({ brandKit: kit })
+    const element = await render(<LowerThirdDesigner />)
+
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit primary band colour"]')!.click())
+
+    expect(useBroadcastStore.getState().lowerThirdStyles[0]).toEqual(style)
+    expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
+    expect(element.textContent).toContain("Draft changes · outputs unchanged")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: `lower-third:${style.id}`, value: { background: { color: "#182a43" } } }])
+    expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
+  })
+
+  it("copies the Brand Kit body font into a lower-third draft without changing the live font", async () => {
+    const style = { ...DEFAULT_LOWER_THIRD_STYLE, fontFamily: "Existing Sans" }
+    const kit = { ...defaultBrandKit(), fonts: { ...defaultBrandKit().fonts, body: "Rhema Body Sans" } }
+    useBroadcastStore.setState({
+      lowerThirdStyles: [style],
+      lowerThird: { line1: "Pastor Tolu", line2: "Senior Pastor", style },
+    })
+    useSettingsStore.setState({ brandKit: kit })
+    const element = await render(<LowerThirdDesigner />)
+
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit body font"]')!.click())
+
+    expect(element.querySelector<HTMLInputElement>('[aria-label="Font"]')?.value).toBe("Rhema Body Sans")
+    expect(useBroadcastStore.getState().lowerThirdStyles[0]).toEqual(style)
+    expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
+    expect(element.textContent).toContain("Draft changes · outputs unchanged")
   })
 
   it("does not change a running ticker while editing", async () => {
