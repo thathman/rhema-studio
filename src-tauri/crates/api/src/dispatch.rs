@@ -31,6 +31,10 @@ pub trait CommandSink: Send + Sync {
     fn plans(&self, _by: &crate::plans::Desk, _q: &crate::plans::PlanRequest) -> Result<serde_json::Value, crate::plans::PlanError> {
         Err(crate::plans::PlanError::Unavailable("this host keeps no service plans".into()))
     }
+    /// A desk's own approval requests (`crate::plans::RequestQuery`), for the desk named `by` only.
+    fn requests(&self, _by: &crate::plans::Desk, _q: &crate::plans::RequestQuery) -> Result<serde_json::Value, crate::plans::PlanError> {
+        Err(crate::plans::PlanError::Unavailable("this host keeps no approval requests".into()))
+    }
 }
 
 /// A sink that adds `"by"` (the sender) to every frontend event it carries.

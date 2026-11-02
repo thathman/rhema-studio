@@ -1242,6 +1242,8 @@ where
         .route("/api/v1/pair", post(pair_handler::<S>))
         .route("/api/v1/me", get(me_handler::<S>))
         .route("/api/v1/live", get(live_handler::<S>))
+        .route("/api/v1/requests", get(requests_mine_handler::<S>))
+        .route("/api/v1/requests/{id}/withdraw", post(request_withdraw_handler::<S>))
         .route("/api/v1/live/events", get(live_events_handler::<S>))
         .route("/api/v1/lookup", post(lookup_handler::<S>))
         .route("/api/v1/plans", get(plans_list_handler::<S>))
@@ -2037,9 +2039,54 @@ async fn plan_request<S: CommandSink + 'static>(state: Arc<AppState<S>>, peer: S
         )
             .into_response(),
         Ok(Err(PlanError::Invalid(why))) => (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!({ "error": why }))).into_response(),
+        Ok(Err(PlanError::Refused(why))) => (StatusCode::CONFLICT, Json(serde_json::json!({ "error": why }))).into_response(),
         Ok(Err(PlanError::Unavailable(why))) => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": why }))).into_response(),
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
+}
+
+/// A paired desk's own approval requests (#410): any role may read and withdraw what it asked
+/// for, never another desk's. This computer's own open remote (no key) has none to show.
+async fn own_requests<S: CommandSink + 'static>(state: Arc<AppState<S>>, peer: SocketAddr, headers: HeaderMap, asked: crate::plans::RequestQuery) -> axum::response::Response {
+    use crate::plans::{PlanError, RequestQuery};
+    let entry = match live_reader(&state, peer, &headers) {
+        Ok(entry) => entry,
+        Err(code) => return code.into_response(),
+    };
+    if entry.hash.is_empty() {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "Requests belong to a paired desk" }))).into_response();
+    }
+    if matches!(asked, RequestQuery::Withdraw(_)) && entry.paused {
+        return (StatusCode::LOCKED, Json(serde_json::json!({ "error": crate::keys::PAUSED_MESSAGE }))).into_response();
+    }
+    let asked = match asked.checked() {
+        Ok(asked) => asked,
+        Err(PlanError::Invalid(why)) => return (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!({ "error": why }))).into_response(),
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+    let desk = crate::plans::Desk { id: entry.hash.clone(), name: entry.name.clone(), role: entry.role };
+    let sink = state.sink.clone();
+    match tokio::task::spawn_blocking(move || sink.requests(&desk, &asked)).await {
+        Ok(Ok(v)) => ([(axum::http::header::CACHE_CONTROL, "no-store")], Json(v)).into_response(),
+        Ok(Err(PlanError::NotFound)) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Err(PlanError::Refused(why))) => (StatusCode::CONFLICT, Json(serde_json::json!({ "error": why }))).into_response(),
+        Ok(Err(PlanError::Invalid(why))) => (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!({ "error": why }))).into_response(),
+        Ok(Err(PlanError::Unavailable(why))) => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": why }))).into_response(),
+        Ok(Err(PlanError::Conflict { .. })) | Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+async fn requests_mine_handler<S: CommandSink + 'static>(AxumState(state): AxumState<Arc<AppState<S>>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap) -> axum::response::Response {
+    own_requests(state, peer, headers, crate::plans::RequestQuery::Mine).await
+}
+
+async fn request_withdraw_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> axum::response::Response {
+    own_requests(state, peer, headers, crate::plans::RequestQuery::Withdraw(id)).await
 }
 
 async fn plans_list_handler<S: CommandSink + 'static>(AxumState(state): AxumState<Arc<AppState<S>>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap) -> axum::response::Response {
@@ -3788,6 +3835,58 @@ mod tests {
         feeds.publish("tv", "{}".into());
         assert!(matches!(feeds.ack("tv", "tv-own-key", 4, None, None), Ok(Some(_))), "a TV's own key opens the ack too");
         assert_eq!(feeds.ack("tv", "s3cret", 4, None, None), Ok(None), "the second page on the same frame is not news");
+    }
+
+    /// #410: a paired desk reads its own approval requests and can take one back before it is
+    /// decided; the host is asked as that desk (its key), so it never sees or withdraws another's.
+    #[tokio::test]
+    async fn a_desk_reads_and_withdraws_only_its_own_requests() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        use crate::plans::{Desk, PlanError, RequestQuery};
+        struct Host;
+        impl CommandSink for Host {
+            fn emit_event(&self, _: &str, _: &str) -> Result<(), CommandError> { Ok(()) }
+            fn invoke_backend(&self, _: &str, _: &str) -> Result<(), CommandError> { Ok(()) }
+            fn requests(&self, by: &Desk, q: &RequestQuery) -> Result<serde_json::Value, PlanError> {
+                // The host's store: r1 is the editor's and open, r2 the editor's and decided, r3 another desk's.
+                let editor = hash_key("ed");
+                match q {
+                    RequestQuery::Mine => Ok(serde_json::json!({ "requests": if by.id == editor { vec!["r1", "r2"] } else { vec![] } })),
+                    RequestQuery::Withdraw(id) if id == "r1" && by.id == editor => Ok(serde_json::json!({ "id": "r1", "state": "withdrawn" })),
+                    RequestQuery::Withdraw(id) if id == "r1" || id == "r2" || id == "r3" => Err(PlanError::Refused("Only the person who sent a request can withdraw it, and only before it is decided.".into())),
+                    RequestQuery::Withdraw(_) => Err(PlanError::NotFound),
+                }
+            }
+        }
+        let entry = |key: &str, role: Role, paused: bool| KeyEntry { hash: hash_key(key), name: key.into(), role, paused, output_scope: Vec::new(), group_take_scope: Vec::new(), record: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("ed", Role::Editor, false), entry("bib", Role::Bible, false), entry("held", Role::Editor, true)] }));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: { let l = new_live_hub(); l.publish(r#"{"v":1}"#.into()); l }, ..Default::default() };
+        let result = start_http_server(config, Arc::new(Host), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let get = |key: &'static str| async move { get_with(port, "/api/v1/requests", &format!("X-Rhema-Key: {key}\r\n"), None).await };
+        let withdraw = |key: &'static str, id: &'static str| async move { raw_http_request_with(port, "POST", &format!("/api/v1/requests/{id}/withdraw"), Some("{}"), &format!("X-Rhema-Key: {key}\r\n")).await };
+
+        assert!(get("ed").await.contains(r#"{"requests":["r1","r2"]}"#), "the desk's own, asked for as its key");
+        assert!(get("bib").await.contains(r#"{"requests":[]}"#), "any role reads its own; another's are not there");
+        assert!(get("nope").await.contains("401"));
+        assert!(withdraw("bib", "r1").await.contains("409"), "another desk's request is never withdrawn");
+        assert!(withdraw("ed", "r2").await.contains("409"), "a decided request stays as decided");
+        assert!(withdraw("ed", "missing").await.contains("404"));
+        assert!(withdraw("ed", "has%20space").await.contains("422"));
+        assert!(withdraw("held", "r1").await.contains("423"), "a desk the main desk took back cannot change requests");
+        let ok = withdraw("ed", "r1").await;
+        assert!(ok.contains("200 OK") && ok.contains(r#""state":"withdrawn""#), "{ok}");
+        let mut handle = result.handle;
+        handle.stop();
+
+        // This computer's own remote with keys off has no desk to own requests.
+        let open = HttpConfig { port: 0, host: "127.0.0.1".into(), ..Default::default() };
+        let result = start_http_server(open, Arc::new(Host), new_shared_status()).await.expect("bind");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(get_with(result.bound_port, "/api/v1/requests", "", None).await.contains("403"));
+        let mut handle = result.handle;
+        handle.stop();
     }
 
     async fn ack_clock(port: u16, clock: i64) -> String {
