@@ -529,6 +529,36 @@ describe("canonical design editor", () => {
     }).toEqual(liveSnapshot)
   })
 
+  it("preserves existing bound layers when undoing and redoing another bound layer", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Video from Library")!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Add Sermon clip as video layer"]')!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Text")!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Undo design edit"]')!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Redo design edit"]')!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const videoNode = Object.values(saved.document.scene.nodes).find((node) => node.name === "Sermon clip")
+    const textNode = Object.values(saved.document.scene.nodes).find((node) => node.type === "text")
+    expect(videoNode).toBeDefined()
+    expect(textNode).toBeDefined()
+    expect(saved.document.bindings[videoNode!.id]).toMatchObject({
+      kind: "video",
+      mediaId: videoAsset.id,
+      videoUrl: videoAssetUrl,
+    })
+    expect(saved.document.bindings[textNode!.id]).toMatchObject({ kind: "text" })
+    expect(designToScene(saved.document).issues).toEqual([])
+  })
+
   it("shows a missing Library video as a blocking editor issue instead of a stale preview", async () => {
     const documentValue = documentFixture()
     const videoNode = Object.values(documentValue.document.scene.nodes).find((node) => node.type === "rect")
