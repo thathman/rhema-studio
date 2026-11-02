@@ -423,12 +423,12 @@ function NowNextSummary() {
   return (
     <section aria-label="Run of show Now and Next" className="grid grid-cols-2 gap-2 border-b border-border px-3 py-2">
       <div role="group" aria-label="Now in the run of show" className="min-w-0 rounded-md bg-background/60 px-2 py-1.5">
-        <span className="block text-[0.625rem] font-bold tracking-wide text-muted-foreground uppercase">Now</span>
+        <span className="block text-[0.6875rem] font-bold tracking-wide text-muted-foreground uppercase">Now</span>
         <span className="block truncate text-xs font-semibold" title={current?.reference ?? "No active run-of-show item"}>{current?.reference ?? "Not started"}</span>
         {current && <span className="block truncate text-[0.6875rem] text-muted-foreground">{currentDetails || "Current run position"}</span>}
       </div>
       <div role="group" aria-label="Next in the run of show" className="min-w-0 rounded-md bg-background/60 px-2 py-1.5">
-        <span className="block text-[0.625rem] font-bold tracking-wide text-muted-foreground uppercase">Next</span>
+        <span className="block text-[0.6875rem] font-bold tracking-wide text-muted-foreground uppercase">Next</span>
         <span className="block truncate text-xs font-semibold" title={next?.label ?? "No next run-of-show item"}>{next?.label ?? "No next item"}</span>
         {next && <span className="block truncate text-[0.6875rem] text-muted-foreground">{itemDetails(next.index, next.item) || "Up next in the running order"}</span>}
       </div>
