@@ -472,6 +472,48 @@ describe("canonical design editor", () => {
     expect(prepared.scene.layers).toContainEqual(expect.objectContaining({ id: rectangle?.id, kind: "color", color: "#d14c62" }))
   })
 
+  it("aligns a selected layer to the active page and keeps each move undoable", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+    const click = async (label: string) => act(async () => element.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!.click())
+    const coordinates = () => [...element.querySelectorAll<HTMLInputElement>('input[type="number"]')].slice(0, 2).map((input) => Number(input.value))
+
+    await click("Add page")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Rectangle")!.click())
+    expect(coordinates()).toEqual([672, 378])
+
+    await click("Align left to page")
+    expect(coordinates()[0]).toBe(0)
+    await click("Center horizontally on page")
+    expect(coordinates()[0]).toBe(680)
+    await click("Align right to page")
+    expect(coordinates()[0]).toBe(1360)
+
+    await click("Align top to page")
+    expect(coordinates()[1]).toBe(0)
+    await click("Center vertically on page")
+    expect(coordinates()[1]).toBe(410)
+    await click("Align bottom to page")
+    expect(coordinates()[1]).toBe(820)
+    await click("Undo design edit")
+    expect(coordinates()).toEqual([1360, 410])
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const rectangle = Object.values(saved.document.scene.nodes).find((node) => node.type === "rect" && node.name === "Rectangle")
+    expect(rectangle).toMatchObject({ x: 1360, y: 410 })
+    const activePageId = saved.document.pages?.[1]?.id
+    expect(activePageId).toBeDefined()
+    const prepared = designToScene(saved.document, activePageId)
+    expect(prepared.issues).toEqual([])
+    expect(prepared.scene.layers).toContainEqual(expect.objectContaining({ id: rectangle?.id, kind: "color" }))
+  })
+
   it("saves and versions native Avnac text as a usable private Prepare scene", async () => {
     const documentValue = documentFixture()
     let savedDocument: DesignDocument | null = null
