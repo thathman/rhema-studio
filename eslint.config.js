@@ -15,6 +15,8 @@ export default defineConfig([
     'web',
     'data/build-bible-db.ts',
     'scripts/mac-qa/avnac-draw.qa.js',
+    'scripts/mac-qa/live-configured-service.js',
+    'scripts/mac-qa/live-empty-service.js',
     'scripts/mac-qa/prepare-mixed-journey.js',
     'scripts/mac-qa/recording-journey.js',
     'scripts/mac-qa/recording-output-ready.js',
