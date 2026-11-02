@@ -79,6 +79,11 @@ export interface SceneLayer {
   color?: string
   /** text: literal content (not a live source binding). */
   text?: string
+  /**
+   * The same words in the second language (#448). An output set to the second language shows
+   * these, one set to both shows the two stacked; without them it shows `text` and warns.
+   */
+  textSecond?: string
   /** text: font family and size on the 1920×1080 design artboard. */
   fontFamily?: string
   fontSize?: number
@@ -195,4 +200,9 @@ export interface SceneFrame {
   layers: SceneLayerFrame[]
   /** Cross-fade to and from this scene, in ms (0 or absent: cut). */
   fadeMs?: number
+  /**
+   * The width/height the scene was laid out for (#448): a scene from a design keeps its artboard's
+   * shape, so an output of another shape letterboxes it instead of stretching it. Absent: fill.
+   */
+  aspect?: number
 }
