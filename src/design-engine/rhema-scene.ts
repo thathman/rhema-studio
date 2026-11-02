@@ -52,6 +52,7 @@ export interface DesignIssue {
 const PLACEHOLDER: Record<string, string> = {
   feed: "#2b3a67", camera: "#1f4d3a", clock: "#5a3d1f", ticker: "#4d1f3a", lowerThird: "#3a1f4d", video: "#1f3a4d", logo: "#4d4d1f",
 }
+export const VIDEO_LAYER_PLACEHOLDER_COLOR = PLACEHOLDER.video
 const TEXT_WEIGHTS = new Set(["400", "500", "600", "700", "800", "900"])
 const TEXT_COLOR = /^#[0-9a-f]{6}$/i
 const SAFE_FONT_FAMILY = /^[\p{L}\p{N}, _-]{1,120}$/u
@@ -320,6 +321,12 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         issues.push({ nodeId: node.id, message: "Gradient layer fills cannot be saved into a Rhema scene yet" })
       } else if (binding.kind === "color") {
         layer.color = node.fill.color
+      } else if (binding.kind === "video") {
+        if (!binding.mediaId || !binding.videoUrl || !binding.mediaFile) {
+          issues.push({ nodeId: node.id, message: "A video layer needs its local Library media reference before it can be used in Prepare" })
+        } else if (node.fill.color !== PLACEHOLDER.video) {
+          issues.push({ nodeId: node.id, message: "The video layer placeholder cannot be changed in Rhema scene output yet" })
+        }
       } else {
         const originalFill = PLACEHOLDER[binding.kind] ?? "#333333"
         if (node.fill.color !== originalFill) {

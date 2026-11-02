@@ -40,7 +40,9 @@ import { useUnsavedStore } from "@/stores/unsaved-store"
 import { mayLeaveDesignDocumentDraft } from "@/lib/design-document-draft"
 import type { DesignDocument, DesignSummary, DesignVersion } from "@/design-engine/design-store"
 import { createBlankRhemaDesign } from "@/design-engine/design-document-utils"
+import { VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rhema-scene"
 import type { Scene } from "@/types/scene"
+import { useMediaStore } from "@/stores/media-store"
 import { DesignDocumentsWorkspace, DesignVersionPicker } from "./design-documents-workspace"
 
 let root: Root | null = null
@@ -296,6 +298,80 @@ describe("My Designs workspace", () => {
     expect(onUse).toHaveBeenCalledTimes(1)
     expect(onUse.mock.calls[0]?.[0]).toMatchObject({ design: { id: designId, version: 1, pageId: "page-two" }, layers: [expect.objectContaining({ id: "page-two-background", color: "#264060" })] })
     expect(onUse.mock.calls[0]?.[2]).toBe("page-two")
+  })
+
+  it("refreshes a saved Library video URL before pinning its version in Prepare", async () => {
+    const designId = "design-video"
+    const design = createBlankRhemaDesign("Sermon clip")
+    const background = Object.values(design.scene.nodes).find((node) => node.type === "rect")
+    if (!background || background.type !== "rect") throw new Error("Expected a design background rectangle")
+    design.scene.nodes[background.id] = { ...background, fill: { type: "solid", color: VIDEO_LAYER_PLACEHOLDER_COLOR } }
+    design.bindings[background.id] = {
+      id: background.id,
+      kind: "video",
+      mediaId: "sermon-media",
+      videoUrl: "asset://stale/video.mp4",
+      mediaFile: "sermon.mp4",
+    }
+    const summary: DesignSummary = { id: designId, title: "Sermon clip", kind: "design", revision: 2, latestVersion: 1, updatedAt: new Date(0).toISOString() }
+    const version: DesignVersion = { designId, version: 1, fromRevision: 2, title: summary.title, document: design, note: null, savedBy: "Tolu", createdAt: new Date(0).toISOString() }
+    store.list.mockResolvedValue([summary])
+    store.listVersions.mockResolvedValue([{ ...version, document: null }])
+    store.getVersion.mockResolvedValue(version)
+    const currentVideoUrl = "asset://localhost/%2Flocal-media%2Fsermon.mp4"
+    const fileUrl = vi.fn(async () => currentVideoUrl)
+    useMediaStore.setState({ fileUrl })
+    const before = useBroadcastStore.getState()
+    const liveSnapshot = { outputs: before.outputs, outputStatus: before.outputStatus, isLive: before.isLive, sceneTakes: before.sceneTakes }
+    const onUse = vi.fn()
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => root!.render(<DesignVersionPicker onUse={onUse} />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
+
+    await act(async () => {
+      ;[...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use in Prepare"))?.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(fileUrl).toHaveBeenCalledWith("sermon-media")
+    expect(onUse).toHaveBeenCalledTimes(1)
+    expect(onUse.mock.calls[0]?.[0]).toMatchObject({
+      design: { id: designId, version: 1 },
+      layers: [expect.objectContaining({ kind: "video", mediaId: "sermon-media", mediaFile: "sermon.mp4", videoUrl: currentVideoUrl })],
+    })
+    const after = useBroadcastStore.getState()
+    expect({ outputs: after.outputs, outputStatus: after.outputStatus, isLive: after.isLive, sceneTakes: after.sceneTakes }).toEqual(liveSnapshot)
+  })
+
+  it("fails closed when a saved version's Library video is unavailable", async () => {
+    const design = createBlankRhemaDesign("Missing video")
+    const background = Object.values(design.scene.nodes).find((node) => node.type === "rect")
+    if (!background || background.type !== "rect") throw new Error("Expected a design background rectangle")
+    design.scene.nodes[background.id] = { ...background, fill: { type: "solid", color: VIDEO_LAYER_PLACEHOLDER_COLOR } }
+    design.bindings[background.id] = { id: background.id, kind: "video", mediaId: "missing-video", videoUrl: "asset://stale/missing.mp4", mediaFile: "missing.mp4" }
+    const summary: DesignSummary = { id: "design-missing-video", title: "Missing video", kind: "design", revision: 1, latestVersion: 1, updatedAt: new Date(0).toISOString() }
+    const version: DesignVersion = { designId: summary.id, version: 1, fromRevision: 1, title: summary.title, document: design, note: null, savedBy: "Tolu", createdAt: new Date(0).toISOString() }
+    store.list.mockResolvedValue([summary])
+    store.listVersions.mockResolvedValue([{ ...version, document: null }])
+    store.getVersion.mockResolvedValue(version)
+    useMediaStore.setState({ fileUrl: vi.fn(async () => null) })
+    const onUse = vi.fn()
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => root!.render(<DesignVersionPicker onUse={onUse} />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
+
+    await act(async () => {
+      ;[...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use in Prepare"))?.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(onUse).not.toHaveBeenCalled()
+    expect(host.textContent).toContain("This version cannot be used")
+    expect(host.textContent).toContain("Missing video")
   })
 
   it("keeps an unsaved draft open when the operator cancels switching designs", async () => {

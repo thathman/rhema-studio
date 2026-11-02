@@ -15,6 +15,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { LookLibraryView } from "@/studio/design/look-library-view"
 import { DesignDocumentEditor } from "@/studio/design/design-document-editor"
 import { DesignUsagePanel } from "@/studio/design/design-usage-panel"
+import { hydrateDesignSceneMedia } from "@/lib/design-media"
 import type { Scene } from "@/types/scene"
 import { cn } from "@/lib/utils"
 
@@ -472,7 +473,7 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
               <Button size="sm" onClick={() => {
                 if (editingDirty) return
                 onDirtyChange?.(false)
-                onUse(createdCompatibility.scene!, createdVersion, effectiveCreatedPageId)
+                void attachResolvedVersion(createdVersion, effectiveCreatedPageId)
               }} disabled={editingDirty || busy}>{useLabel ?? `Use version ${createdVersion.version} in Prepare`}</Button>
             ) : (
               <div role="status" className="max-w-xl rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
@@ -519,7 +520,7 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
         setPendingPageId(version.document.pages![0]!.id)
         return
       }
-      attachResolvedVersion(version, version.document.pages?.[0]?.id)
+      await attachResolvedVersion(version, version.document.pages?.[0]?.id)
     } catch (failure) {
       setError("This version could not be used: " + messageOf(failure))
     } finally {
@@ -527,16 +528,26 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
     }
   }
 
-  const attachResolvedVersion = (version: DesignVersion, pageId?: string) => {
+  const attachResolvedVersion = async (version: DesignVersion, pageId?: string) => {
     const converted = pinnedSceneForVersion(version, operatorName, pageId)
     if (!converted.scene) {
       const reason = converted.issues.map((issue) => issue.message).join("; ")
       setError(reason || "This version cannot be shown as a Rhema scene.")
       return
     }
-    onUse(converted.scene, version, pageId)
-    setPendingVersion(null)
-    setPendingPageId("")
+    setBusy(true)
+    setError("")
+    try {
+      const resolved = await hydrateDesignSceneMedia(converted.scene)
+      if (!resolved.scene) throw new Error(resolved.issue ?? "A Library asset is unavailable on this computer.")
+      onUse(resolved.scene, version, pageId)
+      setPendingVersion(null)
+      setPendingPageId("")
+    } catch (failure) {
+      setError("This version cannot be used: " + messageOf(failure))
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -584,7 +595,7 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
               {pendingPages.map((page, index) => <option key={page.id} value={page.id}>{index + 1}. {page.title}</option>)}
             </select>
           </label>
-          <Button size="sm" onClick={() => attachResolvedVersion(pendingVersion, effectivePendingPageId)} disabled={busy || !effectivePendingPageId}>{useLabel ?? "Use selected page in Prepare"}</Button>
+          <Button size="sm" onClick={() => void attachResolvedVersion(pendingVersion, effectivePendingPageId)} disabled={busy || !effectivePendingPageId}>{useLabel ?? "Use selected page in Prepare"}</Button>
           <Button size="sm" variant="ghost" onClick={() => { setPendingVersion(null); setPendingPageId("") }} disabled={busy}>Cancel</Button>
         </div>
       )}

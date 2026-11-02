@@ -10,14 +10,26 @@ export async function hydrateDesignSceneMedia(scene: Scene): Promise<{ scene: Sc
   const failures: string[] = []
   let changed = false
   const layers = await Promise.all(scene.layers.map(async (layer) => {
-    if (layer.kind !== "picture" || !layer.mediaId || layer.imageUrl?.startsWith("data:")) return layer
-    const imageUrl = await useMediaStore.getState().dataUrl(layer.mediaId).catch(() => null)
-    if (!imageUrl) {
-      failures.push(layer.name || "Picture layer")
-      return layer
+    if (layer.kind === "picture" && layer.mediaId && !layer.imageUrl?.startsWith("data:")) {
+      const imageUrl = await useMediaStore.getState().dataUrl(layer.mediaId).catch(() => null)
+      if (!imageUrl) {
+        failures.push(layer.name || "Picture layer")
+        return layer
+      }
+      changed ||= imageUrl !== layer.imageUrl
+      return { ...layer, imageUrl }
     }
-    changed ||= imageUrl !== layer.imageUrl
-    return { ...layer, imageUrl }
+    if (layer.kind === "video" && layer.mediaId) {
+      // Videos stay streamed from the local media folder; never read the entire file into memory.
+      const videoUrl = await useMediaStore.getState().fileUrl(layer.mediaId).catch(() => null)
+      if (!videoUrl) {
+        failures.push(layer.name || "Video layer")
+        return layer
+      }
+      changed ||= videoUrl !== layer.videoUrl
+      return { ...layer, videoUrl }
+    }
+    return layer
   }))
 
   if (failures.length) {
@@ -25,8 +37,8 @@ export async function hydrateDesignSceneMedia(scene: Scene): Promise<{ scene: Sc
     return {
       scene: null,
       issue: names.length === 1
-        ? `The Library picture “${names[0]}” is unavailable on this computer.`
-        : `These Library pictures are unavailable on this computer: ${names.join(", ")}.`,
+        ? `The Library media “${names[0]}” is unavailable on this computer.`
+        : `These Library media assets are unavailable on this computer: ${names.join(", ")}.`,
     }
   }
   return { scene: changed ? { ...scene, layers } : scene }

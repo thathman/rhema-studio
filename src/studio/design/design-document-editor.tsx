@@ -4,11 +4,11 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { designStore, type DesignDocument, type DesignInput, type DesignVersion } from "@/design-engine/design-store"
-import { designPages, designToScene, type RhemaBinding, type RhemaDesignPage } from "@/design-engine/rhema-scene"
+import { designPages, designToScene, type RhemaBinding, type RhemaDesignPage, VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rhema-scene"
 import { createColorLayer, createLiveFeedLayer } from "@/design-engine/design-document-utils"
 import { createSaraswatiEditorStore, getNodeBounds, pointerDown, pointerMove, pointerUp, type SaraswatiCommand, type SaraswatiPointerState } from "@/vendor/avnac/saraswati"
 import { renderSceneToCanvas } from "@/vendor/avnac/renderer/offscreen-render"
-import type { SaraswatiEllipseNode, SaraswatiGroupNode, SaraswatiNode, SaraswatiRenderableNode, SaraswatiScene, SaraswatiTextNode } from "@/vendor/avnac/saraswati"
+import type { SaraswatiEllipseNode, SaraswatiGroupNode, SaraswatiNode, SaraswatiRectNode, SaraswatiRenderableNode, SaraswatiScene, SaraswatiTextNode } from "@/vendor/avnac/saraswati"
 import { cn } from "@/lib/utils"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
@@ -51,31 +51,10 @@ function stableId(prefix: string) {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`
 }
 
-type PictureBindingSnapshot = Record<string, { mediaId?: string; imageUrl?: string }>
+type BindingSnapshot = Record<string, RhemaBinding>
 
-function pictureBindingSnapshot(scene: SaraswatiScene, bindings: Record<string, RhemaBinding>): PictureBindingSnapshot {
-  const snapshot: PictureBindingSnapshot = {}
-  for (const [id, node] of Object.entries(scene.nodes)) {
-    const binding = bindings[id]
-    if (node.type === "image" && binding?.kind === "picture") {
-      snapshot[id] = { mediaId: binding.mediaId, imageUrl: binding.imageUrl }
-    }
-  }
-  return snapshot
-}
-
-function applyPictureBindingSnapshot(
-  bindings: Record<string, RhemaBinding>,
-  snapshot: PictureBindingSnapshot,
-): Record<string, RhemaBinding> {
-  let next = bindings
-  for (const [id, picture] of Object.entries(snapshot)) {
-    const existing = bindings[id]
-    if (existing?.kind === "picture" && existing.mediaId === picture.mediaId && existing.imageUrl === picture.imageUrl) continue
-    if (next === bindings) next = { ...bindings }
-    next[id] = { ...existing, id, kind: "picture", ...picture }
-  }
-  return next
+function bindingSnapshot(bindings: Record<string, RhemaBinding>): BindingSnapshot {
+  return { ...bindings }
 }
 
 function moveValue(node: SaraswatiRenderableNode, field: "x" | "y" | "width" | "height", value: number): SaraswatiRenderableNode {
@@ -136,7 +115,7 @@ export function DesignDocumentEditor({
     bindingsRef.current = next
     setBindingsState(next)
   }
-  const pictureBindingScenes = useRef(new WeakMap<SaraswatiScene, PictureBindingSnapshot>())
+  const bindingSnapshots = useRef(new WeakMap<SaraswatiScene, BindingSnapshot>())
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [versions, setVersions] = useState<DesignVersion[]>([])
   const [versionNote, setVersionNote] = useState("")
@@ -144,6 +123,7 @@ export function DesignDocumentEditor({
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState("")
   const [imagePickerOpen, setImagePickerOpen] = useState(false)
+  const [mediaPickerKind, setMediaPickerKind] = useState<"image" | "video">("image")
   const [imagePickerBusy, setImagePickerBusy] = useState(false)
   const [imagePickerMessage, setImagePickerMessage] = useState("")
   const [editorFlags, setEditorFlags] = useState({ canUndo: false, canRedo: false })
@@ -156,8 +136,17 @@ export function DesignDocumentEditor({
     () => mediaAssets.filter((asset) => asset.kind === "image" && asset.present),
     [mediaAssets],
   )
+  const libraryVideos = useMemo(
+    () => mediaAssets.filter((asset) => asset.kind === "video" && asset.present),
+    [mediaAssets],
+  )
   const pointerRef = useRef<SaraswatiPointerState | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    if (Object.values(bindings).some((binding) => binding.kind === "video") && !mediaLoaded) {
+      void useMediaStore.getState().list()
+    }
+  }, [bindings, mediaLoaded])
   useEffect(() => {
     return editor.subscribe((next) => {
       setScene(next.scene)
@@ -171,8 +160,8 @@ export function DesignDocumentEditor({
         if (explicit) return true
         return Array.isArray(document.document.pages) && document.document.pages.length ? current : false
       })
-      const pictureBindings = pictureBindingScenes.current.get(next.scene)
-      if (pictureBindings) setBindings((current) => applyPictureBindingSnapshot(current, pictureBindings))
+      const snapshot = bindingSnapshots.current.get(next.scene)
+      if (snapshot) setBindings(snapshot)
     })
   }, [editor, document.document.pages])
 
@@ -207,8 +196,12 @@ export function DesignDocumentEditor({
   )
   const selectedNode = selectedId ? scene.nodes[selectedId] : undefined
   const selectedRenderable = renderable(selectedNode) ? selectedNode : undefined
-  const selectedPaintNode = selectedRenderable && paintNode(selectedRenderable) ? selectedRenderable : undefined
   const selectedBinding = selectedRenderable ? bindings[selectedRenderable.id] : undefined
+  const selectedPaintNode = selectedRenderable && selectedBinding?.kind !== "video" && paintNode(selectedRenderable) ? selectedRenderable : undefined
+  const selectedVideoAsset = selectedBinding?.kind === "video"
+    ? mediaAssets.find((asset) => asset.id === selectedBinding.mediaId)
+    : undefined
+  const selectedVideoMissing = selectedBinding?.kind === "video" && mediaLoaded && !mediaError && !selectedVideoAsset?.present
   const issues = useMemo(() => designToScene({
     ...designForEditor,
     meta: { ...document.document.meta, name: title },
@@ -538,24 +531,31 @@ export function DesignDocumentEditor({
     dispatch({ type: "ADD_NODE", node })
     setSelectedId(id)
   }
-  const openImagePicker = () => {
+  const openMediaPicker = (kind: "image" | "video") => {
+    setMediaPickerKind(kind)
     setImagePickerOpen(true)
     setImagePickerMessage("")
     if (!mediaLoaded) void useMediaStore.getState().list()
   }
-  const importPictures = async () => {
+  const openImagePicker = () => openMediaPicker("image")
+  const openVideoPicker = () => openMediaPicker("video")
+  const importMediaFiles = async () => {
+    const kind = mediaPickerKind
+    const plural = kind === "video" ? "videos" : "pictures"
     setImagePickerBusy(true)
     setImagePickerMessage("")
     try {
-      const results = await useMediaStore.getState().importFiles()
+      const results = await useMediaStore.getState().importFiles(kind === "video"
+        ? [{ name: "Videos", extensions: ["mp4", "m4v", "mov", "webm"] }]
+        : undefined)
       if (!results) return
       const imported = results.filter((result) => result.status === "imported")
       const failures = results.filter((result) => result.status === "failed")
-      if (imported.length) setImagePickerMessage("Pictures added to the Library. Choose one to add it to this design.")
+      if (imported.length) setImagePickerMessage(`${kind === "video" ? "Videos" : "Pictures"} added to the Library. Choose one to add it to this design.`)
       else if (failures.length) setImagePickerMessage(failures.map((result) => result.message).join(" "))
-      else setImagePickerMessage("No pictures were added.")
+      else setImagePickerMessage(`No ${plural} were added.`)
     } catch (error) {
-      setImagePickerMessage("The picture could not be added to the Library: " + errorMessage(error))
+      setImagePickerMessage(`The ${kind} could not be added to the Library: ` + errorMessage(error))
     } finally {
       setImagePickerBusy(false)
     }
@@ -576,11 +576,8 @@ export function DesignDocumentEditor({
       const selectedImage = selectedRenderable?.type === "image" ? selectedRenderable : null
       if (selectedImage) {
         const sceneBeforeReplace = editor.getState().scene
-        const bindingsBeforeReplace = bindingsRef.current
-        pictureBindingScenes.current.set(
-          sceneBeforeReplace,
-          pictureBindingSnapshot(sceneBeforeReplace, bindingsBeforeReplace),
-        )
+        const bindingsBeforeReplace = bindingSnapshot(bindingsRef.current)
+        bindingSnapshots.current.set(sceneBeforeReplace, bindingsBeforeReplace)
         const replacementBinding: RhemaBinding = {
           ...bindingsBeforeReplace[selectedImage.id],
           id: selectedImage.id,
@@ -590,11 +587,12 @@ export function DesignDocumentEditor({
         }
         updateNode({ ...selectedImage, src: imageUrl })
         const sceneAfterReplace = editor.getState().scene
-        pictureBindingScenes.current.set(sceneAfterReplace, pictureBindingSnapshot(sceneAfterReplace, {
+        const bindingsAfterReplace = {
           ...bindingsBeforeReplace,
           [selectedImage.id]: replacementBinding,
-        }))
-        setBindings((current) => ({ ...current, [selectedImage.id]: replacementBinding }))
+        }
+        bindingSnapshots.current.set(sceneAfterReplace, bindingSnapshot(bindingsAfterReplace))
+        setBindings(bindingsAfterReplace)
       } else {
         const sourceAspect = asset.width && asset.height && asset.width > 0 && asset.height > 0
           ? asset.width / asset.height
@@ -626,11 +624,13 @@ export function DesignDocumentEditor({
           cropY: 0,
           clipPath: null,
         }
-        setBindings((current) => ({
-          ...current,
-          [id]: { id, kind: "picture", mediaId: asset.id, imageUrl },
-        }))
+        const sceneBeforeAdd = editor.getState().scene
+        const bindingsBeforeAdd = bindingSnapshot(bindingsRef.current)
+        const bindingsAfterAdd = { ...bindingsBeforeAdd, [id]: { id, kind: "picture" as const, mediaId: asset.id, imageUrl } }
+        bindingSnapshots.current.set(sceneBeforeAdd, bindingsBeforeAdd)
+        setBindings(bindingsAfterAdd)
         dispatch({ type: "ADD_NODE", node })
+        bindingSnapshots.current.set(editor.getState().scene, bindingSnapshot(bindingsAfterAdd))
         setSelectedId(id)
       }
       setImagePickerOpen(false)
@@ -638,6 +638,67 @@ export function DesignDocumentEditor({
       setMessage(selectedRenderable?.type === "image" ? "Library picture replaced. Save the draft to keep the change." : "Library picture added as a layer. Save the draft to keep the change.")
     } catch (error) {
       setImagePickerMessage("The picture could not be added to this design: " + errorMessage(error))
+    } finally {
+      setImagePickerBusy(false)
+    }
+  }
+  const addLibraryVideo = async (asset: MediaAssetStatus) => {
+    if (asset.kind !== "video" || !asset.present) {
+      setImagePickerMessage("That video is no longer available in the Library. Refresh the list and try again.")
+      return
+    }
+    setImagePickerBusy(true)
+    setImagePickerMessage("")
+    try {
+      const videoUrl = await useMediaStore.getState().fileUrl(asset.id)
+      if (!videoUrl) throw new Error("The video file is missing or could not be read.")
+      const sourceAspect = asset.width && asset.height && asset.width > 0 && asset.height > 0
+        ? asset.width / asset.height
+        : 16 / 9
+      const aspect = Math.max(0.1, Math.min(10, sourceAspect))
+      const maxWidth = scene.artboard.width * 0.5
+      const maxHeight = scene.artboard.height * 0.5
+      const width = Math.round(Math.min(maxWidth, maxHeight * aspect))
+      const height = Math.round(width / aspect)
+      const id = stableId("video")
+      const node: SaraswatiRectNode = {
+        id,
+        parentId: activeRootId,
+        name: asset.name,
+        visible: true,
+        x: Math.round((scene.artboard.width - width) / 2),
+        y: Math.round((scene.artboard.height - height) / 2),
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+        opacity: 1,
+        originX: "left",
+        originY: "top",
+        type: "rect",
+        width,
+        height,
+        fill: { type: "solid", color: VIDEO_LAYER_PLACEHOLDER_COLOR },
+        stroke: null,
+        strokeWidth: 0,
+        radiusX: 0,
+        radiusY: 0,
+      }
+      const sceneBeforeAdd = editor.getState().scene
+      const bindingsBeforeAdd = bindingSnapshot(bindingsRef.current)
+      const bindingsAfterAdd = {
+        ...bindingsBeforeAdd,
+        [id]: { id, kind: "video" as const, mediaId: asset.id, videoUrl, mediaFile: asset.file },
+      }
+      bindingSnapshots.current.set(sceneBeforeAdd, bindingsBeforeAdd)
+      setBindings(bindingsAfterAdd)
+      dispatch({ type: "ADD_NODE", node })
+      bindingSnapshots.current.set(editor.getState().scene, bindingSnapshot(bindingsAfterAdd))
+      setSelectedId(id)
+      setImagePickerOpen(false)
+      setImagePickerMessage("")
+      setMessage("Library video added as an editable design layer. Its local preview is muted; outputs stay unchanged.")
+    } catch (error) {
+      setImagePickerMessage("The video could not be added to this design: " + errorMessage(error))
     } finally {
       setImagePickerBusy(false)
     }
@@ -763,34 +824,39 @@ export function DesignDocumentEditor({
             <Button size="xs" variant="outline" onClick={openImagePicker} disabled={document.kind === "template" || imagePickerBusy}>
               {selectedRenderable?.type === "image" ? "Replace image" : "Image from Library"}
             </Button>
+            <Button size="xs" variant="outline" onClick={openVideoPicker} disabled={document.kind === "template" || imagePickerBusy}>Video from Library</Button>
             <Button size="xs" variant="outline" onClick={() => addLayer("feed")} disabled={document.kind === "template"}><PlusIcon /> Live content</Button>
             <Button size="xs" variant="outline" onClick={() => addLayer("color")} disabled={document.kind === "template"}><PlusIcon /> Colour layer</Button>
             <span className="ml-auto text-[0.6875rem] text-muted-foreground">Drag on canvas or focus a layer and use arrow keys; Shift + arrow moves 10 px.</span>
           </div>
           {imagePickerOpen && (
-            <section aria-label="Image library" className="rounded-md border border-border bg-card p-3">
+            <section aria-label={mediaPickerKind === "video" ? "Video library" : "Image library"} className="rounded-md border border-border bg-card p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h3 className="text-xs font-semibold">Pictures from your Library</h3>
-                  <p className="mt-0.5 text-[0.6875rem] text-muted-foreground">Choose a local image to add as an editable layer. It stays with this design when you save it.</p>
+                  <h3 className="text-xs font-semibold">{mediaPickerKind === "video" ? "Videos from your Library" : "Pictures from your Library"}</h3>
+                  <p className="mt-0.5 text-[0.6875rem] text-muted-foreground">{mediaPickerKind === "video"
+                    ? "Choose a local video to add as an editable, versioned layer. The design stays private until normal approval and explicit Take."
+                    : "Choose a local image to add as an editable layer. It stays with this design when you save it."}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button size="xs" variant="outline" onClick={() => void importPictures()} disabled={imagePickerBusy}>Import picture</Button>
+                  <Button size="xs" variant="outline" onClick={() => void importMediaFiles()} disabled={imagePickerBusy}>{mediaPickerKind === "video" ? "Import video" : "Import picture"}</Button>
                   <Button size="xs" variant="ghost" onClick={() => setImagePickerOpen(false)} disabled={imagePickerBusy}>Close</Button>
                 </div>
               </div>
               {imagePickerMessage && <p role="status" className="mt-2 text-xs text-muted-foreground">{imagePickerMessage}</p>}
-              {mediaError && libraryPictures.length === 0 && <p role="alert" className="mt-2 text-xs text-destructive">The Library pictures could not be loaded: {mediaError}</p>}
-              {libraryPictures.length ? (
+              {mediaError && (mediaPickerKind === "video" ? libraryVideos.length === 0 : libraryPictures.length === 0) && <p role="alert" className="mt-2 text-xs text-destructive">The Library {mediaPickerKind === "video" ? "videos" : "pictures"} could not be loaded: {mediaError}</p>}
+              {(mediaPickerKind === "video" ? libraryVideos : libraryPictures).length ? (
                 <ul className="mt-3 flex flex-wrap gap-2">
-                  {libraryPictures.map((asset) => (
+                  {(mediaPickerKind === "video" ? libraryVideos : libraryPictures).map((asset) => (
                     <li key={asset.id}>
                       <Button
                         size="xs"
                         variant="outline"
-                        onClick={() => void addLibraryPicture(asset)}
+                        onClick={() => void (mediaPickerKind === "video" ? addLibraryVideo(asset) : addLibraryPicture(asset))}
                         disabled={imagePickerBusy}
-                        aria-label={`${selectedRenderable?.type === "image" ? "Replace with" : "Add"} ${asset.name}${selectedRenderable?.type === "image" ? "" : " as image layer"}`}
+                        aria-label={mediaPickerKind === "video"
+                          ? `Add ${asset.name} as video layer`
+                          : `${selectedRenderable?.type === "image" ? "Replace with" : "Add"} ${asset.name}${selectedRenderable?.type === "image" ? "" : " as image layer"}`}
                       >
                         {asset.name}
                       </Button>
@@ -799,7 +865,7 @@ export function DesignDocumentEditor({
                 </ul>
               ) : !mediaError && (
                 <p className="mt-3 rounded border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-                  No pictures are in the Library yet. Import a picture here, then choose it to add it to this design.
+                  No {mediaPickerKind === "video" ? "videos" : "pictures"} are in the Library yet. Import {mediaPickerKind === "video" ? "a video" : "a picture"} here, then choose it to add it to this design.
                 </p>
               )}
             </section>
@@ -819,6 +885,29 @@ export function DesignDocumentEditor({
               onKeyDown={(event) => moveByArrow(event, selectedId)}
             />
           </div>
+          {selectedBinding?.kind === "video" && (
+            <section aria-label="Video layer media preview" className="mx-auto mt-3 max-w-2xl rounded-md border border-border p-3">
+              <h3 className="text-xs font-semibold">Video layer · local preview</h3>
+              {selectedVideoMissing ? (
+                <p role="alert" className="mt-2 text-xs text-destructive">The Library video “{selectedVideoAsset?.name ?? selectedRenderable?.name ?? selectedBinding.mediaFile ?? "Video"}” is missing on this computer. Replace it from the Library before using this version in Prepare.</p>
+              ) : selectedBinding.videoUrl ? (
+                <video
+                  src={selectedBinding.videoUrl}
+                  muted
+                  loop
+                  playsInline
+                  controls
+                  preload="metadata"
+                  aria-label={`Local preview, starts muted: ${selectedRenderable?.name ?? selectedBinding.mediaFile ?? "Video"}`}
+                  className="mt-2 max-h-64 w-full rounded bg-black object-contain"
+                />
+              ) : (
+                <p role="alert" className="mt-2 text-xs text-destructive">This video layer has no readable local video reference. Add it again from the Library before using this version in Prepare.</p>
+              )}
+              {mediaError && <p role="status" className="mt-2 text-[0.6875rem] text-muted-foreground">The Library could not be checked. This local preview alone does not confirm the video will be available on outputs.</p>}
+              <p className="mt-2 text-[0.6875rem] text-muted-foreground">This private editor preview starts muted. Player controls affect only this preview; they do not change Preview, Program or any screen.</p>
+            </section>
+          )}
           <p className="text-[0.6875rem] text-muted-foreground">This is a private design draft. Saving it does not change Preview, Program or any output.</p>
           {issues.length > 0 && (
             <div role="status" className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
