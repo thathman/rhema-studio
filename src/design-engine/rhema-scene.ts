@@ -255,6 +255,9 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       issues.push({ nodeId: node.id, message: `"${node.name ?? node.id}" was drawn in the editor; Rhema scenes cannot show it yet` })
       continue
     }
+    if (binding.kind === "clock" && binding.clockShows === "until" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(binding.until ?? "")) {
+      issues.push({ nodeId: node.id, message: "A clock counting down to a fixed time needs a valid 24-hour time before this version can be used in Prepare" })
+    }
     if (Math.abs(node.rotation) > 0.0001) {
       issues.push({ nodeId: node.id, message: "Layer rotation cannot be saved into a Rhema scene yet" })
     }

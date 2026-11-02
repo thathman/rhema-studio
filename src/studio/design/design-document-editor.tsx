@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowDownIcon, ArrowUpIcon, CircleIcon, CopyIcon, EyeIcon, EyeOffIcon, PlusIcon, Redo2Icon, SaveIcon, SquareIcon, TextIcon, Trash2Icon, Undo2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { designStore, type DesignDocument, type DesignInput, type DesignVersion } from "@/design-engine/design-store"
 import { designPages, designToScene, type RhemaBinding, type RhemaDesignPage, VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rhema-scene"
-import { createCameraLayer, createColorLayer, createLiveFeedLayer } from "@/design-engine/design-document-utils"
+import { createCameraLayer, createClockLayer, createColorLayer, createLiveFeedLayer, createLogoLayer, createLowerThirdLayer, createTickerLayer } from "@/design-engine/design-document-utils"
 import { createSaraswatiEditorStore, getNodeBounds, pointerDown, pointerMove, pointerUp, type SaraswatiCommand, type SaraswatiPointerState } from "@/vendor/avnac/saraswati"
 import { renderSceneToCanvas } from "@/vendor/avnac/renderer/offscreen-render"
 import type { SaraswatiEllipseNode, SaraswatiGroupNode, SaraswatiNode, SaraswatiRectNode, SaraswatiRenderableNode, SaraswatiScene, SaraswatiTextNode } from "@/vendor/avnac/saraswati"
@@ -17,6 +18,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { useMediaStore } from "@/stores/media-store"
 import { cameraOfUrl, useRouterHealth, whepUrl } from "@/lib/cameras"
 import type { MediaAssetStatus } from "@/types"
+import { CountdownSelect } from "@/studio/production/countdown-select"
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message
@@ -438,6 +440,34 @@ export function DesignDocumentEditor({
       return { ...current, [id]: { ...binding, ...patch } }
     })
   }
+  const updateDynamicBinding = (patch: Partial<RhemaBinding>) => {
+    if (!selectedRenderable) return
+    const id = selectedRenderable.id
+    const beforeBindings = bindingSnapshot(bindingsRef.current)
+    const binding = beforeBindings[id]
+    if (!binding || !["clock", "ticker", "lowerThird", "logo"].includes(binding.kind)) return
+    const afterBindings = { ...beforeBindings, [id]: { ...binding, ...patch } }
+    if (JSON.stringify(binding) === JSON.stringify(afterBindings[id])) return
+    const sceneBeforeBindingChange = editor.getState().scene
+    bindingSnapshots.current.set(sceneBeforeBindingChange, beforeBindings)
+    // A harmless node command puts the host binding edit into the same Undo/Redo history.
+    dispatch({ type: "SET_NODE_NAME", id, name: selectedRenderable.name ?? selectedRenderable.id })
+    bindingSnapshots.current.set(editor.getState().scene, afterBindings)
+    setBindings(afterBindings)
+  }
+  const chooseClockMode = (choice: string) => {
+    if (selectedBinding?.kind !== "clock") return
+    if (choice === "next") updateDynamicBinding({ clockShows: "countdown", countdownTo: undefined, until: undefined })
+    else if (choice === "milestone") updateDynamicBinding({ clockShows: "countdown", countdownTo: selectedBinding.countdownTo && selectedBinding.countdownTo !== "next" ? selectedBinding.countdownTo : "end", until: undefined })
+    else if (choice === "timer") updateDynamicBinding({ clockShows: undefined, countdownTo: undefined, until: undefined })
+    else if (choice === "time") updateDynamicBinding({ clockShows: "time", countdownTo: undefined, until: undefined })
+    else if (choice === "until") updateDynamicBinding({ clockShows: "until", countdownTo: undefined })
+  }
+  const clockChoice = selectedBinding?.kind === "clock"
+    ? selectedBinding.clockShows === "countdown"
+      ? (selectedBinding.countdownTo ?? "next") === "next" ? "next" : "milestone"
+      : selectedBinding.clockShows ?? "timer"
+    : "timer"
   const commitNumber = (field: "x" | "y" | "width" | "height", value: number) => {
     if (selectedRenderable) updateNode(moveValue(selectedRenderable, field, value))
   }
@@ -474,6 +504,23 @@ export function DesignDocumentEditor({
     const made = kind === "color"
       ? createColorLayer({ x: Math.round(scene.artboard.width * 0.35), y: Math.round(scene.artboard.height * 0.35) })
       : createLiveFeedLayer({ x: Math.round(scene.artboard.width * 0.1), y: Math.round(scene.artboard.height * 0.15) })
+    made.node.parentId = activeRootId
+    editSceneWithBindings(
+      () => dispatch({ type: "ADD_NODE", node: made.node }),
+      (current) => ({ ...current, [made.node.id]: made.binding }),
+    )
+    setSelectedId(made.node.id)
+  }
+  const addLiveLayer = (kind: "clock" | "ticker" | "lowerThird" | "logo") => {
+    const x = Math.round(scene.artboard.width * 0.36)
+    const y = Math.round(scene.artboard.height * 0.36)
+    const made = kind === "clock"
+      ? createClockLayer({ x, y, shows: "timer" })
+      : kind === "ticker"
+        ? createTickerLayer()
+        : kind === "lowerThird"
+          ? createLowerThirdLayer()
+          : createLogoLayer()
     made.node.parentId = activeRootId
     editSceneWithBindings(
       () => dispatch({ type: "ADD_NODE", node: made.node }),
@@ -892,6 +939,19 @@ export function DesignDocumentEditor({
             <Button size="xs" variant="outline" onClick={() => addLayer("feed")} disabled={document.kind === "template"}><PlusIcon /> Live content</Button>
             <Button size="xs" variant="outline" onClick={() => setCameraPickerOpen((open) => !open)} disabled={document.kind === "template"}><PlusIcon /> Camera</Button>
             <Button size="xs" variant="outline" onClick={() => addLayer("color")} disabled={document.kind === "template"}><PlusIcon /> Colour layer</Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="xs" variant="outline" aria-label="Add live design layer" disabled={document.kind === "template"}><PlusIcon /> Live layers</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuLabel>Connected to live sources</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => addLiveLayer("clock")}>Service clock</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => addLiveLayer("ticker")}>Ticker</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => addLiveLayer("lowerThird")}>Lower third</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => addLiveLayer("logo")}>Brand Kit logo</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <span className="ml-auto text-[0.6875rem] text-muted-foreground">Drag on canvas or focus a layer and use arrow keys; Shift + arrow moves 10 px.</span>
           </div>
           {imagePickerOpen && (
@@ -1184,6 +1244,49 @@ export function DesignDocumentEditor({
                     {!cameraRouterReady && <p role="status" className="text-[0.6875rem] text-muted-foreground">Connect a running Rhema camera router with a LAN address to change this source. The saved design stays unchanged.</p>}
                     {cameraRouterReady && cameras.length === 0 && <p role="status" className="text-[0.6875rem] text-muted-foreground">No configured cameras are available. Add one in Live → Production tools → Cameras.</p>}
                     <p className="text-[0.6875rem] text-muted-foreground">The canvas shows a placeholder and does not display live camera video. The draft stores the camera stream address; camera page secrets remain in Settings and are not copied into this design.</p>
+                  </section>
+                )}
+                {selectedBinding?.kind === "clock" && (
+                  <section className="space-y-2 border-t border-border pt-3" aria-label="Clock layer settings">
+                    <h4 className="text-[0.6875rem] font-semibold">Host clock</h4>
+                    <label className="flex flex-col gap-1 text-[0.6875rem] font-medium text-muted-foreground">What it shows
+                      <select aria-label="What clock shows" value={clockChoice} onChange={(event) => chooseClockMode(event.currentTarget.value)} className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground">
+                        <option value="timer">Service timer</option>
+                        <option value="until">Countdown to a time</option>
+                        <option value="next">Time until the next item</option>
+                        <option value="milestone">Time until a run-of-show milestone</option>
+                        <option value="time">Time of day</option>
+                      </select>
+                    </label>
+                    {clockChoice === "until" && (
+                      <label className="flex items-center justify-between gap-2 text-[0.6875rem] font-medium text-muted-foreground">Count down to
+                        <Input type="time" aria-label="Count down to" value={selectedBinding.until ?? ""} onChange={(event) => updateDynamicBinding({ until: event.currentTarget.value || undefined })} className="h-8 w-28 text-xs text-foreground" />
+                      </label>
+                    )}
+                    {clockChoice === "milestone" && (
+                      <label className="flex flex-col gap-1 text-[0.6875rem] font-medium text-muted-foreground">Run-of-show target
+                        <CountdownSelect label="Clock run-of-show target" value={selectedBinding.countdownTo} onChange={(countdownTo) => updateDynamicBinding({ countdownTo })} />
+                      </label>
+                    )}
+                    <p className="text-[0.6875rem] text-muted-foreground">The host supplies the clock when this approved design is used. The canvas shows a placeholder, not the current timer or time.</p>
+                  </section>
+                )}
+                {selectedBinding?.kind === "ticker" && (
+                  <section className="space-y-2 border-t border-border pt-3" aria-label="Ticker layer settings">
+                    <h4 className="text-[0.6875rem] font-semibold">Host ticker</h4>
+                    <p className="text-[0.6875rem] text-muted-foreground">This layer follows the ticker currently running in Production. Its wording stays managed there; the canvas shows a placeholder.</p>
+                  </section>
+                )}
+                {selectedBinding?.kind === "lowerThird" && (
+                  <section className="space-y-2 border-t border-border pt-3" aria-label="Lower third layer settings">
+                    <h4 className="text-[0.6875rem] font-semibold">Presenter lower third</h4>
+                    <p className="text-[0.6875rem] text-muted-foreground">This layer follows the presenter name and title currently on air. Its wording stays managed in Production; the canvas shows a placeholder.</p>
+                  </section>
+                )}
+                {selectedBinding?.kind === "logo" && (
+                  <section className="space-y-2 border-t border-border pt-3" aria-label="Brand Kit logo layer settings">
+                    <h4 className="text-[0.6875rem] font-semibold">Brand Kit logo</h4>
+                    <p className="text-[0.6875rem] text-muted-foreground">This layer follows the logo saved in Settings → Brand Kit, so a later logo update is reflected here. The canvas shows a placeholder.</p>
                   </section>
                 )}
                 {selectedRenderable.type === "text" && (
