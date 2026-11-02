@@ -139,6 +139,11 @@ export interface DesignPin {
   version: number
   /** Optional artboard within the immutable versioned document. Missing means the legacy first page. */
   pageId?: string
+  /**
+   * The congregation outputs a designed moment goes to (#448), by id. Missing or empty: every
+   * congregation screen, as before. Part of what the service's approval covers.
+   */
+  outputs?: string[]
 }
 
 /** One layer as an output draws it. */

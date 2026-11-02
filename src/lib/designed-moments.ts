@@ -33,6 +33,18 @@ const momentSceneId = (ref: DesignPin) => `design-${ref.id}-v${ref.version}${ref
 /** A moment's design on this screen, with or without a way back. */
 const showsMoment = (o: BroadcastOutput) => !!o.sceneSnapshot?.design && o.sceneId === momentSceneId(o.sceneSnapshot.design)
 
+/** A pin's target outputs as a set to compare: none named means every congregation screen. */
+const outputSet = (outputs: string[] | undefined) => [...new Set(outputs ?? [])].sort().join("\n")
+const sameOutputs = (a: string[] | undefined, b: string[] | undefined) => outputSet(a) === outputSet(b)
+const outputsWords = (outputs: string[] | undefined) => (outputs?.length ? `${outputs.length} chosen screen${outputs.length === 1 ? "" : "s"}` : "every congregation screen")
+
+/** The congregation screens a designed moment goes to (#448): those its pin names, or all. */
+export function momentTargets<T extends Pick<BroadcastOutput, "id">>(congregation: T[], ref: Pick<DesignPin, "outputs">): { targets: T[]; missing: string[] } {
+  if (!ref.outputs?.length) return { targets: congregation, missing: [] }
+  const named = new Set(ref.outputs)
+  return { targets: congregation.filter((o) => named.has(o.id)), missing: [...named].filter((id) => !congregation.some((o) => o.id === id)) }
+}
+
 /** Why the open service's approval does not cover this pin; null when it does, or nothing is approved. */
 function designNotApproved(itemId: string, ref: DesignPin): string | null {
   const service = useServiceStore.getState()
@@ -40,7 +52,10 @@ function designNotApproved(itemId: string, ref: DesignPin): string | null {
   if (revision === null || revision === undefined) return null
   if (service.approvedDesignRevision !== revision || !service.approvedDesigns) return service.approvedDesignsError ?? "The approved design list is unavailable. Reload the service or refresh its approval."
   const approved = service.approvedDesigns.moments?.[itemId]
-  if (approved && approved.id === ref.id && approved.version === ref.version && approved.pageId === ref.pageId) return null
+  if (approved && approved.id === ref.id && approved.version === ref.version && approved.pageId === ref.pageId) {
+    if (sameOutputs(approved.outputs, ref.outputs)) return null
+    return `This slide now goes to ${outputsWords(ref.outputs)}, while ${outputsWords(approved.outputs)} was approved. Refresh the service approval to show it; the slide's text is showing instead.`
+  }
   if (approved && approved.id === ref.id && approved.version === ref.version) {
     const requestedPage = ref.pageId ? `page ${ref.pageId}` : "the legacy first page"
     const approvedPage = approved.pageId ? `page ${approved.pageId}` : "the legacy first page"
@@ -89,8 +104,10 @@ export async function showDesignedMoment(
   const scene: Scene = { ...hydrated.scene, id: momentSceneId(ref), name: hydrated.scene.name?.trim() ? hydrated.scene.name : item.slide.title || "Design", design: ref }
   const b = useBroadcastStore.getState()
   const logo = useSettingsStore.getState().brandKit.logoUrl
-  // ponytail: every congregation screen, like a scene step with no screen named; a per-moment target when Prepare offers one.
-  for (const o of b.outputs.filter(isCongregation)) {
+  // The screens the pin names (#448), or every congregation screen when it names none. The others keep what they show.
+  const { targets, missing } = momentTargets(b.outputs.filter(isCongregation), ref)
+  if (missing.length) toast.warning("Design not on every chosen screen", { id: `design-targets-${item.id}`, description: `${missing.length} screen${missing.length === 1 ? " this slide names is" : "s this slide names are"} no longer a congregation output, so ${missing.length === 1 ? "it shows" : "they show"} nothing new.` })
+  for (const o of targets) {
     // A manual Take can happen while the pinned design is loading. Keep that newer per-output choice.
     if (!takeRevisions.has(o.id) || (b.sceneTakes[o.id]?.revision ?? null) !== takeRevisions.get(o.id) || o.sceneId !== sceneIds.get(o.id)) continue
     const earlier = o.designedMomentRestore
