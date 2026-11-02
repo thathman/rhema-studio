@@ -129,6 +129,7 @@ pub fn run() {
         .manage(Mutex::new(rhema_broadcast::ndi::NdiRuntime::default()))
         .manage(commands::broadcast::OutputPacers::default())
         .manage(commands::recorder::RecorderHost(std::sync::OnceLock::new()))
+        .manage(commands::reminders::Reminders::default())
         .manage(Mutex::new(rhema_detection::DirectDetector::new()))
         .manage(Mutex::new(rhema_detection::DetectionMerger::new()))
         .manage(Mutex::new(rhema_detection::ReadingMode::new()))
@@ -225,6 +226,8 @@ pub fn run() {
             commands::join::join_voice,
             commands::cameras::whep_offer,
             commands::camera_router::camera_router_start,
+            commands::reminders::reminders_policy,
+            commands::reminders::reminders_set_policy,
             commands::camera_router::camera_router_stop,
             commands::camera_router::camera_router_status,
             commands::camera_router::cameras_set,

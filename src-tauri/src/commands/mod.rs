@@ -16,6 +16,7 @@ pub mod join;
 pub mod machine;
 pub mod media;
 pub mod recorder;
+pub mod reminders;
 pub mod remote;
 pub mod secrets;
 pub mod setup;
