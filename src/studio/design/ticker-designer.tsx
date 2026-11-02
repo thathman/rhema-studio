@@ -28,6 +28,7 @@ export function TickerDesigner() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const scenes = useBroadcastStore((s) => s.scenes)
   const themes = useBroadcastStore((s) => s.themes)
+  const brandKit = useSettingsStore((s) => s.brandKit)
   const assets = useMediaStore((s) => s.assets)
   const draft = useDesignDraft("ticker", "default", publishedStyle, normalizeTickerStyle)
   const style = draft.value
@@ -119,6 +120,31 @@ export function TickerDesigner() {
             value={style.background.mediaId ? { media_id: style.background.mediaId, name: media?.name ?? "" } : null}
             onChange={(v) => patch({ background: { ...style.background, kind: v ? (v.kind === "video" ? "video" : "picture") : "color", mediaId: v?.media_id ?? null } })}
           />
+          <section className="space-y-2 border-t border-border pt-3" aria-label="Brand Kit styles">
+            <h4 className="text-[0.6875rem] font-semibold">Brand Kit</h4>
+            <p className="text-[0.6875rem] text-muted-foreground">Copy a Brand Kit colour or body font into this ticker draft. Later Brand Kit changes will not update it; connected outputs stay unchanged until you apply it.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="xs" variant="outline" aria-label="Apply Brand Kit ticker text colour" onClick={() => patch({ color: brandKit.colors.text })}>
+                <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: brandKit.colors.text }} />
+                Words · {brandKit.colors.text}
+              </Button>
+              <Button size="xs" variant="outline" aria-label="Apply Brand Kit ticker band colour" onClick={() => patch({ background: { ...style.background, color: brandKit.colors.primary } })}>
+                <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: brandKit.colors.primary }} />
+                Band · {brandKit.colors.primary}
+              </Button>
+              <Button size="xs" variant="outline" aria-label="Apply Brand Kit ticker tag text colour" onClick={() => patch({ labelColor: brandKit.colors.text })}>
+                <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: brandKit.colors.text }} />
+                Tag words · {brandKit.colors.text}
+              </Button>
+              <Button size="xs" variant="outline" aria-label="Apply Brand Kit ticker tag colour" onClick={() => patch({ labelBackground: brandKit.colors.accent })}>
+                <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: brandKit.colors.accent }} />
+                Tag · {brandKit.colors.accent}
+              </Button>
+              <Button size="xs" variant="outline" aria-label="Apply Brand Kit ticker body font" onClick={() => patch({ fontFamily: brandKit.fonts.body })}>
+                Body font · {brandKit.fonts.body}
+              </Button>
+            </div>
+          </section>
           <ContrastCheck style={style} under={theme ? themeGrounds(theme) : []} onUse={patch} />
             </div>
         </div>
