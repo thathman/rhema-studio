@@ -1073,11 +1073,13 @@ fn write_private(path: &std::path::Path, text: &str) -> Result<(), String> {
 
 /// The app's Live State for joined devices (a JSON snapshot; the server passes it on unread).
 #[tauri::command]
-pub fn publish_live_state(state: State<'_, Mutex<HttpRuntime>>, json: String) -> Result<(), String> {
+pub fn publish_live_state(app: AppHandle, state: State<'_, Mutex<HttpRuntime>>, json: String) -> Result<(), String> {
     // Bounded: a snapshot is a few kilobytes; anything near this is a bug, not a service.
     if json.len() > 2 * 1024 * 1024 {
         return Err("live state too large".into());
     }
+    // A recording's output that became a stage screen stops recording before it draws one (doc 42).
+    super::recorder::guard_pinned_output(&app, &json);
     let live = state.lock().map_err(|e| e.to_string())?.live.clone();
     live.publish(json);
     Ok(())
