@@ -167,12 +167,21 @@ final class Publisher {
         }
     }
 
-    /** Called about once a second: a write stuck for several seconds means the Wi-Fi is gone. */
+    /**
+     * Called about once a second, on the main thread: a write stuck for several seconds means the
+     * Wi-Fi is gone. Closing a TLS socket talks to the network, which Android refuses on the main
+     * thread (the app used to crash here), so the socket is closed on a thread of its own.
+     */
     void checkStall() {
         long started = writeStartedNs;
         if (started != 0 && System.nanoTime() - started > 6_000_000_000L) {
             message = "The network stopped taking the picture; connecting again…";
-            closeSocket();
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    closeSocket();
+                }
+            }, "rhema-close-stalled").start();
         }
     }
 
