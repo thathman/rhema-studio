@@ -5,7 +5,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use crate::model::{RecorderState, RecordingManifest};
+use crate::model::{ProblemCode, RecorderProblem, RecorderState, RecordingManifest};
 
 pub const MANIFEST: &str = "manifest.json";
 
@@ -48,7 +48,16 @@ pub fn mark_interrupted(folder: &Path) -> Vec<String> {
     let mut marked = Vec::new();
     for (dir, mut m) in list(folder) {
         if matches!(m.state, RecorderState::Preparing | RecorderState::Recording | RecorderState::Finalizing) {
-            m.state = RecorderState::Recoverable;
+            // A file with nothing in it (a crash before the first fragment) has nothing to recover:
+            // History says so rather than offering an empty recording.
+            let file = m.files.mp4.as_deref().or(m.files.mov.as_deref()).map(|f| dir.join(f));
+            let empty = file.as_deref().is_none_or(|f| fs::metadata(f).map_or(true, |md| md.len() == 0));
+            if empty {
+                m.state = RecorderState::Failed;
+                m.problem = Some(RecorderProblem::new(ProblemCode::WriteFailed, "Rhema stopped before anything of this recording was written: there is nothing to recover."));
+            } else {
+                m.state = RecorderState::Recoverable;
+            }
             if write(&dir, &m).is_ok() {
                 marked.push(m.session_id.clone());
             }
@@ -101,6 +110,9 @@ mod tests {
         write(&t.path().join("a"), &sample("a", RecorderState::Recording, "2026-10-29T09:00:00Z")).unwrap();
         write(&t.path().join("b"), &sample("b", RecorderState::Finalizing, "2026-10-29T09:30:00Z")).unwrap();
         write(&t.path().join("c"), &sample("c", RecorderState::Saved, "2026-10-29T08:00:00Z")).unwrap();
+        for id in ["a", "b"] {
+            fs::write(t.path().join(id).join("recording.mov"), b"fragments").unwrap();
+        }
         let mut marked = mark_interrupted(t.path());
         marked.sort();
         assert_eq!(marked, vec!["a".to_string(), "b".to_string()]);
@@ -108,5 +120,24 @@ mod tests {
         assert_eq!(all.iter().map(|(_, m)| m.session_id.as_str()).collect::<Vec<_>>(), vec!["b", "a", "c"], "newest first");
         assert_eq!(read(&t.path().join("c")).unwrap().state, RecorderState::Saved);
         assert_eq!(read(&t.path().join("a")).unwrap().state, RecorderState::Recoverable);
+    }
+
+    #[test]
+    fn an_interrupted_session_with_nothing_written_is_failed_not_recoverable() {
+        let t = tempfile::tempdir().unwrap();
+        write(&t.path().join("empty"), &sample("empty", RecorderState::Recording, "2026-10-29T09:00:00Z")).unwrap();
+        fs::write(t.path().join("empty").join("recording.mov"), b"").unwrap();
+        write(&t.path().join("none"), &sample("none", RecorderState::Preparing, "2026-10-29T09:10:00Z")).unwrap();
+        write(&t.path().join("some"), &sample("some", RecorderState::Recording, "2026-10-29T09:20:00Z")).unwrap();
+        fs::write(t.path().join("some").join("recording.mov"), b"fragments").unwrap();
+        let mut marked = mark_interrupted(t.path());
+        marked.sort();
+        assert_eq!(marked, vec!["empty".to_string(), "none".to_string(), "some".to_string()], "all are settled");
+        for id in ["empty", "none"] {
+            let m = read(&t.path().join(id)).unwrap();
+            assert_eq!(m.state, RecorderState::Failed, "{id}");
+            assert!(m.problem.is_some_and(|p| p.message.contains("nothing to recover")), "{id}");
+        }
+        assert_eq!(read(&t.path().join("some")).unwrap().state, RecorderState::Recoverable);
     }
 }
