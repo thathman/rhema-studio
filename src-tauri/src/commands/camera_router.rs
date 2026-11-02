@@ -426,6 +426,8 @@ pub fn camera_router_start(app: AppHandle, router: State<'_, CameraRouter>, http
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let config = dir.join("mediamtx.yml");
     let lan = super::remote::remote_lan_address();
+    // One an earlier Rhema left running when it did not close normally holds the ports (#597).
+    rhema_api::orphan::end_orphaned_routers(&binary, &config);
     let (api_password, srt_passphrase, relay_password) = (new_api_password(), new_srt_passphrase(), new_api_password());
     let tls_dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("tls");
     let tls = rtsps_cert(&tls_dir);

@@ -5,7 +5,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 APP_BIN="$ROOT/src-tauri/target/debug/Rhema"
 QA_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/rhema-relay-qa.XXXXXX")"
-trap 'kill "${APP_PID:-}" 2>/dev/null || true; [[ "${KEEP_QA_SCRATCH:-0}" == 1 ]] || rm -rf "$QA_SCRATCH"' EXIT
+# The app's router outlives it when the app is stopped by a signal (#597); it is this run's by its
+# settings file, inside this run's scratch folder, so no other MediaMTX is touched.
+trap 'kill "${APP_PID:-}" 2>/dev/null || true; pkill -TERM -f "^[^ ]*mediamtx $QA_SCRATCH/" 2>/dev/null || true; [[ "${KEEP_QA_SCRATCH:-0}" == 1 ]] || rm -rf "$QA_SCRATCH"' EXIT
 mkdir -p "$QA_SCRATCH/run/in" "$QA_SCRATCH/run/out" "$QA_SCRATCH/home"
 # Beside the program, as in a release: HOME is the isolated one here.
 [[ -x "$ROOT/src-tauri/target/debug/mediamtx" ]] || cp "${RHEMA_MEDIAMTX:-$HOME/.local/mediamtx/mediamtx}" "$ROOT/src-tauri/target/debug/mediamtx"
