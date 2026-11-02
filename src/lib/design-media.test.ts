@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { dataUrl } = vi.hoisted(() => ({ dataUrl: vi.fn() }))
-vi.mock("@/stores/media-store", () => ({ useMediaStore: { getState: () => ({ dataUrl }) } }))
+const { dataUrl, fileUrl } = vi.hoisted(() => ({ dataUrl: vi.fn(), fileUrl: vi.fn() }))
+vi.mock("@/stores/media-store", () => ({ useMediaStore: { getState: () => ({ dataUrl, fileUrl, assets: [] }) } }))
 
 import type { Scene } from "@/types/scene"
 import { hydrateDesignSceneMedia } from "./design-media"
@@ -26,7 +26,26 @@ const imageScene = (): Scene => ({
   }],
 })
 
-beforeEach(() => dataUrl.mockReset())
+const videoScene = (): Scene => ({
+  id: "design-sermon-v1",
+  name: "Sermon",
+  background: "#000000",
+  createdAt: 0,
+  updatedAt: 0,
+  layers: [{
+    id: "sermon-video",
+    name: "Sermon clip",
+    kind: "video",
+    mediaId: "media-sermon",
+    mediaFile: "sermon.mp4",
+    videoUrl: assetUrl,
+    box: { x: 0, y: 0, w: 100, h: 100 },
+    opacity: 1,
+    visible: true,
+  }],
+})
+
+beforeEach(() => { dataUrl.mockReset(); fileUrl.mockReset() })
 
 describe("design media hydration", () => {
   it("resolves content-addressed Library references for an output frame", async () => {
@@ -58,5 +77,27 @@ describe("design media hydration", () => {
 
     expect(result.scene).toBeNull()
     expect(result.issue).toContain("Welcome background")
+  })
+
+  it("refreshes a Library video reference and refuses to use a missing video", async () => {
+    const currentUrl = "asset://localhost/%2Fmedia%2Fsermon.mp4"
+    fileUrl.mockResolvedValue(currentUrl)
+    const scene = videoScene()
+
+    const refreshed = await hydrateDesignSceneMedia(scene)
+
+    expect(fileUrl).toHaveBeenCalledWith("media-sermon")
+    expect(refreshed.scene?.layers[0]).toMatchObject({
+      kind: "video",
+      mediaId: "media-sermon",
+      mediaFile: "sermon.mp4",
+      videoUrl: currentUrl,
+    })
+    expect(scene.layers[0]?.videoUrl).toBe(assetUrl)
+
+    fileUrl.mockResolvedValue(null)
+    const missing = await hydrateDesignSceneMedia(scene)
+    expect(missing.scene).toBeNull()
+    expect(missing.issue).toContain("Sermon clip")
   })
 })

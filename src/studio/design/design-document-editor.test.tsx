@@ -24,7 +24,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { createBlankRhemaDesign } from "@/design-engine/design-document-utils"
 import type { DesignDocument, DesignInput, DesignVersion } from "@/design-engine/design-store"
-import { designToScene } from "@/design-engine/rhema-scene"
+import { designToScene, VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rhema-scene"
 import { applyCommand, type SaraswatiImageNode } from "@/vendor/avnac/saraswati"
 import { DesignDocumentEditor } from "./design-document-editor"
 import { useBroadcastStore } from "@/stores/broadcast-store"
@@ -53,8 +53,27 @@ const imageAsset: MediaAssetStatus = {
   path: "/local-media/welcome.png",
   present: true,
 }
+const videoAsset: MediaAssetStatus = {
+  id: "sermon-video",
+  kind: "video",
+  name: "Sermon clip",
+  file: "sermon-clip.mp4",
+  hash: "b".repeat(64),
+  size: 1024,
+  mime: "video/mp4",
+  width: 1280,
+  height: 720,
+  duration_ms: 18_000,
+  source: "manual",
+  source_ref: "",
+  original_path: "",
+  created_at: new Date(0).toISOString(),
+  path: "/local-media/sermon-clip.mp4",
+  present: true,
+}
 const imageDataUrl = "data:image/png;base64,ZmFrZQ=="
 const imageAssetUrl = `asset://localhost/%2Flocal-media%2F${imageAsset.hash}-welcome.png`
+const videoAssetUrl = `asset://localhost/%2Flocal-media%2F${videoAsset.hash}-sermon-clip.mp4`
 
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -64,9 +83,9 @@ beforeEach(() => {
   store.createVersion.mockReset()
   useSettingsStore.setState({ operatorName: "Tolu", brandKit: defaultBrandKit() })
   useMediaStore.setState({
-    assets: [imageAsset], loading: false, loaded: true, error: null, urls: {},
+    assets: [imageAsset, videoAsset], loading: false, loaded: true, error: null, urls: {},
     dataUrl: vi.fn(async () => imageDataUrl),
-    fileUrl: vi.fn(async () => imageAssetUrl),
+    fileUrl: vi.fn(async (id: string) => id === videoAsset.id ? videoAssetUrl : imageAssetUrl),
   })
 })
 
@@ -440,6 +459,129 @@ describe("canonical design editor", () => {
       liveVerse: after.liveVerse,
       liveSlide: after.liveSlide,
     }).toEqual(liveSnapshot)
+  })
+
+  it("adds a Library video as a private editable layer with a scene-compatible media binding", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const before = useBroadcastStore.getState()
+    const liveSnapshot = {
+      scenes: before.scenes,
+      outputs: before.outputs,
+      outputStatus: before.outputStatus,
+      outputFrames: before.outputFrames,
+      sceneReturn: before.sceneReturn,
+      sceneTakes: before.sceneTakes,
+      isLive: before.isLive,
+      liveVerse: before.liveVerse,
+      liveSlide: before.liveSlide,
+    }
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Video from Library")!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Add Sermon clip as video layer"]')!.click())
+    const preview = element.querySelector<HTMLVideoElement>('video[aria-label="Local preview, starts muted: Sermon clip"]')!
+    expect(preview).toBeDefined()
+    expect(preview.muted).toBe(true)
+    expect(preview.loop).toBe(true)
+    expect(preview.playsInline).toBe(true)
+    expect(preview.getAttribute("src")).toBe(videoAssetUrl)
+
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Undo design edit"]')!.click())
+    expect(element.querySelector('section[aria-label="Video layer media preview"]')).toBeNull()
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Redo design edit"]')!.click())
+    expect(element.querySelector('video[aria-label="Local preview, starts muted: Sermon clip"]')).toBeDefined()
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const videoNode = Object.values(saved.document.scene.nodes).find((node) => node.type === "rect" && node.name === "Sermon clip")
+    expect(videoNode).toBeDefined()
+    expect(saved.document.bindings[videoNode!.id]).toMatchObject({
+      kind: "video",
+      mediaId: videoAsset.id,
+      videoUrl: videoAssetUrl,
+      mediaFile: videoAsset.file,
+    })
+    const prepared = designToScene(saved.document)
+    expect(prepared.issues).toEqual([])
+    expect(prepared.scene.layers).toContainEqual(expect.objectContaining({
+      id: videoNode!.id,
+      kind: "video",
+      mediaId: videoAsset.id,
+      videoUrl: videoAssetUrl,
+      mediaFile: videoAsset.file,
+    }))
+    const after = useBroadcastStore.getState()
+    expect({
+      scenes: after.scenes,
+      outputs: after.outputs,
+      outputStatus: after.outputStatus,
+      outputFrames: after.outputFrames,
+      sceneReturn: after.sceneReturn,
+      sceneTakes: after.sceneTakes,
+      isLive: after.isLive,
+      liveVerse: after.liveVerse,
+      liveSlide: after.liveSlide,
+    }).toEqual(liveSnapshot)
+  })
+
+  it("preserves existing bound layers when undoing and redoing another bound layer", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Video from Library")!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Add Sermon clip as video layer"]')!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Text")!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Undo design edit"]')!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Redo design edit"]')!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const videoNode = Object.values(saved.document.scene.nodes).find((node) => node.name === "Sermon clip")
+    const textNode = Object.values(saved.document.scene.nodes).find((node) => node.type === "text")
+    expect(videoNode).toBeDefined()
+    expect(textNode).toBeDefined()
+    expect(saved.document.bindings[videoNode!.id]).toMatchObject({
+      kind: "video",
+      mediaId: videoAsset.id,
+      videoUrl: videoAssetUrl,
+    })
+    expect(saved.document.bindings[textNode!.id]).toMatchObject({ kind: "text" })
+    expect(designToScene(saved.document).issues).toEqual([])
+  })
+
+  it("shows a missing Library video as a blocking editor issue instead of a stale preview", async () => {
+    const documentValue = documentFixture()
+    const videoNode = Object.values(documentValue.document.scene.nodes).find((node) => node.type === "rect")
+    if (!videoNode || videoNode.type !== "rect") throw new Error("Expected a design rectangle for the video layer")
+    documentValue.document.scene.nodes[videoNode.id] = {
+      ...videoNode,
+      name: "Missing sermon clip",
+      fill: { type: "solid", color: VIDEO_LAYER_PLACEHOLDER_COLOR },
+    }
+    documentValue.document.bindings[videoNode.id] = {
+      id: videoNode.id,
+      kind: "video",
+      mediaId: videoAsset.id,
+      videoUrl: videoAssetUrl,
+      mediaFile: videoAsset.file,
+    }
+    useMediaStore.setState({ assets: [{ ...videoAsset, present: false }], loaded: true, error: null })
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Missing sermon clip")!.click())
+
+    expect(element.querySelector('[role="alert"]')?.textContent).toContain("missing on this computer")
+    expect(element.querySelector('video[aria-label="Local preview, starts muted: Missing sermon clip"]')).toBeNull()
   })
 
   it("keeps picture bindings aligned with undo and redo after replacement", async () => {
