@@ -168,9 +168,9 @@ describe("Permissions workspace", () => {
 
   it("decides the exact host request ID without applying a scene or changing outputs", async () => {
     const request = {
-      id: "host-request-uuid", kind: "scene_save", targetId: "remote-scene", baseRevision: 7,
+      id: "host-request-uuid", kind: "scene_save", targetId: "remote-scene", baseRevision: null,
       requester: { id: "desk-key", name: "Screens desk" },
-      payload: { scene: { id: "remote-scene", name: "Remote scene", layers: [] } },
+      payload: { scene: { id: "remote-scene", name: "Remote scene", background: "#000000", layers: [] } },
       reason: "Prepare the welcome screen", state: "submitted", createdAt: "2026-10-30T09:00:00Z",
       expiresAt: "2026-10-31T09:00:00Z", decidedBy: null, decidedAt: null, decisionNote: null,
     }
@@ -186,10 +186,11 @@ describe("Permissions workspace", () => {
     const el = await mount()
 
     expect(el.textContent).toContain("Approval Requests")
-    expect(el.textContent).toContain("Based on host revision 7")
+    expect(el.textContent).toContain("New scene · no prior host revision")
     expect(el.textContent).toContain("An approved scene needs an explicit host-checked Apply")
     expect(el.textContent).toContain("Remote scene")
-    expect(el.textContent).toContain("Proposed composition: 0 visual layers")
+    expect(el.textContent).toContain("Blank composition · no visual layers")
+    expect(el.textContent).toContain("No current local scene")
     await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Approve"))!.click())
 
     expect(tauri.invoke).toHaveBeenCalledWith("approvals_decide", { id: "host-request-uuid", decision: "approve" })
@@ -199,6 +200,29 @@ describe("Permissions workspace", () => {
     expect(useBroadcastStore.getState().scenes).toBe(scenesBefore)
     expect(useBroadcastStore.getState().outputs).toBe(outputsBefore)
     expect(useSceneApprovalsStore.getState().requests).toEqual([])
+    await act(async () => root.unmount())
+  })
+
+  it("blocks approval when the submitted scene is not a complete reviewable composition", async () => {
+    const request = {
+      id: "incomplete-scene-request", kind: "scene_save", targetId: "remote-scene", baseRevision: 7,
+      requester: { id: "desk-key", name: "Screens desk" },
+      payload: { scene: { id: "remote-scene", name: "Remote scene", background: "#000000" } },
+      reason: "Update the welcome scene", state: "submitted", createdAt: "2026-10-30T09:00:00Z",
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: null, decidedAt: null, decisionNote: null,
+    }
+    useBroadcastStore.setState({ scenes: [{ id: "remote-scene", name: "Current scene", background: "#000000", layers: [] }] as never })
+    tauri.invoke.mockImplementation(async (command: string) => command === "approvals_list" ? [request] : null)
+    resetApprovalRequests()
+    await reloadApprovalRequests()
+    const el = await mount()
+
+    expect(el.textContent).toContain("complete, reviewable layer list")
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("complete, reviewable layer list")
+    const approve = [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Approve"))
+    expect(approve?.disabled).toBe(true)
+    expect(tauri.invoke.mock.calls.some(([command]) => command === "approvals_decide")).toBe(false)
+    expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "incomplete-scene-request", state: "submitted" }])
     await act(async () => root.unmount())
   })
 
@@ -326,7 +350,12 @@ describe("Permissions workspace", () => {
     const sceneStateBefore = useBroadcastStore.getState().scenes
     const el = await mount()
 
-    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Apply approved scene change"]')!.click())
+    const apply = el.querySelector<HTMLButtonElement>('[aria-label="Apply approved scene change"]')!
+    expect(apply.disabled).toBe(false)
+    expect([...el.querySelectorAll('[role="status"]')].some((status) => status.textContent?.includes("No matching scene is available in this local library"))).toBe(true)
+    expect(el.querySelector('[role="alert"]')).toBeNull()
+
+    await act(async () => apply.click())
 
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "scene-request-uuid", state: "superseded" }])
     expect(el.textContent).toContain("Superseded")
@@ -722,6 +751,32 @@ describe("Permissions workspace", () => {
     expect(tauri.invoke).toHaveBeenCalledWith("approvals_apply", { id: "scene-delete-request" })
     expect(useBroadcastStore.getState().scenes).toEqual([])
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "scene-delete-request", state: "applied" }])
+    await act(async () => root.unmount())
+  })
+
+  it.each([
+    ["declined", "The host declined this deletion. The scene remains in the library."],
+    ["requested_changes", "The host requested changes. The scene remains in the library"],
+    ["expired", "This deletion request expired. The scene remains in the library."],
+    ["withdrawn", "This deletion request was withdrawn. The scene remains in the library."],
+    ["superseded", "This deletion request is stale. The scene remains in the library"],
+  ] as const)("does not describe a %s deletion as executable", async (state, notice) => {
+    const request = {
+      id: `scene-delete-${state}`, kind: "scene_delete", targetId: "scene-1", baseRevision: 7,
+      requester: { id: "screens-key", name: "Screens desk" }, payload: { id: "scene-1" },
+      reason: null, state, createdAt: "2026-10-30T09:00:00Z", expiresAt: "2026-10-31T09:00:00Z",
+      decidedBy: null, decidedAt: null, decisionNote: null,
+    }
+    tauri.invoke.mockImplementation(async (command: string) => command === "approvals_list" ? [request] : null)
+    resetApprovalRequests()
+    await reloadApprovalRequests()
+    useBroadcastStore.setState({ scenes: [{ id: "scene-1", name: "Welcome", background: "#000000", createdAt: 1, updatedAt: 1, layers: [] }] as never })
+    const el = await mount()
+
+    expect(el.textContent).toContain(notice)
+    expect(el.textContent).not.toContain("The scene will be removed from the library only after explicit host Apply.")
+    expect(el.querySelector('[aria-label="Apply approved scene deletion"]')).toBeNull()
+    expect(tauri.invoke.mock.calls.some(([command]) => command === "approvals_apply")).toBe(false)
     await act(async () => root.unmount())
   })
 

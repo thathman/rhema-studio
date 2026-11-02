@@ -4,8 +4,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { outputsForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { scenesOnScreen } from "@/lib/desk-scenes"
+import { cameraLabelOf } from "@/lib/cameras"
+import { useQueueStore } from "@/stores/queue-store"
 import { useJoin } from "@/stores/join-store"
+import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
+import { sceneLayerReviewSummary, scenePlanReferenceLabels, sceneRequestReviewModel, type SceneRequestReviewModel } from "./scene-request-review"
 import {
   applySceneApprovalRequest,
   decideApprovalRequest,
@@ -48,22 +52,104 @@ function requestDescription(request: ApprovalRequest, scenes: ReturnType<typeof 
 
 function requestImpact(
   request: ApprovalRequest,
-  outputs: ReturnType<typeof useBroadcastStore.getState>["outputs"],
 ): string {
-  const payload = record(request.payload)
-  const scene = record(payload?.scene)
   if (request.kind === "plan_approve") {
     if (request.baseRevision === null) return "This request has no host-checked base revision and cannot be confirmed safely."
     return `Submitted revision ${request.baseRevision}. Approve this exact revision in Prepare first; the host verifies it before confirmation.`
   }
-  if (request.kind === "scene_save" && Array.isArray(scene?.layers)) return `Proposed composition: ${scene.layers.length} visual layers.`
-  if (request.kind === "scene_delete") {
-    const assignedOutputs = outputs.filter((output) => output.sceneId === request.targetId).map((output) => output.name)
-    return assignedOutputs.length
-      ? `Current output assignment: ${assignedOutputs.join(", ")} (review information only).`
-      : "No current output assignment is recorded in this app session (review information only)."
-  }
   return `Target: ${request.targetId}`
+}
+
+function sceneDeleteInstruction(request: ApprovalRequest): string {
+  switch (request.state) {
+    case "submitted": return "If approved, the scene will be removed only after explicit host Apply."
+    case "approved": return "The scene will be removed only after explicit host Apply."
+    case "applied": return "The host applied this deletion. The scene was removed from its library; Program remains unchanged."
+    case "declined": return "The host declined this deletion. The scene remains in the library."
+    case "requested_changes": return "The host requested changes. The scene remains in the library until a fresh request is reviewed."
+    case "expired": return "This deletion request expired. The scene remains in the library."
+    case "withdrawn": return "This deletion request was withdrawn. The scene remains in the library."
+    case "superseded": return "This deletion request is stale. The scene remains in the library; submit a fresh request after reviewing its current revision."
+  }
+  return "This request did not remove the scene from the library."
+}
+
+function SceneCompositionSummary({ scene, missingText, cameraLabelForUrl }: {
+  scene: import("@/types").Scene | null
+  missingText: string
+  cameraLabelForUrl: (url: string) => string | undefined
+}) {
+  if (!scene) return <p className="mt-1 text-xs text-muted-foreground">{missingText}</p>
+  return (
+    <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+      <p>{scene.name} · {scene.background} · {scene.layers.length} visual layer{scene.layers.length === 1 ? "" : "s"}</p>
+      {scene.layers.length > 0 ? <ol className="list-inside list-decimal space-y-0.5">
+        {scene.layers.map((layer) => <li key={layer.id}>{sceneLayerReviewSummary(layer, cameraLabelForUrl)}</li>)}
+      </ol> : <p>Blank composition · no visual layers</p>}
+    </div>
+  )
+}
+
+function SceneRequestReview({
+  request,
+  model,
+  assignedOutputs,
+  rehearsal,
+  planReferences,
+  cameraLabelForUrl,
+}: {
+  request: ApprovalRequest
+  model: SceneRequestReviewModel
+  assignedOutputs: string[]
+  rehearsal: boolean
+  planReferences: string[]
+  cameraLabelForUrl: (url: string) => string | undefined
+}) {
+  return (
+    <section aria-label="Scene change review" className="mt-3 rounded-md border border-border bg-muted/20 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h4 className="text-sm font-medium">Scene change review</h4>
+        <Badge variant="neutral">{model.baseRevisionLabel}</Badge>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">Current scene data is local review context. The host checks the submitted revision again before Apply. This review does not change Preview or Program.</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="min-w-0 rounded-md border border-border bg-background p-3">
+          <h5 className="text-xs font-semibold">{model.beforeLabel}</h5>
+          <SceneCompositionSummary
+            scene={model.beforeScene}
+            missingText={model.beforeStatus === "unavailable" ? "No trustworthy pre-Apply snapshot is available." : "No scene with this ID is present in the local library."}
+            cameraLabelForUrl={cameraLabelForUrl}
+          />
+        </div>
+        <div className="min-w-0 rounded-md border border-border bg-background p-3">
+          <h5 className="text-xs font-semibold">{model.requestedLabel}</h5>
+          {request.kind === "scene_delete"
+            ? <p className="mt-1 text-xs text-muted-foreground">{sceneDeleteInstruction(request)}</p>
+            : <SceneCompositionSummary scene={model.requestedScene} missingText="The requested scene version cannot be reproduced safely." cameraLabelForUrl={cameraLabelForUrl} />}
+        </div>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <div>
+          <h5 className="text-xs font-semibold">Change summary</h5>
+          <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+            {model.changes.map((change, index) => <li key={`${index}-${change}`}>{change}</li>)}
+          </ul>
+        </div>
+        <div>
+          <h5 className="text-xs font-semibold">Current {rehearsal ? "rehearsal " : ""}screen assignments</h5>
+          <p className="mt-1 text-xs text-muted-foreground">{assignedOutputs.length ? assignedOutputs.join(", ") : "No matching assignment in the local screen state."}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Local review only; this is not a receiver acknowledgement.</p>
+        </div>
+        <div>
+          <h5 className="text-xs font-semibold">Current local service plan references</h5>
+          {planReferences.length ? <ul className="mt-1 space-y-1 text-xs text-muted-foreground">{planReferences.map((reference) => <li key={reference}>{reference}</li>)}</ul> : <p className="mt-1 text-xs text-muted-foreground">No matching scene reference in the current local run of show.</p>}
+          <p className="mt-1 text-xs text-muted-foreground">These references are not pinned in the approval request.</p>
+        </div>
+      </div>
+      {model.blockReason && <p id={`scene-review-warning-${request.id}`} role="alert" className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-950">{model.blockReason}</p>}
+      {model.reviewNotice && <p role="status" className="mt-3 rounded-md border border-border bg-muted/40 p-2 text-xs text-muted-foreground">{model.reviewNotice}</p>}
+    </section>
+  )
 }
 
 function stateLabel(request: ApprovalRequest): string {
@@ -91,9 +177,13 @@ export function ApprovalRequestsPanel() {
   const outputs = useBroadcastStore((state) => state.outputs)
   const rehearsal = useBroadcastStore((state) => state.rehearsal)
   const rehearsalReturn = useBroadcastStore((state) => state.rehearsalReturn)
+  const cameras = useSettingsStore((state) => state.cameras)
+  const queueItems = useQueueStore((state) => state.items)
+  const queueHeaders = useQueueStore((state) => state.headers)
   const screenState = { outputs, rehearsal, rehearsalReturn }
   const outputsOnScreens = outputsForScreens(screenState)
   const sceneIdsOnScreens = scenesOnScreen(screenState)
+  const cameraLabelForUrl = (url: string) => cameraLabelOf(url, cameras)
   const requests = useApprovalRequestsStore((state) => state.requests)
   const localApplicationErrors = useApprovalRequestsStore((state) => state.localApplicationErrors)
   const localSceneRecoveries = useApprovalRequestsStore((state) => state.localSceneRecoveries)
@@ -212,6 +302,9 @@ export function ApprovalRequestsPanel() {
               const recovery = localSceneRecoveries[request.id]
               const needsLocalRecovery = sceneApprovalNeedsLocalRecovery(request, scenes, localApplicationErrors[request.id], localRecoveryDismissed[request.id])
               const hasNewerLocalConflict = sceneApprovalHasNewerLocalConflict(request, scenes, recovery)
+              const sceneReview = request.kind.startsWith("scene_") ? sceneRequestReviewModel(request, scenes, recovery, cameraLabelForUrl) : null
+              const assignedOutputs = outputsOnScreens.filter((output) => output.sceneId === request.targetId).map((output) => output.name)
+              const planReferences = sceneReview ? scenePlanReferenceLabels(queueItems, queueHeaders, request.targetId) : []
               return (
                 <li key={request.id} className="flex flex-wrap items-start gap-3 py-3 first:pt-0 last:pb-0">
                   <div className="min-w-0 flex-1">
@@ -220,7 +313,8 @@ export function ApprovalRequestsPanel() {
                       <Badge variant={stateVariant(request.state)}>{stateLabel(request)}</Badge>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">From {request.requester.name} · {dateWords(request.createdAt)} · {request.baseRevision === null ? "No base revision" : `Based on host revision ${request.baseRevision}`} · Expires {dateWords(request.expiresAt)}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{requestImpact(request, outputsOnScreens)}</p>
+                    {!sceneReview && <p className="mt-1 text-xs text-muted-foreground">{requestImpact(request)}</p>}
+                    {sceneReview && <SceneRequestReview request={request} model={sceneReview} assignedOutputs={assignedOutputs} rehearsal={rehearsal} planReferences={planReferences} cameraLabelForUrl={cameraLabelForUrl} />}
                     {request.state === "approved" && request.kind.startsWith("scene_") && <p className="mt-1 text-xs text-muted-foreground">Apply checks the scene revision and current output assignment on this host. Saving changes the scene library only; it does not Take the scene live.</p>}
                     {request.state === "approved" && request.kind.startsWith("scene_") && localHostStatusUnknown[request.id] && <p role="alert" className="mt-1 text-xs text-amber-800">The host response was interrupted and its status is unknown. The local recovery record was kept. Refresh host status before trying again.</p>}
                     {request.state === "approved" && request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId) && <p role="status" className="mt-1 text-xs text-amber-800">Move every real screen away from this scene before applying its deletion.</p>}
@@ -248,7 +342,7 @@ export function ApprovalRequestsPanel() {
                     </details>
                   </div>
                   {isHost && open && requestingChanges !== request.id && <div className="flex flex-wrap gap-2">
-                    <Button size="sm" disabled={busy === request.id} onClick={() => void decide(request, "approve")}><CheckIcon /> Approve</Button>
+                    <Button size="sm" disabled={busy === request.id || Boolean(sceneReview?.blockReason)} aria-describedby={sceneReview?.blockReason ? `scene-review-warning-${request.id}` : undefined} onClick={() => void decide(request, "approve")}><CheckIcon /> Approve</Button>
                     <Button size="sm" variant="outline" disabled={busy === request.id} onClick={() => void decide(request, "decline")}><XIcon /> Decline</Button>
                     <Button size="sm" variant="ghost" disabled={busy === request.id} onClick={() => setRequestingChanges(request.id)}>Request changes</Button>
                   </div>}
@@ -260,7 +354,7 @@ export function ApprovalRequestsPanel() {
                       size="sm"
                       variant="outline"
                       aria-label={request.kind === "scene_delete" ? "Apply approved scene deletion" : "Apply approved scene change"}
-                      disabled={busy !== null || (request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId))}
+                      disabled={busy !== null || Boolean(sceneReview?.applyBlockReason) || (request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId))}
                       onClick={() => void applyScene(request)}
                     >
                       {request.kind === "scene_delete" ? "Apply approved deletion" : "Apply approved scene change"}
@@ -274,7 +368,7 @@ export function ApprovalRequestsPanel() {
                       size="sm"
                       variant="outline"
                       aria-label={request.kind === "scene_delete" ? "Retry local approved scene deletion" : "Retry local approved scene save"}
-                      disabled={busy !== null || (request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId))}
+                      disabled={busy !== null || Boolean(sceneReview?.applyBlockReason) || (request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId))}
                       onClick={() => void applyScene(request)}
                     >
                       {request.kind === "scene_delete" ? "Retry local deletion" : "Retry local scene save"}
