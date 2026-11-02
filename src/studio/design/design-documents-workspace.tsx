@@ -44,6 +44,19 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
   const [error, setError] = useState("")
   const [reloadToken, setReloadToken] = useState(0)
   const handledInitialTemplate = useRef<InitialDesignTemplate | null>(null)
+  const mainRef = useRef<HTMLElement>(null)
+  const chosenDesignHeadingRef = useRef<HTMLHeadingElement>(null)
+  const focusEditorId = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (chosenDesign) chosenDesignHeadingRef.current?.focus()
+  }, [chosenDesign])
+
+  useEffect(() => {
+    if (!active || active.id !== focusEditorId.current) return
+    mainRef.current?.querySelector<HTMLInputElement>("#design-document-title")?.focus()
+    focusEditorId.current = null
+  }, [active])
 
   const onActiveDirtyChange = useCallback((dirty: boolean) => {
     setActiveDirty(dirty)
@@ -96,6 +109,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
       setChosenDesign(null)
       setActiveDirty(false)
       setBrowseTemplates(false)
+      focusEditorId.current = null
       setError("")
     } catch (failure) {
       setError("Design could not be opened: " + messageOf(failure))
@@ -146,6 +160,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
       // version is deliberately used in Prepare or on a screen.
       setActive(customize ? created : null)
       setChosenDesign(customize ? null : created)
+      focusEditorId.current = customize ? created.id : null
       setActiveDirty(false)
       setBrowseTemplates(false)
       setLoading(true)
@@ -239,7 +254,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
         </div>
         {active && <DesignUsagePanel designId={active.id} />}
       </aside>
-      <main className="flex min-h-0 min-w-0 flex-col">
+      <main ref={mainRef} className="flex min-h-0 min-w-0 flex-col">
         {error && <p role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-xs">{error}</p>}
         {browseTemplates ? (
           <div className="flex min-h-0 flex-1 flex-col">
@@ -264,7 +279,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
         ) : chosenDesign ? (
           <section className="m-auto flex max-w-lg flex-col items-center px-6 py-10 text-center" aria-labelledby="chosen-design-title">
             <Layers3Icon aria-hidden="true" className="size-8 text-muted-foreground" />
-            <h3 id="chosen-design-title" className="mt-3 text-base font-semibold">Added to My Designs</h3>
+            <h3 ref={chosenDesignHeadingRef} id="chosen-design-title" tabIndex={-1} className="mt-3 text-base font-semibold">Added to My Designs</h3>
             <p role="status" className="mt-2 text-sm text-muted-foreground">“{chosenDesign.title}” is a private editable copy. Customize and save a draft here; Preview, Program and screens are unchanged.</p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               <Button onClick={() => void open(chosenDesign.id)} disabled={loading || creating}>Customize this design</Button>

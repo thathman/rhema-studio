@@ -26,6 +26,7 @@ import { SceneDesignPicker } from "@/studio/prepare/scene-design-picker"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useUnsavedStore } from "@/stores/unsaved-store"
+import { createBlankRhemaDesign } from "@/design-engine/design-document-utils"
 import type { DesignDocument, DesignInput, DesignVersion } from "@/design-engine/design-store"
 import type { QueueItem } from "@/types"
 import pack from "../../../design-packs/rhema-worship-expressions.rhema-design.json?raw"
@@ -144,6 +145,7 @@ describe("Design → Templates (#299)", () => {
     mockInvoke.mockImplementation(async (command: string) => {
       if (command === "design_list") return []
       if (command === "design_create") return createdDesign
+      if (command === "design_used_on" || command === "design_list_versions") return []
       return null
     })
     const before = useBroadcastStore.getState()
@@ -159,6 +161,7 @@ describe("Design → Templates (#299)", () => {
       input: expect.objectContaining({ kind: "design", document: expect.any(Object) }),
     }))
     expect(el.textContent).toContain("Added to My Designs")
+    expect(document.activeElement).toBe(el.querySelector("#chosen-design-title"))
     expect(useBroadcastStore.getState().scenes).toEqual([])
     expect(useBroadcastStore.getState()).toMatchObject({
       outputs: before.outputs,
@@ -167,6 +170,31 @@ describe("Design → Templates (#299)", () => {
     })
     expect(useProductionTab.getState()).toMatchObject({ requested: null, scene: null })
     expect(useShellStore.getState().goRequest).toBeNull()
+  })
+
+  it("moves focus into the canonical editor after customizing a scene template", async () => {
+    const createdDesign = {
+      id: "customized-template-copy",
+      title: "Clean · Camera and scripture",
+      kind: "design",
+      document: createBlankRhemaDesign("Clean · Camera and scripture"),
+      revision: 1,
+      latestVersion: null,
+      createdAt: "2026-11-02T00:00:00Z",
+      updatedAt: "2026-11-02T00:00:00Z",
+    }
+    mockInvoke.mockImplementation(async (command: string) => {
+      if (command === "design_list") return []
+      if (command === "design_create") return createdDesign
+      if (command === "design_used_on" || command === "design_list_versions") return []
+      return null
+    })
+    const el = await renderDesignWorkspace("library")
+    const scene = card(el, "Clean · Camera and scripture")
+    const customize = [...scene.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Customize a copy"))!
+
+    await act(async () => customize.click())
+    await vi.waitFor(() => expect(document.activeElement).toBe(el.querySelector<HTMLInputElement>("#design-document-title")))
   })
 
   it("shows the bundled Worship Expressions gallery on a clean install; Use creates a copy without taking it live", async () => {
