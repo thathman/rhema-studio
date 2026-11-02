@@ -12,7 +12,7 @@ const presentCalls = vi.hoisted(() => ({
 }))
 
 vi.mock("@/studio/present-actions", () => ({ presentActions: presentCalls }))
-vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ outputLanguageId, onOutputLanguageIdChange }: { outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void }) => <section aria-label="Preview" data-preview-output={outputLanguageId ?? "none"}>Preview stays private<button type="button" onClick={() => onOutputLanguageIdChange?.("yoruba-output")}>Select Yoruba preview</button></section> }))
+vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, outputLanguageId, onOutputLanguageIdChange }: { compact?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"}>Preview stays private<button type="button" onClick={() => onOutputLanguageIdChange?.("yoruba-output")}>Select Yoruba preview</button></section> }))
 vi.mock("@/components/panels/live-output-panel", () => ({ LiveOutputPanel: () => <section data-studio-live>Program</section> }))
 vi.mock("@/components/panels/search-panel", () => ({ SearchPanel: () => <div data-testid="bible-search-panel">Bible search</div> }))
 vi.mock("@/components/panels/transcript-panel", () => ({ TranscriptPanel: () => <div data-testid="transcript-panel">Transcript</div> }))
@@ -33,7 +33,7 @@ vi.mock("@/studio/present/sound-chip", () => ({ SoundChip: () => <button type="b
 vi.mock("@/studio/present/recorder-dock", () => ({ RecorderDock: () => <section aria-label="Rhema recording dock">Rhema recording controls</section> }))
 vi.mock("@/studio/present/cue-menu", () => ({ CueMenu: () => <button type="button">Cues</button> }))
 vi.mock("@/studio/engage/host-control", () => ({ EngageHostControl: () => <button type="button">Engage host</button> }))
-vi.mock("@/studio/present/transport-bar", () => ({ TransportBar: () => <div role="toolbar" aria-label="Presentation controls"><button>Take live</button></div> }))
+vi.mock("@/studio/present/transport-bar", () => ({ TransportBar: ({ className }: { className?: string }) => <div className={className} role="toolbar" aria-label="Presentation controls"><button>Take live</button></div> }))
 vi.mock("@/studio/present/scenes-strip", () => ({ ScenesStrip: () => null }))
 vi.mock("@/studio/production/production-workspace", () => ({
   ProductionWorkspace: ({ embedded }: { embedded?: boolean }) => <section data-testid="production-tools" data-embedded={embedded ? "true" : "false"}>Production tools</section>,
@@ -170,6 +170,8 @@ describe("Present's unified Live console", () => {
     expect(recovery.textContent).toContain("Take waits for a Preview item")
     expect(element.querySelector('[data-studio-live]')?.textContent).toContain("Program")
     expect(element.querySelector('[data-tour="present-rundown"]')?.className).toContain("row-span-1")
+    expect(element.querySelector('[data-tour="present-rundown"]')?.className).toContain("h-fit")
+    expect(element.querySelector('[data-tour="present-rundown"]')?.className).toContain("self-start")
     expect(element.querySelector('[data-testid="rundown-list"]')).toBeNull()
 
     const button = (label: string) => [...recovery.querySelectorAll("button")].find((candidate) => candidate.getAttribute("aria-label") === label)!
@@ -187,6 +189,26 @@ describe("Present's unified Live console", () => {
     expect(useServiceStore.getState().current).toBeNull()
     expect(useQueueStore.getState()).toMatchObject({ items: [], headers: [] })
     expect(useBroadcastStore.getState()).toMatchObject({ isLive: wasLive, liveVerse: program })
+  })
+
+  it("keeps full private Preview and actual Program in the medium-width Live layout", async () => {
+    await renderWorkspace()
+
+    const preview = element.querySelector<HTMLElement>('[aria-label="Preview"]')!
+    const paneLayout = preview.parentElement!.parentElement!
+    const program = element.querySelector<HTMLElement>('[data-studio-live]')!
+    expect(preview.dataset.compact).toBe("false")
+    expect(preview.parentElement?.className).toContain("max-[1200px]:min-h-[18rem]")
+    expect(preview.parentElement?.className).toContain("max-[1200px]:shrink-0")
+    expect(paneLayout.className).toContain("max-[1200px]:grid-cols-1")
+    expect(paneLayout.className).toContain("min-[1024px]:max-[1200px]:grid-cols-2")
+    expect(program.textContent).toContain("Program")
+    expect(program.className).toContain("max-[1200px]:min-h-[18rem]")
+    expect(element.querySelectorAll('[aria-label="Preview"]')).toHaveLength(1)
+    const transport = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Presentation controls"]')!
+    expect(transport.className).toContain("max-[1200px]:sticky")
+    expect(transport.className).toContain("max-[1200px]:bottom-0")
+    expect(transport.parentElement?.className).toContain("max-[1200px]:pb-40")
   })
 
   it("keeps a zero-moment event visible instead of treating its plan as no service", async () => {
