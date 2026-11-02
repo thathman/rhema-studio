@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { ChevronDownIcon, ExternalLinkIcon, Layers3Icon, SaveIcon, TrashIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -13,7 +13,8 @@ import { TickerDesigner } from "@/studio/design/ticker-designer"
 import { StageDesigner } from "@/studio/design/stage-designer"
 import { CountdownDesigner } from "@/studio/design/countdown-designer"
 import { BrandDesigner } from "@/studio/design/brand-designer"
-import { DesignDocumentsWorkspace } from "@/studio/design/design-documents-workspace"
+import { DesignDocumentsWorkspace, type InitialDesignTemplate } from "@/studio/design/design-documents-workspace"
+import { LookLibraryView } from "@/studio/design/look-library-view"
 import { designUsage } from "@/lib/design-usage"
 import { themeIdsOf } from "@/lib/output-themes"
 import { outputOnAir } from "@/lib/output-on-air"
@@ -44,9 +45,16 @@ export function DesignWorkspace() {
   const tab = useShellStore((s) => s.designTab)
   const setTab = useShellStore((s) => s.setDesignTab)
   const activeTool = DESIGN_TOOLS.find(([id]) => id === (tab === "outputs" ? "used-on" : tab))
+  const [styleId, setStyleId] = useState<string>()
+  const [pendingTemplate, setPendingTemplate] = useState<InitialDesignTemplate | null>(null)
   const changeTab = async (next: DesignTab) => {
     if (next === tab || !(await mayLeaveDesignDocumentDraft())) return
     setTab(next)
+  }
+  const startTemplate = async (look: InitialDesignTemplate["look"], customize: boolean) => {
+    if (!(await mayLeaveDesignDocumentDraft())) return
+    setPendingTemplate({ look, customize })
+    setTab("my-designs")
   }
 
   // Editing starts on the first theme, as the designer always did (leaving the page settles it: see the shell).
@@ -138,9 +146,9 @@ export function DesignWorkspace() {
           </div>
         ) : (
           <div className="h-full overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-panel">
-            {tab === "library" && <DesignDocumentsWorkspace initialBrowseTemplates />}
-            {tab === "my-designs" && <DesignDocumentsWorkspace />}
-            {tab === "lower-thirds" && <LowerThirdDesigner />}
+            {tab === "library" && <LookLibraryView onOpen={(next, id) => { setStyleId(id); void changeTab(next) }} onSceneTemplate={(look, customize) => { void startTemplate(look, customize) }} />}
+            {tab === "my-designs" && <DesignDocumentsWorkspace initialTemplate={pendingTemplate} onInitialTemplateHandled={() => setPendingTemplate(null)} />}
+            {tab === "lower-thirds" && <LowerThirdDesigner initialId={styleId} />}
             {tab === "ticker" && <TickerDesigner />}
             {tab === "stage" && <StageDesigner />}
             {tab === "countdown" && <CountdownDesigner />}

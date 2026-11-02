@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ask } from "@tauri-apps/plugin-dialog"
 import { ArrowLeftIcon, FilePlus2Icon, Layers3Icon, PaletteIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -24,17 +24,26 @@ function messageOf(error: unknown) {
   return String(error)
 }
 
-export function DesignDocumentsWorkspace({ initialBrowseTemplates = false }: { initialBrowseTemplates?: boolean }) {
+export type InitialDesignTemplate = {
+  look: Extract<LibraryLook, { kind: "scene" }>
+  customize: boolean
+}
+
+export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemplateHandled }: {
+  initialTemplate?: InitialDesignTemplate | null
+  onInitialTemplateHandled?: () => void
+}) {
   const [documents, setDocuments] = useState<DesignSummary[]>([])
   const [active, setActive] = useState<DesignDocument | null>(null)
   const [chosenDesign, setChosenDesign] = useState<DesignDocument | null>(null)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [activeDirty, setActiveDirty] = useState(false)
-  const [browseTemplates, setBrowseTemplates] = useState(initialBrowseTemplates)
+  const [browseTemplates, setBrowseTemplates] = useState(false)
   const [query, setQuery] = useState("")
   const [error, setError] = useState("")
   const [reloadToken, setReloadToken] = useState(0)
+  const handledInitialTemplate = useRef<InitialDesignTemplate | null>(null)
 
   const onActiveDirtyChange = useCallback((dirty: boolean) => {
     setActiveDirty(dirty)
@@ -115,7 +124,7 @@ export function DesignDocumentsWorkspace({ initialBrowseTemplates = false }: { i
     }
   }
 
-  const createFromTemplate = async (look: Extract<LibraryLook, { kind: "scene" }>, customize: boolean) => {
+  const createFromTemplate = useCallback(async (look: Extract<LibraryLook, { kind: "scene" }>, customize: boolean) => {
     const state = useBroadcastStore.getState()
     const takenNames = [
       ...state.themes.map((theme) => theme.name),
@@ -151,7 +160,14 @@ export function DesignDocumentsWorkspace({ initialBrowseTemplates = false }: { i
     } finally {
       setCreating(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!initialTemplate || handledInitialTemplate.current === initialTemplate) return
+    handledInitialTemplate.current = initialTemplate
+    void createFromTemplate(initialTemplate.look, initialTemplate.customize)
+    onInitialTemplateHandled?.()
+  }, [createFromTemplate, initialTemplate, onInitialTemplateHandled])
 
   const showTemplates = async () => {
     if (!(await confirmDiscard())) return
