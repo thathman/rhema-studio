@@ -233,13 +233,13 @@ export function PreviewPanel({ itemLook = false, compact = false, outputLanguage
   const languageFallback = !!selectedPreviewOutput && !secondaryFetchPending && isOutputLanguageFallback(verseData, previewLanguage)
   const outputVerseData = selectedPreviewOutput ? forOutputLanguage(verseData, previewLanguage) : verseData
   const outputPicker = onOutputLanguageIdChange && congregationOutputs.length > 0 ? (
-    <label className="flex items-center gap-1 text-[0.625rem] font-medium text-muted-foreground">
+    <label className="flex items-center gap-1 text-[0.6875rem] font-medium text-muted-foreground">
       <span className="sr-only">Preview output</span>
       <select
         aria-label="Preview output"
         value={selectedPreviewOutput?.id ?? ""}
         onChange={(event) => onOutputLanguageIdChange(event.currentTarget.value)}
-        className="max-w-44 rounded border border-border bg-background px-1.5 py-1 text-[0.625rem] text-foreground"
+        className="max-w-44 rounded border border-border bg-background px-1.5 py-1 text-[0.6875rem] text-foreground"
       >
         {congregationOutputs.map((output) => (
           <option key={output.id} value={output.id}>
@@ -264,8 +264,8 @@ export function PreviewPanel({ itemLook = false, compact = false, outputLanguage
             {outputPicker}
           </p>
           {sampleNotice && <p className="truncate text-[0.6875rem] text-muted-foreground">{sampleNotice}</p>}
-          {secondaryFetchPending && <p role="status" className="truncate text-[0.625rem] text-muted-foreground">Checking second language…</p>}
-          {languageFallback && <p role="status" className="truncate text-[0.625rem] text-confidence-mid">{OUTPUT_LANGUAGE_FALLBACK_NOTICE}</p>}
+          {secondaryFetchPending && <p role="status" className="truncate text-[0.6875rem] text-muted-foreground">Checking second language…</p>}
+          {languageFallback && <p role="status" className="truncate text-[0.6875rem] text-confidence-mid">{OUTPUT_LANGUAGE_FALLBACK_NOTICE}</p>}
           <p className="truncate font-medium text-foreground">{label ?? "Nothing in Preview: click a running-order item or find a verse"}</p>
           {plan.length > 0 && <p className="truncate text-[0.6875rem] text-muted-foreground" title={plan.join(" · ")}>Planned · {plan.join(" · ")}</p>}
         </div>
