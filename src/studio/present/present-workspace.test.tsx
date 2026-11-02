@@ -191,14 +191,17 @@ describe("Present's unified Live console", () => {
     expect(useBroadcastStore.getState()).toMatchObject({ isLive: wasLive, liveVerse: program })
   })
 
-  it("keeps full private Preview and actual Program panes available in the narrow Live layout", async () => {
+  it("keeps full private Preview and actual Program in the medium-width Live layout", async () => {
     await renderWorkspace()
 
     const preview = element.querySelector<HTMLElement>('[aria-label="Preview"]')!
+    const paneLayout = preview.parentElement!.parentElement!
     const program = element.querySelector<HTMLElement>('[data-studio-live]')!
     expect(preview.dataset.compact).toBe("false")
     expect(preview.parentElement?.className).toContain("max-[1200px]:min-h-[18rem]")
     expect(preview.parentElement?.className).toContain("max-[1200px]:shrink-0")
+    expect(paneLayout.className).toContain("max-[1200px]:grid-cols-1")
+    expect(paneLayout.className).toContain("min-[1024px]:max-[1200px]:grid-cols-2")
     expect(program.textContent).toContain("Program")
     expect(program.className).toContain("max-[1200px]:min-h-[18rem]")
     expect(element.querySelectorAll('[aria-label="Preview"]')).toHaveLength(1)
