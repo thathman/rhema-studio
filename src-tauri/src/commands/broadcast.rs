@@ -375,12 +375,20 @@ pub fn push_ndi_frame(
     check_frame_len(rgba.len(), width, height)?;
     // One readback feeds both: the recorder (only from the output's own window, so no Stage or
     // preview window can pass its picture off as this output's) and NDI.
-    let recorded = own_window(&webview, &output_id) && recorder.0.get().is_some_and(|r| r.push_frame(&output_id, width, height, rgba));
+    let recorded = own_window(&webview, &output_id) && recorder.0.get().is_some_and(|r| r.push_frame(&output_id, width, height, rgba, frame_timing(&request)));
     let mut runtime = runtime.lock().map_err(|e| e.to_string())?;
     if recorded && !runtime.is_active(&output_id) {
         return Ok(());
     }
     runtime.send_frame_rgba(&output_id, width, height, rgba).map_err(|e| e.to_string())
+}
+
+/// When the page drew this picture and how many it could not send (#626): optional headers
+/// `x-frame-drawn-at` (ms since 1970, the page's `Date.now()` at the draw) and `x-frames-skipped`
+/// (its running count). A page that sends neither is placed on arrival, as before.
+fn frame_timing(request: &tauri::ipc::Request<'_>) -> rhema_recorder::FrameTiming {
+    let number = |name: &str| request.headers().get(name).and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<u64>().ok());
+    rhema_recorder::FrameTiming { drawn_at_ms: number("x-frame-drawn-at"), skipped_total: number("x-frames-skipped") }
 }
 
 fn own_window(webview: &tauri::Webview, output_id: &str) -> bool {
@@ -406,7 +414,7 @@ pub fn push_ndi_region(
     };
     let recorded = own_window(&webview, &output_id)
         && region.x == 0
-        && recorder.0.get().is_some_and(|r| r.push_region(&output_id, region.y, region.width, region.height, rgba));
+        && recorder.0.get().is_some_and(|r| r.push_region(&output_id, region.y, region.width, region.height, rgba, frame_timing(&request)));
     let mut runtime = runtime.lock().map_err(|e| e.to_string())?;
     if recorded && !runtime.is_active(&output_id) {
         return Ok(());

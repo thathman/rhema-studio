@@ -41,12 +41,39 @@ pub const DISK_LOW: u64 = 1 << 30;
 pub const DISK_FULL: u64 = 200 << 20;
 /// Frames waiting for the encoder before new ones are dropped (each is a whole picture).
 const VIDEO_QUEUE: usize = 3;
+/// How far behind real time pictures are written (#626 A/V sync): a picture reaches the writer
+/// about 70–100 ms after the page drew it (read back, then sent across), while sound is placed when
+/// it was captured. Writing each moment this long after it happened lets the picture drawn at that
+/// moment be the one written there, so picture and sound line up.
+const AV_DELAY_US: i64 = 250_000;
+/// Pictures held for their moment: a quarter of a second of a fast page, with room.
+const PENDING_MAX: usize = 16;
+
+/// When the page drew a picture and how many it could not send (headers `x-frame-drawn-at`, the
+/// page's clock in ms since 1970, and `x-frames-skipped`, a running count). Both optional: without
+/// them a picture is placed when it arrives and skipped ones are not known.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FrameTiming {
+    pub drawn_at_ms: Option<u64>,
+    pub skipped_total: Option<u64>,
+}
+
+/// When a picture was drawn, in µs into the session: from the page's clock when it said (and the
+/// picture is at most 2 s old and not from the future), else now.
+fn drawn_us(t0: Instant, drawn_at_ms: Option<u64>) -> i64 {
+    let age = drawn_at_ms.and_then(|drawn| {
+        let wall = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?;
+        wall.checked_sub(Duration::from_millis(drawn)).filter(|age| *age <= Duration::from_secs(2))
+    });
+    i64::try_from(t0.elapsed().saturating_sub(age.unwrap_or_default()).as_micros()).unwrap_or(i64::MAX)
+}
 /// No frame for this long: the output window stopped painting or closed.
 const NO_FRAMES_AFTER: Duration = Duration::from_secs(5);
 pub const FILE_NAME: &str = "recording.mp4";
 
 enum Msg {
-    Video(Vec<u8>),
+    /// A whole picture and when the page drew it (µs into the session).
+    Video(Vec<u8>, i64),
     Audio(Vec<f32>, i64),
     Stop,
 }
@@ -102,6 +129,8 @@ struct Session {
     /// The last whole frame, so a region update (a ticker band) is recorded as a full picture.
     frame: Vec<u8>,
     audio: Option<AudioInput>,
+    /// The page's running count of pictures it could not send, as last heard.
+    page_skipped: u64,
 }
 
 /// Opens the session's sound input (again, after it was lost): each stream places its own blocks
@@ -493,7 +522,7 @@ impl Recorder {
         let _ = clock.set((t0, audio_rate.unwrap_or(0)));
         m.state = RecorderState::Recording;
         let _ = manifest::write(&dir, &m);
-        let session = Session { dir, manifest: m, width, height, fps, t0, tx, shared, writer, frame: Vec::new(), audio };
+        let session = Session { dir, manifest: m, width, height, fps, t0, tx, shared, writer, frame: Vec::new(), audio, page_skipped: 0 };
         let status = status_of(&session, &self.folder);
         self.install(session)?;
         *self.last_request.lock().unwrap_or_else(PoisonError::into_inner) = Some(req.clone());
@@ -501,7 +530,7 @@ impl Recorder {
     }
 
     /// A whole frame from output `output_id`'s window. `false`: no session is recording that output.
-    pub fn push_frame(&self, output_id: &str, width: u32, height: u32, rgba: &[u8]) -> bool {
+    pub fn push_frame(&self, output_id: &str, width: u32, height: u32, rgba: &[u8], timing: FrameTiming) -> bool {
         let mut guard = self.lock();
         let Some(s) = guard.as_mut().filter(|s| s.manifest.output_id == output_id) else { return false };
         if width != s.width || height != s.height || rgba.len() != width as usize * height as usize * 4 {
@@ -515,12 +544,12 @@ impl Recorder {
         }
         s.frame.clear();
         s.frame.extend_from_slice(rgba);
-        send_frame(s);
+        send_frame(s, timing);
         true
     }
 
     /// Rows `y..y+height` of the frame changed (a ticker band); the rest is as last sent.
-    pub fn push_region(&self, output_id: &str, y: u32, width: u32, height: u32, rgba: &[u8]) -> bool {
+    pub fn push_region(&self, output_id: &str, y: u32, width: u32, height: u32, rgba: &[u8], timing: FrameTiming) -> bool {
         let mut guard = self.lock();
         let Some(s) = guard.as_mut().filter(|s| s.manifest.output_id == output_id) else { return false };
         let row = s.width as usize * 4;
@@ -529,7 +558,7 @@ impl Recorder {
             return true;
         }
         s.frame[start..start + rgba.len()].copy_from_slice(rgba);
-        send_frame(s);
+        send_frame(s, timing);
         true
     }
 
@@ -694,14 +723,19 @@ impl Recorder {
     }
 }
 
-fn send_frame(s: &Session) {
+fn send_frame(s: &mut Session, timing: FrameTiming) {
+    // Pictures the page drew but could not send (one still on its way) are dropped pictures too.
+    if let Some(total) = timing.skipped_total {
+        s.shared.frames_dropped.fetch_add(total.saturating_sub(s.page_skipped), Ordering::Relaxed);
+        s.page_skipped = total;
+    }
     if s.shared.writer_gone.load(Ordering::Relaxed) || s.shared.video_queued.load(Ordering::Relaxed) >= VIDEO_QUEUE {
         s.shared.frames_dropped.fetch_add(1, Ordering::Relaxed);
         return;
     }
     s.shared.last_frame_ms.store(s.t0.elapsed().as_millis() as u64 + 1, Ordering::Relaxed);
     s.shared.video_queued.fetch_add(1, Ordering::Relaxed);
-    let _ = s.tx.send(Msg::Video(s.frame.clone()));
+    let _ = s.tx.send(Msg::Video(s.frame.clone(), drawn_us(s.t0, timing.drawn_at_ms)));
 }
 
 fn status_of(s: &Session, folder: &Path) -> RecorderStatus {
@@ -812,25 +846,26 @@ impl FrameSink for backend::Writer {
 fn write_loop<W: FrameSink>(mut writer: W, t0: Instant, fps: u32, rx: &Receiver<Msg>, shared: &Shared, folder: &Path) -> Result<(), String> {
     let mut failed: Option<String> = None;
     let mut last_disk_check = Instant::now();
-    // Constant frame rate: on every tick the latest picture is written (a still slide repeats).
+    // Constant frame rate: each tick, written `AV_DELAY` after its moment, shows the newest picture
+    // drawn by then (a still slide repeats).
     let period_us = 1_000_000 / i64::from(fps.max(1));
+    let delay_us = AV_DELAY_US;
+    let mut pending: std::collections::VecDeque<(i64, Vec<u8>)> = std::collections::VecDeque::new();
     let mut tick: i64 = 0;
     // The encoder could not take the next tick yet (or there is no picture yet): try it again shortly.
     let mut retry = false;
     // When Stop was asked (µs into the session): every tick due until then is still written.
     let mut stop_at: Option<i64> = None;
     loop {
-        let due = t0 + Duration::from_micros((tick * period_us) as u64);
+        let due = t0 + Duration::from_micros((tick * period_us + delay_us) as u64);
         let wait = due.saturating_duration_since(Instant::now());
         // Once the writer has failed nothing is due: only wait for Stop, without spinning a core.
         let timeout = if failed.is_some() { Duration::from_millis(100) } else if retry { wait.max(Duration::from_millis(5)) } else { wait };
         match rx.recv_timeout(timeout) {
-            Ok(Msg::Video(frame)) => {
+            Ok(Msg::Video(frame, drawn)) => {
                 shared.video_queued.fetch_sub(1, Ordering::Relaxed);
                 if failed.is_none() {
-                    if let Err(e) = writer.set_frame(&frame) {
-                        failed = Some(e);
-                    }
+                    hold_picture(&mut pending, frame, drawn, tick * period_us, shared);
                 }
             }
             Ok(Msg::Audio(samples, at)) => {
@@ -853,19 +888,13 @@ fn write_loop<W: FrameSink>(mut writer: W, t0: Instant, fps: u32, rx: &Receiver<
             }
             Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
         }
-        let now_us = t0.elapsed().as_micros() as i64;
+        let now_us = t0.elapsed().as_micros() as i64 - delay_us;
         if failed.is_none() && now_us >= tick * period_us {
-            // Every tick is written, in order, with the latest picture: a hole in the timeline (a busy
-            // computer, a burst the encoder could not take) makes fragmented MPEG-4 fail to close
-            // (-11800/-16341). A tick written more than 2 s late counts as dropped: a stale repeat.
+            // Every tick is written, in order: a hole in the timeline (a busy computer, a burst the
+            // encoder could not take) makes fragmented MPEG-4 fail to close (-11800/-16341). A tick
+            // written late still shows the picture drawn at its moment, so it is not a dropped one.
             let current = now_us / period_us;
-            let written = write_due(&mut tick, current, |t| {
-                let ok = writer.tick(t * period_us)?;
-                if ok && now_us - t * period_us > 2_000_000 {
-                    shared.frames_dropped.fetch_add(1, Ordering::Relaxed);
-                }
-                Ok(ok)
-            });
+            let written = write_due(&mut tick, current, |t| write_tick(&mut writer, &mut pending, t * period_us));
             match written {
                 Ok((n, again)) => {
                     shared.frames_written.fetch_add(n, Ordering::Relaxed);
@@ -892,7 +921,7 @@ fn write_loop<W: FrameSink>(mut writer: W, t0: Instant, fps: u32, rx: &Receiver<
         // Stop while the encoder is behind: write the backlog up to the moment Stop was asked, so the
         // end of the service is not cut off. If the encoder cannot take it within 3 s, say exactly
         // how much is missing rather than closing a shorter file silently.
-        match drain(&mut tick, stop_us / period_us, Duration::from_secs(3), |t| writer.tick(t * period_us)) {
+        match drain(&mut tick, stop_us / period_us, Duration::from_secs(3), |t| write_tick(&mut writer, &mut pending, t * period_us)) {
             Ok((n, 0)) => _ = shared.frames_written.fetch_add(n, Ordering::Relaxed),
             Ok((n, left)) => {
                 shared.frames_written.fetch_add(n, Ordering::Relaxed);
@@ -915,6 +944,33 @@ fn write_loop<W: FrameSink>(mut writer: W, t0: Instant, fps: u32, rx: &Receiver<
         }
         None => writer.finish(),
     }
+}
+
+/// A picture waiting for its moment, in drawing order. One drawn for a moment already written
+/// arrived too late to be seen there: a dropped picture (it still shows from the next tick on, if
+/// nothing newer came). Too many waiting (the encoder stalled): the oldest are dropped.
+fn hold_picture(pending: &mut std::collections::VecDeque<(i64, Vec<u8>)>, frame: Vec<u8>, drawn: i64, next_pts: i64, shared: &Shared) {
+    if drawn < next_pts && pending.iter().all(|(d, _)| *d < drawn) {
+        shared.frames_dropped.fetch_add(1, Ordering::Relaxed);
+    }
+    let at = pending.iter().position(|(d, _)| *d > drawn).unwrap_or(pending.len());
+    pending.insert(at, (drawn, frame));
+    while pending.len() > PENDING_MAX {
+        pending.pop_front();
+        shared.frames_dropped.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// Write the tick at `pts` with the newest picture drawn by then.
+fn write_tick<W: FrameSink>(writer: &mut W, pending: &mut std::collections::VecDeque<(i64, Vec<u8>)>, pts: i64) -> Result<bool, String> {
+    let mut newest = None;
+    while pending.front().is_some_and(|(drawn, _)| *drawn <= pts) {
+        newest = pending.pop_front();
+    }
+    if let Some((_, frame)) = newest {
+        writer.set_frame(&frame)?;
+    }
+    writer.tick(pts)
 }
 
 /// The writer's result, without waiting past `wait`. The system's encoder can block with no limit
@@ -1377,7 +1433,7 @@ mod tests {
     fn nothing_is_taken_while_nothing_records() {
         let t = tempfile::tempdir().unwrap();
         let r = Recorder::new(t.path().to_path_buf());
-        assert!(!r.push_frame("main", 2, 2, &[0; 16]));
+        assert!(!r.push_frame("main", 2, 2, &[0; 16], FrameTiming::default()));
         assert!(r.marker("x", "desk", None, None).is_err());
         assert_eq!(r.stop().unwrap_err().code, ProblemCode::NotRecording);
         assert!(r.session_dir("../etc", false).is_none());
@@ -1418,6 +1474,7 @@ mod tests {
             writer,
             frame: Vec::new(),
             audio: None,
+            page_skipped: 0,
         }
     }
 
@@ -1662,6 +1719,107 @@ mod tests {
         session.t0 = Instant::now() - Duration::from_secs(10);
         session.shared.set_problem(RecorderProblem::new(ProblemCode::AudioDeviceLost, "gone"));
         assert_eq!(status_of(&session, t.path()).problem.map(|p| p.code), Some(ProblemCode::NoFrames));
+    }
+
+    /// Which picture (its first byte) each tick wrote, at which time in the file (µs).
+    type Ticks = Vec<(i64, Option<u8>)>;
+
+    /// Records which picture each tick wrote.
+    struct TickLog {
+        current: Option<u8>,
+        log: Arc<Mutex<Ticks>>,
+    }
+
+    impl FrameSink for TickLog {
+        fn set_frame(&mut self, rgba: &[u8]) -> Result<(), String> {
+            self.current = rgba.first().copied();
+            Ok(())
+        }
+        fn tick(&self, pts_us: i64) -> Result<bool, String> {
+            self.log.lock().unwrap().push((pts_us, self.current));
+            Ok(true)
+        }
+        fn append_audio(&self, _: &[f32], _: i64) -> Result<bool, String> {
+            Ok(true)
+        }
+        fn finish(self) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    /// Run the writer loop at 10 fps with pictures `(id, drawn at ms, arrives at ms)`, stopping at
+    /// `stop_ms`; returns what each tick wrote and how many pictures were counted dropped.
+    fn run_ticks(pictures: &[(u8, i64, u64)], stop_ms: u64) -> (Ticks, u64) {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let writer = TickLog { current: None, log: log.clone() };
+        let (tx, rx) = crossbeam_channel::unbounded::<Msg>();
+        let shared = Shared::default();
+        let folder = tempfile::tempdir().unwrap();
+        let t0 = Instant::now();
+        std::thread::scope(|scope| {
+            scope.spawn(|| write_loop(writer, t0, 10, &rx, &shared, folder.path()));
+            for &(id, drawn_ms, arrives_ms) in pictures {
+                std::thread::sleep((t0 + Duration::from_millis(arrives_ms)).saturating_duration_since(Instant::now()));
+                shared.video_queued.fetch_add(1, Ordering::Relaxed);
+                tx.send(Msg::Video(vec![id; 4], drawn_ms * 1000)).unwrap();
+            }
+            std::thread::sleep((t0 + Duration::from_millis(stop_ms)).saturating_duration_since(Instant::now()));
+            tx.send(Msg::Stop).unwrap();
+        });
+        let ticks = log.lock().unwrap().clone();
+        (ticks, shared.frames_dropped.load(Ordering::Relaxed))
+    }
+
+    #[test]
+    fn each_tick_shows_the_picture_drawn_at_its_moment_however_late_it_arrived() {
+        // Drawn every 100 ms from 50 ms, each reaching the writer 80 ms after it was drawn (read
+        // back and sent across), as on the Intel Mac.
+        let pictures: Vec<(u8, i64, u64)> = (0u8..8).map(|i| (i + 1, 50 + i64::from(i) * 100, 130 + u64::from(i) * 100)).collect();
+        let (ticks, dropped) = run_ticks(&pictures, 900);
+        assert!(ticks.len() >= 8, "{ticks:?}");
+        for (pts, shown) in &ticks {
+            let expected = pictures.iter().rev().find(|(_, drawn, _)| drawn * 1000 <= *pts).map(|(id, _, _)| *id);
+            assert_eq!(*shown, expected, "the tick at {} ms shows the picture drawn by then: {ticks:?}", pts / 1000);
+        }
+        assert_eq!(dropped, 0, "nothing arrived too late to be placed");
+    }
+
+    #[test]
+    fn a_picture_later_than_the_delay_is_counted_dropped_once() {
+        // Picture 2 is drawn at 150 ms but reaches the writer at 700 ms: its moments were written already.
+        let (ticks, dropped) = run_ticks(&[(1, 50, 60), (2, 150, 700), (3, 650, 710)], 1000);
+        assert_eq!(dropped, 1, "{ticks:?}");
+        assert!(ticks.iter().any(|(pts, shown)| *pts >= 650_000 && *shown == Some(3)), "later pictures still show at their moments: {ticks:?}");
+    }
+
+    #[test]
+    fn pictures_the_page_could_not_send_are_counted_from_its_running_count() {
+        let t = tempfile::tempdir().unwrap();
+        let mut session = stub_session(t.path());
+        let skipped = |n| FrameTiming { drawn_at_ms: None, skipped_total: Some(n) };
+        session.frame = vec![0; 4];
+        // The writer takes each picture (here nobody reads the queue, so empty it by hand).
+        let mut send = |timing| {
+            send_frame(&mut session, timing);
+            session.shared.video_queued.store(0, Ordering::Relaxed);
+        };
+        send(skipped(5));
+        send(skipped(8));
+        // The page was reloaded: its count started again.
+        send(skipped(2));
+        send(FrameTiming::default());
+        assert_eq!(session.shared.frames_dropped.load(Ordering::Relaxed), 8, "5, then 3 more; a reload's new count is not more pictures lost");
+    }
+
+    #[test]
+    fn a_pictures_drawing_time_comes_from_the_page_clock_when_it_is_believable() {
+        let t0 = Instant::now().checked_sub(Duration::from_secs(10)).expect("10 s after boot");
+        let now_ms = u64::try_from(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()).unwrap();
+        let near = |d: Option<u64>, ms: i64| (drawn_us(t0, d) / 1000 - ms).abs() < 30;
+        assert!(near(Some(now_ms - 100), 9_900), "100 ms ago");
+        assert!(near(Some(now_ms + 5_000), 10_000), "a clock from the future: now");
+        assert!(near(Some(now_ms - 60_000), 10_000), "too old to believe: now");
+        assert!(near(None, 10_000), "not said: now");
     }
 
     /// An encoder that writes three ticks, then fails like a disk that went away.
