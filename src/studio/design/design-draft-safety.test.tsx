@@ -196,6 +196,77 @@ describe("design editors keep edits in draft until applied (#442)", () => {
     expect(useBroadcastStore.getState().ticker?.style.position).toBe("top")
   })
 
+  it("copies Brand Kit styles into a ticker draft without changing saved or running output", async () => {
+    const style = {
+      ...DEFAULT_TICKER_STYLE,
+      color: "#112233",
+      fontFamily: "Geist Mono",
+      background: { ...DEFAULT_TICKER_STYLE.background, color: "#223344" },
+      labelColor: "#334455",
+      labelBackground: "#445566",
+    }
+    const defaults = defaultBrandKit()
+    const kit = {
+      ...defaults,
+      colors: { ...defaults.colors, text: "#e8c271", primary: "#172a44", accent: "#d66b42" },
+      fonts: { ...defaults.fonts, body: "Geist Variable" },
+    }
+    const running = { items: ["Service begins at 10"], style, startedAt: 1 }
+    useBroadcastStore.setState({ tickerStyle: style, ticker: running, tickerItems: running.items })
+    useSettingsStore.setState({ brandKit: kit })
+    const element = await render(<TickerDesigner />)
+
+    for (const label of [
+      "Apply Brand Kit ticker text colour",
+      "Apply Brand Kit ticker band colour",
+      "Apply Brand Kit ticker tag text colour",
+      "Apply Brand Kit ticker tag colour",
+      "Apply Brand Kit ticker body font",
+    ]) {
+      await act(async () => element.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click())
+    }
+
+    expect(useBroadcastStore.getState().tickerStyle).toEqual(style)
+    expect(useBroadcastStore.getState().ticker?.style).toEqual(style)
+    expect(element.textContent).toContain("Draft changes · outputs unchanged")
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    expect(useBroadcastStore.getState().designDrafts).toMatchObject([{
+      id: "ticker:default",
+      value: {
+        color: kit.colors.text,
+        fontFamily: kit.fonts.body,
+        background: { color: kit.colors.primary },
+        labelColor: kit.colors.text,
+        labelBackground: kit.colors.accent,
+      },
+    }])
+    expect(useBroadcastStore.getState().tickerStyle).toEqual(style)
+    expect(useBroadcastStore.getState().ticker?.style).toEqual(style)
+
+    act(() => root?.unmount())
+    root = null
+    document.body.replaceChildren()
+    useSettingsStore.setState({ brandKit: { ...kit, colors: { ...kit.colors, text: "#12ab34" } } })
+    const reopened = await render(<TickerDesigner />)
+    expect(reopened.querySelector<HTMLInputElement>('[aria-label="Words colour"]')?.value).toBe(kit.colors.text)
+    expect(reopened.querySelector<HTMLInputElement>('[aria-label="Band colour"]')?.value).toBe(kit.colors.primary)
+    expect(reopened.querySelector<HTMLInputElement>('[aria-label="Tag words colour"]')?.value).toBe(kit.colors.text)
+    expect(reopened.querySelector<HTMLInputElement>('[aria-label="Tag colour"]')?.value).toBe(kit.colors.accent)
+    expect(reopened.querySelector<HTMLInputElement>('[aria-label="Font"]')?.value).toBe(kit.fonts.body)
+    expect(useBroadcastStore.getState().ticker?.style).toEqual(style)
+
+    await saveAndApply(reopened)
+    expect(useBroadcastStore.getState().tickerStyle).toMatchObject({
+      color: kit.colors.text,
+      fontFamily: kit.fonts.body,
+      background: { color: kit.colors.primary },
+      labelColor: kit.colors.text,
+      labelBackground: kit.colors.accent,
+    })
+    expect(useBroadcastStore.getState().ticker?.style).toEqual(useBroadcastStore.getState().tickerStyle)
+  })
+
   it("does not change an active stage display while editing", async () => {
     const style = { ...DEFAULT_STAGE_STYLE }
     useBroadcastStore.setState({
