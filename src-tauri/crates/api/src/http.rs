@@ -2747,10 +2747,22 @@ async fn command_handler<S: CommandSink + 'static>(
             if entry.paused {
                 return (StatusCode::LOCKED, CommandResponse::refused(crate::keys::PAUSED_MESSAGE));
             }
+            // A retry of the same request asks once, not twice.
+            let fingerprint = command_fingerprint(&request.command, &entry.name, Some(entry.hash.as_str()), request.service.as_deref(), request.seen.as_ref(), request.why.as_deref());
+            if let Some(id) = request.id.as_deref() {
+                match state.recent.status(id, &fingerprint) {
+                    RecentIdStatus::Replay => return (StatusCode::ACCEPTED, Json(CommandResponse { success: true, note: Some("Already sent to the main desk to approve".into()), ..Default::default() })),
+                    RecentIdStatus::Conflict => return (StatusCode::CONFLICT, CommandResponse::refused("This command id was already used for a different request")),
+                    RecentIdStatus::New => {}
+                }
+            }
             let text = send.text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(120).collect::<String>();
             let payload = serde_json::json!({ "target": send.target, "text": text, "by": entry.name, "byId": entry.hash, "why": request.why }).to_string();
             return match state.sink.emit_event("remote:stage_send_request", &payload) {
                 Ok(()) => {
+                    if let Some(id) = request.id.as_deref() {
+                        state.recent.record(id, &fingerprint);
+                    }
                     log::info!("Stage message from {} for unassigned display {} sent to the main desk", entry.name, send.target);
                     (StatusCode::ACCEPTED, Json(CommandResponse { success: true, note: Some("Sent to the main desk to approve: this stage display is not assigned to this desk".into()), ..Default::default() }))
                 }
@@ -4027,9 +4039,12 @@ mod tests {
         let send = |target: &str| serde_json::json!({ "command": "stage_send", "value": { "text": "  Two   minutes ", "target": target } });
 
         assert_eq!(press(port, "stg", send("pulpit")).await.0, 200);
-        let (status, body) = press(port, "stg", send("choir")).await;
+        let mut ask = send("choir");
+        ask["id"] = "ask-choir-1".into();
+        let (status, body) = press(port, "stg", ask.clone()).await;
         assert_eq!(status, 202, "a stage display not assigned to this desk is asked of the main desk: {body}");
         assert!(body.contains("approve"), "{body}");
+        assert_eq!(press(port, "stg", ask).await.0, 202, "a retry is answered, not asked again");
         assert_eq!(press(port, "stg", send("main")).await.0, 403, "never a congregation screen");
         assert_eq!(press(port, "pres", send("main")).await.0, 403, "a presenter too: stage messages go only to stage displays");
         assert_eq!(press(port, "pres", send("gone")).await.0, 409, "a display the host no longer has");
