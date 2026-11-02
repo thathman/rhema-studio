@@ -7,6 +7,9 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { invoke } from "@tauri-apps/api/core"
 import { actingAs, useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useServiceStore } from "@/stores/service-store"
+import { useSongStore } from "@/stores/song-store"
+import { useWorshipSetStore, type WorshipSetChange } from "@/stores/worship-set-store"
 import { pushRemoteKeys, useSettingsStore } from "@/stores/settings-store"
 import { stepLiveSection } from "@/lib/desk-consoles"
 import { REMOTE_EVENTS, REMOTE_PAIR_CLOSED_EVENT, REMOTE_PAIRED_EVENT } from "@/lib/remote-events"
@@ -22,9 +25,8 @@ import { useNotices } from "@/stores/notices-store"
 import { OBS_REHEARSAL_REASON, useObsStore } from "@/stores/obs-store"
 import { queueRequest } from "@/lib/queue-request"
 import { receiveDeskScene } from "@/lib/desk-scenes"
-import { applyWorshipSet } from "@/lib/worship-set"
-import { reloadApprovalRequests } from "@/studio/permissions/approval-requests-store"
 import { asRemoteRole } from "@/lib/remote-roles"
+import { isSongItem } from "@/types"
 
 /** Every remote command lands in the service log, so "who pressed Next?" has an answer (QA-006). */
 /** A note in the service log that is not a remote command (a device paired). */
@@ -164,6 +166,43 @@ export function useRemoteControl() {
         const step = p.to === "chorus" ? "chorus" : p.step === 1 ? 1 : p.step === -1 ? -1 : 0
         if (step) void stepLiveSection(step).then((why) => { if (why) toast.warning("Section not changed", { description: `${byOf(p)}${why}` }) })
       })
+      // A Worship desk changes today's temporary song list; the saved Prepare order remains intact.
+      await withPayload(REMOTE_EVENTS.worship_set, (p) => {
+        const op = p.op
+        if ((op !== "move" && op !== "skip" && op !== "repeat" && op !== "insert") || typeof p.item !== "string") return
+        const change: WorshipSetChange = {
+          op,
+          item: p.item,
+          ...(typeof p.before === "string" ? { before: p.before } : {}),
+          ...(typeof p.song === "string" ? { song: p.song } : {}),
+        }
+        const queue = useQueueStore.getState().items.filter(isSongItem).slice(0, 30)
+        const songs = useSongStore.getState().songs
+        const base = queue.map((item) => {
+          const key = songs[item.song.song_id]?.song.key?.trim()
+          return { id: item.id, title: item.song.title || item.reference, ...(key ? { key: key.slice(0, 12) } : {}), ...(useBroadcastStore.getState().liveSlide?.itemId === item.id ? { live: true as const } : {}) }
+        })
+        const requestedSong = typeof p.song === "string" ? p.song.trim().toLocaleLowerCase() : null
+        const inserted = op === "insert" && requestedSong
+          ? Object.values(songs).find((song) => song.song.title.trim().toLocaleLowerCase() === requestedSong)
+          : undefined
+        if (op === "insert" && !inserted) {
+          toast.warning("Today's order not changed", { description: `${byOf(p)}That song is not in the host's library. Search the library and choose a song to add.` })
+          return
+        }
+        const libraryItem = inserted ? { id: inserted.song.id, title: inserted.song.title, ...(inserted.song.key?.trim() ? { key: inserted.song.key.trim().slice(0, 12) } : {}) } : undefined
+        const serviceId = useServiceStore.getState().current?.id ?? ""
+        const current = useWorshipSetStore.getState().forService(serviceId, base)
+        if (op === "skip" && current.find((item) => item.id === p.item)?.live) {
+          toast.warning("Song not skipped", { description: `${byOf(p)}The song on the screens cannot be skipped from today's order.` })
+          return
+        }
+        if (!useWorshipSetStore.getState().apply(serviceId, current, change, libraryItem)) {
+          toast.warning("Today's order not changed", { description: `${byOf(p)}The song or target is no longer in the temporary order. Refresh the Worship desk and try again.` })
+          return
+        }
+        useJournalStore.getState().add({ kind: "remote", label: `${byOf(p)}updated today's temporary song order` })
+      })
       // A verse or a song asked for, queued from a joined desk or a phone (Comms C2): into the run
       // of show for later, as the main desk's own Queue; nothing is shown.
       await withPayload(REMOTE_EVENTS.queue_request, (p) => {
@@ -234,29 +273,20 @@ export function useRemoteControl() {
       await withPayload(REMOTE_EVENTS.delete_scene, (p) => receiveDeskScene(p, true))
       // The stage message from a Stage desk: as the main desk's own box, stage screens only.
       await withPayload(REMOTE_EVENTS.stage_message, (p) => { if (typeof p.text === "string") useBroadcastStore.getState().setStageMessage(p.text.trim().slice(0, 120)) })
-      // A Stage desk's message for one stage display (#617; or the main desk approved it, #632): that display only.
-      await withPayload(REMOTE_EVENTS.stage_send, (p) => { if (typeof p.target === "string" && typeof p.text === "string") useBroadcastStore.getState().setStageMessageFor(p.target, p.text.trim().slice(0, 120)) })
-      // A Worship desk's change to today's song order (#623).
-      await withPayload(REMOTE_EVENTS.worship_set, (p) => {
-        void applyWorshipSet(p).then((why) => {
-          if (why) toast.warning("Song order not changed", { description: `${byOf(p)}${why}` })
-          else useJournalStore.getState().add({ kind: "remote", label: `${byOf(p)}${typeof p.op === "string" ? p.op : "changed"} in the song order` })
-        })
-      })
-      // Requests the main desk must decide: a Stage message for an unassigned display (#632), or one
-      // withdrawn by its desk (#612). The Approval Requests list reloads from the host.
-      for (const event of ["remote:stage_send_request", "remote:request_withdrawn"]) await withPayload(event, () => void reloadApprovalRequests())
-      // An automatic Timekeeper reminder (#631): a Comms notice from the host's clock to each destination.
-      await withPayload("timing:reminder", (p) => {
-        if (typeof p.text !== "string" || !Array.isArray(p.to)) return
-        const event = typeof p.eventId === "string" && typeof p.reference === "string" ? { id: p.eventId, title: p.reference } : null
-        for (const to of p.to.filter((t): t is string => typeof t === "string").slice(0, 8)) {
-          useNotices.getState().send({ from: "Timekeeper (automatic)", to: to.startsWith("role:") ? to.slice(5) : { name: to }, priority: p.urgent === true ? "urgent" : "normal", text: p.text.slice(0, 200), event })
+      // A targeted Stage message reaches one host output. No receiver acknowledgement is implied.
+      await withPayload(REMOTE_EVENTS.stage_send, (p) => {
+        if (typeof p.target !== "string" || typeof p.text !== "string") return
+        if (useBroadcastStore.getState().rehearsal) {
+          toast.warning("Stage message not sent", { description: "Stage displays are paused during rehearsal." })
+          return
         }
-      })
-      // The pinned recording's screen became a stage display (#622): the host stopped the recording.
-      await withPayload("recorder:output_left", (p) => {
-        toast.warning("Recording stopped", { description: `${typeof p.outputId === "string" ? p.outputId : "Its screen"} is no longer a congregation screen${p.stopped === false ? ", and the recording could not be closed cleanly" : ""}.` })
+        const output = useBroadcastStore.getState().outputs.find((candidate) => candidate.id === p.target && candidate.role === "stage")
+        if (!output || !useBroadcastStore.getState().setOutputStageMessage(output.id, p.text)) {
+          toast.warning("Stage message not sent", { description: "That Stage display is no longer available. Refresh the desk and choose an assigned display." })
+          return
+        }
+        useJournalStore.getState().add({ kind: "remote", label: `${byOf(p)}sent a private Stage message to ${output.name}` })
+        toast.info(`Message queued for ${output.name}`, { description: "The host updated that display's frame; receiver playback is not confirmed." })
       })
       // OBS from the OBS director's desk, on this computer's OBS connection; the OBS store refuses it in rehearsal.
       const obsScene = (p: Record<string, unknown>) => (typeof p.scene === "string" && useObsStore.getState().scenes.includes(p.scene) ? p.scene : null)

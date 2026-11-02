@@ -148,10 +148,10 @@ export function BibleConsole({ live }: { live: LiveStateV1 }) {
   )
 }
 
-interface HostSong { id: string; title: string; numbers: string[]; firstLine: string; hymn: boolean }
+export interface HostSong { id: string; title: string; numbers: string[]; firstLine: string; hymn: boolean }
 
 /** The host's songs and hymns (title, words or hymn number), each to Show or to the main desk's Preview. */
-export function SongLibrary({ onSend }: { onSend: (command: { command: string; value: string }) => void }) {
+export function SongLibrary({ onSend, onChooseSong, canChooseSong = true }: { onSend: (command: { command: string; value: string }) => void; onChooseSong?: (song: HostSong) => void; canChooseSong?: boolean }) {
   const ok = useCanSend()
   const [query, setQuery] = useState("")
   const [songs, setSongs] = useState<HostSong[] | null>(null)
@@ -176,10 +176,11 @@ export function SongLibrary({ onSend }: { onSend: (command: { command: string; v
       {songs && songs.length > 0 && (
         <ul aria-label="Songs found" className="flex max-h-56 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border">
           {songs.map((s) => (
-            <li key={s.id} className="flex items-center gap-2 px-2 py-1">
+            <li key={s.id} className="flex flex-wrap items-center gap-2 px-2 py-1">
               <span className="min-w-0 flex-1 truncate"><b>{s.title}</b>{s.numbers.length > 0 && <span className="text-muted-foreground"> · {s.numbers.join(", ")}</span>}{s.firstLine && <span className="text-muted-foreground"> · {s.firstLine}</span>}</span>
               <Button size="xs" disabled={!ok} onClick={() => onSend({ command: "song_show", value: s.title })}>Show</Button>
               <Button size="xs" variant="outline" disabled={!ok} title="Into the main desk's Preview only: nothing goes live" onClick={() => onSend({ command: "song_preview", value: s.title })}>Preview</Button>
+              {onChooseSong && <Button size="xs" variant="outline" disabled={!ok || !canChooseSong} title={canChooseSong ? "Add this library song to today's temporary Worship order" : "Add at least one song to today's order first"} onClick={() => onChooseSong(s)}>Add to today's order</Button>}
             </li>
           ))}
         </ul>

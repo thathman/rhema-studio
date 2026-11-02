@@ -251,3 +251,51 @@ export async function lookupOnHost<T>(asked: Record<string, unknown>): Promise<T
   const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
   return invoke<T>("join_lookup", { address, token, asked })
 }
+
+export type DeskApprovalState = "submitted" | "approved" | "declined" | "requested_changes" | "applied" | "expired" | "withdrawn" | "superseded"
+export interface DeskApprovalRequest {
+  id: string
+  kind: string
+  targetId: string
+  baseRevision: number | null
+  state: DeskApprovalState
+  reason: string | null
+  createdAt: string
+  expiresAt: string
+  decidedBy: string | null
+  decidedAt: string | null
+  decisionNote: string | null
+}
+
+const APPROVAL_STATES: readonly DeskApprovalState[] = ["submitted", "approved", "declined", "requested_changes", "applied", "expired", "withdrawn", "superseded"]
+
+function readDeskApprovalRequest(value: unknown): DeskApprovalRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("The host returned a malformed approval request.")
+  const row = value as Record<string, unknown>
+  if (typeof row.id !== "string" || typeof row.kind !== "string" || typeof row.targetId !== "string" || !APPROVAL_STATES.includes(row.state as DeskApprovalState)
+    || !(row.baseRevision === null || (typeof row.baseRevision === "number" && Number.isSafeInteger(row.baseRevision)))
+    || !(row.reason === null || typeof row.reason === "string")
+    || typeof row.createdAt !== "string" || typeof row.expiresAt !== "string"
+    || !(row.decidedBy === null || typeof row.decidedBy === "string")
+    || !(row.decidedAt === null || typeof row.decidedAt === "string")
+    || !(row.decisionNote === null || typeof row.decisionNote === "string")) {
+    throw new Error("The host returned a malformed approval request.")
+  }
+  return row as unknown as DeskApprovalRequest
+}
+
+/** The host returns only this paired desk's own request metadata, without the request payload. */
+export async function loadMyApprovalRequests(): Promise<DeskApprovalRequest[]> {
+  const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
+  const response = await invoke<{ requests: unknown[] }>("join_requests", { address, token })
+  if (!response || !Array.isArray(response.requests) || response.requests.length > 100) throw new Error("The host returned an invalid request list.")
+  return response.requests.map(readDeskApprovalRequest)
+}
+
+/** Withdraw a request only while it remains undecided on the host. */
+export async function withdrawMyApprovalRequest(id: string): Promise<DeskApprovalRequest> {
+  const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
+  const request = readDeskApprovalRequest(await invoke<unknown>("join_withdraw_request", { address, token, id }))
+  if (request.id !== id || request.state !== "withdrawn") throw new Error("The host did not confirm this request as withdrawn.")
+  return request
+}

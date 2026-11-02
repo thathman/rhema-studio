@@ -391,6 +391,55 @@ describe("settings store", () => {
     expect(useSettingsStore.getState().remoteDevices[0]?.outputScope).toEqual(["overflow", "sanctuary"])
   })
 
+  it("keeps Stage display grants separate from congregation and group Take scopes", async () => {
+    const { useSettingsStore } = await import("./settings-store")
+    const device = { hash: "device-hash", name: "Confidence tablet", paired_at: "2026-10-27T10:00:00Z", role: "viewer" as const, outputScope: ["sanctuary"] }
+    useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
+
+    await expect(useSettingsStore.getState().setRemoteDeviceRole(device.hash, "stage")).resolves.toBe(true)
+    expect(useSettingsStore.getState().remoteDevices[0]).toMatchObject({ role: "stage", outputScope: [] })
+    expect(useSettingsStore.getState().remoteDevices[0]?.groupTakeScope).toBeUndefined()
+    expect(mockRemoteInvoke).toHaveBeenLastCalledWith("remote_set_keys", {
+      shared: null,
+      devices: [{ hash: device.hash, name: device.name, role: "stage", paused: false, output_scope: [], group_take_scope: [], record: false }],
+      requireAuth: true,
+    })
+
+    await expect(useSettingsStore.getState().setRemoteDeviceOutputScope(device.hash, ["stage-west", "stage-east", "stage-west"])).resolves.toBe(true)
+    expect(useSettingsStore.getState().remoteDevices[0]?.outputScope).toEqual(["stage-east", "stage-west"])
+    expect(mockRemoteInvoke).toHaveBeenLastCalledWith("remote_set_keys", {
+      shared: null,
+      devices: [{ hash: device.hash, name: device.name, role: "stage", paused: false, output_scope: ["stage-east", "stage-west"], group_take_scope: [], record: false }],
+      requireAuth: true,
+    })
+  })
+
+  it("serializes fast output-scope checkbox changes against the latest acknowledged scope", async () => {
+    const { useSettingsStore } = await import("./settings-store")
+    const device = { hash: "device-hash", name: "Stage tablet", paired_at: "2026-10-27T10:00:00Z", role: "stage" as const, outputScope: [] as string[] }
+    useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
+    const acknowledge: (() => void)[] = []
+    mockRemoteInvoke.mockImplementation(() => new Promise<void>((resolve) => acknowledge.push(resolve)))
+
+    const east = useSettingsStore.getState().setRemoteDeviceOutputAccess(device.hash, "stage-east", true)
+    const west = useSettingsStore.getState().setRemoteDeviceOutputAccess(device.hash, "stage-west", true)
+    await Promise.resolve()
+    expect(mockRemoteInvoke).toHaveBeenCalledTimes(1)
+    acknowledge[0]!()
+    await expect(east).resolves.toBe(true)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(mockRemoteInvoke).toHaveBeenCalledTimes(2)
+    expect(mockRemoteInvoke).toHaveBeenLastCalledWith("remote_set_keys", {
+      shared: null,
+      devices: [{ hash: device.hash, name: device.name, role: "stage", paused: false, output_scope: ["stage-east", "stage-west"], group_take_scope: [], record: false }],
+      requireAuth: true,
+    })
+    acknowledge[1]!()
+    await expect(west).resolves.toBe(true)
+    expect(useSettingsStore.getState().remoteDevices[0]?.outputScope).toEqual(["stage-east", "stage-west"])
+  })
+
   it("keeps group Take grants separate, scoped to individual access, and host acknowledged", async () => {
     const { useSettingsStore } = await import("./settings-store")
     const device = { hash: "device-hash", name: "Screens tablet", paired_at: "2026-10-27T10:00:00Z", role: "screens" as const, outputScope: ["sanctuary", "overflow"] }

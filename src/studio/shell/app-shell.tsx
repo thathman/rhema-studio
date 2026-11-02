@@ -52,8 +52,10 @@ import { hydrateSceneApprovals, useSceneApprovalsStore } from "@/stores/scene-ap
 import { PermissionsWorkspace } from "@/studio/permissions/permissions-workspace"
 import { hydrateApprovalRequests, reloadApprovalRequests, resetApprovalRequests, useApprovalRequestsStore } from "@/studio/permissions/approval-requests-store"
 import { useJoin } from "@/stores/join-store"
+import { useNotices } from "@/stores/notices-store"
+import { automaticReminderNotices } from "@/lib/timekeeper-reminders"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
-import { REMOTE_EVENTS } from "@/lib/remote-events"
+import { REMOTE_EVENTS, REMOTE_REQUEST_WITHDRAWN_EVENT, REMOTE_STAGE_SEND_REQUEST_EVENT } from "@/lib/remote-events"
 
 /** What the top bar calls each page. */
 const TITLES: Record<Workspace, string> = { home: "Home", prepare: "Prepare", present: "Live", production: "Live", library: "Library", design: "Design", permissions: "Permissions", connections: "Connections", team: "Team", archive: "History", settings: "Settings", more: "More tools" }
@@ -114,6 +116,23 @@ export function AppShell() {
   }, [designRequest, go])
   // Host/Join: keep this computer's Live State current for the computers that join it.
   useEffect(() => startLiveStatePublisher(), [])
+  // Host-clock reminders enter the same private Comms stream as manually sent notices.
+  useEffect(() => {
+    let cancelled = false
+    let unlisten: UnlistenFn | undefined
+    void listen<unknown>("timing:reminder", ({ payload }) => {
+      for (const reminder of automaticReminderNotices(payload)) {
+        useNotices.getState().send({ from: "Automatic Timekeeper", fromId: "host", ...reminder })
+      }
+    }).then((off) => {
+      if (cancelled) off()
+      else unlisten = off
+    }).catch(() => {})
+    return () => {
+      cancelled = true
+      unlisten?.()
+    }
+  }, [])
   // Load durable host approvals before rendering their pending badge or accepting decisions.
   useEffect(() => { void hydrateSceneApprovals().catch((error) => toast.error("Saved approvals could not be loaded", { description: error instanceof Error ? error.message : String(error) })) }, [])
   // Host-backed requests power the Permissions badge. Joined desks never read or decide the host ledger.
@@ -128,13 +147,13 @@ export function AppShell() {
     const refreshOnRequest = (received: { payload: string }) => {
       if (cancelled) return
       try {
-        const payload = JSON.parse(received.payload) as { requestId?: unknown }
-        if (typeof payload.requestId === "string" && payload.requestId.trim()) void reloadApprovalRequests().catch(() => {})
+        const payload = JSON.parse(received.payload) as { requestId?: unknown; id?: unknown }
+        if ([payload.requestId, payload.id].some((id) => typeof id === "string" && id.trim())) void reloadApprovalRequests().catch(() => {})
       } catch {
         // Malformed scene events are handled by the scene listener; they cannot refresh or alter approvals.
       }
     }
-    void Promise.allSettled([REMOTE_EVENTS.save_scene, REMOTE_EVENTS.delete_scene].map((event) => listen<string>(event, refreshOnRequest))).then((results) => {
+    void Promise.allSettled([REMOTE_EVENTS.save_scene, REMOTE_EVENTS.delete_scene, REMOTE_REQUEST_WITHDRAWN_EVENT, REMOTE_STAGE_SEND_REQUEST_EVENT].map((event) => listen<string>(event, refreshOnRequest))).then((results) => {
       const listeners = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : [])
       if (cancelled) listeners.forEach((unlisten) => unlisten())
       else unlisteners.push(...listeners)

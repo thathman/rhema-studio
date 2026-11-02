@@ -31,7 +31,7 @@ export interface RemoteDevice {
   role?: RemoteRole
   /** The main desk has taken back control (#243): its commands wait; it still sees the service and talks. Absent = not paused. */
   paused?: boolean
-  /** Host-assigned congregation output IDs for individual Screens Takes; absent/empty denies Takes. */
+  /** Host-assigned congregation outputs for Screens, or stage displays for Stage; absent/empty denies targeted actions. */
   outputScope?: string[]
   /** Separate host grant for group Takes; always a subset of outputScope. */
   groupTakeScope?: string[]
@@ -347,7 +347,9 @@ export interface SettingsState {
   setRemoteDeviceRole: (hash: string, role: RemoteRole) => Promise<boolean>
   setRemoteDeviceRecorderGrant: (hash: string, enabled: boolean) => Promise<boolean>
   setRemoteDeviceOutputScope: (hash: string, outputScope: string[]) => Promise<boolean>
+  setRemoteDeviceOutputAccess: (hash: string, outputId: string, enabled: boolean) => Promise<boolean>
   setRemoteDeviceGroupTakeScope: (hash: string, groupTakeScope: string[]) => Promise<boolean>
+  setRemoteDeviceGroupTakeAccess: (hash: string, outputId: string, enabled: boolean) => Promise<boolean>
   /** Take back control from a paired desk (true) or give it back (false); see src/lib/desk-control.ts. */
   setRemoteDevicePaused: (hash: string, paused: boolean) => Promise<boolean>
   setOperatorName: (name: string) => void
@@ -489,9 +491,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const remoteDevices = s.remoteDevices.map((x) => {
       if (x.hash !== hash) return x
       const next = { ...x, role }
-      if (role === "screens") {
+      if (role === "screens" || role === "stage") {
         next.outputScope = []
-        next.groupTakeScope = []
+        if (role === "screens") next.groupTakeScope = []
+        else {
+          delete next.groupTakeScope
+        }
       } else {
         delete next.outputScope
         delete next.groupTakeScope
@@ -507,16 +512,46 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   }),
   setRemoteDeviceOutputScope: (hash, outputScope) => updateRemotePolicy((s) => {
     const device = s.remoteDevices.find((x) => x.hash === hash)
-    if (!device || device.role !== "screens") return null
+    if (!device || (device.role !== "screens" && device.role !== "stage")) return null
     const normalized = [...new Set(outputScope)].sort()
     if (JSON.stringify(device.outputScope ?? []) === JSON.stringify(normalized)) return {}
-    return { remoteDevices: s.remoteDevices.map((x) => x.hash === hash ? { ...x, outputScope: normalized, groupTakeScope: (x.groupTakeScope ?? []).filter((id) => normalized.includes(id)) } : x) }
+    return { remoteDevices: s.remoteDevices.map((x) => x.hash === hash ? {
+      ...x,
+      outputScope: normalized,
+      ...(x.role === "screens" ? { groupTakeScope: (x.groupTakeScope ?? []).filter((id) => normalized.includes(id)) } : {}),
+    } : x) }
+  }),
+  setRemoteDeviceOutputAccess: (hash, outputId, enabled) => updateRemotePolicy((s) => {
+    if (!outputId || outputId.trim() !== outputId) return null
+    const device = s.remoteDevices.find((x) => x.hash === hash)
+    if (!device || (device.role !== "screens" && device.role !== "stage")) return null
+    const scope = new Set(device.outputScope ?? [])
+    if (scope.has(outputId) === enabled) return {}
+    if (enabled) scope.add(outputId)
+    else scope.delete(outputId)
+    const normalized = [...scope].sort()
+    return { remoteDevices: s.remoteDevices.map((x) => x.hash === hash ? {
+      ...x,
+      outputScope: normalized,
+      ...(x.role === "screens" ? { groupTakeScope: (x.groupTakeScope ?? []).filter((id) => normalized.includes(id)) } : {}),
+    } : x) }
   }),
   setRemoteDeviceGroupTakeScope: (hash, groupTakeScope) => updateRemotePolicy((s) => {
     const device = s.remoteDevices.find((x) => x.hash === hash)
     if (!device || device.role !== "screens") return null
     const normalized = [...new Set(groupTakeScope.filter((id) => typeof id === "string" && (device.outputScope ?? []).includes(id)))].sort()
     if (JSON.stringify(device.groupTakeScope ?? []) === JSON.stringify(normalized)) return {}
+    return { remoteDevices: s.remoteDevices.map((x) => x.hash === hash ? { ...x, groupTakeScope: normalized } : x) }
+  }),
+  setRemoteDeviceGroupTakeAccess: (hash, outputId, enabled) => updateRemotePolicy((s) => {
+    if (!outputId || outputId.trim() !== outputId) return null
+    const device = s.remoteDevices.find((x) => x.hash === hash)
+    if (!device || device.role !== "screens" || !(device.outputScope ?? []).includes(outputId)) return null
+    const scope = new Set(device.groupTakeScope ?? [])
+    if (scope.has(outputId) === enabled) return {}
+    if (enabled) scope.add(outputId)
+    else scope.delete(outputId)
+    const normalized = [...scope].sort()
     return { remoteDevices: s.remoteDevices.map((x) => x.hash === hash ? { ...x, groupTakeScope: normalized } : x) }
   }),
   setRemoteDevicePaused: (hash, paused) => updateRemotePolicy((s) => {

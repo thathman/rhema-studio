@@ -11,7 +11,9 @@ import { presentQueueItem } from "@/lib/remote-actions"
 import { outputsForScreens, useBroadcastStore, type LiveSlide } from "@/stores/broadcast-store"
 import { useDetectionStore } from "@/stores/detection-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useServiceStore } from "@/stores/service-store"
 import { useSongStore } from "@/stores/song-store"
+import { useWorshipSetStore } from "@/stores/worship-set-store"
 import { takeSteps } from "@/lib/item-intent"
 import { projectRunOfShowEvents, type OutlineHeader } from "@/lib/run-of-show"
 import { isImageItem, isSlideItem, isSongItem, isVerseItem, type Program, type QueueItem, type SongQueueItem, type SongWithSections } from "@/types"
@@ -235,10 +237,12 @@ export function liveLyrics(): LiveLyrics | null {
 export function worshipSet(): WorshipSetItem[] {
   const songs = useSongStore.getState().songs
   const liveItem = useBroadcastStore.getState().liveSlide?.itemId
-  return useQueueStore.getState().items.filter(isSongItem).slice(0, 30).map((i) => {
+  const base = useQueueStore.getState().items.filter(isSongItem).slice(0, 30).map((i) => {
     const key = songs[i.song.song_id]?.song.key?.trim()
     return { id: i.id, title: i.song.title || i.reference, ...(key ? { key: key.slice(0, 12) } : {}), ...(i.id === liveItem && liveLyrics() ? { live: true as const } : {}) }
   })
+  const serviceId = useServiceStore.getState().current?.id ?? ""
+  return useWorshipSetStore.getState().forService(serviceId, base).slice(0, 30)
 }
 
 /**
@@ -315,6 +319,7 @@ export function watchDeskConsoles(soon: () => void): (() => void)[] {
     useSongStore.subscribe((s, p) => { if (s.songs !== p.songs) soon() }),
     useDetectionStore.subscribe((s, p) => { if (s.detections !== p.detections) soon() }),
     useSharedReadiness.subscribe(() => soon()),
+    useWorshipSetStore.subscribe((s, p) => { if (s.order !== p.order || s.serviceId !== p.serviceId) soon() }),
     // The screens' camera measures (every 2 s): published only when the map's words change.
     ...(() => {
       let last = JSON.stringify(outputMap())

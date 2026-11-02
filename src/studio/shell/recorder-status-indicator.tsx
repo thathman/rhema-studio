@@ -3,7 +3,8 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import { CircleAlertIcon, CircleDotIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useRecorderAlertStore } from "@/stores/recorder-alert-store"
+import { recorderOutputLeftMessage, useRecorderAlertStore } from "@/stores/recorder-alert-store"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useShellStore, type Workspace } from "@/studio/shell-store"
 
 type RecorderSummary = {
@@ -24,13 +25,15 @@ export function RecorderStatusIndicator({ workspace }: { workspace: Workspace })
   const eventSequence = useRef(0)
   const actionAlert = useRecorderAlertStore((state) => state.alerts.action)
   const statusAlert = useRecorderAlertStore((state) => state.alerts.status)
-  const alertMessage = actionAlert ?? statusAlert
-  const alertScope = actionAlert ? "action" : statusAlert ? "status" : null
+  const safetyAlert = useRecorderAlertStore((state) => state.alerts.safety)
+  const alertMessage = safetyAlert ?? actionAlert ?? statusAlert
+  const alertScope = safetyAlert ? "safety" : actionAlert ? "action" : statusAlert ? "status" : null
 
   useEffect(() => {
     let cancelled = false
     let eventReceived = false
     let unlisten: (() => void) | undefined
+    let unlistenOutputLeft: (() => void) | undefined
     const initialSequence = eventSequence.current
     const listening = listen<RecorderSummary>("recorder:status", (event) => {
       eventReceived = true
@@ -48,6 +51,15 @@ export function RecorderStatusIndicator({ workspace }: { workspace: Workspace })
     }).catch(() => {
       if (!cancelled) setEventsConnected(false)
     })
+    const outputLeftListening = listen<{ outputId?: unknown; stopped?: unknown }>("recorder:output_left", (event) => {
+      const outputId = event.payload?.outputId
+      if (typeof outputId !== "string" || !outputId.trim()) return
+      const outputName = useBroadcastStore.getState().outputs.find((output) => output.id === outputId)?.name ?? outputId
+      useRecorderAlertStore.getState().report("safety", recorderOutputLeftMessage({ outputId, stopped: event.payload.stopped === true }, outputName))
+    }).then((stop) => {
+      if (cancelled) stop()
+      else unlistenOutputLeft = stop
+    }).catch(() => {})
     void invoke<RecorderSummary>("recorder_status").then((next) => {
       if (!cancelled && !eventReceived && eventSequence.current === initialSequence) {
         setStatus(next)
@@ -59,7 +71,9 @@ export function RecorderStatusIndicator({ workspace }: { workspace: Workspace })
     return () => {
       cancelled = true
       unlisten?.()
+      unlistenOutputLeft?.()
       void listening
+      void outputLeftListening
     }
   }, [])
 

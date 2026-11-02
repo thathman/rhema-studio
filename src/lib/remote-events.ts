@@ -66,5 +66,8 @@ export const REMOTE_EVENTS = {
 export const REMOTE_PAIRED_EVENT = "remote:paired"
 /** Emitted when the pairing window closes for any reason. */
 export const REMOTE_PAIR_CLOSED_EVENT = "remote:pair_closed"
+/** A paired desk withdrew its own host approval request. */
+export const REMOTE_REQUEST_WITHDRAWN_EVENT = "remote:request_withdrawn"
+export const REMOTE_STAGE_SEND_REQUEST_EVENT = "remote:stage_send_request"
 
 export type RemoteEventName = (typeof REMOTE_EVENTS)[keyof typeof REMOTE_EVENTS]

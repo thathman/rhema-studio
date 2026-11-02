@@ -1,6 +1,18 @@
 import { create } from "zustand"
 
-export type RecorderAlertScope = "action" | "status"
+export type RecorderAlertScope = "action" | "status" | "safety"
+
+export interface RecorderOutputLeftPayload {
+  outputId: string
+  stopped: boolean
+}
+
+export function recorderOutputLeftMessage(payload: RecorderOutputLeftPayload, outputName = payload.outputId): string {
+  if (payload.stopped) {
+    return `Recording stopped automatically because ${outputName} is no longer a congregation screen. Review the saved recording in History.`
+  }
+  return `Rhema could not confirm the recording stopped after ${outputName} stopped being a congregation screen. Open Live and stop recording before private content can appear.`
+}
 
 interface RecorderAlertStore {
   alerts: Record<RecorderAlertScope, string | null>
@@ -12,6 +24,7 @@ interface RecorderAlertStore {
 const EMPTY_ALERTS: Record<RecorderAlertScope, string | null> = {
   action: null,
   status: null,
+  safety: null,
 }
 
 /** Ephemeral notices that must survive navigation away from the Live recorder dock. */

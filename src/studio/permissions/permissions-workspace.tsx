@@ -11,6 +11,7 @@ import { useSceneApprovalsStore, hydrateSceneApprovals, reloadSceneApprovals, ty
 import { useSettingsStore } from "@/stores/settings-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { ApprovalRequestsPanel } from "./approval-requests-panel"
+import { MyApprovalRequests } from "./my-approval-requests"
 
 const dateWords = (at: number) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
 
@@ -24,6 +25,7 @@ export function PermissionsWorkspace() {
   const remoteDevices = useSettingsStore((s) => s.remoteDevices)
   const outputs = useBroadcastStore((s) => s.outputs)
   const congregationOutputs = outputs.filter((output) => (output.role ?? "congregation") === "congregation")
+  const stageOutputs = outputs.filter((output) => output.role === "stage")
   const [busy, setBusy] = useState<string | null>(null)
   const [busyRecorderGrant, setBusyRecorderGrant] = useState<string | null>(null)
   const [reloading, setReloading] = useState(false)
@@ -164,11 +166,25 @@ export function PermissionsWorkspace() {
                           aria-label={`${output.name} output access for ${device.name}`}
                           disabled={!isHost}
                           checked={device.outputScope?.includes(output.id) ?? false}
-                          onChange={(event) => {
-                            const current = device.outputScope ?? []
-                            const next = event.target.checked ? [...current, output.id] : current.filter((id) => id !== output.id)
-                            void useSettingsStore.getState().setRemoteDeviceOutputScope(device.hash, next)
-                          }}
+                          onChange={(event) => void useSettingsStore.getState().setRemoteDeviceOutputAccess(device.hash, output.id, event.currentTarget.checked)}
+                        />
+                        <span>{output.name}</span>
+                      </label>)}</div>}
+                  </fieldset>}
+                  {device.role === "stage" && <fieldset className="w-full rounded-md border border-border p-3">
+                    <legend className="px-1 text-xs font-semibold">Assigned Stage displays</legend>
+                    {device.outputScope === undefined || device.outputScope.length === 0
+                      ? <p role="status" className="mb-2 text-xs text-confidence-mid">No Stage display is assigned; targeted messages stay blocked until the host assigns one.</p>
+                      : <p className="mb-2 text-xs text-muted-foreground">This Stage desk can send a private message to one assigned display at a time. The congregation never sees these messages.</p>}
+                    {stageOutputs.length === 0
+                      ? <p className="text-xs text-muted-foreground">No Stage displays are configured on this host.</p>
+                      : <div className="flex flex-wrap gap-x-4 gap-y-2">{stageOutputs.map((output) => <label key={output.id} className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          aria-label={`${output.name} Stage access for ${device.name}`}
+                          disabled={!isHost}
+                          checked={device.outputScope?.includes(output.id) ?? false}
+                          onChange={(event) => void useSettingsStore.getState().setRemoteDeviceOutputAccess(device.hash, output.id, event.currentTarget.checked)}
                         />
                         <span>{output.name}</span>
                       </label>)}</div>}
@@ -184,11 +200,7 @@ export function PermissionsWorkspace() {
                           aria-label={`${output.name} group Take access for ${device.name}`}
                           disabled={!isHost}
                           checked={device.groupTakeScope?.includes(output.id) ?? false}
-                          onChange={(event) => {
-                            const current = device.groupTakeScope ?? []
-                            const next = event.target.checked ? [...current, output.id] : current.filter((id) => id !== output.id)
-                            void useSettingsStore.getState().setRemoteDeviceGroupTakeScope(device.hash, next)
-                          }}
+                          onChange={(event) => void useSettingsStore.getState().setRemoteDeviceGroupTakeAccess(device.hash, output.id, event.currentTarget.checked)}
                         />
                         <span>{output.name}</span>
                       </label>)}</div>}
@@ -210,7 +222,9 @@ export function PermissionsWorkspace() {
             </details>
           </div>
         </section>
-        : <section aria-labelledby="your-access-title" className="rounded-lg border border-border bg-card shadow-panel">
+        : <>
+          <MyApprovalRequests />
+          <section aria-labelledby="your-access-title" className="rounded-lg border border-border bg-card shadow-panel">
           <header className="flex items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
             <ShieldCheckIcon aria-hidden className="size-4 text-muted-foreground" />
             <div><h2 id="your-access-title" className="font-semibold">Your access</h2><p className="text-xs text-muted-foreground">This view shows only the access the host assigned to this desk. Other paired-device names and grants are private to the main host.</p></div>
@@ -218,11 +232,12 @@ export function PermissionsWorkspace() {
           <dl className="grid gap-3 p-4 sm:grid-cols-2">
             <div><dt className="text-xs font-semibold text-muted-foreground">This desk</dt><dd className="mt-1 text-sm">{joinedMe?.name ?? "Waiting for host confirmation"}</dd></div>
             <div><dt className="text-xs font-semibold text-muted-foreground">Role</dt><dd className="mt-1 text-sm">{joinedMe ? roleLabel(joinedMe.role) : "Not confirmed by the host"}</dd></div>
-            <div><dt className="text-xs font-semibold text-muted-foreground">Individual congregation outputs</dt><dd className="mt-1 text-sm">{joinedMe?.outputScope === undefined ? "Not shared in this view" : joinedMe.outputScope.length === 0 ? "None assigned" : `${joinedMe.outputScope.length} assigned`}</dd></div>
+            <div><dt className="text-xs font-semibold text-muted-foreground">{joinedMe?.role === "stage" ? "Assigned Stage displays" : "Individual congregation outputs"}</dt><dd className="mt-1 text-sm">{joinedMe?.outputScope === undefined ? "Not shared in this view" : joinedMe.outputScope.length === 0 ? "None assigned" : `${joinedMe.outputScope.length} assigned`}</dd></div>
             <div><dt className="text-xs font-semibold text-muted-foreground">Group Take outputs</dt><dd className="mt-1 text-sm">{joinedMe?.groupTakeScope === undefined ? "Not shared in this view" : joinedMe.groupTakeScope.length === 0 ? "None assigned" : `${joinedMe.groupTakeScope.length} assigned`}</dd></div>
             <div className="sm:col-span-2"><dt className="text-xs font-semibold text-muted-foreground">Rhema Recorder</dt><dd className="mt-1 text-sm text-muted-foreground">The Recorder grant is separate from your role and is managed by the main host. This joined view does not expose the host’s paired-device list.</dd></div>
           </dl>
-        </section>}
+          </section>
+        </>}
       </div>
     </div>
   )

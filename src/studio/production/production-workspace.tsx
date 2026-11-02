@@ -60,6 +60,7 @@ import { runOfShowClockRows } from "@/lib/run-of-show"
 import { eventTimes } from "@/lib/journal"
 import { countdownLine, countdownTarget } from "@/lib/countdown"
 import { CountdownSelect } from "@/studio/production/countdown-select"
+import { AutomaticReminders } from "@/studio/production/automatic-reminders"
 
 type Tab = ProductionTab
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
@@ -227,6 +228,7 @@ function Timekeeper({ embedded = false }: { embedded?: boolean }) {
         {embedded && <p className="text-xs text-muted-foreground">These countdowns run separately from the service clock. Manage them here; the main service timer stays in Live’s top bar.</p>}
         <AuxTimersPanel />
       </Card>
+      <AutomaticReminders />
     </div>
   )
 }

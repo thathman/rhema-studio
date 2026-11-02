@@ -112,11 +112,47 @@ describe("each specialist desk sees only its part", () => {
     expect(sent).toEqual([{ command: "song_show", value: "Great Is Thy Faithfulness" }, { command: "clear_source", value: "song" }])
   })
 
+  it("Worship changes the temporary order through the host, without changing the saved plan", async () => {
+    const state: LiveStateV1 = {
+      ...live,
+      service: { id: "service-1", title: "Sunday" },
+      worshipSet: [{ id: "a", title: "Alpha" }, { id: "b", title: "Beta", live: true }, { id: "c", title: "Gamma" }],
+    }
+    const el = await render("worship", state)
+    await click(button(el, "Move Gamma earlier"))
+    expect(sent[0]).toMatchObject({ command: "worship_set", value: { op: "move", item: "c", before: "b" } })
+    expect(el.textContent).toContain("not saved to Prepare")
+    expect(el.textContent).toContain("On the screens")
+    expect(button(el, "Skip Beta today").disabled).toBe(true)
+    await click(button(el, "Repeat Beta today"))
+    expect(sent).toContainEqual({ command: "worship_set", value: { op: "repeat", item: "b" } })
+  })
+
   it("a stage desk sends the stage message", async () => {
     const el = await render("stage")
     await type(el.querySelector<HTMLInputElement>('[aria-label="Message to stage"]')!, "Wrap up")
     await click(button(el, "Send"))
     expect(sent).toEqual([{ command: "stage_message", value: "Wrap up" }])
+  })
+
+  it("a Stage desk can send privately only to one assigned display", async () => {
+    const state: LiveStateV1 = {
+      ...live,
+      outputs: [
+        ...live.outputs.filter((output) => output.id === "main"),
+        { id: "stage-east", name: "Stage East", role: "stage", sceneId: null },
+      ],
+    }
+    const el = await render("stage", state)
+    expect(el.textContent).toContain("Stage East")
+    expect(el.textContent).not.toContain("Projector")
+    await type(el.querySelector<HTMLSelectElement>('[aria-label="Stage display for private message"]')!, "stage-east")
+    await type(el.querySelector<HTMLInputElement>('[aria-label="Private message text"]')!, "Choir enters now")
+    await click(button(el, "Send privately"))
+    expect(sent).toContainEqual({ command: "stage_send", value: { target: "stage-east", text: "Choir enters now" } })
+    expect(sent).not.toContainEqual({ command: "stage_message", value: "Choir enters now" })
+    await click(button(el, "Clear private message from Stage East"))
+    expect(sent).toContainEqual({ command: "stage_send", value: { target: "stage-east", text: "" } })
   })
 
   it("shows the host service clock read only and does not claim the Stage display received a cue", async () => {

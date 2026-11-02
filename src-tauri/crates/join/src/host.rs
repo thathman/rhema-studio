@@ -166,6 +166,44 @@ pub async fn lookup(host: &Host, token: &str, asked: &serde_json::Value) -> Resu
     Err(v.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from))
 }
 
+/// Read only this paired desk's durable approval requests from the host.
+pub async fn requests(host: &Host, token: &str) -> Result<serde_json::Value, String> {
+    let r = host.client(Some(Duration::from_secs(8)))?.get(host.url("/api/v1/requests")).header("X-Rhema-Key", token).send().await.map_err(|e| host.unreachable(&e))?;
+    let status = r.status().as_u16();
+    let body = r.json::<serde_json::Value>().await.unwrap_or_default();
+    if (200..300).contains(&status) {
+        if body.get("requests").and_then(serde_json::Value::as_array).is_some() { return Ok(body); }
+        return Err("The host returned an invalid request list.".into());
+    }
+    let why = body.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from);
+    Err(match status {
+        401 => "The host no longer knows this computer: pair again".into(),
+        404 => "The host is an older Rhema Studio that does not share approval request status: update it".into(),
+        423 => format!("paused: {why}"),
+        _ => why,
+    })
+}
+
+/// Withdraw one of this desk's own undecided requests. The host remains authoritative.
+pub async fn withdraw_request(host: &Host, token: &str, id: &str) -> Result<serde_json::Value, String> {
+    if id.is_empty() || id.len() > 128 || !id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')) {
+        return Err("That request ID is not valid. Refresh the request list.".into());
+    }
+    let path = format!("/api/v1/requests/{id}/withdraw");
+    let r = host.client(Some(Duration::from_secs(8)))?.post(host.url(&path)).header("X-Rhema-Key", token).json(&serde_json::json!({})).send().await.map_err(|e| host.unreachable(&e))?;
+    let status = r.status().as_u16();
+    let body = r.json::<serde_json::Value>().await.unwrap_or_default();
+    if (200..300).contains(&status) { return Ok(body); }
+    let why = body.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from);
+    Err(match status {
+        401 => "The host no longer knows this computer: pair again".into(),
+        404 => "The host no longer has that request. Refresh the list.".into(),
+        409 => format!("stale: {why}"),
+        423 => format!("paused: {why}"),
+        _ => why,
+    })
+}
+
 /// An OBS companion's tally to its host: the cameras on its OBS program and preview, and those its
 /// OBS plays, for the host's Production → Cameras.
 pub async fn tally(host: &Host, token: &str, tally: &serde_json::Value) -> Result<(), String> {
@@ -423,6 +461,23 @@ pub(crate) mod tests {
         let host = Host::plain(&address).unwrap();
         assert_eq!(cameras(&host, "k").await.unwrap_err(), "paused: The main desk has taken back control");
         assert!(me(&host, "k").await.unwrap_err().contains("pair again"));
+    }
+
+    #[tokio::test]
+    async fn approval_requests_are_read_and_withdrawn_only_through_the_host_api() {
+        let address = pretend_host(|path| match path {
+            "/api/v1/requests" => (200, r#"{"requests":[{"id":"request-1","state":"submitted"}]}"#.into()),
+            "/api/v1/requests/request-1/withdraw" => (200, r#"{"id":"request-1","state":"withdrawn"}"#.into()),
+            "/api/v1/requests/decided/withdraw" => (409, r#"{"error":"Only the person who sent a request can withdraw it, and only before it is decided."}"#.into()),
+            "/api/v1/requests/missing/withdraw" => (404, r#"{"error":"No such request"}"#.into()),
+            _ => (401, "{}".into()),
+        }).await;
+        let host = Host::plain(&address).unwrap();
+        assert_eq!(requests(&host, "k").await.unwrap()["requests"][0]["state"], "submitted");
+        assert_eq!(withdraw_request(&host, "k", "request-1").await.unwrap()["state"], "withdrawn");
+        assert!(withdraw_request(&host, "k", "decided").await.unwrap_err().starts_with("stale:"));
+        assert!(withdraw_request(&host, "k", "missing").await.unwrap_err().contains("no longer has that request"));
+        assert!(withdraw_request(&host, "k", "../pair").await.unwrap_err().contains("not valid"));
     }
 
     #[tokio::test]

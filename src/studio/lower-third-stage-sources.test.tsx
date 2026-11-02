@@ -47,7 +47,7 @@ beforeEach(() => {
   useTimerStore.getState().reset()
   useBroadcastStore.setState({
     isLive: false, liveVerse: null, liveItemId: null, heldLive: null, cleared: false, rehearsal: false, rehearsalReturn: null,
-    sources: {}, stateSources: {}, scenes: [], sceneTakes: {}, ticker: null, lowerThird: null, stageMessage: "",
+    sources: {}, stateSources: {}, scenes: [], sceneTakes: {}, ticker: null, lowerThird: null, stageMessage: "", stageMessagesByOutput: {},
     outputs: [out({ id: MAIN_OUTPUT_ID, type: "display" })],
   })
   useSettingsStore.setState({ operatorName: "Tolu", cameras: [] })
@@ -117,6 +117,34 @@ describe("the lower third as a live source", () => {
 })
 
 describe("the stage message as a live source", () => {
+  it("sends a private message to one Stage output without changing the shared message", () => {
+    useBroadcastStore.setState({ outputs: [...useBroadcastStore.getState().outputs, out({ id: "stage-east", type: "display", role: "stage" }), out({ id: "stage-west", type: "display", role: "stage" })] })
+    useBroadcastStore.getState().setStageMessage("Shared cue")
+    expect(useBroadcastStore.getState().setOutputStageMessage("stage-east", "  Two   minutes ")).toBe(true)
+    expect(last("stage-east")?.stage?.message).toBe("Two minutes")
+    expect(last("stage-west")?.stage?.message).toBe("Shared cue")
+    expect(useBroadcastStore.getState().stageMessage).toBe("Shared cue")
+    expect(useBroadcastStore.getState().setOutputStageMessage("stage-east", "")).toBe(true)
+    expect(useBroadcastStore.getState().stageMessagesByOutput).toEqual({})
+    expect(last("stage-east")?.stage?.message).toBe("Shared cue")
+    expect(useBroadcastStore.getState().setOutputStageMessage("main", "Not a Stage output")).toBe(false)
+    useBroadcastStore.getState().setStageMessage("Updated shared cue")
+    expect(last("stage-east")?.stage?.message).toBe("Updated shared cue")
+    expect(last("stage-west")?.stage?.message).toBe("Updated shared cue")
+  })
+
+  it("shares Stage display names with the host but not unrelated signage outputs", () => {
+    useBroadcastStore.setState({ outputs: [
+      ...useBroadcastStore.getState().outputs,
+      out({ id: "stage-east", type: "display", role: "stage" }),
+      out({ id: "lobby", type: "display", role: "signage" }),
+    ] })
+    expect(buildLiveState().outputs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "stage-east", role: "stage", name: "stage-east" }),
+    ]))
+    expect(buildLiveState().outputs.some((output) => output.id === "lobby")).toBe(false)
+  })
+
   it("sent, cleared and restored from Sources, with who; only the stage screens get it", () => {
     useBroadcastStore.setState({ outputs: [...useBroadcastStore.getState().outputs, out({ id: "stage", type: "display", role: "stage" })] })
     const b = useBroadcastStore.getState()
@@ -153,6 +181,26 @@ describe("the stage message as a live source", () => {
     await act(async () => handlers.get("remote:restore_source")!({ payload: JSON.stringify({ id: "stage", by: "Femi's laptop" }) }))
     s = useBroadcastStore.getState()
     expect(s.stageMessage).toBe("2 minutes left")
+    root.unmount()
+  })
+
+  it("routes a Stage desk's private message to its assigned output, and holds it during rehearsal", async () => {
+    useBroadcastStore.setState({ outputs: [...useBroadcastStore.getState().outputs, out({ id: "stage-east", type: "display", role: "stage" })] })
+    useBroadcastStore.getState().setStageMessage("Shared cue")
+    function Host() { useRemoteControl(); return null }
+    const root = createRoot(document.createElement("div"))
+    await act(async () => root.render(<Host />))
+    await act(async () => handlers.get("remote:stage_send")!({ payload: JSON.stringify({ target: "stage-east", text: "Choir enters now", by: "Stage desk" }) }))
+    expect(last("stage-east")?.stage?.message).toBe("Choir enters now")
+    expect(useBroadcastStore.getState().stageMessage).toBe("Shared cue")
+    expect(entries().at(-1)?.label).toContain("Stage desk: sent a private Stage message to stage-east")
+    await act(async () => handlers.get("remote:stage_send")!({ payload: JSON.stringify({ target: "stage-east", text: "", by: "Stage desk" }) }))
+    expect(last("stage-east")?.stage?.message).toBe("Shared cue")
+    expect(useBroadcastStore.getState().stageMessagesByOutput).toEqual({})
+
+    useBroadcastStore.getState().setRehearsal(true)
+    await act(async () => handlers.get("remote:stage_send")!({ payload: JSON.stringify({ target: "stage-east", text: "Private rehearsal cue", by: "Stage desk" }) }))
+    expect(last("stage-east")?.stage?.message).toBe("Shared cue")
     root.unmount()
   })
 })
