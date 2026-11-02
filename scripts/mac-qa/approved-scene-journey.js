@@ -458,12 +458,14 @@ async function runScenario() {
 
     stage = "Take the approved pinned design version"
     await clickButton("Take live")
-    const designSceneId = `design-${designDocument.id}-v1`
     await waitFor(() => {
       const state = qa.broadcast.getState()
       return state.liveItemId === designedItem.id
         && state.outputs.filter((candidate) => (candidate.role ?? "congregation") === "congregation")
-          .every((candidate) => candidate.sceneId === designSceneId && candidate.sceneSnapshot?.background === "#123456")
+          .every((candidate) => candidate.sceneId === pinnedSceneId
+            && candidate.sceneSnapshot?.design?.id === designDocument.id
+            && candidate.sceneSnapshot?.design?.version === 1
+            && candidate.sceneSnapshot?.background === "#123456")
     }, "approved Design version 1 on congregation outputs")
     const afterDesignedTake = qa.broadcast.getState()
     const mainAfterDesigned = sceneState(qa.broadcast, "main")
@@ -471,8 +473,12 @@ async function runScenario() {
     if (!afterDesignedTake.isLive || afterDesignedTake.liveItemId !== designedItem.id) {
       throw new Error("Taking the pinned design did not activate its content")
     }
-    if (mainAfterDesigned.sceneId !== designSceneId || secondaryAfterDesigned.sceneId !== designSceneId) {
+    if (mainAfterDesigned.sceneId !== pinnedSceneId || secondaryAfterDesigned.sceneId !== pinnedSceneId) {
       throw new Error("The pinned design did not reach every configured congregation output")
+    }
+    if (mainAfterDesigned.sceneSnapshot?.design?.id !== designDocument.id || mainAfterDesigned.sceneSnapshot.design.version !== 1
+      || secondaryAfterDesigned.sceneSnapshot?.design?.id !== designDocument.id || secondaryAfterDesigned.sceneSnapshot.design.version !== 1) {
+      throw new Error("The output did not retain the exact approved Design identity and version")
     }
     if (mainAfterDesigned.sceneSnapshot?.background !== "#123456" || secondaryAfterDesigned.sceneSnapshot?.background !== "#123456") {
       throw new Error("Taking version 1 used the newer draft/version 2 design content")
@@ -519,7 +525,7 @@ async function runScenario() {
       design: { id: designDocument.id, title: designDocument.title, takenVersion: 1, newerVersion: 2 },
       service: { id: serviceAtApproval.current.id, title: serviceAtApproval.current.title, revision: approvalRevision },
       manualScene: { id: sceneId, name: approvedManualScene.name, background: approvedManualScene.background },
-      pinnedMoment: { itemId: designedItem.id, designId: designDocument.id, version: 1, sceneId: designSceneId },
+      pinnedMoment: { itemId: designedItem.id, designId: designDocument.id, version: 1, sceneId: pinnedSceneId },
       beforePreview: { main: mainBefore, secondary: secondaryBefore },
       afterManualTake: { main: mainAfterManual, secondary: secondaryAfterManual },
       afterDesignedTake: { main: mainAfterDesigned, secondary: secondaryAfterDesigned },
