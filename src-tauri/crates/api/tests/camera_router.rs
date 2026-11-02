@@ -49,6 +49,11 @@ impl Drop for Router {
 /// The users as `config_yaml` writes them (camera_router.rs): nothing reads without a sign-in but
 /// this computer, the relay reads for those Rhema checked.
 fn start_router(dir: &std::path::Path, program: &std::path::Path, api: u16, webrtc: u16, rtsp: u16, udp: u16) -> Router {
+    let config = router_config(dir, api, webrtc, rtsp, udp);
+    Router(Command::new(program).arg(&config).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().expect("the router starts"))
+}
+
+fn router_config(dir: &std::path::Path, api: u16, webrtc: u16, rtsp: u16, udp: u16) -> PathBuf {
     let yaml = format!(
         r#"logLevel: warn
 logDestinations: [stdout]
@@ -101,7 +106,41 @@ paths:
     );
     let config = dir.join("mediamtx.yml");
     std::fs::write(&config, yaml).unwrap();
-    Router(Command::new(program).arg(&config).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().expect("the router starts"))
+    config
+}
+
+/// A router whose starter has already exited, as after Rhema was force-stopped: its parent is gone.
+#[cfg(unix)]
+fn orphan_router(program: &std::path::Path, config: &std::path::Path) -> u32 {
+    let out = Command::new("sh").args(["-c", r#""$0" "$1" >/dev/null 2>&1 & echo $!"#]).arg(program).arg(config).output().unwrap();
+    String::from_utf8(out.stdout).unwrap().trim().parse().unwrap()
+}
+
+/// Ends a router started with `orphan_router` when the test ends, however it ends.
+#[cfg(unix)]
+struct Orphan(u32);
+
+#[cfg(unix)]
+impl Drop for Orphan {
+    fn drop(&mut self) {
+        let _ = Command::new("kill").arg(self.0.to_string()).status();
+    }
+}
+
+#[cfg(unix)]
+fn alive(pid: u32) -> bool {
+    Command::new("kill").args(["-0", &pid.to_string()]).stderr(Stdio::null()).status().is_ok_and(|s| s.success())
+}
+
+fn answers(port: u16) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    false
 }
 
 fn base64(input: &[u8]) -> String {
@@ -429,4 +468,38 @@ async fn one_reader_is_cut_off_and_the_others_at_its_address_keep_playing() {
     let _ = camera.join();
     let mut h = handle;
     h.stop();
+}
+
+/// #597: Rhema was force-stopped and its router lived on, holding the ports. The next start closes
+/// that one, and only that one: another MediaMTX on the computer, left over too but not Rhema's,
+/// keeps running. Then a new router starts on the same ports.
+#[cfg(unix)]
+#[test]
+fn a_router_left_by_a_stopped_rhema_is_closed_and_no_other() {
+    let Some(program) = router_program() else {
+        assert!(std::env::var_os("RHEMA_REQUIRE_ROUTER").is_none(), "RHEMA_REQUIRE_ROUTER is set but the router program was not found");
+        eprintln!("no camera router program: skipped");
+        return;
+    };
+    let (ours_dir, other_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (api, webrtc, rtsp, udp) = (free_tcp(), free_tcp(), free_tcp(), free_udp());
+    let config = router_config(ours_dir.path(), api, webrtc, rtsp, udp);
+    let other_api = free_tcp();
+    let other = Orphan(orphan_router(&program, &router_config(other_dir.path(), other_api, free_tcp(), free_tcp(), free_udp())));
+    let left = Orphan(orphan_router(&program, &config));
+    assert!(answers(api) && answers(other_api), "both routers run");
+    // A child of a running program (this test) is someone's, so it is not touched either.
+    let child_dir = tempfile::tempdir().unwrap();
+    let child = start_router(child_dir.path(), &program, free_tcp(), free_tcp(), free_tcp(), free_udp());
+
+    let started = Instant::now();
+    assert_eq!(rhema_api::orphan::end_orphaned_routers(&program, &config), vec![left.0]);
+    eprintln!("closed the left-over router in {} ms", started.elapsed().as_millis());
+    assert!(!alive(left.0), "Rhema's left-over router is closed");
+    assert!(alive(other.0) && answers(other_api), "the other MediaMTX keeps running");
+    assert!(alive(child.0.id()));
+    assert!(rhema_api::orphan::end_orphaned_routers(&program, &config).is_empty(), "nothing left the second time");
+
+    let _fresh = start_router(ours_dir.path(), &program, api, webrtc, rtsp, udp);
+    assert!(answers(api), "a new router starts on the same ports");
 }
