@@ -333,7 +333,7 @@ function LiveConsoleSurface({
       </section>
       {/* On a wide window these sit in the grid itself; on a narrow one they remain full-size and stack
           in a column that scrolls when it must, so Preview and Program are both inspectable. */}
-      <div className="contents max-[1200px]:row-span-3 max-[1200px]:flex max-[1200px]:min-h-0 max-[1200px]:flex-col max-[1200px]:gap-2 max-[1200px]:overflow-y-auto">
+      <div className="contents max-[1200px]:row-span-3 max-[1200px]:flex max-[1200px]:min-h-0 max-[1200px]:flex-col max-[1200px]:gap-2 max-[1200px]:overflow-y-auto max-[1200px]:pb-40">
         <div className="min-h-0 overflow-hidden rounded-xl max-[1200px]:min-h-[18rem] max-[1200px]:shrink-0 [&>div]:h-full">
           <PreviewPanel outputLanguageId={previewOutputId} onOutputLanguageIdChange={onPreviewOutputChange} />
         </div>

@@ -205,6 +205,7 @@ describe("Present's unified Live console", () => {
     const transport = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Presentation controls"]')!
     expect(transport.className).toContain("max-[1200px]:sticky")
     expect(transport.className).toContain("max-[1200px]:bottom-0")
+    expect(transport.parentElement?.className).toContain("max-[1200px]:pb-40")
   })
 
   it("keeps a zero-moment event visible instead of treating its plan as no service", async () => {
