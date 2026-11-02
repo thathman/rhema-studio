@@ -256,6 +256,74 @@ describe("canonical design editor", () => {
     })
   })
 
+  it("replaces a gradient fill with a solid Brand Kit color in the draft only", async () => {
+    const documentValue = documentFixture()
+    const originalBackground = Object.values(documentValue.document.scene.nodes).find((node) => node.type === "rect" && node.name === "Background")
+    if (originalBackground?.type !== "rect") throw new Error("Expected the fixture background rectangle")
+    documentValue.document.scene = applyCommand(documentValue.document.scene, {
+      type: "SET_NODE_FILL",
+      id: originalBackground.id,
+      fill: {
+        type: "gradient",
+        css: "linear-gradient(90deg, #101820, #224466)",
+        stops: [{ color: "#101820", offset: 0 }, { color: "#224466", offset: 1 }],
+        angle: 90,
+      },
+    })
+    const gradientBackground = documentValue.document.scene.nodes[originalBackground.id]
+    if (gradientBackground?.type !== "rect" || gradientBackground.fill.type !== "gradient") {
+      throw new Error("Expected the fixture background to have a gradient fill")
+    }
+    const kit = {
+      ...defaultBrandKit(),
+      colors: { primary: "#335577", accent: "#dda355", text: "#f4f4f4", background: "#101820" },
+    }
+    useSettingsStore.setState({ brandKit: kit })
+    const before = useBroadcastStore.getState()
+    const liveSnapshot = {
+      scenes: before.scenes,
+      outputs: before.outputs,
+      outputStatus: before.outputStatus,
+      outputFrames: before.outputFrames,
+      sceneReturn: before.sceneReturn,
+      sceneTakes: before.sceneTakes,
+      isLive: before.isLive,
+      liveVerse: before.liveVerse,
+      liveSlide: before.liveSlide,
+    }
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Background")!.click())
+    expect(element.textContent).toContain("Gradient preserved")
+    expect(element.textContent).toContain("including a gradient fill, with a solid color copied into this draft")
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit primary fill"]')!.click())
+    expect(element.querySelector<HTMLInputElement>('input[type="color"]')?.value).toBe(kit.colors.primary)
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    expect(saved.document.scene.nodes[gradientBackground.id]).toEqual({
+      ...gradientBackground,
+      fill: { type: "solid", color: kit.colors.primary },
+    })
+    const after = useBroadcastStore.getState()
+    expect({
+      scenes: after.scenes,
+      outputs: after.outputs,
+      outputStatus: after.outputStatus,
+      outputFrames: after.outputFrames,
+      sceneReturn: after.sceneReturn,
+      sceneTakes: after.sceneTakes,
+      isLive: after.isLive,
+      liveVerse: after.liveVerse,
+      liveSlide: after.liveSlide,
+    }).toEqual(liveSnapshot)
+  })
+
   it("edits multiple pages in one saved scene graph and scopes layers to the selected page", async () => {
     const documentValue = documentFixture()
     store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({

@@ -893,7 +893,7 @@ export function DesignDocumentEditor({
                 {(selectedRenderable.type === "text" || !!selectedPaintNode) && (
                   <section className="space-y-2 border-t border-border pt-3" aria-label="Brand Kit styles">
                     <h4 className="text-[0.6875rem] font-semibold">Brand Kit</h4>
-                    <p className="text-[0.6875rem] text-muted-foreground">Apply a one-time copy to this draft. Later Brand Kit changes will not update this layer.</p>
+                    <p className="text-[0.6875rem] text-muted-foreground">Color tokens replace this layer’s current color or fill, including a gradient fill, with a solid color copied into this draft. Later Brand Kit changes will not update this layer.</p>
                     {selectedRenderable.type === "text" ? (
                       <div className="flex flex-wrap gap-1.5">
                         <Button size="xs" variant="outline" aria-label="Apply Brand Kit heading font" disabled={document.kind === "template"} onClick={() => applyBrandTextFont(brandKit.fonts.heading)}>
