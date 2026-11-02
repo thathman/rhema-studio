@@ -1265,6 +1265,7 @@ where
         .route("/api/v1/pair", post(pair_handler::<S>))
         .route("/api/v1/me", get(me_handler::<S>))
         .route("/api/v1/live", get(live_handler::<S>))
+        .route("/api/v1/receivers", get(receivers_handler::<S>))
         .route("/api/v1/live/events", get(live_events_handler::<S>))
         .route("/api/v1/lookup", post(lookup_handler::<S>))
         .route("/api/v1/plans", get(plans_list_handler::<S>))
@@ -1901,6 +1902,45 @@ async fn live_handler<S: CommandSink + 'static>(
         }
         None => StatusCode::NO_CONTENT.into_response(),
     }
+}
+
+/// Receiver truth for the outputs this desk may see (#410): for a browser feed (a TV, OBS Browser
+/// Source), whether a page following it drew the newest frame. That is separate from the host
+/// having applied a change (the Live State) and changes with every frame, so it is read here rather
+/// than streamed with the Live State. Outputs drawn in the host's own windows have no receiver
+/// report here (`feed: false`).
+async fn receivers_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    let reader = match live_reader(&state, peer, &headers) {
+        Ok(entry) => notice_reader(entry),
+        Err(code) => return code.into_response(),
+    };
+    let Some(json) = state.live.current() else { return StatusCode::NO_CONTENT.into_response() };
+    let seen: serde_json::Value = serde_json::from_str(&live_for(&json, reader.as_ref())).unwrap_or_default();
+    let rows: Vec<serde_json::Value> = seen["outputs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|o| o["id"].as_str())
+        .map(|id| match state.feeds.status(id) {
+            Some(f) => serde_json::json!({
+                "id": id,
+                "feed": true,
+                "watching": f.watching,
+                "seq": f.seq,
+                "acked": f.acked,
+                // A page following the feed drew its newest frame.
+                "confirmed": f.watching > 0 && f.seq > 0 && f.acked >= f.seq,
+                "ackedAgoMs": f.acked_ago_ms,
+                "tvsWatching": f.tvs.iter().map(|t| t.watching).sum::<usize>(),
+            }),
+            None => serde_json::json!({ "id": id, "feed": false }),
+        })
+        .collect();
+    ([(axum::http::header::CONTENT_TYPE, "application/json"), (axum::http::header::CACHE_CONTROL, "no-store")], serde_json::json!({ "outputs": rows }).to_string()).into_response()
 }
 
 /// Whether the key a stream was opened with still reads the Live State exactly as then: still
@@ -3835,6 +3875,45 @@ mod tests {
         feeds.publish("tv", "{}".into());
         assert!(matches!(feeds.ack("tv", "tv-own-key", 4, None, None), Ok(Some(_))), "a TV's own key opens the ack too");
         assert_eq!(feeds.ack("tv", "s3cret", 4, None, None), Ok(None), "the second page on the same frame is not news");
+    }
+
+    /// #410: a desk reads, per output it may see, whether a receiver drew the newest frame;
+    /// confirmation goes away when a new frame is published and comes back with its ack.
+    #[tokio::test]
+    async fn receivers_say_whether_a_screen_drew_the_newest_frame_for_the_outputs_a_desk_sees() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        let entry = |key: &str, role: Role, scope: &[&str]| KeyEntry { hash: hash_key(key), name: key.into(), role, paused: false, output_scope: scope.iter().map(|s| (*s).to_string()).collect(), group_take_scope: Vec::new(), record: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("ka", Role::Configure, &[]), entry("kb", Role::Screens, &["tv"])] }));
+        let feeds = new_feed_hub();
+        feeds.set(&[("tv".into(), "s3cret".into())]);
+        let live = new_live_hub();
+        live.publish(r#"{"v":1,"outputs":[{"id":"tv","name":"TV","type":"browser"},{"id":"hall","name":"Hall","type":"display"}]}"#.into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, feeds: feeds.clone(), live, ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let read = |key: &'static str| async move {
+            let r = get_with(port, "/api/v1/receivers", &format!("X-Rhema-Key: {key}\r\n"), None).await;
+            serde_json::from_str::<serde_json::Value>(r.split("\r\n\r\n").nth(1).unwrap_or("")).unwrap_or_default()["outputs"].clone()
+        };
+        let row = |v: &serde_json::Value, id: &str| v.as_array().unwrap().iter().find(|o| o["id"] == id).cloned().unwrap_or_default();
+
+        let all = read("ka").await;
+        assert_eq!((row(&all, "tv")["feed"].clone(), row(&all, "tv")["confirmed"].clone()), (serde_json::json!(true), serde_json::json!(false)), "{all}");
+        assert_eq!(row(&all, "hall"), serde_json::json!({ "id": "hall", "feed": false }), "a window output has no receiver report");
+        let _page = feeds.follow("tv", "s3cret").expect("a page follows the feed");
+        feeds.publish("tv", "{}".into());
+        assert_eq!(row(&read("ka").await, "tv")["confirmed"], false, "published, not drawn yet");
+        feeds.ack("tv", "s3cret", 1, None, None).unwrap();
+        let now = read("ka").await;
+        assert_eq!((row(&now, "tv")["confirmed"].clone(), row(&now, "tv")["watching"].clone()), (serde_json::json!(true), serde_json::json!(1)), "{now}");
+        feeds.publish("tv", "{}".into());
+        assert_eq!(row(&read("ka").await, "tv")["confirmed"], false, "a newer frame not drawn yet");
+        let scoped = read("kb").await;
+        assert_eq!(scoped.as_array().map(Vec::len), Some(1), "a scoped desk sees only its outputs: {scoped}");
+        assert!(get_with(port, "/api/v1/receivers", "X-Rhema-Key: nope\r\n", None).await.contains("401"));
+        let mut handle = result.handle;
+        handle.stop();
     }
 
     async fn ack_clock(port: u16, clock: i64) -> String {
