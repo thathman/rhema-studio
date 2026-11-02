@@ -13,8 +13,8 @@ import { TickerDesigner } from "@/studio/design/ticker-designer"
 import { StageDesigner } from "@/studio/design/stage-designer"
 import { CountdownDesigner } from "@/studio/design/countdown-designer"
 import { BrandDesigner } from "@/studio/design/brand-designer"
+import { DesignDocumentsWorkspace, type InitialDesignTemplate } from "@/studio/design/design-documents-workspace"
 import { LookLibraryView } from "@/studio/design/look-library-view"
-import { DesignDocumentsWorkspace } from "@/studio/design/design-documents-workspace"
 import { designUsage } from "@/lib/design-usage"
 import { themeIdsOf } from "@/lib/output-themes"
 import { outputOnAir } from "@/lib/output-on-air"
@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils"
 
 const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["my-designs", "My Designs", "Editable church designs, private drafts and immutable versions"],
-  ["library", "Templates", "Ready-made looks and layouts to start from"],
+  ["library", "Templates", "Scene templates for private, editable designs"],
   ["themes", "Themes", "How Bible, songs, hymns, slides and pictures look"],
   ["lower-thirds", "Lower thirds", "Names, scripture and lyrics strips"],
   ["ticker", "News ticker", "The crawl along the screen"],
@@ -45,12 +45,16 @@ export function DesignWorkspace() {
   const tab = useShellStore((s) => s.designTab)
   const setTab = useShellStore((s) => s.setDesignTab)
   const activeTool = DESIGN_TOOLS.find(([id]) => id === (tab === "outputs" ? "used-on" : tab))
-  // A lower-third style just added from Templates opens selected.
   const [styleId, setStyleId] = useState<string>()
-
+  const [pendingTemplate, setPendingTemplate] = useState<InitialDesignTemplate | null>(null)
   const changeTab = async (next: DesignTab) => {
     if (next === tab || !(await mayLeaveDesignDocumentDraft())) return
     setTab(next)
+  }
+  const startTemplate = async (look: InitialDesignTemplate["look"], customize: boolean) => {
+    if (!(await mayLeaveDesignDocumentDraft())) return
+    setPendingTemplate({ look, customize })
+    setTab("my-designs")
   }
 
   // Editing starts on the first theme, as the designer always did (leaving the page settles it: see the shell).
@@ -142,8 +146,8 @@ export function DesignWorkspace() {
           </div>
         ) : (
           <div className="h-full overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-panel">
-            {tab === "library" && <LookLibraryView onOpen={(next, id) => { setStyleId(id); void changeTab(next) }} />}
-            {tab === "my-designs" && <DesignDocumentsWorkspace />}
+            {tab === "library" && <LookLibraryView onOpen={(next, id) => { setStyleId(id); void changeTab(next) }} onSceneTemplate={(look, customize) => { void startTemplate(look, customize) }} />}
+            {tab === "my-designs" && <DesignDocumentsWorkspace initialTemplate={pendingTemplate} onInitialTemplateHandled={() => setPendingTemplate(null)} />}
             {tab === "lower-thirds" && <LowerThirdDesigner initialId={styleId} />}
             {tab === "ticker" && <TickerDesigner />}
             {tab === "stage" && <StageDesigner />}

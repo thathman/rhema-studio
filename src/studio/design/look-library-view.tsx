@@ -72,7 +72,12 @@ export interface ContextualScenePickerOptions {
  * Design → Templates: ready-made looks to start from. Adding a copy creates the church's own
  * copy; nothing on a screen changes until that copy is chosen for an output.
  */
-export function LookLibraryView({ onOpen, scenePicker }: { onOpen: (tab: DesignTab, id?: string) => void; scenePicker?: ContextualScenePickerOptions }) {
+export function LookLibraryView({ onOpen, scenePicker, onSceneTemplate }: {
+  onOpen: (tab: DesignTab, id?: string) => void
+  scenePicker?: ContextualScenePickerOptions
+  /** From the primary Design → Templates route, scene looks become canonical design documents. */
+  onSceneTemplate?: (look: Extract<LibraryLook, { kind: "scene" }>, customize: boolean) => void
+}) {
   const [query, setQuery] = useState("")
   const searchId = useId()
   const contextualScenePicker = !!scenePicker
@@ -119,6 +124,8 @@ export function LookLibraryView({ onOpen, scenePicker }: { onOpen: (tab: DesignT
             ? <>Start a church-owned design from a ready-made scene. The copy is saved in My Designs; it does not change a service plan or output.</>
             : scenePicker
             ? <>Choose a scene for this service moment. Each choice creates a church-owned copy and updates the plan; it does not change an output.</>
+            : onSceneTemplate
+            ? <>Scene templates create a private, editable design in My Designs. Themes, lower thirds, tickers and stage looks remain available in their specialist tools.</>
             : <>Ready-made looks, made for Rhema Studio and fully offline. <strong className="font-semibold text-foreground">Add a copy</strong> to keep an editable version in your Designs. Nothing on the screens changes until you deliberately apply or Take it.</>}
         </p>
         {!scenePicker && <ImportPackButton onImported={(pack) => { clear(); setFamily(pack.family.id) }} />}
@@ -185,7 +192,7 @@ export function LookLibraryView({ onOpen, scenePicker }: { onOpen: (tab: DesignT
               })()}
             </header>
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
-              {g.looks.map((l) => <LookCard key={l.id} look={l} favourite={favourites.has(l.id)} onFavourite={() => toggleFavourite(l.id)} onOpen={onOpen} scenePicker={scenePicker} />)}
+              {g.looks.map((l) => <LookCard key={l.id} look={l} favourite={favourites.has(l.id)} onFavourite={() => toggleFavourite(l.id)} onOpen={onOpen} scenePicker={scenePicker} onSceneTemplate={onSceneTemplate} />)}
             </ul>
           </section>
         ))
@@ -292,7 +299,14 @@ function useLookCopies(look: LibraryLook): LookCopy[] {
 
 const COPIES_WHERE: Record<LibraryLook["kind"], string> = { theme: "In your themes", "lower-third": "In your lower-third styles", scene: "In your scenes", ticker: "In use", stage: "In use" }
 
-function LookCard({ look, favourite, onFavourite, onOpen, scenePicker }: { look: LibraryLook; favourite: boolean; onFavourite: () => void; onOpen: (tab: DesignTab, id?: string) => void; scenePicker?: ContextualScenePickerOptions }) {
+function LookCard({ look, favourite, onFavourite, onOpen, scenePicker, onSceneTemplate }: {
+  look: LibraryLook
+  favourite: boolean
+  onFavourite: () => void
+  onOpen: (tab: DesignTab, id?: string) => void
+  scenePicker?: ContextualScenePickerOptions
+  onSceneTemplate?: (look: Extract<LibraryLook, { kind: "scene" }>, customize: boolean) => void
+}) {
   const copies = useLookCopies(look)
   return (
     <li className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
@@ -312,6 +326,11 @@ function LookCard({ look, favourite, onFavourite, onOpen, scenePicker }: { look:
             <>
               <Button size="xs" onClick={() => scenePicker.onChoose(look, false)} title={scenePicker.purpose === "design" ? "Save a private editable copy in My Designs" : undefined}><PlusIcon /> {scenePicker.purpose === "design" ? "Choose template" : "Use for this moment"}</Button>
               <Button size="xs" variant="outline" onClick={() => scenePicker.onChoose(look, true)} title={scenePicker.purpose === "design" ? "Create a canonical design copy and open it in the editor" : "Create a private design copy here. Save a draft and immutable version before adding it to this moment."}><PencilIcon /> {scenePicker.purpose === "design" ? "Customize a copy" : "Customize a copy…"}</Button>
+            </>
+          ) : onSceneTemplate && look.kind === "scene" ? (
+            <>
+              <Button size="xs" onClick={() => onSceneTemplate(look, false)} title="Save a private editable copy in My Designs"><PlusIcon /> Choose template</Button>
+              <Button size="xs" variant="outline" onClick={() => onSceneTemplate(look, true)} title="Create a canonical design copy and open it in the editor"><PencilIcon /> Customize a copy</Button>
             </>
           ) : !scenePicker ? (
             <>
