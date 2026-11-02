@@ -225,8 +225,6 @@ interface BroadcastState {
   cleared: boolean
   /** Private note shown on stage outputs only. Not persisted. */
   stageMessage: string
-  /** A message for one stage output (a Stage desk's `stage_send`), shown there over `stageMessage`. Not persisted. */
-  stageMessageTo: Record<string, string>
   /** The lower third on air (outputs with lowerThirds on), or null. Session state; not saved. */
   lowerThird: LowerThird | null
   /** Designed looks for the lower third (the first is the default). Saved with the themes. */
@@ -341,8 +339,6 @@ interface BroadcastState {
    */
   setVideoPaused: (paused: boolean) => void
   setStageMessage: (message: string) => void
-  /** The message on one stage output only ("" clears it); never a congregation screen. */
-  setStageMessageFor: (outputId: string, message: string) => void
   /** Off puts back the program from before rehearsal, unless `keepRehearsed` (a deliberate go-live). */
   setRehearsal: (on: boolean, opts?: { keepRehearsed?: boolean }) => void
   /** Remember the current live content (if any) before a quick screen replaces it. */
@@ -821,7 +817,6 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   scenePresets: [],
   cleared: false,
   stageMessage: "",
-  stageMessageTo: {},
   lowerThird: null,
   lowerThirdStyles: [DEFAULT_LOWER_THIRD_STYLE],
   designDrafts: [],
@@ -841,13 +836,6 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   setStageClock: (stageClock) => {
     set({ stageClock })
     for (const o of get().outputs) if (o.role === "stage") get().syncBroadcastOutputFor(o.id)
-  },
-  setStageMessageFor: (outputId, message) => {
-    if (get().outputs.find((o) => o.id === outputId)?.role !== "stage") return
-    const rest = { ...get().stageMessageTo }
-    delete rest[outputId]
-    set({ stageMessageTo: message ? { ...rest, [outputId]: message } : rest })
-    get().syncBroadcastOutputFor(outputId)
   },
   stageAux: [],
   setStageAux: (stageAux) => {
@@ -1026,7 +1014,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         role: "stage",
         // A stage that follows chosen sources shows their words; otherwise the program (ADR 0001).
         stage: applyStageStyle({ ...buildStagePayload({
-          isLive: shown !== null, liveVerse: stageVerse, items: q.items, headers: q.headers, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessageTo[outputId] || s.stageMessage,
+          isLive: shown !== null, liveVerse: stageVerse, items: q.items, headers: q.headers, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
         }), ...(isOutputLanguageFallback(shown, output.language) ? { languageNotice: OUTPUT_LANGUAGE_FALLBACK_NOTICE } : {}), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}), ...(s.stageClock ? { clock: s.stageClock } : {}),
           // This output's own layout, orientation and low-light colours (#196 R6); absent from older outputs.

@@ -49,8 +49,6 @@ export const REMOTE_EVENTS = {
   save_scene: "remote:save_scene",
   delete_scene: "remote:delete_scene",
   stage_message: "remote:stage_message",
-  stage_send: "remote:stage_send",
-  worship_set: "remote:worship_set",
   obs_preview: "remote:obs_preview",
   obs_take: "remote:obs_take",
   obs_program: "remote:obs_program",
