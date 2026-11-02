@@ -16,7 +16,6 @@ import { StatusChip } from "@/studio/ui/status-chip"
 import { TimedMoves } from "@/studio/present/timed-moves"
 import { PhaseStrip } from "@/studio/present/phase-strip"
 import { RundownList } from "@/studio/present/rundown-list"
-import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceTimer } from "@/studio/present/service-timer"
 import { AuxTimerStatus } from "@/studio/present/aux-timers"
 import { ObsChip } from "@/studio/present/obs-chip"
@@ -131,10 +130,10 @@ export function PresentWorkspace() {
             variant="outline"
             size="xs"
             data-tour="live-tools"
-            aria-label={toolsOpen && (toolsTab === "bible" || toolsTab === "listening") ? "Close Bible and listening tools" : "Open Bible and listening tools"}
+            aria-label={toolsOpen && (toolsTab === "bible" || toolsTab === "listening") ? "Close Find and listening tools" : "Open Find and listening tools"}
             aria-controls="live-tools-panel"
             aria-expanded={toolsOpen && (toolsTab === "bible" || toolsTab === "listening")}
-            title="Search the Bible and review what listening has heard"
+            title="Find Scripture or a hymn and review what listening has heard"
             onClick={() => {
               if (toolsOpen && (toolsTab === "bible" || toolsTab === "listening")) closeTools()
               else {
@@ -143,7 +142,7 @@ export function PresentWorkspace() {
               }
             }}
           >
-            <BookOpenIcon /> Bible &amp; listening
+            <BookOpenIcon /> Find &amp; listen
           </Button>
           <Button
             ref={productionToolsButtonRef}
@@ -254,26 +253,24 @@ function LiveConsoleSurface({
   const outputs = useBroadcastStore((s) => s.outputs)
   const emptyRundown = count === 0 && headers.length === 0
   const preview = usePreviewLabel()
+  const bottomRow = toolsOpen
+    ? "grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,14.5rem)]"
+    : "grid-rows-[minmax(6rem,1fr)_auto_minmax(0,10.75rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,10.75rem)]"
 
   const focusQuickFind = () => {
-    const focus = () => {
-      const input = document.querySelector<HTMLInputElement>('[data-tour="quick-find"] input[aria-label="Quick find"]')
+    useProductionTab.setState({ liveToolsTab: "bible", open: true, requested: null })
+    window.setTimeout(() => {
+      const input = document.querySelector<HTMLInputElement>('[data-slot="live-tools-panel"] [data-tour="quick-find"] input[aria-label="Quick find"]')
       input?.scrollIntoView?.({ block: "nearest" })
       input?.focus()
-    }
-    if (toolsOpen) {
-      onCloseTools()
-      window.setTimeout(focus, 0)
-    } else {
-      focus()
-    }
+    }, 0)
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3 [@media(max-height:860px)]:gap-2 [@media(max-height:860px)]:pt-2.5">
     <PhaseStrip />
     <RecorderDock />
-    <div className="grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,14.5rem)] gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2">
+    <div className={`grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] ${bottomRow} gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2`}>
       <section className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken ${emptyRundown ? "row-span-1 h-fit self-start" : "row-span-3"}`} data-tour="present-rundown">
         <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
           <div className="min-w-0">
@@ -353,15 +350,8 @@ function LiveConsoleSurface({
           <LiveToolsDrawer tab={toolsTab} onTabChange={onToolsTabChange} onClose={onCloseTools} />
         </div>
       ) : (
-        <div className="col-span-2 grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1 max-[1023px]:grid-cols-1">
-          <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-4" data-tour="quick-find">
-            <div>
-              <h2 className="text-sm font-semibold tracking-tight">Find &amp; cue anything</h2>
-              <p className="text-xs text-muted-foreground">A reference, a hymn number, or a few words</p>
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col [&>*]:min-h-0 [&>*]:flex-1"><QuickFind mode="present" /></div>
-          </section>
-          <section className="flex min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card p-3" role="group" aria-label="Quick screens">
+        <div className="col-span-2 min-h-0 max-[1200px]:h-[10.75rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">
+          <section className="flex h-full min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card p-3" role="group" aria-label="Quick screens">
             {/* Back sits in the header so it is never clipped on a short (1366x768) screen; the screens scroll if they must. */}
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -370,8 +360,8 @@ function LiveConsoleSurface({
               </div>
               <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
             </div>
-            {/* Full-size actions use three columns through 1500px; the last row keeps all seven available. */}
-            <div data-testid="quick-screen-actions" className="-m-1 grid min-h-0 min-w-0 grid-cols-4 content-start gap-1.5 overflow-y-auto overflow-x-hidden p-1 max-[1500px]:grid-cols-3 max-[800px]:grid-cols-2">
+            {/* One compact row on wide screens; wraps and scrolls on short or narrow windows. */}
+            <div data-testid="quick-screen-actions" className="-m-1 grid min-h-0 min-w-0 grid-cols-7 content-start gap-1.5 overflow-y-auto overflow-x-hidden p-1 max-[1200px]:grid-cols-4 max-[800px]:grid-cols-2">
               {(["welcome", "stand", "pray", "offering", "technical", "logo", "black"] as const).map((s) => {
                 // Calm until pressed: only the screen that is on air turns red, so the row also says what is showing.
                 const onAir = isLive && quickOnAir === s
