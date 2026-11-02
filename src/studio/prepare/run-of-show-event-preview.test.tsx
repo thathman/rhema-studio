@@ -210,7 +210,7 @@ describe("Run of Show event preview", () => {
     const designedMoment: QueueItem = {
       id: "designed-welcome",
       kind: "slide",
-      slide: { title: "Welcome", body: "The service begins soon", designRef: { id: "design-1", version: 1, pageId: "welcome-page-two" } },
+      slide: { title: "Welcome", body: "The service begins soon", designRef: { id: "design-1", version: 1, pageId: "welcome-page-two", outputs: ["overflow"] } },
       reference: "Welcome",
       confidence: 1,
       source: "manual",
@@ -234,7 +234,7 @@ describe("Run of Show event preview", () => {
     })
     useBroadcastStore.setState({
       scenes: [localLatestScene],
-      outputs: [{ ...output, sceneId: localLatestScene.id }],
+      outputs: [{ ...output, sceneId: localLatestScene.id }, overflowOutput],
       isLive: true,
       liveItemId: "currently-on-air",
       liveVerse: { reference: "Psalm 23:1", segments: [{ text: "The Lord is my shepherd" }] },
@@ -252,9 +252,11 @@ describe("Run of Show event preview", () => {
     const tab = el.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Event preview"]')!
     await act(async () => { tab.focus(); tab.click() })
 
+    const outputPicker = el.querySelector<HTMLSelectElement>('[aria-label="Preview audience screen"]')!
+    expect(outputPicker.value).toBe("overflow")
     expect(getVersionMock).toHaveBeenCalledWith("design-1", 1)
     expect(getVersionMock).not.toHaveBeenCalledWith("design-1", 2)
-    expect(el.textContent).toContain("Welcome look v1 · Sanctuary")
+    expect(el.textContent).toContain("Welcome look v1 · Overflow")
     expect(el.textContent).not.toContain("Mutable local copy v2")
     expect(el.textContent).not.toContain("This screen keeps its current scene for this moment")
     expect(el.querySelector('[aria-label="Preview of Welcome look v1"]')).not.toBeNull()
@@ -262,6 +264,15 @@ describe("Run of Show event preview", () => {
       sceneId: "welcome-v1",
       layers: [expect.objectContaining({ id: "welcome-image-page-two", imageUrl: "data:image/png;base64,preview-output" })],
     })
+
+    await act(async () => {
+      outputPicker.value = "sanctuary"
+      outputPicker.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    expect(el.textContent).toContain("This designed moment is assigned to other congregation screens")
+    expect(el.textContent).not.toContain("Welcome look v1 · Sanctuary")
+    expect(vi.mocked(drawScene).mock.calls.at(-1)?.[3]).toMatchObject({ sceneId: "welcome-local" })
+    expect(getVersionMock).toHaveBeenCalledTimes(1)
     expect(useBroadcastStore.getState()).toMatchObject({
       isLive: before.isLive,
       liveItemId: before.liveItemId,

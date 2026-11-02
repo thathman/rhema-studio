@@ -29,11 +29,13 @@ import type { SlideQueueItem } from "@/types/queue"
 
 let root: Root | null = null
 let originalScenes: Scene[] = []
+let originalOutputs = useBroadcastStore.getState().outputs
 
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   HTMLCanvasElement.prototype.getContext = (() => null) as never
   originalScenes = useBroadcastStore.getState().scenes
+  originalOutputs = useBroadcastStore.getState().outputs
   mockInvoke.mockReset()
   mockSceneChoose.mockReset()
 })
@@ -41,7 +43,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root?.unmount())
   root = null
-  useBroadcastStore.setState({ scenes: originalScenes })
+  useBroadcastStore.setState({ scenes: originalScenes, outputs: originalOutputs })
   useQueueStore.setState({ items: [] })
   document.body.replaceChildren()
 })
@@ -166,8 +168,14 @@ describe("Prepare design version picker", () => {
     }
     useQueueStore.setState({ items: [item] })
     const before = useBroadcastStore.getState()
+    const baseOutput = before.outputs[0]!
+    useBroadcastStore.setState({ outputs: [
+      { ...baseOutput, id: "sanctuary", name: "Sanctuary", role: "congregation" },
+      { ...baseOutput, id: "overflow", name: "Overflow", role: "congregation" },
+      { ...baseOutput, id: "stage", name: "Stage monitor", role: "stage" },
+    ] })
     const liveBefore = {
-      outputs: before.outputs,
+      outputs: useBroadcastStore.getState().outputs,
       outputStatus: before.outputStatus,
       isLive: before.isLive,
       liveVerse: before.liveVerse,
@@ -188,6 +196,9 @@ describe("Prepare design version picker", () => {
     }))
 
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Choose a scene design for Welcome"]')!.click())
+    await act(async () => [...document.body.querySelectorAll<HTMLInputElement>('input[type="radio"]')].find((radio) => radio.parentElement?.textContent?.includes("Choose specific screens"))!.click())
+    expect(document.body.querySelector('[aria-label="Include Stage monitor"]')).toBeNull()
+    await act(async () => document.body.querySelector<HTMLInputElement>('[aria-label="Include Overflow"]')!.click())
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent === "My Designs")!.click())
     await previewSavedVersion(version.version)
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use in Prepare")!.click())
@@ -197,7 +208,7 @@ describe("Prepare design version picker", () => {
     expect(selected).toHaveLength(1)
     expect(updatedItem).toMatchObject({
       scene_id: selected[0],
-      slide: { designRef: { id: version.designId, version: version.version } },
+      slide: { designRef: { id: version.designId, version: version.version, outputs: ["sanctuary"] } },
     })
     expect(after.scenes.find((scene) => scene.id === selected[0])?.design).toEqual({ id: version.designId, version: version.version, pageId: "root" })
     expect(mockInvoke.mock.calls.map(([command]) => command)).toEqual([

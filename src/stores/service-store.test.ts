@@ -1222,14 +1222,16 @@ describe("slideLabel", () => {
 })
 
 describe("a designed moment saved in a service", () => {
-  it("keeps the design version and page it pins through save and reopen, and drops a malformed pin", () => {
-    const moment = { id: "m1", kind: "slide", slide: { title: "Welcome", body: "", designRef: { id: "d1", version: 3, pageId: "page-two" } }, reference: "Welcome", confidence: 1, source: "manual", added_at: 0 } as QueueItem
+  it("keeps design version, page and audience screens through save and reopen, and drops a malformed pin", () => {
+    const moment = { id: "m1", kind: "slide", slide: { title: "Welcome", body: "", designRef: { id: "d1", version: 3, pageId: "page-two", outputs: ["sanctuary", "overflow", "sanctuary"] } }, reference: "Welcome", confidence: 1, source: "manual", added_at: 0 } as QueueItem
     const [input] = toItemInputs([moment], () => "KJV")
-    expect(JSON.parse(String(input.payload)).designRef).toEqual({ id: "d1", version: 3, pageId: "page-two" })
+    expect(JSON.parse(String(input.payload)).designRef).toEqual({ id: "d1", version: 3, pageId: "page-two", outputs: ["sanctuary", "overflow", "sanctuary"] })
     const stored = (payload: string): ProgramItem => ({ id: "m1", program_id: program.id, position: 0, kind: "slide", reference: "Welcome", book_number: null, chapter: null, verse: null, translation: null, secondary_translation: null, notes: null, payload } as ProgramItem)
     const reopen = (payload: string) => toQueueItems({ program, items: [stored(payload)] }, 1, [KJV]).items[0] as Extract<QueueItem, { kind: "slide" }>
-    expect(reopen(String(input.payload)).slide.designRef).toEqual({ id: "d1", version: 3, pageId: "page-two" })
+    expect(reopen(String(input.payload)).slide.designRef).toEqual({ id: "d1", version: 3, pageId: "page-two", outputs: ["sanctuary", "overflow"] })
     expect(reopen(JSON.stringify({ title: "Welcome", body: "", designRef: { id: "../x", version: 0 } })).slide.designRef).toBeUndefined()
     expect(reopen(JSON.stringify({ title: "Welcome", body: "", designRef: { id: "d1", version: 3, pageId: "../other" } })).slide.designRef).toBeUndefined()
+    expect(reopen(JSON.stringify({ title: "Welcome", body: "", designRef: { id: "d1", version: 3, outputs: ["sanctuary", ""] } })).slide.designRef).toBeUndefined()
+    expect(reopen(JSON.stringify({ title: "Welcome", body: "", designRef: { id: "d1", version: 3, outputs: [] } })).slide.designRef).toEqual({ id: "d1", version: 3 })
   })
 })

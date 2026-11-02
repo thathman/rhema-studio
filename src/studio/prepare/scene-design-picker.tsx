@@ -41,6 +41,24 @@ export function SceneDesignPicker({
   const [designEditorDirty, setDesignEditorDirty] = useState(false)
   const [templateDesignId, setTemplateDesignId] = useState<string | undefined>()
   const [creatingTemplate, setCreatingTemplate] = useState(false)
+  const [audienceMode, setAudienceMode] = useState<"all" | "selected">("all")
+  const [selectedOutputIds, setSelectedOutputIds] = useState<string[]>([])
+  const allOutputs = useBroadcastStore((state) => state.outputs)
+  const congregationOutputs = allOutputs.filter((output) => (output.role ?? "congregation") === "congregation")
+
+  const openPicker = () => {
+    const item = useQueueStore.getState().items.find((candidate) => candidate.id === momentId)
+    const savedOutputs = item?.kind === "slide" ? item.slide.designRef?.outputs ?? [] : []
+    setAudienceMode(savedOutputs.length ? "selected" : "all")
+    setSelectedOutputIds(savedOutputs)
+    setTemplateDesignId(undefined)
+    setSource("templates")
+    setOpen(true)
+  }
+
+  const selectedOutputIdsMissing = audienceMode === "selected"
+    ? selectedOutputIds.filter((id) => !congregationOutputs.some((output) => output.id === id))
+    : []
 
   const momentIsCurrent = () => {
     const queue = useQueueStore.getState()
@@ -70,10 +88,21 @@ export function SceneDesignPicker({
       return
     }
 
+    const currentCongregation = useBroadcastStore.getState().outputs.filter((output) => (output.role ?? "congregation") === "congregation")
+    const chosenOutputs = [...new Set(selectedOutputIds)].sort()
+    if (audienceMode === "selected" && chosenOutputs.length === 0) {
+      toast.error("Choose at least one congregation screen", { description: "Select one or more screens, or choose all congregation screens." })
+      return
+    }
+    if (audienceMode === "selected" && chosenOutputs.some((id) => !currentCongregation.some((output) => output.id === id))) {
+      toast.error("Screen list changed", { description: "One of the selected screens is no longer an available congregation output. Reopen this picker and choose the intended screens." })
+      return
+    }
+
     useBroadcastStore.getState().saveScene(scene)
     const pinnedPageId = pageId ?? scene.design?.pageId
     useQueueStore.getState().updateItem(momentId, (item) => item.kind === "slide"
-      ? { ...item, slide: { ...item.slide, designRef: { id: version.designId, version: version.version, ...(pinnedPageId ? { pageId: pinnedPageId } : {}) } } }
+      ? { ...item, slide: { ...item.slide, designRef: { id: version.designId, version: version.version, ...(pinnedPageId ? { pageId: pinnedPageId } : {}), ...(audienceMode === "selected" ? { outputs: chosenOutputs } : {}) } } }
       : item)
     onSceneSelected(scene.id)
     setOpen(false)
@@ -151,7 +180,7 @@ export function SceneDesignPicker({
         type="button"
         size="sm"
         variant="outline"
-        onClick={() => { setTemplateDesignId(undefined); setSource("templates"); setOpen(true) }}
+        onClick={openPicker}
         aria-label={`Choose a scene design for ${momentTitle}`}
       >
         Choose from Design…
@@ -167,6 +196,43 @@ export function SceneDesignPicker({
               explicitly Take it.
             </DialogDescription>
           </DialogHeader>
+          <fieldset className="space-y-2 rounded-md border border-border bg-muted/20 p-3" aria-label="Designed moment audience">
+            <legend className="px-1 text-xs font-semibold">Audience screens</legend>
+            <p className="text-xs text-muted-foreground">Choose which congregation screens show this design when this moment is taken. No screen selection means all congregation screens, preserving older services.</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
+              <label className="flex min-h-9 items-center gap-2"><input type="radio" name={`audience-${momentId}`} checked={audienceMode === "all"} onChange={() => setAudienceMode("all")} /> All congregation screens</label>
+              <label className="flex min-h-9 items-center gap-2"><input type="radio" name={`audience-${momentId}`} checked={audienceMode === "selected"} onChange={() => { setAudienceMode("selected"); setSelectedOutputIds(congregationOutputs.map((output) => output.id)) }} /> Choose specific screens</label>
+            </div>
+            {audienceMode === "selected" && (
+              <div role="group" aria-label="Choose designed moment screens" className="flex flex-wrap gap-x-5 gap-y-1 border-t border-border pt-2">
+                {congregationOutputs.map((output) => (
+                  <label key={output.id} className="flex min-h-9 items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      aria-label={`Include ${output.name}`}
+                      checked={selectedOutputIds.includes(output.id)}
+                      onChange={(event) => {
+                        const checked = event.currentTarget.checked
+                        setSelectedOutputIds((current) => checked
+                          ? [...new Set([...current, output.id])]
+                          : current.filter((id) => id !== output.id))
+                      }}
+                    />
+                    {output.name}
+                  </label>
+                ))}
+                {congregationOutputs.length === 0 && <p role="status" className="text-xs text-muted-foreground">No congregation screens are configured on this computer.</p>}
+                {selectedOutputIdsMissing.length > 0 && (
+                  <div role="alert" className="flex basis-full flex-wrap items-center gap-2 text-xs text-destructive">
+                    <span>Some previously selected screens are no longer configured.</span>
+                    <Button size="xs" variant="outline" onClick={() => setSelectedOutputIds(congregationOutputs.map((output) => output.id))}>Replace with available screens</Button>
+                  </div>
+                )}
+                {selectedOutputIds.length === 0 && <p role="alert" className="basis-full text-xs text-destructive">Select at least one available screen, or choose all congregation screens.</p>}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">Changing the audience on an approved service changes its approval scope; refresh approval before taking the design.</p>
+          </fieldset>
           <div role="tablist" aria-label="Scene source" className="flex gap-1 border-b border-border">
             <button type="button" role="tab" aria-selected={source === "my-designs"} disabled={designEditorDirty || creatingTemplate} onClick={() => setSource("my-designs")} className="border-b-2 border-transparent px-3 py-2 text-xs font-semibold aria-selected:border-primary aria-selected:text-primary-text disabled:cursor-not-allowed disabled:opacity-50">My Designs</button>
             <button type="button" role="tab" aria-selected={source === "templates"} disabled={designEditorDirty || creatingTemplate} onClick={() => setSource("templates")} className="border-b-2 border-transparent px-3 py-2 text-xs font-semibold aria-selected:border-primary aria-selected:text-primary-text disabled:cursor-not-allowed disabled:opacity-50">Templates</button>

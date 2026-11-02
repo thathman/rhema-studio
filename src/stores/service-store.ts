@@ -525,8 +525,10 @@ export function parseSlidePayload(raw: string | null | undefined): SlideItemPayl
     const sourceRevision = Number.isSafeInteger(p.source_revision) && Number(p.source_revision) > 0 ? Number(p.source_revision) : undefined
     const ref = p.designRef
     const validPage = ref?.pageId === undefined || (typeof ref.pageId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(ref.pageId))
-    const designRef = ref && validPage && typeof ref.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(ref.id) && Number.isSafeInteger(ref.version) && ref.version > 0
-      ? { id: ref.id, version: ref.version, ...(typeof ref.pageId === "string" ? { pageId: ref.pageId } : {}) }
+    const validOutputs = ref?.outputs === undefined || Array.isArray(ref.outputs) && ref.outputs.every((id) => typeof id === "string" && id.length > 0 && id.length <= 128)
+    const outputs = validOutputs && Array.isArray(ref?.outputs) ? [...new Set(ref.outputs as string[])] : undefined
+    const designRef = ref && validPage && validOutputs && typeof ref.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(ref.id) && Number.isSafeInteger(ref.version) && ref.version > 0
+      ? { id: ref.id, version: ref.version, ...(typeof ref.pageId === "string" ? { pageId: ref.pageId } : {}), ...(outputs?.length ? { outputs } : {}) }
       : undefined
     return title.trim() || body.trim() || link ? { title, body, ...(link ? { link } : {}), ...(sourceId && sourceRevision ? { source_asset_id: sourceId, source_revision: sourceRevision } : {}), ...(designRef ? { designRef } : {}) } : null
   } catch {
