@@ -126,6 +126,7 @@ impl Recorder {
             let marked = manifest::mark_interrupted(&f);
             if !marked.is_empty() {
                 log::warn!("recorder: {} interrupted recording(s) marked recoverable: {marked:?}", marked.len());
+                fill_recovered_durations(&f, &marked);
             }
         }
         Self { folder, session: Mutex::new(None), last: Mutex::new(RecorderStatus::idle()), last_request: Mutex::new(None), lifecycle: Mutex::default() }
@@ -870,9 +871,39 @@ pub(crate) fn rgba_into_bgra(src: &[u8], dst: &mut [u8], width: usize, height: u
     }
 }
 
-/// Free bytes on the volume holding `path` (its nearest existing ancestor).
+/// How long each recovered recording plays (read from its file), for History: a crash left the
+/// manifest without one. macOS only; elsewhere History shows it without a length.
+fn fill_recovered_durations(folder: &Path, ids: &[String]) {
+    #[cfg(target_os = "macos")]
+    for (dir, mut m) in manifest::list(folder) {
+        if m.state != RecorderState::Recoverable || m.duration_ms.is_some() || !ids.contains(&m.session_id) {
+            continue;
+        }
+        let Some(file) = m.files.mp4.as_deref().or(m.files.mov.as_deref()).map(|f| dir.join(f)) else { continue };
+        let played = backend::probe(&file).duration_s;
+        if played.is_finite() && played > 0.0 {
+            m.duration_ms = u64::try_from(Duration::from_secs_f64(played).as_millis()).ok();
+            let _ = manifest::write(&dir, &m);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (folder, ids);
+}
+
+/// The volume a path is on is gone: a removable drive (`/Volumes/<name>` on macOS) unplugged.
+fn on_missing_volume(path: &Path) -> bool {
+    let mut parts = path.components();
+    matches!((parts.next(), parts.next(), parts.next()), (Some(std::path::Component::RootDir), Some(std::path::Component::Normal(v)), Some(std::path::Component::Normal(_))) if v == "Volumes")
+        && !path.iter().take(3).collect::<PathBuf>().exists()
+}
+
+/// Free bytes on the volume holding `path` (its nearest existing ancestor). None when it cannot be
+/// told, including when the drive it is on was removed: never another disk's free space.
 #[must_use]
 pub fn disk_free(path: &Path) -> Option<u64> {
+    if on_missing_volume(path) {
+        return None;
+    }
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
@@ -923,6 +954,13 @@ pub fn iso_utc(t: SystemTime) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_removed_drive_has_no_free_space_to_report() {
+        assert_eq!(super::disk_free(std::path::Path::new("/Volumes/Rhema-unplugged-drive-test/Recordings/session")), None, "never the boot disk's free space");
+        let t = tempfile::tempdir().unwrap();
+        assert!(super::disk_free(&t.path().join("not-yet-made")).is_some(), "a folder still to be made on a present disk");
+    }
+
     use super::*;
 
     #[test]
