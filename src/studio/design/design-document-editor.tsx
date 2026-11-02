@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { designStore, type DesignDocument, type DesignInput, type DesignVersion } from "@/design-engine/design-store"
 import { designPages, designToScene, type RhemaBinding, type RhemaDesignPage, VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rhema-scene"
-import { createColorLayer, createLiveFeedLayer } from "@/design-engine/design-document-utils"
+import { createCameraLayer, createColorLayer, createLiveFeedLayer } from "@/design-engine/design-document-utils"
 import { createSaraswatiEditorStore, getNodeBounds, pointerDown, pointerMove, pointerUp, type SaraswatiCommand, type SaraswatiPointerState } from "@/vendor/avnac/saraswati"
 import { renderSceneToCanvas } from "@/vendor/avnac/renderer/offscreen-render"
 import type { SaraswatiEllipseNode, SaraswatiGroupNode, SaraswatiNode, SaraswatiRectNode, SaraswatiRenderableNode, SaraswatiScene, SaraswatiTextNode } from "@/vendor/avnac/saraswati"
@@ -15,6 +15,7 @@ import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import type { BroadcastOutputLanguage } from "@/types/broadcast-output"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useMediaStore } from "@/stores/media-store"
+import { cameraOfUrl, useRouterHealth, whepUrl } from "@/lib/cameras"
 import type { MediaAssetStatus } from "@/types"
 
 function errorMessage(error: unknown) {
@@ -123,12 +124,16 @@ export function DesignDocumentEditor({
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState("")
   const [imagePickerOpen, setImagePickerOpen] = useState(false)
+  const [cameraPickerOpen, setCameraPickerOpen] = useState(false)
   const [mediaPickerKind, setMediaPickerKind] = useState<"image" | "video">("image")
   const [imagePickerBusy, setImagePickerBusy] = useState(false)
   const [imagePickerMessage, setImagePickerMessage] = useState("")
   const [editorFlags, setEditorFlags] = useState({ canUndo: false, canRedo: false })
   const operatorName = useSettingsStore((state) => state.operatorName)
   const brandKit = useSettingsStore((state) => state.brandKit)
+  const cameras = useSettingsStore((state) => state.cameras)
+  const routerStatus = useRouterHealth((state) => state.status)
+  const cameraRouterReady = !!routerStatus?.running && !!routerStatus.lanAddress
   const mediaAssets = useMediaStore((state) => state.assets)
   const mediaLoaded = useMediaStore((state) => state.loaded)
   const mediaError = useMediaStore((state) => state.error)
@@ -197,6 +202,7 @@ export function DesignDocumentEditor({
   const selectedNode = selectedId ? scene.nodes[selectedId] : undefined
   const selectedRenderable = renderable(selectedNode) ? selectedNode : undefined
   const selectedBinding = selectedRenderable ? bindings[selectedRenderable.id] : undefined
+  const selectedCameraName = selectedBinding?.kind === "camera" ? cameraOfUrl(selectedBinding.cameraUrl, cameras) : null
   const selectedPaintNode = selectedRenderable && selectedBinding?.kind !== "video" && paintNode(selectedRenderable) ? selectedRenderable : undefined
   const selectedVideoAsset = selectedBinding?.kind === "video"
     ? mediaAssets.find((asset) => asset.id === selectedBinding.mediaId)
@@ -459,6 +465,43 @@ export function DesignDocumentEditor({
     setBindings((current) => ({ ...current, [made.node.id]: made.binding }))
     dispatch({ type: "ADD_NODE", node: made.node })
     setSelectedId(made.node.id)
+  }
+  const addCameraLayer = (camera: Pick<(typeof cameras)[number], "name" | "label">) => {
+    const router = useRouterHealth.getState().status
+    if (!router?.running || !router.lanAddress) return
+    const made = createCameraLayer({
+      x: Math.round(scene.artboard.width * 0.1),
+      y: Math.round(scene.artboard.height * 0.15),
+      name: `${camera.label} camera`,
+      url: whepUrl(router.lanAddress, router.ports, camera.name),
+    })
+    made.node.parentId = activeRootId
+    setBindings((current) => ({ ...current, [made.node.id]: made.binding }))
+    dispatch({ type: "ADD_NODE", node: made.node })
+    setSelectedId(made.node.id)
+  }
+  const selectCameraSource = (name: string) => {
+    const camera = cameras.find((candidate) => candidate.name === name)
+    const router = useRouterHealth.getState().status
+    if (!camera || !router?.running || !router.lanAddress || !selectedRenderable) return
+    const binding = bindingsRef.current[selectedRenderable.id]
+    if (binding?.kind !== "camera") return
+    const previousName = cameraOfUrl(binding.cameraUrl, cameras)
+    const previousLabel = cameras.find((candidate) => candidate.name === previousName)?.label
+    const beforeBindings = bindingSnapshot(bindingsRef.current)
+    const afterBindings = {
+      ...beforeBindings,
+      [selectedRenderable.id]: { ...binding, cameraUrl: whepUrl(router.lanAddress, router.ports, camera.name) },
+    }
+    const nextName = previousLabel && selectedRenderable.name === `${previousLabel} camera`
+      ? `${camera.label} camera`
+      : selectedRenderable.name ?? selectedRenderable.id
+    const sceneBeforeSourceChange = editor.getState().scene
+    bindingSnapshots.current.set(sceneBeforeSourceChange, beforeBindings)
+    // A scene command anchors the non-canvas source binding in the editor's undo history too.
+    dispatch({ type: "SET_NODE_NAME", id: selectedRenderable.id, name: nextName })
+    bindingSnapshots.current.set(editor.getState().scene, afterBindings)
+    setBindings(afterBindings)
   }
   const addTextLayer = () => {
     const id = "text-" + (globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2))
@@ -826,6 +869,7 @@ export function DesignDocumentEditor({
             </Button>
             <Button size="xs" variant="outline" onClick={openVideoPicker} disabled={document.kind === "template" || imagePickerBusy}>Video from Library</Button>
             <Button size="xs" variant="outline" onClick={() => addLayer("feed")} disabled={document.kind === "template"}><PlusIcon /> Live content</Button>
+            <Button size="xs" variant="outline" onClick={() => setCameraPickerOpen((open) => !open)} disabled={document.kind === "template"}><PlusIcon /> Camera</Button>
             <Button size="xs" variant="outline" onClick={() => addLayer("color")} disabled={document.kind === "template"}><PlusIcon /> Colour layer</Button>
             <span className="ml-auto text-[0.6875rem] text-muted-foreground">Drag on canvas or focus a layer and use arrow keys; Shift + arrow moves 10 px.</span>
           </div>
@@ -867,6 +911,36 @@ export function DesignDocumentEditor({
                 <p className="mt-3 rounded border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
                   No {mediaPickerKind === "video" ? "videos" : "pictures"} are in the Library yet. Import {mediaPickerKind === "video" ? "a video" : "a picture"} here, then choose it to add it to this design.
                 </p>
+              )}
+            </section>
+          )}
+          {cameraPickerOpen && (
+            <section aria-label="Camera sources" className="rounded-md border border-border bg-card p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-semibold">Cameras</h3>
+                  <p className="mt-0.5 text-[0.6875rem] text-muted-foreground">Add a configured church camera as a live layer. This remains a private design draft until it is approved and explicitly taken.</p>
+                </div>
+                <Button size="xs" variant="ghost" onClick={() => setCameraPickerOpen(false)}>Close</Button>
+              </div>
+              {!cameraRouterReady ? (
+                <p role="status" className="mt-3 rounded border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                  Camera selection needs a running Rhema camera router with a LAN address. Start or connect it in Live → Production tools → Cameras.
+                </p>
+              ) : cameras.length === 0 ? (
+                <p role="status" className="mt-3 rounded border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                  No cameras are configured. Add a camera in Live → Production tools → Cameras, then return here.
+                </p>
+              ) : (
+                <ul className="mt-3 flex flex-wrap gap-2">
+                  {cameras.map((camera) => (
+                    <li key={camera.name}>
+                      <Button size="xs" variant="outline" onClick={() => addCameraLayer({ name: camera.name, label: camera.label })} aria-label={`Add ${camera.label} camera`}>
+                        Add {camera.label} camera
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </section>
           )}
@@ -1069,6 +1143,26 @@ export function DesignDocumentEditor({
                       </select>
                     </label>
                     <p className="text-[0.6875rem] text-muted-foreground">These choices are saved with this design. The canvas shows a placeholder for live content; it does not preview the current program.</p>
+                  </section>
+                )}
+                {selectedBinding?.kind === "camera" && (
+                  <section className="space-y-2 border-t border-border pt-3" aria-label="Camera source binding">
+                    <h4 className="text-[0.6875rem] font-semibold">Camera source</h4>
+                    <label className="flex flex-col gap-1 text-[0.6875rem] font-medium text-muted-foreground">Configured camera
+                      <select
+                        aria-label="Camera source"
+                        value={selectedCameraName ?? ""}
+                        onChange={(event) => selectCameraSource(event.currentTarget.value)}
+                        disabled={!cameraRouterReady || cameras.length === 0}
+                        className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+                      >
+                        {!selectedCameraName && <option value="" disabled>Saved source is not configured</option>}
+                        {cameras.map((camera) => <option key={camera.name} value={camera.name}>{camera.label}</option>)}
+                      </select>
+                    </label>
+                    {!cameraRouterReady && <p role="status" className="text-[0.6875rem] text-muted-foreground">Connect a running Rhema camera router with a LAN address to change this source. The saved design stays unchanged.</p>}
+                    {cameraRouterReady && cameras.length === 0 && <p role="status" className="text-[0.6875rem] text-muted-foreground">No configured cameras are available. Add one in Live → Production tools → Cameras.</p>}
+                    <p className="text-[0.6875rem] text-muted-foreground">The canvas shows a placeholder and does not display live camera video. The draft stores the camera stream address; camera page secrets remain in Settings and are not copied into this design.</p>
                   </section>
                 )}
                 {selectedRenderable.type === "text" && (

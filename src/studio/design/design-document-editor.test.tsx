@@ -29,6 +29,7 @@ import { applyCommand, type SaraswatiImageNode } from "@/vendor/avnac/saraswati"
 import { DesignDocumentEditor } from "./design-document-editor"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useRouterHealth } from "@/lib/cameras"
 import { defaultBrandKit } from "@/lib/brand-kit"
 import { useMediaStore } from "@/stores/media-store"
 import type { MediaAssetStatus } from "@/types"
@@ -82,6 +83,8 @@ beforeEach(() => {
   store.saveDraft.mockReset()
   store.createVersion.mockReset()
   useSettingsStore.setState({ operatorName: "Tolu", brandKit: defaultBrandKit() })
+  useSettingsStore.setState({ cameras: [] })
+  useRouterHealth.setState({ status: null, checked: false })
   useMediaStore.setState({
     assets: [imageAsset, videoAsset], loading: false, loaded: true, error: null, urls: {},
     dataUrl: vi.fn(async () => imageDataUrl),
@@ -969,6 +972,85 @@ describe("canonical design editor", () => {
       liveVerse: after.liveVerse,
       liveSlide: after.liveSlide,
     }).toEqual(liveState)
+  })
+
+  it("adds a configured camera as a private design layer without storing its secret or changing Live", async () => {
+    const documentValue = documentFixture()
+    const cameras = [
+      { name: "pulpit", label: "Pulpit", token: "p".repeat(32) },
+      { name: "choir", label: "Choir", token: "c".repeat(32) },
+    ]
+    useSettingsStore.setState({ cameras })
+    const before = useBroadcastStore.getState()
+    const liveSnapshot = {
+      scenes: before.scenes,
+      outputs: before.outputs,
+      outputStatus: before.outputStatus,
+      outputFrames: before.outputFrames,
+      sceneTakes: before.sceneTakes,
+      isLive: before.isLive,
+      liveVerse: before.liveVerse,
+      liveSlide: before.liveSlide,
+    }
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Camera")!.click())
+    expect(element.querySelector('[aria-label="Camera sources"]')?.textContent).toContain("Camera selection needs a running Rhema camera router with a LAN address")
+    expect(element.querySelector('[aria-label="Camera source"]')).toBeNull()
+
+    act(() => useRouterHealth.setState({
+      checked: true,
+      status: {
+        installed: true,
+        running: true,
+        wanted: true,
+        lanAddress: "192.168.1.20",
+        ports: { webrtc: 8889, webrtcUdp: 8189, rtsp: 8554, rtmp: 1935, srt: 8890, api: 9997 },
+        restarts: 0,
+        error: null,
+        paths: [],
+      },
+    }))
+    expect(element.textContent).toContain("Pulpit")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add Pulpit camera")!.click())
+    expect(element.querySelector('[aria-label="Camera source"]')).not.toBeNull()
+    expect(element.querySelector('[aria-label="Camera source binding"]')?.textContent).toContain("canvas shows a placeholder and does not display live camera video")
+    await act(async () => setSelectValue(element.querySelector<HTMLSelectElement>('[aria-label="Camera source"]')!, "choir"))
+    expect(element.querySelector<HTMLSelectElement>('[aria-label="Camera source"]')?.value).toBe("choir")
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Undo design edit"]')!.click())
+    expect(element.querySelector<HTMLSelectElement>('[aria-label="Camera source"]')?.value).toBe("pulpit")
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Redo design edit"]')!.click())
+    expect(element.querySelector<HTMLSelectElement>('[aria-label="Camera source"]')?.value).toBe("choir")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const cameraNode = Object.values(saved.document.scene.nodes).find((node) => node.name === "Choir camera")!
+    const binding = saved.document.bindings[cameraNode.id]!
+    expect(binding).toMatchObject({ kind: "camera", cameraUrl: "http://192.168.1.20:8889/choir/whep" })
+    expect(binding).not.toHaveProperty("token")
+    expect(JSON.stringify(saved.document)).not.toContain(cameras[0]!.token)
+    expect(JSON.stringify(saved.document)).not.toContain(cameras[1]!.token)
+    const converted = designToScene(saved.document)
+    expect(converted.issues).toEqual([])
+    expect(converted.scene.layers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "camera", cameraUrl: "http://192.168.1.20:8889/choir/whep" }),
+    ]))
+    const after = useBroadcastStore.getState()
+    expect({
+      scenes: after.scenes,
+      outputs: after.outputs,
+      outputStatus: after.outputStatus,
+      outputFrames: after.outputFrames,
+      sceneTakes: after.sceneTakes,
+      isLive: after.isLive,
+      liveVerse: after.liveVerse,
+      liveSlide: after.liveSlide,
+    }).toEqual(liveSnapshot)
   })
 
   it("removes a deleted text node's Rhema binding before saving the draft", async () => {
