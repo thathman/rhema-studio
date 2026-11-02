@@ -224,7 +224,8 @@ function Timekeeper({ embedded = false }: { embedded?: boolean }) {
       </Card>
       <CountdownCard />
       <Card kicker="Independent" title="Other timers">
-        {embedded ? <p className="text-xs text-muted-foreground">Manage these from the Timers control in Live’s toolbar.</p> : <AuxTimersPanel />}
+        {embedded && <p className="text-xs text-muted-foreground">These countdowns run separately from the service clock. Manage them here; the main service timer stays in Live’s top bar.</p>}
+        <AuxTimersPanel />
       </Card>
     </div>
   )

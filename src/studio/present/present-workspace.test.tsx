@@ -25,7 +25,6 @@ vi.mock("@/studio/present/phase-strip", () => ({ PhaseStrip: () => null }))
 vi.mock("@/studio/present/rundown-list", () => ({ RundownList: () => <div data-testid="rundown-list" /> }))
 vi.mock("@/studio/present/quick-find", () => ({ QuickFind: () => <input aria-label="Quick find" /> }))
 vi.mock("@/studio/present/service-timer", () => ({ ServiceTimer: () => null }))
-vi.mock("@/studio/present/aux-timers", () => ({ AuxTimers: () => null }))
 vi.mock("@/studio/present/stage-message", () => ({ StageMessage: () => null }))
 vi.mock("@/studio/present/lower-third", () => ({ LowerThirdControl: () => null }))
 vi.mock("@/studio/present/ticker", () => ({ TickerRow: () => null }))
@@ -42,6 +41,7 @@ vi.mock("@/studio/production/production-workspace", () => ({
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { useBibleStore, useBroadcastStore, useDetectionStore, useQueueStore, useTranscriptStore } from "@/stores"
+import { useAuxTimers } from "@/stores/aux-timers-store"
 import { useShellStore } from "@/studio/shell-store"
 import { openProductionTab, useProductionTab } from "@/studio/production/production-tab"
 import { useServiceStore } from "@/stores/service-store"
@@ -125,6 +125,7 @@ beforeEach(() => {
   useQueueStore.setState({ items: [queueItem, secondQueueItem], headers: [] })
   useTranscriptStore.setState({ segments: [transcript], isTranscribing: true })
   useDetectionStore.setState({ detections: [{ verse_ref: "John 3:16", verse_text: verse.text, book_name: "John", book_number: 43, chapter: 3, verse: 16, confidence: 1, source: "direct", auto_queued: false, transcript_snippet: transcript.text, is_chapter_only: false }] })
+  useAuxTimers.setState({ timers: [] })
 })
 
 afterEach(() => {
@@ -136,12 +137,24 @@ afterEach(() => {
   useQueueStore.setState(initialQueue)
   useTranscriptStore.setState(initialTranscript)
   useDetectionStore.setState(initialDetections)
+  useAuxTimers.setState({ timers: [] })
   useServiceStore.setState(initialService)
   useProductionTab.setState(useProductionTab.getInitialState())
   vi.restoreAllMocks()
 })
 
 describe("Present's unified Live console", () => {
+  it("keeps a running auxiliary timer visible as read-only status while management stays in Timekeeper", async () => {
+    useAuxTimers.setState({ timers: [{ id: "communion-prep", label: "Communion prep", timer: { durationMs: 300_000, startedAt: performance.now(), accumulatedMs: 0 }, onStage: false, owner: "" }] })
+    await renderWorkspace()
+
+    const timerStatus = element.querySelector<HTMLElement>('[title="Running auxiliary timer: Communion prep"]')
+    expect(timerStatus?.textContent).toContain("Communion prep")
+    expect(timerStatus?.textContent).toMatch(/\d:\d{2}/)
+    expect(timerStatus?.querySelector("button")).toBeNull()
+    expect(element.querySelector('[role="toolbar"][aria-label="Live tools"] [title*="Other timers"]')).toBeNull()
+  })
+
   it("offers safe next steps when no service is open without changing Program or the rundown", async () => {
     const program = useBroadcastStore.getState().liveVerse
     const wasLive = useBroadcastStore.getState().isLive

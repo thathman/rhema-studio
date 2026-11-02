@@ -17,6 +17,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { openProductionTab, useProductionTab } from "./production-tab"
 import { useShellStore } from "@/studio/shell-store"
 import { newScene } from "@/lib/scenes"
+import { useAuxTimers } from "@/stores/aux-timers-store"
 
 // Each test's page is taken down after it, so a composer left open does not answer the next test's request.
 const roots: Root[] = []
@@ -32,6 +33,7 @@ afterEach(() => {
   act(() => { for (const r of roots.splice(0)) r.unmount() })
   useSettingsStore.setState({ operatorName: originalOperatorName })
   useBroadcastStore.setState({ takeScene: originalTakeScene })
+  useAuxTimers.setState({ timers: [] })
   useShellStore.setState({ workspace: "home", goRequest: null, prepareDesignReturn: null })
 })
 
@@ -66,12 +68,15 @@ describe("Production control", () => {
 
   it("keeps one service-clock control surface when Timekeeper is docked inside Live", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    useAuxTimers.setState({ timers: [{ id: "communion-prep", label: "Communion prep", timer: { durationMs: 300_000, startedAt: null, accumulatedMs: 0 }, onStage: false, owner: "" }] })
     const el = document.createElement("div")
     document.body.appendChild(el)
     await act(async () => mount(el, true))
     expect(el.querySelector('[role="tablist"][aria-label="Live operation tools"]')).not.toBeNull()
     expect(el.textContent).toContain("Use the service timer in Live’s top bar")
-    expect(el.textContent).toContain("Manage these from the Timers control in Live’s toolbar.")
+    expect(el.textContent).toContain("Manage them here; the main service timer stays in Live’s top bar.")
+    expect(el.textContent).toContain("Communion prep")
+    expect(el.querySelector('[aria-label="Start Communion prep"]')).not.toBeNull()
     expect([...el.querySelectorAll("button")].some((button) => /^(Start|Pause|Resume|Reset)$/.test(button.textContent?.trim() ?? ""))).toBe(false)
   })
 

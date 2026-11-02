@@ -18,7 +18,7 @@ import { PhaseStrip } from "@/studio/present/phase-strip"
 import { RundownList } from "@/studio/present/rundown-list"
 import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceTimer } from "@/studio/present/service-timer"
-import { AuxTimers } from "@/studio/present/aux-timers"
+import { AuxTimerStatus } from "@/studio/present/aux-timers"
 import { StageMessage } from "@/studio/present/stage-message"
 import { LowerThirdControl } from "@/studio/present/lower-third"
 import { ObsChip } from "@/studio/present/obs-chip"
@@ -172,7 +172,7 @@ export function PresentWorkspace() {
             />
           )}
           <ServiceTimer />
-          <AuxTimers />
+          <AuxTimerStatus />
           <EngageHostControl />
           <ObsChip />
           <SoundChip />
