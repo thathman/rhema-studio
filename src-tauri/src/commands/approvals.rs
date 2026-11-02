@@ -4,7 +4,7 @@
 //! their own request, decide once, expiry, stale requests are not applied) are the database's.
 
 use rhema_content::{Actor, ApprovalEvent, ApprovalRequest, ApprovalRequestInput, ContentDb, Decision};
-use tauri::{AppHandle, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 use super::content::{with_db, CmdResult, ContentCommandError, ContentState};
 
@@ -98,7 +98,27 @@ pub fn approvals_apply(app: AppHandle, window: WebviewWindow, state: State<'_, C
         }
         _ => current_revision,
     };
-    with_db(&state, |db| db.apply_approval_request(&id, &main_desk(), current_revision))
+    if request.kind == "stage_send" {
+        // Still a stage display now, or the message goes nowhere.
+        let live = super::remote::current_live_state(&app);
+        if !stage_display_now(live.as_deref(), &request.target_id) {
+            return Err(ContentCommandError::Refused { message: "That stage display is no longer on the host.".into(), code: "gone" });
+        }
+    }
+    let applied = with_db(&state, |db| db.apply_approval_request(&id, &main_desk(), current_revision))?;
+    if applied.kind == "stage_send" {
+        // Delivered as any stage message for one display; the window shows it there.
+        let p = &applied.payload;
+        let _ = app.emit_to("main", "remote:stage_send", serde_json::json!({ "target": p["target"], "text": p["text"], "by": applied.requester.name, "approvedBy": "Main desk" }).to_string());
+    }
+    Ok(applied)
+}
+
+/// Whether `target` is one of the host's stage outputs in its Live State now.
+fn stage_display_now(live: Option<&str>, target: &str) -> bool {
+    live.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok())
+        .and_then(|v| v.get("outputs").and_then(serde_json::Value::as_array).cloned())
+        .is_some_and(|outs| outs.iter().any(|o| o.get("id").and_then(serde_json::Value::as_str) == Some(target) && o.get("role").and_then(serde_json::Value::as_str) == Some("stage")))
 }
 
 #[tauri::command]
@@ -109,6 +129,22 @@ pub fn approvals_history(state: State<'_, ContentState>, id: String) -> CmdResul
 /// The request a desk's scene event asks for: only `remote:save_scene` / `remote:delete_scene`
 /// carrying `request: true` (the control server's verdict that this role may only ask).
 fn scene_request(event: &str, v: &serde_json::Value) -> Option<(Actor, ApprovalRequestInput)> {
+    let text = |k: &str| v.get(k).and_then(serde_json::Value::as_str);
+    // A Stage desk's message for a stage display not assigned to it (doc 35, page 6).
+    if event == "remote:stage_send_request" {
+        let requester = Actor { id: text("byId").unwrap_or("unknown-desk").to_string(), name: text("by").unwrap_or("A desk").to_string() };
+        return Some((
+            requester,
+            ApprovalRequestInput {
+                kind: "stage_send".into(),
+                target_id: text("target").unwrap_or_default().to_string(),
+                base_revision: None,
+                payload: serde_json::json!({ "target": text("target"), "text": text("text") }),
+                reason: text("why").map(str::to_string),
+                ttl_secs: Some(10 * 60),
+            },
+        ));
+    }
     let kind = match event {
         "remote:save_scene" => "scene_save",
         "remote:delete_scene" => "scene_delete",
@@ -117,7 +153,6 @@ fn scene_request(event: &str, v: &serde_json::Value) -> Option<(Actor, ApprovalR
     if v.get("request").and_then(serde_json::Value::as_bool) != Some(true) {
         return None;
     }
-    let text = |k: &str| v.get(k).and_then(serde_json::Value::as_str);
     let target = text("id").or_else(|| v.pointer("/scene/id").and_then(serde_json::Value::as_str)).unwrap_or_default();
     let requester = Actor { id: text("byId").unwrap_or("unknown-desk").to_string(), name: text("by").unwrap_or("A desk").to_string() };
     Some((
@@ -142,7 +177,7 @@ pub(super) fn record_scene_request_with(
 ) -> Result<String, String> {
     let mut v = match serde_json::from_str::<serde_json::Value>(payload) {
         Ok(value) => value,
-        Err(error) if matches!(event, "remote:save_scene" | "remote:delete_scene") => {
+        Err(error) if matches!(event, "remote:save_scene" | "remote:delete_scene" | "remote:stage_send_request") => {
             log::warn!("approval request not recorded: invalid scene request payload: {error}");
             return Err("The host could not read the approval request.".into());
         }
@@ -187,6 +222,32 @@ pub fn record_scene_request(app: &tauri::AppHandle, event: &str, payload: &str) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stage_message_for_an_unassigned_display_is_recorded_as_a_request() {
+        let payload = serde_json::json!({ "target": "choir", "text": "Two minutes", "by": "Stage desk", "byId": "k1", "why": "Choir needs it" }).to_string();
+        let mut seen = None;
+        let out = record_scene_request_with("remote:stage_send_request", &payload, |who, input| {
+            seen = Some((who.clone(), input.kind.clone(), input.target_id.clone(), input.payload.clone(), input.reason.clone()));
+            Ok(("r1".into(), "2026-11-02T22:10:00Z".into()))
+        })
+        .unwrap();
+        let (who, kind, target, body, why) = seen.expect("persisted before anything is emitted");
+        assert_eq!((who.id.as_str(), kind.as_str(), target.as_str(), why.as_deref()), ("k1", "stage_send", "choir", Some("Choir needs it")));
+        assert_eq!(body, serde_json::json!({ "target": "choir", "text": "Two minutes" }), "only what is delivered on approval");
+        assert!(out.contains(r#""requestId":"r1""#), "{out}");
+        // A failed save never lets the request go untracked.
+        assert!(record_scene_request_with("remote:stage_send_request", &payload, |_, _| Err("db down".into())).is_err());
+    }
+
+    #[test]
+    fn an_approved_stage_message_goes_only_to_a_stage_display_still_there() {
+        let live = r#"{"outputs":[{"id":"main","role":"congregation"},{"id":"choir","role":"stage"}]}"#;
+        assert!(stage_display_now(Some(live), "choir"));
+        assert!(!stage_display_now(Some(live), "main"), "never a congregation screen");
+        assert!(!stage_display_now(Some(live), "gone"));
+        assert!(!stage_display_now(None, "choir"));
+    }
 
     #[test]
     fn only_a_bound_host_with_reserved_revisions_handles_scene_approvals() {

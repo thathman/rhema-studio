@@ -2737,6 +2737,38 @@ async fn command_handler<S: CommandSink + 'static>(
             log::info!("HTTP command refused for {}: the main desk has taken back control", entry.name);
             return (StatusCode::LOCKED, CommandResponse::refused(crate::keys::PAUSED_MESSAGE));
         }
+        // A Stage desk's message for a stage display it is not assigned (doc 35, page 6): not refused,
+        // but asked of the main desk, which can let it through. Never for a congregation screen.
+        Some(entry) if entry.role == crate::keys::Role::Stage
+            && matches!(&request.command, RemoteCommand::StageSend(send) if !entry.allows(&request.command)
+                && stage_target_live(state.live.current().as_deref(), &send.target).is_ok()) =>
+        {
+            let RemoteCommand::StageSend(send) = &request.command else { unreachable!() };
+            if entry.paused {
+                return (StatusCode::LOCKED, CommandResponse::refused(crate::keys::PAUSED_MESSAGE));
+            }
+            // A retry of the same request asks once, not twice.
+            let fingerprint = command_fingerprint(&request.command, &entry.name, Some(entry.hash.as_str()), request.service.as_deref(), request.seen.as_ref(), request.why.as_deref());
+            if let Some(id) = request.id.as_deref() {
+                match state.recent.status(id, &fingerprint) {
+                    RecentIdStatus::Replay => return (StatusCode::ACCEPTED, Json(CommandResponse { success: true, note: Some("Already sent to the main desk to approve".into()), ..Default::default() })),
+                    RecentIdStatus::Conflict => return (StatusCode::CONFLICT, CommandResponse::refused("This command id was already used for a different request")),
+                    RecentIdStatus::New => {}
+                }
+            }
+            let text = send.text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(120).collect::<String>();
+            let payload = serde_json::json!({ "target": send.target, "text": text, "by": entry.name, "byId": entry.hash, "why": request.why }).to_string();
+            return match state.sink.emit_event("remote:stage_send_request", &payload) {
+                Ok(()) => {
+                    if let Some(id) = request.id.as_deref() {
+                        state.recent.record(id, &fingerprint);
+                    }
+                    log::info!("Stage message from {} for unassigned display {} sent to the main desk", entry.name, send.target);
+                    (StatusCode::ACCEPTED, Json(CommandResponse { success: true, note: Some("Sent to the main desk to approve: this stage display is not assigned to this desk".into()), ..Default::default() }))
+                }
+                Err(e) => (StatusCode::SERVICE_UNAVAILABLE, CommandResponse::refused(e.to_string())),
+            };
+        }
         Some(entry) if !entry.allows(&request.command) => {
             let why = if matches!(&request.command, RemoteCommand::GroupTakeScene(_)) {
                 "The host has not granted group Take for all selected outputs"
@@ -4007,7 +4039,12 @@ mod tests {
         let send = |target: &str| serde_json::json!({ "command": "stage_send", "value": { "text": "  Two   minutes ", "target": target } });
 
         assert_eq!(press(port, "stg", send("pulpit")).await.0, 200);
-        assert_eq!(press(port, "stg", send("choir")).await.0, 403, "a stage display not assigned to this desk");
+        let mut ask = send("choir");
+        ask["id"] = "ask-choir-1".into();
+        let (status, body) = press(port, "stg", ask.clone()).await;
+        assert_eq!(status, 202, "a stage display not assigned to this desk is asked of the main desk: {body}");
+        assert!(body.contains("approve"), "{body}");
+        assert_eq!(press(port, "stg", ask).await.0, 202, "a retry is answered, not asked again");
         assert_eq!(press(port, "stg", send("main")).await.0, 403, "never a congregation screen");
         assert_eq!(press(port, "pres", send("main")).await.0, 403, "a presenter too: stage messages go only to stage displays");
         assert_eq!(press(port, "pres", send("gone")).await.0, 409, "a display the host no longer has");
@@ -4017,6 +4054,9 @@ mod tests {
         assert_eq!(sends.iter().map(|p| p["target"].as_str().unwrap()).collect::<Vec<_>>(), vec!["pulpit", "choir"]);
         assert_eq!(sends[0]["text"], "Two minutes");
         assert!(!events.iter().any(|(e, _)| e == "remote:stage_message"), "never the all-stages event");
+        let asked: Vec<serde_json::Value> = events.iter().filter(|(e, _)| e == "remote:stage_send_request").map(|(_, p)| serde_json::from_str(p).unwrap()).collect();
+        assert_eq!(asked.len(), 1, "one request for the unassigned display, nothing delivered to it");
+        assert_eq!((asked[0]["target"].as_str(), asked[0]["by"].as_str(), asked[0]["text"].as_str()), (Some("choir"), Some("stg"), Some("Two minutes")));
 
         let view = get_with(port, "/api/v1/live", "X-Rhema-Key: stg\r\n", None).await;
         let body: serde_json::Value = serde_json::from_str(view.split("\r\n\r\n").nth(1).unwrap()).unwrap();
