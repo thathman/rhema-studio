@@ -80,6 +80,9 @@ pub enum RemoteCommand {
     /// A change to this service's song order for today only (#410, page 3, Worship): move, skip,
     /// repeat or insert a song without rewriting the approved plan.
     WorshipSet(WorshipSetIn),
+    /// A message to one stage display (#410, page 6): `target` is that stage output's id. A Stage
+    /// desk may send only to the displays the main desk assigned it.
+    StageSend(StageSendIn),
     /// OBS through the host's own OBS connection (OBS director only): a scene to OBS's Preview,
     /// Take the Preview, or (without Studio Mode) switch OBS's program. Never in rehearsal.
     ObsPreview(String),
@@ -193,6 +196,13 @@ pub struct WorshipSetIn {
     pub before: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub song: Option<String>,
+}
+
+/// A stage message for one stage display (`stage_send`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StageSendIn {
+    pub text: String,
+    pub target: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -495,6 +505,7 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::DeleteScene(d) => write!(f, "delete_scene({})", d.id),
             RemoteCommand::StageMessage(m) => write!(f, "stage_message({m})"),
             RemoteCommand::WorshipSet(w) => write!(f, "worship_set({} {})", w.op.as_str(), w.item),
+            RemoteCommand::StageSend(m) => write!(f, "stage_send({}: {})", m.target, m.text),
             RemoteCommand::ObsPreview(scene) => write!(f, "obs_preview({scene})"),
             RemoteCommand::ObsTake => write!(f, "obs_take"),
             RemoteCommand::ObsProgram(scene) => write!(f, "obs_program({scene})"),
@@ -854,6 +865,7 @@ mod tests {
                 | RemoteCommand::DeleteScene(_)
                 | RemoteCommand::StageMessage(_)
                 | RemoteCommand::WorshipSet(_)
+                | RemoteCommand::StageSend(_)
                 | RemoteCommand::ObsPreview(_)
                 | RemoteCommand::ObsTake
                 | RemoteCommand::ObsProgram(_) => {}

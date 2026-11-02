@@ -569,3 +569,47 @@ describe("a scene's design pin", () => {
     expect(normalizeScene({ ...usual, design: { id: "d1", version: 2, pageId: "../other" } })?.design).toBeUndefined()
   })
 })
+
+describe("a designed moment on the screens its slide names (#448)", () => {
+  const theme = () => useBroadcastStore.getState().themes[0].id
+  const withOverflow = () => useBroadcastStore.setState({
+    outputs: [...useBroadcastStore.getState().outputs, { id: "overflow", name: "Overflow", type: "display", themeId: theme(), monitorIndex: 2, ndi: defaultNdiSettings() }],
+  })
+
+  it("goes only to the named congregation screens; the others keep their scene", async () => {
+    withOverflow()
+    await showDesignedMoment(moment({ id: "d1", version: 2, outputs: ["overflow"] }), getVersion)
+    expect(out("overflow")?.sceneId).toBe("design-d1-v2")
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+    expect(out("stage")?.sceneId).toBeUndefined()
+    await showDesignedMoment(plain, getVersion)
+    expect(out("overflow")?.sceneId).toBeUndefined()
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe(usual.id)
+  })
+
+  it("names none: every congregation screen, as before", async () => {
+    withOverflow()
+    await showDesignedMoment(moment({ id: "d1", version: 2, outputs: [] }), getVersion)
+    expect([out(MAIN_OUTPUT_ID)?.sceneId, out("overflow")?.sceneId]).toEqual(["design-d1-v2", "design-d1-v2"])
+  })
+
+  it("a named screen that is gone or not a congregation screen is said, never shown", async () => {
+    await showDesignedMoment(moment({ id: "d1", version: 2, outputs: [MAIN_OUTPUT_ID, "stage", "removed"] }), getVersion)
+    expect(out(MAIN_OUTPUT_ID)?.sceneId).toBe("design-d1-v2")
+    expect(out("stage")?.sceneId).toBeUndefined()
+    expect(toast.warning).toHaveBeenCalledWith("Design not on every chosen screen", expect.objectContaining({ description: expect.stringContaining("2 screens") }))
+  })
+
+  it("the approval covers the screens too: another set needs approving again, the same set in any order does not", async () => {
+    withOverflow()
+    approve({ m: { id: "d1", version: 2, outputs: [MAIN_OUTPUT_ID] } })
+    await showDesignedMoment(moment({ id: "d1", version: 2, outputs: ["overflow"] }), getVersion)
+    expect(out("overflow")?.sceneId).toBeUndefined()
+    expect(toast.warning).toHaveBeenCalledWith("Design needs approval", expect.objectContaining({ description: expect.stringContaining("1 chosen screen") }))
+    toast.warning.mockClear()
+    approve({ m: { id: "d1", version: 2, outputs: ["overflow", MAIN_OUTPUT_ID] } })
+    await showDesignedMoment(moment({ id: "d1", version: 2, outputs: [MAIN_OUTPUT_ID, "overflow"] }), getVersion)
+    expect([out(MAIN_OUTPUT_ID)?.sceneId, out("overflow")?.sceneId]).toEqual(["design-d1-v2", "design-d1-v2"])
+    expect(toast.warning).not.toHaveBeenCalled()
+  })
+})
