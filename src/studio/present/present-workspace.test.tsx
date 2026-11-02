@@ -12,7 +12,7 @@ const presentCalls = vi.hoisted(() => ({
 }))
 
 vi.mock("@/studio/present-actions", () => ({ presentActions: presentCalls }))
-vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: () => <section aria-label="Preview">Preview stays private</section> }))
+vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ outputLanguageId, onOutputLanguageIdChange }: { outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void }) => <section aria-label="Preview" data-preview-output={outputLanguageId ?? "none"}>Preview stays private<button type="button" onClick={() => onOutputLanguageIdChange?.("yoruba-output")}>Select Yoruba preview</button></section> }))
 vi.mock("@/components/panels/live-output-panel", () => ({ LiveOutputPanel: () => <section data-studio-live>Program</section> }))
 vi.mock("@/components/panels/search-panel", () => ({ SearchPanel: () => <div data-testid="bible-search-panel">Bible search</div> }))
 vi.mock("@/components/panels/transcript-panel", () => ({ TranscriptPanel: () => <div data-testid="transcript-panel">Transcript</div> }))
@@ -130,6 +130,23 @@ afterEach(() => {
 })
 
 describe("Present's unified Live console", () => {
+  it("routes the Preview output picker to a congregation output and keeps the selected choice in the Live workspace", async () => {
+    const baseOutput = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({ outputs: [
+      { ...baseOutput, id: "stage-output", name: "Stage monitor", role: "stage", language: "both" },
+      { ...baseOutput, id: "english-output", name: "English screen", role: "congregation", language: "first" },
+      { ...baseOutput, id: "yoruba-output", name: "Yoruba screen", role: "congregation", language: "second" },
+    ] })
+    const program = useBroadcastStore.getState().liveVerse
+    await renderWorkspace()
+
+    const preview = element.querySelector<HTMLElement>('[aria-label="Preview"]')!
+    expect(preview.dataset.previewOutput).toBe("english-output")
+    await act(async () => preview.querySelector<HTMLButtonElement>("button")!.click())
+    expect(preview.dataset.previewOutput).toBe("yoruba-output")
+    expect(useBroadcastStore.getState().liveVerse).toEqual(program)
+  })
+
   it("renders one console for the legacy Advanced preference and preserves private Preview, Program, queue, listening and keyboard safety", async () => {
     const addListener = vi.spyOn(window, "addEventListener")
     await renderWorkspace()

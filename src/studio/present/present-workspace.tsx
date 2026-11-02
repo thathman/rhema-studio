@@ -1,7 +1,7 @@
 import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
-import { useEffect, useRef, useSyncExternalStore } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { ArrowUpIcon, BookOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PreviewPanel } from "@/components/panels/preview-panel"
@@ -35,6 +35,7 @@ import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 import { useProductionTab } from "@/studio/production/production-tab"
 
 export function PresentWorkspace() {
+  const [selectedPreviewOutputId, setSelectedPreviewOutputId] = useState<string | null>(null)
   const toolsButtonRef = useRef<HTMLButtonElement>(null)
   const productionToolsButtonRef = useRef<HTMLButtonElement>(null)
   const toolsOpen = useProductionTab((s) => s.open)
@@ -44,6 +45,10 @@ export function PresentWorkspace() {
   // Verses carry a reference; quick screens and custom slides may only have lines.
   const liveRef = useBroadcastStore((s) => (s.liveVerse ? s.liveVerse.reference || s.liveVerse.lines?.[0] || "Slide" : null))
   const outputs = useBroadcastStore((s) => s.outputs)
+  const congregationOutputs = outputs.filter((output) => (output.role ?? "congregation") === "congregation")
+  const previewOutputId = congregationOutputs.some((output) => output.id === selectedPreviewOutputId)
+    ? selectedPreviewOutputId
+    : congregationOutputs[0]?.id ?? null
   const outputStatus = useBroadcastStore((s) => s.outputStatus)
   const listening = useTranscriptStore((s) => s.isTranscribing)
   const autoLive = useBroadcastStore((s) => s.autoLive)
@@ -198,6 +203,8 @@ export function PresentWorkspace() {
       </header>
       <div className="relative min-h-0 flex-1">
         <LiveConsoleSurface
+          previewOutputId={previewOutputId}
+          onPreviewOutputChange={setSelectedPreviewOutputId}
           toolsOpen={toolsOpen}
           toolsTab={toolsTab}
           onToolsTabChange={selectToolsTab}
@@ -218,11 +225,15 @@ function subscribeNarrow(onChange: () => void): () => void {
 const isNarrow = () => typeof window.matchMedia === "function" && window.matchMedia(NARROW_PRESENT_QUERY).matches
 
 function LiveConsoleSurface({
+  previewOutputId,
+  onPreviewOutputChange,
   toolsOpen,
   toolsTab,
   onToolsTabChange,
   onCloseTools,
 }: {
+  previewOutputId: string | null
+  onPreviewOutputChange: (outputId: string) => void
   toolsOpen: boolean
   toolsTab: LiveToolsTab
   onToolsTabChange: (tab: LiveToolsTab) => void
@@ -264,7 +275,7 @@ function LiveConsoleSurface({
       <div className="contents max-[1200px]:row-span-3 max-[1200px]:flex max-[1200px]:min-h-0 max-[1200px]:flex-col max-[1200px]:gap-2 max-[1200px]:overflow-y-auto">
       {!narrow && (
         <div className="min-h-0 overflow-hidden rounded-xl [&>div]:h-full">
-          <PreviewPanel />
+          <PreviewPanel outputLanguageId={previewOutputId} onOutputLanguageIdChange={onPreviewOutputChange} />
         </div>
       )}
       {/* Live, with the congregation scenes under it: a scene Take changes a screen's layout, not what is live.
@@ -279,7 +290,7 @@ function LiveConsoleSurface({
       </div>
 
       {/* What Take live will put up, right over it, when the window is too narrow for the Preview panel. */}
-      {narrow && <div className="shrink-0"><PreviewPanel compact /></div>}
+      {narrow && <div className="shrink-0"><PreviewPanel compact outputLanguageId={previewOutputId} onOutputLanguageIdChange={onPreviewOutputChange} /></div>}
       <TransportBar className="col-span-2 max-[1200px]:shrink-0" />
 
       {toolsOpen ? (

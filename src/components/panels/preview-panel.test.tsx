@@ -16,9 +16,10 @@ import { createRoot, type Root } from "react-dom/client"
 import { bibleActions } from "@/hooks/use-bible"
 import { presentActions } from "@/studio/present-actions"
 import { useBibleStore } from "@/stores/bible-store"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useSongStore } from "@/stores/song-store"
-import type { AudioQueueItem, SongQueueItem, SongWithSections, Verse, VerseQueueItem } from "@/types"
+import type { AudioQueueItem, SlideQueueItem, SongQueueItem, SongWithSections, Verse, VerseQueueItem } from "@/types"
 import { PreviewPanel } from "./preview-panel"
 import { useMediaStore } from "@/stores/media-store"
 
@@ -51,6 +52,15 @@ const hymn: SongQueueItem = {
   confidence: 1,
   source: "manual",
   added_at: 1,
+}
+const welcomeSlide: SlideQueueItem = {
+  id: "welcome-slide",
+  kind: "slide",
+  slide: { title: "Welcome", body: "Welcome to the service." },
+  reference: "Welcome",
+  confidence: 1,
+  source: "manual",
+  added_at: 2,
 }
 
 const hymnDetails: SongWithSections = {
@@ -93,6 +103,8 @@ beforeEach(() => {
     selectedSlide: null,
     selectedQueueItemId: opening.id,
     activeTranslationId: 1,
+    secondaryTranslationId: null,
+    overrideServiceTranslations: false,
     translations: [
       { id: 1, title: "King James Version", abbreviation: "KJV", language: "en", is_copyrighted: false, is_downloaded: true },
       { id: 2, title: "Second Version", abbreviation: "SV", language: "en", is_copyrighted: false, is_downloaded: true },
@@ -113,6 +125,106 @@ afterEach(() => {
 })
 
 describe("Preview translation refresh", () => {
+  it("previews the selected congregation output in its configured language without changing Program", async () => {
+    const baseOutput = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({
+      outputs: [
+        { ...baseOutput, id: "english-output", name: "English screen", role: "congregation", language: "first" },
+        { ...baseOutput, id: "yoruba-output", name: "Yoruba screen", role: "congregation", language: "second" },
+        { ...baseOutput, id: "stage-output", name: "Stage monitor", role: "stage", language: "both" },
+      ],
+      isLive: true,
+      liveVerse: { reference: "On air", segments: [{ text: "Program remains unchanged" }] },
+    })
+    useBibleStore.setState({ secondaryTranslationId: 2 })
+    const yoruba = { ...verse, id: 2, translation_id: 2, text: "Nítorí Ọlọ́run fẹ́ aráyé" }
+    vi.spyOn(bibleActions, "fetchVerse").mockImplementation(async (_book, _chapter, _verse, translationId) => translationId === 2 ? yoruba : verse)
+    const program = useBroadcastStore.getState().liveVerse
+
+    await act(async () => root!.render(<PreviewPanel outputLanguageId="english-output" onOutputLanguageIdChange={() => {}} />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(canvasVerses.at(-1)).toMatchObject({ segments: [{ verseNumber: 16, text: verse.text }] })
+    expect(document.body.querySelector('[aria-label="Preview output"]')?.textContent).not.toContain("Stage monitor")
+
+    await act(async () => root!.render(<PreviewPanel outputLanguageId="yoruba-output" onOutputLanguageIdChange={() => {}} />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+
+    expect(bibleActions.fetchVerse).toHaveBeenCalledWith(43, 3, 16, 2)
+    expect(canvasVerses.at(-1)).toMatchObject({ segments: [{ text: yoruba.text }] })
+    expect(useBroadcastStore.getState().liveVerse).toEqual(program)
+    expect(useBroadcastStore.getState().isLive).toBe(true)
+  })
+
+  it("keeps the available text and shows checking until a missing secondary translation is confirmed", async () => {
+    const baseOutput = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({ outputs: [{ ...baseOutput, id: "yoruba-output", name: "Yoruba screen", role: "congregation", language: "second" }] })
+    useBibleStore.setState({ secondaryTranslationId: 2 })
+    const request = deferred<Verse | null>()
+    vi.spyOn(bibleActions, "fetchVerse").mockReturnValue(request.promise)
+    const host = document.body.firstElementChild!
+
+    await act(async () => root!.render(<PreviewPanel outputLanguageId="yoruba-output" onOutputLanguageIdChange={() => {}} />))
+    await act(async () => Promise.resolve())
+
+    expect(canvasVerses.at(-1)).toMatchObject({ segments: [{ verseNumber: 16, text: verse.text }] })
+    expect(host.querySelector('[role="status"]')?.textContent).toContain("Checking the selected output’s second language")
+    expect(host.textContent).not.toContain("Second language unavailable")
+
+    await act(async () => {
+      request.resolve(null)
+      await request.promise
+    })
+
+    expect(host.textContent).toContain("Second language unavailable")
+  })
+
+  it("falls back when the secondary lookup returns a verse with a different identity", async () => {
+    const baseOutput = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({ outputs: [{ ...baseOutput, id: "yoruba-output", name: "Yoruba screen", role: "congregation", language: "second" }] })
+    useBibleStore.setState({ secondaryTranslationId: 2 })
+    const request = deferred<Verse | null>()
+    vi.spyOn(bibleActions, "fetchVerse").mockReturnValue(request.promise)
+    const selectVerse = vi.spyOn(bibleActions, "selectVerse")
+    const host = document.body.firstElementChild!
+
+    await act(async () => root!.render(<PreviewPanel outputLanguageId="yoruba-output" onOutputLanguageIdChange={() => {}} />))
+    await act(async () => Promise.resolve())
+    expect(host.textContent).toContain("Checking the selected output’s second language")
+
+    await act(async () => {
+      request.resolve({ ...verse, book_number: 1, translation_id: 2, text: "A different verse" })
+      await request.promise
+    })
+
+    expect(host.textContent).toContain("Second language unavailable")
+    expect(host.textContent).not.toContain("Checking the selected output’s second language")
+    expect(selectVerse).not.toHaveBeenCalled()
+    expect(useBibleStore.getState().selectedVerse).toEqual(verse)
+    expect(canvasVerses.at(-1)).toMatchObject({ segments: [{ verseNumber: 16, text: verse.text }] })
+  })
+
+  it("does not let a late secondary-language response replace a newly selected slide preview", async () => {
+    const baseOutput = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({ outputs: [{ ...baseOutput, id: "yoruba-output", name: "Yoruba screen", role: "congregation", language: "second" }] })
+    useBibleStore.setState({ secondaryTranslationId: 2 })
+    const request = deferred<Verse | null>()
+    vi.spyOn(bibleActions, "fetchVerse").mockReturnValue(request.promise)
+
+    await act(async () => root!.render(<PreviewPanel outputLanguageId="yoruba-output" onOutputLanguageIdChange={() => {}} />))
+    await act(async () => Promise.resolve())
+    expect(bibleActions.fetchVerse).toHaveBeenCalledWith(43, 3, 16, 2)
+
+    await act(async () => presentActions.previewItem(welcomeSlide))
+    await act(async () => {
+      request.resolve({ ...verse, id: 2, translation_id: 2, text: "Late Yoruba" })
+      await request.promise
+    })
+
+    expect(useBibleStore.getState().selectedSlide?.item.id).toBe(welcomeSlide.id)
+    expect(canvasVerses.at(-1)).toMatchObject({ reference: "Welcome", lines: ["Welcome to the service."] })
+    expect(canvasVerses.at(-1)).not.toMatchObject({ segments: [{ text: "Late Yoruba" }] })
+  })
+
   it("does not let an old verse refresh replace a newly selected service item", async () => {
     const request = deferred<Verse | null>()
     vi.spyOn(bibleActions, "fetchVerse").mockReturnValue(request.promise)
@@ -131,6 +243,39 @@ describe("Preview translation refresh", () => {
 
     expect(useBibleStore.getState().selectedQueueItemId).toBe(hymn.id)
     expect(useBibleStore.getState().selectedSlide?.item.id).toBe(hymn.id)
+  })
+
+  it("does not apply an older translation refresh after the active translation changes again", async () => {
+    const secondTranslation = deferred<Verse | null>()
+    const thirdTranslation = deferred<Verse | null>()
+    vi.spyOn(bibleActions, "fetchVerse").mockImplementation((_book, _chapter, _verse, translationId) => translationId === 2 ? secondTranslation.promise : translationId === 3 ? thirdTranslation.promise : Promise.resolve(verse))
+    useBibleStore.setState({ translations: [
+      ...useBibleStore.getState().translations,
+      { id: 3, title: "Third Version", abbreviation: "TV", language: "yo", is_copyrighted: false, is_downloaded: true },
+    ] })
+
+    await act(async () => root!.render(<PreviewPanel />))
+    await act(async () => useBibleStore.getState().setActiveTranslation(2))
+    await act(async () => {
+      useBibleStore.getState().setActiveTranslation(3)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(useBibleStore.getState().activeTranslationId).toBe(3)
+
+    expect(bibleActions.fetchVerse).toHaveBeenCalledWith(43, 3, 16, 2)
+    expect(bibleActions.fetchVerse).toHaveBeenCalledWith(43, 3, 16, 3)
+
+    await act(async () => {
+      secondTranslation.resolve({ ...verse, id: 2, translation_id: 2, text: "Older translation" })
+      await secondTranslation.promise
+    })
+    expect(useBibleStore.getState().selectedVerse).toEqual(verse)
+
+    await act(async () => {
+      thirdTranslation.resolve({ ...verse, id: 3, translation_id: 3, text: "Current translation" })
+      await thirdTranslation.promise
+    })
+    expect(useBibleStore.getState().selectedVerse).toMatchObject({ translation_id: 3, text: "Current translation" })
   })
 
   it("shows local-only audio in Preview and names a missing file", async () => {
