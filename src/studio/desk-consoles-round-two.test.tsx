@@ -78,12 +78,17 @@ describe("worship desk: key, repeat chorus and the worship set", () => {
     expect(button(older, "Repeat chorus")).toBeUndefined()
   })
 
-  it("lists the service's songs in order with their keys, and which is on the screens", async () => {
+  it("shows the temporary Worship order with keys, identifies the live song, and offers order controls", async () => {
     const el = await render("worship")
-    const set = el.querySelector('[aria-label="Worship set"]')!
-    const rows = [...set.querySelectorAll("li")].map((li) => li.textContent)
-    expect(rows).toEqual(["1Great Is Thy FaithfulnessKey D", "2Amazing GraceKey GOn the screens", "3Blessed Assurance"])
-    expect(set.querySelectorAll("button")).toHaveLength(0)
+    const set = el.querySelector('[aria-label="Temporary Worship order"]')!
+    const rows = [...set.querySelectorAll("ol > li")].map((li) => [...li.querySelectorAll("span")].map((span) => span.textContent))
+    expect(rows).toEqual([
+      ["1", "Great Is Thy Faithfulness", "Key D"],
+      ["2", "Amazing Grace", "Key G", "On the screens"],
+      ["3", "Blessed Assurance"],
+    ])
+    expect(set.querySelectorAll("button")).toHaveLength(12)
+    expect(set.querySelector<HTMLButtonElement>('[aria-label="Skip Amazing Grace today"]')?.disabled).toBe(true)
   })
 })
 
