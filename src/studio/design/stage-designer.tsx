@@ -65,6 +65,7 @@ export function StageDesigner() {
   const draft = useDesignDraft("stage", "default", publishedStyle, normalizeStageStyle)
   const style = draft.value
   const zone = useSettingsStore((s) => s.setup.timeZone)
+  const brandKit = useSettingsStore((s) => s.brandKit)
   const canvas = useRef<HTMLCanvasElement>(null)
   const patch = (p: Partial<StageStyle>) => draft.update(normalizeStageStyle({ ...style, ...p }))
   const liveOutputs = outputs.filter((output) => output.role === "stage").map((output) => output.name)
@@ -97,6 +98,28 @@ export function StageDesigner() {
         <div className="flex min-w-0 flex-col gap-3">
           <Row label="Background"><Colour label="Background colour" value={style.background} onChange={(background) => patch({ background })} /></Row>
           <Row label="Words"><Colour label="Words colour" value={style.words} onChange={(words) => patch({ words })} /></Row>
+          <section className="space-y-2 border-t border-border pt-3" aria-label="Brand Kit styles">
+            <h4 className="text-[0.6875rem] font-semibold">Brand Kit</h4>
+            <p className="text-[0.6875rem] text-muted-foreground">Copy a Brand Kit colour into this draft. Later Brand Kit changes will not update this style; connected stage outputs stay unchanged until you apply it.</p>
+            <Button
+              size="xs"
+              variant="outline"
+              aria-label="Apply Brand Kit stage background colour"
+              onClick={() => patch({ background: brandKit.colors.primary })}
+            >
+              <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: brandKit.colors.primary }} />
+              Background · {brandKit.colors.primary}
+            </Button>
+            <Button
+              size="xs"
+              variant="outline"
+              aria-label="Apply Brand Kit stage text colour"
+              onClick={() => patch({ words: brandKit.colors.text })}
+            >
+              <span aria-hidden="true" className="size-3 rounded-full border border-border" style={{ backgroundColor: brandKit.colors.text }} />
+              Words · {brandKit.colors.text}
+            </Button>
+          </section>
           <Row label="Words size">
             <span className="flex items-center gap-1.5">
               <input type="range" aria-label="Words size" min={70} max={160} step={5} value={Math.round(style.wordsScale * 100)} onChange={(e) => patch({ wordsScale: Number(e.target.value) / 100 })} className="w-28 accent-primary" />
