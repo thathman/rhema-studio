@@ -16,6 +16,7 @@ export interface SceneRequestReviewModel {
   baseRevisionLabel: string
   blockReason: string | null
   applyBlockReason: string | null
+  reviewNotice: string | null
   changes: string[]
 }
 
@@ -101,10 +102,46 @@ function sceneContent(scene: Scene): unknown {
   return stable(Object.fromEntries(Object.entries(scene).filter(([key]) => !["createdAt", "updatedAt", "updatedBy"].includes(key))))
 }
 
-function layerLabel(layer: SceneLayer): string {
+type CameraLabel = (url: string) => string | undefined
+
+export function sceneLayerReviewSummary(layer: SceneLayer, cameraLabelForUrl?: CameraLabel): string {
   const text = typeof layer.text === "string" ? layer.text.trim() : ""
-  const detail = layer.kind === "text" && text ? `: “${text.replace(/\s+/g, " ").slice(0, 72)}”` : ""
-  return `${layer.name} (${layer.kind})${detail}`
+  const details = [
+    reviewedValue("box", layer.box),
+    `${reviewedValue("opacity", layer.opacity)} opacity`,
+    layer.visible ? "visible" : "hidden",
+  ]
+  if (layer.crop) details.push(`crop ${reviewedValue("crop", layer.crop)}`)
+  if (layer.fadeMs !== undefined) details.push(`${reviewedValue("fadeMs", layer.fadeMs)} ms transition`)
+  if (layer.held) details.push("holds a content snapshot")
+  if (layer.kind === "text") {
+    details.push(`text “${text.replace(/\s+/g, " ").slice(0, 72)}”`)
+    details.push(`${reviewedValue("fontFamily", layer.fontFamily)} ${reviewedValue("fontSize", layer.fontSize)} px · ${reviewedValue("textColor", layer.textColor)} · weight ${reviewedValue("fontWeight", layer.fontWeight)} · ${reviewedValue("fontStyle", layer.fontStyle)}`)
+    if (layer.lineHeight !== undefined) details.push(`line spacing ${reviewedValue("lineHeight", layer.lineHeight)}`)
+    if (layer.textAlign) details.push(`align ${layer.textAlign}`)
+    if (layer.underline) details.push("underlined")
+  }
+  if (layer.kind === "color" || layer.kind === "ellipse") details.push(`color ${reviewedValue("color", layer.color)}`)
+  if (layer.kind === "feed") {
+    details.push(layer.shows?.length ? `shows ${reviewedValue("shows", layer.shows)}` : "no content sources selected")
+    if (layer.language) details.push(`language ${layer.language}`)
+    if (layer.themeId) details.push(`theme ${reviewedValue("themeId", layer.themeId)}`)
+  }
+  if (layer.kind === "camera") {
+    const label = layer.cameraUrl ? cameraLabelForUrl?.(layer.cameraUrl) : undefined
+    details.push(`camera ${label ?? (layer.cameraUrl ? "configured source · name unavailable" : "not bound")}`)
+    if (layer.cameraFallback) details.push(`fallback ${reviewedValue("cameraFallback", layer.cameraFallback)}`)
+    details.push(`no signal ${layer.noSignal ?? "bars"}`)
+    details.push(`camera name ${layer.noSignalName ? "on" : "off"}`)
+  }
+  if (layer.kind === "clock") {
+    if (layer.clockShows) details.push(`clock ${layer.clockShows}`)
+    if (layer.countdownTo) details.push(`countdown ${reviewedValue("countdownTo", layer.countdownTo)}`)
+    if (layer.until) details.push(`until ${layer.until}`)
+    if (layer.themeId) details.push(`theme ${reviewedValue("themeId", layer.themeId)}`)
+  }
+  if ((layer.kind === "picture" || layer.kind === "video" || layer.kind === "logo") && hasHostMedia(layer)) details.push("host media attached")
+  return `${layer.name} (${layer.kind}) · ${details.join(" · ")}`
 }
 
 const REVIEW_LAYER_FIELDS = [
@@ -112,11 +149,14 @@ const REVIEW_LAYER_FIELDS = [
   ["visible", "Visibility"], ["color", "Color"], ["textColor", "Text color"], ["fontFamily", "Font"],
   ["fontSize", "Font size"], ["fontWeight", "Weight"], ["fontStyle", "Style"], ["textAlign", "Text alignment"],
   ["lineHeight", "Line spacing"], ["underline", "Underline"], ["crop", "Crop"], ["shows", "Content types"],
-  ["language", "Language"], ["clockShows", "Clock display"], ["until", "Countdown target"], ["fadeMs", "Transition"],
+  ["language", "Language"], ["cameraUrl", "Camera source"], ["cameraFallback", "Camera fallback"], ["noSignal", "No-signal behavior"],
+  ["noSignalName", "Show no-signal name"], ["clockShows", "Clock display"], ["countdownTo", "Countdown event"],
+  ["until", "Countdown target"], ["themeId", "Theme"], ["fadeMs", "Transition"],
 ] as const
 
-function reviewedValue(key: string, value: unknown): string {
+function reviewedValue(key: string, value: unknown, cameraLabelForUrl?: CameraLabel): string {
   if (value === undefined || value === null) return "unset"
+  if (key === "cameraUrl") return typeof value === "string" && value ? cameraLabelForUrl?.(value) ?? "configured source · name unavailable" : "not bound"
   if (key === "box" || key === "crop") {
     const record = plainRecord(value)
     if (!record) return "invalid"
@@ -128,17 +168,17 @@ function reviewedValue(key: string, value: unknown): string {
   return text.trim().replace(/\s+/g, " ").slice(0, 72)
 }
 
-function changedLayerDetails(before: SceneLayer, after: SceneLayer): string[] {
+function changedLayerDetails(before: SceneLayer, after: SceneLayer, cameraLabelForUrl?: CameraLabel): string[] {
   const changes = REVIEW_LAYER_FIELDS.flatMap(([key, label]) => {
     const oldValue = (before as unknown as PlainRecord)[key]
     const newValue = (after as unknown as PlainRecord)[key]
     if (JSON.stringify(stable(oldValue)) === JSON.stringify(stable(newValue))) return []
-    return [`${label}: ${reviewedValue(key, oldValue)} → ${reviewedValue(key, newValue)}`]
+    return [`${label}: ${reviewedValue(key, oldValue, cameraLabelForUrl)} → ${reviewedValue(key, newValue, cameraLabelForUrl)}`]
   })
   return changes.length ? changes : ["visual properties changed"]
 }
 
-function sceneChanges(before: Scene | null, after: Scene | null, kind: string): string[] {
+function sceneChanges(before: Scene | null, after: Scene | null, kind: string, cameraLabelForUrl?: CameraLabel): string[] {
   if (kind === "scene_delete") return [before ? `Delete “${before.name}” from the scene library.` : "Delete the requested scene from the scene library."]
   if (!after) return []
   if (!before) return [`Create “${after.name}” with ${after.layers.length} visual layer${after.layers.length === 1 ? "" : "s"}.`]
@@ -156,16 +196,16 @@ function sceneChanges(before: Scene | null, after: Scene | null, kind: string): 
     const previous = beforeById.get(layer.id)
     return previous && JSON.stringify(stable(previous)) !== JSON.stringify(stable(layer))
   })
-  if (added.length) changes.push(`Layers added: ${added.map(layerLabel).join("; ")}.`)
-  if (removed.length) changes.push(`Layers removed: ${removed.map(layerLabel).join("; ")}.`)
+  if (added.length) changes.push(`Layers added: ${added.map((layer) => sceneLayerReviewSummary(layer, cameraLabelForUrl)).join("; ")}.`)
+  if (removed.length) changes.push(`Layers removed: ${removed.map((layer) => sceneLayerReviewSummary(layer, cameraLabelForUrl)).join("; ")}.`)
   if (changed.length) changes.push(`Layers changed: ${changed.map((layer) => {
     const previous = beforeById.get(layer.id)!
-    return `${previous.name} → ${layer.name}: ${changedLayerDetails(previous, layer).join("; ")}`
+    return `${previous.name} → ${layer.name}: ${changedLayerDetails(previous, layer, cameraLabelForUrl).join("; ")}`
   }).join("; ")}.`)
   const commonBefore = before.layers.filter((layer) => afterById.has(layer.id)).map((layer) => layer.id)
   const commonAfter = after.layers.filter((layer) => beforeById.has(layer.id)).map((layer) => layer.id)
   if (commonBefore.length > 1 && commonBefore.join("\u0000") !== commonAfter.join("\u0000")) {
-    changes.push(`Layer order: ${after.layers.map(layerLabel).join(" → ")}.`)
+    changes.push(`Layer order: ${after.layers.map((layer) => sceneLayerReviewSummary(layer, cameraLabelForUrl)).join(" → ")}.`)
   }
   if (!changes.length && JSON.stringify(sceneContent(before)) === JSON.stringify(sceneContent(after))) {
     return ["No composition differences from this local reference. The host still checks the submitted base revision before Apply."]
@@ -178,6 +218,7 @@ export function sceneRequestReviewModel(
   request: ApprovalRequest,
   scenes: readonly Scene[],
   recovery?: SceneApprovalRecovery,
+  cameraLabelForUrl?: CameraLabel,
 ): SceneRequestReviewModel {
   const currentScene = scenes.find((scene) => scene.id === request.targetId)
   const validRecovery = recovery && recovery.requestId === request.id && recovery.targetId === request.targetId && recovery.kind === request.kind ? recovery : null
@@ -196,20 +237,27 @@ export function sceneRequestReviewModel(
   let requestedScene: Scene | null = null
   let blockReason: string | null = null
   let applyBlockReason: string | null = null
+  let reviewNotice: string | null = null
   if (request.kind === "scene_save") {
     const proposal = normalizeRequestedScene(request, sceneMergeBase ?? undefined)
     requestedScene = proposal.scene
     blockReason = proposal.error
     applyBlockReason = proposal.error
     if (!applied && !currentScene && request.baseRevision !== null) {
-      blockReason = "The target scene is missing from this local library. Refresh the scene library before reviewing this revision."
+      const missingLocalScene = "The target scene is missing from this local library. Refresh the scene library before reviewing this revision."
+      if (request.state === "submitted") blockReason = missingLocalScene
+      else if (request.state === "approved") reviewNotice = "No matching scene is available in this local library for comparison. The approved request can still be checked against the authoritative host revision before Apply."
     } else if (currentScene && request.baseRevision === null && !(applied && validRecovery && validRecovery.beforeScene === null)) {
       const missingRevision = "This scene update has no host base revision. Ask the operator to submit a fresh request before approving it."
       blockReason = missingRevision
       applyBlockReason = missingRevision
     }
   } else if (request.kind === "scene_delete") {
-    if (!applied && !currentScene) blockReason = "The target scene is missing from this local library. Refresh the scene library before reviewing its deletion."
+    if (!applied && !currentScene) {
+      const missingLocalScene = "The target scene is missing from this local library. Refresh the scene library before reviewing its deletion."
+      if (request.state === "submitted") blockReason = missingLocalScene
+      else if (request.state === "approved") reviewNotice = "No matching scene is available in this local library. The approved deletion can still be checked against the authoritative host revision before Apply."
+    }
     if (request.baseRevision === null) {
       const missingRevision = "This deletion has no host base revision. Ask the operator to submit a fresh request before approving it."
       blockReason = missingRevision
@@ -228,9 +276,9 @@ export function sceneRequestReviewModel(
     : `Submitted against host revision ${request.baseRevision}`
   const changes = request.kind === "scene_save" && !beforeScene && request.baseRevision !== null
     ? ["No trustworthy before snapshot is available for this host revision."]
-    : sceneChanges(beforeScene, request.kind === "scene_delete" ? null : requestedScene, request.kind)
+    : sceneChanges(beforeScene, request.kind === "scene_delete" ? null : requestedScene, request.kind, cameraLabelForUrl)
 
-  return { beforeScene, beforeStatus, beforeLabel, requestedScene, requestedLabel, baseRevisionLabel, blockReason, applyBlockReason, changes }
+  return { beforeScene, beforeStatus, beforeLabel, requestedScene, requestedLabel, baseRevisionLabel, blockReason, applyBlockReason, reviewNotice, changes }
 }
 
 export function scenePlanReferenceLabels(items: readonly QueueItem[], headers: readonly OutlineHeader[], sceneId: string): string[] {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { OutlineHeader } from "@/lib/run-of-show"
 import type { QueueItem, Scene, SceneLayer } from "@/types"
 import type { ApprovalRequest } from "./approval-requests-store"
-import { scenePlanReferenceLabels, sceneRequestReviewModel } from "./scene-request-review"
+import { sceneLayerReviewSummary, scenePlanReferenceLabels, sceneRequestReviewModel } from "./scene-request-review"
 
 function textLayer(text: string): SceneLayer {
   return {
@@ -55,14 +55,33 @@ describe("scene approval review", () => {
     const before = scene("Welcome")
     const subtitle: SceneLayer = { ...textLayer("Sunday service"), id: "subtitle", name: "Subtitle", box: { x: 5, y: 34, w: 90, h: 12 } }
     const panel: SceneLayer = { id: "panel", name: "Backdrop", kind: "color", color: "#222222", box: { x: 5, y: 8, w: 90, h: 40 }, opacity: 1, visible: true }
-    const movedSubtitle = { ...subtitle, box: { x: 8, y: 40, w: 84, h: 14 } }
-    const changedPanel = { ...panel, color: "#334455" }
-    const requested = request({ payload: { scene: { id: "welcome", name: "Welcome", background: "#000000", layers: [movedSubtitle, textLayer("Welcome"), changedPanel] } } })
+    const movedHeading = { ...textLayer("Welcome to worship"), box: { x: 8, y: 10, w: 80, h: 22 } }
+    const changedPanel = { ...panel, color: "#334455", box: { x: 6, y: 9, w: 88, h: 38 } }
+    const badge: SceneLayer = { id: "badge", name: "Welcome badge", kind: "color", color: "#336699", box: { x: 1, y: 2, w: 20, h: 10 }, opacity: 0.9, visible: true }
+    const requested = request({ payload: { scene: { id: "welcome", name: "Welcome", background: "#000000", layers: [changedPanel, movedHeading, badge] } } })
     const model = sceneRequestReviewModel(requested, [{ ...before, layers: [textLayer("Welcome"), subtitle, panel] }])
 
-    expect(model.changes.join(" ")).toContain("Position and size: x 5%, y 34%, w 90%, h 12% → x 8%, y 40%, w 84%, h 14%")
+    expect(model.changes.join(" ")).toContain("Position and size: x 5%, y 8%, w 90%, h 20% → x 8%, y 10%, w 80%, h 22%")
     expect(model.changes.join(" ")).toContain("Color: #222222 → #334455")
+    expect(model.changes.join(" ")).toContain("Layers added: Welcome badge (color) · x 1%, y 2%, w 20%, h 10% · 90% opacity · visible · color #336699")
+    expect(model.changes.join(" ")).toContain("Layers removed: Subtitle (text) · x 5%, y 34%, w 90%, h 12% · 100% opacity · visible · text “Sunday service”")
     expect(model.changes.join(" ")).toContain("Layer order:")
+  })
+
+  it("shows camera bindings and fallback behavior without exposing the stream URL", () => {
+    const camera: SceneLayer = {
+      id: "camera-layer", name: "Pulpit", kind: "camera", cameraUrl: "http://192.168.1.10:8889/pulpit/whep?token=private",
+      cameraFallback: "Camera feed unavailable", noSignal: "words", noSignalName: true,
+      box: { x: 5, y: 8, w: 90, h: 80 }, opacity: 1, visible: true,
+    }
+    const summary = sceneLayerReviewSummary(camera, () => "Pulpit Camera")
+
+    expect(summary).toContain("camera Pulpit Camera")
+    expect(summary).toContain("fallback Camera feed unavailable")
+    expect(summary).toContain("no signal words")
+    expect(summary).toContain("camera name on")
+    expect(summary).not.toContain("192.168.1.10")
+    expect(summary).not.toContain("private")
   })
 
   it("fails closed when the submitted scene is missing a complete layer list", () => {
@@ -100,6 +119,15 @@ describe("scene approval review", () => {
     expect(withoutRecovery.beforeScene).toBeNull()
     expect(withoutRecovery.beforeStatus).toBe("unavailable")
     expect(withoutRecovery.beforeLabel).toContain("unavailable")
+  })
+
+  it("keeps an approved request actionable when the local scene is missing and labels that context informationally", () => {
+    const model = sceneRequestReviewModel(request({ state: "approved" }), [])
+
+    expect(model.blockReason).toBeNull()
+    expect(model.applyBlockReason).toBeNull()
+    expect(model.reviewNotice).toContain("No matching scene is available in this local library")
+    expect(model.changes).toContain("No trustworthy before snapshot is available for this host revision.")
   })
 
   it("finds direct scene assignments and scene Take steps in current local service events", () => {

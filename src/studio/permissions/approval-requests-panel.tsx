@@ -4,10 +4,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { outputsForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { scenesOnScreen } from "@/lib/desk-scenes"
+import { cameraLabelOf } from "@/lib/cameras"
 import { useQueueStore } from "@/stores/queue-store"
 import { useJoin } from "@/stores/join-store"
+import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
-import { scenePlanReferenceLabels, sceneRequestReviewModel, type SceneRequestReviewModel } from "./scene-request-review"
+import { sceneLayerReviewSummary, scenePlanReferenceLabels, sceneRequestReviewModel, type SceneRequestReviewModel } from "./scene-request-review"
 import {
   applySceneApprovalRequest,
   decideApprovalRequest,
@@ -58,16 +60,31 @@ function requestImpact(
   return `Target: ${request.targetId}`
 }
 
-function SceneCompositionSummary({ scene, missingText }: { scene: import("@/types").Scene | null; missingText: string }) {
+function sceneDeleteInstruction(request: ApprovalRequest): string {
+  switch (request.state) {
+    case "submitted": return "If approved, the scene will be removed only after explicit host Apply."
+    case "approved": return "The scene will be removed only after explicit host Apply."
+    case "applied": return "The host applied this deletion. The scene was removed from its library; Program remains unchanged."
+    case "declined": return "The host declined this deletion. The scene remains in the library."
+    case "requested_changes": return "The host requested changes. The scene remains in the library until a fresh request is reviewed."
+    case "expired": return "This deletion request expired. The scene remains in the library."
+    case "withdrawn": return "This deletion request was withdrawn. The scene remains in the library."
+    case "superseded": return "This deletion request is stale. The scene remains in the library; submit a fresh request after reviewing its current revision."
+  }
+  return "This request did not remove the scene from the library."
+}
+
+function SceneCompositionSummary({ scene, missingText, cameraLabelForUrl }: {
+  scene: import("@/types").Scene | null
+  missingText: string
+  cameraLabelForUrl: (url: string) => string | undefined
+}) {
   if (!scene) return <p className="mt-1 text-xs text-muted-foreground">{missingText}</p>
   return (
     <div className="mt-1 space-y-1 text-xs text-muted-foreground">
       <p>{scene.name} · {scene.background} · {scene.layers.length} visual layer{scene.layers.length === 1 ? "" : "s"}</p>
       {scene.layers.length > 0 ? <ol className="list-inside list-decimal space-y-0.5">
-        {scene.layers.map((layer) => {
-          const text = typeof layer.text === "string" ? layer.text.trim() : ""
-          return <li key={layer.id}>{layer.name} ({layer.kind}){layer.kind === "text" && text ? `: ${text.replace(/\s+/g, " ").slice(0, 72)}` : ""}</li>
-        })}
+        {scene.layers.map((layer) => <li key={layer.id}>{sceneLayerReviewSummary(layer, cameraLabelForUrl)}</li>)}
       </ol> : <p>Blank composition · no visual layers</p>}
     </div>
   )
@@ -79,12 +96,14 @@ function SceneRequestReview({
   assignedOutputs,
   rehearsal,
   planReferences,
+  cameraLabelForUrl,
 }: {
   request: ApprovalRequest
   model: SceneRequestReviewModel
   assignedOutputs: string[]
   rehearsal: boolean
   planReferences: string[]
+  cameraLabelForUrl: (url: string) => string | undefined
 }) {
   return (
     <section aria-label="Scene change review" className="mt-3 rounded-md border border-border bg-muted/20 p-3">
@@ -99,13 +118,14 @@ function SceneRequestReview({
           <SceneCompositionSummary
             scene={model.beforeScene}
             missingText={model.beforeStatus === "unavailable" ? "No trustworthy pre-Apply snapshot is available." : "No scene with this ID is present in the local library."}
+            cameraLabelForUrl={cameraLabelForUrl}
           />
         </div>
         <div className="min-w-0 rounded-md border border-border bg-background p-3">
           <h5 className="text-xs font-semibold">{model.requestedLabel}</h5>
           {request.kind === "scene_delete"
-            ? <p className="mt-1 text-xs text-muted-foreground">{request.state === "applied" ? "The scene was removed from the host library. Program remains unchanged." : "The scene will be removed from the library only after explicit host Apply."}</p>
-            : <SceneCompositionSummary scene={model.requestedScene} missingText="The requested scene version cannot be reproduced safely." />}
+            ? <p className="mt-1 text-xs text-muted-foreground">{sceneDeleteInstruction(request)}</p>
+            : <SceneCompositionSummary scene={model.requestedScene} missingText="The requested scene version cannot be reproduced safely." cameraLabelForUrl={cameraLabelForUrl} />}
         </div>
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -127,6 +147,7 @@ function SceneRequestReview({
         </div>
       </div>
       {model.blockReason && <p id={`scene-review-warning-${request.id}`} role="alert" className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-950">{model.blockReason}</p>}
+      {model.reviewNotice && <p role="status" className="mt-3 rounded-md border border-border bg-muted/40 p-2 text-xs text-muted-foreground">{model.reviewNotice}</p>}
     </section>
   )
 }
@@ -156,11 +177,13 @@ export function ApprovalRequestsPanel() {
   const outputs = useBroadcastStore((state) => state.outputs)
   const rehearsal = useBroadcastStore((state) => state.rehearsal)
   const rehearsalReturn = useBroadcastStore((state) => state.rehearsalReturn)
+  const cameras = useSettingsStore((state) => state.cameras)
   const queueItems = useQueueStore((state) => state.items)
   const queueHeaders = useQueueStore((state) => state.headers)
   const screenState = { outputs, rehearsal, rehearsalReturn }
   const outputsOnScreens = outputsForScreens(screenState)
   const sceneIdsOnScreens = scenesOnScreen(screenState)
+  const cameraLabelForUrl = (url: string) => cameraLabelOf(url, cameras)
   const requests = useApprovalRequestsStore((state) => state.requests)
   const localApplicationErrors = useApprovalRequestsStore((state) => state.localApplicationErrors)
   const localSceneRecoveries = useApprovalRequestsStore((state) => state.localSceneRecoveries)
@@ -279,7 +302,7 @@ export function ApprovalRequestsPanel() {
               const recovery = localSceneRecoveries[request.id]
               const needsLocalRecovery = sceneApprovalNeedsLocalRecovery(request, scenes, localApplicationErrors[request.id], localRecoveryDismissed[request.id])
               const hasNewerLocalConflict = sceneApprovalHasNewerLocalConflict(request, scenes, recovery)
-              const sceneReview = request.kind.startsWith("scene_") ? sceneRequestReviewModel(request, scenes, recovery) : null
+              const sceneReview = request.kind.startsWith("scene_") ? sceneRequestReviewModel(request, scenes, recovery, cameraLabelForUrl) : null
               const assignedOutputs = outputsOnScreens.filter((output) => output.sceneId === request.targetId).map((output) => output.name)
               const planReferences = sceneReview ? scenePlanReferenceLabels(queueItems, queueHeaders, request.targetId) : []
               return (
@@ -291,7 +314,7 @@ export function ApprovalRequestsPanel() {
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">From {request.requester.name} · {dateWords(request.createdAt)} · {request.baseRevision === null ? "No base revision" : `Based on host revision ${request.baseRevision}`} · Expires {dateWords(request.expiresAt)}</p>
                     {!sceneReview && <p className="mt-1 text-xs text-muted-foreground">{requestImpact(request)}</p>}
-                    {sceneReview && <SceneRequestReview request={request} model={sceneReview} assignedOutputs={assignedOutputs} rehearsal={rehearsal} planReferences={planReferences} />}
+                    {sceneReview && <SceneRequestReview request={request} model={sceneReview} assignedOutputs={assignedOutputs} rehearsal={rehearsal} planReferences={planReferences} cameraLabelForUrl={cameraLabelForUrl} />}
                     {request.state === "approved" && request.kind.startsWith("scene_") && <p className="mt-1 text-xs text-muted-foreground">Apply checks the scene revision and current output assignment on this host. Saving changes the scene library only; it does not Take the scene live.</p>}
                     {request.state === "approved" && request.kind.startsWith("scene_") && localHostStatusUnknown[request.id] && <p role="alert" className="mt-1 text-xs text-amber-800">The host response was interrupted and its status is unknown. The local recovery record was kept. Refresh host status before trying again.</p>}
                     {request.state === "approved" && request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId) && <p role="status" className="mt-1 text-xs text-amber-800">Move every real screen away from this scene before applying its deletion.</p>}
