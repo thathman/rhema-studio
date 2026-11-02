@@ -226,7 +226,7 @@ describe("Permissions workspace", () => {
     expect(el.textContent).toContain("revision 4")
     expect(el.textContent).toContain("Approve this exact revision in Prepare first")
     await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Open in Prepare"))!.click())
-    expect(useShellStore.getState().prepareProgramRequest).toBe("service-1")
+    expect(useShellStore.getState().prepareProgramRequest).toEqual({ programId: "service-1" })
     await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Confirm approved revision"))!.click())
 
     expect(tauri.invoke).toHaveBeenCalledWith("approvals_apply", { id: "plan-request-uuid" })

@@ -21,7 +21,7 @@ import { RULE_LABEL, interleave, newPhase, organiseHeadersIntoDefaultPhases, pro
 import { CalendarDaysIcon, ClockIcon, EllipsisIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
 import { RundownTools } from "@/studio/prepare/bulk-bar"
 import { useBibleStore } from "@/stores"
-import type { CueQueueItem } from "@/types"
+import { isSlideItem, type CueQueueItem } from "@/types"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceTiming } from "@/studio/use-service-timing"
 import { presentActions } from "@/studio/present-actions"
@@ -64,6 +64,8 @@ export function PrepareWorkspace() {
   const orderCountLabel = eventCount > 0
     ? `${eventCount} ${eventCount === 1 ? "event" : "events"}${looseItemCount > 0 ? ` · ${looseItemCount} ${looseItemCount === 1 ? "item" : "items"}` : ""}`
     : `${count} ${count === 1 ? "item" : "items"}`
+  const prepareMomentFocus = useShellStore((s) => s.prepareMomentFocus)
+  const prepareMomentSelection = useShellStore((s) => s.prepareMomentSelection)
   const [designReturn] = useState(() => useShellStore.getState().prepareDesignReturn)
   const [libraryReturn] = useState(() => useShellStore.getState().prepareLibraryReturn)
   const designReturnIsCurrent = designReturn !== null
@@ -76,7 +78,6 @@ export function PrepareWorkspace() {
   const [returnMomentId, setReturnMomentId] = useState<string | null>(() => selectedReturn?.momentId ?? null)
   const [returnTab, setReturnTab] = useState<"content" | "scenes">(() => libraryReturnIsCurrent ? "content" : designReturnIsCurrent ? "scenes" : "content")
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => new Set())
-  const selectedEvent = headers.find((header) => header.id === selectedEventId && header.event)
   const selectedItem = useSelectedItem()
   const [rundownView, setRundownView] = useState<RundownView>(storedRundownView)
   const [creatingDraft, setCreatingDraft] = useState(false)
@@ -84,6 +85,24 @@ export function PrepareWorkspace() {
   // Hidden items and a skipped phase take no planned time (#193).
   const planned = useQueueStore((s) => formatMinutes(plannedTotalMs(timedItems(s.items, s.headers))))
   const service = useServiceStore((s) => s.current)
+  const serviceLoading = useServiceStore((s) => s.loading)
+  const momentSelectionItem = prepareMomentSelection
+    ? items.find((item) => item.id === prepareMomentSelection.itemId)
+    : null
+  const momentSelectionIsCurrent = Boolean(
+    prepareMomentSelection
+    && service?.id === prepareMomentSelection.programId
+    && momentSelectionItem
+    && isSlideItem(momentSelectionItem)
+    && momentSelectionItem.slide.designRef?.id === prepareMomentSelection.designId
+    && momentSelectionItem.slide.designRef.version === prepareMomentSelection.version
+    && projectRunOfShowEvents(items, headers).some((event) => event.id === prepareMomentSelection.eventId && event.moments.some((moment) => moment.id === prepareMomentSelection.itemId)),
+  )
+  const activeMomentSelection = momentSelectionIsCurrent ? prepareMomentSelection : null
+  const activeEventId = activeMomentSelection?.eventId ?? selectedEventId
+  const activeMomentId = activeMomentSelection?.itemId ?? returnMomentId
+  const activeReturnTab = activeMomentSelection ? "scenes" : returnTab
+  const selectedEvent = headers.find((header) => header.id === activeEventId && header.event)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [removePhasesOpen, setRemovePhasesOpen] = useState(false)
   // On a narrower window the timing column folds away; this brings it back over the editor.
@@ -108,12 +127,47 @@ export function PrepareWorkspace() {
       useShellStore.getState().clearPrepareLibraryReturn()
     }
   }, [designReturn, designReturnIsCurrent, libraryReturn, libraryReturnIsCurrent])
+  useEffect(() => {
+    if (!prepareMomentFocus || serviceLoading) return
+    const fail = (description: string) => {
+      toast.error("This design use has changed", { description })
+      useShellStore.getState().clearPrepareMomentFocus(prepareMomentFocus)
+    }
+    if (service?.id !== prepareMomentFocus.programId) {
+      fail("The referenced service is no longer open. Refresh Used On and try again.")
+      return
+    }
+    const itemIndex = items.findIndex((item) => item.id === prepareMomentFocus.itemId)
+    const item = itemIndex < 0 ? null : items[itemIndex]
+    if (!item || !isSlideItem(item) || item.slide.designRef?.id !== prepareMomentFocus.designId || item.slide.designRef.version !== prepareMomentFocus.version) {
+      fail("The service no longer contains this exact design version. Refresh Used On to review current references.")
+      return
+    }
+
+    const event = projectRunOfShowEvents(items, headers).find((candidate) => candidate.moments.some((moment) => moment.id === item.id))
+    if (event) {
+      useShellStore.getState().setPrepareMomentSelection({ ...prepareMomentFocus, eventId: event.id })
+    } else {
+      // Standalone service items have no event editor, so select the pinned item in the private Preview.
+      // This only changes the operator's selection; Program and output scenes remain untouched.
+      useShellStore.getState().setPrepareMomentSelection(null)
+      useBibleStore.getState().selectSlide({ item, index: itemIndex })
+      useBibleStore.getState().setSelectedQueueItemId(item.id)
+      useShellStore.getState().clearPrepareMomentFocus(prepareMomentFocus)
+    }
+  }, [prepareMomentFocus, serviceLoading, service?.id, items, headers])
+  useEffect(() => {
+    if (!prepareMomentSelection || serviceLoading || momentSelectionIsCurrent) return
+    useShellStore.getState().setPrepareMomentSelection(null)
+  }, [prepareMomentSelection, serviceLoading, momentSelectionIsCurrent])
   const selectEvent = (id: string | null) => {
+    useShellStore.getState().setPrepareMomentSelection(null)
     setSelectedEventId(id)
     setReturnMomentId(null)
     setReturnTab("content")
   }
   const selectAddedItem = (itemId: string) => {
+    useShellStore.getState().setPrepareMomentSelection(null)
     setSelectedEventId(null)
     const queue = useQueueStore.getState()
     const selectedIndex = queue.items.findIndex((item) => item.id === itemId)
@@ -165,6 +219,7 @@ export function PrepareWorkspace() {
     else window.setTimeout(scrollToPhase, 0)
   }
   const onEventCreated = async (id: string) => {
+    useShellStore.getState().setPrepareMomentSelection(null)
     setSelectedEventId(id)
     setReturnMomentId(null)
     if (useServiceStore.getState().current || draftCreationInProgress.current) return
@@ -298,11 +353,13 @@ export function PrepareWorkspace() {
         <section className="min-h-0 overflow-hidden rounded-lg border border-border bg-card shadow-panel">
           {selectedEvent ? (
             <RunOfShowEventEditor
-              key={`${selectedEvent.id}:${returnMomentId ?? ""}`}
+              key={`${selectedEvent.id}:${activeMomentId ?? ""}`}
               header={selectedEvent}
-              defaultTab={returnTab}
-              focusMomentId={returnMomentId}
+              defaultTab={activeReturnTab}
+              focusMomentId={activeMomentId}
+              onFocusHandled={prepareMomentFocus ? () => useShellStore.getState().clearPrepareMomentFocus(prepareMomentFocus) : undefined}
               onOpenMoment={(item) => {
+                useShellStore.getState().setPrepareMomentSelection(null)
                 setSelectedEventId(null)
                 setReturnMomentId(null)
                 presentActions.previewItem(item)

@@ -4,6 +4,7 @@ import { designStore, type DesignUse } from "@/design-engine/design-store"
 import { pinnedSceneForVersion } from "@/design-engine/design-document-utils"
 import { hydrateDesignSceneMedia } from "@/lib/design-media"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useShellStore } from "@/studio/shell-store"
 import type { Scene } from "@/types/scene"
 
 function messageOf(error: unknown) {
@@ -151,6 +152,20 @@ export function DesignUsagePanel({ designId }: { designId: string }) {
           <p className="text-[0.6875rem] text-muted-foreground">
             Plan revision {use.revision} · Live approved revision {use.approvedRevision ?? "none"}
           </p>
+          <button
+            type="button"
+            aria-label={`Open ${use.reference} in Prepare`}
+            title="Open this exact service moment in Prepare. Program will not change."
+            className="mt-1 min-h-10 rounded px-2 text-left text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => useShellStore.getState().openPrepareMoment({
+              programId: use.programId,
+              itemId: use.itemId,
+              designId,
+              version: use.version,
+            })}
+          >
+            Open in Prepare
+          </button>
         </div>
       ))}
     </section>

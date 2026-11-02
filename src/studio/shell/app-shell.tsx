@@ -187,12 +187,17 @@ export function AppShell() {
       if (useShellStore.getState().workspace !== "prepare") return
       // A newer request supersedes this one if it arrived while navigation was guarded.
       if (useShellStore.getState().prepareProgramRequest !== null) return
-      const result = await useServiceStore.getState().openProgram(prepareProgramRequest)
+      const result = await useServiceStore.getState().openProgram(prepareProgramRequest.programId)
       if (result !== "ok") {
         const detail = result === "unsaved"
           ? "Save or discard the current service changes in Prepare before opening this request."
           : useServiceStore.getState().error ?? "The requested service could not be opened."
         toast.error("Could not open service in Prepare", { description: detail })
+      } else if (prepareProgramRequest.moment && useShellStore.getState().prepareProgramRequest === null) {
+        useShellStore.getState().setPrepareMomentFocus({
+          programId: prepareProgramRequest.programId,
+          ...prepareProgramRequest.moment,
+        })
       }
     })
   }, [prepareProgramRequest, go])
