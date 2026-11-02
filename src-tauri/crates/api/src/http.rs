@@ -1626,8 +1626,10 @@ enum RecentIdStatus {
 }
 
 impl RecentIds {
-    const KEEP: std::time::Duration = std::time::Duration::from_secs(60);
-    const MAX: usize = 256;
+    /// Long enough for a desk that lost the church Wi-Fi mid-press to come back and retry (#410).
+    const KEEP: std::time::Duration = std::time::Duration::from_mins(15);
+    /// Every press of a busy service's desks in that time, with room to spare.
+    const MAX: usize = 4096;
 
     /// Check whether this is a first request, an exact retry, or a conflicting reuse.
     fn status(&self, id: &str, fingerprint: &str) -> RecentIdStatus {
@@ -3887,6 +3889,19 @@ mod tests {
         assert!(get_with(result.bound_port, "/api/v1/requests", "", None).await.contains("403"));
         let mut handle = result.handle;
         handle.stop();
+    /// #410: a desk that comes back after a long drop retries with the same id; the host still
+    /// knows it (it is not done twice), even after thousands of other presses.
+    #[test]
+    fn a_retry_is_known_long_after_and_after_many_other_presses() {
+        let recent = RecentIds::default();
+        recent.record("first", "take main sermon");
+        for i in 0..3000 {
+            recent.record(&format!("press-{i}"), "verse next");
+        }
+        assert_eq!(recent.status("first", "take main sermon"), RecentIdStatus::Replay);
+        assert_eq!(recent.status("first", "take main choir"), RecentIdStatus::Conflict);
+        assert_eq!(recent.status("unseen", "verse next"), RecentIdStatus::New);
+        assert!(RecentIds::KEEP >= std::time::Duration::from_mins(10));
     }
 
     async fn ack_clock(port: u16, clock: i64) -> String {
