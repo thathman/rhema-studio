@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowDownIcon, ArrowUpIcon, CircleIcon, EyeIcon, EyeOffIcon, PlusIcon, Redo2Icon, SaveIcon, SquareIcon, TextIcon, Trash2Icon, Undo2Icon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, CircleIcon, CopyIcon, EyeIcon, EyeOffIcon, PlusIcon, Redo2Icon, SaveIcon, SquareIcon, TextIcon, Trash2Icon, Undo2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -378,6 +378,31 @@ export function DesignDocumentEditor({
     } else if (delta !== 0) {
       dispatch({ type: "MOVE_NODE", id: selectedRenderable.id, dx: 0, dy: delta })
     }
+  }
+  const duplicateSelectedLayer = () => {
+    if (!selectedRenderable) return
+    const bounds = getNodeBounds(selectedRenderable)
+    const horizontalDelta = bounds.x + bounds.width + 24 <= scene.artboard.width
+      ? 24
+      : bounds.x >= 24 ? -24 : 0
+    const verticalDelta = bounds.y + bounds.height + 24 <= scene.artboard.height
+      ? 24
+      : bounds.y >= 24 ? -24 : 0
+    const duplicateId = stableId("layer")
+    const duplicate: SaraswatiRenderableNode = {
+      ...selectedRenderable,
+      id: duplicateId,
+      name: `${selectedRenderable.name?.trim() || "Layer"} copy`.slice(0, 80),
+    }
+    editor.beginBatch()
+    dispatch({ type: "ADD_NODE", node: duplicate })
+    dispatch({ type: "MOVE_NODE", id: duplicateId, dx: horizontalDelta, dy: verticalDelta })
+    editor.endBatch()
+    const binding = bindingsRef.current[selectedRenderable.id]
+    if (binding) {
+      setBindings((current) => ({ ...current, [duplicateId]: { ...binding, id: duplicateId } }))
+    }
+    setSelectedId(duplicateId)
   }
   const updateFeedBinding = (patch: Partial<RhemaBinding>) => {
     if (!selectedRenderable) return
@@ -812,6 +837,7 @@ export function DesignDocumentEditor({
               {selectedRenderable && <>
                 <Button size="icon-xs" variant="ghost" onClick={() => reorder(1)} aria-label="Move layer forward"><ArrowUpIcon /></Button>
                 <Button size="icon-xs" variant="ghost" onClick={() => reorder(-1)} aria-label="Move layer backward"><ArrowDownIcon /></Button>
+                <Button size="icon-xs" variant="ghost" onClick={duplicateSelectedLayer} aria-label="Duplicate selected layer"><CopyIcon /></Button>
                 <Button size="icon-xs" variant="ghost" onClick={() => {
                   const id = selectedRenderable.id
                   dispatch({ type: "DELETE_NODE", id })
