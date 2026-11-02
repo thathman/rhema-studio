@@ -183,6 +183,7 @@ describe("Production control", () => {
     await open("OBS")
     expect(el.querySelector('[aria-label="OBS program"] h3')?.textContent).toBe("Online program (OBS, 720p30)")
     await open("Screens")
+    expect(el.querySelector('[role="group"][aria-label="News ticker controls"]')).not.toBeNull()
     expect(el.querySelector('[aria-label="Hall NDI"]')?.textContent).toContain("Congregation program (screens, 1080p30)")
     // A screen sets no format of its own: the usual one.
     expect(el.querySelector(`[aria-label="${main.name}"]`)?.textContent).toContain("Congregation program (screens, 1080p)")

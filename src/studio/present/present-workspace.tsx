@@ -21,7 +21,6 @@ import { ServiceTimer } from "@/studio/present/service-timer"
 import { AuxTimers } from "@/studio/present/aux-timers"
 import { StageMessage } from "@/studio/present/stage-message"
 import { LowerThirdControl } from "@/studio/present/lower-third"
-import { TickerRow } from "@/studio/present/ticker"
 import { ObsChip } from "@/studio/present/obs-chip"
 import { SoundChip } from "@/studio/present/sound-chip"
 import { CueMenu } from "@/studio/present/cue-menu"
@@ -366,7 +365,7 @@ function LiveConsoleSurface({
             </div>
             <div className="flex min-h-0 flex-1 flex-col [&>*]:min-h-0 [&>*]:flex-1"><QuickFind mode="present" /></div>
           </section>
-          <section className="flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-4" role="group" aria-label="Quick screens">
+          <section className="flex min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card p-3" role="group" aria-label="Quick screens">
             {/* Back sits in the header so it is never clipped on a short (1366x768) screen; the screens scroll if they must. */}
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -375,8 +374,8 @@ function LiveConsoleSurface({
               </div>
               <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
             </div>
-            {/* Four across on wide windows, three at the 1392px desktop capture width, two on small windows. */}
-            <div data-testid="quick-screen-actions" className="-m-1 grid min-h-0 min-w-0 grid-cols-4 content-start gap-2 overflow-y-auto overflow-x-hidden p-1 max-[1500px]:grid-cols-3 max-[1200px]:grid-cols-2 max-[1200px]:gap-1.5">
+            {/* Full-size actions use three columns through 1500px; the last row keeps all seven available. */}
+            <div data-testid="quick-screen-actions" className="-m-1 grid min-h-0 min-w-0 grid-cols-4 content-start gap-1.5 overflow-y-auto overflow-x-hidden p-1 max-[1500px]:grid-cols-3 max-[800px]:grid-cols-2">
               {(["welcome", "stand", "pray", "offering", "technical", "logo", "black"] as const).map((s) => {
                 // Calm until pressed: only the screen that is on air turns red, so the row also says what is showing.
                 const onAir = isLive && quickOnAir === s
@@ -387,13 +386,12 @@ function LiveConsoleSurface({
                     label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering", technical: "Technical issue", logo: "Logo", black: "Black" }[s]}
                     tone={onAir ? "live" : "neutral"}
                     aria-pressed={onAir}
-                    className="h-11 min-w-0 justify-start gap-1.5 px-2.5 text-[0.8125rem] leading-tight max-[1200px]:px-2 max-[1200px]:text-xs [&_svg]:!size-4"
+                    className="h-11 min-w-0 justify-start gap-1.5 px-2 text-xs leading-tight [&_svg]:!size-4"
                     onClick={() => presentActions.quickScreen(s)}
                   />
                 )
               })}
             </div>
-            <TickerRow />
           </section>
         </div>
       )}

@@ -45,6 +45,7 @@ import { useServiceTiming } from "@/studio/use-service-timing"
 import { useReadiness } from "@/studio/use-readiness"
 import { HoldControl } from "@/studio/present/service-timer"
 import { AuxTimersPanel } from "@/studio/present/aux-timers"
+import { TickerRow } from "@/studio/present/ticker"
 import { timeChangeWords, useTimeChange } from "@/stores/time-change-store"
 import type { ReadinessCheck } from "@/studio/readiness"
 import { SceneComposer } from "@/studio/production/scene-composer"
@@ -290,6 +291,9 @@ function Screens() {
   const needs = useNeeds()
   return (
     <Card kicker="Outputs" title="Screens, NDI senders and browser feeds" badge={<div className="flex flex-wrap justify-end gap-2"><ReadyMadeFeeds /><Button size="sm" onClick={openOutputs}><MonitorIcon /> Open outputs</Button></div>}>
+      <section role="group" aria-label="News ticker controls" className="rounded-md border border-border px-3 py-2">
+        <TickerRow />
+      </section>
       <NeedsAttention needs={needs} className="mb-2" />
       <ul aria-label="Outputs" className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
         {outputs.map((o) => <OutputInspector key={o.id} output={o} status={status[o.id]} frame={frames[o.id]} scenes={scenes} themes={themes} />)}
