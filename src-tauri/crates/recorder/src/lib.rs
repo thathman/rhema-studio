@@ -66,6 +66,8 @@ struct Shared {
     problem: Mutex<Option<RecorderProblem>>,
     /// The writer takes nothing more (it failed, or closed the file on a full disk).
     writer_gone: AtomicBool,
+    /// The sound input stopped; `AudioInput` tries it again.
+    audio_lost: AtomicBool,
 }
 
 impl Shared {
@@ -73,6 +75,15 @@ impl Shared {
         log::warn!("recorder: {}", p.message);
         *self.problem.lock().unwrap_or_else(PoisonError::into_inner) = Some(p);
     }
+    /// Clear the problem if it is still this one (the sound input came back): a later, different
+    /// problem stays.
+    fn clear_problem_if(&self, code: ProblemCode) {
+        let mut p = self.problem.lock().unwrap_or_else(PoisonError::into_inner);
+        if p.as_ref().is_some_and(|p| p.code == code) {
+            *p = None;
+        }
+    }
+
     fn problem(&self) -> Option<RecorderProblem> {
         self.problem.lock().unwrap_or_else(PoisonError::into_inner).clone()
     }
@@ -90,7 +101,131 @@ struct Session {
     writer: JoinHandle<Result<(), String>>,
     /// The last whole frame, so a region update (a ticker band) is recorded as a full picture.
     frame: Vec<u8>,
-    audio: Option<audio::Capture>,
+    audio: Option<AudioInput>,
+}
+
+/// Opens the session's sound input (again, after it was lost): each stream places its own blocks
+/// on the session clock and says when it is lost.
+fn audio_opener(device: String, tx_a: Sender<Msg>, sh_a: Arc<Shared>, clock_a: Arc<OnceLock<(Instant, u32)>>) -> impl Fn() -> Result<audio::Capture, String> + Send + 'static {
+    move || {
+        let (tx_a, sh_a, sh_lost, clock_a) = (tx_a.clone(), sh_a.clone(), sh_a.clone(), clock_a.clone());
+        let mut placer = AudioPlacer::default();
+        audio::start(
+            &device,
+            move |block| {
+                let Some((t0, rate)) = clock_a.get() else { return };
+                let now = t0.elapsed();
+                let frames = (block.len() / 2) as i64;
+                // The block's first sample was captured about one block before the callback.
+                let host = (now.as_secs_f64() * f64::from(*rate)) as i64 - frames;
+                let peak = block.iter().fold(0f32, |m, s| m.max(s.abs()));
+                sh_a.peak_bits.store(peak.to_bits(), Ordering::Relaxed);
+                let stamp = now.as_millis() as u64 + 1;
+                sh_a.last_audio_ms.store(stamp, Ordering::Relaxed);
+                sh_a.last_sound_ms.fetch_max(if peak > SILENT_PEAK { stamp } else { 0 }, Ordering::Relaxed);
+                if let Some(at) = placer.place(host, frames, *rate) {
+                    let _ = tx_a.send(Msg::Audio(block.to_vec(), at));
+                }
+            },
+            move |e| {
+                sh_lost.audio_lost.store(true, Ordering::Relaxed);
+                sh_lost.set_problem(RecorderProblem::new(ProblemCode::AudioDeviceLost, format!("The sound input stopped ({e}). Video keeps recording; Rhema keeps trying the input again.")));
+            },
+        )
+    }
+}
+
+/// When to try a lost sound input again: after 1, 2 and 4 s, then every 8 s.
+struct Retry {
+    next: Option<Instant>,
+    wait: Duration,
+}
+
+impl Retry {
+    const FIRST: Duration = Duration::from_secs(1);
+    const MOST: Duration = Duration::from_secs(8);
+
+    fn new() -> Self {
+        Self { next: None, wait: Self::FIRST }
+    }
+
+    /// The input is lost at `now`: whether to try opening it again now.
+    fn due(&mut self, now: Instant) -> bool {
+        match self.next {
+            None => {
+                self.next = Some(now + self.wait);
+                false
+            }
+            Some(at) if now >= at => {
+                self.wait = (self.wait * 2).min(Self::MOST);
+                self.next = Some(now + self.wait);
+                true
+            }
+            Some(_) => false,
+        }
+    }
+
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+/// The sound input of a recording, and what opens it again after it is lost (a USB sound desk
+/// unplugged and back, a driver hiccup): the same device at the same rate, so sound comes back into
+/// the same file, its gap a gap. Dropping it stops both.
+struct AudioInput {
+    capture: Arc<Mutex<Option<audio::Capture>>>,
+    done: Arc<AtomicBool>,
+    watch: Option<JoinHandle<()>>,
+}
+
+impl AudioInput {
+    fn start(open: impl Fn() -> Result<audio::Capture, String> + Send + 'static, shared: Arc<Shared>) -> Result<(Self, u32), String> {
+        let first = open()?;
+        let rate = first.rate;
+        let capture = Arc::new(Mutex::new(Some(first)));
+        let done = Arc::new(AtomicBool::new(false));
+        let (cap, stop) = (capture.clone(), done.clone());
+        let watch = std::thread::Builder::new()
+            .name("recorder-audio-watch".into())
+            .spawn(move || {
+                let mut retry = Retry::new();
+                while !stop.load(Ordering::Relaxed) {
+                    std::thread::sleep(Duration::from_millis(250));
+                    if !shared.audio_lost.load(Ordering::Relaxed) {
+                        retry.reset();
+                        continue;
+                    }
+                    if !retry.due(Instant::now()) {
+                        continue;
+                    }
+                    // The old stream first: a device holds one stream at a time on some systems.
+                    drop(cap.lock().unwrap_or_else(PoisonError::into_inner).take());
+                    match open() {
+                        Ok(c) if c.rate == rate => {
+                            *cap.lock().unwrap_or_else(PoisonError::into_inner) = Some(c);
+                            shared.audio_lost.store(false, Ordering::Relaxed);
+                            shared.clear_problem_if(ProblemCode::AudioDeviceLost);
+                            log::info!("recorder: the sound input is back");
+                        }
+                        Ok(c) => log::warn!("recorder: the sound input came back at {} Hz, not {rate}; still waiting", c.rate),
+                        Err(e) => log::info!("recorder: sound input not back yet ({e})"),
+                    }
+                }
+            })
+            .map_err(|e| e.to_string())?;
+        Ok((Self { capture, done, watch: Some(watch) }, rate))
+    }
+}
+
+impl Drop for AudioInput {
+    fn drop(&mut self) {
+        self.done.store(true, Ordering::Relaxed);
+        if let Some(t) = self.watch.take() {
+            let _ = t.join();
+        }
+        drop(self.capture.lock().unwrap_or_else(PoisonError::into_inner).take());
+    }
 }
 
 /// What a recording is going through. One lock decides every change of it, so a start, a stop and
@@ -319,34 +454,15 @@ impl Recorder {
         let audio = match &req.audio_device_id {
             None => None,
             Some(device) => {
-                let (tx_a, sh_a, sh_lost, clock_a) = (tx.clone(), shared.clone(), shared.clone(), clock.clone());
-                let mut placer = AudioPlacer::default();
-                let capture = audio::start(
-                    device,
-                    move |block| {
-                        let Some((t0, rate)) = clock_a.get() else { return };
-                        let now = t0.elapsed();
-                        let frames = (block.len() / 2) as i64;
-                        // The block's first sample was captured about one block before the callback.
-                        let host = (now.as_secs_f64() * f64::from(*rate)) as i64 - frames;
-                        let peak = block.iter().fold(0f32, |m, s| m.max(s.abs()));
-                        sh_a.peak_bits.store(peak.to_bits(), Ordering::Relaxed);
-                        let stamp = now.as_millis() as u64 + 1;
-                        sh_a.last_audio_ms.store(stamp, Ordering::Relaxed);
-                        sh_a.last_sound_ms.fetch_max(if peak > SILENT_PEAK { stamp } else { 0 }, Ordering::Relaxed);
-                        if let Some(at) = placer.place(host, frames, *rate) {
-                            let _ = tx_a.send(Msg::Audio(block.to_vec(), at));
-                        }
-                    },
-                    move |e| sh_lost.set_problem(RecorderProblem::new(ProblemCode::AudioDeviceLost, format!("The sound input stopped ({e}). Video keeps recording."))),
-                );
-                match capture {
-                    Ok(c) => Some(c),
+                let open = audio_opener(device.clone(), tx.clone(), shared.clone(), clock.clone());
+                match AudioInput::start(open, shared.clone()) {
+                    Ok(input) => Some(input),
                     Err(e) => return fail(RecorderProblem::new(ProblemCode::AudioMissing, e)),
                 }
             }
         };
-        let audio_rate = audio.as_ref().map(|c| c.rate);
+        let audio_rate = audio.as_ref().map(|(_, rate)| *rate);
+        let audio = audio.map(|(input, _)| input);
 
         let (ready_tx, ready_rx) = crossbeam_channel::bounded::<Result<Instant, String>>(1);
         let writer = {
@@ -1593,6 +1709,28 @@ mod tests {
         let p = shared.problem().expect("said");
         assert_eq!(p.code, ProblemCode::EncoderFailed);
         assert!(p.message.contains("closed"), "{}", p.message);
+    }
+
+    #[test]
+    fn a_lost_sound_input_is_tried_again_after_1_2_4_then_every_8_seconds() {
+        let start = Instant::now();
+        let at = |s: u64| start + Duration::from_secs(s);
+        let mut retry = Retry::new();
+        let tries: Vec<u64> = (0..40).filter(|s| retry.due(at(*s))).collect();
+        assert_eq!(tries, vec![1, 3, 7, 15, 23, 31, 39], "1, then 2, 4 and 8 s apart, never more than 8");
+        retry.reset();
+        assert!(!retry.due(at(40)) && retry.due(at(41)), "back to the first wait once it came back");
+    }
+
+    #[test]
+    fn the_sound_input_coming_back_clears_only_its_own_problem() {
+        let shared = Shared::default();
+        shared.set_problem(RecorderProblem::new(ProblemCode::AudioDeviceLost, "gone"));
+        shared.clear_problem_if(ProblemCode::AudioDeviceLost);
+        assert_eq!(shared.problem(), None);
+        shared.set_problem(RecorderProblem::new(ProblemCode::DiskLow, "low"));
+        shared.clear_problem_if(ProblemCode::AudioDeviceLost);
+        assert_eq!(shared.problem().map(|p| p.code), Some(ProblemCode::DiskLow), "a later, different problem stays");
     }
 
     #[test]

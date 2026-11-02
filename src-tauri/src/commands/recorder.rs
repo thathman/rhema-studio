@@ -48,6 +48,32 @@ fn host_scoped_request(request: RecorderStartRequest, live_state: Option<&str>) 
     RecorderStartRequest { output_role: output_role.to_string(), ..request }
 }
 
+/// Whether a newly published Live State shows the recording's output is no longer a congregation
+/// output (made Stage or signage, or removed). Only a state that lists outputs can say so: one
+/// without them (the app window reloading) never stops a recording.
+fn output_left_congregation(live_state: &str, pinned: &str) -> bool {
+    let lists_outputs = serde_json::from_str::<serde_json::Value>(live_state)
+        .ok()
+        .and_then(|v| v.get("outputs").and_then(serde_json::Value::as_array).map(|a| !a.is_empty()))
+        .unwrap_or(false);
+    lists_outputs && !KeyEntry::is_congregation_output(Some(live_state), pinned)
+}
+
+/// Each Live State the app publishes (doc 42): a recording whose output stopped being a congregation
+/// output is stopped at once, keeping what was recorded, because that output's window may now draw
+/// a stage screen's private notes, which must never go into the church's recording.
+pub fn guard_pinned_output(app: &AppHandle, live_state: &str) {
+    let Some(host) = app.try_state::<RecorderHost>() else { return };
+    let Some(rec) = host.0.get() else { return };
+    let Some(pinned) = rec.pinned_output() else { return };
+    if !output_left_congregation(live_state, &pinned) {
+        return;
+    }
+    log::warn!("recorder: output {pinned} is no longer a congregation output; stopping the recording");
+    let stopped = rec.stop();
+    let _ = app.emit_to("main", "recorder:output_left", serde_json::json!({ "outputId": pinned, "stopped": stopped.is_ok() }));
+}
+
 /// Run recorder startup only after the host confirms the named output is a current congregation output.
 fn start_for_current_congregation<T>(
     request: RecorderStartRequest,
@@ -307,6 +333,17 @@ mod tests {
         let named = in_run(RecorderStartRequest { service_run_id: Some("run-x".into()), ..request("sanctuary", "congregation") }, now);
         assert_eq!((named.service_run_id.as_deref(), named.program_id), (Some("run-x"), None));
         assert_eq!(in_run(request("sanctuary", "congregation"), None).service_run_id, None);
+    }
+
+    #[test]
+    fn a_recording_stops_when_its_output_is_no_longer_a_congregation_output() {
+        let as_stage = r#"{"outputs":[{"id":"sanctuary","role":"stage"}]}"#;
+        assert!(output_left_congregation(as_stage, "sanctuary"), "made a stage screen");
+        assert!(output_left_congregation(r#"{"outputs":[{"id":"overflow"}]}"#, "sanctuary"), "removed");
+        assert!(!output_left_congregation(r#"{"outputs":[{"id":"sanctuary"},{"id":"stage","role":"stage"}]}"#, "sanctuary"), "still congregation");
+        assert!(!output_left_congregation(r#"{"v":1}"#, "sanctuary"), "a state without outputs never stops it");
+        assert!(!output_left_congregation(r#"{"outputs":[]}"#, "sanctuary"), "nor one with none listed yet");
+        assert!(!output_left_congregation("not json", "sanctuary"));
     }
 
     #[test]
