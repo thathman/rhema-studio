@@ -98,6 +98,26 @@ export function createLiveFeedLayer(input: { x: number; y: number; name?: string
   }
 }
 
+/** Add a configured Rhema camera as a bound layer; the router URL contains no camera-page secret. */
+export function createCameraLayer(input: { x: number; y: number; name: string; url: string }): {
+  node: SaraswatiRectNode
+  binding: RhemaBinding
+} {
+  const id = newId("layer")
+  return {
+    node: rectNode({
+      id,
+      name: input.name,
+      x: input.x,
+      y: input.y,
+      width: 1280,
+      height: 720,
+      fill: "#1f4d3a",
+    }),
+    binding: { id, kind: "camera", cameraUrl: input.url, noSignal: "bars", noSignalName: true },
+  }
+}
+
 /** Make a fresh local scene snapshot from an immutable version without reusing its source scene ID. */
 export function pinnedSceneForVersion(version: DesignVersion, operatorName: string, pageId?: string): {
   scene: Scene | null
