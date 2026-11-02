@@ -514,6 +514,63 @@ describe("canonical design editor", () => {
     expect(prepared.scene.layers).toContainEqual(expect.objectContaining({ id: rectangle?.id, kind: "color" }))
   })
 
+  it("duplicates a live-feed layer with its binding in one undoable edit", async () => {
+    const documentValue = documentFixture()
+    const before = useBroadcastStore.getState()
+    const liveSnapshot = {
+      scenes: before.scenes,
+      outputs: before.outputs,
+      outputStatus: before.outputStatus,
+      outputFrames: before.outputFrames,
+      sceneTakes: before.sceneTakes,
+      isLive: before.isLive,
+      liveVerse: before.liveVerse,
+      liveSlide: before.liveSlide,
+    }
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+    const click = async (label: string) => act(async () => element.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!.click())
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Live content")!.click())
+    await click("Follow Bible")
+    await act(async () => setSelectValue(element.querySelector<HTMLSelectElement>('[aria-label="Live content language"]')!, "second"))
+    await click("Duplicate selected layer")
+    expect(element.textContent).toContain("Live content copy")
+    await click("Undo design edit")
+    expect(element.textContent).not.toContain("Live content copy")
+    await click("Redo design edit")
+    expect(element.textContent).toContain("Live content copy")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const feeds = Object.values(saved.document.scene.nodes).filter((node) => node.type === "rect" && (node.name === "Live content" || node.name === "Live content copy"))
+    expect(feeds).toHaveLength(2)
+    const source = feeds.find((node) => node.type === "rect" && node.name === "Live content")
+    const duplicate = feeds.find((node) => node.type === "rect" && node.name === "Live content copy")
+    if (source?.type !== "rect" || duplicate?.type !== "rect") throw new Error("Expected both live-feed rectangles")
+    expect(duplicate).toMatchObject({ x: source.x + 24, y: source.y + 24 })
+    expect(saved.document.bindings[duplicate.id]).toEqual({ id: duplicate.id, kind: "feed", shows: ["bible"], language: "second" })
+    const prepared = designToScene(saved.document)
+    expect(prepared.issues).toEqual([])
+    expect(prepared.scene.layers).toContainEqual(expect.objectContaining({ id: duplicate.id, kind: "feed" }))
+
+    const after = useBroadcastStore.getState()
+    expect({
+      scenes: after.scenes,
+      outputs: after.outputs,
+      outputStatus: after.outputStatus,
+      outputFrames: after.outputFrames,
+      sceneTakes: after.sceneTakes,
+      isLive: after.isLive,
+      liveVerse: after.liveVerse,
+      liveSlide: after.liveSlide,
+    }).toEqual(liveSnapshot)
+  })
+
   it("saves and versions native Avnac text as a usable private Prepare scene", async () => {
     const documentValue = documentFixture()
     let savedDocument: DesignDocument | null = null
