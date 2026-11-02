@@ -100,7 +100,7 @@ impl Role {
             // Songs and hymns are the main screens' content: the Present desks and the worship desk.
             RemoteCommand::SongShow(_) => matches!(self, Role::Present | Role::Configure | Role::Worship),
             // Stepping the song on the screens section by section (desk consoles): the same desks.
-            RemoteCommand::SongSection(_) => matches!(self, Role::Present | Role::Configure | Role::Worship),
+            RemoteCommand::SongSection(_) | RemoteCommand::WorshipSet(_) => matches!(self, Role::Present | Role::Configure | Role::Worship),
             // Adding to the queue prepares; it shows nothing. A verse or song asked for (Comms C2) too.
             RemoteCommand::AddToQueue | RemoteCommand::QueueRequest(_) => matches!(self, Role::Present | Role::Configure | Role::Editor),
             RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => match self {

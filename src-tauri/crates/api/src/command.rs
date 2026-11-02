@@ -77,6 +77,9 @@ pub enum RemoteCommand {
     DeleteScene(SceneDelete),
     /// The message on the stage display (one short line; "" clears it). Never the congregation.
     StageMessage(String),
+    /// A change to this service's song order for today only (#410, page 3, Worship): move, skip,
+    /// repeat or insert a song without rewriting the approved plan.
+    WorshipSet(WorshipSetIn),
     /// OBS through the host's own OBS connection (OBS director only): a scene to OBS's Preview,
     /// Take the Preview, or (without Studio Mode) switch OBS's program. Never in rehearsal.
     ObsPreview(String),
@@ -155,6 +158,43 @@ impl QueueKind {
 }
 
 /// What to do with OBS's recording, and a marker's name (optional; the host names it otherwise).
+/// What a Worship desk does to today's song order (`worship_set`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WorshipSetOp {
+    /// Move `item` to just before `before` (to the end when `before` is absent).
+    Move,
+    /// Leave `item` out today.
+    Skip,
+    /// Sing `item` again, right after itself.
+    Repeat,
+    /// Add the library song `song` before `before` (`item` names where the desk was looking).
+    Insert,
+}
+
+impl WorshipSetOp {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Move => "move",
+            Self::Skip => "skip",
+            Self::Repeat => "repeat",
+            Self::Insert => "insert",
+        }
+    }
+}
+
+/// One change to today's song order: the item ids are the Live State's `worshipSet` ids.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorshipSetIn {
+    pub op: WorshipSetOp,
+    pub item: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub song: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ObsRecordIn {
     pub action: RecordAction,
@@ -454,6 +494,7 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::SaveScene(s) => write!(f, "save_scene({})", s.id()),
             RemoteCommand::DeleteScene(d) => write!(f, "delete_scene({})", d.id),
             RemoteCommand::StageMessage(m) => write!(f, "stage_message({m})"),
+            RemoteCommand::WorshipSet(w) => write!(f, "worship_set({} {})", w.op.as_str(), w.item),
             RemoteCommand::ObsPreview(scene) => write!(f, "obs_preview({scene})"),
             RemoteCommand::ObsTake => write!(f, "obs_take"),
             RemoteCommand::ObsProgram(scene) => write!(f, "obs_program({scene})"),
@@ -812,6 +853,7 @@ mod tests {
                 RemoteCommand::SaveScene(_)
                 | RemoteCommand::DeleteScene(_)
                 | RemoteCommand::StageMessage(_)
+                | RemoteCommand::WorshipSet(_)
                 | RemoteCommand::ObsPreview(_)
                 | RemoteCommand::ObsTake
                 | RemoteCommand::ObsProgram(_) => {}
