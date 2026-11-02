@@ -218,13 +218,13 @@ describe("Library workspace", () => {
     await act(async () => root!.render(<LibraryWorkspace />))
     mockInvoke.mockClear()
     await clickButton("Choose a saved version for this moment")
-    await clickButton("Use this version in the current moment")
-    const pageSelect = document.querySelector<HTMLSelectElement>("[aria-label='Saved version page']")!
+    await clickButton("Preview version 2")
+    const pageSelect = document.querySelector<HTMLSelectElement>("[aria-label='Preview page']")!
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(pageSelect, "page-two")
       pageSelect.dispatchEvent(new Event("change", { bubbles: true }))
     })
-    await act(async () => document.querySelector<HTMLDivElement>("[aria-label='Attach a page from this version'] button")!.click())
+    await clickButton("Use this version in the current moment")
 
     const [updated, other] = useQueueStore.getState().items
     const scene = useBroadcastStore.getState().scenes.find((candidate) => candidate.id === updated.scene_id)!
@@ -244,12 +244,11 @@ describe("Library workspace", () => {
   it.each(["service", "removed moment", "moved moment", "caller"])("rejects a %s changed while the design version loads", async (change) => {
     const { version } = contextualDesign()
     const error = vi.spyOn(toast, "error")
-    let finish!: (value: DesignVersion) => void
-    vi.mocked(designStore.getVersion).mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    vi.mocked(designStore.getVersion).mockResolvedValue(version)
     await act(async () => root!.render(<LibraryWorkspace />))
     mockInvoke.mockClear()
     await clickButton("Choose a saved version for this moment")
-    await clickButton("Use this version in the current moment")
+    await clickButton(`Preview version ${version.version}`)
     await act(async () => {
       if (change === "service") {
         useServiceStore.setState({ current: { ...useServiceStore.getState().current!, id: "service-b" } })
@@ -266,7 +265,7 @@ describe("Library workspace", () => {
     })
     const queueBefore = useQueueStore.getState().items
     const broadcastBefore = useBroadcastStore.getState()
-    await act(async () => finish(version))
+    await clickButton("Use this version in the current moment")
     expect(error).toHaveBeenCalledWith("The Prepare service or moment changed", expect.anything())
     expect(useQueueStore.getState().items).toBe(queueBefore)
     expect(useBroadcastStore.getState()).toBe(broadcastBefore)
