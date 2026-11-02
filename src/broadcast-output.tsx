@@ -12,6 +12,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { onThemeFontsLoaded, renderVerse, drawLowerThird } from "@/lib/verse-renderer"
 import { cameraReports, syncCameras, WhepPlayer } from "@/lib/whep"
 import { paintFrame } from "@/lib/output-paint"
+import { frameTiming } from "@/lib/frame-timing"
 import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { normalizeTheme } from "@/lib/theme-migrations"
 import "./broadcast-fonts.css"
@@ -145,6 +146,10 @@ function BroadcastCanvas() {
   const ndiCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const lastPushRef = useRef(0)
   const pushingRef = useRef(false)
+  // For the recorder's timing (#626): when the canvas was last drawn (ms since 1970) and how many
+  // frames this page drew but could not send. Sent as x-frame-drawn-at / x-frames-skipped.
+  const drawnAtRef = useRef(0)
+  const skippedRef = useRef(0)
   // When the push in flight started: a reply that never comes must not stop NDI for good.
   const pushStartedRef = useRef(0)
   const pushNdiBurstRef = useRef<(() => void) | null>(null)
@@ -165,6 +170,7 @@ function BroadcastCanvas() {
     if (!canvas) return
     const ctx = canvas.getContext("2d")
     if (!ctx) return
+    drawnAtRef.current = Date.now()
 
     if (stageRef.current) {
       const s = stageRef.current
@@ -292,7 +298,10 @@ function BroadcastCanvas() {
   const pushNdiFrame = useCallback(async (region?: { y: number; height: number }) => {
     if (!ndiConfigRef.current.active) return
     // Back-pressure: skip while a push is in flight, unless its reply is over a second late (lost).
-    if (pushingRef.current && performance.now() - pushStartedRef.current < 1000) return
+    if (pushingRef.current && performance.now() - pushStartedRef.current < 1000) {
+      skippedRef.current++
+      return
+    }
     pushingRef.current = true
     pushStartedRef.current = performance.now()
 
@@ -327,13 +336,13 @@ function BroadcastCanvas() {
         // from the page takes ~70 ms on an Intel Mac, too slow for 30 frames a second.
         const band = sourceCtx.getImageData(0, region.y, sourceWidth, region.height)
         await invoke("push_ndi_region", new Uint8Array(band.data.buffer), {
-          headers: { "x-ndi-output": OUTPUT_ID, "x-ndi-x": "0", "x-ndi-y": String(region.y), "x-ndi-width": String(sourceWidth), "x-ndi-height": String(region.height) },
+          headers: { "x-ndi-output": OUTPUT_ID, "x-ndi-x": "0", "x-ndi-y": String(region.y), "x-ndi-width": String(sourceWidth), "x-ndi-height": String(region.height), ...frameTiming(drawnAtRef.current, skippedRef.current) },
         })
       } else {
         const imageData = sourceCtx.getImageData(0, 0, sourceWidth, sourceHeight)
         // The pixels go as the raw request body (no base64/JSON); output and size ride in headers.
         await invoke("push_ndi_frame", new Uint8Array(imageData.data.buffer), {
-          headers: { "x-ndi-output": OUTPUT_ID, "x-ndi-width": String(sourceWidth), "x-ndi-height": String(sourceHeight) },
+          headers: { "x-ndi-output": OUTPUT_ID, "x-ndi-width": String(sourceWidth), "x-ndi-height": String(sourceHeight), ...frameTiming(drawnAtRef.current, skippedRef.current) },
         })
       }
       lastPushRef.current = Date.now()
