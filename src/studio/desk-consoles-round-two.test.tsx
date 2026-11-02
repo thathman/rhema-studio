@@ -23,7 +23,7 @@ const live: LiveStateV1 = {
   v: 1, at: 0, church: "CAC", service: null, program: { onAir: true, reference: null, rehearsal: false },
   sources: [{ id: "ticker", reference: "Welcome to CAC", on: true, revision: 2, by: "Main desk", activatedAt: 0 }, { id: "lowerThird", reference: "Pastor Ade", on: false, revision: 1 }],
   event: { mode: "own", currentId: null }, rundown: [], timing: null, stageMessage: "", scenes: [], outputs: [], notices: [],
-  revisions: { lyrics: 7, queue: 3, "obs:record": 4, "obs:transition": 5, "source:ticker": 2 },
+  revisions: { lyrics: 7, queue: 3, "obs:record": 4, "obs:transition": 5, "source:ticker": 2, "source:lowerThird": 1 },
   lyrics: { itemId: "i1", index: 2, title: "Amazing Grace", kind: "hymn", section: 2, sections: ["Verse 1", "Chorus", "Verse 2", "Chorus"], key: "G", choruses: [1, 3] },
   worshipSet: [{ id: "i0", title: "Great Is Thy Faithfulness", key: "D" }, { id: "i1", title: "Amazing Grace", key: "G", live: true }, { id: "i2", title: "Blessed Assurance" }],
   outputMap: [{ id: "main", name: "Projector", kind: "display", role: "congregation", on: true, scene: "Sermon split", by: "Femi's laptop", at: 0 }, { id: "side", name: "Side screen", kind: "display", role: "congregation", on: true, scene: null }],
@@ -164,6 +164,28 @@ describe("screens desk and the director's output map", () => {
     await act(async () => useJoin.setState({ live: changed }))
     expect(box.querySelector('[role="alert"]')?.textContent).toContain("changed while you were reviewing")
     expect(button(box, "Confirm take off the shared ticker")).toBeUndefined()
+    expect(sent).toHaveLength(0)
+  })
+
+  it("fails closed when an older host does not provide server source revisions", async () => {
+    const el = await render("screens", { ...live, revisions: undefined })
+    const box = el.querySelector('[aria-label="Ticker and lower third"]')!
+    expect(box.querySelector('[role="alert"]')?.textContent).toContain("Update the host")
+    expect(button(box, "Take off ticker…").disabled).toBe(true)
+    expect(button(box, "Put back lower third…").disabled).toBe(true)
+    expect(sent).toHaveLength(0)
+  })
+
+  it("re-reads the current host revision immediately before sending", async () => {
+    const el = await render("screens")
+    const box = el.querySelector('[aria-label="Ticker and lower third"]')!
+    await click(button(box, "Take off ticker…"))
+
+    // Model a Live State update just before the click handler runs, before the subscribed view rerenders.
+    useJoin.getState().live!.revisions!["source:ticker"] = 3
+    await click(button(box, "Confirm take off the shared ticker"))
+
+    expect(box.querySelector('[role="alert"]')?.textContent).toContain("changed while you were reviewing")
     expect(sent).toHaveLength(0)
   })
 
