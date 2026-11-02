@@ -373,25 +373,49 @@ describe("Prepare → Permissions → Live journey", () => {
     })
     useServiceStore.setState({ programs: [program], current: program, dirty: false, loading: false, saving: false, error: null })
     useBroadcastStore.setState({ isLive: true, liveVerse: previousProgram as never, liveItemId: "previous-item", liveSlide: null })
-    await act(async () => root.render(<WorkspaceJourney />))
+    await act(async () => {
+      root.render(<WorkspaceJourney />)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
 
     const programBefore = useBroadcastStore.getState().liveVerse
-    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Opening"]')!.click())
-    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.getAttribute("aria-label") === "Add content to Opening")!.click())
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Opening"]')!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.getAttribute("aria-label") === "Add content to Opening")!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
     const addDialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
     const slidesTab = [...addDialog.querySelectorAll<HTMLButtonElement>('button[role="tab"]')].find((button) => button.textContent?.trim() === "Slides")!
     await act(async () => { slidesTab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); slidesTab.click() })
-    await vi.waitFor(() => expect([...addDialog.querySelectorAll<HTMLButtonElement>("button")].some((button) => button.textContent?.includes("Browse reusable slides"))).toBe(true))
-    await act(async () => [...addDialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse reusable slides"))!.click())
+    await act(async () => {
+      await vi.waitFor(() => {
+        const browseButton = [...addDialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse reusable slides"))
+        expect(browseButton).toBeTruthy()
+      })
+      const browseButton = [...addDialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse reusable slides"))!
+      browseButton.click()
+      await vi.waitFor(() => expect(useShellStore.getState().workspace).toBe("library"))
+    })
 
     expect(useShellStore.getState()).toMatchObject({
       workspace: "library",
       prepareLibraryReturn: { serviceId: "service-1", targetHeaderId: "event-opening", eventId: "event-opening", momentId: null },
     })
-    await vi.waitFor(() => expect([...document.body.querySelectorAll<HTMLButtonElement>("button")].some((button) => button.getAttribute("aria-pressed") === "false" && button.textContent?.includes("Welcome"))).toBe(true))
+    await act(async () => {
+      await vi.waitFor(() => {
+        const welcomeButton = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.getAttribute("aria-pressed") === "false" && button.textContent?.includes("Welcome"))
+        expect(welcomeButton).toBeTruthy()
+      })
+    })
     const sourceButton = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.getAttribute("aria-pressed") === "false" && button.textContent?.includes("Welcome"))!
     await act(async () => sourceButton.click())
-    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add to service")!.click())
+    await act(async () => {
+      [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add to service")!.click()
+      await vi.waitFor(() => expect(useShellStore.getState().workspace).toBe("prepare"))
+    })
 
     expect(useShellStore.getState().workspace).toBe("prepare")
     const insertedQueue = useQueueStore.getState()
@@ -407,40 +431,55 @@ describe("Prepare → Permissions → Live journey", () => {
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
     const save = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save")!
-    await act(async () => save.click())
+    await act(async () => {
+      save.click()
+      await vi.waitFor(() => expect(useServiceStore.getState()).toMatchObject({ current: { revision: 5 }, dirty: false }))
+    })
     expect(useServiceStore.getState()).toMatchObject({ current: { revision: 5 }, dirty: false })
     expect((state.programData as { items: Array<{ id: string; kind: string }> }).items.filter((entry) => entry.kind !== "phase" && entry.kind !== "group").map((entry) => entry.id)).toEqual(["moment-1", added.id, "sermon-moment"])
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
-    expect(useServiceStore.getState().closeProgram()).toBe("closed")
-    expect(await useServiceStore.getState().openProgram("service-1")).toBe("ok")
+    await act(async () => {
+      expect(useServiceStore.getState().closeProgram()).toBe("closed")
+      expect(await useServiceStore.getState().openProgram("service-1")).toBe("ok")
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
     expect(useServiceStore.getState().current).toMatchObject({ revision: 5, approved_revision: 4 })
     expect(useQueueStore.getState().items.map((entry) => entry.id)).toEqual(["moment-1", added.id, "sermon-moment"])
     expect(useQueueStore.getState().headers.map(({ id, at }) => [id, at])).toEqual([["event-opening", 0], ["event-sermon", 2]])
 
     const request = { ...state.request, baseRevision: 5, payload: { ...state.request.payload, revision: 5 } }
     state.requests = [request]
-    useApprovalRequestsStore.setState({ requests: [request as ApprovalRequest], hydrated: true, loading: false, error: null })
+    await act(async () => useApprovalRequestsStore.setState({ requests: [request as ApprovalRequest], hydrated: true, loading: false, error: null }))
     const slideRow = host.querySelector<HTMLElement>(`[data-rundown-item-id="${added.id}"]`)!
     await act(async () => slideRow.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
     expect(useBibleStore.getState().selectedSlide?.item.id).toBe(added.id)
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
     const approve = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Approve"))!
-    await act(async () => approve.click())
+    await act(async () => {
+      approve.click()
+      await vi.waitFor(() => expect(useServiceStore.getState().current).toMatchObject({ revision: 5, approved_revision: 5 }))
+    })
     expect(useServiceStore.getState().current).toMatchObject({ revision: 5, approved_revision: 5 })
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
     await act(async () => navButton("Permissions").click())
     expect(host.textContent).toContain("revision 5")
-    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Confirm approved revision"))!.click())
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Confirm approved revision"))!.click()
+      await vi.waitFor(() => expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "approval-1", state: "applied", payload: { revision: 5 } }]))
+    })
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "approval-1", state: "applied", payload: { revision: 5 } }])
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
     await act(async () => navButton("Live").click())
     expect(host.textContent).toContain("Welcome")
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
-    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Take live"]')!.click())
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('button[aria-label="Take live"]')!.click()
+      await vi.waitFor(() => expect(useBroadcastStore.getState().liveVerse).toMatchObject({ reference: "Welcome", kind: "slide", content: "slide" }))
+    })
     expect(useBroadcastStore.getState().liveVerse).toMatchObject({ reference: "Welcome", kind: "slide", content: "slide" })
     expect(useBroadcastStore.getState().liveItemId).toBe(added.id)
   })
