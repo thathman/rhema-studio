@@ -255,6 +255,17 @@ export function DesignDocumentEditor({
   const dispatch = (command: SaraswatiCommand) => {
     editor.dispatch(command)
   }
+  const editSceneWithBindings = (
+    editScene: () => void,
+    updateBindings: (current: Record<string, RhemaBinding>) => Record<string, RhemaBinding>,
+  ) => {
+    const sceneBefore = editor.getState().scene
+    bindingSnapshots.current.set(sceneBefore, bindingSnapshot(bindingsRef.current))
+    editScene()
+    const nextBindings = updateBindings(bindingsRef.current)
+    setBindings(nextBindings)
+    bindingSnapshots.current.set(editor.getState().scene, bindingSnapshot(nextBindings))
+  }
   const applyBrandTextFont = (fontFamily: string) => {
     if (selectedRenderable?.type !== "text" || document.kind === "template") return
     dispatch({ type: "SET_TEXT_FORMAT", id: selectedRenderable.id, fontFamily })
@@ -331,10 +342,11 @@ export function DesignDocumentEditor({
       dispatch({ type: "SET_GROUP_CHILDREN", id, children })
       return id
     }
-    editor.beginBatch()
-    cloneNode(sourcePage.nodeId, root.id, duplicateId)
-    editor.endBatch()
-    setBindings((current) => ({ ...current, ...newBindings }))
+    editSceneWithBindings(() => {
+      editor.beginBatch()
+      cloneNode(sourcePage.nodeId, root.id, duplicateId)
+      editor.endBatch()
+    }, (current) => ({ ...current, ...newBindings }))
     const duplicate: RhemaDesignPage = { id: duplicateId, nodeId: duplicateId, title: duplicateTitle }
     pageNodeIds.current.add(duplicateId)
     setPageMetadata((current) => new Map(current).set(duplicateId, duplicate))
@@ -406,14 +418,15 @@ export function DesignDocumentEditor({
       id: duplicateId,
       name: `${selectedRenderable.name?.trim() || "Layer"} copy`.slice(0, 80),
     }
-    editor.beginBatch()
-    dispatch({ type: "ADD_NODE", node: duplicate })
-    dispatch({ type: "MOVE_NODE", id: duplicateId, dx: horizontalDelta, dy: verticalDelta })
-    editor.endBatch()
     const binding = bindingsRef.current[selectedRenderable.id]
-    if (binding) {
-      setBindings((current) => ({ ...current, [duplicateId]: { ...binding, id: duplicateId } }))
-    }
+    editSceneWithBindings(() => {
+      editor.beginBatch()
+      dispatch({ type: "ADD_NODE", node: duplicate })
+      dispatch({ type: "MOVE_NODE", id: duplicateId, dx: horizontalDelta, dy: verticalDelta })
+      editor.endBatch()
+    }, (current) => binding
+      ? { ...current, [duplicateId]: { ...binding, id: duplicateId } }
+      : current)
     setSelectedId(duplicateId)
   }
   const updateFeedBinding = (patch: Partial<RhemaBinding>) => {
@@ -462,8 +475,10 @@ export function DesignDocumentEditor({
       ? createColorLayer({ x: Math.round(scene.artboard.width * 0.35), y: Math.round(scene.artboard.height * 0.35) })
       : createLiveFeedLayer({ x: Math.round(scene.artboard.width * 0.1), y: Math.round(scene.artboard.height * 0.15) })
     made.node.parentId = activeRootId
-    setBindings((current) => ({ ...current, [made.node.id]: made.binding }))
-    dispatch({ type: "ADD_NODE", node: made.node })
+    editSceneWithBindings(
+      () => dispatch({ type: "ADD_NODE", node: made.node }),
+      (current) => ({ ...current, [made.node.id]: made.binding }),
+    )
     setSelectedId(made.node.id)
   }
   const addCameraLayer = (camera: Pick<(typeof cameras)[number], "name" | "label">) => {
@@ -532,8 +547,10 @@ export function DesignDocumentEditor({
       stroke: null,
       strokeWidth: 0,
     }
-    setBindings((current) => ({ ...current, [id]: { id, kind: "text", textBoxHeight: scene.artboard.height * 0.2 } }))
-    dispatch({ type: "ADD_NODE", node })
+    editSceneWithBindings(
+      () => dispatch({ type: "ADD_NODE", node }),
+      (current) => ({ ...current, [id]: { id, kind: "text", textBoxHeight: scene.artboard.height * 0.2 } }),
+    )
     setSelectedId(id)
   }
   const addRectangleLayer = () => {
@@ -544,8 +561,10 @@ export function DesignDocumentEditor({
       name: "Rectangle",
     })
     made.node.parentId = activeRootId
-    setBindings((current) => ({ ...current, [made.node.id]: made.binding }))
-    dispatch({ type: "ADD_NODE", node: made.node })
+    editSceneWithBindings(
+      () => dispatch({ type: "ADD_NODE", node: made.node }),
+      (current) => ({ ...current, [made.node.id]: made.binding }),
+    )
     setSelectedId(made.node.id)
   }
   const addEllipseLayer = () => {
@@ -570,8 +589,10 @@ export function DesignDocumentEditor({
       stroke: null,
       strokeWidth: 0,
     }
-    setBindings((current) => ({ ...current, [id]: { id, kind: "ellipse" } }))
-    dispatch({ type: "ADD_NODE", node })
+    editSceneWithBindings(
+      () => dispatch({ type: "ADD_NODE", node }),
+      (current) => ({ ...current, [id]: { id, kind: "ellipse" } }),
+    )
     setSelectedId(id)
   }
   const openMediaPicker = (kind: "image" | "video") => {
