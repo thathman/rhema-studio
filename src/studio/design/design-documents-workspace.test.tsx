@@ -13,6 +13,7 @@ const store = vi.hoisted(() => ({
   usedOn: vi.fn(),
 }))
 const mockAsk = vi.hoisted(() => vi.fn(async (...args: unknown[]) => { void args; return true }))
+const mockPreviewRender = vi.hoisted(() => vi.fn())
 
 vi.mock("@/design-engine/design-store", () => ({ designStore: {
   list: (...args: unknown[]) => store.list(...args),
@@ -31,6 +32,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: (...args: unknown[]) => mockA
 vi.mock("@tauri-apps/plugin-store", () => ({ load: vi.fn(async () => ({ get: async () => undefined, set: async () => {}, save: async () => {} })) }))
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }))
 vi.mock("@/lib/verse-renderer", () => ({ drawLowerThird: vi.fn(), onThemeFontsLoaded: vi.fn(() => () => {}), renderVerse: vi.fn() }))
+vi.mock("@/vendor/avnac/renderer/offscreen-render", () => ({ renderSceneToCanvas: (...args: unknown[]) => mockPreviewRender(...args) }))
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -62,6 +64,7 @@ beforeEach(() => {
   store.duplicate.mockReset()
   store.usedOn.mockReset().mockResolvedValue([])
   mockAsk.mockReset().mockResolvedValue(true)
+  mockPreviewRender.mockReset().mockResolvedValue(null)
   useBroadcastStore.setState({ themes: BUILTIN_THEMES, scenes: [], designDrafts: [] })
   useUnsavedStore.setState({ songEditor: null, designEditor: null })
 })
@@ -71,6 +74,15 @@ afterEach(() => {
   root = null
   document.body.replaceChildren()
 })
+
+async function openVersionPreview(host: ParentNode, version: number) {
+  const button = [...host.querySelectorAll<HTMLButtonElement>("button")].find((candidate) => candidate.textContent?.includes(`Preview version ${version}`))
+  if (!button) throw new Error(`Preview version ${version} button was not found`)
+  await act(async () => {
+    button.click()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
 
 describe("My Designs workspace", () => {
   it("asks before leaving an unsaved design document and honors Keep editing", async () => {
@@ -208,7 +220,7 @@ describe("My Designs workspace", () => {
     root = createRoot(host)
     await act(async () => root!.render(<DesignVersionPicker onUse={onUse} />))
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
-    expect(host.textContent).toContain("Use in Prepare")
+    expect(host.textContent).toContain("Preview version 1")
     const before = useBroadcastStore.getState()
     const liveBefore = {
       outputs: before.outputs,
@@ -219,10 +231,10 @@ describe("My Designs workspace", () => {
       sceneTakes: before.sceneTakes,
     }
 
-    await act(async () => {
-      ;[...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use in Prepare"))?.click()
-      await Promise.resolve()
-    })
+    await openVersionPreview(host, 1)
+    expect(onUse).not.toHaveBeenCalled()
+    expect(host.textContent).toContain("Use in Prepare")
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use in Prepare"))!.click())
 
     expect(store.getVersion).toHaveBeenCalledWith(designId, 1)
     expect(onUse).toHaveBeenCalledTimes(1)
@@ -239,6 +251,78 @@ describe("My Designs workspace", () => {
       liveSlide: after.liveSlide,
       sceneTakes: after.sceneTakes,
     }).toEqual(liveBefore)
+  })
+
+  it("previews the exact immutable version privately before the operator uses it", async () => {
+    const designId = "design-preview"
+    const design = createBlankRhemaDesign("Prayer lower third")
+    const summary: DesignSummary = { id: designId, title: "Prayer lower third", kind: "design", revision: 2, latestVersion: 3, updatedAt: new Date(0).toISOString() }
+    const version: DesignVersion = { designId, version: 2, fromRevision: 2, title: summary.title, document: design, note: "Approved wording", savedBy: "Tolu", createdAt: new Date(0).toISOString() }
+    store.list.mockResolvedValue([summary])
+    store.listVersions.mockResolvedValue([{ ...version, document: null }])
+    store.getVersion.mockResolvedValue(version)
+    const renderedCanvas = document.createElement("canvas")
+    renderedCanvas.width = 960
+    renderedCanvas.height = 540
+    mockPreviewRender.mockResolvedValue(renderedCanvas)
+    const drawImage = vi.fn()
+    const clearRect = vi.fn()
+    HTMLCanvasElement.prototype.getContext = (() => ({ drawImage, clearRect })) as never
+    const onUse = vi.fn()
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => root!.render(<DesignVersionPicker onUse={onUse} />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
+
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Preview version 2"))!.click())
+    await vi.waitFor(() => expect(mockPreviewRender).toHaveBeenCalledTimes(1))
+
+    expect(store.getVersion).toHaveBeenCalledWith(designId, 2)
+    expect(mockPreviewRender).toHaveBeenCalledWith(expect.objectContaining({ root: design.scene.root }), expect.objectContaining({ maxCssPx: expect.any(Number), awaitFonts: false }))
+    expect(host.textContent).toContain("Private artwork preview")
+    expect(host.textContent).toContain("live sources are shown as static placeholders")
+    expect(onUse).not.toHaveBeenCalled()
+    expect(drawImage).toHaveBeenCalledWith(renderedCanvas, 0, 0, expect.any(Number), expect.any(Number))
+
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use in Prepare"))!.click())
+    expect(onUse).toHaveBeenCalledTimes(1)
+    expect(onUse.mock.calls[0]?.[1]).toEqual(version)
+  })
+
+  it("does not show a stale version when the operator changes the search while it loads", async () => {
+    const firstDesign = createBlankRhemaDesign("First saved design")
+    const firstSummary: DesignSummary = { id: "design-first", title: "First saved design", kind: "design", revision: 1, latestVersion: 1, updatedAt: new Date(0).toISOString() }
+    const firstVersion: DesignVersion = { designId: firstSummary.id, version: 1, fromRevision: 1, title: firstSummary.title, document: firstDesign, note: null, savedBy: "Tolu", createdAt: new Date(0).toISOString() }
+    const secondSummary: DesignSummary = { id: "design-second", title: "Second saved design", kind: "design", revision: 1, latestVersion: 2, updatedAt: new Date(0).toISOString() }
+    store.list.mockResolvedValue([firstSummary, secondSummary])
+    store.listVersions.mockImplementation(async (id: string) => [{
+      ...firstVersion,
+      designId: id,
+      title: id === firstSummary.id ? firstSummary.title : secondSummary.title,
+    }])
+    let finish!: (version: DesignVersion) => void
+    store.getVersion.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => root!.render(<DesignVersionPicker onUse={vi.fn()} />))
+    await vi.waitFor(() => expect(host.textContent).toContain("Preview version 1"))
+
+    const previewButton = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Preview version 1")
+    if (!previewButton) throw new Error("The first design preview button was not found")
+    await act(async () => previewButton.click())
+    const search = host.querySelector<HTMLInputElement>('[aria-label="Search saved designs"]')!
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!
+      setter.call(search, "Second")
+      search.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await vi.waitFor(() => expect(host.querySelector<HTMLSelectElement>('[aria-label="Saved design"]')?.value).toBe("design-second"))
+
+    await act(async () => finish(firstVersion))
+    expect(host.querySelector('[aria-label="Saved design version preview"]')).toBeNull()
+    expect(host.textContent).not.toContain("First saved design · version 1")
   })
 
   it("requires an explicit page choice when attaching a multi-page version", async () => {
@@ -275,6 +359,11 @@ describe("My Designs workspace", () => {
     store.list.mockResolvedValue([summary])
     store.listVersions.mockResolvedValue([{ ...version, document: null }])
     store.getVersion.mockResolvedValue(version)
+    const renderedCanvas = document.createElement("canvas")
+    renderedCanvas.width = 960
+    renderedCanvas.height = 540
+    mockPreviewRender.mockResolvedValue(renderedCanvas)
+    HTMLCanvasElement.prototype.getContext = (() => ({ drawImage: vi.fn(), clearRect: vi.fn() })) as never
     const onUse = vi.fn()
     const host = document.createElement("div")
     document.body.appendChild(host)
@@ -282,17 +371,15 @@ describe("My Designs workspace", () => {
     await act(async () => root!.render(<DesignVersionPicker onUse={onUse} />))
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
 
-    await act(async () => {
-      ;[...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use in Prepare"))!.click()
-      await Promise.resolve()
-    })
+    await openVersionPreview(host, 1)
     expect(onUse).not.toHaveBeenCalled()
-    const pageSelect = host.querySelector<HTMLSelectElement>('[aria-label="Saved version page"]')!
+    const pageSelect = host.querySelector<HTMLSelectElement>('[aria-label="Preview page"]')!
     const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!
     await act(async () => {
       setter.call(pageSelect, "page-two")
       pageSelect.dispatchEvent(new Event("change", { bubbles: true }))
     })
+    expect(mockPreviewRender.mock.calls.at(-1)?.[0]).toMatchObject({ root: "page-two-group" })
     await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use selected page in Prepare"))!.click())
 
     expect(onUse).toHaveBeenCalledTimes(1)
@@ -330,10 +417,8 @@ describe("My Designs workspace", () => {
     await act(async () => root!.render(<DesignVersionPicker onUse={onUse} />))
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
 
-    await act(async () => {
-      ;[...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use in Prepare"))?.click()
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
+    await openVersionPreview(host, 1)
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use in Prepare"))!.click())
 
     expect(fileUrl).toHaveBeenCalledWith("sermon-media")
     expect(onUse).toHaveBeenCalledTimes(1)
@@ -364,10 +449,8 @@ describe("My Designs workspace", () => {
     await act(async () => root!.render(<DesignVersionPicker onUse={onUse} />))
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
 
-    await act(async () => {
-      ;[...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use in Prepare"))?.click()
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
+    await openVersionPreview(host, 1)
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use in Prepare"))!.click())
 
     expect(onUse).not.toHaveBeenCalled()
     expect(host.textContent).toContain("This version cannot be used")

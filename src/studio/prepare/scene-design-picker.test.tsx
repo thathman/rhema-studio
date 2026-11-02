@@ -54,6 +54,15 @@ async function render(node: React.ReactNode) {
   return container
 }
 
+async function previewSavedVersion(version: number) {
+  const button = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((candidate) => candidate.textContent === `Preview version ${version}`)
+  if (!button) throw new Error(`Preview version ${version} button was not found`)
+  await act(async () => {
+    button.click()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
 function withNativeText(design: RhemaDesign): RhemaDesign {
   const rootNode = design.scene.nodes[design.scene.root]
   if (!rootNode || rootNode.type !== "group") throw new Error("Fixture should have a root group")
@@ -180,6 +189,7 @@ describe("Prepare design version picker", () => {
 
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Choose a scene design for Welcome"]')!.click())
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent === "My Designs")!.click())
+    await previewSavedVersion(version.version)
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use in Prepare")!.click())
 
     const after = useBroadcastStore.getState()
@@ -189,7 +199,7 @@ describe("Prepare design version picker", () => {
       scene_id: selected[0],
       slide: { designRef: { id: version.designId, version: version.version } },
     })
-    expect(after.scenes.find((scene) => scene.id === selected[0])?.design).toEqual({ id: version.designId, version: version.version })
+    expect(after.scenes.find((scene) => scene.id === selected[0])?.design).toEqual({ id: version.designId, version: version.version, pageId: "root" })
     expect(mockInvoke.mock.calls.map(([command]) => command)).toEqual([
       "design_list",
       "design_list_versions",
@@ -247,6 +257,7 @@ describe("Prepare design version picker", () => {
 
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Choose a scene design for Welcome"]')!.click())
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent === "My Designs")!.click())
+    await previewSavedVersion(version.version)
     await act(async () => useQueueStore.setState({ items: [] }))
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use in Prepare")!.click())
 
@@ -332,8 +343,8 @@ describe("Prepare design version picker", () => {
 
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Choose a scene design for Welcome"]')!.click())
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent === "My Designs")!.click())
-    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use in Prepare")!.click())
-    const pageSelect = document.body.querySelector<HTMLSelectElement>('[aria-label="Saved version page"]')!
+    await previewSavedVersion(version.version)
+    const pageSelect = document.body.querySelector<HTMLSelectElement>('[aria-label="Preview page"]')!
     const setPageValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!
     await act(async () => {
       setPageValue.call(pageSelect, "yoruba-page")

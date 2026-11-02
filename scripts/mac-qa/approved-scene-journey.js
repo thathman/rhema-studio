@@ -19,6 +19,7 @@ const waitForAsync = async (predicate, label, timeoutMs = 8000) => {
   throw new Error("Timed out waiting for " + label)
 }
 const normal = (value) => String(value ?? "").replace(/\s+/g, " ").trim()
+const designedMomentSceneId = (ref) => `design-${ref.id}-v${ref.version}${ref.pageId ? `-page-${encodeURIComponent(ref.pageId)}` : ""}`
 const buttons = () => [...document.querySelectorAll("button, [role=tab]")]
 const activateButton = async (button, label) => {
   if (button.disabled || button.getAttribute("aria-disabled") === "true") throw new Error("Button “" + label + "” is disabled")
@@ -277,6 +278,8 @@ async function runScenario() {
     await clickButton("Event scenes")
     await clickButton("Choose a scene design for QA Designed Moment")
     await clickButton("My Designs")
+    await clickButton("Preview version 1")
+    await waitFor(() => document.body.innerText.includes("Private artwork preview"), "saved design artwork preview")
     await clickButton("Use in Prepare")
     const pinnedItem = await waitFor(() => {
       const item = qa.queue.getState().items.find((candidate) => candidate.id === designedItem.id)
@@ -456,12 +459,17 @@ async function runScenario() {
 
     stage = "Take the approved pinned design version"
     await clickButton("Take live")
-    const designSceneId = `design-${designDocument.id}-v1`
+    const designRef = reopenedDesigned.slide.designRef
+    const designSceneId = designedMomentSceneId(designRef)
     await waitFor(() => {
       const state = qa.broadcast.getState()
       return state.liveItemId === designedItem.id
         && state.outputs.filter((candidate) => (candidate.role ?? "congregation") === "congregation")
-          .every((candidate) => candidate.sceneId === designSceneId && candidate.sceneSnapshot?.background === "#123456")
+          .every((candidate) => candidate.sceneId === designSceneId
+            && candidate.sceneSnapshot?.design?.id === designRef.id
+            && candidate.sceneSnapshot?.design?.version === designRef.version
+            && candidate.sceneSnapshot?.design?.pageId === designRef.pageId
+            && candidate.sceneSnapshot?.background === "#123456")
     }, "approved Design version 1 on congregation outputs")
     const afterDesignedTake = qa.broadcast.getState()
     const mainAfterDesigned = sceneState(qa.broadcast, "main")
@@ -471,6 +479,10 @@ async function runScenario() {
     }
     if (mainAfterDesigned.sceneId !== designSceneId || secondaryAfterDesigned.sceneId !== designSceneId) {
       throw new Error("The pinned design did not reach every configured congregation output")
+    }
+    if (mainAfterDesigned.sceneSnapshot?.design?.id !== designRef.id || mainAfterDesigned.sceneSnapshot.design.version !== designRef.version || mainAfterDesigned.sceneSnapshot.design.pageId !== designRef.pageId
+      || secondaryAfterDesigned.sceneSnapshot?.design?.id !== designRef.id || secondaryAfterDesigned.sceneSnapshot.design.version !== designRef.version || secondaryAfterDesigned.sceneSnapshot.design.pageId !== designRef.pageId) {
+      throw new Error("The output did not retain the exact approved Design identity and version")
     }
     if (mainAfterDesigned.sceneSnapshot?.background !== "#123456" || secondaryAfterDesigned.sceneSnapshot?.background !== "#123456") {
       throw new Error("Taking version 1 used the newer draft/version 2 design content")
@@ -517,7 +529,7 @@ async function runScenario() {
       design: { id: designDocument.id, title: designDocument.title, takenVersion: 1, newerVersion: 2 },
       service: { id: serviceAtApproval.current.id, title: serviceAtApproval.current.title, revision: approvalRevision },
       manualScene: { id: sceneId, name: approvedManualScene.name, background: approvedManualScene.background },
-      pinnedMoment: { itemId: designedItem.id, designId: designDocument.id, version: 1, sceneId: designSceneId },
+      pinnedMoment: { itemId: designedItem.id, designId: designRef.id, version: designRef.version, pageId: designRef.pageId, sceneId: designSceneId, preparedSceneId: pinnedSceneId },
       beforePreview: { main: mainBefore, secondary: secondaryBefore },
       afterManualTake: { main: mainAfterManual, secondary: secondaryAfterManual },
       afterDesignedTake: { main: mainAfterDesigned, secondary: secondaryAfterDesigned },
@@ -546,8 +558,10 @@ async function runScenario() {
       stack: error?.stack,
       outputs: qa.broadcast.getState().outputs.map((output) => ({
         id: output.id,
+        sceneId: output.sceneId,
         scene: output.sceneSnapshot?.name,
         background: output.sceneSnapshot?.background,
+        design: output.sceneSnapshot?.design,
         approval: output.sceneAppearanceSnapshot?.approved,
       })),
       service: {

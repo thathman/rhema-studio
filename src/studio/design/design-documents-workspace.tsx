@@ -16,6 +16,7 @@ import { LookLibraryView } from "@/studio/design/look-library-view"
 import { DesignDocumentEditor } from "@/studio/design/design-document-editor"
 import { DesignUsagePanel } from "@/studio/design/design-usage-panel"
 import { hydrateDesignSceneMedia } from "@/lib/design-media"
+import { renderSceneToCanvas } from "@/vendor/avnac/renderer/offscreen-render"
 import type { Scene } from "@/types/scene"
 import { cn } from "@/lib/utils"
 
@@ -38,6 +39,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
   const [active, setActive] = useState<DesignDocument | null>(null)
   const [chosenDesign, setChosenDesign] = useState<DesignDocument | null>(null)
   const [loading, setLoading] = useState(true)
+
   const [creating, setCreating] = useState(false)
   const [activeDirty, setActiveDirty] = useState(false)
   const [browseTemplates, setBrowseTemplates] = useState(false)
@@ -329,6 +331,58 @@ function summaryOf(document: DesignDocument): DesignSummary {
   }
 }
 
+function DesignVersionArtworkPreview({ version, pageId }: { version: DesignVersion; pageId?: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
+  const pageTitle = version.document
+    ? designPages(version.document).find((page) => page.id === pageId)?.title ?? "Page 1"
+    : "Page 1"
+
+  useEffect(() => {
+    let cancelled = false
+    const render = async () => {
+      setStatus("loading")
+      const target = canvasRef.current
+      const context = target?.getContext("2d")
+      if (!target || !context) throw new Error("Canvas preview is unavailable on this computer.")
+      context.clearRect(0, 0, target.width, target.height)
+      if (!version.document) throw new Error("The saved design document is unavailable.")
+      const page = designPages(version.document).find((candidate) => candidate.id === pageId)
+      if (!page) throw new Error("This saved page is unavailable.")
+      const pageScene = page.nodeId === version.document.scene.root
+        ? version.document.scene
+        : { ...version.document.scene, root: page.nodeId }
+      const rendered = await renderSceneToCanvas(pageScene, { maxCssPx: 720, awaitFonts: false })
+      if (!rendered) throw new Error("The design renderer returned no artwork.")
+      if (cancelled) return
+      target.width = rendered.width
+      target.height = rendered.height
+      context.clearRect(0, 0, target.width, target.height)
+      context.drawImage(rendered, 0, 0, target.width, target.height)
+      setStatus("ready")
+    }
+    void render().catch(() => { if (!cancelled) setStatus("error") })
+    return () => { cancelled = true }
+  }, [version, pageId])
+
+  return (
+    <figure className="min-w-0">
+      <div className="mx-auto aspect-video w-full max-w-[45rem] overflow-hidden rounded-md border border-border bg-muted/40">
+        <canvas
+          ref={canvasRef}
+          role="img"
+          aria-label={`Saved design ${version.title}, version ${version.version}, page ${pageTitle}`}
+          aria-busy={status === "loading"}
+          className="h-full w-full object-contain"
+        />
+      </div>
+      {status === "loading" && <p role="status" className="mt-2 text-xs text-muted-foreground">Rendering the saved page…</p>}
+      {status === "error" && <p role="alert" className="mt-2 text-xs text-destructive">The saved artwork preview could not be rendered here. The saved version is unchanged; check it in Prepare Preview before taking it live.</p>}
+      <figcaption className="mt-2 text-xs text-muted-foreground">Private artwork preview · live sources are shown as static placeholders. This preview does not change Preview, Program, or any screen.</figcaption>
+    </figure>
+  )
+}
+
 /** Pick or customize a private copy of an immutable design version for the current Prepare moment. */
 export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDesignId }: {
   onUse: (scene: Scene, version: DesignVersion, pageId?: string) => void
@@ -339,6 +393,7 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
 }) {
   const operatorName = useSettingsStore((state) => state.operatorName)
   const [documents, setDocuments] = useState<DesignSummary[]>([])
+  const [query, setQuery] = useState("")
   const [selectedId, setSelectedId] = useState("")
   const [versions, setVersions] = useState<DesignVersion[]>([])
   const [versionsForId, setVersionsForId] = useState("")
@@ -346,12 +401,16 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
   const [editingDirty, setEditingDirty] = useState(false)
   const [createdVersion, setCreatedVersion] = useState<DesignVersion | null>(null)
   const [createdPageId, setCreatedPageId] = useState("")
-  const [pendingVersion, setPendingVersion] = useState<DesignVersion | null>(null)
-  const [pendingPageId, setPendingPageId] = useState("")
+  const [previewVersion, setPreviewVersion] = useState<DesignVersion | null>(null)
+  const [previewPageId, setPreviewPageId] = useState("")
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewError, setPreviewError] = useState("")
+  const previewRequestId = useRef(0)
   const [editingError, setEditingError] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
+  useEffect(() => () => { previewRequestId.current += 1 }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -376,7 +435,9 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
       setEditing(document)
       setEditingDirty(false)
       setCreatedVersion(null)
-      setPendingVersion(null)
+      previewRequestId.current += 1
+      setPreviewVersion(null)
+      setPreviewLoading(false)
       onDirtyChange?.(false)
     }).catch((failure) => {
       if (!cancelled) setError("The new design could not be opened: " + messageOf(failure))
@@ -399,6 +460,7 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
   }, [selectedId])
 
   const visibleVersions = versionsForId === selectedId ? versions : []
+  const filteredDocuments = documents.filter((item) => item.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
   const createdPages = createdVersion?.document ? designPages(createdVersion.document) : []
   const effectiveCreatedPageId = createdVersion?.document?.pages?.some((page) => page.id === createdPageId)
     ? createdPageId
@@ -407,17 +469,16 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
     () => createdVersion ? pinnedSceneForVersion(createdVersion, operatorName, effectiveCreatedPageId) : null,
     [createdVersion, operatorName, effectiveCreatedPageId],
   )
-  const pendingPages = pendingVersion?.document ? designPages(pendingVersion.document) : []
-  const effectivePendingPageId = pendingVersion?.document?.pages?.some((page) => page.id === pendingPageId)
-    ? pendingPageId
-    : pendingVersion?.document?.pages?.[0]?.id
-
   const customizeCopy = async (listed: DesignVersion) => {
+    previewRequestId.current += 1
     setBusy(true)
     setError("")
     setEditingError("")
     setCreatedVersion(null)
-    setPendingVersion(null)
+    setPreviewVersion(null)
+    setPreviewPageId("")
+    setPreviewLoading(false)
+    setPreviewError("")
     try {
       const copy = await designStore.duplicate(listed.designId, listed.version, listed.title + " copy")
       setEditing(copy)
@@ -467,8 +528,8 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
       const resolved = await hydrateDesignSceneMedia(converted.scene)
       if (!resolved.scene) throw new Error(resolved.issue ?? "A Library asset is unavailable on this computer.")
       onUse(resolved.scene, version, pageId)
-      setPendingVersion(null)
-      setPendingPageId("")
+      setPreviewVersion(null)
+      setPreviewPageId("")
     } catch (failure) {
       setError("This version cannot be used: " + messageOf(failure))
     } finally {
@@ -531,34 +592,56 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
     )
   }
 
-  const attachVersion = async (listed: DesignVersion) => {
-    setBusy(true)
-    setError("")
+  const previewSavedVersion = async (listed: DesignVersion) => {
+    const requestId = ++previewRequestId.current
+    setPreviewLoading(true)
+    setPreviewError("")
+    setPreviewVersion(null)
+    setPreviewPageId("")
     try {
       const version = await designStore.getVersion(listed.designId, listed.version)
-      if (!version?.document) throw new Error("This version is no longer available on this computer.")
-      if ((version.document.pages?.length ?? 0) > 1) {
-        setPendingVersion(version)
-        setPendingPageId(version.document.pages![0]!.id)
-        return
-      }
-      await attachResolvedVersion(version, version.document.pages?.[0]?.id)
+      if (requestId !== previewRequestId.current) return
+      if (!version?.document) throw new Error("This saved design version is no longer available on this computer.")
+      setPreviewVersion(version)
+      setPreviewPageId(designPages(version.document)[0]?.id ?? "")
     } catch (failure) {
-      setError("This version could not be used: " + messageOf(failure))
+      if (requestId === previewRequestId.current) setPreviewError("This version could not be previewed: " + messageOf(failure))
     } finally {
-      setBusy(false)
+      if (requestId === previewRequestId.current) setPreviewLoading(false)
     }
+  }
+
+  const previewPages = previewVersion?.document ? designPages(previewVersion.document) : []
+  const effectivePreviewPageId = previewPages.some((page) => page.id === previewPageId)
+    ? previewPageId
+    : previewPages[0]?.id
+  const previewPage = previewPages.find((page) => page.id === effectivePreviewPageId)
+  const finalUseLabel = useLabel ?? (previewPages.length > 1 ? "Use selected page in Prepare" : "Use in Prepare")
+  const changeQuery = (nextQuery: string) => {
+    previewRequestId.current += 1
+    const matches = documents.filter((item) => item.title.toLocaleLowerCase().includes(nextQuery.trim().toLocaleLowerCase()))
+    setQuery(nextQuery)
+    if (!matches.some((item) => item.id === selectedId)) setSelectedId(matches[0]?.id ?? "")
+    setPreviewVersion(null)
+    setPreviewPageId("")
+    setPreviewLoading(false)
+    setPreviewError("")
   }
 
   return (
     <div className="flex min-h-[20rem] flex-col gap-3">
       <p className="text-xs text-muted-foreground">Choose a saved version for this moment. Rhema adds a pinned scene to the service plan; Preview can show it, and Program stays unchanged until someone explicitly Takes it. Versions with features Rhema scenes cannot render yet remain saved but cannot be used in Prepare.</p>
       {documents.length > 0 && (
-      <label className="flex flex-col gap-1 text-xs font-semibold">Design
-          <select aria-label="Saved design" value={selectedId} onChange={(event) => { setError(""); setSelectedId(event.currentTarget.value) }} className="h-9 rounded-md border border-input bg-background px-2 text-sm font-normal">
-            {documents.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-          </select>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="flex flex-col gap-1 text-xs font-semibold">Search saved designs
+          <Input type="search" aria-label="Search saved designs" value={query} onChange={(event) => changeQuery(event.currentTarget.value)} placeholder="Search by design name" className="h-9 text-sm font-normal" />
         </label>
+        {filteredDocuments.length > 0 && <label className="flex flex-col gap-1 text-xs font-semibold">Design
+          <select aria-label="Saved design" value={selectedId} onChange={(event) => { previewRequestId.current += 1; setError(""); setPreviewVersion(null); setPreviewLoading(false); setPreviewError(""); setSelectedId(event.currentTarget.value) }} className="h-9 rounded-md border border-input bg-background px-2 text-sm font-normal">
+            {filteredDocuments.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+          </select>
+        </label>}
+      </div>
       )}
       {loading && <p className="text-xs text-muted-foreground">Loading saved designs…</p>}
       {!loading && documents.length === 0 && (
@@ -568,6 +651,7 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
           <Button size="sm" variant="outline" className="mt-3" onClick={() => useShellStore.getState().openDesign("my-designs")}>Open My Designs</Button>
         </div>
       )}
+      {!loading && documents.length > 0 && filteredDocuments.length === 0 && <p role="status" className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">No saved designs match this search.</p>}
       {!loading && selectedId && versionsForId !== selectedId && !error && <p className="text-xs text-muted-foreground">Loading saved versions…</p>}
       {!loading && selectedId && versionsForId === selectedId && visibleVersions.length === 0 && (
         <p className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">This design has no saved versions yet. Save a draft and create a version in Design → My Designs.</p>
@@ -581,23 +665,35 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
                 <p className="text-[0.6875rem] text-muted-foreground">Saved {new Date(version.createdAt).toLocaleString()}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Button size="xs" variant="outline" onClick={() => void customizeCopy(version)} disabled={busy}>Customize a copy</Button>
-                <Button size="xs" onClick={() => void attachVersion(version)} disabled={busy}>{useLabel ?? "Use in Prepare"}</Button>
+                <Button size="xs" variant="outline" onClick={() => void customizeCopy(version)} disabled={busy || previewLoading}>Customize a copy</Button>
+                <Button size="xs" onClick={() => void previewSavedVersion(version)} disabled={busy || previewLoading}>Preview version {version.version}</Button>
               </div>
             </div>
           ))}
         </div>
       )}
-      {pendingVersion && pendingVersion.document && pendingPages.length > 1 && (
-        <div className="flex flex-wrap items-end gap-2 rounded-md border border-primary/30 bg-primary/5 p-3" aria-label="Attach a page from this version">
-          <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs font-semibold">Choose a page from version {pendingVersion.version}
-            <select aria-label="Saved version page" value={effectivePendingPageId ?? ""} onChange={(event) => setPendingPageId(event.currentTarget.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm font-normal">
-              {pendingPages.map((page, index) => <option key={page.id} value={page.id}>{index + 1}. {page.title}</option>)}
-            </select>
-          </label>
-          <Button size="sm" onClick={() => void attachResolvedVersion(pendingVersion, effectivePendingPageId)} disabled={busy || !effectivePendingPageId}>{useLabel ?? "Use selected page in Prepare"}</Button>
-          <Button size="sm" variant="ghost" onClick={() => { setPendingVersion(null); setPendingPageId("") }} disabled={busy}>Cancel</Button>
-        </div>
+      {previewLoading && <p role="status" aria-live="polite" className="text-xs text-muted-foreground">Loading the saved version for preview…</p>}
+      {previewError && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs">{previewError}</p>}
+      {previewVersion?.document && previewPage && (
+        <section aria-label="Saved design version preview" className="grid gap-3 rounded-md border border-border bg-muted/20 p-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(14rem,0.8fr)]">
+          <DesignVersionArtworkPreview version={previewVersion} pageId={effectivePreviewPageId} />
+          <div className="flex flex-col gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">{previewVersion.title} · version {previewVersion.version}</h3>
+              <p className="mt-1 text-xs text-muted-foreground">{previewPage.title}{previewVersion.note ? ` · ${previewVersion.note}` : ""}</p>
+            </div>
+            {previewPages.length > 1 && <label className="flex flex-col gap-1 text-xs font-semibold">Choose a page
+              <select aria-label="Preview page" value={effectivePreviewPageId ?? ""} onChange={(event) => setPreviewPageId(event.currentTarget.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm font-normal">
+                {previewPages.map((page, index) => <option key={page.id} value={page.id}>{index + 1}. {page.title}</option>)}
+              </select>
+            </label>}
+            <p className="text-xs text-muted-foreground">Using this version pins it to the selected moment. It does not publish to Program; Take stays explicit.</p>
+            <div className="mt-auto flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => void attachResolvedVersion(previewVersion, effectivePreviewPageId)} disabled={busy || !effectivePreviewPageId}>{finalUseLabel}</Button>
+              <Button size="sm" variant="outline" onClick={() => { previewRequestId.current += 1; setPreviewVersion(null); setPreviewPageId(""); setPreviewError("") }} disabled={busy}>Back to saved versions</Button>
+            </div>
+          </div>
+        </section>
       )}
       {error && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs">{error}</p>}
     </div>
