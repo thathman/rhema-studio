@@ -2,7 +2,7 @@ import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
 import { useEffect, useRef, useState, useSyncExternalStore } from "react"
-import { ArrowUpIcon, BookOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
+import { ArrowUpIcon, BookOpenIcon, FolderOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, PlusIcon, SearchIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { LiveOutputPanel } from "@/components/panels/live-output-panel"
@@ -21,7 +21,6 @@ import { ServiceTimer } from "@/studio/present/service-timer"
 import { AuxTimers } from "@/studio/present/aux-timers"
 import { StageMessage } from "@/studio/present/stage-message"
 import { LowerThirdControl } from "@/studio/present/lower-third"
-import { TickerRow } from "@/studio/present/ticker"
 import { ObsChip } from "@/studio/present/obs-chip"
 import { SoundChip } from "@/studio/present/sound-chip"
 import { CueMenu } from "@/studio/present/cue-menu"
@@ -33,6 +32,8 @@ import { EngageHostControl } from "@/studio/engage/host-control"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 import { useProductionTab } from "@/studio/production/production-tab"
+import { usePreviewLabel } from "@/hooks/use-preview-label"
+import { nextVisibleItem, plannedTimes } from "@/lib/run-of-show"
 
 export function PresentWorkspace() {
   const [selectedPreviewOutputId, setSelectedPreviewOutputId] = useState<string | null>(null)
@@ -243,17 +244,35 @@ function LiveConsoleSurface({
   const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => false)
   const isLive = useBroadcastStore((s) => s.isLive)
   const count = useQueueStore((s) => s.items.length)
+  const headers = useQueueStore((s) => s.headers)
   const hasTimedItems = useQueueStore((s) => s.items.some((i) => i.auto_advance))
   const held = useBroadcastStore((s) => s.heldLive !== null)
   const quickOnAir = useBroadcastStore((s) => s.liveVerse?.quickScreen ?? null)
   const service = useServiceStore((s) => s.current)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const emptyRundown = count === 0 && headers.length === 0
+  const preview = usePreviewLabel()
+
+  const focusQuickFind = () => {
+    const focus = () => {
+      const input = document.querySelector<HTMLInputElement>('[data-tour="quick-find"] input[aria-label="Quick find"]')
+      input?.scrollIntoView?.({ block: "nearest" })
+      input?.focus()
+    }
+    if (toolsOpen) {
+      onCloseTools()
+      window.setTimeout(focus, 0)
+    } else {
+      focus()
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3 [@media(max-height:860px)]:gap-2 [@media(max-height:860px)]:pt-2.5">
     <PhaseStrip />
     <RecorderDock />
     <div className="grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,14.5rem)] gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2">
-      <section className="row-span-3 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken" data-tour="present-rundown">
+      <section className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken ${emptyRundown ? "row-span-1" : "row-span-3"}`} data-tour="present-rundown">
         <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold tracking-tight">Running order</h2>
@@ -266,9 +285,49 @@ function LiveConsoleSurface({
             <TimedMoves />
           </div>
         )}
-        <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
-          <RundownList mode="present" />
-        </div>
+        {!emptyRundown && <NowNextSummary />}
+        {emptyRundown ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-2" role="region" aria-label="Live setup actions">
+            <div className="shrink-0">
+              <h3 className="text-sm font-semibold">{service ? "No events in this service" : "No service open"}</h3>
+              <p className="text-[0.6875rem] leading-tight text-muted-foreground">Open or create a plan, or find a private cue.</p>
+              <p className="mt-0.5 text-[0.6875rem] leading-tight text-muted-foreground" title={preview
+                ? "Plan changes never update Program by themselves. Preview stays private until you choose Take live."
+                : "Plan changes never update Program by themselves. Take is unavailable until you choose a moment for Preview."}>
+                {preview ? "Only Take changes an output." : "Take waits for a Preview item."}
+              </p>
+            </div>
+            <div className="grid shrink-0 grid-cols-2 gap-1">
+              {service ? (
+                <Button type="button" size="xs" aria-label="Add event in Prepare" title="Add an event in Prepare" className="h-7 min-h-7 min-w-0 justify-start gap-1 px-2 text-[0.6875rem] [&_svg]:size-3.5" onClick={() => useShellStore.getState().goTo("prepare")}>
+                  <PlusIcon /> Add event
+                </Button>
+              ) : (
+                <>
+                  <Button type="button" size="xs" aria-label="Open a saved service" title="Choose a saved service" className="h-7 min-h-7 min-w-0 justify-start gap-1 px-2 text-[0.6875rem] [&_svg]:size-3.5" onClick={() => useShellStore.getState().goTo("archive")}>
+                    <FolderOpenIcon /> Open saved
+                  </Button>
+                  <Button type="button" size="xs" aria-label="Create a service" title="Create a new service" variant="outline" className="h-7 min-h-7 min-w-0 justify-start gap-1 px-2 text-[0.6875rem] [&_svg]:size-3.5" onClick={() => {
+                    useShellStore.getState().setNewServiceOpen(true)
+                    useShellStore.getState().goTo("prepare")
+                  }}>
+                    <PlusIcon /> New service
+                  </Button>
+                </>
+              )}
+              <Button type="button" size="xs" aria-label="Find Scripture or hymn" title="Find Scripture or hymn" variant="outline" className="h-7 min-h-7 min-w-0 justify-start gap-1 px-2 text-[0.6875rem] [&_svg]:size-3.5" onClick={focusQuickFind}>
+                <SearchIcon /> Find cue
+              </Button>
+              <Button type="button" size="xs" aria-label={outputs.length === 0 ? "Add an output" : "Review outputs"} title="Review or connect an output" variant="ghost" className="h-7 min-h-7 min-w-0 justify-start gap-1 px-2 text-[0.6875rem] [&_svg]:size-3.5" onClick={() => useShellStore.getState().openOutputs()}>
+                <MonitorCogIcon /> {outputs.length === 0 ? "Add output" : "Outputs"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+            <RundownList mode="present" />
+          </div>
+        )}
       </section>
       {/* On a wide window these sit in the grid itself; on a narrow one (1024×600 and up) they share one
           column that scrolls when it must, so nothing in it is ever drawn over another part. */}
@@ -306,7 +365,7 @@ function LiveConsoleSurface({
             </div>
             <div className="flex min-h-0 flex-1 flex-col [&>*]:min-h-0 [&>*]:flex-1"><QuickFind mode="present" /></div>
           </section>
-          <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-4" role="group" aria-label="Quick screens">
+          <section className="flex min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card p-3" role="group" aria-label="Quick screens">
             {/* Back sits in the header so it is never clipped on a short (1366x768) screen; the screens scroll if they must. */}
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -315,8 +374,8 @@ function LiveConsoleSurface({
               </div>
               <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
             </div>
-            {/* Four across, two rows: on a small window the icons give way so every screen stays in view. */}
-            <div className="-m-1 grid min-h-0 grid-cols-4 content-start gap-2 overflow-y-auto p-1 max-[1200px]:gap-1.5">
+            {/* Full-size actions use three columns through 1500px; the last row keeps all seven available. */}
+            <div data-testid="quick-screen-actions" className="-m-1 grid min-h-0 min-w-0 grid-cols-4 content-start gap-1.5 overflow-y-auto overflow-x-hidden p-1 max-[1500px]:grid-cols-3 max-[800px]:grid-cols-2">
               {(["welcome", "stand", "pray", "offering", "technical", "logo", "black"] as const).map((s) => {
                 // Calm until pressed: only the screen that is on air turns red, so the row also says what is showing.
                 const onAir = isLive && quickOnAir === s
@@ -327,19 +386,51 @@ function LiveConsoleSurface({
                     label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering", technical: "Technical issue", logo: "Logo", black: "Black" }[s]}
                     tone={onAir ? "live" : "neutral"}
                     aria-pressed={onAir}
-                    className="h-11 min-w-0 justify-start gap-1.5 px-2.5 text-[0.8125rem] leading-tight max-[1200px]:justify-center max-[1200px]:px-1.5 max-[1200px]:text-xs max-[1200px]:[&>span:first-child]:hidden [&_svg]:!size-4"
+                    className="h-11 min-w-0 justify-start gap-1.5 px-2 text-xs leading-tight [&_svg]:!size-4"
                     onClick={() => presentActions.quickScreen(s)}
                   />
                 )
               })}
             </div>
-            <TickerRow />
           </section>
         </div>
       )}
       </div>
     </div>
     </div>
+  )
+}
+
+/** The run-of-show cursor and upcoming item, kept separate from the actual Program panel. */
+function NowNextSummary() {
+  const items = useQueueStore((s) => s.items)
+  const headers = useQueueStore((s) => s.headers)
+  const activeIndex = useQueueStore((s) => s.activeIndex)
+  const current = activeIndex === null ? null : items[activeIndex] ?? null
+  const next = nextVisibleItem(items, headers, activeIndex)
+  const planned = plannedTimes(items, headers)
+  const timeFor = (index: number) => planned.get(index)
+
+  const itemDetails = (index: number, item: { planned_minutes?: number | null }) => {
+    const at = timeFor(index)
+    const minutes = item.planned_minutes
+    return [at ? `Planned ${at}` : null, typeof minutes === "number" && minutes > 0 ? `${minutes} min` : null].filter(Boolean).join(" · ")
+  }
+  const currentDetails = current && activeIndex !== null ? itemDetails(activeIndex, current) : ""
+
+  return (
+    <section aria-label="Run of show Now and Next" className="grid grid-cols-2 gap-2 border-b border-border px-3 py-2">
+      <div role="group" aria-label="Now in the run of show" className="min-w-0 rounded-md bg-background/60 px-2 py-1.5">
+        <span className="block text-[0.6875rem] font-bold tracking-wide text-muted-foreground uppercase">Now</span>
+        <span className="block truncate text-xs font-semibold" title={current?.reference ?? "No active run-of-show item"}>{current?.reference ?? "Not started"}</span>
+        {current && <span className="block truncate text-[0.6875rem] text-muted-foreground">{currentDetails || "Current run position"}</span>}
+      </div>
+      <div role="group" aria-label="Next in the run of show" className="min-w-0 rounded-md bg-background/60 px-2 py-1.5">
+        <span className="block text-[0.6875rem] font-bold tracking-wide text-muted-foreground uppercase">Next</span>
+        <span className="block truncate text-xs font-semibold" title={next?.label ?? "No next run-of-show item"}>{next?.label ?? "No next item"}</span>
+        {next && <span className="block truncate text-[0.6875rem] text-muted-foreground">{itemDetails(next.index, next.item) || "Up next in the running order"}</span>}
+      </div>
+    </section>
   )
 }
 
