@@ -20,6 +20,7 @@ import { nextVisibleItem } from "@/lib/run-of-show"
 import { warnMs } from "@/lib/item-timing"
 import { elapsedMs, formatMs, remainingMs, timerTone } from "@/lib/timer"
 import { PreviewPanel } from "@/components/panels/preview-panel"
+import { VerseTranslationControls } from "@/studio/prepare/verse-translation-controls"
 import { TimingRules } from "@/studio/prepare/timing-rules"
 import { EngageItemEditor } from "@/studio/engage/quiz-editor"
 import { engageFromItem } from "@/lib/engage"
@@ -88,7 +89,8 @@ export function ItemEditor() {
           {isImageItem(item) && <ImageItemControls item={item} />}
           {isAudioItem(item) && <AudioItemControls item={item} />}
           {isCueItem(item) && (engageFromItem(item) ? <EngageItemEditor item={item} /> : <CueItemEditor item={item} />)}
-          {kind === "verse" && <p className="px-2 pt-3 text-xs text-muted-foreground">Shown in the translation it was added with (or the service's, if the operator overrides it in Present).</p>}
+          {isVerseItem(item) && <VerseTranslationControls item={item} />}
+          {isVerseItem(item) && <p className="px-2 pt-3 text-xs text-muted-foreground">Preview shows this moment’s pinned text. Present can use the service translation override.</p>}
           {!isImageItem(item) && !isAudioItem(item) && !isCueItem(item) && <BackgroundPicker item={item} />}
           {!isCueItem(item) && !isAudioItem(item) && <LookAndScene item={item} />}
         </TabsContent>

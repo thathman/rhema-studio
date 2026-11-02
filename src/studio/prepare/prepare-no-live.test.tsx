@@ -6,12 +6,24 @@ vi.hoisted(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
   ;(globalThis as { PointerEvent?: typeof PointerEvent }).PointerEvent ??= MouseEvent as unknown as typeof PointerEvent
   ;(globalThis as { CSS?: { escape: (s: string) => string } }).CSS ??= { escape: (s: string) => s }
+  if (globalThis.HTMLCanvasElement) {
+    const context = new Proxy({ font: "" }, {
+      get: (target, property) => property === "measureText"
+        ? (text: string) => ({ width: text.length * 8 })
+        : property === "canvas"
+          ? { width: 1920, height: 1080 }
+          : Reflect.get(target, property) ?? (() => undefined),
+      set: (target, property, value) => Reflect.set(target, property, value),
+    })
+    globalThis.HTMLCanvasElement.prototype.getContext = (() => context) as unknown as typeof HTMLCanvasElement.prototype.getContext
+  }
 })
 const mockService = vi.hoisted(() => ({
   program: null as null | Record<string, unknown>,
   items: [] as Record<string, unknown>[],
   verses: [
     { id: 1, translation_id: 1, book_number: 19, book_name: "Psalms", book_abbreviation: "Ps", chapter: 23, verse: 1, text: "The Lord is my shepherd" },
+    { id: 7, translation_id: 7, book_number: 19, book_name: "Psalms", book_abbreviation: "Ps", chapter: 23, verse: 1, text: "Synthetic Yoruba translation fixture" },
     { id: 2, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "Jn", chapter: 3, verse: 16, text: "For God so loved the world" },
   ],
 }))
@@ -21,7 +33,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (cmd.endsWith("_list")) return []
     if (cmd === "get_verse") {
       return mockService.verses.find((verse) =>
-        verse.book_number === args?.bookNumber && verse.chapter === args?.chapter && verse.verse === args?.verse,
+        verse.translation_id === args?.translationId && verse.book_number === args?.bookNumber && verse.chapter === args?.chapter && verse.verse === args?.verse,
       ) ?? null
     }
     if (cmd === "content_create_program") {
@@ -340,7 +352,10 @@ describe("Prepare never takes anything live (#299)", () => {
       selectedQueueItemId: null,
       activeTranslationId: 1,
       secondaryTranslationId: null,
-      translations: [{ id: 1, abbreviation: "KJV", title: "King James Version", language: "en", is_copyrighted: false, is_downloaded: true }],
+      translations: [
+        { id: 1, abbreviation: "KJV", title: "King James Version", language: "en", is_copyrighted: false, is_downloaded: true },
+        { id: 7, abbreviation: "OYCB", title: "Open Yoruba Contemporary Bible", language: "yo", is_copyrighted: false, is_downloaded: true },
+      ],
       books: [
         { id: 19, translation_id: 1, book_number: 19, name: "Psalms", abbreviation: "Ps", testament: "OT" },
         { id: 43, translation_id: 1, book_number: 43, name: "John", abbreviation: "Jn", testament: "NT" },
@@ -386,6 +401,27 @@ describe("Prepare never takes anything live (#299)", () => {
 
     const psalm = await addBibleMoment("psalm 23 1", "Psalms 23:1")
     expect(psalm).toHaveProperty("verse")
+    const psalmRow = () => el.querySelector<HTMLElement>(`[data-rundown-item-id="${psalm.id}"]`)
+    await act(async () => psalmRow()!.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    const primaryTranslation = el.querySelector<HTMLSelectElement>('select[aria-label="Primary translation"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(primaryTranslation, "OYCB")
+      primaryTranslation.dispatchEvent(new Event("change", { bubbles: true }))
+      await Promise.resolve()
+    })
+    const secondaryTranslation = el.querySelector<HTMLSelectElement>('select[aria-label="Secondary translation"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(secondaryTranslation, "KJV")
+      secondaryTranslation.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    expect(useQueueStore.getState().items.find((item) => item.id === psalm.id)).toMatchObject({
+      id: psalm.id,
+      reference: "Psalms 23:1",
+      translation: "OYCB",
+      secondary_translation: "KJV",
+      verse: { translation_id: 7, text: "Synthetic Yoruba translation fixture" },
+    })
+    expect(useBibleStore.getState()).toMatchObject({ activeTranslationId: 1, secondaryTranslationId: null })
 
     await openEventAdd()
     const slideDialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
@@ -434,6 +470,12 @@ describe("Prepare never takes anything live (#299)", () => {
     const reopened = useQueueStore.getState()
     expect(reopened.items.map((item) => item.id)).toEqual([psalm.id, john.id, slideMoment.id])
     expect(reopened.items.map((item) => "verse" in item ? "verse" : item.kind)).toEqual(["verse", "verse", "slide"])
+    expect(reopened.items.find((item) => item.id === psalm.id)).toMatchObject({
+      id: psalm.id,
+      translation: "OYCB",
+      secondary_translation: "KJV",
+      verse: { translation_id: 7, text: "Synthetic Yoruba translation fixture" },
+    })
     expect(reopened.items.find((item) => item.id === slideMoment.id)).toMatchObject({
       reference: "Edited sermon title",
       slide: { title: "Edited sermon title", body: "Revised words for Sunday" },
