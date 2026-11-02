@@ -358,6 +358,27 @@ export function DesignDocumentEditor({
     }
   }
   const updateNode = (node: SaraswatiRenderableNode) => dispatch({ type: "REPLACE_NODE", node })
+  const alignSelectedToPage = (
+    axis: "horizontal" | "vertical",
+    position: "start" | "center" | "end",
+  ) => {
+    if (!selectedRenderable) return
+    const bounds = getNodeBounds(selectedRenderable)
+    const current = axis === "horizontal" ? bounds.x : bounds.y
+    const size = axis === "horizontal" ? bounds.width : bounds.height
+    const pageSize = axis === "horizontal" ? scene.artboard.width : scene.artboard.height
+    const target = position === "start"
+      ? 0
+      : position === "center"
+        ? (pageSize - size) / 2
+        : pageSize - size
+    const delta = target - current
+    if (axis === "horizontal") {
+      if (delta !== 0) dispatch({ type: "MOVE_NODE", id: selectedRenderable.id, dx: delta, dy: 0 })
+    } else if (delta !== 0) {
+      dispatch({ type: "MOVE_NODE", id: selectedRenderable.id, dx: 0, dy: delta })
+    }
+  }
   const updateFeedBinding = (patch: Partial<RhemaBinding>) => {
     if (!selectedRenderable) return
     const id = selectedRenderable.id
@@ -810,6 +831,19 @@ export function DesignDocumentEditor({
                   {"height" in selectedRenderable && <NumberField label="Height" min={1} max={scene.artboard.height * 2} value={selectedRenderable.height} onCommit={(value) => commitNumber("height", value)} />}
                   <NumberField label="Opacity %" min={0} max={100} value={selectedRenderable.opacity * 100} onCommit={(value) => dispatch({ type: "SET_NODE_OPACITY", id: selectedRenderable.id, opacity: value / 100 })} />
                 </div>
+                <section className="space-y-2 border-t border-border pt-3" aria-label="Align selected layer">
+                  <h4 className="text-[0.6875rem] font-semibold">Align to page</h4>
+                  <div role="group" aria-label="Horizontal alignment" className="flex flex-wrap gap-1.5">
+                    <Button size="xs" variant="outline" onClick={() => alignSelectedToPage("horizontal", "start")} aria-label="Align left to page">Left</Button>
+                    <Button size="xs" variant="outline" onClick={() => alignSelectedToPage("horizontal", "center")} aria-label="Center horizontally on page">Center</Button>
+                    <Button size="xs" variant="outline" onClick={() => alignSelectedToPage("horizontal", "end")} aria-label="Align right to page">Right</Button>
+                  </div>
+                  <div role="group" aria-label="Vertical alignment" className="flex flex-wrap gap-1.5">
+                    <Button size="xs" variant="outline" onClick={() => alignSelectedToPage("vertical", "start")} aria-label="Align top to page">Top</Button>
+                    <Button size="xs" variant="outline" onClick={() => alignSelectedToPage("vertical", "center")} aria-label="Center vertically on page">Middle</Button>
+                    <Button size="xs" variant="outline" onClick={() => alignSelectedToPage("vertical", "end")} aria-label="Align bottom to page">Bottom</Button>
+                  </div>
+                </section>
                 {selectedPaintNode && (
                   <label className="flex items-center justify-between gap-2 text-[0.6875rem] font-medium text-muted-foreground">Fill colour
                     {selectedPaintNode.fill.type === "solid"
