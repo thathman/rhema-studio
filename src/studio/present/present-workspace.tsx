@@ -2,7 +2,7 @@ import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
 import { useEffect, useRef, useState, useSyncExternalStore } from "react"
-import { ArrowUpIcon, BookOpenIcon, FolderOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, PlusIcon, SearchIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
+import { ArrowUpIcon, BookOpenIcon, FolderOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, PlusIcon, SearchIcon, SlidersHorizontalIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { LiveOutputPanel } from "@/components/panels/live-output-panel"
@@ -19,16 +19,11 @@ import { RundownList } from "@/studio/present/rundown-list"
 import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceTimer } from "@/studio/present/service-timer"
 import { AuxTimerStatus } from "@/studio/present/aux-timers"
-import { StageMessage } from "@/studio/present/stage-message"
-import { LowerThirdControl } from "@/studio/present/lower-third"
 import { ObsChip } from "@/studio/present/obs-chip"
-import { SoundChip } from "@/studio/present/sound-chip"
-import { CueMenu } from "@/studio/present/cue-menu"
 import { TransportBar } from "@/studio/present/transport-bar"
 import { RecorderDock } from "@/studio/present/recorder-dock"
 import { ScenesStrip } from "@/studio/present/scenes-strip"
 import { LiveToolsDrawer, type LiveToolsTab } from "@/studio/present/live-tools-drawer"
-import { EngageHostControl } from "@/studio/engage/host-control"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 import { useProductionTab } from "@/studio/production/production-tab"
@@ -39,6 +34,7 @@ export function PresentWorkspace() {
   const [selectedPreviewOutputId, setSelectedPreviewOutputId] = useState<string | null>(null)
   const toolsButtonRef = useRef<HTMLButtonElement>(null)
   const productionToolsButtonRef = useRef<HTMLButtonElement>(null)
+  const controlsButtonRef = useRef<HTMLButtonElement>(null)
   const toolsOpen = useProductionTab((s) => s.open)
   const toolsTab = useProductionTab((s) => s.liveToolsTab)
   const openOutputs = useShellStore((s) => s.openOutputs)
@@ -65,7 +61,12 @@ export function PresentWorkspace() {
   const onAir = outputs.filter((o) => outputOnAir(o, outputStatus[o.id])).length
   const closeTools = () => {
     useProductionTab.setState({ open: false, requested: null })
-    queueMicrotask(() => (toolsTab === "production" ? productionToolsButtonRef.current : toolsButtonRef.current)?.focus())
+    const returnFocus = toolsTab === "production"
+      ? productionToolsButtonRef.current
+      : toolsTab === "controls"
+        ? controlsButtonRef.current
+        : toolsButtonRef.current
+    queueMicrotask(() => returnFocus?.focus())
   }
 
   const selectToolsTab = (tab: LiveToolsTab) => {
@@ -130,15 +131,15 @@ export function PresentWorkspace() {
             variant="outline"
             size="xs"
             data-tour="live-tools"
-            aria-label={toolsOpen && toolsTab !== "production" ? "Close Bible and listening tools" : "Open Bible and listening tools"}
+            aria-label={toolsOpen && (toolsTab === "bible" || toolsTab === "listening") ? "Close Bible and listening tools" : "Open Bible and listening tools"}
             aria-controls="live-tools-panel"
-            aria-expanded={toolsOpen && toolsTab !== "production"}
+            aria-expanded={toolsOpen && (toolsTab === "bible" || toolsTab === "listening")}
             title="Search the Bible and review what listening has heard"
             onClick={() => {
-              if (toolsOpen && toolsTab !== "production") closeTools()
+              if (toolsOpen && (toolsTab === "bible" || toolsTab === "listening")) closeTools()
               else {
                 const previousTab = useProductionTab.getState().liveToolsTab
-                useProductionTab.setState({ liveToolsTab: previousTab === "production" ? "bible" : previousTab, open: true, requested: null })
+                useProductionTab.setState({ liveToolsTab: previousTab === "production" || previousTab === "controls" ? "bible" : previousTab, open: true, requested: null })
               }
             }}
           >
@@ -162,6 +163,22 @@ export function PresentWorkspace() {
           >
             <MonitorCogIcon /> Production tools
           </Button>
+          <Button
+            ref={controlsButtonRef}
+            type="button"
+            variant="outline"
+            size="xs"
+            aria-label={toolsOpen && toolsTab === "controls" ? "Close other controls" : "Open other controls"}
+            aria-controls="live-tools-panel"
+            aria-expanded={toolsOpen && toolsTab === "controls"}
+            title="Open secondary Live controls"
+            onClick={() => {
+              if (toolsOpen && toolsTab === "controls") closeTools()
+              else useProductionTab.setState({ liveToolsTab: "controls", open: true, requested: null })
+            }}
+          >
+            <SlidersHorizontalIcon /> More controls
+          </Button>
           <StatusChip tone={listening ? "ok" : "off"} label={listening ? (cloudSpeechProvider ? `Listening (${cloudSpeechProvider === "openai" ? "OpenAI" : "Deepgram"})` : "Listening") : "Listening off"} title={listening && cloudSpeechProvider ? `Microphone sound is being sent to ${cloudSpeechProvider === "openai" ? "OpenAI" : "Deepgram"}` : undefined} />
           {listening && autoLive && (
             <StatusChip
@@ -173,12 +190,7 @@ export function PresentWorkspace() {
           )}
           <ServiceTimer />
           <AuxTimerStatus />
-          <EngageHostControl />
           <ObsChip />
-          <SoundChip />
-          <LowerThirdControl />
-          <StageMessage />
-          <CueMenu />
           {service && (
             <StatusChip
               tone={override ? "warn" : "info"}
