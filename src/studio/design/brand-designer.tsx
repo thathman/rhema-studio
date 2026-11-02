@@ -1,12 +1,15 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import { PaletteIcon, WandSparklesIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useBroadcastStore, useSettingsStore } from "@/stores"
 import { pickThemeBackgroundImage } from "@/lib/theme-designer-files"
-import { BRAND_FONTS, MANAGED_THEME_IDS, contrastRatio, type BrandKit, type BrandVariant } from "@/lib/brand-kit"
+import { BRAND_FONTS, MANAGED_THEME_IDS, applyBrandKit, contrastRatio, type BrandKit, type BrandVariant } from "@/lib/brand-kit"
+import { themeIdsOf } from "@/lib/output-themes"
+import { outputOnAir } from "@/lib/output-on-air"
 import { PlusIcon, XIcon } from "lucide-react"
 
 const CORNERS = [["top-left", "Top left"], ["top-right", "Top right"], ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"]] as const
@@ -19,8 +22,20 @@ const CORNERS = [["top-left", "Top left"], ["top-right", "Top right"], ["bottom-
 export function BrandDesigner() {
   const saved = useSettingsStore((s) => s.brandKit)
   const themes = useBroadcastStore((s) => s.themes)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const outputStatus = useBroadcastStore((s) => s.outputStatus)
   const [kit, setKit] = useState<BrandKit>(saved)
+  const [reviewOpen, setReviewOpen] = useState(false)
   const managed = themes.filter((t) => t.brandManaged)
+  const proposedThemes = useMemo(
+    () => applyBrandKit(kit, themes, new Set(outputs.flatMap(themeIdsOf))),
+    [kit, themes, outputs],
+  )
+  const themesToRefresh = proposedThemes.filter((theme) => theme.brandManaged && themes.find((current) => current.id === theme.id)?.brandManaged !== false)
+  const themeIdsToRefresh = new Set(themesToRefresh.map((theme) => theme.id))
+  const themesToRetire = themes.filter((theme) => theme.brandManaged && theme.id.startsWith("brand-variant-") && !proposedThemes.some((next) => next.id === theme.id))
+  const themesKeptInUse = themes.filter((theme) => theme.brandManaged && theme.id.startsWith("brand-variant-") && proposedThemes.some((next) => next.id === theme.id && next.brandManaged === false))
+  const affectedOutputs = outputs.filter((output) => output.role !== "stage" && themeIdsOf(output).some((id) => themeIdsToRefresh.has(id)))
   const set = (patch: Partial<BrandKit>) => setKit((k) => ({ ...k, ...patch }))
   const setColor = (key: keyof BrandKit["colors"], value: string) => set({ colors: { ...kit.colors, [key]: value } })
   const bodyContrast = contrastRatio(kit.colors.text, kit.colors.background)
@@ -29,6 +44,7 @@ export function BrandDesigner() {
   const apply = () => {
     useSettingsStore.getState().setBrandKit(kit)
     useBroadcastStore.getState().applyBrandKit(kit)
+    setReviewOpen(false)
     toast.success("Brand applied", { description: "Themes “Scripture”, “Lyrics” and “Announcements” are ready in Outputs and the designer." })
   }
 
@@ -92,9 +108,9 @@ export function BrandDesigner() {
           </div>
           <div className="col-span-2 flex items-center justify-between gap-3 border-t border-border pt-3">
             <span className="text-xs text-muted-foreground">
-              {managed.length ? `${managed.length} brand theme${managed.length === 1 ? "" : "s"} in use. Themes you edit by hand stay as you left them.` : "No brand themes yet."}
+              {managed.length ? `${managed.length} managed theme${managed.length === 1 ? "" : "s"}. Themes you edit by hand stay as you left them.` : "No brand themes yet."}
             </span>
-            <Button onClick={apply}><WandSparklesIcon /> Apply to themes</Button>
+            <Button onClick={() => setReviewOpen(true)}><WandSparklesIcon /> Apply to themes…</Button>
           </div>
           {managed.length > 0 && (
             <ul className="col-span-2 text-xs text-muted-foreground">
@@ -102,6 +118,51 @@ export function BrandDesigner() {
             </ul>
           )}
         </div>
+        <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Review Brand Kit changes</DialogTitle>
+              <DialogDescription>
+                Applying saves this Brand Kit and refreshes its managed themes. Active outputs using those themes may show the updated appearance when the themes sync.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3">
+              <section className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+                <h3 className="font-semibold">Managed themes to refresh</h3>
+                {themesToRefresh.length ? (
+                  <ul className="mt-1 list-inside list-disc text-muted-foreground">
+                    {themesToRefresh.map((theme) => <li key={theme.id}>{theme.name}{themes.some((current) => current.id === theme.id) ? " · update" : " · create"}</li>)}
+                  </ul>
+                ) : <p className="mt-1 text-muted-foreground">No managed themes will be refreshed.</p>}
+                {themesToRetire.length > 0 && <>
+                  <h4 className="mt-3 font-semibold">Removed Ministry looks</h4>
+                  <ul className="mt-1 list-inside list-disc text-muted-foreground">
+                    {themesToRetire.map((theme) => <li key={theme.id}>{theme.name}</li>)}
+                  </ul>
+                </>}
+                {themesKeptInUse.length > 0 && <>
+                  <h4 className="mt-3 font-semibold">Ministry looks kept because outputs use them</h4>
+                  <ul className="mt-1 list-inside list-disc text-muted-foreground">
+                    {themesKeptInUse.map((theme) => <li key={theme.id}>{theme.name} · appearance stays as it is</li>)}
+                  </ul>
+                </>}
+              </section>
+              <section className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+                <h3 className="font-semibold">Configured outputs using these themes</h3>
+                {affectedOutputs.length ? (
+                  <ul className="mt-1 list-inside list-disc text-muted-foreground">
+                    {affectedOutputs.map((output) => <li key={output.id}>{output.name}{outputOnAir(output, outputStatus[output.id]) ? " · active now" : " · not active"}</li>)}
+                  </ul>
+                ) : <p className="mt-1 text-muted-foreground">No configured output currently uses a theme that will be refreshed.</p>}
+              </section>
+              <p className="text-xs text-muted-foreground">Cancel keeps the saved Brand Kit and themes unchanged. Applying updates theme definitions; it does not change the selected scene or rundown item.</p>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setReviewOpen(false)}>Cancel</Button>
+              <Button type="button" onClick={apply}><WandSparklesIcon /> Apply Brand Kit</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
     </div>
   )
 }
