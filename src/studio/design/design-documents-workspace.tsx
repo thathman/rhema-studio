@@ -454,6 +454,28 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
     }
   }
 
+  const attachResolvedVersion = async (version: DesignVersion, pageId?: string) => {
+    const converted = pinnedSceneForVersion(version, operatorName, pageId)
+    if (!converted.scene) {
+      const reason = converted.issues.map((issue) => issue.message).join("; ")
+      setError(reason || "This version cannot be shown as a Rhema scene.")
+      return
+    }
+    setBusy(true)
+    setError("")
+    try {
+      const resolved = await hydrateDesignSceneMedia(converted.scene)
+      if (!resolved.scene) throw new Error(resolved.issue ?? "A Library asset is unavailable on this computer.")
+      onUse(resolved.scene, version, pageId)
+      setPendingVersion(null)
+      setPendingPageId("")
+    } catch (failure) {
+      setError("This version cannot be used: " + messageOf(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (editing) {
     return (
       <div className="flex min-h-[30rem] flex-col gap-3">
@@ -523,28 +545,6 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
       await attachResolvedVersion(version, version.document.pages?.[0]?.id)
     } catch (failure) {
       setError("This version could not be used: " + messageOf(failure))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const attachResolvedVersion = async (version: DesignVersion, pageId?: string) => {
-    const converted = pinnedSceneForVersion(version, operatorName, pageId)
-    if (!converted.scene) {
-      const reason = converted.issues.map((issue) => issue.message).join("; ")
-      setError(reason || "This version cannot be shown as a Rhema scene.")
-      return
-    }
-    setBusy(true)
-    setError("")
-    try {
-      const resolved = await hydrateDesignSceneMedia(converted.scene)
-      if (!resolved.scene) throw new Error(resolved.issue ?? "A Library asset is unavailable on this computer.")
-      onUse(resolved.scene, version, pageId)
-      setPendingVersion(null)
-      setPendingPageId("")
-    } catch (failure) {
-      setError("This version cannot be used: " + messageOf(failure))
     } finally {
       setBusy(false)
     }
