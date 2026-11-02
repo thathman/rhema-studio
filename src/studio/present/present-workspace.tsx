@@ -1,7 +1,7 @@
 import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
-import { useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ArrowUpIcon, BookOpenIcon, FolderOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, PlusIcon, SearchIcon, SlidersHorizontalIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PreviewPanel } from "@/components/panels/preview-panel"
@@ -228,15 +228,6 @@ export function PresentWorkspace() {
   )
 }
 
-/** Below this width the console has no room for the Preview panel: a one-line Preview sits over the transport. */
-const NARROW_PRESENT_QUERY = "(max-width: 1199.98px)"
-function subscribeNarrow(onChange: () => void): () => void {
-  const mq = typeof window.matchMedia === "function" ? window.matchMedia(NARROW_PRESENT_QUERY) : null
-  mq?.addEventListener?.("change", onChange)
-  return () => mq?.removeEventListener?.("change", onChange)
-}
-const isNarrow = () => typeof window.matchMedia === "function" && window.matchMedia(NARROW_PRESENT_QUERY).matches
-
 function LiveConsoleSurface({
   previewOutputId,
   onPreviewOutputChange,
@@ -252,8 +243,7 @@ function LiveConsoleSurface({
   onToolsTabChange: (tab: LiveToolsTab) => void
   onCloseTools: () => void
 }) {
-  // One Preview at a time (the panel also follows translation changes): full when it fits, else the line.
-  const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => false)
+  // One Preview at a time (the panel also follows translation changes); narrow layouts stack full panes.
   const isLive = useBroadcastStore((s) => s.isLive)
   const count = useQueueStore((s) => s.items.length)
   const headers = useQueueStore((s) => s.headers)
@@ -284,7 +274,7 @@ function LiveConsoleSurface({
     <PhaseStrip />
     <RecorderDock />
     <div className="grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,14.5rem)] gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2">
-      <section className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken ${emptyRundown ? "row-span-1" : "row-span-3"}`} data-tour="present-rundown">
+      <section className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken ${emptyRundown ? "row-span-1 h-fit self-start" : "row-span-3"}`} data-tour="present-rundown">
         <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold tracking-tight">Running order</h2>
@@ -341,28 +331,23 @@ function LiveConsoleSurface({
           </div>
         )}
       </section>
-      {/* On a wide window these sit in the grid itself; on a narrow one (1024×600 and up) they share one
-          column that scrolls when it must, so nothing in it is ever drawn over another part. */}
+      {/* On a wide window these sit in the grid itself; on a narrow one they remain full-size and stack
+          in a column that scrolls when it must, so Preview and Program are both inspectable. */}
       <div className="contents max-[1200px]:row-span-3 max-[1200px]:flex max-[1200px]:min-h-0 max-[1200px]:flex-col max-[1200px]:gap-2 max-[1200px]:overflow-y-auto">
-      {!narrow && (
-        <div className="min-h-0 overflow-hidden rounded-xl [&>div]:h-full">
+        <div className="min-h-0 overflow-hidden rounded-xl max-[1200px]:min-h-[18rem] max-[1200px]:shrink-0 [&>div]:h-full">
           <PreviewPanel outputLanguageId={previewOutputId} onOutputLanguageIdChange={onPreviewOutputChange} />
         </div>
-      )}
       {/* Live, with the congregation scenes under it: a scene Take changes a screen's layout, not what is live.
           Opening the scenes on a short window scrolls this column instead of covering the transport. */}
-      <div className="flex min-h-0 flex-col gap-2 overflow-y-auto max-[1200px]:min-h-fit max-[1200px]:flex-1 max-[1200px]:overflow-visible">
+      <div className="flex min-h-0 flex-col gap-2 overflow-y-auto max-[1200px]:min-h-fit max-[1200px]:flex-1 max-[1200px]:shrink-0 max-[1200px]:overflow-visible">
         {/* Never shorter than a readable picture with its sources, however many lines they take: the open
             scenes scroll under it instead. */}
-        <div className="min-h-min flex-1 overflow-hidden rounded-xl [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
+        <div className="min-h-min flex-1 overflow-hidden rounded-xl max-[1200px]:min-h-[18rem] [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
           <LiveOutputPanel />
         </div>
         <ScenesStrip />
       </div>
-
-      {/* What Take live will put up, right over it, when the window is too narrow for the Preview panel. */}
-      {narrow && <div className="shrink-0"><PreviewPanel compact outputLanguageId={previewOutputId} onOutputLanguageIdChange={onPreviewOutputChange} /></div>}
-      <TransportBar className="col-span-2 max-[1200px]:shrink-0" />
+      <TransportBar className="col-span-2 max-[1200px]:shrink-0 max-[1200px]:sticky max-[1200px]:bottom-0 max-[1200px]:z-10 max-[1200px]:bg-background" />
 
       {toolsOpen ? (
         <div className="col-span-2 min-h-0 overflow-hidden max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0">
@@ -431,16 +416,16 @@ function NowNextSummary() {
   const currentDetails = current && activeIndex !== null ? itemDetails(activeIndex, current) : ""
 
   return (
-    <section aria-label="Run of show Now and Next" className="grid grid-cols-2 gap-2 border-b border-border px-3 py-2">
+    <section aria-label="Run of show Now and Next" className="grid grid-cols-2 gap-2 border-b border-border px-3 py-2 max-[1200px]:grid-cols-1">
       <div role="group" aria-label="Now in the run of show" className="min-w-0 rounded-md bg-background/60 px-2 py-1.5">
         <span className="block text-[0.6875rem] font-bold tracking-wide text-muted-foreground uppercase">Now</span>
-        <span className="block truncate text-xs font-semibold" title={current?.reference ?? "No active run-of-show item"}>{current?.reference ?? "Not started"}</span>
-        {current && <span className="block truncate text-[0.6875rem] text-muted-foreground">{currentDetails || "Current run position"}</span>}
+        <span className="block truncate text-xs font-semibold max-[1200px]:whitespace-normal" title={current?.reference ?? "No active run-of-show item"}>{current?.reference ?? "Not started"}</span>
+        {current && <span className="block truncate text-[0.6875rem] text-muted-foreground max-[1200px]:whitespace-normal" title={currentDetails || "Current run position"}>{currentDetails || "Current run position"}</span>}
       </div>
       <div role="group" aria-label="Next in the run of show" className="min-w-0 rounded-md bg-background/60 px-2 py-1.5">
         <span className="block text-[0.6875rem] font-bold tracking-wide text-muted-foreground uppercase">Next</span>
-        <span className="block truncate text-xs font-semibold" title={next?.label ?? "No next run-of-show item"}>{next?.label ?? "No next item"}</span>
-        {next && <span className="block truncate text-[0.6875rem] text-muted-foreground">{itemDetails(next.index, next.item) || "Up next in the running order"}</span>}
+        <span className="block truncate text-xs font-semibold max-[1200px]:whitespace-normal" title={next?.label ?? "No next run-of-show item"}>{next?.label ?? "No next item"}</span>
+        {next && <span className="block truncate text-[0.6875rem] text-muted-foreground max-[1200px]:whitespace-normal" title={itemDetails(next.index, next.item) || "Up next in the running order"}>{itemDetails(next.index, next.item) || "Up next in the running order"}</span>}
       </div>
     </section>
   )
