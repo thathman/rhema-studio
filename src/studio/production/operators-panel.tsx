@@ -295,7 +295,7 @@ function JoinedDesk() {
           {desks.includes("outputs") && deskLive && <OutputMap live={deskLive} />}
           {desks.includes("outputs") && deskLive && <ScreenSources live={deskLive} />}
           {desks.includes("scenes") && deskLive && <ScenesDesk live={deskLive} role={role} outputScope={me?.outputScope ?? []} groupTakeScope={me?.groupTakeScope ?? []} />}
-          {desks.includes("stage") && <StageDesk live={live} />}
+          {desks.includes("stage") && <StageDesk live={live} stale={fresh.stale} />}
           {desks.includes("obs") && <ObsDesk live={live} />}
           <DeskAuxTimers live={live} role={role} stale={fresh.stale} />
           <RunOfShowView live={live} stale={fresh.stale} />
