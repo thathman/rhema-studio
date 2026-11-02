@@ -31,6 +31,14 @@ describe("Rhema scenes in the Avnac engine", () => {
     expect(scene).toEqual(sermon)
   })
 
+  it("requires a valid fixed time before a clock layer can be used in Prepare", () => {
+    const design = sceneToDesign({ ...sermon, layers: [layer("fixed-clock", "clock", { clockShows: "until" })] })
+    expect(designToScene(design).issues).toContainEqual({
+      nodeId: "fixed-clock",
+      message: "A clock counting down to a fixed time needs a valid 24-hour time before this version can be used in Prepare",
+    })
+  })
+
   it("resolves exactly the selected page from one versioned scene graph", () => {
     const base = sceneToDesign({ ...sermon, layers: [layer("first", "text", { text: "First page" })] })
     const root = base.scene.nodes[base.scene.root]

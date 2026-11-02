@@ -114,6 +114,18 @@ async function render(documentValue: DesignDocument, onReopen = vi.fn(async () =
   return element
 }
 
+async function addLiveLayer(element: HTMLElement, name: string) {
+  await act(async () => {
+    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Add live design layer"]')!
+    const pointerDown = new Event("pointerdown", { bubbles: true })
+    Object.defineProperties(pointerDown, { button: { value: 0 }, ctrlKey: { value: false } })
+    trigger.dispatchEvent(pointerDown)
+  })
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) => candidate.textContent?.trim() === name)
+  if (!item) throw new Error(`Live layer menu item "${name}" was not rendered`)
+  await act(async () => item.click())
+}
+
 function setValue(element: HTMLInputElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!
   setter.call(element, value)
@@ -1002,6 +1014,88 @@ describe("canonical design editor", () => {
       liveVerse: after.liveVerse,
       liveSlide: after.liveSlide,
     }).toEqual(liveState)
+  })
+
+  it("adds clock, ticker, lower-third and Brand Kit logo layers from one compact menu without changing Live", async () => {
+    const documentValue = documentFixture()
+    const before = useBroadcastStore.getState()
+    const liveState = {
+      scenes: before.scenes,
+      outputs: before.outputs,
+      outputStatus: before.outputStatus,
+      outputFrames: before.outputFrames,
+      sceneTakes: before.sceneTakes,
+      isLive: before.isLive,
+      liveVerse: before.liveVerse,
+      liveSlide: before.liveSlide,
+    }
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await addLiveLayer(element, "Service clock")
+    expect(element.querySelector('[aria-label="Clock layer settings"]')?.textContent).toContain("host supplies the clock")
+    await addLiveLayer(element, "Ticker")
+    expect(element.querySelector('[aria-label="Ticker layer settings"]')?.textContent).toContain("ticker currently running in Production")
+    await addLiveLayer(element, "Lower third")
+    expect(element.querySelector('[aria-label="Lower third layer settings"]')?.textContent).toContain("presenter name and title currently on air")
+    await addLiveLayer(element, "Brand Kit logo")
+    expect(element.querySelector('[aria-label="Brand Kit logo layer settings"]')?.textContent).toContain("logo saved in Settings → Brand Kit")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const input = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const liveLayers = Object.values(input.document.bindings).filter((binding) => ["clock", "ticker", "lowerThird", "logo"].includes(binding.kind))
+    expect(liveLayers.map((binding) => binding.kind).sort()).toEqual(["clock", "logo", "lowerThird", "ticker"])
+    expect(designToScene(input.document).issues).toEqual([])
+    expect(designToScene(input.document).scene.layers.map((layer) => layer.kind)).toEqual(expect.arrayContaining(["clock", "ticker", "lowerThird", "logo"]))
+    const after = useBroadcastStore.getState()
+    expect({
+      scenes: after.scenes,
+      outputs: after.outputs,
+      outputStatus: after.outputStatus,
+      outputFrames: after.outputFrames,
+      sceneTakes: after.sceneTakes,
+      isLive: after.isLive,
+      liveVerse: after.liveVerse,
+      liveSlide: after.liveSlide,
+    }).toEqual(liveState)
+  })
+
+  it("edits the clock mode and fixed time, and blocks Prepare compatibility until the time is valid", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await addLiveLayer(element, "Service clock")
+    const clockMode = element.querySelector<HTMLSelectElement>('[aria-label="What clock shows"]')!
+    await act(async () => setSelectValue(clockMode, "milestone"))
+    expect(element.querySelector('[aria-label="Clock run-of-show target"]')).not.toBeNull()
+
+    await act(async () => setSelectValue(clockMode, "until"))
+    const timeInput = element.querySelector<HTMLInputElement>('[aria-label="Count down to"]')!
+    expect(timeInput).not.toBeNull()
+    expect(element.textContent).toContain("A clock counting down to a fixed time needs a valid 24-hour time")
+    await act(async () => setValue(timeInput, "10:30"))
+    expect(element.textContent).not.toContain("A clock counting down to a fixed time needs a valid 24-hour time")
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Undo design edit"]')!.click())
+    expect(element.querySelector<HTMLInputElement>('[aria-label="Count down to"]')?.value).toBe("")
+    expect(element.textContent).toContain("A clock counting down to a fixed time needs a valid 24-hour time")
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Redo design edit"]')!.click())
+    expect(element.querySelector<HTMLInputElement>('[aria-label="Count down to"]')?.value).toBe("10:30")
+    expect(element.textContent).not.toContain("A clock counting down to a fixed time needs a valid 24-hour time")
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+    const input = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const clockNode = Object.values(input.document.scene.nodes).find((node) => node.name === "Service timer")!
+    expect(input.document.bindings[clockNode.id]).toMatchObject({ kind: "clock", clockShows: "until", until: "10:30" })
+    expect(designToScene(input.document).issues).toEqual([])
   })
 
   it("adds a configured camera as a private design layer without storing its secret or changing Live", async () => {
