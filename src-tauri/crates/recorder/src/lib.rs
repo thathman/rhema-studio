@@ -29,6 +29,12 @@ use crossbeam_channel::{Receiver, Sender};
 
 pub use model::*;
 
+/// A block whose loudest sample is below this (-60 dBFS) is silence: a muted channel or an
+/// unplugged cable sends this rather than nothing.
+const SILENT_PEAK: f32 = 0.001;
+/// Sound arriving but silent this long is said on the status (a quiet moment in a service is shorter).
+const SILENT_AFTER: Duration = Duration::from_secs(10);
+
 /// Refuse to start below this much free space; warn below `DISK_LOW`; close the file below `DISK_FULL`.
 pub const DISK_START_MIN: u64 = 2 << 30;
 pub const DISK_LOW: u64 = 1 << 30;
@@ -54,6 +60,8 @@ struct Shared {
     peak_bits: AtomicU32,
     /// Milliseconds since the start of the last audio block / frame, plus one (0 = none yet).
     last_audio_ms: AtomicU64,
+    /// When a block last had sound in it (above `SILENT_PEAK`), the same way; 0 = never.
+    last_sound_ms: AtomicU64,
     last_frame_ms: AtomicU64,
     problem: Mutex<Option<RecorderProblem>>,
     /// The writer takes nothing more (it failed, or closed the file on a full disk).
@@ -126,6 +134,7 @@ impl Recorder {
             let marked = manifest::mark_interrupted(&f);
             if !marked.is_empty() {
                 log::warn!("recorder: {} interrupted recording(s) marked recoverable: {marked:?}", marked.len());
+                fill_recovered_durations(&f, &marked);
             }
         }
         Self { folder, session: Mutex::new(None), last: Mutex::new(RecorderStatus::idle()), last_request: Mutex::new(None), lifecycle: Mutex::default() }
@@ -322,7 +331,9 @@ impl Recorder {
                         let host = (now.as_secs_f64() * f64::from(*rate)) as i64 - frames;
                         let peak = block.iter().fold(0f32, |m, s| m.max(s.abs()));
                         sh_a.peak_bits.store(peak.to_bits(), Ordering::Relaxed);
-                        sh_a.last_audio_ms.store(now.as_millis() as u64 + 1, Ordering::Relaxed);
+                        let stamp = now.as_millis() as u64 + 1;
+                        sh_a.last_audio_ms.store(stamp, Ordering::Relaxed);
+                        sh_a.last_sound_ms.fetch_max(if peak > SILENT_PEAK { stamp } else { 0 }, Ordering::Relaxed);
                         if let Some(at) = placer.place(host, frames, *rate) {
                             let _ = tx_a.send(Msg::Audio(block.to_vec(), at));
                         }
@@ -594,6 +605,8 @@ fn status_of(s: &Session, folder: &Path) -> RecorderStatus {
             problem = Some(RecorderProblem::new(ProblemCode::NoFrames, "No picture from the screen for 5 seconds: is its window open?"));
         } else if !sound_only && s.manifest.audio_device_id.is_some() && !receiving && elapsed > Duration::from_secs(3) {
             problem = Some(RecorderProblem::new(ProblemCode::AudioMissing, "No sound arriving from the sound desk input."));
+        } else if !sound_only && receiving && Duration::from_millis(ago(sh.last_sound_ms.load(Ordering::Relaxed)).unwrap_or(elapsed_ms)) >= SILENT_AFTER {
+            problem = Some(RecorderProblem::new(ProblemCode::AudioMissing, "The sound desk input is silent: is its channel muted or its cable out? The recording has no sound while it is."));
         } else if disk_free_bytes.is_some_and(|f| f < DISK_LOW) {
             problem = Some(RecorderProblem::new(ProblemCode::DiskLow, "Less than 1 GB free: the recording will close before the disk fills."));
         }
@@ -909,9 +922,39 @@ pub(crate) fn rgba_into_bgra(src: &[u8], dst: &mut [u8], width: usize, height: u
     }
 }
 
-/// Free bytes on the volume holding `path` (its nearest existing ancestor).
+/// How long each recovered recording plays (read from its file), for History: a crash left the
+/// manifest without one. macOS only; elsewhere History shows it without a length.
+fn fill_recovered_durations(folder: &Path, ids: &[String]) {
+    #[cfg(target_os = "macos")]
+    for (dir, mut m) in manifest::list(folder) {
+        if m.state != RecorderState::Recoverable || m.duration_ms.is_some() || !ids.contains(&m.session_id) {
+            continue;
+        }
+        let Some(file) = m.files.mp4.as_deref().or(m.files.mov.as_deref()).map(|f| dir.join(f)) else { continue };
+        let played = backend::probe(&file).duration_s;
+        if played.is_finite() && played > 0.0 {
+            m.duration_ms = u64::try_from(Duration::from_secs_f64(played).as_millis()).ok();
+            let _ = manifest::write(&dir, &m);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (folder, ids);
+}
+
+/// The volume a path is on is gone: a removable drive (`/Volumes/<name>` on macOS) unplugged.
+fn on_missing_volume(path: &Path) -> bool {
+    let mut parts = path.components();
+    matches!((parts.next(), parts.next(), parts.next()), (Some(std::path::Component::RootDir), Some(std::path::Component::Normal(v)), Some(std::path::Component::Normal(_))) if v == "Volumes")
+        && !path.iter().take(3).collect::<PathBuf>().exists()
+}
+
+/// Free bytes on the volume holding `path` (its nearest existing ancestor). None when it cannot be
+/// told, including when the drive it is on was removed: never another disk's free space.
 #[must_use]
 pub fn disk_free(path: &Path) -> Option<u64> {
+    if on_missing_volume(path) {
+        return None;
+    }
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
@@ -962,6 +1005,13 @@ pub fn iso_utc(t: SystemTime) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_removed_drive_has_no_free_space_to_report() {
+        assert_eq!(super::disk_free(std::path::Path::new("/Volumes/Rhema-unplugged-drive-test/Recordings/session")), None, "never the boot disk's free space");
+        let t = tempfile::tempdir().unwrap();
+        assert!(super::disk_free(&t.path().join("not-yet-made")).is_some(), "a folder still to be made on a present disk");
+    }
+
     use super::*;
 
     #[test]
@@ -1543,6 +1593,30 @@ mod tests {
         let p = shared.problem().expect("said");
         assert_eq!(p.code, ProblemCode::EncoderFailed);
         assert!(p.message.contains("closed"), "{}", p.message);
+    }
+
+    #[test]
+    fn a_silent_sound_input_is_said_after_ten_seconds_and_not_before() {
+        let t = tempfile::tempdir().unwrap();
+        let mut session = stub_session(t.path());
+        session.manifest.audio_device_id = Some("Mixer".into());
+        session.t0 = Instant::now().checked_sub(Duration::from_secs(30)).expect("30 s after boot");
+        let at = |ago_s: u64| (30 - ago_s) * 1000 + 1;
+        // Pictures and sound blocks keep arriving.
+        session.shared.last_frame_ms.store(at(0), Ordering::Relaxed);
+        session.shared.last_audio_ms.store(at(0), Ordering::Relaxed);
+        session.shared.last_sound_ms.store(at(4), Ordering::Relaxed);
+        assert_eq!(status_of(&session, t.path()).problem, None, "a quiet moment is not silence");
+        session.shared.last_sound_ms.store(at(12), Ordering::Relaxed);
+        let p = status_of(&session, t.path()).problem.expect("said");
+        assert_eq!(p.code, ProblemCode::AudioMissing);
+        assert!(p.message.contains("silent"), "{}", p.message);
+        // Never any sound since the start, 30 s ago: the same.
+        session.shared.last_sound_ms.store(0, Ordering::Relaxed);
+        assert!(status_of(&session, t.path()).problem.is_some_and(|p| p.message.contains("silent")));
+        // A recording with no sound input chosen says nothing about silence.
+        session.manifest.audio_device_id = None;
+        assert_eq!(status_of(&session, t.path()).problem, None);
     }
 
     #[test]
