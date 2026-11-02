@@ -113,7 +113,7 @@ export function LiveOutputPanel({ outputId }: { outputId?: string | null } = {})
       </div>
       <div className="flex min-h-9 shrink-0 items-center gap-2 border-t border-border px-3 py-1.5">
         <span title={output?.name} className="max-w-28 shrink-0 truncate text-[0.6875rem] font-semibold text-foreground">{output?.name ?? "No output"}</span>
-        <StatusChip tone={!isLive ? "off" : rehearsal ? "warn" : "live"} label={!output ? "No output" : rehearsal ? "Rehearsal" : isLive ? "Host applied" : "Off air"} className="h-6 shrink-0 px-2 text-[0.625rem]" />
+        <StatusChip tone={!isLive ? "off" : rehearsal ? "warn" : "live"} label={!output ? "No output" : rehearsal ? "Rehearsal" : isLive ? "Host applied" : "Off air"} className="h-6 shrink-0 px-2 text-[0.6875rem]" />
         <p role="status" aria-live="polite" aria-atomic="true" className="min-w-0 truncate text-[0.6875rem] text-muted-foreground">
           {programDelivery(output, status, isLive, rehearsal, feed)}
         </p>
