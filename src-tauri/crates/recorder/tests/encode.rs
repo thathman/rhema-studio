@@ -91,6 +91,55 @@ fn a_recording_cut_off_by_a_crash_still_plays_its_fragments() {
     assert!(p.duration_s >= 2.0, "only {p:?} survived");
 }
 
+/// After a crash, the next start settles the interrupted session for History: recoverable, with
+/// the length its file actually plays (the manifest had none).
+#[test]
+fn a_crashed_recording_is_listed_recoverable_with_the_length_it_plays() {
+    if let Ok(path) = std::env::var("RHEMA_REC_CRASH_SESSION_FILE") {
+        record(std::path::Path::new(&path), 5, false);
+        std::process::abort();
+    }
+    let _one = ONE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let folder = tempfile::tempdir().unwrap();
+    let dir = folder.path().join("session-1");
+    let manifest = rhema_recorder::RecordingManifest {
+        version: 1,
+        session_id: "session-1".into(),
+        state: rhema_recorder::RecorderState::Recording,
+        output_id: "main".into(),
+        output_name: "Sanctuary".into(),
+        profile: rhema_recorder::RecorderProfile::Standard720p30,
+        audio_device_id: None,
+        service_run_id: None,
+        program_id: None,
+        rehearsal: false,
+        started_at: "2026-11-02T10:00:00Z".into(),
+        stopped_at: None,
+        duration_ms: None,
+        files: rhema_recorder::RecordingFiles { mov: None, mp4: Some(rhema_recorder::FILE_NAME.into()) },
+        markers: vec![],
+        frames_written: 0,
+        frames_dropped: 0,
+        problem: None,
+    };
+    rhema_recorder::manifest::write(&dir, &manifest).unwrap();
+    let file = dir.join(rhema_recorder::FILE_NAME);
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "a_crashed_recording_is_listed_recoverable_with_the_length_it_plays", "--nocapture"])
+        .env("RHEMA_REC_CRASH_SESSION_FILE", &file)
+        .status()
+        .unwrap();
+    assert!(!status.success(), "the child must have crashed");
+    let plays = probe(&file).duration_s;
+    assert!(plays >= 2.0, "fragments survived: {plays}");
+
+    let _recorder = rhema_recorder::Recorder::new(folder.path().to_path_buf());
+    let settled = rhema_recorder::manifest::read(&dir).unwrap();
+    assert_eq!(settled.state, rhema_recorder::RecorderState::Recoverable);
+    let ms = settled.duration_ms.expect("its length is filled in");
+    assert!((ms as f64 / 1000.0 - plays).abs() < 0.5, "{ms} ms against {plays} s");
+}
+
 #[test]
 fn a_still_screen_with_continuous_sound_closes_properly() {
     // What a static slide sends: a picture now and then (bursts, a 2 s keep-alive), sound all the time.
