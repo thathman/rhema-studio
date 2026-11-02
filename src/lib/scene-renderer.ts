@@ -334,15 +334,31 @@ function paintFading(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: 
  * layer looks exactly like the same look on an output of its own. A feed with nothing live shows
  * nothing. With a fader, a layer that has a fade cross-fades to new content.
  */
-export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: number, frame: SceneFrame, opts: SceneDrawOptions): void {
-  ctx.clearRect(0, 0, width, height)
+/**
+ * Where a scene's layers go on a canvas (#448): all of it, or for a scene laid out for another
+ * shape (a design on a 4:3 or portrait output) the largest centred area of that shape.
+ */
+export function sceneArea(width: number, height: number, aspect: number | undefined): { x: number; y: number; w: number; h: number } {
+  if (!aspect || !(aspect > 0) || !(width > 0) || !(height > 0) || Math.abs(width / height - aspect) < 0.01) return { x: 0, y: 0, w: width, h: height }
+  const w = Math.min(width, height * aspect)
+  const h = w / aspect
+  return { x: (width - w) / 2, y: (height - h) / 2, w, h }
+}
+
+export function drawScene(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, frame: SceneFrame, opts: SceneDrawOptions): void {
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight)
   if (frame.background !== "transparent") {
     ctx.fillStyle = frame.background
-    ctx.fillRect(0, 0, width, height)
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight)
   }
+  // Layers are laid out in the scene's own area; the background fills the bars around it.
+  const area = sceneArea(canvasWidth, canvasHeight, frame.aspect)
+  const width = area.w
+  const height = area.h
   opts.fader?.keep(new Set(frame.layers.map((l) => l.id)))
   for (const l of frame.layers) {
-    const r = rect(l, width, height)
+    const box = rect(l, width, height)
+    const r = { ...box, x: box.x + area.x, y: box.y + area.y }
     ctx.save()
     ctx.globalAlpha = l.opacity
     if (opts.fader && l.fadeMs && !opts.preview && !opts.cameraBelow?.(l.id)) paintFading(ctx, l, r, height, opts, opts.fader)
