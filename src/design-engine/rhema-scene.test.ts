@@ -225,16 +225,74 @@ describe("Rhema scenes in the Avnac engine", () => {
     ]))
   })
 
-  it("blocks saves that would drop layer rotation or image crop", () => {
+  it("blocks saves that would drop layer rotation, and keeps the picture's crop", () => {
     const design = sceneToDesign(sermon)
     let scene = design.scene
     scene = applyCommand(scene, { type: "ROTATE_NODE", id: "pic", rotation: 20 })
     scene = applyCommand(scene, { type: "SET_IMAGE_CROP", id: "pic", cropX: 12, cropY: 8, cropWidth: 180, cropHeight: 120 })
-    const { issues } = designToScene({ ...design, scene })
-    expect(issues).toEqual(expect.arrayContaining([
-      { nodeId: "pic", message: "Layer rotation cannot be saved into a Rhema scene yet" },
-      { nodeId: "pic", message: "Image crop and clipping cannot be saved into a Rhema scene yet" },
-    ]))
+    const { issues, scene: saved } = designToScene({ ...design, scene })
+    expect(issues).toEqual([{ nodeId: "pic", message: "Layer rotation cannot be saved into a Rhema scene yet" }])
+    expect(saved.layers.find((l) => l.id === "pic")?.imageDraw).toMatchObject({ cropX: 12, cropY: 8, cropWidth: 180, cropHeight: 120 })
+  })
+})
+
+describe("picture crop and clipping (#448 Slice B)", () => {
+  const cropped = () => {
+    const design = sceneToDesign(sermon)
+    let scene = applyCommand(design.scene, { type: "SET_IMAGE_CROP", id: "pic", cropX: 10, cropY: 5, cropWidth: 80, cropHeight: 40 })
+    scene = applyCommand(scene, { type: "SET_IMAGE_BORDER_RADIUS", id: "pic", radius: 24 })
+    scene = applyCommand(scene, { type: "SET_NODE_CLIP_PATH", id: "pic", clipPath: { type: "ellipse", x: 0, y: 0, width: 400, height: 300 } })
+    return { ...design, scene }
+  }
+
+  it("saves crop, rounded corners and a clip as the editor keeps them, and they reopen the same", () => {
+    const { scene, issues } = designToScene(cropped())
+    expect(issues).toEqual([])
+    const pic = scene.layers.find((l) => l.id === "pic")!
+    expect(pic.imageDraw).toMatchObject({ width: 576, height: 432, cropX: 10, cropY: 5, cropWidth: 80, cropHeight: 40, clips: [{ type: "ellipse", x: 0, y: 0, width: 400, height: 300 }] })
+    expect(pic.imageDraw?.radius).toBeGreaterThan(0)
+    expect(pic.box).toEqual({ x: 10, y: 20, w: 30, h: 40 })
+    const stored = JSON.parse(JSON.stringify(scene)) as Scene
+    const reopened = designToScene(JSON.parse(JSON.stringify(sceneToDesign(stored))))
+    expect(reopened.issues).toEqual([])
+    expect(reopened.scene).toEqual(stored)
+  })
+
+  it("a picture resized after cropping keeps its own size and scales onto the box", () => {
+    const design = cropped()
+    const pic = design.scene.nodes.pic
+    if (pic.type !== "image") throw new Error("image")
+    const resized = designToScene({ ...design, scene: { ...design.scene, nodes: { ...design.scene.nodes, pic: { ...pic, scaleX: 2, scaleY: 0.5 } } } })
+    expect(resized.issues).toEqual([])
+    const layer = resized.scene.layers.find((l) => l.id === "pic")!
+    expect(layer.imageDraw).toMatchObject({ width: 576, height: 432 })
+    expect(layer.box).toEqual({ x: 10, y: 20, w: 60, h: 20 })
+    expect(sceneToDesign(resized.scene).scene.nodes.pic).toMatchObject({ width: 576, height: 432, scaleX: 2, scaleY: 0.5 })
+  })
+
+  it("an untouched picture still covers its box, as before", () => {
+    const { scene } = designToScene(sceneToDesign(sermon))
+    expect(scene.layers.find((l) => l.id === "pic")?.imageDraw).toBeUndefined()
+  })
+
+  it.each([
+    ["a flipped picture", (n: Record<string, unknown>) => ({ ...n, scaleX: -1 }), "positive, unflipped scale"],
+    ["a crop starting outside", (n: Record<string, unknown>) => ({ ...n, cropX: -5 }), "cannot start before its edge"],
+    ["a zero-pixel crop", (n: Record<string, unknown>) => ({ ...n, cropWidth: 0 }), "at least one pixel"],
+    ["a polygon clip", (n: Record<string, unknown>) => ({ ...n, clipPath: { type: "polygon", points: [] } }), "rectangles and ellipses only"],
+    ["too many clips", (n: Record<string, unknown>) => ({ ...n, clipPathStack: Array.from({ length: 4 }, () => ({ type: "ellipse", x: 0, y: 0, width: 10, height: 10 })) }), "at most 4 clips"],
+    ["an infinite clip", (n: Record<string, unknown>) => ({ ...n, clipPath: { type: "rect", x: 0, y: 0, width: Number.POSITIVE_INFINITY, height: 10, radiusX: 0, radiusY: 0 } }), "finite position and a size"],
+  ])("refuses %s, saying why", (_why, edit, says) => {
+    const design = cropped()
+    const scene = { ...design.scene, nodes: { ...design.scene.nodes, pic: edit(design.scene.nodes.pic as unknown as Record<string, unknown>) as never } }
+    expect(designToScene({ ...design, scene }).issues).toEqual([{ nodeId: "pic", message: expect.stringContaining(says) }])
+  })
+
+  it("still refuses group opacity and rotation", () => {
+    const design = sceneToDesign(sermon)
+    const root = design.scene.nodes[design.scene.root]!
+    const faded = designToScene({ ...design, scene: { ...design.scene, nodes: { ...design.scene.nodes, [root.id]: { ...root, opacity: 0.5 } } } })
+    expect(faded.issues).toContainEqual({ nodeId: root.id, message: "Group opacity cannot be saved into a flat Rhema scene yet" })
   })
 })
 

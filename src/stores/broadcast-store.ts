@@ -43,6 +43,7 @@ import { countdownFrame, countsToTarget, DEFAULT_COUNTDOWN_LOOK, lookCounting, N
 import { normalizeDesignDraft, normalizeDesignDrafts, type DesignDraft } from "@/lib/design-drafts"
 import { aspectRatioLabel, type GroupTakeHostCheck, type GroupTakeResult } from "@/lib/group-take"
 import { dropReplacedGradients } from "@/lib/scene-gradient"
+import { dropStaleImageDraws } from "@/lib/scene-image"
 
 /** Heard verses (Settings → Display mode, the Live panel's Auto): wait, go live, or the Bible feeds only. */
 export type AutoMode = "manual" | "auto" | "bible"
@@ -1458,8 +1459,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   saveScene: (scene) => {
     const s = get()
     const at = s.scenes.findIndex((x) => x.id === scene.id)
-    // A colour set over a gradient replaces it (#448), whichever editor set it.
-    const next = { ...dropReplacedGradients(scene, s.scenes[at]), updatedAt: Math.max(Date.now(), (s.scenes[at]?.updatedAt ?? 0) + 1), updatedBy: currentActor() ?? null }
+    // A colour set over a gradient replaces it, and another picture or a Rhema crop replaces the
+    // design editor's drawing of a picture (#448), whichever editor made the change.
+    const next = { ...dropStaleImageDraws(dropReplacedGradients(scene, s.scenes[at]), s.scenes[at]), updatedAt: Math.max(Date.now(), (s.scenes[at]?.updatedAt ?? 0) + 1), updatedBy: currentActor() ?? null }
     set({ scenes: at < 0 ? [...s.scenes, next] : s.scenes.map((x, i) => (i === at ? next : x)) })
   },
   deleteScene: (id) => {

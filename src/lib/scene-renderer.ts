@@ -3,8 +3,8 @@ import { clockText } from "@/lib/scenes"
 import { drawTicker } from "@/lib/ticker-draw"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { drawBars, drawStatic, noSignalOf } from "@/lib/no-signal"
-import { paintCanvas2DStyle } from "@/vendor/avnac/renderer/backends/canvas2d/shared"
-import type { LowerThird, SceneFrame, SceneGradient, SceneLayerFrame, Ticker } from "@/types"
+import { applyCanvas2DClipPath, paintCanvas2DStyle, roundedCanvas2DRectPath } from "@/vendor/avnac/renderer/backends/canvas2d/shared"
+import type { ImageDraw, LowerThird, SceneFrame, SceneGradient, SceneLayerFrame, Ticker } from "@/types"
 
 export interface SceneDrawOptions {
   /** A loaded picture for a URL, or null while it loads (the caller loads it and redraws). */
@@ -73,6 +73,32 @@ export function scenePaint(ctx: CanvasRenderingContext2D, color: string, gradien
     // A stop this engine cannot parse: the saved solid colour, never a frame that fails to draw.
     return color
   }
+}
+
+/**
+ * A picture as the Avnac editor draws it (its image command, without rotation): in the picture's own
+ * size scaled onto the box, inside its clips and rounded corners, the source crop stretched over it.
+ */
+function drawEditorPicture(ctx: CanvasRenderingContext2D, img: HTMLImageElement, d: ImageDraw, r: { x: number; y: number; w: number; h: number }): void {
+  ctx.save()
+  ctx.translate(r.x + r.w / 2, r.y + r.h / 2)
+  ctx.scale(r.w / d.width, r.h / d.height)
+  for (const clip of d.clips ?? []) applyCanvas2DClipPath(ctx, clip)
+  const x = -d.width / 2, y = -d.height / 2
+  const radius = Math.max(0, Math.min(d.radius ?? 0, d.width / 2, d.height / 2))
+  if (radius > 0) {
+    ctx.beginPath()
+    roundedCanvas2DRectPath(ctx, x, y, d.width, d.height, radius)
+    ctx.clip()
+  }
+  const cropX = Math.max(0, Math.round(d.cropX))
+  const cropY = Math.max(0, Math.round(d.cropY))
+  const maxW = Math.max(1, img.naturalWidth - cropX)
+  const maxH = Math.max(1, img.naturalHeight - cropY)
+  const sw = d.cropWidth !== undefined ? Math.max(1, Math.min(maxW, Math.round(d.cropWidth))) : maxW
+  const sh = d.cropHeight !== undefined ? Math.max(1, Math.min(maxH, Math.round(d.cropHeight))) : maxH
+  ctx.drawImage(img, cropX, cropY, sw, sh, x, y, d.width, d.height)
+  ctx.restore()
 }
 
 function rect(l: SceneLayerFrame, width: number, height: number) {
@@ -280,7 +306,8 @@ function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: n
     ctx.fill()
   } else if (l.kind === "picture" && l.imageUrl) {
     const img = opts.image(l.imageUrl)
-    if (img && img.naturalWidth > 0) {
+    if (img && img.naturalWidth > 0 && l.imageDraw) drawEditorPicture(ctx, img, l.imageDraw, r)
+    else if (img && img.naturalWidth > 0) {
       const s = source(l, img.naturalWidth, img.naturalHeight)
       // Cover the box, keeping the picture's shape.
       const scale = Math.max(r.w / s.sw, r.h / s.sh)

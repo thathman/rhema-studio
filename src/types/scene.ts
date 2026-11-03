@@ -34,6 +34,28 @@ export interface SceneGradient {
   stops: { color: string; offset: number }[]
 }
 
+/** A clip on a picture in its own drawing space: centred on the picture, in its unscaled size. */
+export type SceneClip =
+  | { type: "rect"; x: number; y: number; width: number; height: number; radiusX: number; radiusY: number }
+  | { type: "ellipse"; x: number; y: number; width: number; height: number }
+
+/**
+ * A picture drawn as the Avnac editor draws it (#448 Slice B): the source crop (in the picture's
+ * pixels; no size means to its edge) stretched over the layer's box, inside rounded corners
+ * (`radius`) and each clip in turn, all in the picture's unscaled size (`width` × `height`).
+ * Absent: Rhema's own picture, cropped by `crop` (%) and covering its box.
+ */
+export interface ImageDraw {
+  width: number
+  height: number
+  cropX: number
+  cropY: number
+  cropWidth?: number
+  cropHeight?: number
+  radius?: number
+  clips?: SceneClip[]
+}
+
 /**
  * feed: live content (the sources it follows) in an approved look; color and picture: a
  * background; video: a library video playing on a loop, without sound (a moving background); camera: a camera on the church network (a WHEP stream, e.g. from MediaMTX; #209); clock: the
@@ -105,6 +127,8 @@ export interface SceneLayer {
   lineHeight?: number
   textColor?: string
   underline?: boolean
+  /** picture: drawn as the design editor draws it (crop, rounded corners, clips); see `ImageDraw`. */
+  imageDraw?: ImageDraw
   /** picture, video: a library picture or video. A picture also keeps its picture as a data URL (so outputs need nothing else). */
   mediaId?: string
   imageUrl?: string
@@ -182,6 +206,8 @@ export interface SceneLayerFrame {
   textColor?: string
   underline?: boolean
   imageUrl?: string | null
+  /** picture: drawn as the design editor draws it. */
+  imageDraw?: ImageDraw
   /** video: where an output window plays it from. */
   videoUrl?: string
   /** video: its file in the media folder (a browser feed plays it from the host). */

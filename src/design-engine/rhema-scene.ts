@@ -18,6 +18,7 @@ import {
 } from "../vendor/avnac/saraswati"
 import type { CountdownTo, DesignPin, Scene, SceneGradient, SceneLayer } from "../types/scene"
 import { gradientCss, gradientFallback, gradientIssue, normalizeGradient } from "../lib/scene-gradient"
+import { imageDrawIssue, normalizeImageDraw } from "../lib/scene-image"
 
 /** The editing frame: a 1920×1080 artboard; layer boxes are kept in % of it, as Rhema keeps them. */
 export const DESIGN_WIDTH = 1920
@@ -104,7 +105,20 @@ function toNode(layer: SceneLayer): SaraswatiNode {
     return text
   }
   if (layer.kind === "picture" && layer.imageUrl) {
-    const image: SaraswatiImageNode = { ...basePaint(layer), type: "image", width, height, src: layer.imageUrl, cropX: 0, cropY: 0, clipPath: null }
+    // A picture cropped or clipped in the editor opens as the editor left it: its own size, scaled to the box.
+    const d = layer.imageDraw
+    const clips = d?.clips ?? []
+    const image: SaraswatiImageNode = {
+      ...basePaint(layer), type: "image", src: layer.imageUrl,
+      width: d?.width ?? width, height: d?.height ?? height,
+      ...(d ? { scaleX: width / d.width, scaleY: height / d.height } : {}),
+      cropX: d?.cropX ?? 0, cropY: d?.cropY ?? 0,
+      ...(d?.cropWidth !== undefined ? { cropWidth: d.cropWidth } : {}),
+      ...(d?.cropHeight !== undefined ? { cropHeight: d.cropHeight } : {}),
+      ...(d?.radius ? { borderRadius: d.radius } : {}),
+      clipPath: clips.at(-1) ?? null,
+      ...(clips.length > 1 ? { clipPathStack: clips.slice(0, -1) } : {}),
+    }
     return image
   }
   if (layer.kind === "ellipse") {
@@ -329,8 +343,22 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       if (binding.kind !== "picture" || node.src !== binding.imageUrl) {
         issues.push({ nodeId: node.id, message: "Image replacement cannot be saved into this Rhema layer yet" })
       }
-      if (node.cropX !== 0 || node.cropY !== 0 || node.cropWidth !== undefined || node.cropHeight !== undefined || node.clipPath !== null || (node.clipPathStack?.length ?? 0) > 0 || (node.borderRadius ?? 0) > 0) {
-        issues.push({ nodeId: node.id, message: "Image crop and clipping cannot be saved into a Rhema scene yet" })
+      const clips = [...(node.clipPathStack ?? []), ...(node.clipPath ? [node.clipPath] : [])]
+      const edited = node.cropX !== 0 || node.cropY !== 0 || node.cropWidth !== undefined || node.cropHeight !== undefined || clips.length > 0 || (node.borderRadius ?? 0) > 0
+      if (!Number.isFinite(node.scaleX) || !Number.isFinite(node.scaleY) || node.scaleX <= 0 || node.scaleY <= 0) {
+        issues.push({ nodeId: node.id, message: "Pictures must keep a positive, unflipped scale for Rhema scene output" })
+      } else if (edited && !binding.imageDraw && binding.crop && (binding.crop.l || binding.crop.t || binding.crop.r || binding.crop.b)) {
+        // Its Rhema crop (%) is not shown in the editor; cropping again here would silently lose it.
+        issues.push({ nodeId: node.id, message: "This picture is cropped in the Scene composer; reset that crop there before cropping, rounding or clipping it here" })
+      } else if (edited || binding.imageDraw) {
+        // Cropped, rounded or clipped in the editor (now or before): drawn on outputs exactly as the editor draws it.
+        const raw = { width: node.width, height: node.height, cropX: node.cropX, cropY: node.cropY, cropWidth: node.cropWidth, cropHeight: node.cropHeight, radius: node.borderRadius, clips }
+        const draw = normalizeImageDraw(raw)
+        if (!draw) issues.push({ nodeId: node.id, message: `This picture's crop or clipping cannot be drawn on Rhema outputs: ${imageDrawIssue(raw)}` })
+        else {
+          layer.imageDraw = draw
+          delete layer.crop
+        }
       }
     } else if (node.type === "rect") {
       if (node.fill.type === "gradient" && binding.kind === "color") {
