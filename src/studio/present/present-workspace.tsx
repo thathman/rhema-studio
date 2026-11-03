@@ -2,15 +2,13 @@ import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react"
-import { ArrowUpIcon, BookOpenIcon, CircleAlertIcon, FolderOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, PlusIcon, SearchIcon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
+import { ArrowUpIcon, BookOpenIcon, FolderOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, PlusIcon, SearchIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { LiveOutputPanel } from "@/components/panels/live-output-panel"
 import { useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
-import { useJoin } from "@/stores/join-store"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
-import { useApprovalRequestsStore } from "@/studio/permissions/approval-requests-store"
 import { presentActions } from "@/studio/present-actions"
 import { keyToPresentAction, shouldIgnoreKeyboard } from "@/studio/present-keys"
 import { BigButton } from "@/studio/ui/big-button"
@@ -27,7 +25,7 @@ import { ScenesStrip } from "@/studio/present/scenes-strip"
 import { LiveSceneTakeAction, type SceneTakeSelection } from "@/studio/present/live-scene-take-action"
 import { LiveToolsDrawer, type LiveToolsTab } from "@/studio/present/live-tools-drawer"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
-import { LiveCrewStatus } from "@/studio/present/live-crew-status"
+import { LiveActivityStrip } from "@/studio/present/live-activity-strip"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 import { useProductionTab } from "@/studio/production/production-tab"
 import { usePreviewLabel } from "@/hooks/use-preview-label"
@@ -62,12 +60,6 @@ function moveLiveToolbarFocus(event: ReactKeyboardEvent<HTMLDivElement>): void {
   next.focus()
 }
 
-function ignorePresentArrowsOnNavigationButton(event: ReactKeyboardEvent<HTMLButtonElement>): void {
-  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
-  event.preventDefault()
-  event.stopPropagation()
-}
-
 export function PresentWorkspace() {
   const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null)
   const toolsButtonRef = useRef<HTMLButtonElement>(null)
@@ -95,10 +87,6 @@ export function PresentWorkspace() {
   const autoLive = useBroadcastStore((s) => s.autoLive)
   const cloudSpeechProvider = useCloudConsentStore((s) => s.runningProvider === "deepgram" || s.runningProvider === "openai" ? s.runningProvider : null)
   const service = useServiceStore((s) => s.current)
-  const joinStatus = useJoin((s) => s.status)
-  const approvalRequestsHydrated = useApprovalRequestsStore((s) => s.hydrated)
-  const approvalRequestsError = useApprovalRequestsStore((s) => s.error)
-  const pendingApprovalCount = useApprovalRequestsStore((s) => s.requests.filter((request) => request.state === "submitted").length)
   const warning = useBroadcastStore((s) => s.presentWarning)
   const takeAttempts = useTakeAttemptStore((s) => s.attempts)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
@@ -204,32 +192,6 @@ export function PresentWorkspace() {
               onClick={openOutputs}
               title="Open outputs"
             />
-            {joinStatus === "off" && approvalRequestsHydrated && approvalRequestsError && (
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                aria-label="Open Permissions because approval status is unavailable"
-                title="The host approval request status could not be loaded. Open Permissions to retry; the pending count is unknown."
-                onKeyDown={ignorePresentArrowsOnNavigationButton}
-                onClick={() => useShellStore.getState().goTo("permissions")}
-              >
-                <CircleAlertIcon /> Requests unavailable
-              </Button>
-            )}
-            {joinStatus === "off" && approvalRequestsHydrated && !approvalRequestsError && pendingApprovalCount > 0 && (
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                aria-label={`Open ${pendingApprovalCount} pending approval ${pendingApprovalCount === 1 ? "request" : "requests"} in Permissions`}
-                title={`${pendingApprovalCount} host-recorded request${pendingApprovalCount === 1 ? "" : "s"} await review. Open Permissions to inspect the exact requests.`}
-                onKeyDown={ignorePresentArrowsOnNavigationButton}
-                onClick={() => useShellStore.getState().goTo("permissions")}
-              >
-                <ShieldCheckIcon /> Requests <span className="tabular-nums">{pendingApprovalCount}</span>
-              </Button>
-            )}
           </div>
         </div>
         <div
@@ -367,7 +329,7 @@ function LiveConsoleSurface({
           </div>
           <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{count} {count === 1 ? "item" : "items"}</span>
         </div>
-        <LiveCrewStatus />
+        <LiveActivityStrip />
         {hasTimedItems && (
           <div className="flex justify-end border-b border-border px-4 py-1.5">
             <TimedMoves />
