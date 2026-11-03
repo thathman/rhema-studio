@@ -2646,6 +2646,10 @@ async fn feed_events_handler<S: CommandSink + 'static>(
     let Some((first, rx, watching)) = state.feeds.follow(&id, &key) else {
         return StatusCode::FORBIDDEN.into_response();
     };
+    // Nothing published yet (this host just started, the output not on): say it is off, so a page
+    // that reconnects does not keep a picture from before the restart as if live (#411 TV QA).
+    // Number 0: never acknowledged, so the feed is not counted as drawn.
+    let first = first.or_else(|| Some((0, r#"{"off":true}"#.to_owned())));
     // Frames as they change, and a beat with the host's clock every few seconds between them (#196):
     // a page that hears neither knows it is out of date. An older page ignores the beats.
     let beat = tokio::time::interval_at(tokio::time::Instant::now() + FEED_BEAT, FEED_BEAT);
@@ -4237,6 +4241,32 @@ mod tests {
 
     async fn ack_clock(port: u16, clock: i64) -> String {
         raw_http_request_with(port, "POST", "/api/v1/feed/l3/ack?k=s3cret", Some(&format!(r#"{{"seq":2,"clock":{clock}}}"#)), "").await
+    }
+
+    #[tokio::test]
+    async fn a_page_joining_a_feed_with_nothing_published_hears_it_is_off() {
+        let feeds = new_feed_hub();
+        feeds.set(&[("tv".into(), "s3cret".into())]);
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds: feeds.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(PageSink), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let stream = {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+            s.write_all(format!("GET /api/v1/feed/tv/events?k=s3cret HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+            let mut out = Vec::new();
+            let mut buf = [0u8; 1024];
+            while !String::from_utf8_lossy(&out).contains("\"off\":true}\n") {
+                let n = tokio::time::timeout(FEED_BEAT, s.read(&mut buf)).await.expect("the off frame at once").unwrap();
+                if n == 0 { break; }
+                out.extend_from_slice(&buf[..n]);
+            }
+            String::from_utf8_lossy(&out).into_owned()
+        };
+        assert!(stream.contains("event: frame\nid: 0\ndata: {\"off\":true}"), "{stream}");
+        let mut h = result.handle;
+        h.stop();
     }
 
     #[tokio::test]
