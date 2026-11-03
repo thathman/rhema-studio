@@ -46,7 +46,7 @@ async function runScenario() {
   let stage = "open Live scene tools"
   try {
     await clickButton("Live")
-    await clickButton("Open production tools")
+    await clickButton("Toggle Live tools")
     await waitFor(() => buttons().some((button) => button.getAttribute("role") === "tab" && normal(button.innerText) === "Scenes"), "Live production tool tabs")
     await clickButton("Scenes")
     await waitFor(() => document.querySelector('[aria-label="Scene preview"]'), "Scene Composer")
