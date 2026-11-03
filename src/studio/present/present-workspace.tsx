@@ -105,6 +105,29 @@ export function PresentWorkspace() {
             <p className="truncate text-[0.6875rem] text-muted-foreground">{service ? `${service.title}${startsAt ? ` · starts ${startsAt}` : ""}` : "What is next in your service"}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {outputId && congregationOutputs.length > 0 && (
+              <label
+                className="flex h-8 min-w-0 items-center gap-2 rounded-full border border-border bg-card px-3 text-xs"
+                title="Scene Take affects this congregation output. Source Take follows subscriptions."
+              >
+                <span className="shrink-0 text-[0.625rem] font-semibold tracking-wide text-muted-foreground uppercase">Target</span>
+                <select
+                  aria-label="Target congregation output for Live Preview and Program"
+                  aria-describedby="live-output-target-scope"
+                  data-testid="live-output-target"
+                  value={outputId}
+                  onChange={(event) => setSelectedOutputId(event.currentTarget.value)}
+                  className="max-w-48 min-w-0 bg-transparent text-xs font-semibold text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  {congregationOutputs.map((output) => (
+                    <option key={output.id} value={output.id}>
+                      {output.name} · {output.language === "first" ? "First language" : output.language === "second" ? "Second language" : "Both languages"}
+                    </option>
+                  ))}
+                </select>
+                <span id="live-output-target-scope" className="sr-only">Preview language and scene Take follow this output. Source Take follows its subscriptions.</span>
+              </label>
+            )}
             {liveStatusLabel && <StatusChip tone={liveStatusTone} label={liveStatusLabel} className="max-w-80" />}
             <StatusChip
               tone={rehearsal ? "warn" : "off"}
@@ -193,7 +216,6 @@ export function PresentWorkspace() {
       <div className="relative min-h-0 flex-1">
         <LiveConsoleSurface
           outputId={outputId}
-          onOutputChange={setSelectedOutputId}
           toolsOpen={toolsOpen}
           toolsTab={toolsTab}
           onToolsTabChange={selectToolsTab}
@@ -206,14 +228,12 @@ export function PresentWorkspace() {
 
 function LiveConsoleSurface({
   outputId,
-  onOutputChange,
   toolsOpen,
   toolsTab,
   onToolsTabChange,
   onCloseTools,
 }: {
   outputId: string | null
-  onOutputChange: (outputId: string) => void
   toolsOpen: boolean
   toolsTab: LiveToolsTab
   onToolsTabChange: (tab: LiveToolsTab) => void
@@ -310,7 +330,7 @@ function LiveConsoleSurface({
       {/* Wide windows use the workspace grid; 1024–1200 keeps two readable panes, while smaller widths stack. */}
       <div className="contents max-[1200px]:row-span-3 max-[1200px]:grid max-[1200px]:grid-cols-1 min-[1024px]:max-[1200px]:grid-cols-2 max-[1200px]:min-h-0 max-[1200px]:gap-2 max-[1200px]:overflow-y-auto max-[1200px]:pb-40">
       <div className="min-h-0 overflow-hidden rounded-xl max-[1200px]:min-h-[18rem] max-[1200px]:shrink-0 [&>div]:h-full">
-        <PreviewPanel outputLanguageId={outputId} onOutputLanguageIdChange={onOutputChange} onEmptyPreviewAction={focusQuickFind} />
+        <PreviewPanel hideOutputPicker outputLanguageId={outputId} onEmptyPreviewAction={focusQuickFind} />
       </div>
       {/* Live, with the congregation scenes under it: a scene Take changes a screen's layout, not what is live.
           Opening the scenes on a short window scrolls this column instead of covering the transport. */}

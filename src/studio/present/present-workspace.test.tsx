@@ -25,7 +25,7 @@ const presentCalls = vi.hoisted(() => {
 })
 
 vi.mock("@/studio/present-actions", () => ({ presentActions: presentCalls }))
-vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, outputLanguageId, onOutputLanguageIdChange, onEmptyPreviewAction }: { compact?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void; onEmptyPreviewAction?: () => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"} data-empty-preview-action={onEmptyPreviewAction ? "true" : "false"}>Preview stays private<label>Output<select aria-label="Named congregation output for Preview language and scene Take" value={outputLanguageId ?? ""} onChange={(event) => onOutputLanguageIdChange?.(event.currentTarget.value)}><option value="english-output">English screen</option><option value="yoruba-output">Yoruba screen</option></select></label></section> }))
+vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, hideOutputPicker, outputLanguageId, onOutputLanguageIdChange, onEmptyPreviewAction }: { compact?: boolean; hideOutputPicker?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void; onEmptyPreviewAction?: () => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"} data-empty-preview-action={onEmptyPreviewAction ? "true" : "false"}>Preview stays private{!hideOutputPicker && <label>Output<select aria-label="Named congregation output for Preview language and scene Take" value={outputLanguageId ?? ""} onChange={(event) => onOutputLanguageIdChange?.(event.currentTarget.value)}><option value="english-output">English screen</option><option value="yoruba-output">Yoruba screen</option></select></label>}</section> }))
 vi.mock("@/components/panels/live-output-panel", () => ({ LiveOutputPanel: ({ outputId, sceneTakeAction }: { outputId?: string | null; sceneTakeAction?: React.ReactNode }) => <section data-program-output={outputId ?? "none"}>Program{sceneTakeAction}</section> }))
 vi.mock("@/components/panels/transcript-panel", () => ({ TranscriptPanel: () => <div data-testid="transcript-panel">Transcript</div> }))
 vi.mock("@/components/panels/detections-panel", () => ({ DetectionsPanel: () => <div data-testid="detections-panel">Detections</div> }))
@@ -323,15 +323,22 @@ describe("Present's unified Live console", () => {
 
     const preview = element.querySelector<HTMLElement>('[aria-label="Preview"]')!
     expect(preview.dataset.previewOutput).toBe("english-output")
+    const target = element.querySelector<HTMLSelectElement>('[aria-label="Target congregation output for Live Preview and Program"]')!
+    expect(target.parentElement).not.toBe(preview)
+    expect(target.getAttribute("aria-describedby")).toBe("live-output-target-scope")
+    expect([...target.options].map((option) => option.textContent)).toEqual([
+      "English screen · First language",
+      "Yoruba screen · Second language",
+    ])
     await act(async () => {
-      const selector = preview.querySelector<HTMLSelectElement>('[aria-label="Named congregation output for Preview language and scene Take"]')!
-      selector.value = "yoruba-output"
-      selector.dispatchEvent(new Event("change", { bubbles: true }))
+      target.value = "yoruba-output"
+      target.dispatchEvent(new Event("change", { bubbles: true }))
     })
     expect(preview.dataset.previewOutput).toBe("yoruba-output")
     expect(element.querySelector<HTMLElement>("[data-program-output]")?.dataset.programOutput).toBe("yoruba-output")
     expect(element.querySelector<HTMLElement>("[data-testid=scene-target]")?.dataset.sceneOutput).toBe("yoruba-output")
-    expect(element.querySelectorAll('[aria-label="Named congregation output for Preview language and scene Take"]')).toHaveLength(1)
+    expect(element.querySelectorAll('[aria-label="Target congregation output for Live Preview and Program"]')).toHaveLength(1)
+    expect(preview.querySelector("select")).toBeNull()
     await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Preview scene for yoruba-output"]')!.click())
     expect(element.querySelector('[data-testid="named-scene-take"]')?.textContent).toBe("Take Welcome to Yoruba screen")
     expect(element.querySelectorAll('[data-testid="named-scene-take"]')).toHaveLength(1)
@@ -342,7 +349,7 @@ describe("Present's unified Live console", () => {
     expect(useBroadcastStore.getState().liveVerse).toEqual(program)
 
     await act(async () => {
-      const selector = preview.querySelector<HTMLSelectElement>('[aria-label="Named congregation output for Preview language and scene Take"]')!
+      const selector = element.querySelector<HTMLSelectElement>('[aria-label="Target congregation output for Live Preview and Program"]')!
       selector.value = "english-output"
       selector.dispatchEvent(new Event("change", { bubbles: true }))
     })
