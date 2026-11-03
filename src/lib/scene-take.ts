@@ -64,6 +64,47 @@ const refusal = (e: unknown): SceneTakeRefusal =>
     ? (e as SceneTakeRefusal)
     : { code: "unavailable", message: String(e) }
 
+/** The public Program state an asynchronous scene Take must not overwrite if an operator acts meanwhile. */
+function localProgramSnapshot(outputId: string): { values: readonly unknown[]; outputTest: boolean } | null {
+  const state = useBroadcastStore.getState()
+  const output = state.outputs.find((candidate) => candidate.id === outputId)
+  if (!output) return null
+  return {
+    values: [
+      state.isLive,
+      state.cleared,
+      state.liveVerse,
+      state.liveSourceVerse,
+      state.liveItem,
+      state.liveSlide,
+      state.liveItemId,
+      output.type,
+      output.role,
+      output.language,
+      output.sceneId,
+      output.sceneSnapshot,
+      output.sceneAppearanceSnapshot,
+      output.designedMomentRestore,
+      output.themeId,
+      output.themeFor,
+      output.shows,
+      output.lowerThirds,
+      output.ticker,
+      output.signage,
+      output.cameraFallback,
+    ],
+    outputTest: !!state.outputTests[outputId],
+  }
+}
+
+function sameLocalProgram(before: ReturnType<typeof localProgramSnapshot>, outputId: string): boolean {
+  const current = localProgramSnapshot(outputId)
+  return !!before && !!current
+    && before.outputTest === current.outputTest
+    && before.values.length === current.values.length
+    && before.values.every((value, index) => value === current.values[index])
+}
+
 /**
  * The revisions to keep with a Preview of `sceneId` on `outputId`. Publishes the desk's state
  * first, so a change made a moment ago is part of what is reviewed.
@@ -118,6 +159,10 @@ export async function takeSceneOnOutput(
 ): Promise<SceneTakeResult> {
   // Anything changed on this desk since Preview is in the Live State the host checks against.
   publishLiveState()
+  const programBeforeCheck = localProgramSnapshot(outputId)
+  if (programBeforeCheck?.outputTest) {
+    return { ok: false, refusal: { code: "unavailable", message: "A screen test is using this output. End the test and review this scene before taking it." } }
+  }
   let accepted: { revision: number; approved: ApprovedSceneTake | null }
   try {
     accepted = await invoke<{ revision: number; approved: ApprovedSceneTake | null }>("local_scene_take", { output: outputId, scene: sceneId, seen })
@@ -134,6 +179,18 @@ export async function takeSceneOnOutput(
       refusal: {
         code: "not-applied",
         message: "Preview changed while Take was being checked; nothing was applied to Program. Review the current scene before taking again",
+      },
+    }
+  }
+  // A host reply can arrive after an operator has changed Program locally. The host acceptance is
+  // retained for revision safety, but the newer local action wins and is never overwritten here.
+  if (!sameLocalProgram(programBeforeCheck, outputId)) {
+    return {
+      ok: false,
+      acceptedRevision,
+      refusal: {
+        code: "not-applied",
+        message: "Program changed while Take was being checked; the newer operator action stays on screen. Review this scene before taking it again",
       },
     }
   }

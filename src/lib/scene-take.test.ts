@@ -37,6 +37,7 @@ beforeEach(() => {
       { ...main, id: "overflow", name: "Overflow", type: "browser", sceneId: undefined },
       { ...main, id: "stage", name: "Stage", role: "stage", sceneId: undefined },
     ],
+    outputTests: {},
     outputStatus: { overflow: { previewOpen: false, ndiActive: false, feedActive: true } },
   })
 })
@@ -71,6 +72,52 @@ describe("main-desk scene Take", () => {
       acceptedRevision: 8,
       refusal: { code: "not-applied", message: "Preview changed while Take was being checked; nothing was applied to Program. Review the current scene before taking again" },
     })
+    expect(sceneOf("main")).toBeUndefined()
+  })
+
+  it("does not overwrite a manual Program action made while the host is checking", async () => {
+    let release!: (accepted: { revision: number; approved: null }) => void
+    host = (cmd) => cmd === "local_scene_take" ? new Promise((resolve) => { release = resolve }) : null
+    const pending = takeSceneOnOutput("main", scene.id, seen)
+    await Promise.resolve()
+
+    // A manual operator Take lands on Program while the host's earlier response is pending.
+    useBroadcastStore.setState({ isLive: true, liveItemId: "manual-operator-take" })
+    release({ revision: 8, approved: null })
+
+    expect(await pending).toMatchObject({
+      ok: false,
+      acceptedRevision: 8,
+      refusal: { code: "not-applied" },
+    })
+    expect(useBroadcastStore.getState().liveItemId).toBe("manual-operator-take")
+    expect(sceneOf("main")).toBeUndefined()
+  })
+
+  it("keeps a newer manual scene Take when the earlier host reply arrives late", async () => {
+    const manualScene = newScene("Operator scene", SCENE_PRESETS[1])
+    useBroadcastStore.getState().saveScene(manualScene)
+    let release!: (accepted: { revision: number; approved: null }) => void
+    host = (cmd) => cmd === "local_scene_take" ? new Promise((resolve) => { release = resolve }) : null
+    const pending = takeSceneOnOutput("main", scene.id, seen)
+    await Promise.resolve()
+
+    useBroadcastStore.getState().takeScene("main", manualScene.id)
+    release({ revision: 8, approved: null })
+
+    expect(await pending).toMatchObject({ ok: false, acceptedRevision: 8, refusal: { code: "not-applied" } })
+    expect(sceneOf("main")).toBe(manualScene.id)
+  })
+
+  it("does not send a scene Take while a screen test owns the output", async () => {
+    useBroadcastStore.setState({ outputTests: { main: Date.now() } })
+    host = () => null
+
+    expect(await takeSceneOnOutput("main", scene.id, seen)).toMatchObject({
+      ok: false,
+      refusal: { code: "unavailable", message: "A screen test is using this output. End the test and review this scene before taking it." },
+    })
+    expect(calls).toEqual(["publish"])
     expect(sceneOf("main")).toBeUndefined()
   })
 
