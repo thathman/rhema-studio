@@ -84,7 +84,10 @@ async function runScenario() {
 
     stage = "save the initial scene to the library without changing the output"
     await clickButton("Save scene")
-    await waitFor(() => qaStores.broadcast.getState().scenes.some((scene) => scene.name === "Full screen"), "initial scene revision to save")
+    const savedInitialScene = await waitFor(
+      () => qaStores.broadcast.getState().scenes.find((scene) => scene.name === "Full screen"),
+      "initial scene revision to save",
+    )
 
     stage = "choose the saved scene in the output's private scene preview"
     await chooseSceneForOutput("Full screen", output.name)
@@ -97,8 +100,10 @@ async function runScenario() {
     const outputId = output.id
     await waitFor(() => {
       const current = qaStores.broadcast.getState()
-      return current.outputs.find((candidate) => candidate.id === outputId)?.sceneSnapshot?.name === "Full screen"
-        && current.outputFrames[outputId]?.scene?.sceneId === output.sceneId
+      const taken = current.outputs.find((candidate) => candidate.id === outputId)
+      return taken?.sceneSnapshot?.id === savedInitialScene.id
+        && taken.sceneSnapshot.name === "Full screen"
+        && current.outputFrames[outputId]?.scene?.sceneId === savedInitialScene.id
     }, "initial scene revision to reach the output")
     const takenBeforeEdit = qaStores.broadcast.getState().outputs.find((candidate) => candidate.id === outputId)?.sceneSnapshot
     const frameBeforeEdit = qaStores.broadcast.getState().outputFrames[outputId]?.scene
