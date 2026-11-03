@@ -99,5 +99,7 @@ export function withBasic(scene: Scene | null, b: BasicScene): Scene {
   const lt = layers.find((l) => l.kind === "lowerThird")
   if (b.lowerThird && !lt) layers.push(newLayer("lowerThird"))
   if (!b.lowerThird && lt) layers = layers.filter((l) => l.id !== lt.id)
-  return { ...base, name: b.name.trim().slice(0, 80) || base.name, background, layers }
+  // A background gradient stays only while the sheet leaves the background as it was.
+  const { backgroundGradient, ...rest } = base
+  return { ...rest, ...(backgroundGradient && background === base.background ? { backgroundGradient } : {}), name: b.name.trim().slice(0, 80) || base.name, background, layers }
 }

@@ -11,6 +11,7 @@ import { createSceneEditApproval, decideSceneEditApproval, hydrateSceneApprovals
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import { NO_SIGNALS } from "@/types/scene"
 import type { Scene, SceneBox, SceneCrop, SceneLayer, SceneLayerKind } from "@/types"
+import { keepHostGradients } from "@/lib/scene-gradient"
 
 /**
  * Scenes made and changed from joined desks (#243 SC.16, SC.17). The host publishes each scene's
@@ -56,6 +57,8 @@ export function sceneForDesk(scene: Scene, onScreen: boolean): DeskScene {
     id: scene.id,
     name: scene.name,
     background: scene.background,
+    // Shown to desks and counted in the scene's revision; a desk sends back only `background`.
+    ...(scene.backgroundGradient ? { backgroundGradient: scene.backgroundGradient } : {}),
     ...(scene.fadeMs ? { fadeMs: scene.fadeMs } : {}),
     onScreen,
     layers: scene.layers.map((l) => {
@@ -169,7 +172,7 @@ export function mergeDeskScene(raw: unknown, existing: Scene | undefined, opts: 
   const now = Date.now()
   const scene = normalizeScene({ id, name: text(s.name, 80) ?? "Scene", background, layers, ...(fadeMs ? { fadeMs } : {}), createdAt: existing?.createdAt ?? now, updatedAt: existing?.updatedAt ?? now, ...(existing?.libraryLookId ? { libraryLookId: existing.libraryLookId } : {}) })
   // normalizeScene names every optional field; keep only those that are set.
-  return scene && { ...scene, layers: scene.layers.map((l) => Object.fromEntries(Object.entries(l).filter(([, v]) => v !== undefined)) as unknown as SceneLayer) }
+  return scene && keepHostGradients({ ...scene, layers: scene.layers.map((l) => Object.fromEntries(Object.entries(l).filter(([, v]) => v !== undefined)) as unknown as SceneLayer) }, existing)
 }
 
 /** Why a change to this scene waits for the main desk, or null when it goes in at once. */
