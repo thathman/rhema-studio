@@ -159,10 +159,18 @@ async function runScenario() {
     await setInput("input#design-document-title", "QA Approved Design")
     await setLabeledColor("Background colour", "#123456")
     await setInput('input[aria-label="Version note"]', "QA approved scene baseline")
+    await waitFor(
+      () => [...document.querySelectorAll("button")].some((button) => normal(button.textContent) === "Save draft" && !button.disabled),
+      "initial Design draft to become dirty",
+    )
     await clickButton("Save draft")
     await waitFor(
-      () => [...document.querySelectorAll("button")].find((button) => normal(button.textContent) === "Save draft")?.disabled,
-      "Design draft to save",
+      () => {
+        const save = [...document.querySelectorAll("button")].find((button) => normal(button.textContent) === "Save draft")
+        const create = [...document.querySelectorAll("button")].find((button) => normal(button.textContent) === "Create version")
+        return save?.disabled && create && !create.disabled
+      },
+      "initial Design draft to finish saving",
     )
     const designDocument = await waitForAsync(
       async () => (await window.__TAURI_INTERNALS__.invoke("design_list"))
@@ -365,10 +373,18 @@ async function runScenario() {
     await designRow.click()
     await waitFor(() => document.querySelector('input#design-document-title')?.value === "QA Approved Design", "saved design editor to reopen", 20000)
     await setLabeledColor("Background colour", "#405060")
+    await waitFor(
+      () => [...document.querySelectorAll("button")].some((button) => normal(button.textContent) === "Save draft" && !button.disabled),
+      "newer Design draft to become dirty",
+    )
     await clickButton("Save draft")
     await waitFor(
-      () => [...document.querySelectorAll("button")].find((button) => normal(button.textContent) === "Save draft")?.disabled,
-      "newer design draft to save",
+      () => {
+        const save = [...document.querySelectorAll("button")].find((button) => normal(button.textContent) === "Save draft")
+        const create = [...document.querySelectorAll("button")].find((button) => normal(button.textContent) === "Create version")
+        return save?.disabled && create && !create.disabled
+      },
+      "newer Design draft to finish saving",
     )
     // Save draft disables as soon as the save starts; Create version enables only once it has finished.
     await waitFor(
