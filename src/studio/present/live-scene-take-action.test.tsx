@@ -19,6 +19,8 @@ import type { Program } from "@/types"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { MAIN_OUTPUT_ID } from "@/types"
+import { newScene } from "@/lib/scenes"
 import { LiveSceneTakeAction, type SceneTakeSelection } from "./live-scene-take-action"
 
 const selection: SceneTakeSelection = {
@@ -104,6 +106,28 @@ describe("Live's named scene Take", () => {
     expect(element.textContent).toContain("Use its approved running-order Take")
     expect(api.read).not.toHaveBeenCalled()
     expect(api.take).not.toHaveBeenCalled()
+  })
+
+  it("keeps rehearsal Takes local and restores the real output without contacting the host", async () => {
+    const scene = { ...newScene("Welcome"), id: "welcome" }
+    useBroadcastStore.setState((state) => ({ scenes: [...state.scenes.filter((saved) => saved.id !== scene.id), scene] }))
+    const before = useBroadcastStore.getState().outputs.find((output) => output.id === MAIN_OUTPUT_ID)!
+    useBroadcastStore.getState().setRehearsal(true)
+    await render(<LiveSceneTakeAction selection={{ ...selection, outputId: MAIN_OUTPUT_ID }} />)
+
+    const rehearse = button(`Take scene Welcome in rehearsal on ${selection.outputName}`)
+    expect(rehearse.disabled).toBe(false)
+    expect(api.read).not.toHaveBeenCalled()
+    await click(rehearse)
+
+    expect(api.take).not.toHaveBeenCalled()
+    expect(api.drawn).not.toHaveBeenCalled()
+    expect(useBroadcastStore.getState().outputs.find((output) => output.id === MAIN_OUTPUT_ID)?.sceneId).toBe("welcome")
+    expect(useBroadcastStore.getState().rehearsalReturn?.outputScenes[MAIN_OUTPUT_ID]).toBe(before.sceneId)
+    expect(element.textContent).toContain("Only the local rehearsal changed. The real output is unchanged.")
+
+    useBroadcastStore.getState().setRehearsal(false)
+    expect(useBroadcastStore.getState().outputs.find((output) => output.id === MAIN_OUTPUT_ID)?.sceneId).toBe(before.sceneId)
   })
 
   it("never calls a local display or NDI send receiver-confirmed", async () => {

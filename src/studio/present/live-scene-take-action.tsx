@@ -18,7 +18,7 @@ export interface SceneTakeSelection {
   details: string | null
 }
 
-type Phase = "idle" | "checking" | "ready" | "taking" | "confirmed" | "waiting" | "no-receiver" | "sent" | "unknown" | "stale" | "refused" | "blocked"
+type Phase = "idle" | "checking" | "ready" | "taking" | "confirmed" | "waiting" | "no-receiver" | "sent" | "unknown" | "stale" | "refused" | "blocked" | "rehearsed"
 interface ViewState {
   key: string
   phase: Phase
@@ -37,7 +37,7 @@ export function LiveSceneTakeAction({ selection }: {
   const service = useServiceStore((s) => s.current)
   const requireApproval = useSettingsStore((s) => s.requireApproval)
   const approvalBlock = sceneTakeApprovalBlockReason(rehearsal, service, requireApproval)
-  const key = selection ? `${selection.outputId}\u0000${selection.sceneId}\u0000${selection.sceneUpdatedAt}` : ""
+  const key = selection ? `${selection.outputId}\u0000${selection.sceneId}\u0000${selection.sceneUpdatedAt}\u0000${rehearsal ? "rehearsal" : "live"}` : ""
   const outputId = selection?.outputId
   const sceneId = selection?.sceneId
   const revisionLabel = selection?.revisionLabel
@@ -56,6 +56,7 @@ export function LiveSceneTakeAction({ selection }: {
 
   useEffect(() => {
     if (!outputId || !sceneId || approvalBlock) return
+    if (rehearsal) return
     const id = ++operation.current
     void readSceneTakeRevisions(outputId, sceneId).then((result) => {
       if (operation.current !== id || currentKey.current !== key || blockRef.current) return
@@ -64,18 +65,20 @@ export function LiveSceneTakeAction({ selection }: {
         : { key, phase: refusalPhase(result.refusal.code), message: result.refusal.message, canReview: result.refusal.code === "unavailable" })
     })
     return () => { if (operation.current === id) operation.current += 1 }
-  }, [key, outputId, sceneId, approvalBlock, outputName, revisionLabel])
+  }, [key, outputId, sceneId, approvalBlock, outputName, revisionLabel, rehearsal])
 
   if (!selection) return null
 
   const currentView = view.key === key
     ? view
-    : approvalBlock
+    : rehearsal
+      ? { key, phase: "ready" as const, message: "Rehearsal only. Taking this scene changes this computer, not the real screens." }
+      : approvalBlock
       ? { key, phase: "blocked" as const, message: approvalBlock }
       : { key, phase: "checking" as const, message: "Checking this scene and output with the host. Nothing changes until you Take." }
 
   const review = async () => {
-    if (approvalBlock) return
+    if (approvalBlock || rehearsal) return
     const id = ++operation.current
     setView({ key, phase: "checking", message: "Reviewing the current scene and output with the host. Nothing changes." })
     const result = await readSceneTakeRevisions(selection.outputId, selection.sceneId)
@@ -86,7 +89,13 @@ export function LiveSceneTakeAction({ selection }: {
   }
 
   const take = async () => {
-    if (!currentView.seen || currentView.phase !== "ready" || selection.disabledReason || approvalBlock) return
+    if (currentView.phase !== "ready" || selection.disabledReason || approvalBlock) return
+    if (rehearsal) {
+      useBroadcastStore.getState().takeScene(selection.outputId, selection.sceneId)
+      setView({ key, phase: "rehearsed", message: "Only the local rehearsal changed. The real output is unchanged." })
+      return
+    }
+    if (!currentView.seen) return
     const id = ++operation.current
     setView({ key, phase: "taking", message: `Checking and applying ${selection.sceneName} on ${selection.outputName}…` })
     const result = await takeSceneOnOutput(selection.outputId, selection.sceneId, currentView.seen, () =>
@@ -123,10 +132,14 @@ export function LiveSceneTakeAction({ selection }: {
   }
 
   const blocked = approvalBlock || selection.disabledReason
-  const canTake = currentView.phase === "ready" && !!currentView.seen && !blocked
+  const canTake = currentView.phase === "ready" && (rehearsal || !!currentView.seen) && !blocked
   const canReview = currentView.phase === "stale" || !!currentView.canReview
-  const actionLabel = currentView.phase === "stale" ? `Review ${selection.sceneName} for ${selection.outputName} again` : `Take scene ${selection.sceneName} to ${selection.outputName}`
-  const buttonText = currentView.phase === "stale" ? "Review again" : currentView.phase === "checking" ? "Checking…" : currentView.phase === "taking" ? "Taking…" : `Take ${selection.sceneName} to ${selection.outputName}`
+  const actionLabel = rehearsal
+    ? `Take scene ${selection.sceneName} in rehearsal on ${selection.outputName}`
+    : currentView.phase === "stale" ? `Review ${selection.sceneName} for ${selection.outputName} again` : `Take scene ${selection.sceneName} to ${selection.outputName}`
+  const buttonText = rehearsal
+    ? currentView.phase === "rehearsed" ? "Rehearsed" : "Take in rehearsal"
+    : currentView.phase === "stale" ? "Review again" : currentView.phase === "checking" ? "Checking…" : currentView.phase === "taking" ? "Taking…" : `Take ${selection.sceneName} to ${selection.outputName}`
 
   return (
     <div data-slot="live-scene-take-action" className="flex shrink-0 flex-col gap-1.5 border-t border-border px-3 py-2">
@@ -135,7 +148,7 @@ export function LiveSceneTakeAction({ selection }: {
           <p className="truncate text-[0.6875rem] font-semibold" title={`${selection.sceneName} → ${selection.outputName}`}>
             {selection.sceneName} <span className="text-muted-foreground">→ {selection.outputName}</span>
           </p>
-          <p className="truncate text-[0.625rem] text-muted-foreground">Private scene Preview · {selection.revisionLabel}</p>
+          <p className="truncate text-[0.6875rem] text-muted-foreground">Private scene Preview · {selection.revisionLabel}</p>
         </div>
         {currentView.phase === "stale" && canReview ? (
           <Button type="button" size="sm" variant="outline" aria-label={actionLabel} onClick={() => void review()}>
@@ -147,7 +160,7 @@ export function LiveSceneTakeAction({ selection }: {
           </Button>
         )}
       </div>
-      {selection.details && <p className="text-[0.625rem] leading-snug text-muted-foreground">{selection.details}</p>}
+      {selection.details && <p className="text-[0.6875rem] leading-snug text-muted-foreground">{selection.details}</p>}
       {(currentView.phase === "ready" && selection.disabledReason ? selection.disabledReason : currentView.message) && <p role="status" aria-live="polite" aria-atomic="true" className="text-[0.6875rem] leading-snug text-muted-foreground">{currentView.phase === "ready" && selection.disabledReason ? selection.disabledReason : currentView.message}</p>}
       {canReview && currentView.phase !== "stale" && (
         <Button type="button" size="xs" variant="ghost" aria-label={`Retry host review for ${selection.sceneName} on ${selection.outputName}`} onClick={() => void review()} className="min-h-9 self-start">
