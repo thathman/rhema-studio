@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() } }))
+vi.hoisted(() => {
+  const context = { font: "", measureText: (value: string) => ({ width: value.length * 8 }) }
+  if (typeof HTMLCanvasElement !== "undefined") HTMLCanvasElement.prototype.getContext = (() => context) as never
+})
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -28,6 +32,7 @@ class FakeObs {
   video = { baseWidth: 1920, baseHeight: 1080, outputWidth: 1920, outputHeight: 1080, fpsNumerator: 60, fpsDenominator: 1 }
   /** OBS's stream (Start Streaming in OBS), its inputs and its transitions. */
   streaming: Record<string, unknown> = { outputActive: false }
+  recording = false
   inputs = [{ inputName: "Pulpit mic", inputKind: "coreaudio_input_capture", unversionedInputKind: "coreaudio_input_capture" }, { inputName: "Camera 1", inputKind: "ffmpeg_source", unversionedInputKind: "ffmpeg_source" }]
   muted: Record<string, boolean> = { "Pulpit mic": false }
   transitions = ["Cut", "Fade"]
@@ -63,7 +68,10 @@ class FakeObs {
     let code = 100
     let responseData: Record<string, unknown> | undefined
     const after: Array<() => void> = []
-    if (type === "GetRecordStatus") responseData = { outputActive: false, outputPaused: false }
+    if (type === "GetRecordStatus") responseData = { outputActive: this.recording, outputPaused: false, outputTimecode: this.recording ? "00:05:01.000" : null }
+    else if (type === "StartRecord") { this.recording = true; responseData = {} }
+    else if (type === "StopRecord") { this.recording = false; responseData = {} }
+    else if (type === "CreateRecordChapter") responseData = {}
     else if (type === "GetVideoSettings") responseData = this.video
     else if (type === "GetStreamStatus") responseData = this.streaming
     else if (type === "GetStats") responseData = { activeFps: 30, cpuUsage: 9, renderSkippedFrames: 0, renderTotalFrames: 100, outputSkippedFrames: 0, outputTotalFrames: 100 }
@@ -184,6 +192,28 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     expect(s.program).toBe("Wide")
     expect(s.studioMode).toBe(false)
     expect(s.preview).toBeNull()
+  })
+
+  it("keeps OBS recording controls in the OBS tab and confirms both start and stop", async () => {
+    const { useObsStore, obs } = await setup()
+    const { el, button } = await render()
+    expect(el.querySelector('[aria-label="OBS recording controls"]')?.textContent).toContain("Not recording")
+    expect(button("Start recording…")).toBeTruthy()
+
+    await act(async () => button("Start recording…")!.click())
+    expect(el.querySelector('[role="alertdialog"]')?.textContent).toContain("Start a recording in OBS now?")
+    await act(async () => button("Start in OBS")!.click())
+    await settle()
+    expect(obs.requests.some((request) => request.type === "StartRecord")).toBe(true)
+    expect(useObsStore.getState().recording?.active).toBe(true)
+    expect(button("Stop recording…")).toBeTruthy()
+
+    await act(async () => button("Stop recording…")!.click())
+    expect(el.querySelector('[role="alertdialog"]')?.textContent).toContain("Stop the recording in OBS now?")
+    await act(async () => button("Stop in OBS")!.click())
+    await settle()
+    expect(obs.requests.some((request) => request.type === "StopRecord")).toBe(true)
+    expect(useObsStore.getState().recording?.active).toBe(false)
   })
 
   it("follows OBS's own events: a cut made in OBS, a new scene, and Studio Mode on and off", async () => {

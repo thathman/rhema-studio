@@ -1,6 +1,7 @@
 import { useId, useState } from "react"
-import { ArrowRightLeftIcon, EyeIcon, RefreshCwIcon, SettingsIcon } from "lucide-react"
+import { ArrowRightLeftIcon, CircleIcon, EyeIcon, FlagIcon, RefreshCwIcon, SettingsIcon, SquareIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { openSettings } from "@/lib/settings-dialog"
 import { congregationProgramName, onlineProgramName } from "@/lib/program-names"
@@ -111,6 +112,59 @@ function ObsTransition({ held, reasonId, joined }: { held: boolean; reasonId: st
       </select>
       <span className="text-muted-foreground">How OBS's next switch looks. It does not switch anything.</span>
     </label>
+  )
+}
+
+/** OBS recording actions live with OBS's own output controls, not in Live's always-visible toolbar. */
+function ObsRecordingControls() {
+  const status = useObsStore((s) => s.status)
+  const recording = useObsStore((s) => s.recording)
+  const [confirm, setConfirm] = useState<"start" | "stop" | null>(null)
+  const [label, setLabel] = useState("")
+  const obs = useObsStore.getState()
+  if (status !== "connected") return null
+
+  const active = recording?.active === true
+  const timecode = recording?.timecode?.slice(0, 8)
+  return (
+    <section aria-label="OBS recording controls" className="flex flex-col gap-2 rounded-md border border-border bg-surface-sunken p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-auto font-semibold">OBS recording</span>
+        {recording === null ? (
+          <span role="status" className="text-muted-foreground">Waiting for OBS to confirm its recording state…</span>
+        ) : active ? (
+          <span role="status" className="font-medium text-destructive">{recording.paused ? "Paused" : "Recording"}{timecode ? ` · ${timecode}` : ""}</span>
+        ) : (
+          <span role="status" className="text-muted-foreground">Not recording</span>
+        )}
+        {confirm === null && recording !== null && (
+          active
+            ? <Button type="button" size="sm" variant="outline" onClick={() => setConfirm("stop")}><SquareIcon /> Stop recording…</Button>
+            : <Button type="button" size="sm" variant="outline" onClick={() => setConfirm("start")}><CircleIcon /> Start recording…</Button>
+        )}
+      </div>
+      {confirm && (
+        <div role="alertdialog" aria-label={confirm === "start" ? "Start OBS recording?" : "Stop OBS recording?"} className="flex flex-wrap items-center gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/5 px-2.5 py-2">
+          <span className="min-w-0 flex-1">{confirm === "start" ? "Start a recording in OBS now?" : "Stop the recording in OBS now?"}</span>
+          <Button type="button" size="sm" variant={confirm === "stop" ? "destructive" : "default"} onClick={() => {
+            const action = confirm
+            setConfirm(null)
+            void (action === "start" ? obs.startRecording() : obs.stopRecording())
+          }}>{confirm === "start" ? "Start in OBS" : "Stop in OBS"}</Button>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setConfirm(null)}>{confirm === "start" ? "Cancel" : "Keep recording"}</Button>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {["Sermon start", "Sermon end", "Altar call"].map((markName) => (
+          <Button key={markName} type="button" size="sm" variant="secondary" onClick={() => void obs.mark(markName)}><FlagIcon /> {markName}</Button>
+        ))}
+        <form className="flex min-w-48 flex-1 gap-1" onSubmit={(event) => { event.preventDefault(); void obs.mark(label); setLabel("") }}>
+          <Input aria-label="OBS mark name" placeholder="Mark another moment" value={label} onChange={(event) => setLabel(event.target.value)} className="h-8 text-xs" maxLength={60} />
+          <Button type="submit" size="sm" disabled={!label.trim()}>Mark</Button>
+        </form>
+      </div>
+      <p className="text-muted-foreground">Marks go into the service log and into the recording as chapters where OBS supports them. Start and stop the stream in OBS.</p>
+    </section>
   )
 }
 
@@ -248,7 +302,8 @@ export function ObsPanel() {
             <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">As OBS reports them</p>
             <h3 className="text-sm font-bold">Stream and recording</h3>
             <ObsOutputs />
-            <p className="text-muted-foreground">Start and stop the stream in OBS. Bitrate is worked out from what OBS has sent since the last reading.</p>
+            <ObsRecordingControls />
+            <p className="text-muted-foreground">Start and stop the stream in OBS itself. Bitrate is worked out from what OBS has sent since the last reading.</p>
           </section>
           <section aria-label="OBS inputs" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4 text-xs">
             <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">From OBS, shown only</p>
