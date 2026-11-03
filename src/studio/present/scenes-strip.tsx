@@ -46,7 +46,8 @@ export function ScenesStrip({ className, outputId }: { className?: string; outpu
         aria-expanded={open}
         aria-controls={bodyId}
         onClick={() => setOpen(!open)}
-        title={open ? "Hide the scenes" : "Show the scenes"}
+        aria-label={open ? `Hide detailed scenes for ${target.name}` : `Show detailed scenes for ${target.name}`}
+        title={open ? "Hide detailed scene controls" : "Show full scene controls"}
         className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-3 py-1.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <LayersIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
@@ -57,11 +58,9 @@ export function ScenesStrip({ className, outputId }: { className?: string; outpu
         </span>
         <ChevronDownIcon aria-hidden className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
-      {open && (
-        <div id={bodyId} className="flex flex-col gap-2 border-t border-border px-3 pt-2 pb-2.5">
-          <ScenePicker key={target.id} output={target} scenes={scenes} planned={planned} />
-        </div>
-      )}
+      <div className={cn("flex flex-col gap-2 border-t border-border", open ? "px-3 pt-2 pb-2.5" : "px-2 py-1.5")}>
+        <ScenePicker key={target.id} output={target} scenes={scenes} planned={planned} open={open} controlsId={bodyId} />
+      </div>
     </section>
   )
 }
@@ -77,7 +76,7 @@ function usePlannedScene(scenes: Scene[]): Scene | null {
  * The previewed item's planned scene starts picked (never taken: Take scene stays the operator's);
  * a pick of the operator's own holds until Preview's planned scene changes.
  */
-function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; scenes: Scene[]; planned: Scene | null }) {
+function ScenePicker({ output, scenes, planned, open, controlsId }: { output: BroadcastOutput; scenes: Scene[]; planned: Scene | null; open: boolean; controlsId: string }) {
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
   const themes = useBroadcastStore((s) => s.themes)
   const logoUrl = useSettingsStore((s) => s.brandKit.logoUrl)
@@ -118,86 +117,122 @@ function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; sce
 
   return (
     <>
-      <div role="group" aria-label={`Scenes for ${output.name}`} className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
-        {scenes.map((s) => {
-          const onAir = s.id === output.sceneId
-          return (
-            <button
-              key={s.id}
-              type="button"
-              aria-pressed={s.id === pickedId}
-              aria-label={`${s.name}${onAir ? `, ${onAirWord.toLowerCase()}` : s.id === planned?.id ? ", planned for the item in Preview" : ""}`}
-              onClick={() => { setOwn(s.id === pickedId ? null : s.id); setRefreshed(false) }}
-              title={onAir ? `${s.name} is on ${output.name}${rehearsal ? " in rehearsal" : ""}` : `Pick ${s.name}, then Take scene${s.id === planned?.id ? " (the scene planned for the item in Preview)" : ""}`}
-              className={cn(
-                "flex min-h-11 shrink-0 items-center gap-1.5 rounded-md border p-1 pr-2 text-left text-[0.6875rem] outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                s.id === pickedId ? "border-primary bg-primary/10 text-foreground" : "border-border hover:bg-muted"
-              )}
+      {!open && (
+        <div role="group" aria-label={`Quick scene controls for ${output.name}`} className="flex min-w-0 flex-wrap items-center gap-2">
+          <label className="flex min-w-36 flex-1 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <span className="shrink-0">Scene</span>
+            <select
+              aria-label={`Choose scene for ${output.name}`}
+              value={pickedId ?? ""}
+              onChange={(event) => { setOwn(event.currentTarget.value || null); setRefreshed(false) }}
+              className="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             >
-              <SceneThumb scene={s} output={output} />
-              <span className="flex max-w-28 flex-col leading-tight">
-                <span className="truncate font-semibold">{s.name}</span>
-                {onAir && <span className={cn("text-[0.625rem] font-bold tracking-wide uppercase", rehearsal ? "text-tone-amber-foreground" : "text-live-pulse")}>{onAirWord}</span>}
-                {!onAir && s.id === planned?.id && <span className="text-[0.625rem] font-bold tracking-wide text-primary-text uppercase">For Preview</span>}
-              </span>
-            </button>
-          )
-        })}
+              <option value="">Choose a scene</option>
+              {scenes.map((scene) => <option key={scene.id} value={scene.id}>{scene.name}</option>)}
+            </select>
+          </label>
+          <SceneAction
+            icon={<LayersIcon />}
+            label={picked ? `Take scene ${picked.name} to ${output.name}` : `Take scene to ${output.name}`}
+            text={picked ? `Take ${picked.name} to ${output.name}` : `Choose a scene for ${output.name}`}
+            title={picked ? (rehearsal ? `Rehearse ${picked.name} on ${output.name}. The screen keeps its scene.` : `Take ${picked.name} to ${output.name} only.`) : `Choose a scene to take to ${output.name}.`}
+            reason={takeReason}
+            descriptionId={details ? takeDetailsId : undefined}
+            onClick={() => {
+              if (!picked) return
+              b().takeScene(output.id, picked.id)
+              setOwn(null)
+              setRefreshed(false)
+            }}
+            primary
+          />
+          <span className="min-w-0 flex-1 truncate text-right text-[0.6875rem] text-muted-foreground" title={`${rehearsal ? "Rehearsal layout" : "Current layout"} on ${output.name}`}>
+            {rehearsal ? "Rehearsal layout" : "Layout"}: {showing?.name ?? "own feed"}{showing ? ` · ${sceneRevisionLabel(showing)}` : ""}
+          </span>
+        </div>
+      )}
+      <div id={controlsId} hidden={!open} className={open ? "flex flex-col gap-2" : "hidden"}>
+        <div role="group" aria-label={`Scenes for ${output.name}`} className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+          {scenes.map((s) => {
+            const onAir = s.id === output.sceneId
+            return (
+              <button
+                key={s.id}
+                type="button"
+                aria-pressed={s.id === pickedId}
+                aria-label={`${s.name}${onAir ? `, ${onAirWord.toLowerCase()}` : s.id === planned?.id ? ", planned for the item in Preview" : ""}`}
+                onClick={() => { setOwn(s.id === pickedId ? null : s.id); setRefreshed(false) }}
+                title={onAir ? `${s.name} is on ${output.name}${rehearsal ? " in rehearsal" : ""}` : `Pick ${s.name}, then Take scene${s.id === planned?.id ? " (the scene planned for the item in Preview)" : ""}`}
+                className={cn(
+                  "flex min-h-11 shrink-0 items-center gap-1.5 rounded-md border p-1 pr-2 text-left text-[0.6875rem] outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                  s.id === pickedId ? "border-primary bg-primary/10 text-foreground" : "border-border hover:bg-muted"
+                )}
+              >
+                <SceneThumb scene={s} output={output} />
+                <span className="flex max-w-28 flex-col leading-tight">
+                  <span className="truncate font-semibold">{s.name}</span>
+                  {onAir && <span className={cn("text-[0.625rem] font-bold tracking-wide uppercase", rehearsal ? "text-tone-amber-foreground" : "text-live-pulse")}>{onAirWord}</span>}
+                  {!onAir && s.id === planned?.id && <span className="text-[0.625rem] font-bold tracking-wide text-primary-text uppercase">For Preview</span>}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        {showing && sceneNeedsRefresh(output, scenes, themes, logoUrl) && scenes.some((s) => s.id === showing.id) && (
+          <button type="button" aria-label={`Refresh saved preview for ${output.name}`} className="min-h-11 self-start rounded-md border px-3 text-xs" onClick={() => { setOwn(showing.id); setRefreshed(true) }}>
+            Refresh saved preview
+          </button>
+        )}
+        {showing && <p className="text-xs text-muted-foreground">
+          {rehearsal ? "Rehearsal" : "Taken"} design: {sceneRevisionLabel(showing)} · Saved by {showing.updatedBy || "unknown operator"}.
+          {!rehearsal && taken && <> Taken by {taken.by || "unknown operator"} at {new Date(taken.at).toLocaleString()}.</>}
+          {scenes.find((s) => s.id === showing.id) && <> Saved design: {sceneRevisionLabel(scenes.find((s) => s.id === showing.id)!)}.</>}
+          {output.sceneAppearanceSnapshot?.approved && <> Approved service {output.sceneAppearanceSnapshot.approved.programId} revision {output.sceneAppearanceSnapshot.approved.revision} · {output.sceneAppearanceSnapshot.approved.approvedBy || "unknown operator"} · {output.sceneAppearanceSnapshot.approved.approvedAt || "time unavailable"}.</>}
+        </p>}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <SceneAction
+            icon={<LayersIcon />}
+            label={picked ? `Take scene ${picked.name} to ${output.name}` : "Take scene"}
+            text={`Take to ${output.name}`}
+            title={picked ? (rehearsal ? `Rehearse ${picked.name} on ${output.name}. The screen keeps its scene.` : `Arrange ${output.name} as ${picked.name}. What is live stays live.`) : "Take scene"}
+            reason={takeReason}
+            descriptionId={details ? takeDetailsId : undefined}
+            onClick={() => {
+              if (!picked) return
+              b().takeScene(output.id, picked.id)
+              // Nothing stays picked after a Take, so a second click never takes another scene.
+              setOwn(null)
+              setRefreshed(false)
+            }}
+            primary
+          />
+          <SceneAction
+            icon={<UndoIcon />}
+            label={`${output.name}: back to its own feed`}
+            text="Own feed"
+            title={`Back to its own feed: ${output.name} shows what is live, full screen`}
+            reason={ownReason}
+            onClick={() => b().releaseScene(output.id)}
+          />
+          <SceneAction
+            icon={<RotateCcwIcon />}
+            label={restorable ? `Restore ${restorable.name} on ${output.name}` : "Restore scene"}
+            text={restorable ? `Restore ${restorable.name}` : "Restore"}
+            title={restorable ? `Put ${restorable.name} back on ${output.name}` : "Restore the last scene"}
+            reason={restoreReason}
+            onClick={() => restorable && b().takeScene(output.id, restorable.id)}
+          />
+          <SceneSheetButton output={output} scene={picked} />
+          <span className="min-w-0 flex-1 truncate text-right text-[0.6875rem] text-muted-foreground">
+            {rehearsal && "Rehearsal · "}
+            {showing ? <>Shows <strong className="font-semibold text-foreground">{showing.name}</strong></> : "Shows its own feed"}
+            {covered && ` · ${covered === "black" ? "Black" : "Logo"} covers it`}
+          </span>
+        </div>
+        {rehearsal && <p className="text-xs text-tone-amber-foreground">{SCENES_REHEARSAL_NOTE}</p>}
       </div>
       {details && <p id={takeDetailsId} role="note" aria-label="Take details" className="text-xs text-muted-foreground">{details}</p>}
-      {showing && sceneNeedsRefresh(output, scenes, themes, logoUrl) && scenes.some((s) => s.id === showing.id) && (
-        <button type="button" aria-label={`Refresh saved preview for ${output.name}`} className="min-h-11 self-start rounded-md border px-3 text-xs" onClick={() => { setOwn(showing.id); setRefreshed(true) }}>
-          Refresh saved preview
-        </button>
-      )}
       {refreshed && <p role="status" className="text-xs text-muted-foreground">Preview refreshed for {output.name}. Take scene to apply it.</p>}
-      {showing && <p className="text-xs text-muted-foreground">
-        {rehearsal ? "Rehearsal" : "Taken"} design: {sceneRevisionLabel(showing)} · Saved by {showing.updatedBy || "unknown operator"}.
-        {!rehearsal && taken && <> Taken by {taken.by || "unknown operator"} at {new Date(taken.at).toLocaleString()}.</>}
-        {scenes.find((s) => s.id === showing.id) && <> Saved design: {sceneRevisionLabel(scenes.find((s) => s.id === showing.id)!)}.</>}
-        {output.sceneAppearanceSnapshot?.approved && <> Approved service {output.sceneAppearanceSnapshot.approved.programId} revision {output.sceneAppearanceSnapshot.approved.revision} · {output.sceneAppearanceSnapshot.approved.approvedBy || "unknown operator"} · {output.sceneAppearanceSnapshot.approved.approvedAt || "time unavailable"}.</>}
-      </p>}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <SceneAction
-          icon={<LayersIcon />}
-          label={picked ? `Take scene ${picked.name} to ${output.name}` : "Take scene"}
-          text={`Take to ${output.name}`}
-          title={picked ? (rehearsal ? `Rehearse ${picked.name} on ${output.name}. The screen keeps its scene.` : `Arrange ${output.name} as ${picked.name}. What is live stays live.`) : "Take scene"}
-          reason={takeReason}
-          descriptionId={details ? takeDetailsId : undefined}
-          onClick={() => {
-            if (!picked) return
-            b().takeScene(output.id, picked.id)
-            // Nothing stays picked after a Take, so a second click never takes another scene.
-            setOwn(null)
-            setRefreshed(false)
-          }}
-          primary
-        />
-        <SceneAction
-          icon={<UndoIcon />}
-          label={`${output.name}: back to its own feed`}
-          text="Own feed"
-          title={`Back to its own feed: ${output.name} shows what is live, full screen`}
-          reason={ownReason}
-          onClick={() => b().releaseScene(output.id)}
-        />
-        <SceneAction
-          icon={<RotateCcwIcon />}
-          label={restorable ? `Restore ${restorable.name} on ${output.name}` : "Restore scene"}
-          text={restorable ? `Restore ${restorable.name}` : "Restore"}
-          title={restorable ? `Put ${restorable.name} back on ${output.name}` : "Restore the last scene"}
-          reason={restoreReason}
-          onClick={() => restorable && b().takeScene(output.id, restorable.id)}
-        />
-        <SceneSheetButton output={output} scene={picked} />
-        <span className="min-w-0 flex-1 truncate text-right text-[0.6875rem] text-muted-foreground">
-          {rehearsal && "Rehearsal · "}
-          {showing ? <>Shows <strong className="font-semibold text-foreground">{showing.name}</strong></> : "Shows its own feed"}
-          {covered && ` · ${covered === "black" ? "Black" : "Logo"} covers it`}
-        </span>
-      </div>
-      {rehearsal && <p className="text-xs text-tone-amber-foreground">{SCENES_REHEARSAL_NOTE}</p>}
     </>
   )
 }
@@ -224,7 +259,7 @@ function SceneAction({ icon, label, text, title, reason, onClick, primary, descr
         )}
       >
         {icon}
-        <span aria-hidden className="max-w-36 truncate">{text}</span>
+        <span aria-hidden className="max-w-56 truncate">{text}</span>
       </button>
       {off && <span id={reasonId} className="sr-only">{reason}</span>}
     </>
