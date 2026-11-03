@@ -39,11 +39,12 @@ Code: `src-tauri/crates/content/src/design_proposal.rs` (check and build),
 }
 ```
 
+- **Lengths** are counted as the editor's adapter counts them (UTF-16 units: an emoji is two).
 - **Pages:** 1–12, unique titles up to 80 characters, 1–40 layers each (bottom first), 200 in all.
   The background is shared by the pages. Proposal ≤ 256 KB (the stdio message limit is 1 MB).
 - **Layers** (px on the 1920 × 1080 artboard, top-left origin, inside it; `opacity` 0–1):
   - `text`: `text` (≤ 2,000 characters, `\n` breaks a line), `textSecond` (the second service
-    language), `fontSize` 8–400, `fontFamily` (letters, numbers, spaces, commas, `_`, `-`),
+    language), `fontSize` 8–400, `fontFamily` (letters A–Z, numbers, spaces, commas, `_`, `-`; up to 120),
     `fontWeight` "400"–"900", `fontStyle`, `textAlign`, `lineHeight` 0.5–3, `color` `#rrggbb`, `underline`.
   - `rect`, `ellipse`: `fill`, either solid `#rrggbb` or a linear gradient (angle −360–360, 2–16 stops
     of `#rrggbb`/`#rrggbbaa` at offsets 0–1 in order).
@@ -73,7 +74,7 @@ no issue and the output renderer draws it (`mcp-design-draft.render.test.ts`, on
 
 `ContentDb::create_assistant_design` is `create_design` (the host's document checks, one transaction)
 with the audit row's actor `"<client name> <version> (AI assistant, MCP)"` (from the client's
-`initialize`) and payload `{ title, kind, source: "mcp", assistant }`. The draft has revision 1 and
+`initialize`, without control, line-break or text-direction characters) and payload `{ title, kind, source: "mcp", assistant }`. The draft has revision 1 and
 no version, so no service or scene can pin it (pins need a version) and nothing reaches a screen.
 
 ## Safety

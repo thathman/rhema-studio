@@ -190,7 +190,7 @@ fn the_draft_is_saved_beside_the_running_app_as_a_new_unversioned_design_by_the_
     assert_eq!(app.get_program(&service.id).unwrap().unwrap().program.revision, service.revision);
     assert_eq!(app.list_design_versions(&saved.id).unwrap().len(), 0);
 
-    // A video, or a picture whose file is gone, cannot be used.
+    // A picture whose file is gone cannot be used.
     std::fs::remove_file(dir.join("media/choir.png")).unwrap();
     assert!(library_picture(&mcp, &media, &pic.id).unwrap_err().contains("missing from the media folder"));
 }
@@ -205,4 +205,48 @@ fn the_writing_handle_never_creates_or_migrates_a_database() {
     rusqlite::Connection::open(&db_path).unwrap().execute("INSERT INTO schema_migrations (version) VALUES ('9999_from_the_future')", []).unwrap();
     let err = ContentDb::open_existing(&db_path).unwrap_err().to_string();
     assert!(err.to_lowercase().contains("newer"), "{err}");
+}
+
+/// The limits at their edges, built and kept as a second golden the render test opens with the
+/// editor's adapter, so a Rust check looser than `designToScene` cannot slip in unseen.
+fn edges() -> Value {
+    let emoji = |n: usize| "🙏".repeat(n);
+    json!({ "title": "Edges", "background": { "type": "gradient", "angle": -360, "stops": [{ "color": "#00000000", "offset": 0 }, { "color": "#ffffff80", "offset": 0 }, { "color": "#123456", "offset": 1 }] }, "pages": [
+        { "title": emoji(40), "layers": [
+            { "type": "text", "x": 0, "y": 0, "width": 1920, "height": 1080, "text": emoji(1000), "textSecond": emoji(1000), "fontFamily": "Noto Sans, Arial", "fontSize": 8, "lineHeight": 3 },
+            { "type": "text", "x": 1919, "y": 1079, "width": 1, "height": 1, "text": "x", "textSecond": "y", "fontSize": 400, "lineHeight": 0.5, "fontWeight": "900", "fontStyle": "italic", "textAlign": "right", "underline": true },
+            { "type": "ellipse", "x": 0, "y": 0, "width": 1, "height": 1, "opacity": 0, "fill": { "type": "gradient", "angle": -45.5, "stops": [{ "color": "#ff0000", "offset": 0 }, { "color": "#00ff00", "offset": 1 }] } }
+        ] }
+    ] })
+}
+
+#[test]
+fn the_limits_at_their_edges_build_the_edges_golden_and_one_past_them_is_refused() {
+    let built = try_build(&edges(), true).unwrap_or_else(|(e, _)| panic!("{e:?}"));
+    let golden = fixture("mcp-design-draft-edges.json");
+    let text = serde_json::to_string_pretty(&built.document).unwrap() + "\n";
+    if std::env::var_os("UPDATE_GOLDEN").is_some() {
+        std::fs::write(&golden, &text).unwrap();
+    }
+    assert_eq!(std::fs::read_to_string(&golden).unwrap(), text);
+    // One past each, as the editor's adapter counts (UTF-16 units), and a font name it refuses.
+    let mut p = edges();
+    p["pages"][0]["title"] = json!("🙏".repeat(41));
+    p["pages"][0]["layers"][0]["text"] = json!("🙏".repeat(1001));
+    p["pages"][0]["layers"][1]["fontFamily"] = json!("Noto देवनागरी");
+    let e = errors(&p);
+    assert!(has(&e, "pages[0].title", "80 characters"), "{e:?}");
+    assert!(has(&e, "pages[0].layers[0].text", "2000 characters"), "{e:?}");
+    assert!(has(&e, "pages[0].layers[1].fontFamily", "font family"), "{e:?}");
+}
+
+#[test]
+fn only_a_present_library_picture_can_be_used() {
+    let dir = temp("kinds");
+    let db = ContentDb::open(&dir.join("studio.db")).unwrap();
+    let media = |kind: &str, file: &str| MediaInput { kind: kind.into(), name: file.into(), file: file.into(), hash: "b".repeat(64), size: 1, mime: "video/mp4".into(), width: None, height: None, duration_ms: None, source: "local".into(), source_ref: String::new(), original_path: String::new() };
+    std::fs::write(dir.join("media/loop.mp4"), b"v").unwrap();
+    let video = db.register_media(&media("video", "loop.mp4")).unwrap();
+    assert!(library_picture(&db, &dir.join("media"), &video.id).unwrap_err().contains("not a picture"));
+    assert!(library_picture(&db, &dir.join("media"), "nope").unwrap_err().contains("not a picture in the church's media library"));
 }

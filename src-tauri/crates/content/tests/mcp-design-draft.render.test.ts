@@ -80,6 +80,11 @@ describe("an MCP-created design draft opens and draws through Rhema's adapters",
     expect(white).toBeGreaterThan(500)
   })
 
+  it("opens the builder's limits at their edges with no issue (the Rust checks are never looser)", () => {
+    const edges = JSON.parse(readFileSync(join(__dirname, "fixtures/mcp-design-draft-edges.json"), "utf8")) as RhemaDesign
+    for (const page of designPages(edges)) expect(designToScene(edges, page.id).issues).toEqual([])
+  })
+
   it("previews its picture in the editor as outputs draw it (never cropped there)", () => {
     const picture = Object.values(design.bindings).find((b) => b.kind === "picture")!
     expect(outputCoverPictures(design)).toEqual({ [picture.id!]: { l: 0, t: 0, r: 0, b: 0 } })

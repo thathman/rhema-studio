@@ -84,7 +84,7 @@ fn an_opted_in_assistant_makes_an_editable_design_draft_and_nothing_else() {
     settings(&dir, false);
 
     let mut mcp = Mcp::start(&dir);
-    let init = mcp.rpc("initialize", json!({ "protocolVersion": "2025-06-18", "clientInfo": { "name": "E2E Assistant", "version": "9.1" } }));
+    let init = mcp.rpc("initialize", json!({ "protocolVersion": "2025-06-18", "clientInfo": { "name": "E2E\u{202E} Assistant", "version": "9.1\n" } }));
     assert_eq!(init["result"]["serverInfo"]["name"], "rhema-studio");
     let names: Vec<String> = mcp.rpc("tools/list", json!({}))["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
     for n in ["rhema_get_design_capabilities", "rhema_list_designs", "rhema_validate_design_draft", "rhema_create_design_draft"] {

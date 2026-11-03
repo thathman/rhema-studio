@@ -635,7 +635,9 @@ fn handle(s: &mut Server, msg: &Value) -> Option<Value> {
     let result = match method {
         "initialize" => {
             if let Some(c) = params.get("clientInfo") {
-                s.client = json!({ "name": c.get("name").and_then(Value::as_str).unwrap_or("an assistant").chars().take(60).collect::<String>(), "version": c.get("version").and_then(Value::as_str).unwrap_or("").chars().take(30).collect::<String>() });
+                // Shown in drafts, the audit trail and logs: no control or text-direction characters.
+                let clean = |k: &str, or: &str, max: usize| c.get(k).and_then(Value::as_str).unwrap_or(or).chars().filter(|ch| !rhema_content::proposal::hidden_char(*ch) && *ch != '\n').take(max).collect::<String>();
+                s.client = json!({ "name": clean("name", "an assistant", 60), "version": clean("version", "", 30) });
             }
             let asked = params.get("protocolVersion").and_then(Value::as_str).unwrap_or("");
             json!({

@@ -111,11 +111,23 @@ fn stop_color(s: &str) -> bool {
 
 /// Words people see on screen: no control or direction-override characters (which can make text
 /// read differently from what was reviewed), within the length outputs draw.
+/// A character that can make words read differently from what was reviewed: control (except a line
+/// break) or text-direction.
+pub fn hidden_char(c: char) -> bool {
+    (c.is_control() && c != '\n') || matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{200E}' | '\u{200F}' | '\u{FEFF}')
+}
+
+/// Length as the editor's adapter counts it (JavaScript's `.length`: UTF-16 units), so a limit here
+/// is never looser than `designToScene`'s.
+fn js_len(t: &str) -> usize {
+    t.encode_utf16().count()
+}
+
 fn text_issue(t: &str) -> Option<String> {
-    if t.chars().count() > MAX_TEXT_CHARS {
+    if js_len(t) > MAX_TEXT_CHARS {
         return Some(format!("text is limited to {MAX_TEXT_CHARS} characters"));
     }
-    if t.chars().any(|c| (c.is_control() && c != '\n') || matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{200E}' | '\u{200F}' | '\u{FEFF}')) {
+    if t.chars().any(hidden_char) {
         return Some("text may not contain control or text-direction characters".into());
     }
     None
@@ -397,14 +409,14 @@ fn text_layer(
     );
     let family = string(ctx, o, path, "fontFamily").unwrap_or("Arial").trim();
     if family.is_empty()
-        || family.chars().count() > 120
+        || family.len() > 120
         || !family
             .chars()
-            .all(|c| c.is_alphanumeric() || matches!(c, ',' | ' ' | '_' | '-'))
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, ',' | ' ' | '_' | '-'))
     {
         ctx.err(
             &format!("{path}.fontFamily"),
-            "a font family is letters, numbers, spaces, commas, underscores or hyphens",
+            "a font family is letters A–Z, numbers, spaces, commas, underscores or hyphens",
         );
     }
     let weight = string(ctx, o, path, "fontWeight").unwrap_or("600");
@@ -575,7 +587,7 @@ pub fn build(
             .unwrap_or_default()
             .to_string();
         if page_title.is_empty()
-            || page_title.chars().count() > 80
+            || js_len(&page_title) > 80
             || text_issue(&page_title).is_some()
         {
             ctx.err(

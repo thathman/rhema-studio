@@ -84,7 +84,8 @@ pub(super) fn call(s: &Server, name: &str, a: &Value) -> Option<Value> {
         }
         "rhema_validate_design_draft" | "rhema_create_design_draft" => {
             let (Some(c), Some(dir)) = (&s.content, s.dir.as_deref()) else { return Some(tool_error(s.problem.as_deref().unwrap_or("no Rhema data on this computer yet"))) };
-            let media = dir.join("media");
+            // Absolute, as the app's own media folder is: a relative `--data` would store an address the editor cannot load.
+            let media = std::path::absolute(dir.join("media")).unwrap_or_else(|_| dir.join("media"));
             let mut next_id = |kind: &str| format!("{kind}-{}", uuid::Uuid::new_v4());
             let built = proposal::build(a.get("design").unwrap_or(&Value::Null), bilingual(s), &|id| proposal::library_picture(c, &media, id), &mut next_id, now_ms());
             let built = match built {
