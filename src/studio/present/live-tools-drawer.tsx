@@ -1,6 +1,5 @@
 import { BookOpenIcon, MicIcon, MonitorCogIcon, SlidersHorizontalIcon, XIcon } from "lucide-react"
 import { DetectionsPanel } from "@/components/panels/detections-panel"
-import { SearchPanel } from "@/components/panels/search-panel"
 import { TranscriptPanel } from "@/components/panels/transcript-panel"
 import { Button } from "@/components/ui/button"
 import { EmbeddingWarningBanner } from "@/components/ui/embedding-warning-banner"
@@ -9,6 +8,7 @@ import { CueMenu } from "@/studio/present/cue-menu"
 import { LowerThirdControl } from "@/studio/present/lower-third"
 import { SoundChip } from "@/studio/present/sound-chip"
 import { StageMessage } from "@/studio/present/stage-message"
+import { QuickFind } from "@/studio/present/quick-find"
 import { EngageHostControl } from "@/studio/engage/host-control"
 import type { LiveToolsTab } from "@/studio/production/production-tab"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -45,7 +45,9 @@ export function LiveToolsDrawer({
               ? "Timing, scenes, cameras, OBS and health tools share this Live state. Preview stays private until an explicit action."
               : tab === "controls"
                 ? "Open secondary cues, local sound, lower thirds, Stage messages and Engage when needed."
-                : "Bible search previews verses. Listening results stay here until you choose Queue, Bible feeds, or Show live."}
+                : tab === "listening"
+                  ? "Review what the microphone heard. Choose Queue, Bible feeds, or Show live when you are ready."
+                  : "Find Scripture or a hymn for private Preview. Choosing a result does not change Program."}
           </p>
         </div>
         <Button type="button" variant="ghost" size="icon-sm" aria-label="Close Live tools" title="Close Live tools" onClick={onClose}>
@@ -58,15 +60,15 @@ export function LiveToolsDrawer({
         className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-2"
       >
         <TabsList aria-label="Live tools" className="mt-2 w-full">
-          <TabsTrigger value="bible"><BookOpenIcon /> Bible search</TabsTrigger>
+          <TabsTrigger value="bible"><BookOpenIcon /> Find &amp; cue</TabsTrigger>
           <TabsTrigger value="listening"><MicIcon /> Listening</TabsTrigger>
           <TabsTrigger value="production"><MonitorCogIcon /> Production tools</TabsTrigger>
           <TabsTrigger value="controls"><SlidersHorizontalIcon /> More controls</TabsTrigger>
         </TabsList>
         <TabsContent value="bible" className="mt-2 min-h-0 flex-1 overflow-hidden">
-          <div className="flex h-full min-h-0 flex-col gap-2">
+          <div className="flex h-full min-h-0 flex-col gap-2" role="region" aria-label="Find Scripture and songs" data-tour="quick-find">
             <EmbeddingWarningBanner />
-            <div className="min-h-0 flex-1"><SearchPanel /></div>
+            <div className="min-h-0 flex-1"><QuickFind mode="present" autoFocus /></div>
           </div>
         </TabsContent>
         <TabsContent value="listening" className="mt-2 min-h-0 flex-1 overflow-hidden">

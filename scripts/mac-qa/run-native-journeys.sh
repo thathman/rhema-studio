@@ -38,6 +38,7 @@ cleanup() {
       "$QA_RUN/out/native-recording-journey.json" \
       "$QA_RUN/out/live-empty-service.json" \
       "$QA_RUN/out/live-configured-service.json" \
+      "$QA_RUN/out/live-find-drawer.json" \
       "$QA_SCRATCH/result.json" \
       "$QA_SCRATCH/scene-result.json" \
       "$QA_SCRATCH/take-failure-result.json" \
@@ -142,6 +143,7 @@ PY
 # native app window, not the browser shim or an illustrative mockup.
 capture_live_state empty-service live-empty-service.js
 capture_live_state configured-service live-configured-service.js
+capture_live_state find-drawer live-find-drawer.js
 if [[ "${LIVE_SCREENSHOTS_ONLY:-0}" == 1 ]]; then
   echo "Native Live screenshots captured; LIVE_SCREENSHOTS_ONLY=1 skips the longer recorder and scene journeys."
   exit 0

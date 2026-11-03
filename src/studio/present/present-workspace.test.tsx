@@ -14,7 +14,6 @@ const presentCalls = vi.hoisted(() => ({
 vi.mock("@/studio/present-actions", () => ({ presentActions: presentCalls }))
 vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, outputLanguageId, onOutputLanguageIdChange }: { compact?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"}>Preview stays private<select aria-label="Output for Preview and Scene Take" value={outputLanguageId ?? ""} onChange={(event) => onOutputLanguageIdChange?.(event.currentTarget.value)}><option value="english-output">English screen</option><option value="yoruba-output">Yoruba screen</option></select></section> }))
 vi.mock("@/components/panels/live-output-panel", () => ({ LiveOutputPanel: ({ outputId }: { outputId?: string | null }) => <section data-studio-live data-program-output={outputId ?? "none"}>Program</section> }))
-vi.mock("@/components/panels/search-panel", () => ({ SearchPanel: () => <div data-testid="bible-search-panel">Bible search</div> }))
 vi.mock("@/components/panels/transcript-panel", () => ({ TranscriptPanel: () => <div data-testid="transcript-panel">Transcript</div> }))
 vi.mock("@/components/panels/detections-panel", () => ({ DetectionsPanel: () => <div data-testid="detections-panel">Detections</div> }))
 vi.mock("@/components/ui/embedding-warning-banner", () => ({ EmbeddingWarningBanner: () => null }))
@@ -168,6 +167,7 @@ describe("Present's unified Live console", () => {
     expect(recovery.textContent).toContain("No service open")
     expect(recovery.querySelector('p[title*="Plan changes never update Program"]')).not.toBeNull()
     expect(recovery.textContent).toContain("Take waits for a Preview item")
+    expect(element.querySelector('[data-tour="quick-find"]')).toBeNull()
     expect(element.querySelector('[data-studio-live]')?.textContent).toContain("Program")
     expect(element.querySelector('[data-tour="present-rundown"]')?.className).toContain("row-span-1")
     expect(element.querySelector('[data-tour="present-rundown"]')?.className).toContain("h-fit")
@@ -178,8 +178,13 @@ describe("Present's unified Live console", () => {
     await act(async () => button("Open a saved service").click())
     expect(useShellStore.getState().goRequest).toBe("archive")
 
-    await act(async () => button("Find Scripture or hymn").click())
-    expect(document.activeElement).toBe(element.querySelector('[data-tour="quick-find"] input[aria-label="Quick find"]'))
+    await act(async () => {
+      button("Find Scripture or hymn").click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+    const quickFind = element.querySelector('[data-slot="live-tools-panel"] [data-tour="quick-find"] input[aria-label="Quick find"]')
+    expect(quickFind).not.toBeNull()
+    expect(document.activeElement).toBe(quickFind)
 
     await act(async () => button("Review outputs").click())
     expect(useShellStore.getState().outputsDialogOpen).toBe(true)
@@ -290,7 +295,7 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[aria-label="Rhema recording dock"]')?.textContent).toContain("Rhema recording controls")
     expect(element.querySelector('[role="toolbar"][aria-label="Presentation controls"] button')?.textContent).toBe("Take live")
     const quickActions = element.querySelector<HTMLElement>('[data-testid="quick-screen-actions"]')!
-    expect(quickActions.className).toContain("max-[1500px]:grid-cols-3")
+    expect(quickActions.className).toContain("max-[1200px]:grid-cols-4")
     expect(quickActions.className).toContain("max-[800px]:grid-cols-2")
     expect(quickActions.className).toContain("overflow-x-hidden")
     expect(quickActions.textContent).toContain("Technical issue")
@@ -300,17 +305,19 @@ describe("Present's unified Live console", () => {
 
     pressArrowRight()
     expect(presentCalls.next).toHaveBeenCalledTimes(1)
-    const quickFind = element.querySelector("input")!
-    pressArrowRight(quickFind)
-    expect(presentCalls.next).toHaveBeenCalledTimes(1)
-
     const openTools = element.querySelector<HTMLButtonElement>('[data-tour="live-tools"]')!
     await act(async () => openTools.click())
-    expect(openTools.getAttribute("aria-label")).toBe("Close Bible and listening tools")
+    expect(openTools.getAttribute("aria-label")).toBe("Close Find and listening tools")
     expect(element.querySelectorAll('[aria-label="Close Live tools"]')).toHaveLength(1)
     expect(document.querySelector('[data-slot="live-tools-panel"]')).not.toBeNull()
+    expect(document.querySelector('[data-slot="live-tools-panel"]')?.parentElement?.className).toContain("max-[1200px]:h-[14.5rem]")
     expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
-    expect(document.querySelector("[data-testid='bible-search-panel']")).not.toBeNull()
+    const quickFind = element.querySelector<HTMLInputElement>('[data-slot="live-tools-panel"] [data-tour="quick-find"] input[aria-label="Quick find"]')!
+    expect(quickFind).not.toBeNull()
+    expect(element.querySelector('[data-tour="quick-find"]')).not.toBeNull()
+    expect(document.querySelector('[data-slot="live-tools-panel"] [role="tab"][aria-selected="true"]')?.textContent).toContain("Find & cue")
+    pressArrowRight(quickFind)
+    expect(presentCalls.next).toHaveBeenCalledTimes(1)
     expect(element.querySelector('[aria-label="Preview"]')?.textContent).toContain("stays private")
     expect(element.querySelector("[data-studio-live]")?.textContent).toContain("Program")
 
