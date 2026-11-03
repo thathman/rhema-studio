@@ -27,6 +27,7 @@ import { ScenesStrip } from "@/studio/present/scenes-strip"
 import { LiveSceneTakeAction, type SceneTakeSelection } from "@/studio/present/live-scene-take-action"
 import { LiveToolsDrawer, type LiveToolsTab } from "@/studio/present/live-tools-drawer"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
+import { LiveCrewStatus } from "@/studio/present/live-crew-status"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 import { useProductionTab } from "@/studio/production/production-tab"
 import { usePreviewLabel } from "@/hooks/use-preview-label"
@@ -366,6 +367,7 @@ function LiveConsoleSurface({
           </div>
           <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{count} {count === 1 ? "item" : "items"}</span>
         </div>
+        <LiveCrewStatus />
         {hasTimedItems && (
           <div className="flex justify-end border-b border-border px-4 py-1.5">
             <TimedMoves />
