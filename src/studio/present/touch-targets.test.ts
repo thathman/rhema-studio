@@ -26,7 +26,7 @@ describe("Present touch targets (#215 G9.3)", () => {
     const src = read("./scenes-strip.tsx")
     const classes = classesOf(src, "<button")
     // The shared output picker lives in Preview; this strip has its fold, scenes and actions.
-    expect(classes.length).toBe(4)
+    expect(classes.length).toBe(5)
     for (const c of classes) expect(c).toMatch(/\b(?:min-)?h-11\b/)
     expect(src).not.toMatch(/\bh-8\b/)
   })

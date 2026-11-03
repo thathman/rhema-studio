@@ -258,7 +258,7 @@ function ScenePicker({ output, scenes, planned, open, controlsId, onTakeSelectio
                 {s.id === pickedId && approvalPreviewRequired
                   ? previewScene
                     ? <SceneThumb scene={previewScene} output={output} appearance={approvedPin?.outputs[output.id]} />
-                    : <span data-approved-preview-unavailable={s.id} className="flex h-[27px] w-12 shrink-0 items-center justify-center rounded-sm bg-muted text-[0.5rem] text-muted-foreground">Checking</span>
+                    : <span data-approved-preview-unavailable={s.id} className="flex h-[27px] w-12 shrink-0 items-center justify-center rounded-sm bg-muted text-xs text-muted-foreground">Checking</span>
                   : <SceneThumb scene={s} output={output} />}
                 <span className="flex max-w-28 flex-col leading-tight">
                   <span className="truncate font-semibold">{s.name}</span>
@@ -323,7 +323,7 @@ function ScenePicker({ output, scenes, planned, open, controlsId, onTakeSelectio
         </p>
       )}
       {currentApprovedPreview.status === "error" && picked && approvalPreviewRequired && (
-        <button type="button" className="min-h-9 self-start rounded-md border px-3 text-xs" onClick={() => setPreviewAttempt((attempt) => attempt + 1)}>
+        <button type="button" className="min-h-11 self-start rounded-md border px-3 text-xs" onClick={() => setPreviewAttempt((attempt) => attempt + 1)}>
           Refresh approved Preview
         </button>
       )}
