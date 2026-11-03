@@ -210,6 +210,7 @@ function LiveConsoleSurface({
   onCloseTools: () => void
 }) {
   const [sceneTakeSelection, setSceneTakeSelection] = useState<SceneTakeSelection | null>(null)
+  const selectedOutputSceneTake = sceneTakeSelection?.outputId === outputId ? sceneTakeSelection : null
   // One Preview at a time (the panel also follows translation changes); narrow layouts stack full panes.
   const isLive = useBroadcastStore((s) => s.isLive)
   const count = useQueueStore((s) => s.items.length)
@@ -309,12 +310,12 @@ function LiveConsoleSurface({
         <div className="min-h-[18rem] flex-1 overflow-hidden rounded-xl [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
           <LiveOutputPanel
             outputId={outputId}
-            sceneTakeAction={<LiveSceneTakeAction selection={sceneTakeSelection?.outputId === outputId ? sceneTakeSelection : null} />}
+            sceneTakeAction={<LiveSceneTakeAction selection={selectedOutputSceneTake} />}
           />
         </div>
         <ScenesStrip outputId={outputId} onTakeSelectionChange={setSceneTakeSelection} />
       </div>
-      <TransportBar className="col-span-2 max-[1200px]:shrink-0 max-[1200px]:sticky max-[1200px]:bottom-0 max-[1200px]:z-10 max-[1200px]:bg-background max-[1023px]:col-span-1" />
+      <TransportBar hasSelectedOutputSceneTake={selectedOutputSceneTake !== null} className="col-span-2 max-[1200px]:shrink-0 max-[1200px]:sticky max-[1200px]:bottom-0 max-[1200px]:z-10 max-[1200px]:bg-background max-[1023px]:col-span-1" />
 
       {toolsOpen ? (
         <div className="col-span-2 min-h-0 overflow-hidden max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">

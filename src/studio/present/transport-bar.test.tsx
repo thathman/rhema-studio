@@ -3,6 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
+vi.hoisted(() => {
+  if (!globalThis.HTMLCanvasElement) return
+  const context = new Proxy({ font: "" }, {
+    get: (target, property) => property === "measureText"
+      ? (text: string) => ({ width: text.length * 8 })
+      : property === "canvas"
+        ? { width: 1920, height: 1080 }
+        : Reflect.get(target, property) ?? (() => undefined),
+    set: (target, property, value) => Reflect.set(target, property, value),
+  })
+  globalThis.HTMLCanvasElement.prototype.getContext = (() => context) as unknown as typeof globalThis.HTMLCanvasElement.prototype.getContext
+})
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -17,11 +29,11 @@ const item: QueueItem = { id: "it-1", reference: "John 3:16", confidence: 1, sou
 let el: HTMLDivElement
 let root: Root
 
-async function render() {
+async function render(hasSelectedOutputSceneTake = false) {
   el = document.createElement("div")
   document.body.append(el)
   root = createRoot(el)
-  await act(async () => root.render(<TransportBar />))
+  await act(async () => root.render(<TransportBar hasSelectedOutputSceneTake={hasSelectedOutputSceneTake} />))
 }
 
 const button = (name: string) => el.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)!
@@ -150,10 +162,39 @@ describe("Present's transport bar", () => {
     const target = () => document.getElementById(button("Take source live").getAttribute("aria-describedby")!)!.textContent
     expect(target()).toContain("John 3:16")
     expect(target()).toContain("Source Take · outputs subscribed to this source")
+    expect(button("Take source live").textContent).toContain("To subscribed outputs")
     expect(button("Take source live").title).toContain("does not limit this source Take")
+    expect(button("Take source live").className).toContain("bg-primary")
 
     await act(async () => useBroadcastStore.setState({ rehearsal: true }))
     expect(target()).toContain("Rehearsal · public outputs keep their current Program")
+    expect(button("Take source live").textContent).toContain("Private rehearsal · public outputs unchanged")
+  })
+
+  it("demotes the transport Take, cue and audio actions when the selected output has a scene Take", async () => {
+    useBibleStore.setState({ selectedVerse: verse })
+    await render(true)
+
+    const secondary = (name: string) => {
+      expect(button(name).className).toContain("border-border")
+      expect(button(name).className).toContain("bg-card")
+      expect(button(name).className).not.toContain("bg-primary")
+      expect(button(name).className).not.toContain("text-primary-foreground")
+    }
+    secondary("Take source live")
+
+    await act(async () => useBibleStore.setState({
+      selectedVerse: null,
+      selectedSlide: { item: { id: "cue", kind: "cue", reference: "Sermon begins", confidence: 1, source: "manual", added_at: 0 }, index: 0 } as never,
+    }))
+    secondary("Run cue")
+    expect(document.getElementById(button("Run cue").getAttribute("aria-describedby")!)?.textContent).toContain("Cue only · screen Program stays unchanged")
+
+    await act(async () => useBibleStore.setState({
+      selectedSlide: { item: { id: "audio", kind: "audio", audio: { media_id: "walk-in", name: "Walk-in" }, reference: "Walk-in", confidence: 1, source: "manual", added_at: 0 }, index: 0 } as never,
+    }))
+    secondary("Play audio cue")
+    expect(document.getElementById(button("Play audio cue").getAttribute("aria-describedby")!)?.textContent).toContain("Audio cue · screen Program stays unchanged")
   })
 
   it("labels cue and local audio actions without claiming they take a screen source", async () => {
