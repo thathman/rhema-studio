@@ -55,6 +55,7 @@ describe("Present's Program and Preview panels", () => {
     expect(header.textContent).toContain("On air")
     await act(async () => useBroadcastStore.setState({ rehearsal: true }))
     expect(header.textContent).toContain("Rehearsal")
+    expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe("Rehearsal")
   })
 
   it("the one-line Preview says what Take live will put up, and the item's plan", async () => {
@@ -114,7 +115,82 @@ describe("Present's Program and Preview panels", () => {
     await render(<LiveOutputPanel outputId="foyer" />)
 
     expect(el.textContent).toContain("Foyer TV")
-    expect(el.querySelector('[role="status"]')?.textContent).toContain("Receiver confirmed · 1 browser page showing the latest Program frame · 1 Google TV.")
+    expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe("Receiver confirmed")
+    expect(el.querySelector('[role="status"]')?.textContent).toBe("Receiver confirmed. 1 browser page showing the latest Program frame · 1 Google TV.")
+    expect(el.textContent).not.toContain("Host applied")
+  })
+
+  it("distinguishes a publishing browser feed from receiver confirmation and lag", async () => {
+    const base = useBroadcastStore.getState().outputs[0]!
+    const output = { ...base, id: "foyer", name: "Foyer TV", type: "browser" as const, role: "congregation" as const }
+    useBroadcastStore.setState({
+      outputs: [output],
+      outputStatus: { foyer: { previewOpen: false, ndiActive: false, feedActive: true } },
+      isLive: true,
+      rehearsal: false,
+      liveVerse: { reference: "John 3:16", segments: [] },
+    })
+    receiverState.health = { watching: 2, current: false, behind: true, tvs: { sanctuary: 1 } }
+
+    await render(<LiveOutputPanel outputId="foyer" />)
+
+    expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe("Behind")
+    expect(el.querySelector('[role="status"]')?.textContent).toBe("Behind. 2 browser pages connected; the latest Program frame is not confirmed · 1 Google TV.")
+  })
+
+  it.each([
+    ["no receiver", { watching: 0, current: false, behind: false }, "No receiver", "Feed is publishing; no receiver is connected."],
+    ["waiting for a draw", { watching: 1, current: false, behind: false }, "Waiting", "1 browser page connected; waiting for a draw acknowledgement."],
+  ] as const)("reports a browser feed that is %s", async (_name, health, label, detail) => {
+    const base = useBroadcastStore.getState().outputs[0]!
+    const output = { ...base, id: "foyer", name: "Foyer TV", type: "browser" as const, role: "congregation" as const }
+    useBroadcastStore.setState({
+      outputs: [output],
+      outputStatus: { foyer: { previewOpen: false, ndiActive: false, feedActive: true } },
+      isLive: true,
+      rehearsal: false,
+      liveVerse: { reference: "John 3:16", segments: [] },
+    })
+    receiverState.health = health
+
+    await render(<LiveOutputPanel outputId="foyer" />)
+
+    expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe(label)
+    expect(el.querySelector('[role="status"]')?.textContent).toBe(`${label}. ${detail}`)
+  })
+
+  it("reports a host-side feed failure without implying that a receiver saw the frame", async () => {
+    const base = useBroadcastStore.getState().outputs[0]!
+    const output = { ...base, id: "foyer", name: "Foyer TV", type: "browser" as const, role: "congregation" as const }
+    useBroadcastStore.setState({
+      outputs: [output],
+      outputStatus: { foyer: { previewOpen: false, ndiActive: false, feedActive: false } },
+      isLive: true,
+      rehearsal: false,
+      liveVerse: { reference: "John 3:16", segments: [] },
+    })
+
+    await render(<LiveOutputPanel outputId="foyer" />)
+
+    expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe("Not sending")
+    expect(el.querySelector('[role="status"]')?.textContent).toBe("Not sending. Host is not sending to this browser feed.")
+  })
+
+  it("reports NDI errors as errors rather than host-applied success", async () => {
+    const base = useBroadcastStore.getState().outputs[0]!
+    const output = { ...base, id: "stream", name: "Stream NDI", type: "ndi" as const, role: "congregation" as const }
+    useBroadcastStore.setState({
+      outputs: [output],
+      outputStatus: { stream: { previewOpen: false, ndiActive: false, ndiError: "Frame send failed" } },
+      isLive: true,
+      rehearsal: false,
+      liveVerse: { reference: "John 3:16", segments: [] },
+    })
+
+    await render(<LiveOutputPanel outputId="stream" />)
+
+    expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe("NDI error")
+    expect(el.querySelector('[role="status"]')?.textContent).toBe("NDI error. NDI sender error · Frame send failed")
   })
 
   it("does not claim receiver confirmation for a local host display window", async () => {

@@ -40,6 +40,7 @@ export function LiveOutputPanel({ outputId }: { outputId?: string | null } = {})
   const verseData = isLive ? forOutputLanguage(liveVerse, output?.language ?? "both") : null
   // A video item on air can be paused and resumed on every screen (MD-002, #36).
   const video = isLive && liveVerse?.content === "picture" ? liveVerse.video : undefined
+  const delivery = programDelivery(output, status, isLive, rehearsal, feed)
 
   // Following a translation change on air lives in useLiveTranslationFollow (mounted once).
 
@@ -111,11 +112,14 @@ export function LiveOutputPanel({ outputId }: { outputId?: string | null } = {})
           )}
         </div>
       </div>
-      <div className="flex min-h-9 shrink-0 items-center gap-2 border-t border-border px-3 py-1.5">
+      <div
+        className="flex min-h-9 shrink-0 items-center gap-2 border-t border-border px-3 py-1.5"
+        data-program-delivery-state={delivery.label}
+      >
         <span title={output?.name} className="max-w-28 shrink-0 truncate text-[0.6875rem] font-semibold text-foreground">{output?.name ?? "No output"}</span>
-        <StatusChip tone={!isLive ? "off" : rehearsal ? "warn" : "live"} label={!output ? "No output" : rehearsal ? "Rehearsal" : isLive ? "Host applied" : "Off air"} className="h-6 shrink-0 px-2 text-[0.6875rem]" />
+        <StatusChip tone={delivery.tone} label={delivery.label} title={delivery.detail} className="h-6 shrink-0 px-2 text-[0.6875rem]" />
         <p role="status" aria-live="polite" aria-atomic="true" className="min-w-0 truncate text-[0.6875rem] text-muted-foreground">
-          {programDelivery(output, status, isLive, rehearsal, feed)}
+          <span className="sr-only">{delivery.label}. </span>{delivery.detail}
         </p>
       </div>
       <LiveSourcesStrip />
@@ -129,33 +133,33 @@ function programDelivery(
   isLive: boolean,
   rehearsal: boolean,
   feed: ReturnType<typeof useFeedHealth>,
-): string {
-  if (!output) return "Add a congregation output to see its Program state."
-  if (rehearsal) return "Rehearsal · public Program stays on the frame shown before practice."
-  if (!isLive) return "Host Program is off air."
+): { label: string; tone: "ok" | "warn" | "off" | "info"; detail: string } {
+  if (!output) return { label: "No output", tone: "warn", detail: "Add a congregation output to see its Program state." }
+  if (rehearsal) return { label: "Rehearsal", tone: "warn", detail: "Public Program stays on the frame shown before practice." }
+  if (!isLive) return { label: "Off air", tone: "off", detail: "Host Program is off air." }
 
   if (output.type === "browser") {
-    if (!status?.feedActive) return "Host is not sending to this browser feed."
-    if (!feed) return "Feed is publishing · checking for a receiver."
-    if (feed.watching === 0) return "Feed is publishing · no receiver is connected."
+    if (!status?.feedActive) return { label: "Not sending", tone: "warn", detail: "Host is not sending to this browser feed." }
+    if (!feed) return { label: "Checking", tone: "info", detail: "Feed is publishing; checking for a receiver." }
+    if (feed.watching === 0) return { label: "No receiver", tone: "warn", detail: "Feed is publishing; no receiver is connected." }
     const pages = `${feed.watching} browser ${feed.watching === 1 ? "page" : "pages"}`
     const televisions = Object.values(feed.tvs ?? {}).reduce((total, count) => total + count, 0)
     const tvs = televisions > 0 ? ` · ${televisions} Google ${televisions === 1 ? "TV" : "TVs"}` : ""
-    if (feed.behind) return `${pages} connected · behind; the latest Program frame is not confirmed${tvs}.`
-    if (feed.current) return `Receiver confirmed · ${pages} showing the latest Program frame${tvs}.`
-    return `${pages} connected · waiting for a draw acknowledgement${tvs}.`
+    if (feed.behind) return { label: "Behind", tone: "warn", detail: `${pages} connected; the latest Program frame is not confirmed${tvs}.` }
+    if (feed.current) return { label: "Receiver confirmed", tone: "ok", detail: `${pages} showing the latest Program frame${tvs}.` }
+    return { label: "Waiting", tone: "info", detail: `${pages} connected; waiting for a draw acknowledgement${tvs}.` }
   }
 
   if (output.type === "ndi") {
-    if (status?.ndiError) return `NDI sender error · ${status.ndiError}`
-    if (!status?.ndiActive) return "NDI sender is stopped."
+    if (status?.ndiError) return { label: "NDI error", tone: "warn", detail: `NDI sender error · ${status.ndiError}` }
+    if (!status?.ndiActive) return { label: "NDI stopped", tone: "warn", detail: "NDI sender is stopped." }
     if (typeof status.ndiReceivers === "number" && status.ndiReceivers > 0) {
-      return `NDI sender active · ${status.ndiReceivers} ${status.ndiReceivers === 1 ? "receiver" : "receivers"} connected; frame acknowledgement is unavailable.`
+      return { label: "NDI active", tone: "info", detail: `${status.ndiReceivers} ${status.ndiReceivers === 1 ? "receiver" : "receivers"} connected; frame acknowledgement is unavailable.` }
     }
-    return "NDI sender active · no receiver connection is reported."
+    return { label: "NDI active", tone: "info", detail: "No receiver connection is reported." }
   }
 
   return status?.previewOpen
-    ? "Host output window is open · local displays do not report receiver acknowledgement."
-    : "Host output window is closed · local displays do not report receiver acknowledgement."
+    ? { label: "Window open", tone: "info", detail: "Host output window is open; local displays do not report receiver acknowledgement." }
+    : { label: "Window closed", tone: "warn", detail: "Host output window is closed; local displays do not report receiver acknowledgement." }
 }
