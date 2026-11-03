@@ -115,11 +115,17 @@ fi
 capture_live_state() {
   local name="$1"
   local scenario="$2"
-  local screenshot="$QA_SCRATCH/artifacts/live-${name}.png"
-  mkdir -p "$QA_SCRATCH/artifacts"
   "$ROOT/scripts/mac-qa/qa.py" main "live-${name}" "$ROOT/scripts/mac-qa/${scenario}" 60 > "$QA_SCRATCH/live-${name}.json"
+  mkdir -p "$QA_SCRATCH/artifacts"
   cp "$QA_RUN/out/live-${name}.json" "$QA_SCRATCH/artifacts/live-${name}-state.json"
   sleep 1
+  capture_live_window "live-${name}"
+}
+
+capture_live_window() {
+  local name="$1"
+  local screenshot="$QA_SCRATCH/artifacts/${name}.png"
+  mkdir -p "$QA_SCRATCH/artifacts"
   local window_id
   window_id="$(swift "$ROOT/scripts/mac-qa/rhema-window-id.swift")"
   screencapture -x -l "$window_id" "$screenshot"
@@ -139,10 +145,67 @@ print(f"Captured {path.name}: {width}x{height}, {len(data)} bytes")
 PY
 }
 
+resize_live_window() {
+  local name="$1"
+  local width="$2"
+  local height="$3"
+  if ! "$ROOT/scripts/mac-qa/qa.py" main "$name" - 20 > "$QA_SCRATCH/$name.json" <<EOF
+const label = window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label
+if (!label) throw new Error("The current native window label is unavailable")
+await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: false })
+await sleep(250)
+const resize = (width, height) => window.__TAURI_INTERNALS__.invoke("plugin:window|set_size", {
+  label,
+  value: { Logical: { width, height } },
+})
+await resize($width, $height)
+await sleep(500)
+let actual = { width: window.innerWidth, height: window.innerHeight }
+for (let correction = 0; correction < 2 && (actual.width !== $width || actual.height !== $height); correction += 1) {
+  await resize($width + ($width - actual.width), $height + ($height - actual.height))
+  await sleep(500)
+  actual = { width: window.innerWidth, height: window.innerHeight }
+}
+if ((actual.width !== $width || actual.height !== $height) && $width >= 1920 && $height >= 1080) {
+  await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: true })
+  await sleep(1000)
+  actual = { width: window.innerWidth, height: window.innerHeight }
+}
+if (actual.width !== $width || actual.height !== $height) {
+  throw new Error("Requested " + $width + "x" + $height + ", native content area is " + actual.width + "x" + actual.height)
+}
+return { ...actual, devicePixelRatio: window.devicePixelRatio }
+EOF
+  then
+    mkdir -p "$QA_SCRATCH/artifacts"
+    cp "$QA_SCRATCH/$name.json" "$QA_SCRATCH/artifacts/$name-result.json"
+    cat "$QA_SCRATCH/$name.json" >&2
+    return 1
+  fi
+  mkdir -p "$QA_SCRATCH/artifacts"
+  cp "$QA_RUN/out/$name.json" "$QA_SCRATCH/artifacts/$name.json"
+}
+
+capture_live_viewports() {
+  local state="$1"
+  local viewport width height
+  for viewport in 1024x700 1366x768 1702x895 1920x1080; do
+    width="${viewport%x*}"
+    height="${viewport#*x}"
+    resize_live_window "live-${state}-${viewport}-viewport" "$width" "$height"
+    sleep 1
+    capture_live_window "live-${state}-${viewport}"
+  done
+  # Return to the QA window's configured size for the next scenario.
+  resize_live_window "live-${state}-viewport-reset" 1280 800
+}
+
 # Capture both states from the built Tauri window. These PNGs come from the
 # native app window, not the browser shim or an illustrative mockup.
 capture_live_state empty-service live-empty-service.js
+capture_live_viewports empty-service
 capture_live_state configured-service live-configured-service.js
+capture_live_viewports configured-service
 capture_live_state find-drawer live-find-drawer.js
 if [[ "${LIVE_SCREENSHOTS_ONLY:-0}" == 1 ]]; then
   echo "Native Live screenshots captured; LIVE_SCREENSHOTS_ONLY=1 skips the longer recorder and scene journeys."
