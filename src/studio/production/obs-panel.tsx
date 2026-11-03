@@ -1,4 +1,4 @@
-import { useId, useState } from "react"
+import { useId, useLayoutEffect, useRef, useState } from "react"
 import { ArrowRightLeftIcon, CircleIcon, EyeIcon, FlagIcon, RefreshCwIcon, SettingsIcon, SquareIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -121,13 +121,45 @@ function ObsRecordingControls() {
   const recording = useObsStore((s) => s.recording)
   const [confirm, setConfirm] = useState<"start" | "stop" | null>(null)
   const [label, setLabel] = useState("")
+  const confirmationRef = useRef<HTMLButtonElement>(null)
+  const startRef = useRef<HTMLButtonElement>(null)
+  const stopRef = useRef<HTMLButtonElement>(null)
+  const sectionRef = useRef<HTMLElement>(null)
+  const returnFocusAfterClose = useRef(false)
   const obs = useObsStore.getState()
+
+  useLayoutEffect(() => {
+    if (confirm) {
+      confirmationRef.current?.focus()
+      return
+    }
+    if (!returnFocusAfterClose.current) return
+    returnFocusAfterClose.current = false
+    const current = useObsStore.getState().recording
+    if (current === null) sectionRef.current?.focus()
+    else (current.active ? stopRef.current : startRef.current)?.focus()
+  }, [confirm, recording?.active])
+
+  const closeConfirmation = () => {
+    returnFocusAfterClose.current = true
+    setConfirm(null)
+  }
+  const performConfirmation = async () => {
+    if (!confirm) return
+    try {
+      if (confirm === "start") await obs.startRecording()
+      else await obs.stopRecording()
+    } finally {
+      closeConfirmation()
+    }
+  }
+
   if (status !== "connected") return null
 
   const active = recording?.active === true
   const timecode = recording?.timecode?.slice(0, 8)
   return (
-    <section aria-label="OBS recording controls" className="flex flex-col gap-2 rounded-md border border-border bg-surface-sunken p-3">
+    <section ref={sectionRef} tabIndex={-1} aria-label="OBS recording controls" className="flex flex-col gap-2 rounded-md border border-border bg-surface-sunken p-3 outline-none focus-visible:ring-2 focus-visible:ring-ring">
       <div className="flex flex-wrap items-center gap-2">
         <span className="mr-auto font-semibold">OBS recording</span>
         {recording === null ? (
@@ -139,19 +171,20 @@ function ObsRecordingControls() {
         )}
         {confirm === null && recording !== null && (
           active
-            ? <Button type="button" size="sm" variant="outline" onClick={() => setConfirm("stop")}><SquareIcon /> Stop recording…</Button>
-            : <Button type="button" size="sm" variant="outline" onClick={() => setConfirm("start")}><CircleIcon /> Start recording…</Button>
+            ? <Button ref={stopRef} type="button" size="sm" variant="outline" onClick={() => setConfirm("stop")}><SquareIcon /> Stop recording…</Button>
+            : <Button ref={startRef} type="button" size="sm" variant="outline" onClick={() => setConfirm("start")}><CircleIcon /> Start recording…</Button>
         )}
       </div>
       {confirm && (
-        <div role="alertdialog" aria-label={confirm === "start" ? "Start OBS recording?" : "Stop OBS recording?"} className="flex flex-wrap items-center gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/5 px-2.5 py-2">
+        <div role="alertdialog" aria-label={confirm === "start" ? "Start OBS recording?" : "Stop OBS recording?"} onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault()
+            closeConfirmation()
+          }
+        }} className="flex flex-wrap items-center gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/5 px-2.5 py-2">
           <span className="min-w-0 flex-1">{confirm === "start" ? "Start a recording in OBS now?" : "Stop the recording in OBS now?"}</span>
-          <Button type="button" size="sm" variant={confirm === "stop" ? "destructive" : "default"} onClick={() => {
-            const action = confirm
-            setConfirm(null)
-            void (action === "start" ? obs.startRecording() : obs.stopRecording())
-          }}>{confirm === "start" ? "Start in OBS" : "Stop in OBS"}</Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => setConfirm(null)}>{confirm === "start" ? "Cancel" : "Keep recording"}</Button>
+          <Button ref={confirmationRef} type="button" size="sm" variant={confirm === "stop" ? "destructive" : "default"} onClick={() => void performConfirmation()}>{confirm === "start" ? "Start in OBS" : "Stop in OBS"}</Button>
+          <Button type="button" size="sm" variant="ghost" onClick={closeConfirmation}>{confirm === "start" ? "Cancel" : "Keep recording"}</Button>
         </div>
       )}
       <div className="flex flex-wrap items-center gap-1.5">

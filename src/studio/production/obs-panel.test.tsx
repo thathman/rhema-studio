@@ -202,11 +202,18 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
 
     await act(async () => button("Start recording…")!.click())
     expect(el.querySelector('[role="alertdialog"]')?.textContent).toContain("Start a recording in OBS now?")
+    expect(document.activeElement).toBe(button("Start in OBS"))
+    await act(async () => document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })))
+    expect(el.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(document.activeElement).toBe(button("Start recording…"))
+
+    await act(async () => button("Start recording…")!.click())
     await act(async () => button("Start in OBS")!.click())
     await settle()
     expect(obs.requests.some((request) => request.type === "StartRecord")).toBe(true)
     expect(useObsStore.getState().recording?.active).toBe(true)
     expect(button("Stop recording…")).toBeTruthy()
+    expect(document.activeElement).toBe(button("Stop recording…"))
 
     await act(async () => button("Stop recording…")!.click())
     expect(el.querySelector('[role="alertdialog"]')?.textContent).toContain("Stop the recording in OBS now?")
@@ -214,6 +221,7 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     await settle()
     expect(obs.requests.some((request) => request.type === "StopRecord")).toBe(true)
     expect(useObsStore.getState().recording?.active).toBe(false)
+    expect(document.activeElement).toBe(button("Start recording…"))
   })
 
   it("follows OBS's own events: a cut made in OBS, a new scene, and Studio Mode on and off", async () => {
