@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
+vi.mock("@/lib/scene-renderer", () => ({ drawScene: vi.fn() }))
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -210,13 +211,75 @@ describe("Present's scenes", () => {
     try {
       await render()
       const toggle = el.querySelector('section[aria-label="Scenes"] > button') as HTMLButtonElement
+      const controlsId = toggle.getAttribute("aria-controls")
+      const controlled = [...el.querySelectorAll<HTMLElement>("[id]")].find((element) => element.id === controlsId)
       expect(toggle.getAttribute("aria-expanded")).toBe("false")
-      expect(el.querySelector('[aria-label^="Scenes for"]')).toBeNull()
+      expect(controlled).toBeDefined()
+      expect(controlled?.hidden).toBe(true)
+      expect(el.querySelector('[aria-label="Quick scene controls for Sanctuary"]')).not.toBeNull()
       // The fold still says what each screen shows.
       expect(toggle.textContent).toContain("Sanctuary: its own feed")
       await click(toggle)
       expect(toggle.getAttribute("aria-expanded")).toBe("true")
+      expect(controlled?.hidden).toBe(false)
       expect(el.querySelector('[aria-label^="Scenes for"]')).not.toBeNull()
+    } finally {
+      window.matchMedia = before
+    }
+  })
+
+  it("keeps a named, output-scoped Take visible while the full scene list is folded", async () => {
+    const before = window.matchMedia
+    window.matchMedia = ((q: string) => ({ matches: q === SCENES_FOLDED_QUERY, media: q, addEventListener() {}, removeEventListener() {} })) as never
+    try {
+      const verse: Verse = { id: 1, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "Jn", chapter: 3, verse: 16, text: "For God so loved the world" }
+      useQueueStore.setState({ items: [{ id: "it-1", reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, verse, scene_id: "cam" }] })
+      useBibleStore.setState({ selectedVerse: verse, selectedSlide: null })
+      await render("overflow")
+
+      const toggle = el.querySelector('section[aria-label="Scenes"] > button') as HTMLButtonElement
+      const quickControls = el.querySelector<HTMLElement>('[aria-label="Quick scene controls for Overflow"]')!
+      const selection = quickControls.querySelector<HTMLSelectElement>('[aria-label="Choose scene for Overflow"]')!
+      const takeScene = quickControls.querySelector<HTMLButtonElement>('[aria-label="Take scene Camera with the Bible to Overflow"]')!
+      expect(toggle.getAttribute("aria-expanded")).toBe("false")
+      expect(selection.value).toBe("cam")
+      expect(takeScene.textContent).toContain("Take to Overflow")
+      expect(takeScene.getAttribute("aria-disabled")).toBeNull()
+      expect(quickControls.textContent).toContain("Layout: own feed")
+
+      await click(takeScene)
+      expect(take).toHaveBeenCalledExactlyOnceWith("overflow", "cam")
+      expect(output("overflow").sceneId).toBe("cam")
+      expect(output(MAIN_OUTPUT_ID).sceneId).toBeUndefined()
+      expect(output("stage").sceneId).toBeUndefined()
+    } finally {
+      window.matchMedia = before
+    }
+  })
+
+  it("requires an explicit scene selection before the compact Take can act", async () => {
+    const before = window.matchMedia
+    window.matchMedia = ((q: string) => ({ matches: q === SCENES_FOLDED_QUERY, media: q, addEventListener() {}, removeEventListener() {} })) as never
+    try {
+      await render()
+      const quickControls = el.querySelector<HTMLElement>('[aria-label="Quick scene controls for Sanctuary"]')!
+      const selection = quickControls.querySelector<HTMLSelectElement>('[aria-label="Choose scene for Sanctuary"]')!
+      const unavailable = quickControls.querySelector<HTMLButtonElement>('[aria-label="Take scene to Sanctuary"]')!
+      expect(selection.value).toBe("")
+      expect(unavailable.getAttribute("aria-disabled")).toBe("true")
+      await click(unavailable)
+      expect(take).not.toHaveBeenCalled()
+
+      await act(async () => {
+        selection.value = "lyr"
+        selection.dispatchEvent(new Event("change", { bubbles: true }))
+      })
+      expect(take).not.toHaveBeenCalled()
+      const takeSelected = quickControls.querySelector<HTMLButtonElement>('[aria-label="Take scene Lyrics on a picture to Sanctuary"]')!
+      expect(takeSelected.getAttribute("aria-disabled")).toBeNull()
+      await click(takeSelected)
+      expect(take).toHaveBeenCalledExactlyOnceWith(MAIN_OUTPUT_ID, "lyr")
+      expect(output("overflow").sceneId).toBeUndefined()
     } finally {
       window.matchMedia = before
     }
