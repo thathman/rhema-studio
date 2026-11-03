@@ -4,7 +4,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use rhema_api::{
     close_pairing, hash_key, new_key_set, new_pairing_window, open_pairing, CommandError, CommandSink, HttpConfig, HttpHandle, KeyEntry, KeySet, Role,
-    OscConfig, OscHandle, PairingWindow, SharedFeeds, SharedVoice, new_voice_hub, SharedLive, SharedStatus, new_feed_hub, new_live_hub, new_shared_status, start_http_server, start_osc_listener,
+    OscConfig, OscHandle, PairingWindow, SceneTakeRefusal, SceneTakeRevisions, SharedFeeds, SharedVoice, new_voice_hub, SharedLive, SharedStatus, new_feed_hub, new_live_hub, new_shared_status, start_http_server, start_osc_listener,
 };
 
 /// Who may send remote commands, shared by both listeners so a revoke takes
@@ -1085,6 +1085,42 @@ pub fn publish_live_state(app: AppHandle, state: State<'_, Mutex<HttpRuntime>>, 
     let live = state.lock().map_err(|e| e.to_string())?.live.clone();
     live.publish(json);
     Ok(())
+}
+
+/// One output or scene id from the main desk for a scene Take: as sent, short and not blank.
+fn scene_take_of(window: &tauri::WebviewWindow, output: String, scene: String) -> Result<rhema_api::command::SceneTake, SceneTakeRefusal> {
+    if window.label() != "main" {
+        return Err(SceneTakeRefusal::NOT_MAIN_DESK);
+    }
+    let valid = |id: &str| !id.is_empty() && id.trim() == id && id.len() <= 128;
+    if !valid(&output) || !valid(&scene) {
+        return Err(SceneTakeRefusal::INVALID);
+    }
+    Ok(rhema_api::command::SceneTake { output, scene })
+}
+
+/// What the main desk reviews in Preview before Take (#410): the output's and the scene's
+/// revisions on this host now. Main window only; no server or network needed.
+#[tauri::command]
+pub fn live_take_revisions(window: tauri::WebviewWindow, state: State<'_, Mutex<HttpRuntime>>, output: String, scene: String) -> Result<SceneTakeRevisions, SceneTakeRefusal> {
+    let take = scene_take_of(&window, output, scene)?;
+    let live = state.lock().map_err(|_| SceneTakeRefusal::UNAVAILABLE)?.live.clone();
+    live.scene_take_revisions(&take)
+}
+
+/// The main desk's single-output scene Take (#410), checked and accepted by this host against the
+/// revisions it reviewed (`live_take_revisions`). Returns the output's accepted revision; the app
+/// then applies it (`takeScene`), and only a receiver's acknowledgement says it was drawn.
+#[tauri::command]
+pub fn local_scene_take(window: tauri::WebviewWindow, state: State<'_, Mutex<HttpRuntime>>, output: String, scene: String, seen: SceneTakeRevisions) -> Result<u64, SceneTakeRefusal> {
+    let take = scene_take_of(&window, output, scene)?;
+    let live = state.lock().map_err(|_| SceneTakeRefusal::UNAVAILABLE)?.live.clone();
+    let accepted = live.accept_scene_take(&take, seen);
+    match &accepted {
+        Ok(revision) => log::info!("scene Take {} -> {} accepted at output revision {revision}", take.scene, take.output),
+        Err(why) => log::info!("scene Take {} -> {} refused: {}", take.scene, take.output, why.code),
+    }
+    accepted
 }
 
 fn valid_group_take_aspect_ratio(value: &str) -> bool {
