@@ -162,6 +162,37 @@ describe("Preview translation refresh", () => {
     expect(useBroadcastStore.getState()).toMatchObject(program)
   })
 
+  it("does not cover selected slide content when its display reference is empty", async () => {
+    const slide: SlideQueueItem = {
+      ...welcomeSlide,
+      reference: "",
+      slide: { title: "Visible slide", body: "The selected content is here." },
+    }
+    useQueueStore.setState({ items: [slide], headers: [], activeIndex: null })
+    useBibleStore.setState({
+      selectedVerse: null,
+      selectedSlide: { item: slide, index: 0 },
+      selectedQueueItemId: slide.id,
+      samplePreview: false,
+    })
+    const program = {
+      isLive: useBroadcastStore.getState().isLive,
+      liveVerse: useBroadcastStore.getState().liveVerse,
+    }
+
+    await act(async () => root!.render(<PreviewPanel onEmptyPreviewAction={vi.fn()} />))
+
+    const preview = document.body.querySelector<HTMLElement>('[data-slot="preview-panel"]')!
+    expect(preview.textContent).not.toContain("Nothing in private Preview")
+    expect(preview.querySelector("button")).toBeNull()
+    expect(preview.querySelector('[aria-hidden="true"]')).toBeNull()
+    expect(canvasVerses.at(-1)).toMatchObject({
+      reference: "Visible slide",
+      segments: [{ text: "The selected content is here." }],
+    })
+    expect(useBroadcastStore.getState()).toMatchObject(program)
+  })
+
   it("previews the selected congregation output in its configured language without changing Program", async () => {
     const baseOutput = useBroadcastStore.getState().outputs[0]!
     useBroadcastStore.setState({

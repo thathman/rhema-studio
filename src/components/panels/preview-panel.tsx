@@ -118,7 +118,8 @@ export function PreviewPanel({ itemLook = false, compact = false, outputLanguage
 
   const previewed = useSelectedItem()?.item ?? null
   const label = usePreviewLabel()
-  const showLiveEmptyState = !compact && !label && !!onEmptyPreviewAction
+  const hasPreviewContent = !!previewed || !!selectedVerse || !!selectedSlide
+  const showLiveEmptyState = !compact && !hasPreviewContent && !!onEmptyPreviewAction
   const bibleItem = previewed && isVerseItem(previewed) ? previewed : null
   const translationChoice = resolveTranslations(bibleItem, { activeTranslationId, secondaryTranslationId, translations, overrideServiceTranslations })
   const secondaryBibleId = isMissing(translationChoice) ? null : translationChoice.secondary
