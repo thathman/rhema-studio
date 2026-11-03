@@ -179,7 +179,7 @@ export function PresentWorkspace() {
                     </option>
                   ))}
                 </select>
-                <span id="live-output-target-scope" className="sr-only">Preview language and scene Take follow this output. Source Take follows its subscriptions.</span>
+                <span id="live-output-target-scope" className="sr-only">Target selects the Preview language and Program view, and scopes scene Take. Source Take follows its subscriptions.</span>
               </label>
             )}
             {liveStatusLabel && <StatusChip tone={liveStatusTone} label={liveStatusLabel} className="max-w-80" />}
@@ -448,7 +448,7 @@ function LiveConsoleSurface({
                 <h2 className="text-sm font-semibold tracking-tight">One-touch moments</h2>
                 <p className="text-xs text-muted-foreground">Temporary screens, with safe return</p>
                 <p id="live-quick-screen-scope" className="text-[0.6875rem] leading-tight text-muted-foreground">
-                  Quick screens use each output’s source routing; Black and Logo go to every feed. Target scopes Preview language and scene Take only.
+                  Target selects Preview language and the Program view shown here, and scopes scene Take. Quick screens and Source Take follow output routing; Black and Logo reach every feed.
                 </p>
               </div>
               <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
