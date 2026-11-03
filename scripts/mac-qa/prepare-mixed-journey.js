@@ -94,7 +94,11 @@ const programSnapshot = (qa) => {
     liveVerse: live.liveVerse,
   }))
 }
-const phaseHeaderSnapshot = (headers) => JSON.parse(JSON.stringify(headers.filter((header) => header.type === "phase")))
+const phaseHeaderSnapshot = (headers) => JSON.parse(JSON.stringify(headers
+  .filter((header) => header.type === "phase")
+  .map(({ id, type, name, at, rule, role, starts_at, advance_seconds, disabled }) => ({
+    id, type, name, at, rule, role, starts_at, advance_seconds, disabled,
+  }))))
 const listenTauriEvent = async (event, handler) => {
   const callback = window.__TAURI_INTERNALS__.transformCallback(handler)
   const eventId = await window.__TAURI_INTERNALS__.invoke("plugin:event|listen", {
@@ -616,7 +620,7 @@ async function runScenario() {
     const reopenedIds = reopened.items.map((item) => item.id)
     if (JSON.stringify(reopenedIds) !== JSON.stringify(expectedIds)) throw new Error(`Saved service changed item IDs/order: ${JSON.stringify(reopenedIds)}`)
     if (JSON.stringify(phaseHeaderSnapshot(reopened.headers)) !== JSON.stringify(expectedPhaseHeaders)) {
-      throw new Error(`Saved service changed phase IDs, order, timing or rules: ${JSON.stringify(phaseHeaderSnapshot(reopened.headers))}`)
+      throw new Error(`Saved service changed phase IDs, order, timing or rules: expected ${JSON.stringify(expectedPhaseHeaders)}; got ${JSON.stringify(phaseHeaderSnapshot(reopened.headers))}`)
     }
     const reopenedPhaseHeaders = phaseHeaderSnapshot(reopened.headers)
     const reopenedEvents = reopened.headers.filter((header) => header.event).sort((a, b) => a.at - b.at)
