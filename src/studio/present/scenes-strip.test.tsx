@@ -216,12 +216,14 @@ describe("Present's scenes", () => {
       expect(toggle.getAttribute("aria-expanded")).toBe("false")
       expect(controlled).toBeDefined()
       expect(controlled?.hidden).toBe(true)
+      expect(controlled?.classList.contains("hidden")).toBe(true)
       expect(el.querySelector('[aria-label="Quick scene controls for Sanctuary"]')).not.toBeNull()
       // The fold still says what each screen shows.
       expect(toggle.textContent).toContain("Sanctuary: its own feed")
       await click(toggle)
       expect(toggle.getAttribute("aria-expanded")).toBe("true")
       expect(controlled?.hidden).toBe(false)
+      expect(controlled?.classList.contains("hidden")).toBe(false)
       expect(el.querySelector('[aria-label^="Scenes for"]')).not.toBeNull()
     } finally {
       window.matchMedia = before

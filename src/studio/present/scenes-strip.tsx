@@ -151,7 +151,7 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
           </span>
         </div>
       )}
-      <div id={controlsId} hidden={!open} className="flex flex-col gap-2">
+      <div id={controlsId} hidden={!open} className={open ? "flex flex-col gap-2" : "hidden"}>
         <div role="group" aria-label={`Scenes for ${output.name}`} className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
           {scenes.map((s) => {
             const onAir = s.id === output.sceneId
