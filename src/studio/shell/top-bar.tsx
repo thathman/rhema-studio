@@ -1,22 +1,11 @@
 import { useState } from "react"
-import { BellIcon, ChevronRightIcon, InfoIcon, SearchIcon, SlidersHorizontalIcon } from "lucide-react"
+import { ChevronRightIcon, InfoIcon, SearchIcon, SlidersHorizontalIcon } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useShellStore } from "@/studio/shell-store"
 import { ShortcutsDialog } from "@/studio/shell/shortcuts-dialog"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { NoticesPanel } from "@/studio/notices-panel"
+import { HostNotices } from "@/studio/shell/host-notices"
 import { PersonLevels, TalkButton, TalkTo } from "@/studio/talk"
 import { hostTalk, setHostChannels, setHostLevel, setVoiceVolume, speakerName, useVoice } from "@/lib/voice"
-import { queueRequest } from "@/lib/queue-request"
-import { useNotices, type ActionMode, type NoticeAction } from "@/stores/notices-store"
-import { useBroadcastStore } from "@/stores/broadcast-store"
-import { activateBibleReference, previewBibleReference } from "@/lib/bible-activate"
-import { songRequest } from "@/lib/song-request"
-import { runSceneNoticeAction } from "@/studio/notice-scene-action"
-import { acceptSceneRequest, declineSceneRequest } from "@/lib/desk-scenes"
-import { useSettingsStore } from "@/stores/settings-store"
-import { useEventClock } from "@/stores/event-clock-store"
-import { useQueueStore } from "@/stores/queue-store"
-import { runOfShowClockRows } from "@/lib/run-of-show"
 import { RuntimeSourceBadge } from "@/studio/shell/runtime-source-badge"
 import { RecorderStatusIndicator } from "@/studio/shell/recorder-status-indicator"
 import type { Workspace } from "@/studio/shell-store"
@@ -46,109 +35,12 @@ export function TopBar({ title, workspace }: { title: string; workspace: Workspa
         <RecorderStatusIndicator workspace={workspace} />
         <button type="button" className={ICON} aria-label="Keyboard shortcuts" title="Keyboard shortcuts" onClick={() => setShortcuts(true)}><InfoIcon /></button>
         <HostTalk />
-        <HostNotices />
+        {workspace === "present" || workspace === "production" ? null : <HostNotices />}
         <RuntimeSourceBadge />
       </div>
       <ShortcutsDialog open={shortcuts} onOpenChange={setShortcuts} />
     </header>
   )
-}
-
-/** The main desk's production notices (Rhema Comms): the bell, with what is unread for this desk. */
-function HostNotices() {
-  const notices = useNotices((s) => s.notices)
-  const read = useNotices((s) => s.read)
-  const operator = useSettingsStore((s) => s.operatorName.trim())
-  const current = useEventClock((s) => s.currentId)
-  const items = useQueueStore((s) => s.items)
-  const headers = useQueueStore((s) => s.headers)
-  const event = runOfShowClockRows(items, headers).rows.find((row) => row.id === current)
-  const me = operator ? `${operator} (main desk)` : "Main desk"
-  const scenes = useBroadcastStore((s) => s.scenes)
-  const rundown = useQueueStore((s) => s.items)
-  const devices = useSettingsStore((s) => s.remoteDevices)
-  const cameras = useSettingsStore((s) => s.cameras)
-  const people = devices.map((d) => d.name)
-  const unread = notices.filter((n) => n.from !== me && (n.to === "host" || n.to === "all") && !read.includes(n.id))
-  return (
-    <Popover onOpenChange={(o) => { if (o) useNotices.getState().markRead(notices.map((n) => n.id)) }}>
-      <PopoverTrigger asChild>
-        <button type="button" className={`${ICON} relative max-[450px]:hidden`} aria-label={unread.length ? `Notices: ${unread.length} new` : "Notices"} title="Production notices from the team">
-          <BellIcon />
-          {unread.length > 0 && <span aria-hidden className={`absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[0.6875rem] font-bold text-white ${unread.some((n) => n.priority === "urgent") ? "bg-on-air" : "bg-primary"}`}>{unread.length}</span>}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-96">
-        <p className="mb-2 text-sm font-semibold">Production notices</p>
-        <NoticesPanel
-          notices={notices}
-          role="host"
-          me={me}
-          eventTitle={event?.reference ?? null}
-          onSend={(n) => useNotices.getState().send({ ...n, from: me, fromId: "host", event: event ? { id: event.id, title: event.reference } : null })}
-          onAnswer={async (id, state, why) => {
-            const a = notices.find((n) => n.id === id)?.action
-            // Persist an explicit Decline before answering the notice; if storage fails, keep both open.
-            if (state === "unable" && a?.kind === "sceneEdit" && !await declineSceneRequest(a.value)) {
-              throw new Error("The decline could not be saved on this host. The request remains open.")
-            }
-            useNotices.getState().answer(id, me, state, why)
-          }}
-          onAction={runNoticeAction}
-          onQueue={queueRequest}
-          scenes={scenes}
-          rundown={rundown}
-          people={people}
-          cameras={cameras.map((c) => c.label || c.name)}
-        />
-        <button type="button" className="mt-2 text-[0.6875rem] text-muted-foreground underline" onClick={() => useShellStore.getState().goTo("team")}>Team activity: approvals and comments</button>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-/** Why a verse asked for did not go up, by how presenting it ended. */
-const NOT_SHOWN: Record<string, string> = {
-  empty: "that verse was not found",
-  missing_translation: "the Bible translation is not on this computer",
-  held_for_approval: "it is waiting for approval",
-  superseded: "something else was shown first",
-}
-
-/**
- * Do what an action request asks, on the main desk, when its button is pressed (Comms C2): null
- * when it was done, else why not, so the answer is Ready only when it really happened. A verse or
- * a song can go to Preview only (`mode`), so nothing goes live until the operator shows it.
- */
-async function runNoticeAction(a: NoticeAction, mode: ActionMode = "show"): Promise<string | null> {
-  if (a.kind === "camera") return null // answering is the action
-  // A joined desk's scene change waiting for the main desk (#243 SC.17): Accept puts it in.
-  if (a.kind === "sceneEdit") return acceptSceneRequest(a.value)
-  if (a.kind === "song") return songRequest(a.value, mode)
-  // A wrap-up warning: its line on the stage display (stage screens only), as the stage message box does.
-  if (a.kind === "wrap") {
-    useBroadcastStore.getState().setStageMessage(a.value.trim().slice(0, 120))
-    return null
-  }
-  if (a.kind === "bible" && mode === "preview") {
-    const outcome = await previewBibleReference(a.value)
-    if (outcome === null) return "that is not a Bible reference"
-    return outcome === "previewed" ? null : NOT_SHOWN.empty
-  }
-  if (a.kind === "bible") {
-    const outcome = await activateBibleReference(a.value)
-    if (outcome === null) return "that is not a Bible reference"
-    return outcome === "presented" ? null : NOT_SHOWN[outcome] ?? "it was not shown"
-  }
-  if (a.kind === "event") {
-    const { items, headers } = useQueueStore.getState()
-    if (!runOfShowClockRows(items, headers).rows.some((row) => row.id === a.value || row.moments.some((moment) => moment.id === a.value))) return "that event is no longer in the run of show"
-    if (useBroadcastStore.getState().rehearsal) return "rehearsal is on, so the event clock does not move"
-    useEventClock.getState().start(a.value)
-    return null
-  }
-  if (a.kind === "scene") return runSceneNoticeAction(a.value)
-  return "this request is not available on the main desk"
 }
 
 /** The main desk's Talk (Rhema Comms voice): hold to talk; who is speaking shows beside it. */
