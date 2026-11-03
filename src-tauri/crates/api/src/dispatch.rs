@@ -35,6 +35,12 @@ pub trait CommandSink: Send + Sync {
     fn requests(&self, _by: &crate::plans::Desk, _q: &crate::plans::RequestQuery) -> Result<serde_json::Value, crate::plans::PlanError> {
         Err(crate::plans::PlanError::Unavailable("this host keeps no approval requests".into()))
     }
+    /// Whether the open service (`service`, the host's own) lets `scene` go to each of `outputs`: an
+    /// approved service only with the scene and each output's look pinned in it (#410). The same
+    /// check the main desk's Take and the app's apply make. A host without services allows it.
+    fn approved_scene_take(&self, _service: Option<&str>, _scene: &str, _outputs: &[String]) -> Result<(), crate::http::SceneTakeRefusal> {
+        Ok(())
+    }
 }
 
 /// A sink that adds `"by"` (the sender) to every frontend event it carries.

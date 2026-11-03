@@ -34,6 +34,7 @@ const noteRemote = (event: string) => useJournalStore.getState().add({ kind: "re
 import { remoteActions } from "@/lib/remote-actions"
 import { confidenceLevel } from "@/lib/confidence"
 import { useApprovalGateStore } from "@/stores/approval-gate-store"
+import { applySceneTake, sceneTakeApproval } from "@/lib/scene-take"
 
 /**
  * Listens for remote control events from the Rust backend (OSC / HTTP API)
@@ -218,7 +219,13 @@ export function useRemoteControl() {
       await withPayload(REMOTE_EVENTS.take_scene, (p) => {
         const b = useBroadcastStore.getState()
         const output = b.outputs.find((o) => o.id === p.output && (o.role ?? "congregation") === "congregation")
-        if (output && typeof p.scene === "string") b.takeScene(output.id, p.scene)
+        if (!output || typeof p.scene !== "string") return
+        const sceneId = p.scene
+        // The host's approved-service rule (#410): an approved service's pinned scene and look, never the saved one.
+        void sceneTakeApproval(sceneId, [output.id]).then((r) => {
+          const why = !r.ok ? r.refusal.message : applySceneTake(output.id, sceneId, r.approved) ? null : "That output or scene changed; nothing changed on screen."
+          if (why) toast.warning(`${output.name}: scene not taken`, { description: `${byOf(p)}${why}` })
+        })
       })
       await withPayload(REMOTE_EVENTS.group_take_scene, (p) => {
         const requestId = typeof p.requestId === "string" && p.requestId.trim() === p.requestId && p.requestId.length <= 128 ? p.requestId : ""
@@ -241,7 +248,12 @@ export function useRemoteControl() {
         void (async () => {
           try {
             const check = await invoke<GroupTakeHostCheck>("remote_group_take_preflight", { byId: p.byId, scene, outputs: outputIds, service: p.service, seen: revisions })
-            const applied = useBroadcastStore.getState().takeGroupScene(requestId, outputIds, scene, p.byId as string, check, revisions, by)
+            const approval = await sceneTakeApproval(scene, outputIds)
+            if (!approval.ok) {
+              useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds, scene, approval.refusal.message, by)
+              return
+            }
+            const applied = useBroadcastStore.getState().takeGroupScene(requestId, outputIds, scene, p.byId as string, check, revisions, by, approval.approved)
             if (!applied) useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds, scene, "Host state changed after review; nothing was applied.", by)
           } catch (error) {
             useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds, scene, error instanceof Error ? error.message : String(error), by)

@@ -363,12 +363,18 @@ async function runScenario() {
       "QA design in My Designs",
     )
     await designRow.click()
-    await waitFor(() => document.querySelector('input#design-document-title')?.value === "QA Approved Design", "saved design editor to reopen")
+    await waitFor(() => document.querySelector('input#design-document-title')?.value === "QA Approved Design", "saved design editor to reopen", 20000)
     await setLabeledColor("Background colour", "#405060")
     await clickButton("Save draft")
     await waitFor(
       () => [...document.querySelectorAll("button")].find((button) => normal(button.textContent) === "Save draft")?.disabled,
       "newer design draft to save",
+    )
+    // Save draft disables as soon as the save starts; Create version enables only once it has finished.
+    await waitFor(
+      () => [...document.querySelectorAll("button")].find((button) => normal(button.textContent) === "Create version" && !button.disabled),
+      "saved draft to allow a new version",
+      20000,
     )
     await clickButton("Create version")
     await waitForAsync(

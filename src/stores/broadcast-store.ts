@@ -36,6 +36,7 @@ import { captureSceneAppearance, normalizeScene, presetFromScene, sceneClock, sc
 import { hasPendingRemotePolicyUpdate, useSettingsStore } from "@/stores/settings-store"
 import { cameraDownState, cameraLabelOf, useRouterHealth } from "@/lib/cameras"
 import type { Scene, SceneAppearanceSnapshot, SceneFrame, SceneLayerKind } from "@/types"
+import type { ApprovedSceneTake } from "@/lib/scene-take"
 import type { CountdownTargets } from "@/lib/countdown"
 import { zoneCity } from "@/lib/stage-clock"
 import { countdownFrame, countsToTarget, DEFAULT_COUNTDOWN_LOOK, lookCounting, NO_COUNTDOWN_SOURCES, normalizeCountdownLook, type CountdownSources } from "@/lib/countdown-display"
@@ -209,7 +210,7 @@ interface BroadcastState {
   /** Record an unresolved request before async host preflight so restart never implies success. */
   recordGroupTakePending: (requestId: string, outputIds: string[], sceneId: string, service: string, byId: string, by?: string) => boolean
   /** Apply only if authority, service, scene and every output still match the host check. */
-  takeGroupScene: (requestId: string, outputIds: string[], sceneId: string, byId: string, check: GroupTakeHostCheck, requestedRevisions: Record<string, number>, by?: string) => boolean
+  takeGroupScene: (requestId: string, outputIds: string[], sceneId: string, byId: string, check: GroupTakeHostCheck, requestedRevisions: Record<string, number>, by?: string, approved?: ApprovedSceneTake | null) => boolean
   /** Keep a refusal visible to the requesting Screens desk without changing any output. */
   recordGroupTakeFailure: (requestId: string, outputIds: string[], sceneId: string, reason: string, by?: string) => void
   /** The church's own scene presets (arrangements saved from scenes), beside the built-in ones. Saved. */
@@ -1497,7 +1498,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     void persistGroupTakeResults(groupTakeResults)
     return true
   },
-  takeGroupScene: (requestId, outputIds, sceneId, byId, check, requestedRevisions, by = currentActor()) => {
+  takeGroupScene: (requestId, outputIds, sceneId, byId, check, requestedRevisions, by = currentActor(), approved = null) => {
     if (hasPendingRemotePolicyUpdate()) return false
     const s = get()
     const pending = s.groupTakeResults.find((result) => result.requestId === requestId)
@@ -1538,7 +1539,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       if ((output.language ?? "both") !== expected.language || output.themeId !== expected.themeId || !sameThemeFor || !sameThemeNames || !sameThemeRevisions) return false
       if ((output.shows ?? []).join("\u001f") !== (expected.shows ?? []).join("\u001f") || expected.aspectRatio !== aspectRatioLabel(outputTheme?.resolution)) return false
     }
-    const snapshot = normalizeScene(scene)
+    // An approved service puts up its pinned scene and each output's pinned look (#410), as the host
+    // returned them; the saved scene above only shows nothing changed since review.
+    if (approved && (approved.scene?.id !== sceneId || outputIds.some((id) => !approved.outputs[id]))) return false
+    const snapshot = normalizeScene(approved ? approved.scene : scene)
     if (!snapshot) return false
 
     const at = Date.now()
@@ -1551,7 +1555,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       sceneTakes[output.id] = { sceneId: snapshot.id, revision: ++activations, at, ...(by ? { by } : {}) }
       updates.set(output.id, {
         sceneSnapshot: structuredClone(snapshot),
-        sceneAppearanceSnapshot: captureSceneAppearance(snapshot, output, s.themes, useSettingsStore.getState().brandKit.logoUrl),
+        sceneAppearanceSnapshot: approved
+          ? structuredClone({ ...approved.outputs[output.id]!, approved: { programId: approved.programId, revision: approved.revision, appearanceComplete: true, approvedAt: approved.approvedAt, approvedBy: approved.approvedBy } })
+          : captureSceneAppearance(snapshot, output, s.themes, useSettingsStore.getState().brandKit.logoUrl),
       })
     }
     const outputs = s.outputs.map((output) => {

@@ -818,27 +818,68 @@ impl LiveHub {
 
     fn bump_many(&self, parts: &[String]) -> bool {
         let mut revisions = self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let Some(current) = self.current.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone() else {
-            return false;
-        };
-        let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&current) else {
-            return false;
-        };
-        let Some(object) = value.as_object_mut() else {
-            return false;
-        };
-        if !revisions.bump_many(parts) {
+        if !self.current_is_object() || !revisions.bump_many(parts) {
             return false;
         }
+        self.store_revisions(&revisions);
+        drop(revisions);
+        true
+    }
+
+    fn current_is_object(&self) -> bool {
+        self.current().is_some_and(|c| serde_json::from_str::<serde_json::Value>(&c).is_ok_and(|v| v.is_object()))
+    }
+
+    /// Put the revisions into the current Live State and send it on. Called with the revision lock
+    /// held: a reserved command revision is part of the Live State immediately, including when the
+    /// dispatcher or a later native preflight refuses the operation, and no concurrent Live snapshot
+    /// can overtake it.
+    fn store_revisions(&self, revisions: &Revisions) {
+        let Some(current) = self.current.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone() else { return };
+        let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&current) else { return };
+        let Some(object) = value.as_object_mut() else { return };
         object.insert("revisions".into(), revisions.to_json());
         let updated = serde_json::to_string(&value).unwrap_or(current);
         *self.current.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(updated.clone());
-        // A reserved command revision is part of the Live State immediately, including when the
-        // dispatcher or a later native preflight refuses the operation. Keep the send within the
-        // revision lock so concurrent Live snapshots cannot overtake it.
         let _ = self.tx.send(updated);
-        drop(revisions);
-        true
+    }
+
+    /// What the main desk reviews before a single-output scene Take (#410): the output's and the
+    /// scene's revisions now. Refused like the Take itself would be (a stage output, a missing
+    /// output or scene, nothing published yet).
+    pub fn scene_take_revisions(&self, take: &crate::command::SceneTake) -> Result<SceneTakeRevisions, SceneTakeRefusal> {
+        let revisions = self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let current = self.current().ok_or(SceneTakeRefusal::UNAVAILABLE)?;
+        validate_scene_take_live(Some(&current), take).map_err(SceneTakeRefusal::from_check)?;
+        Ok(SceneTakeRevisions {
+            output: revisions.get(&format!("output:{}", take.output)).ok_or(SceneTakeRefusal::UNAVAILABLE)?,
+            scene: revisions.get(&format!("scene:{}", take.scene)).ok_or(SceneTakeRefusal::UNAVAILABLE)?,
+        })
+    }
+
+    /// The main desk's own single-output scene Take (#410), in this process: no server or network
+    /// needed. The same checks as a desk's `take_scene` over HTTP, but the revisions are required:
+    /// the output and the scene must both still be what the desk reviewed. Accepting it moves the
+    /// output's revision at once, under the same lock as the check, so a desk acting on the old
+    /// one is refused (409) and so is a second press of this one. Returns the output's new
+    /// revision: accepted, not yet applied by the app or drawn by any receiver.
+    pub fn accept_scene_take(&self, take: &crate::command::SceneTake, seen: SceneTakeRevisions) -> Result<u64, SceneTakeRefusal> {
+        let mut revisions = self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let current = self.current().filter(|_| self.current_is_object()).ok_or(SceneTakeRefusal::UNAVAILABLE)?;
+        validate_scene_take_live(Some(&current), take).map_err(SceneTakeRefusal::from_check)?;
+        let output = format!("output:{}", take.output);
+        for (part, saw) in [(output.clone(), seen.output), (format!("scene:{}", take.scene), seen.scene)] {
+            match revisions.get(&part) {
+                None => return Err(SceneTakeRefusal::UNAVAILABLE),
+                Some(now) if now != saw => return Err(SceneTakeRefusal::STALE),
+                Some(_) => {}
+            }
+        }
+        if !revisions.bump_many(std::slice::from_ref(&output)) {
+            return Err(SceneTakeRefusal::UNAVAILABLE);
+        }
+        self.store_revisions(&revisions);
+        revisions.get(&output).ok_or(SceneTakeRefusal::UNAVAILABLE)
     }
 
     fn bump(&self, part: &str) {
@@ -860,6 +901,36 @@ impl LiveHub {
 }
 
 pub type SharedLive = Arc<LiveHub>;
+
+/// The revisions a single-output scene Take acts on (#410): its output's and its scene's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SceneTakeRevisions {
+    pub output: u64,
+    pub scene: u64,
+}
+
+/// Why the host did not accept a main-desk scene Take (#410). `code` is what the desk acts on:
+/// `stale` (409 over HTTP: the output or scene changed, or is gone; read again), `not-congregation`
+/// (403: scenes go to congregation outputs only), `unavailable` (the host has not published its
+/// Live State or that revision yet), `invalid` (a malformed id) or `not-main-desk`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct SceneTakeRefusal {
+    pub code: &'static str,
+    pub message: &'static str,
+}
+
+impl SceneTakeRefusal {
+    pub const STALE: Self = Self { code: "stale", message: "That output or scene changed since you looked; check Preview and Take again" };
+    pub const UNAVAILABLE: Self = Self { code: "unavailable", message: "The host is not ready to check this Take yet; try again in a moment" };
+    pub const INVALID: Self = Self { code: "invalid", message: "Choose a valid output and scene" };
+    pub const NOT_MAIN_DESK: Self = Self { code: "not-main-desk", message: "Scenes are taken from the main desk" };
+    /// The open service is approved, and this scene or output has no usable pinned snapshot in it.
+    pub const NOT_APPROVED: Self = Self { code: "not-approved", message: "This scene is not pinned for that output in the approved service; refresh the approval before taking it" };
+
+    fn from_check((_, message, code): (StatusCode, &'static str, Option<&'static str>)) -> Self {
+        Self { code: code.unwrap_or("stale"), message }
+    }
+}
 
 /// Production notices stay private to the people they are for (Rhema Comms, #251): a paired desk
 /// gets the Live State with only the notices addressed to everyone, to its role, to its key (one
@@ -3043,12 +3114,20 @@ async fn command_handler<S: CommandSink + 'static>(
                     );
                 }
             }
+            if let Err(why) = state.sink.approved_scene_take(state.live.service().as_deref(), &take.scene, &take.outputs) {
+                log::info!("HTTP group Take from {by} refused: {}", why.code);
+                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(why.message.into()), code: Some(why.code), ..Default::default() }));
+            }
         }
     } else {
         if let RemoteCommand::TakeScene(take) = &command {
             if let Err((status, why, code)) = validate_scene_take_live(state.live.current().as_deref(), take) {
                 log::info!("HTTP Take from {by} refused: {why}");
                 return (status, Json(CommandResponse { success: false, error: Some(why.into()), code, ..Default::default() }));
+            }
+            if let Err(why) = state.sink.approved_scene_take(state.live.service().as_deref(), &take.scene, std::slice::from_ref(&take.output)) {
+                log::info!("HTTP Take from {by} refused: {}", why.code);
+                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(why.message.into()), code: Some(why.code), ..Default::default() }));
             }
         }
         if let Some(seen) = request.seen.as_ref() {
@@ -5542,6 +5621,8 @@ mod tests {
         bible_revision: u64,
         /// The service log: one line per command carried out.
         journal: Vec<String>,
+        /// Service s1 is approved with only this scene pinned (#410); None: not approved.
+        pinned: Option<&'static str>,
     }
 
     impl Model {
@@ -5591,6 +5672,31 @@ mod tests {
         fn invoke_backend(&self, _: &str, _: &str) -> Result<(), CommandError> {
             Ok(())
         }
+        fn approved_scene_take(&self, service: Option<&str>, scene: &str, _: &[String]) -> Result<(), SceneTakeRefusal> {
+            match self.model.lock().unwrap().pinned {
+                Some(pinned) if service == Some("s1") && scene != pinned => Err(SceneTakeRefusal::NOT_APPROVED),
+                _ => Ok(()),
+            }
+        }
+    }
+
+    /// #410: in an approved service a desk takes only the scene pinned in it. Anything else is
+    /// refused before it reaches the host app, and the output and its revision stay as they were.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn an_approved_service_refuses_a_desks_take_of_an_unpinned_scene() {
+        let host = HostSim::new(Model { pinned: Some("choir"), ..Model::default() });
+        let (port, mut handle) = sim_server(&host).await;
+        let seen = read_revisions(port, "ka").await;
+        let take = |scene: &str| serde_json::json!({ "command": "take_scene", "value": { "output": "main", "scene": scene }, "seen": seen, "service": "s1" });
+        let (status, body) = press(port, "ka", take("pulpit")).await;
+        assert_eq!(status, 409, "{body}");
+        assert!(body.contains(r#""code":"not-approved""#), "{body}");
+        settle().await;
+        let m = host.model.lock().unwrap().clone();
+        assert_eq!((m.scene, m.scene_revision, m.journal.len()), (None, 0, 0), "nothing reached the output");
+        assert_eq!(read_revisions(port, "ka").await, seen, "no revision moved");
+        assert_eq!(press(port, "ka", take("choir")).await.0, 200, "the pinned scene goes through");
+        handle.stop();
     }
 
     const DESKS: [(&str, &str); 6] = [("ka", "Desk A"), ("kb", "Desk B"), ("kc", "Desk C"), ("kd", "Desk D"), ("ke", "Desk E"), ("kf", "Desk F")];
@@ -5763,6 +5869,83 @@ mod tests {
         assert_eq!(read_revisions(port, "ka").await["output:main"].as_u64(), Some(revision), "the same revision the Live State now gives the output");
         assert!(revision > fresh["output:main"].as_u64().unwrap(), "a new revision for the change");
         assert_eq!(sink.command_count(), 1);
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    /// The Live State a main-desk scene Take is checked against: two congregation outputs and a
+    /// stage display, two scenes; `layers` changes the sermon scene (an edit).
+    fn take_state(layers: &str) -> String {
+        format!(r#"{{"v":1,"service":{{"id":"s1"}},"outputs":[{{"id":"main","name":"Main","sceneId":null}},{{"id":"overflow","name":"Overflow","sceneId":null}},{{"id":"stage","name":"Stage","role":"stage","sceneId":null}}],"scenes":[{{"id":"sermon","name":"Sermon","layers":{layers}}},{{"id":"choir","name":"Choir","layers":[]}}]}}"#)
+    }
+
+    fn scene_take(output: &str, scene: &str) -> crate::command::SceneTake {
+        crate::command::SceneTake { output: output.into(), scene: scene.into() }
+    }
+
+    /// #410: the main desk's own Take, with no server running. It acts only on what the desk
+    /// reviewed and moves only its own output.
+    #[test]
+    fn a_main_desk_take_moves_only_its_output_and_only_on_what_was_reviewed() {
+        let live = new_live_hub();
+        assert_eq!(live.scene_take_revisions(&scene_take("main", "sermon")), Err(SceneTakeRefusal::UNAVAILABLE), "nothing published yet");
+        live.publish(take_state("[]"));
+        let seen = live.scene_take_revisions(&scene_take("main", "sermon")).expect("reviewable");
+        let before = |part: &str| live.revision(part).unwrap();
+        let (overflow, stage, scene) = (before("output:overflow"), before("output:stage"), before("scene:sermon"));
+
+        assert_eq!(live.accept_scene_take(&scene_take("stage", "sermon"), seen).map_err(|r| r.code), Err("not-congregation"));
+        assert_eq!(live.accept_scene_take(&scene_take("lobby", "sermon"), seen), Err(SceneTakeRefusal { code: "stale", message: "That output is no longer on the host; refresh before Take" }));
+        assert_eq!(live.accept_scene_take(&scene_take("main", "gone"), seen).map_err(|r| r.code), Err("stale"));
+        assert_eq!(live.revision("output:main"), Some(seen.output), "refused Takes change no revision");
+
+        let accepted = live.accept_scene_take(&scene_take("main", "sermon"), seen).expect("accepted");
+        assert_eq!(accepted, seen.output + 1, "the output's revision moves at once");
+        assert_eq!(live.revision("output:main"), Some(accepted));
+        let shown: serde_json::Value = serde_json::from_str(&live.current().unwrap()).unwrap();
+        assert_eq!(shown["revisions"]["output:main"].as_u64(), Some(accepted), "and is in the Live State desks read");
+        assert_eq!((before("output:overflow"), before("output:stage"), before("scene:sermon")), (overflow, stage, scene), "no other output, nor the scene, moves");
+
+        assert_eq!(live.accept_scene_take(&scene_take("main", "sermon"), seen), Err(SceneTakeRefusal::STALE), "a second press of the same Take");
+        // Someone edits the scene after it was reviewed: the output is current, the scene is not.
+        live.publish(take_state(r#"[{"id":"t","kind":"text"}]"#));
+        let output_now = SceneTakeRevisions { output: accepted, scene: seen.scene };
+        assert_eq!(live.accept_scene_take(&scene_take("main", "sermon"), output_now), Err(SceneTakeRefusal::STALE), "an edited scene");
+        let fresh = live.scene_take_revisions(&scene_take("main", "sermon")).unwrap();
+        assert!(live.accept_scene_take(&scene_take("main", "sermon"), fresh).is_ok(), "reviewed again, it goes");
+    }
+
+    #[test]
+    fn a_main_desk_take_needs_a_live_state_it_can_read() {
+        let live = new_live_hub();
+        live.publish("not json".into());
+        let seen = SceneTakeRevisions { output: 1, scene: 1 };
+        assert_eq!(live.accept_scene_take(&scene_take("main", "sermon"), seen), Err(SceneTakeRefusal::UNAVAILABLE));
+    }
+
+    /// #410: the main desk's Take and a joined desk's go through the same revisions, so a desk
+    /// still acting on what it saw before the main desk's Take is refused on that output, and only
+    /// on that one.
+    #[tokio::test]
+    async fn a_desk_acting_on_what_it_saw_before_a_main_desk_take_is_refused_on_that_output_only() {
+        let sink = Arc::new(MockSink::new());
+        let live = new_live_hub();
+        live.publish(take_state("[]"));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: crate::keys::key_set_from(&[("ka", "Desk A")]), live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let take = |output: &str, seen: &serde_json::Value| serde_json::json!({ "command": "take_scene", "value": { "output": output, "scene": "choir" }, "seen": seen });
+        let desk_saw = read_revisions(port, "ka").await;
+
+        let seen = live.scene_take_revisions(&scene_take("main", "sermon")).unwrap();
+        live.accept_scene_take(&scene_take("main", "sermon"), seen).expect("the main desk's Take");
+
+        let (status, body) = press(port, "ka", take("main", &desk_saw)).await;
+        assert!(status == 409 && body.contains(r#""code":"stale""#), "{status} {body}");
+        assert_eq!(sink.command_count(), 0);
+        let (status, body) = press(port, "ka", take("overflow", &desk_saw)).await;
+        assert_eq!(status, 200, "another output is untouched by the main desk's Take: {body}");
         let mut handle = result.handle;
         handle.stop();
     }
