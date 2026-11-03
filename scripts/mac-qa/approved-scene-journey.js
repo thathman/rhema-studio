@@ -65,6 +65,9 @@ const setControlValue = async (input, value, label) => {
   await sleep(100)
 }
 const setLabeledColor = async (labelText, value) => {
+  const accessibleInput = [...document.querySelectorAll('input[type="color"]')]
+    .find((candidate) => candidate.getAttribute("aria-label") === labelText)
+  if (accessibleInput) return setControlValue(accessibleInput, value, labelText)
   const label = await waitFor(
     () => [...document.querySelectorAll("label")].find((candidate) => normal(candidate.textContent).startsWith(labelText)),
     "colour control “" + labelText + "”",
@@ -157,7 +160,7 @@ async function runScenario() {
     await clickButton("Customize a copy")
     await waitFor(() => document.querySelector('input#design-document-title'), "editable design template copy")
     await setInput("input#design-document-title", "QA Approved Design")
-    await setLabeledColor("Background colour", "#123456")
+    await setLabeledColor("Artboard background solid colour", "#123456")
     await setInput('input[aria-label="Version note"]', "QA approved scene baseline")
     await waitFor(
       () => [...document.querySelectorAll("button")].some((button) => normal(button.textContent) === "Save draft" && !button.disabled),
@@ -372,7 +375,7 @@ async function runScenario() {
     )
     await designRow.click()
     await waitFor(() => document.querySelector('input#design-document-title')?.value === "QA Approved Design", "saved design editor to reopen", 20000)
-    await setLabeledColor("Background colour", "#405060")
+    await setLabeledColor("Artboard background solid colour", "#405060")
     await waitFor(
       () => [...document.querySelectorAll("button")].some((button) => normal(button.textContent) === "Save draft" && !button.disabled),
       "newer Design draft to become dirty",
