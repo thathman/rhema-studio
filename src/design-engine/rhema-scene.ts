@@ -240,11 +240,6 @@ export function designPages(design: RhemaDesign): RhemaDesignPage[] {
   return [{ id: design.scene.root, nodeId: design.scene.root, title: "Page 1" }]
 }
 
-/**
- * Back to a Rhema scene. Callers must refuse to save when `issues` is nonempty. Supported edits
- * come back in the editor's order with its position, size, visibility and name; unsupported paint,
- * crop and transform edits are reported instead of being silently dropped.
- */
 /** Cropped, rounded or clipped in the editor: outputs then draw it as the editor does. */
 function pictureEdited(node: SaraswatiImageNode): boolean {
   return node.cropX !== 0 || node.cropY !== 0 || node.cropWidth !== undefined || node.cropHeight !== undefined || !!node.clipPath || (node.clipPathStack?.length ?? 0) > 0 || (node.borderRadius ?? 0) > 0
@@ -267,6 +262,11 @@ export function outputCoverPictures(design: Pick<RhemaDesign, "scene" | "binding
   return cover
 }
 
+/**
+ * Back to a Rhema scene. Callers must refuse to save when `issues` is nonempty. Supported edits
+ * come back in the editor's order with its position, size, visibility and name; unsupported paint,
+ * crop and transform edits are reported instead of being silently dropped.
+ */
 export function designToScene(design: RhemaDesign, pageId?: string): { scene: Scene; issues: DesignIssue[] } {
   const issues = pageIssues(design)
   const pages = designPages(design)
