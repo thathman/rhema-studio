@@ -207,9 +207,9 @@ describe("the main desk takes back control (#243)", () => {
 
 describe("one service at a time (#246 C16)", () => {
   it("the Live State names the service and its revision; a desk tags its commands with it", async () => {
-    useServiceStore.setState({ current: { id: "svc-11", title: "11 AM", revision: 4, service_date: null, created_at: "", updated_at: "", item_count: 2 } })
+    useServiceStore.setState({ current: { id: "svc-11", title: "11 AM", revision: 4, approved_revision: 3, service_date: null, created_at: "", updated_at: "", item_count: 2 } })
     const s = buildLiveState()
-    expect(s.service).toEqual({ id: "svc-11", title: "11 AM", revision: 4 })
+    expect(s.service).toEqual({ id: "svc-11", title: "11 AM", revision: 4, approved_revision: 3 })
     expect(serviceOf(s)).toBe("svc-11")
     expect(serviceOf({ ...s, service: null })).toBe("")
     expect(serviceOf({ ...s, service: { title: "an older host" } })).toBeUndefined()

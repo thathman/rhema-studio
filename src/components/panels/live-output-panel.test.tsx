@@ -43,6 +43,15 @@ afterEach(() => {
 })
 
 describe("Present's Program and Preview panels", () => {
+  it("keeps the selected output's named scene action inside Program", async () => {
+    await render(<LiveOutputPanel outputId="main" sceneTakeAction={<div data-slot="live-scene-take-action"><button type="button">Take Welcome to Sanctuary</button></div>} />)
+    const panel = el.querySelector('[data-slot="live-output-panel"]')!
+    const picture = panel.querySelector('[data-slot="live-picture"]')!
+    const action = panel.querySelector('[data-slot="live-scene-take-action"] button')!
+    expect(action.textContent).toBe("Take Welcome to Sanctuary")
+    expect(picture.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it("Program has no second go-live switch and reports whether the screens are on air", async () => {
     await render(<LiveOutputPanel />)
     expect(el.querySelector('[role="switch"]')).toBeNull()

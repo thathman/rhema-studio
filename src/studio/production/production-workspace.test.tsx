@@ -85,7 +85,7 @@ describe("Production control", () => {
     expect([...el.querySelectorAll("button")].some((button) => /^(Start|Pause|Resume|Reset)$/.test(button.textContent?.trim() ?? ""))).toBe(false)
   })
 
-  it("Scenes (once Programs) is the Scene Composer: a ready-made arrangement, Take, and back to the output's own feed", async () => {
+  it("Scenes (once Programs) is a private editor; saved scenes go through the named Program Take", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     useBroadcastStore.setState({ scenes: [], sceneReturn: {} })
     useSettingsStore.setState({ operatorName: "Tolu" })
@@ -96,29 +96,25 @@ describe("Production control", () => {
     await act(async () => tab.click())
     const button = (text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent?.includes(text)) as HTMLButtonElement
     await act(async () => button("Bible and lyrics").click())
-    const takeButton = button("Take Bible and lyrics")
-    const takeDetails = el.querySelector('[aria-label="Take details"]')
     const targetName = useBroadcastStore.getState().outputs.find((o) => (o.role ?? "congregation") === "congregation")?.name
-    expect(takeDetails?.textContent).toContain(`Affected output: ${targetName} only`)
-    expect(takeDetails?.textContent).toContain("Revision: New scene draft; Take saves its first revision first")
-    expect(takeDetails?.textContent).toContain("Actor: Tolu")
-    expect(takeButton.getAttribute("aria-describedby")).toBe(takeDetails?.id)
+    expect(el.textContent).toContain(`Preview output`)
+    expect(el.textContent).toContain(targetName)
+    expect(el.textContent).toContain("This editor is private. Save the scene, choose it in Live → Scenes, then use the named Take on Program.")
+    expect(button("Save scene")).toBeTruthy()
+    expect([...el.querySelectorAll("button")].some((b) => b.textContent?.trim().startsWith("Take "))).toBe(false)
     expect(useBroadcastStore.getState().outputs.find((o) => o.name === targetName)?.sceneId).toBeUndefined()
     expect(el.querySelector('[aria-label="Layers, bottom first"]')?.textContent).toContain("Bible")
-    await act(async () => takeButton.click())
+    await act(async () => button("Save scene").click())
     const s = useBroadcastStore.getState()
     expect(s.scenes.map((x) => x.name)).toEqual(["Bible and lyrics"])
     const main = s.outputs.find((o) => (o.role ?? "congregation") === "congregation")!
-    expect(button("Take Bible and lyrics").getAttribute("aria-label")).toBe(`Take Bible and lyrics to ${main.name}`)
-    expect(main.sceneId).toBe(s.scenes[0].id)
-    expect(button("Back to its own feed").getAttribute("aria-label")).toBe(`Back to ${main.name}'s own feed`)
+    expect(main.sceneId).toBeUndefined()
+    expect([...el.querySelectorAll("button")].some((b) => b.textContent?.trim().startsWith("Take "))).toBe(false)
+    expect(el.querySelector('button[aria-label^="Back to "]')).toBeNull()
     await act(async () => useBroadcastStore.setState({ rehearsal: true }))
-    expect(button("Take Bible and lyrics").getAttribute("aria-label")).toBe(`Rehearse Bible and lyrics on ${main.name}`)
     await act(async () => useBroadcastStore.setState({ rehearsal: false }))
-    await act(async () => button("Back to its own feed").click())
     expect(useBroadcastStore.getState().outputs.find((o) => o.id === main.id)?.sceneId).toBeUndefined()
-    expect(button("Restore Bible and lyrics")).toBeTruthy()
-    expect(button("Restore Bible and lyrics").getAttribute("aria-label")).toBe(`Restore Bible and lyrics to ${main.name}`)
+    expect(button("Preview restore Bible and lyrics for " + main.name)).toBeFalsy()
   })
 
   it("opens Scenes at the scene another page asked for (Design → Templates' Customize a copy)", async () => {
@@ -187,9 +183,7 @@ describe("Production control", () => {
     await act(async () => mount(el))
     const open = async (name: string) => act(async () => ([...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === name) as HTMLButtonElement).click())
     await open("Scenes")
-    const header = el.querySelector('[aria-label="Congregation program"]')!
-    expect(header.querySelector("h2")?.textContent).toBe("Congregation program (screens, 1080p30)")
-    expect(header.textContent).toContain("Online program (OBS, 720p30)")
+    expect(el.textContent).not.toContain("Congregation program (screens, 1080p30)")
     await open("OBS")
     expect(el.querySelector('[aria-label="OBS program"] h3')?.textContent).toBe("Online program (OBS, 720p30)")
     await open("Screens")

@@ -57,6 +57,23 @@ describe("main-desk scene Take", () => {
     expect(calls).toEqual(["publish", "local_scene_take"])
   })
 
+  it("does not apply a Take after the operator moves to a newer Preview while the host is checking", async () => {
+    let release!: (accepted: { revision: number; approved: null }) => void
+    host = (cmd) => cmd === "local_scene_take" ? new Promise((resolve) => { release = resolve }) : null
+    let current = true
+    const pending = takeSceneOnOutput("main", scene.id, seen, () => current)
+    await Promise.resolve()
+    current = false
+    release({ revision: 8, approved: null })
+
+    expect(await pending).toEqual({
+      ok: false,
+      acceptedRevision: 8,
+      refusal: { code: "not-applied", message: "Preview changed while Take was being checked; nothing was applied to Program. Review the current scene before taking again" },
+    })
+    expect(sceneOf("main")).toBeUndefined()
+  })
+
   it.each(["stale", "not-congregation", "not-approved", "unavailable", "not-main-desk"])("changes no output when the host refuses (%s)", async (code) => {
     host = (cmd) => (cmd === "local_scene_take" ? refuse(code)() : null)
     const result = await takeSceneOnOutput("main", scene.id, seen)

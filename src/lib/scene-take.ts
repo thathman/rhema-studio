@@ -110,7 +110,12 @@ export async function sceneTakeApproval(sceneId: string, outputIds: string[]): P
  * Take `sceneId` on `outputId` only, if the output, scene, service and approval are still what
  * Preview reviewed (`seen`). A refusal changes nothing on any output.
  */
-export async function takeSceneOnOutput(outputId: string, sceneId: string, seen: SceneTakeRevisions): Promise<SceneTakeResult> {
+export async function takeSceneOnOutput(
+  outputId: string,
+  sceneId: string,
+  seen: SceneTakeRevisions,
+  isCurrent: () => boolean = () => true,
+): Promise<SceneTakeResult> {
   // Anything changed on this desk since Preview is in the Live State the host checks against.
   publishLiveState()
   let accepted: { revision: number; approved: ApprovedSceneTake | null }
@@ -120,11 +125,22 @@ export async function takeSceneOnOutput(outputId: string, sceneId: string, seen:
     return { ok: false, refusal: refusal(e) }
   }
   const acceptedRevision = accepted.revision
+  // A newer Preview may be chosen while the host command is in flight. The host has
+  // accepted this revision, but the operator's newer choice wins locally.
+  if (!isCurrent()) {
+    return {
+      ok: false,
+      acceptedRevision,
+      refusal: {
+        code: "not-applied",
+        message: "Preview changed while Take was being checked; nothing was applied to Program. Review the current scene before taking again",
+      },
+    }
+  }
   if (!applySceneTake(outputId, sceneId, accepted.approved)) {
     // Accepted, but not applied (the scene or output went in between): the screen is unchanged.
     // The moved revision only makes other desks look again; it never means the output changed.
     return { ok: false, acceptedRevision, refusal: { code: "not-applied", message: "That output or scene changed as you pressed Take; nothing changed on screen. Check Preview and Take again" } }
-  }
   const output = useBroadcastStore.getState().outputs.find((o) => o.id === outputId)!
   if (output.type !== "browser" || !useBroadcastStore.getState().outputStatus[outputId]?.feedActive) {
     return { ok: true, acceptedRevision, receiver: { kind: "none" } }

@@ -7,9 +7,12 @@ import { sceneRevisionLabel, sceneTakeDetails } from "@/lib/scene-take-details"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useServiceStore } from "@/stores/service-store"
 import { cleanIntentId } from "@/lib/item-intent"
+import { sceneTakeApprovalBlockReason } from "@/studio/present/scene-take-policy"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { SceneSheetButton } from "@/studio/present/scene-sheet"
+import type { SceneTakeSelection } from "@/studio/present/live-scene-take-action"
 import type { BroadcastOutput, Scene } from "@/types"
 
 /** Window heights at which the scenes start folded (a 1440×900 laptop and smaller). */
@@ -21,13 +24,18 @@ const isCongregation = (o: BroadcastOutput) => (o.role ?? "congregation") === "c
 export const SCENES_REHEARSAL_NOTE = "Rehearsal: a Take here is practice. The screens keep their scene, and it comes back when rehearsal ends."
 
 /**
- * Scenes in Present (ADR 0001): change what a congregation screen is arranged to show (camera and
- * Bible, lyrics on a picture…) without leaving the live console. Taking a scene changes the
- * screen's layout, not what is live: the words come from the live sources either way. Scenes are
- * made and edited in Live → Production tools → Scenes (a basic one here too: New / Edit scene); this takes them, goes back to the screen's own
- * feed, and restores the last one. Shown only when there is a congregation screen and a saved scene.
+ * Scenes in Present (ADR 0001): choose a private arrangement for a congregation screen (camera and
+ * Bible, lyrics on a picture…) without leaving the live console. Selection does not change the
+ * screen; the named action on Program applies it. The words still come from the live sources.
+ * Scenes are made and edited in Live → Production tools → Scenes. The operator can return to the
+ * screen's own feed and preview the last scene before the same named Take. Shown only when there
+ * is a congregation screen and a saved scene.
  */
-export function ScenesStrip({ className, outputId }: { className?: string; outputId?: string | null }) {
+export function ScenesStrip({ className, outputId, onTakeSelectionChange }: {
+  className?: string
+  outputId?: string | null
+  onTakeSelectionChange?: (selection: SceneTakeSelection | null) => void
+}) {
   const scenes = useBroadcastStore((s) => s.scenes)
   const outputs = useBroadcastStore((s) => s.outputs)
   const congregation = outputs.filter(isCongregation)
@@ -59,7 +67,7 @@ export function ScenesStrip({ className, outputId }: { className?: string; outpu
         <ChevronDownIcon aria-hidden className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
       <div className={cn("flex flex-col gap-2 border-t border-border", open ? "px-3 pt-2 pb-2.5" : "px-2 py-1.5")}>
-        <ScenePicker key={target.id} output={target} scenes={scenes} planned={planned} open={open} controlsId={bodyId} />
+        <ScenePicker key={target.id} output={target} scenes={scenes} planned={planned} open={open} controlsId={bodyId} onTakeSelectionChange={onTakeSelectionChange} />
       </div>
     </section>
   )
@@ -72,12 +80,21 @@ function usePlannedScene(scenes: Scene[]): Scene | null {
 }
 
 /**
- * One congregation screen: its saved scenes to pick from, and Take scene, its own feed, Restore.
- * The previewed item's planned scene starts picked (never taken: Take scene stays the operator's);
+ * One congregation screen: its saved scenes to preview, its own feed, and a restore preview.
+ * The previewed item's planned scene starts picked (never taken: the Program action stays explicit);
  * a pick of the operator's own holds until Preview's planned scene changes.
  */
-function ScenePicker({ output, scenes, planned, open, controlsId }: { output: BroadcastOutput; scenes: Scene[]; planned: Scene | null; open: boolean; controlsId: string }) {
+function ScenePicker({ output, scenes, planned, open, controlsId, onTakeSelectionChange }: {
+  output: BroadcastOutput
+  scenes: Scene[]
+  planned: Scene | null
+  open: boolean
+  controlsId: string
+  onTakeSelectionChange?: (selection: SceneTakeSelection | null) => void
+}) {
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
+  const service = useServiceStore((s) => s.current)
+  const requireApproval = useSettingsStore((s) => s.requireApproval)
   const themes = useBroadcastStore((s) => s.themes)
   const logoUrl = useSettingsStore((s) => s.brandKit.logoUrl)
   const [refreshed, setRefreshed] = useState(false)
@@ -94,6 +111,7 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
     setOwn(undefined)
   }
   const showing = sceneForOutput(output, scenes)
+  const approvalBlock = sceneTakeApprovalBlockReason(rehearsal, service, requireApproval)
   // Already on this screen: nothing to pre-pick.
   const suggested = planned && planned.id !== showing?.id ? planned : null
   const pickedId = own !== undefined ? own : (suggested?.id ?? null)
@@ -103,7 +121,7 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
   const b = useBroadcastStore.getState
 
   const takeReason = !picked ? "Pick a scene above first" : picked.id === showing?.id && picked.updatedAt === showing.updatedAt && !sceneNeedsRefresh(output, scenes, themes, logoUrl) ? `${output.name} already shows ${picked.name}` : null
-  const ownReason = !showing ? `${output.name} already shows its own feed` : null
+  const ownReason = approvalBlock ?? (!showing ? `${output.name} already shows its own feed` : null)
   const restoreReason = showing ? `${output.name} shows ${showing.name}: Restore is for after Back to its own feed` : !restorable ? `${output.name} has not shown a scene yet` : null
   // In rehearsal the scene on a screen is the rehearsal's, never called on air.
   const onAirWord = rehearsal ? "In rehearsal" : "On air"
@@ -114,6 +132,19 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
     actor: operatorName,
     rehearsal,
   }) : null
+
+  useEffect(() => {
+    onTakeSelectionChange?.(picked ? {
+      outputId: output.id,
+      outputName: output.name,
+      sceneId: picked.id,
+      sceneName: picked.name,
+      sceneUpdatedAt: picked.updatedAt,
+      revisionLabel: sceneRevisionLabel(picked),
+      disabledReason: takeReason,
+      details,
+    } : null)
+  }, [output.id, output.name, picked, takeReason, details, onTakeSelectionChange])
 
   return (
     <>
@@ -131,23 +162,8 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
               {scenes.map((scene) => <option key={scene.id} value={scene.id}>{scene.name}</option>)}
             </select>
           </label>
-          <SceneAction
-            icon={<LayersIcon />}
-            label={picked ? `Take scene ${picked.name} to ${output.name}` : `Take scene to ${output.name}`}
-            text={picked ? `Take ${picked.name} to ${output.name}` : `Choose a scene for ${output.name}`}
-            title={picked ? (rehearsal ? `Rehearse ${picked.name} on ${output.name}. The screen keeps its scene.` : `Take ${picked.name} to ${output.name} only.`) : `Choose a scene to take to ${output.name}.`}
-            reason={takeReason}
-            descriptionId={details ? takeDetailsId : undefined}
-            onClick={() => {
-              if (!picked) return
-              b().takeScene(output.id, picked.id)
-              setOwn(null)
-              setRefreshed(false)
-            }}
-            primary
-          />
           <span className="min-w-0 flex-1 truncate text-right text-[0.6875rem] text-muted-foreground" title={`${rehearsal ? "Rehearsal layout" : "Current layout"} on ${output.name}`}>
-            {rehearsal ? "Rehearsal layout" : "Layout"}: {showing?.name ?? "own feed"}{showing ? ` · ${sceneRevisionLabel(showing)}` : ""}
+            Private Preview: {picked?.name ?? "no scene selected"} · {rehearsal ? "Rehearsal layout" : "Layout"}: {showing?.name ?? "own feed"}{showing ? ` · ${sceneRevisionLabel(showing)}` : ""}
           </span>
         </div>
       )}
@@ -191,22 +207,6 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
         </p>}
         <div className="flex flex-wrap items-center gap-1.5">
           <SceneAction
-            icon={<LayersIcon />}
-            label={picked ? `Take scene ${picked.name} to ${output.name}` : "Take scene"}
-            text={`Take to ${output.name}`}
-            title={picked ? (rehearsal ? `Rehearse ${picked.name} on ${output.name}. The screen keeps its scene.` : `Arrange ${output.name} as ${picked.name}. What is live stays live.`) : "Take scene"}
-            reason={takeReason}
-            descriptionId={details ? takeDetailsId : undefined}
-            onClick={() => {
-              if (!picked) return
-              b().takeScene(output.id, picked.id)
-              // Nothing stays picked after a Take, so a second click never takes another scene.
-              setOwn(null)
-              setRefreshed(false)
-            }}
-            primary
-          />
-          <SceneAction
             icon={<UndoIcon />}
             label={`${output.name}: back to its own feed`}
             text="Own feed"
@@ -216,11 +216,15 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
           />
           <SceneAction
             icon={<RotateCcwIcon />}
-            label={restorable ? `Restore ${restorable.name} on ${output.name}` : "Restore scene"}
-            text={restorable ? `Restore ${restorable.name}` : "Restore"}
-            title={restorable ? `Put ${restorable.name} back on ${output.name}` : "Restore the last scene"}
+            label={restorable ? `Preview restore ${restorable.name} on ${output.name}` : "Preview restore scene"}
+            text={restorable ? `Preview restore ${restorable.name}` : "Preview restore"}
+            title={restorable ? `Select ${restorable.name} in private Preview. The Program Take stays a separate action.` : "Choose a scene to preview before taking."}
             reason={restoreReason}
-            onClick={() => restorable && b().takeScene(output.id, restorable.id)}
+            onClick={() => {
+              if (!restorable) return
+              setOwn(restorable.id)
+              setRefreshed(false)
+            }}
           />
           <SceneSheetButton output={output} scene={picked} />
           <span className="min-w-0 flex-1 truncate text-right text-[0.6875rem] text-muted-foreground">
@@ -237,11 +241,8 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
   )
 }
 
-/**
- * A scene control. Like the transport's, one that cannot act stays focusable and says why. Take
- * scene is outlined teal with a layers icon, so it never reads as the solid Take source live.
- */
-function SceneAction({ icon, label, text, title, reason, onClick, primary, descriptionId }: { icon: ReactNode; label: string; text: string; title: string; reason: string | null; onClick: () => void; primary?: boolean; descriptionId?: string }) {
+/** A scene control that cannot act stays focusable and explains why. */
+function SceneAction({ icon, label, text, title, reason, onClick }: { icon: ReactNode; label: string; text: string; title: string; reason: string | null; onClick: () => void }) {
   const reasonId = useId()
   const off = reason !== null
   return (
@@ -250,12 +251,12 @@ function SceneAction({ icon, label, text, title, reason, onClick, primary, descr
         type="button"
         aria-label={label}
         aria-disabled={off || undefined}
-        aria-describedby={off ? reasonId : descriptionId}
+        aria-describedby={off ? reasonId : undefined}
         title={reason ?? title}
         onClick={off ? undefined : onClick}
         className={cn(
           "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-md border px-3 text-xs font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 [&_svg]:size-3.5",
-          primary ? "border-primary/70 bg-card text-primary-text hover:bg-primary/10 aria-disabled:hover:bg-card" : "border-border bg-card text-foreground hover:bg-muted aria-disabled:hover:bg-card"
+          "border-border bg-card text-foreground hover:bg-muted aria-disabled:hover:bg-card"
         )}
       >
         {icon}

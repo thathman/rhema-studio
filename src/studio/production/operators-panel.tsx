@@ -35,6 +35,7 @@ import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { openPermissions } from "@/studio/permissions/navigation"
 import { validAspectRatioLabel } from "@/lib/group-take"
 import { EditorLibraryPreview } from "@/studio/production/editor-library-preview"
+import { deskSceneTakeApprovalBlockReason } from "@/studio/present/scene-take-policy"
 
 // The join form has its own module so Rhema Studio Companion (#209) shows it without the studio's desks.
 export { JoinForm }
@@ -749,12 +750,17 @@ function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveSta
   const send = useJoin.getState().send
   // A camera desk and an editor change scenes but never put one on a screen.
   const takes = role !== "camera" && role !== "editor"
+  const takeBlockReason = deskSceneTakeApprovalBlockReason(live.program.rehearsal, live.service, live.requireApproval ?? false)
   const edits = editsScenes(role)
   const cameraOnly = role === "camera"
   const open = editing === "new" ? null : live.scenes.find((s) => s.id === editing)
   const done = (words: string) => { setEditing(null); setSaid(words) }
   const takeScene = async (scene: LiveStateV1["scenes"][number]) => {
     if (!output) return
+    if (takeBlockReason) {
+      setSaid(takeBlockReason)
+      return
+    }
     const before = output
     const request = ++takeRequest.current
     setReceiverSnapshot(null)
@@ -986,11 +992,12 @@ function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveSta
       ) : (
         <p role={role === "screens" ? "status" : undefined} className="text-muted-foreground">{role === "screens" ? "No congregation output is assigned to this desk. Ask the main host to review output scope in Permissions." : "The host has no congregation output."}</p>
       )}
+      {takes && takeBlockReason && <p role="status" className="text-xs text-amber-700">{takeBlockReason}</p>}
       {receiverStatus && <p role={receiver?.error ? "alert" : "status"} aria-live="polite" className="text-xs text-muted-foreground">{receiverStatus}</p>}
       <ul className="flex flex-wrap gap-1.5">
         {live.scenes.map((s) => (
           <li key={s.id} className="flex items-center gap-0.5">
-            {takes && output && !groupMode && <Button size="sm" variant={s.id === output.sceneId ? "default" : "outline"} aria-label={`${s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} ${s.name} on ${output.name}`} title={`${s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} ${s.name} on ${output.name}`} disabled={!ok || (s.id === output.sceneId && !output.sceneNeedsUpdate) || (takeFeedback?.outputId === output.id && takeFeedback.result === null)} onClick={() => void takeScene(s)}>{s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} {s.name}</Button>}
+            {takes && output && !groupMode && <Button size="sm" variant={s.id === output.sceneId ? "default" : "outline"} aria-label={`${s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} ${s.name} on ${output.name}`} title={takeBlockReason ?? `${s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} ${s.name} on ${output.name}`} disabled={!ok || !!takeBlockReason || (s.id === output.sceneId && !output.sceneNeedsUpdate) || (takeFeedback?.outputId === output.id && takeFeedback.result === null)} onClick={() => void takeScene(s)}>{s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} {s.name}</Button>}
             {!takes && <span className="px-1 font-medium">{s.name}</span>}
             {edits && deskEditable(s) && <Button size="sm" variant="ghost" aria-label={cameraOnly ? `Change the cameras in ${s.name}` : `Edit ${s.name}`} disabled={!ok} onClick={() => { setSaid(""); setEditing(s.id) }}>{cameraOnly ? "Cameras…" : "Edit…"}</Button>}
           </li>
@@ -998,7 +1005,7 @@ function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveSta
         {live.scenes.length === 0 && <li className="text-muted-foreground">No scenes yet{edits && !cameraOnly ? "" : ": they are made on the host (Live → Production tools → Scenes)"}.</li>}
       </ul>
       <div className="flex flex-wrap gap-2">
-        {takes && output?.sceneId && !groupMode && <Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "release_scene", value: output.id })}>Back to its own feed</Button>}
+        {takes && output?.sceneId && !groupMode && <Button size="sm" variant="ghost" title={takeBlockReason ?? undefined} disabled={!ok || !!takeBlockReason} onClick={() => void send({ command: "release_scene", value: output.id })}>Back to its own feed</Button>}
         {/* An older host says nothing about approvals and takes no scenes from a desk. */}
         {edits && !cameraOnly && editing === null && live.requireApproval !== undefined && <Button size="sm" variant="outline" disabled={!ok} onClick={() => { setSaid(""); setEditing("new") }}>New scene…</Button>}
       </div>
@@ -1009,6 +1016,7 @@ function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveSta
         outputScope={outputScope}
         groupTakeScope={groupTakeScope}
         groupMode={groupMode}
+        takeBlockReason={takeBlockReason}
         takePending={takeFeedback?.result === null}
         onGroupModeChange={(active) => setGroupModeState({ context: groupTakeContext, active })}
       />}
@@ -1030,6 +1038,7 @@ function GroupTakeControls({
   outputScope,
   groupTakeScope,
   groupMode,
+  takeBlockReason,
   takePending,
   onGroupModeChange,
 }: {
@@ -1037,6 +1046,7 @@ function GroupTakeControls({
   outputScope: string[]
   groupTakeScope: string[]
   groupMode: boolean
+  takeBlockReason: string | null
   takePending: boolean
   onGroupModeChange: (active: boolean) => void
 }) {
@@ -1051,6 +1061,10 @@ function GroupTakeControls({
   const groupScene = live.scenes.find((scene) => scene.id === groupSceneId) ?? live.scenes[0]
   const send = useJoin.getState().send
   const askForGroupTake = () => {
+    if (takeBlockReason) {
+      setSaid(takeBlockReason)
+      return
+    }
     if (selectedGroupOutputs.length < 2) {
       setSaid("Select at least two granted outputs before reviewing a group Take.")
       return
@@ -1066,6 +1080,10 @@ function GroupTakeControls({
     setReviewGroupTake(true)
   }
   const confirmGroupTake = async () => {
+    if (takeBlockReason) {
+      setSaid(takeBlockReason)
+      return
+    }
     if (!groupScene || selectedGroupOutputs.length < 2) return
     let requestId: string
     try {
@@ -1088,8 +1106,9 @@ function GroupTakeControls({
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-semibold">Group Take</p>
         <span className="text-xs text-muted-foreground">Individual Take is the default. Group mode is temporary and never carries across reconnects.</span>
-        <Button size="sm" variant={groupMode ? "default" : "outline"} disabled={groupOutputs.length < 2 || takePending} aria-pressed={groupMode} onClick={() => { onGroupModeChange(!groupMode); setGroupTargets([]); setSaid("") }}>{groupMode ? "Exit group mode" : "Choose group targets…"}</Button>
+        <Button size="sm" variant={groupMode ? "default" : "outline"} disabled={(!!takeBlockReason && !groupMode) || groupOutputs.length < 2 || takePending} aria-pressed={groupMode} onClick={() => { onGroupModeChange(!groupMode); setGroupTargets([]); setSaid("") }}>{groupMode ? "Exit group mode" : "Choose group targets…"}</Button>
       </div>
+      {takeBlockReason && <p role="status" className="text-xs text-amber-700">Group Take unavailable: {takeBlockReason}</p>}
       {groupOutputs.length < 2 && <p role="status" className="text-xs text-muted-foreground">A separate host grant for at least two congregation outputs is required before group Take can be used.</p>}
       {groupMode && groupOutputs.length >= 2 && <>
         <fieldset className="flex flex-wrap gap-x-4 gap-y-2">
@@ -1105,7 +1124,7 @@ function GroupTakeControls({
               {live.scenes.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
             </select>
           </label>
-          <Button size="sm" disabled={!ok || !groupScene || selectedGroupOutputs.length < 2} onClick={askForGroupTake}>Review {selectedGroupOutputs.length || "group"} outputs…</Button>
+          <Button size="sm" disabled={!ok || !!takeBlockReason || !groupScene || selectedGroupOutputs.length < 2} onClick={askForGroupTake}>Review {selectedGroupOutputs.length || "group"} outputs…</Button>
           {selectedGroupOutputs.length < 2 && <span role="status" className="text-xs text-muted-foreground">Select at least two outputs.</span>}
         </div>
       </>}
@@ -1121,10 +1140,10 @@ function GroupTakeControls({
           <p className="font-semibold">{groupScene?.name ?? "Scene"} to {selectedGroupOutputs.length} outputs</p>
           <ul className="mt-2 grid gap-3">{selectedGroupOutputs.map((candidate) => <GroupTakeOutputReview key={candidate.id} output={candidate} scene={groupScene!} live={live} />)}</ul>
         </div>
-        {said.startsWith("Group Take not sent:") && <p role="alert" className="text-destructive">{said}</p>}
+        {(said.startsWith("Group Take not sent:") || takeBlockReason) && <p role={takeBlockReason ? "status" : "alert"} className="text-destructive">{takeBlockReason ?? said}</p>}
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setReviewGroupTake(false)}>Cancel</Button>
-          <Button type="button" disabled={!ok || !groupScene || !groupImpactReady} onClick={() => void confirmGroupTake()}>Take these {selectedGroupOutputs.length} outputs</Button>
+          <Button type="button" disabled={!ok || !!takeBlockReason || !groupScene || !groupImpactReady} onClick={() => void confirmGroupTake()}>Take these {selectedGroupOutputs.length} outputs</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -13,7 +13,7 @@ const presentCalls = vi.hoisted(() => ({
 
 vi.mock("@/studio/present-actions", () => ({ presentActions: presentCalls }))
 vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, outputLanguageId, onOutputLanguageIdChange }: { compact?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"}>Preview stays private<label>Output<select aria-label="Named congregation output for Preview language and scene Take" value={outputLanguageId ?? ""} onChange={(event) => onOutputLanguageIdChange?.(event.currentTarget.value)}><option value="english-output">English screen</option><option value="yoruba-output">Yoruba screen</option></select></label></section> }))
-vi.mock("@/components/panels/live-output-panel", () => ({ LiveOutputPanel: ({ outputId }: { outputId?: string | null }) => <section data-program-output={outputId ?? "none"}>Program</section> }))
+vi.mock("@/components/panels/live-output-panel", () => ({ LiveOutputPanel: ({ outputId, sceneTakeAction }: { outputId?: string | null; sceneTakeAction?: React.ReactNode }) => <section data-program-output={outputId ?? "none"}>Program{sceneTakeAction}</section> }))
 vi.mock("@/components/panels/transcript-panel", () => ({ TranscriptPanel: () => <div data-testid="transcript-panel">Transcript</div> }))
 vi.mock("@/components/panels/detections-panel", () => ({ DetectionsPanel: () => <div data-testid="detections-panel">Detections</div> }))
 vi.mock("@/components/ui/embedding-warning-banner", () => ({ EmbeddingWarningBanner: () => null }))
@@ -33,7 +33,8 @@ vi.mock("@/studio/present/recorder-dock", () => ({ RecorderDock: () => <section 
 vi.mock("@/studio/present/cue-menu", () => ({ CueMenu: () => <button type="button">Cues</button> }))
 vi.mock("@/studio/engage/host-control", () => ({ EngageHostControl: () => <button type="button">Engage host</button> }))
 vi.mock("@/studio/present/transport-bar", () => ({ TransportBar: ({ className }: { className?: string }) => <div className={className} role="toolbar" aria-label="Presentation controls"><button>Take source live</button></div> }))
-vi.mock("@/studio/present/scenes-strip", () => ({ ScenesStrip: ({ outputId }: { outputId?: string | null }) => <section data-testid="scene-target" data-scene-output={outputId ?? "none"} /> }))
+vi.mock("@/studio/present/scenes-strip", () => ({ ScenesStrip: ({ outputId, onTakeSelectionChange }: { outputId?: string | null; onTakeSelectionChange?: (selection: { outputId: string; outputName: string; sceneId: string; sceneName: string; sceneUpdatedAt: number; revisionLabel: string; disabledReason: null; details: null }) => void }) => <section data-testid="scene-target" data-scene-output={outputId ?? "none"}><button type="button" aria-label={`Preview scene for ${outputId}`} onClick={() => outputId && onTakeSelectionChange?.({ outputId, outputName: outputId === "yoruba-output" ? "Yoruba screen" : "English screen", sceneId: "welcome", sceneName: "Welcome", sceneUpdatedAt: 1, revisionLabel: "Scene v1", disabledReason: null, details: null })}>Preview scene</button></section> }))
+vi.mock("@/studio/present/live-scene-take-action", () => ({ LiveSceneTakeAction: ({ selection }: { selection: { outputName: string; sceneName: string } | null }) => selection ? <div data-testid="named-scene-take">Take {selection.sceneName} to {selection.outputName}</div> : null }))
 vi.mock("@/studio/production/production-workspace", () => ({
   ProductionWorkspace: ({ embedded }: { embedded?: boolean }) => <section data-testid="production-tools" data-embedded={embedded ? "true" : "false"}>Production tools</section>,
 }))
@@ -261,7 +262,7 @@ describe("Present's unified Live console", () => {
     expect(useQueueStore.getState()).toMatchObject({ items: [], headers: [] })
   })
 
-  it("shares one named congregation output across private Preview, Program and scene Take", async () => {
+  it("shares one named congregation output across private Preview, Program and the named scene Take", async () => {
     const baseOutput = useBroadcastStore.getState().outputs[0]!
     useBroadcastStore.setState({ outputs: [
       { ...baseOutput, id: "stage-output", name: "Stage monitor", role: "stage", language: "both" },
@@ -282,6 +283,8 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector<HTMLElement>("[data-program-output]")?.dataset.programOutput).toBe("yoruba-output")
     expect(element.querySelector<HTMLElement>("[data-testid=scene-target]")?.dataset.sceneOutput).toBe("yoruba-output")
     expect(element.querySelectorAll('[aria-label="Named congregation output for Preview language and scene Take"]')).toHaveLength(1)
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Preview scene for yoruba-output"]')!.click())
+    expect(element.querySelector('[data-testid="named-scene-take"]')?.textContent).toBe("Take Welcome to Yoruba screen")
     expect(useBroadcastStore.getState().liveVerse).toEqual(program)
   })
 
