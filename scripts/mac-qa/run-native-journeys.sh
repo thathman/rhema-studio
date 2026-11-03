@@ -149,7 +149,7 @@ resize_live_window() {
   local name="$1"
   local width="$2"
   local height="$3"
-  "$ROOT/scripts/mac-qa/qa.py" main "$name" - 20 > "$QA_SCRATCH/$name.json" <<EOF
+  if ! "$ROOT/scripts/mac-qa/qa.py" main "$name" - 20 > "$QA_SCRATCH/$name.json" <<EOF
 const label = window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label
 if (!label) throw new Error("The current native window label is unavailable")
 await window.__TAURI_INTERNALS__.invoke("plugin:window|set_size", {
@@ -163,6 +163,12 @@ if (actual.width !== $width || actual.height !== $height) {
 }
 return actual
 EOF
+  then
+    mkdir -p "$QA_SCRATCH/artifacts"
+    cp "$QA_SCRATCH/$name.json" "$QA_SCRATCH/artifacts/$name-result.json"
+    cat "$QA_SCRATCH/$name.json" >&2
+    return 1
+  fi
   mkdir -p "$QA_SCRATCH/artifacts"
   cp "$QA_RUN/out/$name.json" "$QA_SCRATCH/artifacts/$name.json"
 }
