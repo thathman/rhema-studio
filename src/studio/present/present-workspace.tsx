@@ -39,7 +39,13 @@ export function PresentWorkspace() {
   const openOutputs = useShellStore((s) => s.openOutputs)
   const isLive = useBroadcastStore((s) => s.isLive)
   // Verses carry a reference; quick screens and custom slides may only have lines.
-  const liveRef = useBroadcastStore((s) => (s.liveVerse ? s.liveVerse.reference || s.liveVerse.lines?.[0] || "Slide" : null))
+  const liveRef = useBroadcastStore((s) => {
+    const verse = s.liveVerse
+    if (!verse) return null
+    if (verse.quickScreen === "black") return "Black"
+    if (verse.quickScreen === "logo") return "Logo"
+    return verse.reference || verse.lines?.[0] || "Slide"
+  })
   const outputs = useBroadcastStore((s) => s.outputs)
   const congregationOutputs = outputs.filter((output) => (output.role ?? "congregation") === "congregation")
   const outputId = congregationOutputs.some((output) => output.id === selectedOutputId)
@@ -53,8 +59,16 @@ export function PresentWorkspace() {
   const warning = useBroadcastStore((s) => s.presentWarning)
   const takeAttempts = useTakeAttemptStore((s) => s.attempts)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
+  const liveStatusLabel = isLive
+    ? `${rehearsal ? "REHEARSAL" : "LIVE"} · ${liveRef ?? "Screen active"}`
+    : liveRef
+      ? `Off air · Restore shows ${liveRef}`
+      : rehearsal
+        ? "Rehearsal · nothing live"
+        : null
+  const liveStatusTone = rehearsal ? "warn" : isLive ? "live" : "off"
   const startsAt = useQueueStore((s) => (s.headers.find((h) => h.type === "phase" && h.role === "main") ?? s.headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at ?? null)
-  const onAir = outputs.filter((o) => outputOnAir(o, outputStatus[o.id])).length
+  const onAir = congregationOutputs.filter((o) => outputOnAir(o, outputStatus[o.id])).length
   const closeTools = () => {
     useProductionTab.setState({ open: false, requested: null })
     const returnFocus = toolsTab === "bible" || toolsTab === "listening"
@@ -91,11 +105,7 @@ export function PresentWorkspace() {
             <p className="truncate text-[0.6875rem] text-muted-foreground">{service ? `${service.title}${startsAt ? ` · starts ${startsAt}` : ""}` : "What is next in your service"}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <StatusChip
-              tone={isLive && liveRef ? (rehearsal ? "warn" : "live") : "off"}
-              label={isLive && liveRef ? `${rehearsal ? "REHEARSAL" : "LIVE"} · ${liveRef}` : liveRef ? `Off air · Restore shows ${liveRef}` : rehearsal ? "Rehearsal · nothing live" : "Nothing live"}
-              className="max-w-80"
-            />
+            {liveStatusLabel && <StatusChip tone={liveStatusTone} label={liveStatusLabel} className="max-w-80" />}
             <StatusChip
               tone={rehearsal ? "warn" : "off"}
               label={rehearsal ? "Rehearsal on" : "Rehearsal off"}
@@ -112,7 +122,7 @@ export function PresentWorkspace() {
             )}
             <StatusChip
               tone={onAir > 0 ? "ok" : "warn"}
-              label={onAir > 0 ? `${onAir}/${outputs.length} outputs on` : "No output on a screen"}
+              label={onAir > 0 ? `${onAir}/${congregationOutputs.length} congregation outputs on` : "No output on a screen"}
               onClick={openOutputs}
               title="Open outputs"
             />
@@ -176,7 +186,7 @@ export function PresentWorkspace() {
         </div>
         {/* Always present, so screen readers announce changes: what is on air, and warnings about it. */}
         <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-          {isLive && liveRef ? `${rehearsal ? "Rehearsal" : "On air"}: ${liveRef}` : "Off air"}
+          {isLive ? `${rehearsal ? "Rehearsal" : "On air"}${liveRef ? `: ${liveRef}` : ""}` : rehearsal ? "Rehearsal: nothing live" : "Off air"}
         </span>
         <span role="alert" aria-atomic="true" className="sr-only">{warning ?? ""}</span>
       </header>

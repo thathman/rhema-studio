@@ -211,6 +211,42 @@ describe("Present's unified Live console", () => {
     expect(useBroadcastStore.getState()).toMatchObject({ isLive: wasLive, liveVerse: program })
   })
 
+  it("leaves the empty Program state in its panel and labels quick screens in the Live header", async () => {
+    useBroadcastStore.setState({ isLive: false, liveVerse: null, rehearsal: false })
+    await renderWorkspace()
+
+    const header = element.querySelector("header")!
+    expect(header.textContent).not.toContain("Nothing live")
+    expect(header.textContent).toContain("Rehearsal off")
+
+    await act(async () => useBroadcastStore.setState({
+      isLive: true,
+      liveVerse: { reference: "", segments: [], lines: [], quickScreen: "black" } as never,
+    }))
+    expect(header.textContent).toContain("LIVE · Black")
+    expect(header.querySelector('[role="status"]')?.textContent).toBe("On air: Black")
+  })
+
+  it("summarizes congregation output status without counting a live Stage display", async () => {
+    const baseOutput = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({
+      outputs: [
+        { ...baseOutput, id: "stage-output", name: "Stage monitor", role: "stage" },
+        { ...baseOutput, id: "english-output", name: "English screen", role: "congregation", language: "first" },
+        { ...baseOutput, id: "yoruba-output", name: "Yoruba screen", role: "congregation", language: "second" },
+      ],
+      outputStatus: {
+        "stage-output": { previewOpen: true, ndiActive: false },
+        "english-output": { previewOpen: true, ndiActive: false },
+        "yoruba-output": { previewOpen: false, ndiActive: false },
+      },
+    })
+    await renderWorkspace()
+
+    expect(element.querySelector("header")?.textContent).toContain("1/2 congregation outputs on")
+    expect(element.querySelector("header")?.textContent).not.toContain("2/3 outputs on")
+  })
+
   it("keeps full private Preview and actual Program in the medium-width Live layout", async () => {
     await renderWorkspace()
 
