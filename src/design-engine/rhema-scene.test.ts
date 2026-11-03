@@ -120,7 +120,7 @@ describe("Rhema scenes in the Avnac engine", () => {
     expect(graded.issues).toEqual([])
     expect(graded.scene.layers[0]).toMatchObject({ color: "#d14c62", gradient: { angle: 90, stops: [{ color: "#d14c62", offset: 0 }, { color: "#3157a4", offset: 1 }] } })
     const badGradient = applyCommand(design.scene, { type: "SET_NODE_FILL", id: "oval", fill: { type: "gradient", css: "", stops: [{ color: "red", offset: 0 }, { color: "#3157a4", offset: 1 }], angle: 90 } })
-    expect(designToScene({ ...design, scene: badGradient }).issues).toContainEqual({ nodeId: "oval", message: "This ellipse gradient cannot be drawn on Rhema outputs: Gradient colours must be hex (#rrggbb, #rrggbbaa) or rgb()/rgba()" })
+    expect(designToScene({ ...design, scene: badGradient }).issues).toContainEqual({ nodeId: "oval", message: "This ellipse gradient cannot be drawn on Rhema outputs: Gradient colours must be hex (#rrggbb, #rrggbbaa) or rgb()/rgba() with whole-number channels" })
     const stroke = applyCommand(design.scene, { type: "SET_NODE_STROKE", id: "oval", stroke: { type: "solid", color: "#ffffff" }, strokeWidth: 2 })
     expect(designToScene({ ...design, scene: stroke }).issues).toContainEqual({ nodeId: "oval", message: "Ellipse stroke and clipping cannot be saved into a Rhema scene yet" })
     const clip = applyCommand(design.scene, { type: "SET_NODE_CLIP_PATH", id: "oval", clipPath: { type: "ellipse", x: 0, y: 0, width: 100, height: 100 } })

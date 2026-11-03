@@ -518,7 +518,7 @@ impl Revisions {
         // Each scene's arrangement (#243 SC.16): whether it is on a screen is not a change to it.
         for sc in v["scenes"].as_array().into_iter().flatten() {
             if let Some(id) = sc["id"].as_str() {
-                out.push((format!("scene:{id}"), serde_json::json!([sc["name"], sc["background"], sc["fadeMs"], sc["layers"]]).to_string()));
+                out.push((format!("scene:{id}"), serde_json::json!([sc["name"], sc["background"], sc["backgroundGradient"], sc["fadeMs"], sc["layers"]]).to_string()));
             }
         }
         out
@@ -5877,6 +5877,20 @@ mod tests {
     /// stage display, two scenes; `layers` changes the sermon scene (an edit).
     fn take_state(layers: &str) -> String {
         format!(r#"{{"v":1,"service":{{"id":"s1"}},"outputs":[{{"id":"main","name":"Main","sceneId":null}},{{"id":"overflow","name":"Overflow","sceneId":null}},{{"id":"stage","name":"Stage","role":"stage","sceneId":null}}],"scenes":[{{"id":"sermon","name":"Sermon","layers":{layers}}},{{"id":"choir","name":"Choir","layers":[]}}]}}"#)
+    }
+
+    /// #448: a scene whose background gradient alone changed is a changed scene, so a desk (or the
+    /// main desk's Take) acting on what it reviewed before looks again.
+    #[test]
+    fn a_background_gradient_change_moves_the_scene_revision() {
+        let live = new_live_hub();
+        let state = |angle: u32| format!(r##"{{"v":1,"scenes":[{{"id":"sermon","name":"Sermon","background":"#0b1a3a","backgroundGradient":{{"angle":{angle},"stops":[{{"color":"#0b1a3a","offset":0}},{{"color":"#d14c62","offset":1}}]}},"layers":[]}}]}}"##);
+        live.publish(state(90));
+        let before = live.revision("scene:sermon").expect("a revision");
+        live.publish(state(90));
+        assert_eq!(live.revision("scene:sermon"), Some(before), "the same scene again");
+        live.publish(state(45));
+        assert_eq!(live.revision("scene:sermon"), Some(before + 1));
     }
 
     fn scene_take(output: &str, scene: &str) -> crate::command::SceneTake {

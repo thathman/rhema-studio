@@ -17,7 +17,7 @@ import {
   type SaraswatiTextNode,
 } from "../vendor/avnac/saraswati"
 import type { CountdownTo, DesignPin, Scene, SceneGradient, SceneLayer } from "../types/scene"
-import { gradientCss, gradientIssue, normalizeGradient } from "../lib/scene-gradient"
+import { gradientCss, gradientFallback, gradientIssue, normalizeGradient } from "../lib/scene-gradient"
 
 /** The editing frame: a 1920×1080 artboard; layer boxes are kept in % of it, as Rhema keeps them. */
 export const DESIGN_WIDTH = 1920
@@ -338,7 +338,7 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         if (!gradient) issues.push({ nodeId: node.id, message: `This gradient fill cannot be drawn on Rhema outputs: ${gradientIssue(node.fill)}` })
         else {
           // Older builds show the first colour; this build and every output draw the gradient.
-          layer.color = gradient.stops[0]!.color
+          layer.color = gradientFallback(gradient)
           layer.gradient = gradient
         }
       } else if (node.fill.type !== "solid") {
@@ -382,7 +382,7 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         layer.color = node.fill.color
         delete layer.gradient
       } else if (compatible && gradient) {
-        layer.color = gradient.stops[0]!.color
+        layer.color = gradientFallback(gradient)
         layer.gradient = gradient
       }
     } else {
@@ -390,7 +390,7 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
     }
     layers.push(layer)
   }
-  const background = artboardBg.type === "solid" ? (artboardBg.color === "rgba(0,0,0,0)" ? "transparent" : artboardBg.color) : (backgroundGradient?.stops[0]?.color ?? "#000000")
+  const background = artboardBg.type === "solid" ? (artboardBg.color === "rgba(0,0,0,0)" ? "transparent" : artboardBg.color) : (backgroundGradient ? gradientFallback(backgroundGradient, true) : "#000000")
   // The artboard alone says the background: a gradient left in older metadata never comes back.
   const meta: Partial<Scene> = { ...design.meta }
   delete meta.backgroundGradient

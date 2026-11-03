@@ -131,3 +131,61 @@ it("the Basic scene sheet keeps a background gradient until it sets another back
   expect(recoloured.backgroundGradient).toBeUndefined()
   expect(near(pixel(drawOutput(recoloured, 320, 180), 5, 175), [0x11, 0x22, 0x33, 255])).toBe(true)
 })
+
+describe("gradient paint outside the editor (review of #656)", () => {
+  it("refuses colours Canvas 2D cannot parse, and draws every form it accepts", async () => {
+    const { gradientIssue } = await import("@/lib/scene-gradient")
+    const { scenePaint } = await import("@/lib/scene-renderer")
+    expect(gradientIssue(g(0, ["rgb(10%, 20, 30)", 0], ["#000000", 1]))).toContain("whole-number channels")
+    expect(gradientIssue(g(0, ["rgb(300, 0, 0)", 0], ["#000000", 1]))).not.toBeNull()
+    const ctx = ctxOf(createCanvas(10, 10))
+    for (const color of ["#abc", "#aabbcc", "#aabbcc80", "rgb(1, 2, 3)", "rgba(1, 2, 3, 0.5)", "RGBA(255,255,255,1)"]) {
+      const paint = g(0, [color, 0], ["#000000", 1])
+      expect(gradientIssue(paint), color).toBeNull()
+      expect(() => scenePaint(ctx, "#000000", paint, { x: 0, y: 0, w: 10, h: 10 }), color).not.toThrow()
+    }
+  })
+
+  it("keeps a #rrggbb solid colour beside every gradient, which desks and approval review accept", () => {
+    let scene = sceneToDesign(painted).scene
+    scene = applyCommand(scene, { type: "SET_ARTBOARD", bg: { type: "gradient", css: "", stops: [{ color: "rgba(0, 0, 0, 0)", offset: 0 }, { color: "#ffffff", offset: 1 }], angle: 0 } })
+    scene = applyCommand(scene, { type: "SET_NODE_FILL", id: "halo", fill: { type: "gradient", css: "", stops: [{ color: "rgba(209, 76, 98, 0.5)", offset: 0 }, { color: "#fff", offset: 1 }], angle: 0 } })
+    scene = applyCommand(scene, { type: "SET_NODE_FILL", id: "panel", fill: { type: "gradient", css: "", stops: [{ color: "#abc", offset: 0 }, { color: "#fff", offset: 1 }], angle: 0 } })
+    const saved = designToScene({ ...sceneToDesign(painted), scene }).scene
+    expect(saved.background).toBe("transparent")
+    expect(saved.layers.find((l) => l.id === "halo")?.color).toBe("#d14c62")
+    expect(saved.layers.find((l) => l.id === "panel")?.color).toBe("#aabbcc")
+    expect(normalizeScene(saved)?.layers.find((l) => l.id === "halo")?.color).toBe("#d14c62")
+  })
+
+  it("a solid colour set over a gradient replaces it; a new gradient stays", async () => {
+    const { useBroadcastStore } = await import("@/stores/broadcast-store")
+    const b = () => useBroadcastStore.getState()
+    b().saveScene(painted)
+    const saved = () => b().scenes.find((s) => s.id === painted.id)!
+    // A colour picker patches the colour and leaves the gradient as it was.
+    b().saveScene({ ...saved(), background: "transparent", layers: saved().layers.map((l) => (l.id === "panel" ? { ...l, color: "#112233" } : l)) })
+    expect(saved().backgroundGradient).toBeUndefined()
+    expect(saved().layers.find((l) => l.id === "panel")?.gradient).toBeUndefined()
+    expect(saved().layers.find((l) => l.id === "halo")?.gradient).toEqual(painted.layers[1]!.gradient)
+    // The design editor saves a new gradient with its new fallback colour: kept.
+    b().saveScene({ ...saved(), background: "#d14c62", backgroundGradient: g(45, ["#d14c62", 0], ["#000000", 1]) })
+    expect(saved().backgroundGradient?.angle).toBe(45)
+  })
+
+  it("a joined desk's save keeps the host's gradients unless it changed that colour", async () => {
+    const { mergeDeskScene, sceneForDesk } = await import("@/lib/desk-scenes")
+    const sent = JSON.parse(JSON.stringify(sceneForDesk(painted, false)))
+    // Desks see the gradient (and its revision); what they send back cannot set one.
+    expect(sent.backgroundGradient).toEqual(painted.backgroundGradient)
+    expect(mergeDeskScene({ ...sent, backgroundGradient: g(1, ["#000000", 0], ["#ffffff", 1]) }, painted, { cameras: new Set(), themes: new Set() })?.backgroundGradient).toEqual(painted.backgroundGradient)
+    const renamed = mergeDeskScene({ ...sent, name: "Renamed" }, painted, { cameras: new Set(), themes: new Set() })!
+    expect(renamed.name).toBe("Renamed")
+    expect(renamed.backgroundGradient).toEqual(painted.backgroundGradient)
+    expect(renamed.layers.map((l) => l.gradient)).toEqual(painted.layers.map((l) => l.gradient))
+    const recoloured = mergeDeskScene({ ...sent, background: "#000000", layers: sent.layers.map((l: SceneLayer) => (l.id === "panel" ? { ...l, color: "#112233" } : l)) }, painted, { cameras: new Set(), themes: new Set() })!
+    expect(recoloured.backgroundGradient).toBeUndefined()
+    expect(recoloured.layers.find((l) => l.id === "panel")?.gradient).toBeUndefined()
+    expect(recoloured.layers.find((l) => l.id === "halo")?.gradient).toEqual(painted.layers[1]!.gradient)
+  })
+})

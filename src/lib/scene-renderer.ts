@@ -67,7 +67,12 @@ export function sceneOverlay(frame: SceneFrame | undefined): LowerThird | null {
  */
 export function scenePaint(ctx: CanvasRenderingContext2D, color: string, gradient: SceneGradient | undefined, r: { x: number; y: number; w: number; h: number }): string | CanvasGradient {
   if (!gradient) return color
-  return paintCanvas2DStyle(ctx, { type: "gradient", css: "", stops: gradient.stops, angle: gradient.angle }, { x: r.x, y: r.y, width: r.w, height: r.h }) ?? color
+  try {
+    return paintCanvas2DStyle(ctx, { type: "gradient", css: "", stops: gradient.stops, angle: gradient.angle }, { x: r.x, y: r.y, width: r.w, height: r.h }) ?? color
+  } catch {
+    // A stop this engine cannot parse: the saved solid colour, never a frame that fails to draw.
+    return color
+  }
 }
 
 function rect(l: SceneLayerFrame, width: number, height: number) {
