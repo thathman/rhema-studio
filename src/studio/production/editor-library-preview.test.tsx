@@ -1,8 +1,16 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const { lookupOnHost } = vi.hoisted(() => ({ lookupOnHost: vi.fn() }))
-vi.mock("@/stores/join-store", () => ({ lookupOnHost }))
+const { lookupOnHost, send, canSend } = vi.hoisted(() => ({
+  lookupOnHost: vi.fn(),
+  send: vi.fn(),
+  canSend: { value: true },
+}))
+vi.mock("@/stores/join-store", () => ({
+  lookupOnHost,
+  useJoin: { getState: () => ({ send }) },
+  useCanSend: () => canSend.value,
+}))
 
 import { act } from "react"
 import { createRoot } from "react-dom/client"
@@ -26,6 +34,8 @@ const type = async (input: HTMLInputElement | HTMLSelectElement, value: string) 
 
 beforeEach(async () => {
   lookupOnHost.mockReset()
+  send.mockReset().mockResolvedValue({ ok: true })
+  canSend.value = true
   lookupOnHost.mockImplementation(async (asked: { what: string }) => {
     if (asked.what === "translations") return { active: 1, translations: [{ id: 1, abbreviation: "KJV", name: "King James Version", language: "en" }, { id: 2, abbreviation: "YOR", name: "Bibeli Mimo", language: "yo" }] }
     if (asked.what === "search") return { verses: [{ book: 43, bookName: "John", chapter: 3, verse: 16, text: "For God so loved the world" }] }
@@ -58,7 +68,7 @@ describe("joined Editor Library preview", () => {
     expect(lookupOnHost).toHaveBeenCalledWith({ what: "chapter", translation: 1, book: 43, chapter: 3 })
     expect(element.querySelector('[aria-label="Selected Scripture preview"]')?.textContent).toContain("Verse 16")
     expect(element.querySelector('[aria-label="Selected Scripture preview"]')?.textContent).toContain("KJV")
-    expect(element.textContent).toContain("nothing sent to the host")
+    expect(element.textContent).toContain("not on a screen")
   })
 
   it("searches the host song library and makes the limited summary scope clear", async () => {
@@ -71,6 +81,72 @@ describe("joined Editor Library preview", () => {
     expect(preview?.textContent).toContain("Great Is Thy Faithfulness")
     expect(preview?.textContent).toContain("Full arrangement preview and service draft submission are not part of this joined Editor view yet.")
     expect(element.textContent).toContain("Searching and selecting never changes the service, host Preview, Program, or outputs.")
+  })
+
+  it("requests the selected Scripture for the host rundown without taking it live", async () => {
+    await type(element.querySelector<HTMLInputElement>('[aria-label="Editor Scripture reference or words"]')!, "God so loved")
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Find in host Bible"]')!)
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Editor Scripture results"] button')!)
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Request John 3:16 in host rundown"]')!)
+
+    expect(send).toHaveBeenCalledOnce()
+    expect(send).toHaveBeenCalledWith({ command: "queue_request", value: { kind: "bible", value: "John 3:16" } })
+    expect(element.querySelector('[aria-label="Editor add-to-rundown result"]')?.textContent).toContain("Request sent for John 3:16. Check the host rundown; nothing changed on a screen.")
+  })
+
+  it("requests the selected song by its host Library title", async () => {
+    await type(element.querySelector<HTMLInputElement>('[aria-label="Editor song title, words or hymn number"]')!, "CAC 12")
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Find in host songs"]')!)
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Editor song results"] button')!)
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Request Great Is Thy Faithfulness in host rundown"]')!)
+
+    expect(send).toHaveBeenCalledWith({ command: "queue_request", value: { kind: "song", value: "Great Is Thy Faithfulness" } })
+    expect(element.querySelector('[aria-label="Editor add-to-rundown result"]')?.textContent).toContain("Request sent for Great Is Thy Faithfulness. Check the host rundown; nothing changed on a screen.")
+  })
+
+  it("keeps the rundown action disabled while disconnected or paused", async () => {
+    canSend.value = false
+    await act(async () => root!.render(<EditorLibraryPreview />))
+    await type(element.querySelector<HTMLInputElement>('[aria-label="Editor song title, words or hymn number"]')!, "CAC 12")
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Find in host songs"]')!)
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Editor song results"] button')!)
+
+    expect(element.querySelector<HTMLButtonElement>('[aria-label="Request Great Is Thy Faithfulness in host rundown"]')!.disabled).toBe(true)
+    expect(element.textContent).toContain("The host is not currently accepting actions from this desk.")
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it("shows host refusals instead of claiming a song was added", async () => {
+    send.mockResolvedValueOnce({ ok: false, error: "The main desk changed the service; refresh this desk." })
+    await type(element.querySelector<HTMLInputElement>('[aria-label="Editor song title, words or hymn number"]')!, "CAC 12")
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Find in host songs"]')!)
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Editor song results"] button')!)
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Request Great Is Thy Faithfulness in host rundown"]')!)
+
+    expect(element.querySelector('[aria-label="Editor add-to-rundown result"]')?.textContent).toContain("The main desk changed the service; refresh this desk.")
+    expect(element.textContent).not.toContain("Request sent for Great Is Thy Faithfulness")
+  })
+
+  it("keeps an in-flight rundown result visible when the Editor changes the private preview", async () => {
+    let resolveSend!: (value: { ok: true }) => void
+    const pending = new Promise<{ ok: true }>((resolve) => { resolveSend = resolve })
+    send.mockReturnValueOnce(pending)
+    await type(element.querySelector<HTMLInputElement>('[aria-label="Editor song title, words or hymn number"]')!, "CAC 12")
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Find in host songs"]')!)
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Editor song results"] button')!)
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Request Great Is Thy Faithfulness in host rundown"]')!)
+    expect(element.querySelector('[aria-label="Editor add-to-rundown result"]')?.textContent).toContain("Sending a request for Great Is Thy Faithfulness")
+
+    await type(element.querySelector<HTMLInputElement>('[aria-label="Editor Scripture reference or words"]')!, "God so loved")
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Find in host Bible"]')!)
+    await click(element.querySelector<HTMLButtonElement>('[aria-label="Editor Scripture results"] button')!)
+    expect(element.querySelector('[aria-label="Selected Scripture preview"]')?.textContent).toContain("John 3:16")
+
+    await act(async () => {
+      resolveSend({ ok: true })
+      await pending
+    })
+    expect(element.querySelector('[aria-label="Editor add-to-rundown result"]')?.textContent).toContain("Request sent for Great Is Thy Faithfulness. Check the host rundown; nothing changed on a screen.")
   })
 
   it("ignores an older Scripture lookup that returns after a newer search", async () => {
