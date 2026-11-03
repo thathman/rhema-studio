@@ -405,6 +405,10 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[aria-label="Rhema recording dock"]')?.textContent).toContain("Rhema recording controls")
     expect(element.querySelector('[role="toolbar"][aria-label="Presentation controls"] button')?.textContent).toBe("Take source live")
     const quickActions = element.querySelector<HTMLElement>('[data-testid="quick-screen-actions"]')!
+    const quickScreenGroup = element.querySelector<HTMLElement>('[role="group"][aria-label="Quick screens"]')!
+    const quickScreenScope = element.querySelector<HTMLElement>("#live-quick-screen-scope")
+    expect(quickScreenGroup.getAttribute("aria-describedby")).toBe("live-quick-screen-scope")
+    expect(quickScreenScope?.textContent).toBe("Quick screens use each output’s source routing; Black and Logo go to every feed. Target scopes Preview language and scene Take only.")
     expect(quickActions.className).toContain("max-[1200px]:grid-cols-4")
     expect(quickActions.className).toContain("max-[800px]:grid-cols-2")
     expect(quickActions.className).toContain("overflow-x-hidden")
