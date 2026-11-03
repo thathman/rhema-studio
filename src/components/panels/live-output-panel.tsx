@@ -119,7 +119,7 @@ export function LiveOutputPanel({ outputId }: { outputId?: string | null } = {})
         <span title={output?.name} className="max-w-28 shrink-0 truncate text-[0.6875rem] font-semibold text-foreground">{output?.name ?? "No output"}</span>
         <StatusChip tone={delivery.tone} label={delivery.label} title={delivery.detail} className="h-6 shrink-0 px-2 text-[0.6875rem]" />
         <p role="status" aria-live="polite" aria-atomic="true" className="min-w-0 truncate text-[0.6875rem] text-muted-foreground">
-          {delivery.detail}
+          <span className="sr-only">{delivery.label}. </span>{delivery.detail}
         </p>
       </div>
       <LiveSourcesStrip />

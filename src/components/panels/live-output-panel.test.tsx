@@ -116,7 +116,7 @@ describe("Present's Program and Preview panels", () => {
 
     expect(el.textContent).toContain("Foyer TV")
     expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe("Receiver confirmed")
-    expect(el.querySelector('[role="status"]')?.textContent).toContain("1 browser page showing the latest Program frame · 1 Google TV.")
+    expect(el.querySelector('[role="status"]')?.textContent).toBe("Receiver confirmed. 1 browser page showing the latest Program frame · 1 Google TV.")
     expect(el.textContent).not.toContain("Host applied")
   })
 
@@ -135,7 +135,7 @@ describe("Present's Program and Preview panels", () => {
     await render(<LiveOutputPanel outputId="foyer" />)
 
     expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe("Behind")
-    expect(el.querySelector('[role="status"]')?.textContent).toContain("2 browser pages connected; the latest Program frame is not confirmed · 1 Google TV.")
+    expect(el.querySelector('[role="status"]')?.textContent).toBe("Behind. 2 browser pages connected; the latest Program frame is not confirmed · 1 Google TV.")
   })
 
   it.each([
@@ -156,7 +156,7 @@ describe("Present's Program and Preview panels", () => {
     await render(<LiveOutputPanel outputId="foyer" />)
 
     expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe(label)
-    expect(el.querySelector('[role="status"]')?.textContent).toBe(detail)
+    expect(el.querySelector('[role="status"]')?.textContent).toBe(`${label}. ${detail}`)
   })
 
   it("reports a host-side feed failure without implying that a receiver saw the frame", async () => {
@@ -173,7 +173,7 @@ describe("Present's Program and Preview panels", () => {
     await render(<LiveOutputPanel outputId="foyer" />)
 
     expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe("Not sending")
-    expect(el.querySelector('[role="status"]')?.textContent).toBe("Host is not sending to this browser feed.")
+    expect(el.querySelector('[role="status"]')?.textContent).toBe("Not sending. Host is not sending to this browser feed.")
   })
 
   it("reports NDI errors as errors rather than host-applied success", async () => {
@@ -190,7 +190,7 @@ describe("Present's Program and Preview panels", () => {
     await render(<LiveOutputPanel outputId="stream" />)
 
     expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe("NDI error")
-    expect(el.querySelector('[role="status"]')?.textContent).toBe("NDI sender error · Frame send failed")
+    expect(el.querySelector('[role="status"]')?.textContent).toBe("NDI error. NDI sender error · Frame send failed")
   })
 
   it("does not claim receiver confirmation for a local host display window", async () => {
