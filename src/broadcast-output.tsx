@@ -275,6 +275,10 @@ function BroadcastCanvas() {
     const { width, height } = data.theme.resolution
     const h = Math.round((height * data.ticker.style.height) / 100)
     const y = data.ticker.style.position === "top" ? 0 : height - h
+    // This band is a drawing of the canvas too: its push says when, or the recorder places it at the
+    // last full drawing (up to 2 s back) or at its arrival, and a band read before a scene change but
+    // arriving after it hides that change (#411 recorder QA).
+    drawnAtRef.current = Date.now()
     try {
       ctx.clearRect(0, y, width, h)
       ctx.drawImage(baseCanvas, 0, y, width, h, 0, y, width, h)
