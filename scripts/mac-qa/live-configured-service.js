@@ -63,6 +63,7 @@ async function runScenario() {
       liveSlide: state.liveSlide,
       liveItemId: state.liveItemId,
       heldLive: state.heldLive,
+      cleared: state.cleared,
       sceneTake: state.sceneTakes?.[targetOutput.id] ?? null,
       outputScene: {
         id: currentOutput?.sceneId ?? null,
