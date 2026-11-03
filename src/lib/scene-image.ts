@@ -56,19 +56,24 @@ export function normalizeImageDraw(raw: unknown): ImageDraw | undefined {
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 
 /**
- * A saved scene's pictures after an edit (`prev` → `next`): the editor's drawing of a picture stays
- * only while that picture and its Rhema crop are the ones it was made for. Another picture (a new
+ * A saved scene's pictures after an edit outside the design editor (`prev` → `next`, same design
+ * pin): the editor's drawing of a picture stays only while that picture and its Rhema crop are the
+ * ones it was made for. Another picture (a new
  * library pick) or a Rhema crop set over it, with the drawing left as it was, drops the drawing, so
  * the picture covers its box with that crop as Rhema's own pictures do.
  */
 export function dropStaleImageDraws(next: Scene, prev: Scene | undefined): Scene {
-  if (!prev) return next
+  // A scene made from another design version (first use, a re-pin) is the editor's own save: its
+  // drawing is right for its picture, even one replaced in the editor with the crop kept.
+  if (!prev || !same(next.design, prev.design)) return next
   const was = new Map(prev.layers.map((l) => [l.id, l]))
   let changed = false
   const layers = next.layers.map((l) => {
     const old = was.get(l.id)
     if (!l.imageDraw || !old || !same(l.imageDraw, old.imageDraw)) return l
-    if (l.imageUrl === old.imageUrl && l.mediaId === old.mediaId && same(l.crop, old.crop)) return l
+    // The same library picture stays the same picture when only its address is filled in (offline data URL).
+    const samePicture = l.mediaId || old.mediaId ? l.mediaId === old.mediaId : l.imageUrl === old.imageUrl
+    if (samePicture && same(l.crop, old.crop)) return l
     changed = true
     const plain = { ...l }
     delete plain.imageDraw

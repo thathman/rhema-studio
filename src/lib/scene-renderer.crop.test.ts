@@ -195,3 +195,22 @@ describe("picture drawing after review", () => {
     expect(stored.layers[0]?.imageDraw).toBeUndefined()
   })
 })
+
+it("a picture replaced in the design editor keeps its crop when the scene is re-pinned to that version", async () => {
+  const { useBroadcastStore } = await import("@/stores/broadcast-store")
+  const b = () => useBroadcastStore.getState()
+  const v1 = { ...edited({ type: "SET_IMAGE_CROP", id: "pic", cropX: 100, cropY: 0, cropWidth: 100, cropHeight: 50 }), id: "repin", design: { id: "d", version: 1 } }
+  b().saveScene(v1)
+  const v2 = { ...v1, design: { id: "d", version: 2 }, layers: [{ ...v1.layers[0]!, mediaId: "m2", imageUrl: "data:image/png;base64,replaced" }] }
+  b().saveScene(v2)
+  expect(b().scenes.find((s) => s.id === "repin")?.layers[0]?.imageDraw).toEqual(v1.layers[0]!.imageDraw)
+})
+
+it("filling in a library picture's address keeps its crop", async () => {
+  const { useBroadcastStore } = await import("@/stores/broadcast-store")
+  const b = () => useBroadcastStore.getState()
+  const scene = { ...edited({ type: "SET_IMAGE_CROP", id: "pic", cropX: 100, cropY: 0, cropWidth: 100, cropHeight: 50 }), id: "hydrate" }
+  b().saveScene({ ...scene, layers: [{ ...scene.layers[0]!, imageUrl: "asset://m1.png" }] })
+  b().saveScene(scene)
+  expect(b().scenes.find((s) => s.id === "hydrate")?.layers[0]?.imageDraw).toEqual(scene.layers[0]!.imageDraw)
+})
