@@ -45,11 +45,21 @@ interface JoinState {
    * main desk has taken back control, or if it is for another service. Says whether the host did it,
    * and if not, why in the host's words.
    */
-  send: (command: { command: string; value?: string | number | Record<string, unknown>; seen?: Record<string, number>; id?: string }) => Promise<SendResult>
+  send: (command: { command: string; value?: string | number | Record<string, unknown>; seen?: Record<string, number>; id?: string; service?: string | null }) => Promise<SendResult>
 }
 
 /** `note`: what the host said about a command it took (a scene change sent to the main desk to accept). `stale`: the desk's copy of a scene was older than the host's. */
-export type SendResult = { ok: true; note?: string } | { ok: false; error: string; stale?: true }
+export type SendResult = { ok: true; note?: string; revision?: number } | { ok: false; error: string; stale?: true }
+
+export interface HostReceiverOutput {
+  id: string
+  feed: boolean
+  watching?: number
+  seq?: number
+  acked?: number
+  confirmed?: boolean
+}
+
 
 /** What a desk is told when someone changed that part of the service before its command arrived. */
 export const STALE_MESSAGE = "Someone changed this first — look again"
@@ -84,6 +94,38 @@ export function serviceOf(live: LiveStateV1 | null): string | undefined {
   if (!live) return undefined
   if (live.service === null) return ""
   return live.service.id
+}
+
+/** Read receiver confirmation from the host, scoped to this paired desk's allowed outputs. */
+export async function readHostReceivers(): Promise<HostReceiverOutput[]> {
+  const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
+  const result = await invoke<unknown>("join_receivers", { address, token })
+  if (!result || typeof result !== "object" || Array.isArray(result) || !Array.isArray((result as { outputs?: unknown }).outputs)) {
+    throw new Error("The host returned a malformed receiver report.")
+  }
+  return (result as { outputs: unknown[] }).outputs.map((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("The host returned a malformed receiver row.")
+    const row = value as Record<string, unknown>
+    if (typeof row.id !== "string" || typeof row.feed !== "boolean") throw new Error("The host returned a malformed receiver row.")
+    if (row.feed && (
+      !Number.isSafeInteger(row.watching) || (row.watching as number) < 0
+      || !Number.isSafeInteger(row.seq) || (row.seq as number) < 0
+      || !Number.isSafeInteger(row.acked) || (row.acked as number) < 0
+      || typeof row.confirmed !== "boolean"
+    )) {
+      throw new Error("The host returned incomplete receiver confirmation.")
+    }
+    return {
+      id: row.id,
+      feed: row.feed,
+      ...(row.feed ? {
+        watching: row.watching as number,
+        seq: row.seq as number,
+        acked: row.acked as number,
+        confirmed: row.confirmed as boolean,
+      } : {}),
+    }
+  })
 }
 
 // The last few arrivals' (this desk's wall time − the host's "at").
@@ -206,10 +248,15 @@ export const useJoin = create<JoinState>((set, get) => ({
   },
   send: async (command) => {
     const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
+    const { service: expectedService, ...payload } = command
     try {
-      const note = await invoke<string | null>("join_command", { address, token, command: withWhatWasSeen(command, get().live), service: serviceOf(get().live) })
+      const service = expectedService !== undefined ? expectedService ?? undefined : serviceOf(get().live)
+      const response = await invoke<unknown>("join_command", { address, token, command: withWhatWasSeen(payload, get().live), service })
       set({ error: null, note: null })
-      return typeof note === "string" && note ? { ok: true, note } : { ok: true }
+      const value = response && typeof response === "object" && !Array.isArray(response) ? response as Record<string, unknown> : null
+      const note = typeof response === "string" ? response : typeof value?.note === "string" ? value.note : undefined
+      const revision = Number.isSafeInteger(value?.revision) && (value?.revision as number) >= 0 ? value?.revision as number : undefined
+      return { ok: true, ...(note ? { note } : {}), ...(revision !== undefined ? { revision } : {}) }
     } catch (e) {
       const msg = String(e)
       // join_command marks the two refusals this desk handles itself (src-tauri/src/commands/join.rs).

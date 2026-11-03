@@ -39,6 +39,20 @@ pub struct Paired {
     secure: Option<SecureLink>,
 }
 
+/// The host's receipt for a desk command. `revision` is present for an accepted single-output Take.
+#[derive(Debug, Serialize)]
+pub struct JoinCommandResult {
+    note: Option<String>,
+    revision: Option<u64>,
+}
+
+fn command_result(response: &serde_json::Value) -> JoinCommandResult {
+    JoinCommandResult {
+        note: response.get("note").and_then(serde_json::Value::as_str).filter(|note| !note.is_empty()).map(String::from),
+        revision: response.get("revision").and_then(serde_json::Value::as_u64),
+    }
+}
+
 /// How to reach `address`, given the secure link held now. With a link for another address (its host
 /// moved a moment ago) nothing is sent: never plain http, where this computer's key would be in the clear.
 fn host_for(secure: Option<&(String, SecureLink)>, address: &str) -> Result<Host, String> {
@@ -160,6 +174,30 @@ pub async fn join_withdraw_request(state: State<'_, JoinRuntime>, address: Strin
     rhema_join::host::withdraw_request(&state.host(&address)?, &token, &id).await
 }
 
+/// Whether a browser receiver drew the latest Program frame for the outputs this desk may see.
+/// The host checks this desk's key and output scope; display windows on the host itself do not
+/// have a receiver report.
+#[tauri::command]
+pub async fn join_receivers(state: State<'_, JoinRuntime>, address: String, token: String) -> Result<serde_json::Value, String> {
+    receiver_report(&state.host(&address)?, &token).await
+}
+
+async fn receiver_report(host: &Host, token: &str) -> Result<serde_json::Value, String> {
+    let response = host.client(Some(Duration::from_secs(6)))?
+        .get(host.url("/api/v1/receivers"))
+        .header("X-Rhema-Key", token)
+        .send().await
+        .map_err(|e| host.unreachable(&e))?;
+    let status = response.status();
+    if status == reqwest::StatusCode::NO_CONTENT {
+        return Ok(serde_json::json!({ "outputs": [] }));
+    }
+    if !status.is_success() {
+        return Err(format!("The host could not report receiver status ({status})"));
+    }
+    response.json().await.map_err(|_| "The host returned an unreadable receiver report".to_string())
+}
+
 /// The body of one command: a fresh `id` (a retry is harmless) and, when known, the service this
 /// desk is looking at (#246 C16), so the host refuses it if it has moved to another one.
 fn command_body(command: serde_json::Value, service: Option<String>) -> serde_json::Value {
@@ -199,7 +237,7 @@ fn refusal(status: u16, error: Option<String>, code: Option<&str>) -> String {
 /// Send one command (the host checks the key's role and the service). A command the host took may
 /// come back with a note for the desk (a scene change sent to the main desk to accept).
 #[tauri::command]
-pub async fn join_command(state: State<'_, JoinRuntime>, address: String, token: String, command: serde_json::Value, service: Option<String>) -> Result<Option<String>, String> {
+pub async fn join_command(state: State<'_, JoinRuntime>, address: String, token: String, command: serde_json::Value, service: Option<String>) -> Result<JoinCommandResult, String> {
     let host = state.host(&address)?;
     let body = command_body(command, service);
     let r = host.client(Some(Duration::from_secs(10)))?.post(host.url("/api/v1/command")).header("X-Rhema-Key", token).json(&body).send().await.map_err(|e| host.unreachable(&e))?;
@@ -207,7 +245,7 @@ pub async fn join_command(state: State<'_, JoinRuntime>, address: String, token:
     let v = r.json::<serde_json::Value>().await.unwrap_or_default();
     let text = |k: &str| v.get(k).and_then(|e| e.as_str()).map(String::from);
     if status.is_success() {
-        return Ok(text("note"));
+        return Ok(command_result(&v));
     }
     Err(refusal(status.as_u16(), text("error"), text("code").as_deref()))
 }
@@ -470,6 +508,14 @@ pub async fn host_discover() -> Result<Vec<Found>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn command_receipt_keeps_the_output_revision_for_take_feedback() {
+        let receipt = command_result(&serde_json::json!({"success": true, "revision": 17}));
+        let encoded = serde_json::to_value(receipt).unwrap();
+        assert_eq!(encoded["revision"], 17);
+        assert!(encoded["note"].is_null());
+    }
 
     #[test]
     fn a_key_never_goes_in_the_clear_to_an_address_a_secure_host_left() {
@@ -800,5 +846,37 @@ mod tests {
         assert!(!JoinRuntime::default().host(&address).unwrap().is_secure());
         let mut h = r.handle;
         h.stop();
+    }
+
+    #[tokio::test]
+    async fn receiver_status_uses_the_joined_key_and_host_output_scope() {
+        use rhema_api::keys::{hash_key, KeyEntry, Keys, Role};
+        let token = "screens-token";
+        let keys: rhema_api::keys::KeySet = Arc::new(std::sync::RwLock::new(Keys {
+            require_auth: true,
+            entries: vec![KeyEntry {
+                hash: hash_key(token), name: "Screens desk".into(), role: Role::Screens,
+                paused: false, output_scope: vec!["tv".into()], group_take_scope: Vec::new(), record: false,
+            }],
+        }));
+        let live = rhema_api::new_live_hub();
+        live.publish(r#"{"v":1,"outputs":[{"id":"tv","name":"Sanctuary TV","type":"browser","role":"congregation"},{"id":"hall","name":"Hall","type":"display","role":"congregation"}]}"#.into());
+        let feeds = rhema_api::new_feed_hub();
+        feeds.set(&[("tv".into(), "feed-token".into())]);
+        let config = rhema_api::HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live, feeds, ..Default::default() };
+        let result = rhema_api::start_http_server(config, Arc::new(Quiet), rhema_api::new_shared_status()).await.unwrap();
+        let address = format!("127.0.0.1:{}", result.bound_port);
+        let host = JoinRuntime::default().host(&address).unwrap();
+
+        let report = receiver_report(&host, token).await.unwrap();
+        assert_eq!(report["outputs"].as_array().unwrap().len(), 1, "the host enforces this desk's output scope: {report}");
+        assert_eq!(report["outputs"][0], serde_json::json!({
+            "id": "tv", "feed": true, "watching": 0, "seq": 0, "acked": 0,
+            "confirmed": false, "ackedAgoMs": null, "tvsWatching": 0
+        }));
+        assert!(receiver_report(&host, "wrong-token").await.is_err(), "a wrong key cannot read receiver state");
+
+        let mut handle = result.handle;
+        handle.stop();
     }
 }

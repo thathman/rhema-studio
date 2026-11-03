@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { cn } from "@/lib/utils"
 import { formatMs } from "@/lib/timer"
 import { setDeskControl } from "@/lib/desk-control"
-import { useCanSend, useJoin } from "@/stores/join-store"
+import { readHostReceivers, useCanSend, useJoin, type HostReceiverOutput, type SendResult } from "@/stores/join-store"
 import type { LiveStateV1 } from "@/lib/live-state"
 import { activatedLabel } from "@/lib/live-sources"
 import { sourceName } from "@/lib/content-names"
@@ -719,6 +719,23 @@ function PrepareDesk() {
  * operator); make or change a scene through the host (#243 SC.16) for a desk that may (a camera
  * desk: its camera boxes only).
  */
+function receiverProgramFingerprint(live: LiveStateV1, outputId: string): string {
+  const output = live.outputs.find((candidate) => candidate.id === outputId)
+  return JSON.stringify({
+    revisions: live.revisions ?? null,
+    output: output ? {
+      sceneId: output.sceneId,
+      sceneRevision: output.sceneRevision,
+      sceneNeedsUpdate: output.sceneNeedsUpdate,
+      sceneLiveDesignRevision: output.sceneLiveDesignRevision,
+      sceneApprovedRevision: output.sceneApprovedRevision,
+    } : null,
+    sources: [...live.sources]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((source) => [source.id, source.revision, source.on, source.state]),
+  })
+}
+
 function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveStateV1; role: string; outputScope: string[]; groupTakeScope: string[] }) {
   const ok = useCanSend()
   const connectionStatus = useJoin((s) => s.status)
@@ -730,9 +747,34 @@ function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveSta
   // The scene open in the editor: its id, "new", or none.
   const [editing, setEditing] = useState<string | null>(null)
   const [said, setSaid] = useState("")
+  const [takeFeedback, setTakeFeedback] = useState<{
+    request: number
+    outputId: string
+    sceneId: string
+    sceneName: string
+    result: SendResult | null
+    receiverBaselineReady: boolean
+    receiverBaselineSeq?: number
+    receiverBaselineFeed?: boolean
+    receiverBaselineError?: string
+    previousOutputRevision: number | undefined
+    previousSceneId: string | null
+    previousSceneRevision: number | null | undefined
+    previousNeedsUpdate: boolean | undefined
+  } | null>(null)
+  const takeRequest = useRef(0)
+  const [receiverSnapshot, setReceiverSnapshot] = useState<{
+    outputId: string
+    sceneId: string
+    revisionFingerprint: string
+    report?: HostReceiverOutput
+    error?: string
+    timedOut?: boolean
+  } | null>(null)
   const congregationOutputs = live.outputs
   const outputs = role === "screens" ? congregationOutputs.filter((o) => outputScope.includes(o.id)) : congregationOutputs
   const output = outputs.find((o) => o.id === outputId) ?? outputs[0]
+  const selectedOutputId = output?.id
   const send = useJoin.getState().send
   // A camera desk and an editor change scenes but never put one on a screen.
   const takes = role !== "camera" && role !== "editor"
@@ -740,23 +782,244 @@ function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveSta
   const cameraOnly = role === "camera"
   const open = editing === "new" ? null : live.scenes.find((s) => s.id === editing)
   const done = (words: string) => { setEditing(null); setSaid(words) }
+  const takeScene = async (scene: LiveStateV1["scenes"][number]) => {
+    if (!output) return
+    const before = output
+    const request = ++takeRequest.current
+    setReceiverSnapshot(null)
+    setTakeFeedback({
+      request,
+      outputId: before.id,
+      sceneId: scene.id,
+      sceneName: scene.name,
+      result: null,
+      receiverBaselineReady: role !== "screens",
+      previousOutputRevision: live.revisions?.[`output:${before.id}`],
+      previousSceneId: before.sceneId,
+      previousSceneRevision: before.sceneRevision,
+      previousNeedsUpdate: before.sceneNeedsUpdate,
+    })
+    const result = await send({
+      command: "take_scene",
+      value: { output: before.id, scene: scene.id },
+      seen: live.revisions,
+      service: live.service === null ? "" : live.service?.id,
+    })
+    if (request !== takeRequest.current) return
+    setTakeFeedback((current) => current?.request === request
+      ? { ...current, result, receiverBaselineReady: role !== "screens" || !result.ok || !!result.note }
+      : current)
+
+    if (role !== "screens" || !result.ok || result.note) return
+    let timer = 0
+    const baseline = await Promise.race([
+      readHostReceivers().then((rows) => ({ rows })).catch((error) => ({ error: String(error) })),
+      new Promise<{ error: string }>((resolve) => {
+        timer = window.setTimeout(() => resolve({ error: "Receiver status did not respond after the Take." }), 1200)
+      }),
+    ])
+    window.clearTimeout(timer)
+    if (request !== takeRequest.current) return
+    let receiverBaselineSeq: number | undefined
+    let receiverBaselineFeed: boolean | undefined
+    let receiverBaselineError: string | undefined
+    if ("rows" in baseline) {
+      const row = baseline.rows.find((candidate) => candidate.id === before.id)
+      if (!row) receiverBaselineError = "The host did not report this output after the Take."
+      else if (!row.feed) receiverBaselineFeed = false
+      else {
+        receiverBaselineFeed = true
+        receiverBaselineSeq = row.seq
+      }
+    } else receiverBaselineError = baseline.error
+    setTakeFeedback((current) => current?.request === request
+      ? { ...current, receiverBaselineReady: true, receiverBaselineSeq, receiverBaselineFeed, receiverBaselineError }
+      : current)
+  }
+
+  const feedback = output && takeFeedback?.outputId === output.id ? takeFeedback : null
+  const revisionFingerprint = output ? receiverProgramFingerprint(live, output.id) : ""
+  const receiver = output
+    && feedback
+    && receiverSnapshot?.outputId === output.id
+    && receiverSnapshot.sceneId === feedback.sceneId
+    && receiverSnapshot.revisionFingerprint === revisionFingerprint
+    ? receiverSnapshot
+    : null
+
+  useEffect(() => {
+    const currentFeedback = feedback
+    const result = currentFeedback?.result
+    if (
+      role !== "screens"
+      || connectionStatus !== "connected"
+      || !selectedOutputId
+      || !currentFeedback
+      || !result?.ok
+      || result.note
+      || !currentFeedback.receiverBaselineReady
+      || currentFeedback.receiverBaselineSeq === undefined
+      || currentFeedback.receiverBaselineFeed !== true
+    ) return
+    const acceptedRevision = result.revision
+    const baselineSeq = currentFeedback.receiverBaselineSeq
+
+    let alive = true
+    const pause = () => new Promise((resolve) => window.setTimeout(resolve, 700))
+    const publishError = (error: string, fingerprint = revisionFingerprint) => {
+      if (alive && takeRequest.current === currentFeedback.request) {
+        setReceiverSnapshot({ outputId: selectedOutputId, sceneId: currentFeedback.sceneId, revisionFingerprint: fingerprint, error })
+      }
+    }
+    const check = async () => {
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        if (!alive || takeRequest.current !== currentFeedback.request) return
+        const currentLive = useJoin.getState().live
+        const currentOutput = currentLive?.outputs.find((candidate) => candidate.id === selectedOutputId)
+        if (!currentLive || !currentOutput) {
+          publishError("The host no longer reports this output. Confirm its assignment in Permissions.")
+          return
+        }
+
+        const currentRevision = currentLive.revisions?.[`output:${selectedOutputId}`]
+        const outputAdvanced = currentFeedback.previousOutputRevision !== undefined && currentRevision !== undefined
+          ? currentRevision > currentFeedback.previousOutputRevision
+          : currentOutput.sceneRevision !== currentFeedback.previousSceneRevision
+            || (currentFeedback.previousNeedsUpdate === true && currentOutput.sceneNeedsUpdate !== true)
+        if (currentOutput.sceneId !== currentFeedback.sceneId) {
+          if (outputAdvanced) {
+            publishError("Current Program changed before receiver confirmation. Review the selected output before taking again.")
+            return
+          }
+          await pause()
+          continue
+        }
+
+        const hostApplied = acceptedRevision !== undefined
+          ? currentRevision !== undefined && currentRevision >= acceptedRevision
+          : outputAdvanced || currentFeedback.previousSceneId !== currentOutput.sceneId
+        if (!hostApplied) {
+          await pause()
+          continue
+        }
+
+        const beforeFingerprint = receiverProgramFingerprint(currentLive, selectedOutputId)
+        try {
+          const rows = await readHostReceivers()
+          if (!alive || takeRequest.current !== currentFeedback.request) return
+          const latestLive = useJoin.getState().live
+          if (!latestLive || receiverProgramFingerprint(latestLive, selectedOutputId) !== beforeFingerprint) continue
+          const report = rows.find((row) => row.id === selectedOutputId)
+          if (!report) {
+            publishError("The host did not report this output. Confirm it is still assigned and connected.", beforeFingerprint)
+            return
+          }
+          setReceiverSnapshot({ outputId: selectedOutputId, sceneId: currentFeedback.sceneId, revisionFingerprint: beforeFingerprint, report })
+          const newFrameDrawn = report.confirmed
+            && report.seq !== undefined
+            && report.acked !== undefined
+            && report.seq > baselineSeq
+            && report.acked >= report.seq
+          if (!report.feed || ((report.watching ?? 0) > 0 && newFrameDrawn)) return
+          if (attempt === 7) {
+            setReceiverSnapshot({ outputId: selectedOutputId, sceneId: currentFeedback.sceneId, revisionFingerprint: beforeFingerprint, report, timedOut: true })
+            return
+          }
+        } catch (error) {
+          publishError(String(error), beforeFingerprint)
+          return
+        }
+        await pause()
+      }
+
+      if (alive && takeRequest.current === currentFeedback.request) {
+        publishError("The host accepted the Take but has not confirmed the requested Program state yet.")
+      }
+    }
+    void check()
+    return () => { alive = false }
+  }, [role, connectionStatus, selectedOutputId, feedback, revisionFingerprint])
+
+  const takeStatus = (() => {
+    if (!feedback) return null
+    if (!feedback.result) return { role: "status" as const, text: `Sending ${feedback.sceneName} to ${output?.name}; waiting for the host response.` }
+    if (!feedback.result.ok) return { role: "alert" as const, text: `${feedback.result.error}. The host did not apply ${feedback.sceneName}.` }
+    if (feedback.result.note) return { role: "status" as const, text: `Approval request sent for ${feedback.sceneName} on ${output?.name}. ${feedback.result.note} Current Program is unchanged until the host approves it.` }
+    if (!output) return { role: "status" as const, text: `The host accepted ${feedback.sceneName}; waiting for the output state.` }
+    const currentRevision = live.revisions?.[`output:${output.id}`]
+    const hostShowsTake = output.sceneId === feedback.sceneId && (feedback.result.revision !== undefined
+      ? currentRevision !== undefined && currentRevision >= feedback.result.revision
+      : currentRevision !== undefined && feedback.previousOutputRevision !== undefined
+        ? currentRevision > feedback.previousOutputRevision
+        : feedback.previousSceneId !== output.sceneId || feedback.previousSceneRevision !== output.sceneRevision
+          || (feedback.previousNeedsUpdate === true && output.sceneNeedsUpdate !== true))
+    if (hostShowsTake) return { role: "status" as const, text: `Host applied ${feedback.sceneName} to ${output.name}.` }
+    const outputAdvanced = currentRevision !== undefined && feedback.previousOutputRevision !== undefined
+      ? currentRevision > feedback.previousOutputRevision
+      : output.sceneRevision !== feedback.previousSceneRevision || (feedback.previousNeedsUpdate === true && output.sceneNeedsUpdate !== true)
+    if (outputAdvanced && output.sceneId !== feedback.sceneId) {
+      const current = output.sceneName ?? live.scenes.find((scene) => scene.id === output.sceneId)?.name ?? "its own feed"
+      return { role: "status" as const, text: `Current Program changed before this Take appeared. ${output.name} now shows ${current}; review before trying again.` }
+    }
+    return { role: "status" as const, text: `The host accepted ${feedback.sceneName} for ${output.name}; waiting for Current Program to confirm.` }
+  })()
+
+  const receiverStatus = (() => {
+    if (role !== "screens" || !output || !feedback || !feedback.result?.ok || feedback.result.note) return null
+    if (connectionStatus !== "connected") return "Host connection unavailable; receiver status cannot be checked."
+    if (receiver?.error) return `Receiver status unavailable: ${receiver.error}`
+    const currentRevision = live.revisions?.[`output:${output.id}`]
+    const hostApplied = output.sceneId === feedback.sceneId && (feedback.result.revision !== undefined
+      ? currentRevision !== undefined && currentRevision >= feedback.result.revision
+      : currentRevision !== undefined && feedback.previousOutputRevision !== undefined
+        ? currentRevision > feedback.previousOutputRevision
+        : feedback.previousSceneId !== output.sceneId || feedback.previousSceneRevision !== output.sceneRevision
+          || (feedback.previousNeedsUpdate === true && output.sceneNeedsUpdate !== true))
+    if (!hostApplied) return "Waiting for Current Program to reflect this Take before checking receiver delivery."
+    if (!feedback.receiverBaselineReady) return "Host applied the Take; checking the receiver's first post-Take frame state…"
+    if (feedback.receiverBaselineFeed === false) return `No receiver can confirm frames on ${output.name}; this output is shown in a host window.`
+    if (feedback.receiverBaselineSeq === undefined) {
+      return `Receiver confirmation is unavailable for this Take: ${feedback.receiverBaselineError ?? "the first post-Take frame sequence could not be read"}. The host can still apply the Take.`
+    }
+    if (!receiver) return "Host applied the Take; checking whether the receiver drew the Program frame…"
+    if (!receiver.report) return `Receiver status unavailable: ${receiver.error ?? "No receiver details were reported."}`
+    if (!receiver.report.feed) return `No receiver confirmation is available for ${output.name}; this output is shown in a host window.`
+    if ((receiver.report.watching ?? 0) === 0) return receiver.timedOut
+      ? `No receiver is following ${output.name}'s feed. Check that its receiver is connected.`
+      : `No receiver is following ${output.name}'s feed yet.`
+    const newFrameDrawn = receiver.report.confirmed
+      && receiver.report.seq !== undefined
+      && receiver.report.acked !== undefined
+      && receiver.report.seq > feedback.receiverBaselineSeq
+      && receiver.report.acked >= receiver.report.seq
+    if (newFrameDrawn) return `Receiver confirms the new Program frame on ${output.name} was drawn.`
+    if (receiver.report.seq !== undefined && receiver.report.seq <= feedback.receiverBaselineSeq) {
+      return receiver.timedOut
+        ? `The receiver has not drawn a new Program frame on ${output.name}. Check its connection.`
+        : `Waiting for a new receiver frame on ${output.name}.`
+    }
+    return receiver.timedOut
+      ? `No receiver has drawn the latest Program frame on ${output.name}. Check the receiver connection.`
+      : `Waiting for a receiver to draw the latest Program frame on ${output.name}.`
+  })()
   return (
     <section aria-label="Scenes desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
       {output ? (
         <div className="flex flex-wrap items-center gap-2">
           {!groupMode && <><span className="font-semibold">Scenes on</span>
-            <select aria-label="Congregation output" value={output.id} onChange={(e) => setOutputId(e.target.value)} className="h-7 rounded-md border border-input bg-card px-1.5">
+            <select aria-label="Congregation output" value={output.id} disabled={takeFeedback?.result === null} onChange={(e) => { takeRequest.current += 1; setOutputId(e.target.value); setTakeFeedback(null); setReceiverSnapshot(null) }} className="h-7 rounded-md border border-input bg-card px-1.5">
               {outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
-            <span className="text-muted-foreground">shows {output.sceneName ?? live.scenes.find((s) => s.id === output.sceneId)?.name ?? "its own feed"}</span></>}
+            <span className="text-muted-foreground">Current Program on {output.name}: {output.sceneName ?? live.scenes.find((s) => s.id === output.sceneId)?.name ?? "its own feed"}</span></>}
         </div>
       ) : (
         <p role={role === "screens" ? "status" : undefined} className="text-muted-foreground">{role === "screens" ? "No congregation output is assigned to this desk. Ask the main host to review output scope in Permissions." : "The host has no congregation output."}</p>
       )}
+      {receiverStatus && <p role={receiver?.error ? "alert" : "status"} aria-live="polite" className="text-xs text-muted-foreground">{receiverStatus}</p>}
       <ul className="flex flex-wrap gap-1.5">
         {live.scenes.map((s) => (
           <li key={s.id} className="flex items-center gap-0.5">
-            {takes && output && !groupMode && <Button size="sm" variant={s.id === output.sceneId ? "default" : "outline"} disabled={!ok || (s.id === output.sceneId && !output.sceneNeedsUpdate)} onClick={() => void send({ command: "take_scene", value: { output: output.id, scene: s.id } })}>{s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} {s.name}</Button>}
+            {takes && output && !groupMode && <Button size="sm" variant={s.id === output.sceneId ? "default" : "outline"} aria-label={`${s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} ${s.name} on ${output.name}`} title={`${s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} ${s.name} on ${output.name}`} disabled={!ok || (s.id === output.sceneId && !output.sceneNeedsUpdate) || (takeFeedback?.outputId === output.id && takeFeedback.result === null)} onClick={() => void takeScene(s)}>{s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} {s.name}</Button>}
             {!takes && <span className="px-1 font-medium">{s.name}</span>}
             {edits && deskEditable(s) && <Button size="sm" variant="ghost" aria-label={cameraOnly ? `Change the cameras in ${s.name}` : `Edit ${s.name}`} disabled={!ok} onClick={() => { setSaid(""); setEditing(s.id) }}>{cameraOnly ? "Cameras…" : "Edit…"}</Button>}
           </li>
@@ -768,12 +1031,14 @@ function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveSta
         {/* An older host says nothing about approvals and takes no scenes from a desk. */}
         {edits && !cameraOnly && editing === null && live.requireApproval !== undefined && <Button size="sm" variant="outline" disabled={!ok} onClick={() => { setSaid(""); setEditing("new") }}>New scene…</Button>}
       </div>
+      {takeStatus && <p role={takeStatus.role} aria-live="polite" className={takeStatus.role === "alert" ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>{takeStatus.text}</p>}
       {role === "screens" && <GroupTakeControls
         key={groupTakeContext}
         live={live}
         outputScope={outputScope}
         groupTakeScope={groupTakeScope}
         groupMode={groupMode}
+        takePending={takeFeedback?.result === null}
         onGroupModeChange={(active) => setGroupModeState({ context: groupTakeContext, active })}
       />}
       {role === "screens" && live.groupTakeResults && live.groupTakeResults.length > 0 && <section aria-label="Group Take results" className="rounded-md border border-border p-2.5">
@@ -794,12 +1059,14 @@ function GroupTakeControls({
   outputScope,
   groupTakeScope,
   groupMode,
+  takePending,
   onGroupModeChange,
 }: {
   live: LiveStateV1
   outputScope: string[]
   groupTakeScope: string[]
   groupMode: boolean
+  takePending: boolean
   onGroupModeChange: (active: boolean) => void
 }) {
   const ok = useCanSend()
@@ -850,7 +1117,7 @@ function GroupTakeControls({
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-semibold">Group Take</p>
         <span className="text-xs text-muted-foreground">Individual Take is the default. Group mode is temporary and never carries across reconnects.</span>
-        <Button size="sm" variant={groupMode ? "default" : "outline"} disabled={groupOutputs.length < 2} aria-pressed={groupMode} onClick={() => { onGroupModeChange(!groupMode); setGroupTargets([]); setSaid("") }}>{groupMode ? "Exit group mode" : "Choose group targets…"}</Button>
+        <Button size="sm" variant={groupMode ? "default" : "outline"} disabled={groupOutputs.length < 2 || takePending} aria-pressed={groupMode} onClick={() => { onGroupModeChange(!groupMode); setGroupTargets([]); setSaid("") }}>{groupMode ? "Exit group mode" : "Choose group targets…"}</Button>
       </div>
       {groupOutputs.length < 2 && <p role="status" className="text-xs text-muted-foreground">A separate host grant for at least two congregation outputs is required before group Take can be used.</p>}
       {groupMode && groupOutputs.length >= 2 && <>
