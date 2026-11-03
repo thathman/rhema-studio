@@ -152,16 +152,22 @@ resize_live_window() {
   if ! "$ROOT/scripts/mac-qa/qa.py" main "$name" - 20 > "$QA_SCRATCH/$name.json" <<EOF
 const label = window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label
 if (!label) throw new Error("The current native window label is unavailable")
-await window.__TAURI_INTERNALS__.invoke("plugin:window|set_size", {
+const resize = (width, height) => window.__TAURI_INTERNALS__.invoke("plugin:window|set_size", {
   label,
-  value: { Logical: { width: $width, height: $height } },
+  value: { Logical: { width, height } },
 })
+await resize($width, $height)
 await sleep(500)
-const actual = { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio }
+let actual = { width: window.innerWidth, height: window.innerHeight }
+for (let correction = 0; correction < 2 && (actual.width !== $width || actual.height !== $height); correction += 1) {
+  await resize($width + ($width - actual.width), $height + ($height - actual.height))
+  await sleep(500)
+  actual = { width: window.innerWidth, height: window.innerHeight }
+}
 if (actual.width !== $width || actual.height !== $height) {
   throw new Error("Requested " + $width + "x" + $height + ", native content area is " + actual.width + "x" + actual.height)
 }
-return actual
+return { ...actual, devicePixelRatio: window.devicePixelRatio }
 EOF
   then
     mkdir -p "$QA_SCRATCH/artifacts"
