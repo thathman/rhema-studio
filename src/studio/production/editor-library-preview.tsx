@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { lookupOnHost } from "@/stores/join-store"
+import { lookupOnHost, useCanSend, useJoin } from "@/stores/join-store"
 import { useBibleStore } from "@/stores/bible-store"
 import { parseTypedReference } from "@/lib/quick-search"
 import { passageFrom, type HostVerse } from "@/lib/desk-console-words"
@@ -15,8 +15,9 @@ interface HostTranslation {
 
 const field = "h-8 min-w-0 rounded-md border border-input bg-transparent px-2"
 
-/** Read-only host Library lookup for the joined Editor role. It never sends a Live command. */
+/** Host Library preview and explicit rundown requests for the joined Editor role; neither changes Live. */
 export function EditorLibraryPreview() {
+  const canSend = useCanSend()
   const books = useBibleStore((state) => state.books)
   const [translations, setTranslations] = useState<HostTranslation[]>([])
   const [translation, setTranslation] = useState<number | null>(null)
@@ -33,6 +34,9 @@ export function EditorLibraryPreview() {
   const [searchingSongs, setSearchingSongs] = useState(false)
   const scriptureRequest = useRef(0)
   const songRequest = useRef(0)
+  const queueRequest = useRef(0)
+  const [queueing, setQueueing] = useState(false)
+  const [queueOutcome, setQueueOutcome] = useState<{ key: string; state: "sending" | "sent" | "error"; message: string } | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -53,6 +57,7 @@ export function EditorLibraryPreview() {
   useEffect(() => () => {
     scriptureRequest.current++
     songRequest.current++
+    queueRequest.current++
   }, [])
 
   const previewChapter = async (book: number, bookName: string, chapter: number, verse: number) => {
@@ -142,6 +147,40 @@ export function EditorLibraryPreview() {
   }
 
   const abbreviation = translations.find((item) => item.id === translation)?.abbreviation
+  const queueSelection = passage?.length
+    ? { kind: "bible" as const, value: `${passage[0].bookName} ${passage[0].chapter}:${passage[0].verse}`, label: `${passage[0].bookName} ${passage[0].chapter}:${passage[0].verse}` }
+    : selectedSong
+      ? { kind: "song" as const, value: selectedSong.title, label: selectedSong.title }
+      : null
+  const queueKey = queueSelection ? `${queueSelection.kind}\u0000${queueSelection.value}` : ""
+  const visibleQueueOutcome = queueOutcome?.key === queueKey ? queueOutcome : null
+  const previousQueueOutcome = queueOutcome && queueOutcome.key !== queueKey ? queueOutcome : null
+
+  const requestRundown = async () => {
+    if (!queueSelection) return
+    if (!canSend) {
+      setQueueOutcome({ key: queueKey, state: "error", message: "The host is not currently accepting actions from this desk." })
+      return
+    }
+    const request = ++queueRequest.current
+    const selected = queueSelection
+    const key = queueKey
+    setQueueing(true)
+    setQueueOutcome({ key, state: "sending", message: `Sending a request for ${selected.label} to the host…` })
+    try {
+      const result = await useJoin.getState().send({ command: "queue_request", value: { kind: selected.kind, value: selected.value } })
+      if (request !== queueRequest.current) return
+      if (result.ok) {
+        setQueueOutcome({ key, state: "sent", message: `Request sent for ${selected.label}. Check the host rundown; nothing changed on a screen.` })
+      } else {
+        setQueueOutcome({ key, state: "error", message: result.error })
+      }
+    } catch (error) {
+      if (request === queueRequest.current) setQueueOutcome({ key, state: "error", message: String(error) })
+    } finally {
+      if (request === queueRequest.current) setQueueing(false)
+    }
+  }
 
   return (
     <section aria-label="Prepare desk" className="flex flex-col gap-3 rounded-md border border-border p-3">
@@ -199,11 +238,20 @@ export function EditorLibraryPreview() {
 
       {(passage || selectedSong) && (
         <section aria-label="Editor private preview" className="rounded-md border border-primary/30 bg-primary/5 p-3">
-          <p className="text-xs font-bold uppercase tracking-wide text-primary-text">Private Library preview · nothing sent to the host</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-primary-text">Private Library preview · not on a screen</p>
           {passage && <div className="mt-2" aria-label="Selected Scripture preview"><h3 className="font-semibold">{passage[0]?.bookName} {passage[0]?.chapter}:{passage[0]?.verse} · {abbreviation}</h3>{passage.map((verse) => <p key={verse.verse} className="mt-1"><sup className="mr-1 tabular-nums">{verse.verse}</sup>{verse.text}</p>)}</div>}
           {selectedSong && <div className="mt-2" aria-label="Selected song preview"><h3 className="font-semibold">{selectedSong.title}</h3>{selectedSong.numbers.length > 0 && <p className="text-sm text-muted-foreground">{selectedSong.numbers.join(", ")}</p>}{selectedSong.firstLine && <p className="mt-1">{selectedSong.firstLine}</p>}<p className="mt-2 text-xs text-muted-foreground">The host lookup supplies this song summary. Full arrangement preview and service draft submission are not part of this joined Editor view yet.</p></div>}
+          {queueSelection && <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" variant="outline" aria-label={`Request ${queueSelection.label} in host rundown`} disabled={!canSend || queueing || visibleQueueOutcome?.state === "sent"} onClick={() => void requestRundown()}>
+              {queueing ? "Sending request…" : visibleQueueOutcome?.state === "sent" ? "Request sent" : `Request ${queueSelection.kind === "bible" ? "Scripture" : "song"} in host rundown`}
+            </Button>
+            {!canSend && <p role="status" className="text-xs text-muted-foreground">The host is not currently accepting actions from this desk.</p>}
+            {visibleQueueOutcome && <p aria-label="Editor add-to-rundown result" role={visibleQueueOutcome.state === "error" ? "alert" : "status"} aria-live="polite" className="text-xs text-muted-foreground">{visibleQueueOutcome.message}</p>}
+            <p className="basis-full text-xs text-muted-foreground">This sends a request for the host rundown. The host checks the item; nothing is sent to a screen.</p>
+          </div>}
         </section>
       )}
+      {previousQueueOutcome && <p aria-label="Editor add-to-rundown result" role={previousQueueOutcome.state === "error" ? "alert" : "status"} aria-live="polite" className="text-sm text-muted-foreground">{previousQueueOutcome.message}</p>}
     </section>
   )
 }
