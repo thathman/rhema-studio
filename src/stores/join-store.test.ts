@@ -28,7 +28,7 @@ vi.mock("@/stores/settings-store", () => ({
 }))
 vi.mock("@/stores/notices-store", () => ({ takeUnableReason: () => null }))
 
-import { useJoin } from "./join-store"
+import { readHostReceivers, useJoin } from "./join-store"
 
 describe("joined host state", () => {
   beforeEach(() => {
@@ -85,6 +85,53 @@ describe("joined host state", () => {
       receivedAt: 0,
       clockSkewMs: null,
     })
+  })
+
+  it("reads only validated receiver confirmation for the paired host", async () => {
+    invokeMock.mockResolvedValueOnce({ outputs: [{ id: "tv", feed: true, watching: 2, seq: 7, acked: 7, confirmed: true, privateToken: "ignored" }] })
+    await expect(readHostReceivers()).resolves.toEqual([{ id: "tv", feed: true, watching: 2, seq: 7, acked: 7, confirmed: true }])
+    expect(invokeMock).toHaveBeenCalledWith("join_receivers", { address: "https://host.local", token: "paired-token" })
+  })
+
+  it("preserves the host output revision from an accepted Take", async () => {
+    invokeMock.mockResolvedValueOnce({ note: null, revision: 17 })
+    await expect(useJoin.getState().send({ command: "take_scene", value: { output: "tv", scene: "welcome" } }))
+      .resolves.toEqual({ ok: true, revision: 17 })
+  })
+
+  it("keeps the output revision and service seen when the operator chose the Take", async () => {
+    useJoin.setState({ live: { v: 1, revisions: { "output:tv": 9 }, service: { id: "new-service", title: "New service" } } as unknown as LiveStateV1 })
+    await useJoin.getState().send({
+      command: "take_scene",
+      value: { output: "tv", scene: "welcome" },
+      seen: { "output:tv": 7 },
+      service: "original-service",
+    })
+    expect(invokeMock).toHaveBeenCalledWith("join_command", expect.objectContaining({
+      service: "original-service",
+      command: expect.objectContaining({ seen: { "output:tv": 7 } }),
+    }))
+  })
+
+  it("sends an explicit empty service when the captured host state has no open service", async () => {
+    useJoin.setState({ live: { v: 1, revisions: { "output:tv": 9 }, service: null } as unknown as LiveStateV1 })
+    await useJoin.getState().send({
+      command: "take_scene",
+      value: { output: "tv", scene: "welcome" },
+      seen: { "output:tv": 9 },
+      service: "",
+    })
+    expect(invokeMock).toHaveBeenCalledWith("join_command", expect.objectContaining({
+      service: "",
+      command: expect.objectContaining({ seen: { "output:tv": 9 } }),
+    }))
+  })
+
+  it("fails closed when receiver confirmation fields are missing or malformed", async () => {
+    invokeMock.mockResolvedValueOnce({ outputs: [{ id: "tv", feed: true, watching: "2", confirmed: true }] })
+    await expect(readHostReceivers()).rejects.toThrow("incomplete receiver confirmation")
+    invokeMock.mockResolvedValueOnce({ outputs: [{ id: "tv", feed: "yes" }] })
+    await expect(readHostReceivers()).rejects.toThrow("malformed receiver row")
   })
 
   it("ignores a host snapshot arriving after the desk left", async () => {

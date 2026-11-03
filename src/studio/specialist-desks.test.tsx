@@ -3,16 +3,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const sent: Record<string, unknown>[] = []
 /** What the host answers the next join_command with: a note, or a refusal (as join.rs marks it). */
-let answer: { note?: string; refuse?: string } = {}
+let answer: { note?: string; refuse?: string; revision?: number } = {}
+let receiverReport: { outputs: { id: string; feed: boolean; watching?: number; seq?: number; acked?: number; confirmed?: boolean }[] } = { outputs: [] }
+let receiverReadQueue: { outputs: { id: string; feed: boolean; watching?: number; seq?: number; acked?: number; confirmed?: boolean }[] }[] = []
+let receiverError: string | null = null
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string, a: { command?: Record<string, unknown>; asked?: Record<string, unknown> } = {}) => {
     // The host's song library, as join_lookup answers it (desk consoles).
     if (cmd === "join_lookup" && a.asked?.what === "songs") return { songs: [{ id: "s1", title: "Great Is Thy Faithfulness", numbers: ["CAC 12"], firstLine: "Great is thy faithfulness", hymn: false }] }
+    if (cmd === "join_receivers") {
+      if (receiverError) throw receiverError
+      return receiverReadQueue.shift() ?? receiverReport
+    }
     if (cmd !== "join_command") return null
     sent.push(a.command ?? {})
-    const { note, refuse } = answer
+    const { note, refuse, revision } = answer
     answer = {}
     if (refuse) throw refuse
+    if (revision !== undefined) return { note: note ?? null, revision }
     return note ?? null
   }),
 }))
@@ -69,6 +77,9 @@ const type = async (input: HTMLInputElement | HTMLSelectElement, value: string) 
 beforeEach(() => {
   sent.length = 0
   answer = {}
+  receiverReport = { outputs: [] }
+  receiverReadQueue = []
+  receiverError = null
 })
 
 afterEach(async () => {
@@ -216,6 +227,132 @@ describe("editing a scene from a Screens desk", () => {
     expect(map?.textContent).not.toContain("Lobby")
     await click(button(el, "Take Welcome"))
     expect(sent).toEqual([{ command: "take_scene", value: { output: "overflow", scene: "welcome" } }])
+  })
+
+  it("separates host-applied Program state from a receiver confirming its latest frame", async () => {
+    receiverReport = { outputs: [{ id: "overflow", feed: true, watching: 1, seq: 1, acked: 1, confirmed: true }] }
+    receiverReadQueue = [
+      { outputs: [{ id: "overflow", feed: true, watching: 1, seq: 1, acked: 1, confirmed: true }] },
+      { outputs: [{ id: "overflow", feed: true, watching: 1, seq: 2, acked: 2, confirmed: true }] },
+    ]
+    const state: LiveStateV1 = {
+      ...live,
+      revisions: { "output:overflow": 3 },
+      outputs: [{ id: "overflow", name: "Overflow", sceneId: "split", sceneRevision: 5 }],
+    }
+    const el = await render("screens", state, ["overflow"])
+    expect(el.textContent).not.toContain("Receiver confirms")
+    expect(el.textContent).toContain("Current Program on Overflow: Sermon split")
+
+    await click(button(el, "Take Welcome"))
+    expect(sent).toEqual([{ command: "take_scene", value: { output: "overflow", scene: "welcome" }, seen: { "output:overflow": 3 } }])
+    expect(el.textContent).toContain("The host accepted Welcome for Overflow; waiting for Current Program to confirm.")
+
+    const applied: LiveStateV1 = {
+      ...state,
+      revisions: { "output:overflow": 4 },
+      outputs: [{ id: "overflow", name: "Overflow", sceneId: "welcome", sceneName: "Welcome", sceneRevision: 6 }],
+    }
+    await act(async () => {
+      useJoin.setState({ live: applied })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(el.textContent).toContain("Host applied Welcome to Overflow.")
+    expect(el.textContent).toContain("Receiver confirms the new Program frame on Overflow was drawn.")
+
+    await act(async () => useJoin.setState({
+      live: {
+        ...applied,
+        revisions: { "output:overflow": 5 },
+        outputs: [{ id: "overflow", name: "Overflow", sceneId: "split", sceneRevision: 7 }],
+      },
+    }))
+    expect(el.textContent).not.toContain("Receiver confirms the new Program frame on Overflow was drawn.")
+  })
+
+  it("does not treat a confirmed frame at the post-Take baseline as the new scene frame", async () => {
+    receiverReport = { outputs: [{ id: "main", feed: true, watching: 1, seq: 10, acked: 10, confirmed: true }] }
+    receiverReadQueue = [
+      { outputs: [{ id: "main", feed: true, watching: 1, seq: 10, acked: 10, confirmed: true }] },
+      { outputs: [{ id: "main", feed: true, watching: 1, seq: 10, acked: 10, confirmed: true }] },
+    ]
+    const state: LiveStateV1 = { ...live, revisions: { "output:main": 3 }, outputs: [{ id: "main", name: "Sanctuary", sceneId: "split", sceneRevision: 5 }] }
+    const el = await render("screens", state, ["main"])
+    answer = { revision: 4 }
+    await click(button(el, "Take Welcome"))
+    await act(async () => {
+      useJoin.setState({ live: { ...state, revisions: { "output:main": 4 }, outputs: [{ id: "main", name: "Sanctuary", sceneId: "welcome", sceneRevision: 6 }] } })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(el.textContent).toContain("Waiting for a new receiver frame on Sanctuary.")
+    expect(el.textContent).not.toContain("Receiver confirms")
+  })
+
+  it("shows an approval request as pending without claiming Program changed", async () => {
+    const state: LiveStateV1 = { ...live, outputs: [{ id: "main", name: "Sanctuary", sceneId: "split", sceneRevision: 5 }] }
+    const el = await render("screens", state, ["main"])
+    answer = { note: "Sent to the main desk to accept, because approvals are required" }
+    await click(button(el, "Take Welcome"))
+    expect(el.textContent).toContain("Approval request sent for Welcome on Sanctuary.")
+    expect(el.textContent).toContain("Current Program is unchanged until the host approves it.")
+    expect(el.textContent).toContain("Current Program on Sanctuary: Sermon split")
+    expect(el.textContent).not.toContain("Host applied Welcome")
+  })
+
+  it("keeps stale Take refusals visible without claiming the receiver confirmed a frame", async () => {
+    const state: LiveStateV1 = { ...live, outputs: [{ id: "main", name: "Sanctuary", sceneId: "split", sceneRevision: 5 }] }
+    const el = await render("screens", state, ["main"])
+
+    answer = { refuse: "stale: Someone changed this first — look again" }
+    await click(button(el, "Take Welcome"))
+    const alerts = [...el.querySelectorAll('[role="alert"]')].map((alert) => alert.textContent).join(" ")
+    expect(alerts).toContain("Someone changed this first")
+    expect(alerts).toContain("The host did not apply Welcome")
+    expect(el.textContent).not.toContain("Host applied Welcome to Sanctuary")
+  })
+
+  it("reports receiver errors after the host applies the selected-output Take", async () => {
+    receiverReport = { outputs: [{ id: "main", feed: true, watching: 1, seq: 1, acked: 1, confirmed: true }] }
+    const state: LiveStateV1 = { ...live, revisions: { "output:main": 3 }, outputs: [{ id: "main", name: "Sanctuary", sceneId: "split", sceneRevision: 5 }] }
+    const el = await render("screens", state, ["main"])
+    answer = { revision: 4 }
+    await click(button(el, "Take Welcome"))
+    receiverError = "The host could not report receiver status (401 Unauthorized)"
+    await act(async () => {
+      useJoin.setState({ live: { ...state, revisions: { "output:main": 4 }, outputs: [{ id: "main", name: "Sanctuary", sceneId: "welcome", sceneRevision: 6 }] } })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("Receiver status unavailable")
+  })
+
+  it("does not block an explicit Take when the receiver baseline is unavailable", async () => {
+    receiverError = "The host could not report receiver status (401 Unauthorized)"
+    const state: LiveStateV1 = { ...live, revisions: { "output:main": 3 }, outputs: [{ id: "main", name: "Sanctuary", sceneId: "split", sceneRevision: 5 }] }
+    const el = await render("screens", state, ["main"])
+    answer = { revision: 4 }
+    await click(button(el, "Take Welcome"))
+    expect(sent).toContainEqual({ command: "take_scene", value: { output: "main", scene: "welcome" }, seen: { "output:main": 3 } })
+    await act(async () => useJoin.setState({ live: { ...state, revisions: { "output:main": 4 }, outputs: [{ id: "main", name: "Sanctuary", sceneId: "welcome", sceneRevision: 6 }] } }))
+    expect(el.textContent).toContain("Receiver confirmation is unavailable for this Take")
+    expect(el.textContent).toContain("The host can still apply the Take.")
+  })
+
+  it("explains when the host no longer reports the selected output", async () => {
+    receiverReport = { outputs: [{ id: "main", feed: true, watching: 1, seq: 1, acked: 1, confirmed: true }] }
+    receiverReadQueue = [
+      { outputs: [{ id: "main", feed: true, watching: 1, seq: 1, acked: 1, confirmed: true }] },
+      { outputs: [] },
+    ]
+    const state: LiveStateV1 = { ...live, revisions: { "output:main": 3 }, outputs: [{ id: "main", name: "Sanctuary", sceneId: "split", sceneRevision: 5 }] }
+    const el = await render("screens", state, ["main"])
+    answer = { revision: 4 }
+    await click(button(el, "Take Welcome"))
+    await act(async () => {
+      useJoin.setState({ live: { ...state, revisions: { "output:main": 4 }, outputs: [{ id: "main", name: "Sanctuary", sceneId: "welcome", sceneRevision: 6 }] } })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("The host did not report this output")
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("Confirm it is still assigned and connected")
   })
 
   it("saves through the host with the revision it started from, and says when it waits for the main desk", async () => {

@@ -26,7 +26,11 @@ const STREAM_SILENCE: Duration = Duration::from_secs(if cfg!(test) { 1 } else { 
 /// A plain http client: a short wait to connect, and `timeout` for the whole request when given;
 /// with none (a stream that never ends), a limit on how long it may go silent.
 pub fn client(timeout: Option<Duration>) -> Result<reqwest::Client, String> {
-    let b = reqwest::Client::builder().connect_timeout(Duration::from_secs(5));
+    // Paired-desk credentials use a custom header, which reqwest does not strip on every redirect.
+    // Never forward a key to a different host after the operator paired with this one.
+    let b = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(5));
     match timeout {
         Some(t) => b.timeout(t),
         None => b.read_timeout(STREAM_SILENCE),
@@ -77,7 +81,11 @@ impl Host {
         #[cfg(feature = "pinned")]
         if let Some(tls) = &self.tls {
             // Straight to the host, never through a proxy: the certificate is the host's own.
-            let b = reqwest::Client::builder().use_preconfigured_tls((**tls).clone()).no_proxy().connect_timeout(Duration::from_secs(5));
+            let b = reqwest::Client::builder()
+                .use_preconfigured_tls((**tls).clone())
+                .no_proxy()
+                .redirect(reqwest::redirect::Policy::none())
+                .connect_timeout(Duration::from_secs(5));
             return match timeout {
                 Some(t) => b.timeout(t),
                 None => b.read_timeout(STREAM_SILENCE),
@@ -490,5 +498,35 @@ pub(crate) mod tests {
         assert_eq!(said.len(), 1, "{said:?}");
         assert_eq!(said[0].0, "join:state");
         assert!(said[0].1.contains("\"refused\"") && said[0].1.contains("pair again"), "{}", said[0].1);
+    }
+
+    #[tokio::test]
+    async fn a_paired_key_is_not_forwarded_through_a_redirect() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let destination = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let destination_address = destination.local_addr().unwrap();
+        let redirector = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let redirect_address = redirector.local_addr().unwrap();
+        let redirect_task = tokio::spawn(async move {
+            let (mut stream, _) = redirector.accept().await.unwrap();
+            let mut request = [0u8; 2048];
+            let _ = stream.read(&mut request).await;
+            let response = format!(
+                "HTTP/1.1 302 Found\r\nLocation: http://{destination_address}/capture\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+
+        let response = client(Some(Duration::from_secs(2)))
+            .unwrap()
+            .get(format!("http://{redirect_address}/receivers"))
+            .header("X-Rhema-Key", "paired-secret")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::FOUND);
+        assert!(tokio::time::timeout(Duration::from_millis(100), destination.accept()).await.is_err());
+        redirect_task.await.unwrap();
     }
 }
