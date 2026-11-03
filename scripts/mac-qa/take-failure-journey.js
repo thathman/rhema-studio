@@ -90,7 +90,7 @@ async function runScenario() {
 
     stage = "Take the valid baseline live"
     await clickRundownItem(baseline)
-    await clickButton("Take live")
+    await clickButton("Take source live")
     await waitFor(() => {
       const live = qa.broadcast.getState()
       return live.isLive && live.liveItemId === baseline.id && qa.queue.getState().activeIndex === 0
@@ -106,7 +106,7 @@ async function runScenario() {
     await waitFor(() => qa.bible.getState().selectedSlide?.item.id === missing.id, "missing image preview")
 
     stage = "Take the missing image and inspect the failure"
-    await clickButton("Take live")
+    await clickButton("Take source live")
     const notice = await waitFor(() => document.querySelector('[data-take-status="failed"]'), "visible failed-Take notice")
     const noticeText = normal(notice.innerText)
     if (!noticeText.includes("Take failed: QA Missing Image · empty")) throw new Error(`Failure notice omitted the result: ${noticeText}`)

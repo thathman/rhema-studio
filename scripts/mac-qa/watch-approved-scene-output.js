@@ -36,10 +36,12 @@ const matches = (frame, conditions) => {
 const handleCheckpoint = async (event) => {
   const { outputId: requestedOutput, name, expectedHash, expectedChangeFromHash, expectedPixel } = event.payload ?? {}
   if (requestedOutput !== outputId) return
+  let lastFrame = null
   try {
     const frame = await waitFor(() => {
       const current = sampleProgramCanvas()
       if (!current) return null
+      lastFrame = current
       return matches(current, { expectedHash, expectedChangeFromHash, expectedPixel }) ? current : null
     }, `the rendered ${outputId} frame for ${name}`)
     await invoke("plugin:event|emit", {
@@ -49,7 +51,11 @@ const handleCheckpoint = async (event) => {
   } catch (error) {
     await invoke("plugin:event|emit", {
       event: "qa:program-capture-ack",
-      payload: { outputId, name, error: String(error?.message ?? error) },
+      payload: {
+        outputId,
+        name,
+        error: `${String(error?.message ?? error)}${lastFrame ? `; last sampled frame: ${JSON.stringify(lastFrame)}` : ""}`,
+      },
     })
   }
 }

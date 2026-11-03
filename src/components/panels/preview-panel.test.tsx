@@ -144,7 +144,9 @@ describe("Preview translation refresh", () => {
     await act(async () => root!.render(<PreviewPanel outputLanguageId="english-output" onOutputLanguageIdChange={() => {}} />))
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
     expect(canvasVerses.at(-1)).toMatchObject({ segments: [{ verseNumber: 16, text: verse.text }] })
-    const outputPicker = document.body.querySelector<HTMLSelectElement>('[aria-label="Output for Preview and Scene Take"]')!
+    const outputPicker = document.body.querySelector<HTMLSelectElement>('[aria-label="Named congregation output for Preview language and scene Take"]')!
+    expect(outputPicker.parentElement?.textContent).toContain("Output")
+    expect(document.body.textContent).toContain("Scene Take targets this output. Source Take follows its subscriptions.")
     expect([...outputPicker.options].map((option) => option.textContent)).toEqual([
       "English screen · First language",
       "Yoruba screen · Second language",

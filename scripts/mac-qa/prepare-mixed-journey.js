@@ -231,7 +231,7 @@ async function runScenario() {
     )
     await activateButton(baselineRow)
     await waitFor(() => qa.bible.getState().selectedQueueItemId === baseline.id, "baseline Preview selection")
-    await clickButton("Take live")
+    await clickButton("Take source live")
     await waitFor(() => qa.broadcast.getState().isLive && qa.broadcast.getState().liveItemId === baseline.id, "baseline to appear in Program")
     const programOutputBaseline = await captureProgramOutput("baseline", { expectChangeFromInitial: true })
     const renderedBaselineProgram = await waitForProgramCanvas(
@@ -684,7 +684,7 @@ async function runScenario() {
     if (programOutputBeforeTake.hash !== programOutputBaseline.hash) {
       throw new Error("The broadcast-main output canvas changed while Scripture was only in Preview")
     }
-    await clickButton("Take live")
+    await clickButton("Take source live")
     await waitFor(() => {
       const live = qa.broadcast.getState()
       return live.isLive && live.liveItemId === bibleMoment.id

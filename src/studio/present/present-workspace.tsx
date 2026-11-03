@@ -183,7 +183,7 @@ export function PresentWorkspace() {
             <StatusChip
               tone="warn"
               label="Auto-live on"
-              title="Heard verses can change the Bible source without Take live. Click to turn this off; the Auto control is in the Program panel."
+              title="Heard verses can change the Bible source without Take source live. Click to turn this off; the Auto control is in the Program panel."
               onClick={() => useBroadcastStore.getState().setAutoLive(false)}
             />
           )}
@@ -291,7 +291,7 @@ function LiveConsoleSurface({
               <h3 className="text-sm font-semibold">{service ? "No events in this service" : "No service open"}</h3>
               <p className="text-[0.6875rem] leading-tight text-muted-foreground">Open or create a plan, or find a private cue.</p>
               <p className="mt-0.5 text-[0.6875rem] leading-tight text-muted-foreground" title={preview
-                ? "Plan changes never update Program by themselves. Preview stays private until you choose Take live."
+                ? "Plan changes never update Program by themselves. Preview stays private until you choose a Take action."
                 : "Plan changes never update Program by themselves. Take is unavailable until you choose a moment for Preview."}>
                 {preview ? "Only Take changes an output." : "Take waits for a Preview item."}
               </p>

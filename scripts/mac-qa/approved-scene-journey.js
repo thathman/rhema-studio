@@ -409,7 +409,7 @@ async function runScenario() {
     })
 
     stage = "Take the approved output-scoped manual scene"
-    await clickButton("Take live")
+    await clickButton("Take source live")
     await waitFor(() => {
       const output = qa.broadcast.getState().outputs.find((candidate) => candidate.id === "main")
       return qa.broadcast.getState().liveItemId === manualItem.id
@@ -458,7 +458,7 @@ async function runScenario() {
     })
 
     stage = "Take the approved pinned design version"
-    await clickButton("Take live")
+    await clickButton("Take source live")
     const designRef = reopenedDesigned.slide.designRef
     const designSceneId = designedMomentSceneId(designRef)
     await waitFor(() => {
@@ -502,7 +502,7 @@ async function runScenario() {
     if (JSON.stringify(programState(qa.broadcast)) !== JSON.stringify(programBeforeFollowingPreview)) {
       throw new Error("Preview of the following moment changed Program")
     }
-    await clickButton("Take live")
+    await clickButton("Take source live")
     await waitFor(() => {
       const state = qa.broadcast.getState()
       const mainOutput = state.outputs.find((candidate) => candidate.id === "main")

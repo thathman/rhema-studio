@@ -12,7 +12,7 @@ const presentCalls = vi.hoisted(() => ({
 }))
 
 vi.mock("@/studio/present-actions", () => ({ presentActions: presentCalls }))
-vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, outputLanguageId, onOutputLanguageIdChange }: { compact?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"}>Preview stays private<select aria-label="Output for Preview and Scene Take" value={outputLanguageId ?? ""} onChange={(event) => onOutputLanguageIdChange?.(event.currentTarget.value)}><option value="english-output">English screen</option><option value="yoruba-output">Yoruba screen</option></select></section> }))
+vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, outputLanguageId, onOutputLanguageIdChange }: { compact?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"}>Preview stays private<label>Output<select aria-label="Named congregation output for Preview language and scene Take" value={outputLanguageId ?? ""} onChange={(event) => onOutputLanguageIdChange?.(event.currentTarget.value)}><option value="english-output">English screen</option><option value="yoruba-output">Yoruba screen</option></select></label></section> }))
 vi.mock("@/components/panels/live-output-panel", () => ({ LiveOutputPanel: ({ outputId }: { outputId?: string | null }) => <section data-studio-live data-program-output={outputId ?? "none"}>Program</section> }))
 vi.mock("@/components/panels/transcript-panel", () => ({ TranscriptPanel: () => <div data-testid="transcript-panel">Transcript</div> }))
 vi.mock("@/components/panels/detections-panel", () => ({ DetectionsPanel: () => <div data-testid="detections-panel">Detections</div> }))
@@ -32,7 +32,7 @@ vi.mock("@/studio/present/sound-chip", () => ({ SoundChip: () => <button type="b
 vi.mock("@/studio/present/recorder-dock", () => ({ RecorderDock: () => <section aria-label="Rhema recording dock">Rhema recording controls</section> }))
 vi.mock("@/studio/present/cue-menu", () => ({ CueMenu: () => <button type="button">Cues</button> }))
 vi.mock("@/studio/engage/host-control", () => ({ EngageHostControl: () => <button type="button">Engage host</button> }))
-vi.mock("@/studio/present/transport-bar", () => ({ TransportBar: ({ className }: { className?: string }) => <div className={className} role="toolbar" aria-label="Presentation controls"><button>Take live</button></div> }))
+vi.mock("@/studio/present/transport-bar", () => ({ TransportBar: ({ className }: { className?: string }) => <div className={className} role="toolbar" aria-label="Presentation controls"><button>Take source live</button></div> }))
 vi.mock("@/studio/present/scenes-strip", () => ({ ScenesStrip: ({ outputId }: { outputId?: string | null }) => <section data-testid="scene-target" data-scene-output={outputId ?? "none"} /> }))
 vi.mock("@/studio/production/production-workspace", () => ({
   ProductionWorkspace: ({ embedded }: { embedded?: boolean }) => <section data-testid="production-tools" data-embedded={embedded ? "true" : "false"}>Production tools</section>,
@@ -273,14 +273,14 @@ describe("Present's unified Live console", () => {
     const preview = element.querySelector<HTMLElement>('[aria-label="Preview"]')!
     expect(preview.dataset.previewOutput).toBe("english-output")
     await act(async () => {
-      const selector = preview.querySelector<HTMLSelectElement>('[aria-label="Output for Preview and Scene Take"]')!
+      const selector = preview.querySelector<HTMLSelectElement>('[aria-label="Named congregation output for Preview language and scene Take"]')!
       selector.value = "yoruba-output"
       selector.dispatchEvent(new Event("change", { bubbles: true }))
     })
     expect(preview.dataset.previewOutput).toBe("yoruba-output")
     expect(element.querySelector<HTMLElement>("[data-program-output]")?.dataset.programOutput).toBe("yoruba-output")
     expect(element.querySelector<HTMLElement>("[data-testid=scene-target]")?.dataset.sceneOutput).toBe("yoruba-output")
-    expect(element.querySelectorAll('[aria-label="Output for Preview and Scene Take"]')).toHaveLength(1)
+    expect(element.querySelectorAll('[aria-label="Named congregation output for Preview language and scene Take"]')).toHaveLength(1)
     expect(useBroadcastStore.getState().liveVerse).toEqual(program)
   })
 
@@ -293,7 +293,7 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[aria-label="Preview"]')?.textContent).toContain("stays private")
     expect(element.querySelector("[data-studio-live]")?.textContent).toContain("Program")
     expect(element.querySelector('[aria-label="Rhema recording dock"]')?.textContent).toContain("Rhema recording controls")
-    expect(element.querySelector('[role="toolbar"][aria-label="Presentation controls"] button')?.textContent).toBe("Take live")
+    expect(element.querySelector('[role="toolbar"][aria-label="Presentation controls"] button')?.textContent).toBe("Take source live")
     const quickActions = element.querySelector<HTMLElement>('[data-testid="quick-screen-actions"]')!
     expect(quickActions.className).toContain("max-[1200px]:grid-cols-4")
     expect(quickActions.className).toContain("max-[800px]:grid-cols-2")
@@ -397,6 +397,6 @@ describe("Present's unified Live console", () => {
     expect(element.querySelectorAll('[data-testid="rundown-list"]')).toHaveLength(1)
     expect(element.querySelector('[aria-label="Preview"]')?.textContent).toContain("stays private")
     expect(element.querySelector("[data-studio-live]")?.textContent).toContain("Program")
-    expect([...element.querySelectorAll('[role="toolbar"][aria-label="Presentation controls"] button')].filter((button) => button.textContent === "Take live")).toHaveLength(1)
+    expect([...element.querySelectorAll('[role="toolbar"][aria-label="Presentation controls"] button')].filter((button) => button.textContent === "Take source live")).toHaveLength(1)
   })
 })

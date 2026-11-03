@@ -505,7 +505,7 @@ function sendToLivePreview(
   }
   const positionGeneration = sourceOnly ? latestVisualTake : ++latestVisualTake
   const took = rundownItem ? afterTake(rundownItem, !isUp(rundownItem)) : () => {}
-  // A reading armed "Bible feeds only" in Prepare: Take live sends it there, in its own translations.
+  // A reading armed "Bible feeds only" in Prepare: Take source live sends it there, in its own translations.
   if (rundownItem && sourceOnly) return takeOnBibleFeeds(rundownItem, isTargetCurrent).then((outcome) => {
     finishTakeAttempt(attemptId, itemId, reference, outcome, positionGeneration)
     took(outcome)

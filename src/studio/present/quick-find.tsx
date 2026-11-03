@@ -192,7 +192,7 @@ export function QuickFind({ mode, autoFocus, scope = "all", onAdded }: { mode: "
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">Enter previews the first result; Take live puts it on screen.{bibleFeeds > 0 ? " Bible feeds sends a verse to the feeds that follow Bible only." : ""}</p>
+            <p className="mt-2 text-xs text-muted-foreground">Enter previews the first result; Take source live sends it to outputs that follow that source.{bibleFeeds > 0 ? " Bible feeds sends a verse to the feeds that follow Bible only." : ""}</p>
           </li>
         )}
         {busy && results.length === 0 && (
