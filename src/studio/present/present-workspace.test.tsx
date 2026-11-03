@@ -13,7 +13,7 @@ const presentCalls = vi.hoisted(() => ({
 
 vi.mock("@/studio/present-actions", () => ({ presentActions: presentCalls }))
 vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, outputLanguageId, onOutputLanguageIdChange }: { compact?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"}>Preview stays private<label>Output<select aria-label="Named congregation output for Preview language and scene Take" value={outputLanguageId ?? ""} onChange={(event) => onOutputLanguageIdChange?.(event.currentTarget.value)}><option value="english-output">English screen</option><option value="yoruba-output">Yoruba screen</option></select></label></section> }))
-vi.mock("@/components/panels/live-output-panel", () => ({ LiveOutputPanel: ({ outputId }: { outputId?: string | null }) => <section data-studio-live data-program-output={outputId ?? "none"}>Program</section> }))
+vi.mock("@/components/panels/live-output-panel", () => ({ LiveOutputPanel: ({ outputId }: { outputId?: string | null }) => <section data-program-output={outputId ?? "none"}>Program</section> }))
 vi.mock("@/components/panels/transcript-panel", () => ({ TranscriptPanel: () => <div data-testid="transcript-panel">Transcript</div> }))
 vi.mock("@/components/panels/detections-panel", () => ({ DetectionsPanel: () => <div data-testid="detections-panel">Detections</div> }))
 vi.mock("@/components/ui/embedding-warning-banner", () => ({ EmbeddingWarningBanner: () => null }))
@@ -209,7 +209,7 @@ describe("Present's unified Live console", () => {
     expect(paneLayout.className).toContain("max-[1200px]:grid-cols-1")
     expect(paneLayout.className).toContain("min-[1024px]:max-[1200px]:grid-cols-2")
     expect(program.textContent).toContain("Program")
-    expect(program.className).toContain("max-[1200px]:min-h-[18rem]")
+    expect(program.className).toContain("min-h-[18rem]")
     expect(element.querySelectorAll('[aria-label="Preview"]')).toHaveLength(1)
     const transport = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Presentation controls"]')!
     expect(transport.className).toContain("max-[1200px]:sticky")
@@ -283,6 +283,17 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector<HTMLElement>("[data-testid=scene-target]")?.dataset.sceneOutput).toBe("yoruba-output")
     expect(element.querySelectorAll('[aria-label="Named congregation output for Preview language and scene Take"]')).toHaveLength(1)
     expect(useBroadcastStore.getState().liveVerse).toEqual(program)
+  })
+
+  it("keeps the actual Program readable above the independently scrolling scene controls", async () => {
+    await renderWorkspace()
+
+    const program = element.querySelector<HTMLElement>("[data-studio-live]")
+    expect(program).not.toBeNull()
+    expect(program?.className).toContain("min-h-[18rem]")
+    expect(program?.parentElement?.className).toContain("overflow-y-auto")
+    expect(program?.nextElementSibling?.getAttribute("data-testid")).toBe("scene-target")
+    expect(program?.textContent).toContain("Program")
   })
 
   it("renders one console for the legacy Advanced preference and preserves private Preview, Program, queue, listening and keyboard safety", async () => {

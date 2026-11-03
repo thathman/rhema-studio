@@ -304,7 +304,7 @@ function LiveConsoleSurface({
       <div className="flex min-h-0 flex-col gap-2 overflow-y-auto max-[1200px]:min-h-fit max-[1200px]:shrink-0 max-[1200px]:overflow-visible">
         {/* Never shorter than a readable picture with its sources, however many lines they take: the open
             scenes scroll under it instead. */}
-        <div className="min-h-min flex-1 overflow-hidden rounded-xl max-[1200px]:min-h-[18rem] [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
+        <div className="min-h-[18rem] flex-1 overflow-hidden rounded-xl [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
           <LiveOutputPanel outputId={outputId} />
         </div>
         <ScenesStrip outputId={outputId} />
