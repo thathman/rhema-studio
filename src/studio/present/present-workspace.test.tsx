@@ -211,6 +211,22 @@ describe("Present's unified Live console", () => {
     expect(useBroadcastStore.getState()).toMatchObject({ isLive: wasLive, liveVerse: program })
   })
 
+  it("leaves the empty Program state in its panel and labels quick screens in the Live header", async () => {
+    useBroadcastStore.setState({ isLive: false, liveVerse: null, rehearsal: false })
+    await renderWorkspace()
+
+    const header = element.querySelector("header")!
+    expect(header.textContent).not.toContain("Nothing live")
+    expect(header.textContent).toContain("Rehearsal off")
+
+    await act(async () => useBroadcastStore.setState({
+      isLive: true,
+      liveVerse: { reference: "", segments: [], lines: [], quickScreen: "black" } as never,
+    }))
+    expect(header.textContent).toContain("LIVE · Black")
+    expect(header.querySelector('[role="status"]')?.textContent).toBe("On air: Black")
+  })
+
   it("keeps full private Preview and actual Program in the medium-width Live layout", async () => {
     await renderWorkspace()
 

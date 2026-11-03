@@ -99,6 +99,17 @@ describe("Present's Program and Preview panels", () => {
     expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe("Rehearsal")
   })
 
+  it("shows the empty Program once while keeping its off-air detail available to assistive tech", async () => {
+    await render(<LiveOutputPanel />)
+
+    expect(el.textContent).toContain("Nothing on air")
+    const delivery = el.querySelector<HTMLElement>('[data-program-delivery-state="Off air"]')!
+    expect(delivery.textContent).toContain("Off air")
+    const detail = delivery.querySelector<HTMLElement>('[role="status"]')!
+    expect(detail.textContent).toContain("Host Program is off air.")
+    expect(detail.className).toContain("sr-only")
+  })
+
   it("the one-line Preview says what Take live will put up, and the item's plan", async () => {
     await render(<PreviewPanel compact />)
     const line = el.querySelector('section[aria-label="Preview"]')!
