@@ -180,7 +180,7 @@ async function runScenario() {
 
     stage = "open Live production tools and save a separate output-scoped scene"
     await clickButton("Live")
-    await clickButton("Open production tools")
+    await clickButton("Toggle Live tools")
     await clickButton("Scenes")
     await clickButton("Full screen")
     const sceneNameInput = await waitFor(() => document.querySelector('input[aria-label="Scene name"]'), "scene name field")

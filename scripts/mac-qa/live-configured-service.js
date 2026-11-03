@@ -53,6 +53,9 @@ async function runScenario() {
   const preview = qa.bible.getState().selectedSlide
   const outputPicker = document.querySelector('[aria-label="Named congregation output for Preview language and scene Take"]')
   const sourceTake = document.querySelector('[aria-label="Take source live"]')
+  const liveToolbar = document.querySelector('[role="toolbar"][aria-label="Live tools"]')
+  const toolbarButtons = [...(liveToolbar?.querySelectorAll("button") ?? [])].map((button) => button.textContent?.replace(/\s+/g, " ").trim() ?? "")
+  const toolbarText = liveToolbar?.textContent?.replace(/\s+/g, " ").trim() ?? ""
   const result = {
     service: qa.service.getState().current?.title,
     saved: !qa.service.getState().dirty,
@@ -64,8 +67,9 @@ async function runScenario() {
     programLive: qa.broadcast.getState().isLive,
     takeLabel: sourceTake?.getAttribute("aria-label"),
     takeDisabled: sourceTake?.getAttribute("aria-disabled") === "true",
+    toolbarButtons,
   }
-  if (result.service !== "QA Sunday Service" || !result.saved || result.itemCount !== 1 || result.eventName !== "Opening" || !result.output || !result.selectedOutput?.startsWith(result.output) || result.preview !== "Welcome" || result.takeLabel !== "Take source live" || result.programLive || result.takeDisabled) {
+  if (result.service !== "QA Sunday Service" || !result.saved || result.itemCount !== 1 || result.eventName !== "Opening" || !result.output || !result.selectedOutput?.startsWith(result.output) || result.preview !== "Welcome" || result.takeLabel !== "Take source live" || result.programLive || result.takeDisabled || !toolbarButtons.some((label) => label.includes("Find & listen")) || !toolbarButtons.some((label) => label.includes("Live tools")) || toolbarText.includes("Production tools") || toolbarText.includes("More controls") || toolbarText.includes("Listening off") || toolbarText.includes("Saved translations")) {
     throw new Error(`Unexpected configured Live state: ${JSON.stringify(result)}`)
   }
   return result

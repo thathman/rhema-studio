@@ -148,8 +148,9 @@ describe("Present's unified Live console", () => {
     useAuxTimers.setState({ timers: [{ id: "communion-prep", label: "Communion prep", timer: { durationMs: 300_000, startedAt: performance.now(), accumulatedMs: 0 }, onStage: false, owner: "" }] })
     await renderWorkspace()
 
-    const timerStatus = element.querySelector<HTMLElement>('[title="Running auxiliary timer: Communion prep"]')
+    const timerStatus = element.querySelector<HTMLElement>('[title="Additional timer: Communion prep"]')
     expect(timerStatus?.textContent).toContain("Communion prep")
+    expect(timerStatus?.textContent).toContain("Running extra timer:")
     expect(timerStatus?.textContent).toMatch(/\d:\d{2}/)
     expect(timerStatus?.querySelector("button")).toBeNull()
     expect(element.querySelector('[role="toolbar"][aria-label="Live tools"] [title*="Other timers"]')).toBeNull()
@@ -354,21 +355,33 @@ describe("Present's unified Live console", () => {
     expect(useShellStore.getState().presentView).toBe("production")
   })
 
-  it("keeps secondary controls out of the Live toolbar and opens them in an accessible drawer", async () => {
+  it("keeps the Live toolbar compact and opens secondary controls from the shared tools drawer", async () => {
+    useServiceStore.setState({ current: emptyService })
+    useTranscriptStore.setState({ isTranscribing: false })
     await renderWorkspace()
 
     const toolbar = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Live tools"]')!
-    const moreControls = toolbar.querySelector<HTMLButtonElement>('[aria-label="Open other controls"]')!
+    const liveTools = toolbar.querySelector<HTMLButtonElement>('[aria-label="Toggle Live tools"]')!
+    expect(toolbar.querySelector('[aria-label="Open production tools"]')).toBeNull()
+    expect(toolbar.querySelector('[aria-label="Open other controls"]')).toBeNull()
+    expect(toolbar.textContent).not.toContain("Listening off")
+    expect(toolbar.textContent).not.toContain("Saved translations")
     expect(toolbar.textContent).not.toContain("Cues")
     expect(toolbar.textContent).not.toContain("Sound controls")
     expect(toolbar.textContent).not.toContain("Lower thirds")
     expect(toolbar.textContent).not.toContain("Stage messages")
     expect(toolbar.textContent).not.toContain("Engage host")
-    expect(moreControls.getAttribute("aria-expanded")).toBe("false")
+    expect(liveTools.getAttribute("aria-expanded")).toBe("false")
 
-    await act(async () => moreControls.click())
+    await act(async () => liveTools.click())
 
-    expect(moreControls.getAttribute("aria-expanded")).toBe("true")
+    expect(liveTools.getAttribute("aria-expanded")).toBe("true")
+    expect(element.querySelector('[data-slot="live-tools-panel"] [role="tab"][aria-selected="true"]')?.textContent).toContain("Production tools")
+    const controlsTab = [...element.querySelectorAll<HTMLElement>('[data-slot="live-tools-panel"] [role="tab"]')].find((tab) => tab.textContent?.includes("More controls"))!
+    await act(async () => {
+      controlsTab.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true }))
+      controlsTab.click()
+    })
     expect(element.querySelector('[data-slot="live-tools-panel"] [role="tab"][aria-selected="true"]')?.textContent).toContain("More controls")
     const controls = element.querySelector<HTMLElement>('[role="group"][aria-label="Secondary Live controls"]')!
     expect(controls.textContent).toContain("Cues")
@@ -381,7 +394,29 @@ describe("Present's unified Live console", () => {
     const close = element.querySelector<HTMLButtonElement>('[data-slot="live-tools-panel"] button[aria-label="Close Live tools"]')!
     await act(async () => close.click())
     expect(document.querySelector('[data-slot="live-tools-panel"]')).toBeNull()
-    expect(document.activeElement).toBe(moreControls)
+    expect(document.activeElement).toBe(liveTools)
+  })
+
+  it("keeps the service translation override with contextual Find and cue tools", async () => {
+    useServiceStore.setState({ current: emptyService })
+    useBibleStore.setState({ overrideServiceTranslations: false })
+    await renderWorkspace()
+
+    const toolbar = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Live tools"]')!
+    expect(toolbar.textContent).not.toContain("Saved translations")
+
+    const find = toolbar.querySelector<HTMLButtonElement>('[aria-label="Open Find and listening tools"]')!
+    await act(async () => find.click())
+    const panel = element.querySelector<HTMLElement>('[data-slot="live-tools-panel"]')!
+    const override = panel.querySelector<HTMLButtonElement>('[aria-label^="Override all service translations with"]')!
+    expect(override.getAttribute("aria-pressed")).toBe("false")
+    await act(async () => override.click())
+    expect(useBibleStore.getState().overrideServiceTranslations).toBe(true)
+
+    const useSaved = panel.querySelector<HTMLButtonElement>('[aria-label="Use saved translations for this service"]')!
+    expect(useSaved.getAttribute("aria-pressed")).toBe("true")
+    await act(async () => useSaved.click())
+    expect(useBibleStore.getState().overrideServiceTranslations).toBe(false)
   })
 
   it("opens Production tools inside the same Live console with one rundown, Preview, Program and Take", async () => {
@@ -392,7 +427,7 @@ describe("Present's unified Live console", () => {
     expect(useShellStore.getState().goRequest).toBe("present")
     expect(useProductionTab.getState().selected).toBe("obs")
     expect(document.querySelector('[data-testid="production-tools"]')?.getAttribute("data-embedded")).toBe("true")
-    expect(element.querySelector<HTMLButtonElement>('[aria-label="Close production tools"]')).not.toBeNull()
+    expect(element.querySelector<HTMLButtonElement>('[role="toolbar"][aria-label="Live tools"] [aria-label="Toggle Live tools"]')).not.toBeNull()
     expect(element.querySelectorAll('[aria-label="Close Live tools"]')).toHaveLength(1)
     expect(element.querySelectorAll('[data-testid="rundown-list"]')).toHaveLength(1)
     expect(element.querySelector('[aria-label="Preview"]')?.textContent).toContain("stays private")

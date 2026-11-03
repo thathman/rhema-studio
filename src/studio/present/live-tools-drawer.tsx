@@ -3,6 +3,8 @@ import { DetectionsPanel } from "@/components/panels/detections-panel"
 import { TranscriptPanel } from "@/components/panels/transcript-panel"
 import { Button } from "@/components/ui/button"
 import { EmbeddingWarningBanner } from "@/components/ui/embedding-warning-banner"
+import { useBibleStore } from "@/stores"
+import { useServiceStore } from "@/stores/service-store"
 import { ProductionWorkspace } from "@/studio/production/production-workspace"
 import { CueMenu } from "@/studio/present/cue-menu"
 import { LowerThirdControl } from "@/studio/present/lower-third"
@@ -14,6 +16,38 @@ import type { LiveToolsTab } from "@/studio/production/production-tab"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export type { LiveToolsTab } from "@/studio/production/production-tab"
+
+function ServiceTranslationControl() {
+  const service = useServiceStore((state) => state.current)
+  const override = useBibleStore((state) => state.overrideServiceTranslations)
+  const activeAbbrev = useBibleStore((state) => state.translations.find((translation) => translation.id === state.activeTranslationId)?.abbreviation ?? "active")
+  if (!service) return null
+
+  const label = override
+    ? `Use saved translations for this service`
+    : `Override all service translations with ${activeAbbrev}`
+
+  return (
+    <div role="group" aria-label="Service translation override" className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface-sunken px-3 py-1.5">
+      <span role="status" className="text-[0.6875rem] text-muted-foreground">
+        {override ? `Override: ${activeAbbrev}` : "Saved translations"}
+      </span>
+      <Button
+        type="button"
+        size="xs"
+        variant={override ? "outline" : "ghost"}
+        aria-label={label}
+        aria-pressed={override}
+        title={override
+          ? `Service items are shown in ${activeAbbrev}. Use the translation saved with each item.`
+          : `Service items are shown in the translation saved with each item. Use ${activeAbbrev} for all service items.`}
+        onClick={() => useBibleStore.getState().setOverrideServiceTranslations(!override)}
+      >
+        {override ? "Use saved translations" : `Override · ${activeAbbrev}`}
+      </Button>
+    </div>
+  )
+}
 
 export function LiveToolsDrawer({
   tab,
@@ -68,6 +102,7 @@ export function LiveToolsDrawer({
         <TabsContent value="bible" className="mt-2 min-h-0 flex-1 overflow-hidden">
           <div className="flex h-full min-h-0 flex-col gap-2" role="region" aria-label="Find Scripture and songs" data-tour="quick-find">
             <EmbeddingWarningBanner />
+            <ServiceTranslationControl />
             <div className="min-h-0 flex-1"><QuickFind mode="present" autoFocus /></div>
           </div>
         </TabsContent>
