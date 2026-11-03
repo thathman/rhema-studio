@@ -51,17 +51,21 @@ async function runScenario() {
 
   const output = qa.broadcast.getState().outputs.find((candidate) => (candidate.role ?? "congregation") === "congregation")
   const preview = qa.bible.getState().selectedSlide
+  const outputPicker = document.querySelector('[aria-label="Named congregation output for Preview language and scene Take"]')
+  const sourceTake = document.querySelector('[aria-label="Take source live"]')
   const result = {
     service: qa.service.getState().current?.title,
     saved: !qa.service.getState().dirty,
     itemCount: qa.queue.getState().items.length,
     eventName: qa.queue.getState().headers[0]?.name,
     output: output?.name,
+    selectedOutput: outputPicker?.selectedOptions?.[0]?.textContent?.trim(),
     preview: preview?.item.reference,
     programLive: qa.broadcast.getState().isLive,
-    takeDisabled: document.querySelector('[aria-label="Take live"]')?.getAttribute("aria-disabled") === "true",
+    takeLabel: sourceTake?.textContent?.replace(/\s+/g, " ").trim(),
+    takeDisabled: sourceTake?.getAttribute("aria-disabled") === "true",
   }
-  if (result.service !== "QA Sunday Service" || !result.saved || result.itemCount !== 1 || result.eventName !== "Opening" || !result.output || result.preview !== "Welcome" || result.programLive || result.takeDisabled) {
+  if (result.service !== "QA Sunday Service" || !result.saved || result.itemCount !== 1 || result.eventName !== "Opening" || !result.output || !result.selectedOutput?.startsWith(result.output) || result.preview !== "Welcome" || result.takeLabel !== "Take source live" || result.programLive || result.takeDisabled) {
     throw new Error(`Unexpected configured Live state: ${JSON.stringify(result)}`)
   }
   return result

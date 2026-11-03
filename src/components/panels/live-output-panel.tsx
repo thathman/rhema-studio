@@ -69,7 +69,7 @@ export function LiveOutputPanel({ outputId }: { outputId?: string | null } = {})
         )}
         <label
           className="flex items-center gap-2"
-          title="Auto: On: while on air, a verse heard while listening goes live without Take live (while a song, hymn or slide is up it goes only to the feeds that follow Bible). Bible feeds only: it goes to the feeds that follow Bible and never the main screens. Off (the default): heard verses wait in the preview."
+          title="Auto: On: while on air, a verse heard while listening goes live without Take source live (while a song, hymn or slide is up it goes only to the feeds that follow Bible). Bible feeds only: it goes to the feeds that follow Bible and never the main screens. Off (the default): heard verses wait in the preview."
         >
           <span className={cn("text-xs font-medium transition-colors", autoMode !== "manual" ? "text-foreground" : "text-muted-foreground")}>
             Auto
@@ -87,7 +87,7 @@ export function LiveOutputPanel({ outputId }: { outputId?: string | null } = {})
         <StatusChip
           tone={!isLive ? "off" : rehearsal ? "warn" : "live"}
           label={!isLive ? "Off air" : rehearsal ? "Rehearsal" : "On air"}
-          title={!isLive ? "Nothing is on the screens. Take live puts Preview up; Restore brings back what was cleared." : rehearsal ? "Rehearsal: the screens keep what they showed before it." : "On air: the screens show Live. Clear takes it down."}
+          title={!isLive ? "Nothing is on the screens. Take runs the selected Preview action; Restore brings back what was cleared." : rehearsal ? "Rehearsal: the screens keep what they showed before it." : "On air: the screens show Live. Clear takes it down."}
           className="h-7 px-2.5"
         />
       </PanelHeader>

@@ -68,7 +68,7 @@ describe("Present's transport bar", () => {
     await click("Next")
     await click("Previous verse")
     await click("Next verse")
-    await click("Take live")
+    await click("Take source live")
     await click("Clear")
     expect(calls.prev).toHaveBeenCalledTimes(1)
     expect(calls.next).toHaveBeenCalledTimes(1)
@@ -93,13 +93,13 @@ describe("Present's transport bar", () => {
     expect(reasonOf("Next")).toMatch(/running order is empty/)
     expect(reasonOf("Previous verse")).toMatch(/Nothing has been live yet/)
     expect(reasonOf("Next verse")).toMatch(/Nothing has been live yet/)
-    expect(reasonOf("Take live")).toMatch(/Nothing in Preview/)
+    expect(reasonOf("Take source live")).toMatch(/Nothing in Preview/)
     expect(reasonOf("Clear")).toMatch(/Nothing is on the screens/)
     expect(reasonOf("Restore")).toMatch(/Nothing was cleared/)
     // Still focusable, so a keyboard or screen-reader user can find out why.
-    expect(button("Take live").disabled).toBe(false)
+    expect(button("Take source live").disabled).toBe(false)
 
-    await click("Take live")
+    await click("Take source live")
     await click("Next")
     await click("Clear")
     expect(take).not.toHaveBeenCalled()
@@ -139,19 +139,36 @@ describe("Present's transport bar", () => {
     expect(verseNext).toHaveBeenCalledTimes(1)
   })
 
-  it("has one Take live, which says what it puts up and where", async () => {
+  it("makes shared source Take distinct from a selected output's scene Take", async () => {
     useBibleStore.setState({ selectedVerse: verse })
     await render()
     const toolbar = el.querySelector('[role="toolbar"][aria-label="Presentation controls"]')!
     const names = [...toolbar.querySelectorAll("button")].map((b) => b.getAttribute("aria-label"))
-    expect(names.filter((n) => n === "Take live")).toHaveLength(1)
+    expect(names.filter((n) => n === "Take source live")).toHaveLength(1)
     expect(names).not.toContain("Show live")
 
-    const target = () => document.getElementById(button("Take live").getAttribute("aria-describedby")!)!.textContent
+    const target = () => document.getElementById(button("Take source live").getAttribute("aria-describedby")!)!.textContent
     expect(target()).toContain("John 3:16")
-    expect(target()).toContain("no screen is on")
+    expect(target()).toContain("Source Take · outputs subscribed to this source")
+    expect(button("Take source live").title).toContain("does not limit this source Take")
 
     await act(async () => useBroadcastStore.setState({ rehearsal: true }))
-    expect(target()).toContain("this console only (rehearsal)")
+    expect(target()).toContain("Rehearsal · public outputs keep their current Program")
+  })
+
+  it("labels cue and local audio actions without claiming they take a screen source", async () => {
+    await render()
+    await act(async () => useBibleStore.setState({
+      selectedVerse: null,
+      selectedSlide: { item: { id: "cue", kind: "cue", reference: "Sermon begins", confidence: 1, source: "manual", added_at: 0 }, index: 0 } as never,
+    }))
+    expect(button("Run cue").textContent).toContain("Run cue")
+    expect(document.getElementById(button("Run cue").getAttribute("aria-describedby")!)?.textContent).toContain("Cue only")
+
+    await act(async () => useBibleStore.setState({
+      selectedSlide: { item: { id: "audio", kind: "audio", audio: { media_id: "walk-in", name: "Walk-in" }, reference: "Walk-in", confidence: 1, source: "manual", added_at: 0 }, index: 0 } as never,
+    }))
+    expect(button("Play audio cue").textContent).toContain("Play audio cue")
+    expect(document.getElementById(button("Play audio cue").getAttribute("aria-describedby")!)?.textContent).toContain("Audio cue · screen Program stays unchanged")
   })
 })

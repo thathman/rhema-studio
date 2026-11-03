@@ -1,12 +1,12 @@
 import { useId, type ReactNode } from "react"
 import { ChevronLeftIcon, ChevronRightIcon, ChevronsLeftIcon, ChevronsRightIcon, MonitorIcon, RotateCcwIcon, SquareIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { outputOnAir } from "@/lib/output-on-air"
 import { songSlides } from "@/lib/lyrics"
 import { useServiceSong } from "@/stores/song-pins-store"
-import { useBroadcastStore, useQueueStore } from "@/stores"
+import { useBibleStore, useBroadcastStore, useQueueStore } from "@/stores"
+import { useMediaStore } from "@/stores/media-store"
 import { presentActions } from "@/studio/present-actions"
-import { isSongItem } from "@/types"
+import { isAudioItem, isCueItem, isImageItem, isSongItem } from "@/types"
 import { usePreviewLabel } from "@/hooks/use-preview-label"
 
 /** "Next: Chorus" while a song is live, else the keyboard hint. */
@@ -101,15 +101,20 @@ function TransportButton({
 }
 
 /**
- * Present's transport (issue #299): step through the service on the left, one Take live in the
+ * Present's transport (issue #299): step through the service on the left, one source Take in the
  * middle with what it will put up and where, Clear and Restore on the right. Every button runs
  * the same presentActions verb as the keyboard, remotes and cues, so nothing here changes what an
- * action does. The layout follows the bar's own width: on a half-size window Take live gets its
+ * action does. The layout follows the bar's own width: on a half-size window source Take gets its
  * own row and the rest become icons with tooltips, never a sideways scroll.
  */
 export function TransportBar({ className }: { className?: string }) {
   const isLive = useBroadcastStore((s) => s.isLive)
   const hasLiveItem = useBroadcastStore((s) => s.liveVerse !== null)
+  const selectedSlide = useBibleStore((s) => s.selectedSlide)
+  const imagePreviewIsAudio = useMediaStore((s) => {
+    const item = selectedSlide?.item
+    return !!item && isImageItem(item) && s.assets.some((asset) => asset.id === item.image.media_id && asset.kind === "audio")
+  })
   // What is up when it is not a Bible reading: the verse steps then have nothing to continue.
   const notReading = useBroadcastStore((s) => {
     const v = s.liveVerse
@@ -117,9 +122,22 @@ export function TransportBar({ className }: { className?: string }) {
     return v.quickScreen ? "A quick screen" : (v.content && NOT_A_READING[v.content]) || "A slide or picture"
   })
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
-  const onAir = useBroadcastStore((s) => s.outputs.filter((o) => outputOnAir(o, s.outputStatus[o.id])).length)
   const count = useQueueStore((s) => s.items.length)
   const preview = usePreviewLabel()
+  const previewItem = selectedSlide?.item
+  const previewKind = previewItem && isCueItem(previewItem)
+    ? "cue"
+    : previewItem && (isAudioItem(previewItem) || imagePreviewIsAudio)
+      ? "audio"
+      : "source"
+  const takeLabel = previewKind === "cue" ? "Run cue" : previewKind === "audio" ? "Play audio cue" : "Take source live"
+  const takeTitle = previewKind === "cue"
+    ? `Run ${preview ?? "the selected"} cue. It does not change screen Program.`
+    : previewKind === "audio"
+      ? `Play ${preview ?? "the selected"} audio cue. Screen Program stays unchanged.`
+      : rehearsal
+        ? `Take ${preview ?? "the Preview item"} into private rehearsal. Public outputs keep their current Program.`
+        : `Take ${preview ?? "the Preview item"} as the active source. Every output subscribed to that source receives it. The named output selector sets Preview language and the scene Take target; it does not limit this source Take.`
   const nextHint = useNextHint()
   const targetId = useId()
 
@@ -131,7 +149,13 @@ export function TransportBar({ className }: { className?: string }) {
     : notReading
       ? `${notReading} ${isLive ? "is on air" : "was the last thing shown"}: verse steps continue a Bible reading. ${notReading === "A quick screen" ? "Press Back, or take a verse live" : "Take a verse live"} first`
       : null
-  const where = rehearsal ? "this console only (rehearsal)" : onAir === 0 ? "the Live panel only: no screen is on" : `the main screens · ${onAir} ${onAir === 1 ? "output" : "outputs"} on`
+  const destinationHint = previewKind === "cue"
+    ? "Cue only · screen Program stays unchanged"
+    : previewKind === "audio"
+      ? "Audio cue · screen Program stays unchanged"
+      : rehearsal
+        ? "Rehearsal · public outputs keep their current Program"
+        : "Source Take · outputs subscribed to this source"
 
   return (
     <div role="toolbar" aria-label="Presentation controls" className={cn("@container", className)}>
@@ -177,21 +201,21 @@ export function TransportBar({ className }: { className?: string }) {
 
         <span aria-hidden className="hidden h-7 w-px bg-border @min-[32rem]:block" />
 
-        {/* The one go-live action, with what it puts up and where; on a narrow bar it gets its own row. */}
-        <div role="group" aria-label="Take live" className="flex min-w-0 flex-1 items-center gap-3 @max-[32rem]:order-first @max-[32rem]:basis-full">
+        {/* Source Take follows subscriptions; the named-output scene action stays separately scoped below Program. */}
+        <div role="group" aria-label={takeLabel} className="flex min-w-0 flex-1 items-center gap-3 @max-[32rem]:order-first @max-[32rem]:basis-full">
           <TransportButton
             icon={<MonitorIcon />}
-            label="Take live"
-            title={preview ? `Take live: put ${preview} on ${where}` : "Take live"}
+            label={takeLabel}
+            title={takeTitle}
             reason={preview ? null : "Nothing in Preview: click a running-order item or find a verse first"}
             onClick={() => presentActions.showLive()}
             tone="take"
-            text={{ value: "Take live", className: "flex" }}
+            text={{ value: takeLabel, className: "flex" }}
             describedBy={targetId}
           />
           <p id={targetId} className="min-w-0 flex-1 text-xs leading-tight">
             <span className="block truncate font-medium text-foreground">{preview ?? "Nothing in Preview"}</span>
-            <span className="block truncate text-muted-foreground">→ {where}</span>
+            <span className="block truncate text-muted-foreground">{destinationHint}</span>
           </p>
         </div>
 

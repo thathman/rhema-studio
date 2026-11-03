@@ -55,7 +55,7 @@ export async function activateOnBibleFeeds(verse: Verse, opts: { itemId?: string
   const outcome = await presentVerse(verse, { sourceOnly: true, itemId: opts.itemId ?? null, by: opts.by })
   if (outcome === "presented") {
     if (useBroadcastStore.getState().rehearsal) toast.info("Rehearsal: the Bible feeds were not changed")
-    else toast.success(`${verse.book_name} ${verse.chapter}:${verse.verse} is on the Bible feeds`, { description: "The main screens still show what they showed. Take live puts it there too." })
+    else toast.success(`${verse.book_name} ${verse.chapter}:${verse.verse} is on the Bible feeds`, { description: "The main screens still show what they showed. Take source live puts it there too." })
   }
   return outcome
 }

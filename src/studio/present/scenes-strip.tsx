@@ -204,7 +204,7 @@ function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; sce
 
 /**
  * A scene control. Like the transport's, one that cannot act stays focusable and says why. Take
- * scene is outlined teal with a layers icon, so it never reads as the solid Take live.
+ * scene is outlined teal with a layers icon, so it never reads as the solid Take source live.
  */
 function SceneAction({ icon, label, text, title, reason, onClick, primary, descriptionId }: { icon: ReactNode; label: string; text: string; title: string; reason: string | null; onClick: () => void; primary?: boolean; descriptionId?: string }) {
   const reasonId = useId()
