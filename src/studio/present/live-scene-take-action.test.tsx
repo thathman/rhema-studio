@@ -80,6 +80,9 @@ describe("Live's named scene Take", () => {
     expect(take.disabled).toBe(false)
     expect(element.textContent).toContain("Private Preview")
     expect(element.textContent).toContain("only Sanctuary Main is affected")
+    const contextRow = element.querySelector<HTMLElement>("[data-program-context-row]")!
+    expect(contextRow.title).toContain("Affected output: Sanctuary Main only")
+    expect(contextRow.textContent).not.toContain("Affected output:")
 
     await click(take)
 

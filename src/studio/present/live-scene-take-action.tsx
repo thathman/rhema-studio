@@ -142,13 +142,12 @@ export function LiveSceneTakeAction({ selection }: {
     : currentView.phase === "stale" ? "Review again" : currentView.phase === "checking" ? "Checking…" : currentView.phase === "taking" ? "Taking…" : `Take ${selection.sceneName} to ${selection.outputName}`
 
   return (
-    <div data-slot="live-scene-take-action" data-program-context-row className="flex shrink-0 flex-col gap-1.5 border-b border-border px-3 py-2">
+    <div data-slot="live-scene-take-action" data-program-context-row title={selection.details ?? undefined} className="flex shrink-0 flex-col gap-1.5 border-b border-border px-3 py-2">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <div className="min-w-0 flex-1">
           <p className="truncate text-[0.6875rem] font-semibold" title={`${selection.sceneName} → ${selection.outputName}`}>
             {selection.sceneName} <span className="text-muted-foreground">→ {selection.outputName}</span>
           </p>
-          <p className="truncate text-[0.6875rem] text-muted-foreground">Private scene Preview · {selection.revisionLabel}</p>
         </div>
         {currentView.phase === "stale" && canReview ? (
           <Button type="button" size="sm" variant="outline" aria-label={actionLabel} onClick={() => void review()}>
@@ -160,7 +159,6 @@ export function LiveSceneTakeAction({ selection }: {
           </Button>
         )}
       </div>
-      {selection.details && <p className="text-[0.6875rem] leading-snug text-muted-foreground">{selection.details}</p>}
       {(currentView.phase === "ready" && selection.disabledReason ? selection.disabledReason : currentView.message) && <p role="status" aria-live="polite" aria-atomic="true" className="text-[0.6875rem] leading-snug text-muted-foreground">{currentView.phase === "ready" && selection.disabledReason ? selection.disabledReason : currentView.message}</p>}
       {canReview && currentView.phase !== "stale" && (
         <Button type="button" size="xs" variant="ghost" aria-label={`Retry host review for ${selection.sceneName} on ${selection.outputName}`} onClick={() => void review()} className="min-h-9 self-start">
