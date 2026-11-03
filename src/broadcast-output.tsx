@@ -146,6 +146,10 @@ function BroadcastCanvas() {
   const ndiCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const lastPushRef = useRef(0)
   const pushingRef = useRef(false)
+  // A whole frame is owed (none sent yet, or one skipped or failed): the next push sends it all, never
+  // just the ticker's band, or a scene change taken while the ticker moves never reaches NDI or a
+  // recording (#411 recorder QA: 4 of 12 changes lost).
+  const fullOwedRef = useRef(true)
   // For the recorder's timing (#626): when the canvas was last drawn (ms since 1970) and how many
   // frames this page drew but could not send. Sent as x-frame-drawn-at / x-frames-skipped.
   const drawnAtRef = useRef(0)
@@ -271,6 +275,10 @@ function BroadcastCanvas() {
     const { width, height } = data.theme.resolution
     const h = Math.round((height * data.ticker.style.height) / 100)
     const y = data.ticker.style.position === "top" ? 0 : height - h
+    // This band is a drawing of the canvas too: its push says when, or the recorder places it at the
+    // last full drawing (up to 2 s back) or at its arrival, and a band read before a scene change but
+    // arriving after it hides that change (#411 recorder QA).
+    drawnAtRef.current = Date.now()
     try {
       ctx.clearRect(0, y, width, h)
       ctx.drawImage(baseCanvas, 0, y, width, h, 0, y, width, h)
@@ -300,6 +308,7 @@ function BroadcastCanvas() {
     // Back-pressure: skip while a push is in flight, unless its reply is over a second late (lost).
     if (pushingRef.current && performance.now() - pushStartedRef.current < 1000) {
       skippedRef.current++
+      if (!region) fullOwedRef.current = true
       return
     }
     pushingRef.current = true
@@ -331,7 +340,7 @@ function BroadcastCanvas() {
         sourceHeight = targetHeight
       }
 
-      if (region && sourceCtx === ctx && lastPushRef.current > 0) {
+      if (region && sourceCtx === ctx && !fullOwedRef.current) {
         // Only the rows that moved (a ticker's band): the whole frame is ~8 MB, and moving it
         // from the page takes ~70 ms on an Intel Mac, too slow for 30 frames a second.
         const band = sourceCtx.getImageData(0, region.y, sourceWidth, region.height)
@@ -344,10 +353,12 @@ function BroadcastCanvas() {
         await invoke("push_ndi_frame", new Uint8Array(imageData.data.buffer), {
           headers: { "x-ndi-output": OUTPUT_ID, "x-ndi-width": String(sourceWidth), "x-ndi-height": String(sourceHeight), ...frameTiming(drawnAtRef.current, skippedRef.current) },
         })
+        fullOwedRef.current = false
       }
       lastPushRef.current = Date.now()
       if (ndiRawRef.current.active) reportNdi(true, "")
     } catch (error) {
+      fullOwedRef.current = true
       console.warn("[broadcast-output] push_ndi_frame failed", error)
       if (ndiRawRef.current.active) reportNdi(false, String(error))
     } finally {
