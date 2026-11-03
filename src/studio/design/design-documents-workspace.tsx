@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { designStore, type DesignDocument, type DesignSummary, type DesignVersion } from "@/design-engine/design-store"
 import { createBlankRhemaDesign, pinnedSceneForVersion } from "@/design-engine/design-document-utils"
-import { designPages, sceneToDesign } from "@/design-engine/rhema-scene"
+import { designPages, outputCoverPictures, sceneToDesign } from "@/design-engine/rhema-scene"
 import { adoptLook, type LibraryLook } from "@/lib/look-library"
 import { libraryLooks } from "@/lib/design-packs"
 import { useBroadcastStore, useSettingsStore } from "@/stores"
@@ -352,7 +352,7 @@ function DesignVersionArtworkPreview({ version, pageId }: { version: DesignVersi
       const pageScene = page.nodeId === version.document.scene.root
         ? version.document.scene
         : { ...version.document.scene, root: page.nodeId }
-      const rendered = await renderSceneToCanvas(pageScene, { maxCssPx: 720, awaitFonts: false })
+      const rendered = await renderSceneToCanvas(pageScene, { maxCssPx: 720, awaitFonts: false, imageCover: outputCoverPictures(version.document) })
       if (!rendered) throw new Error("The design renderer returned no artwork.")
       if (cancelled) return
       target.width = rendered.width

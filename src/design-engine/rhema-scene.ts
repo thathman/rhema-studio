@@ -16,7 +16,7 @@ import {
   type SaraswatiScene,
   type SaraswatiTextNode,
 } from "../vendor/avnac/saraswati"
-import type { CountdownTo, DesignPin, Scene, SceneGradient, SceneLayer } from "../types/scene"
+import type { CountdownTo, DesignPin, Scene, SceneCrop, SceneGradient, SceneLayer } from "../types/scene"
 import { gradientCss, gradientFallback, gradientIssue, normalizeGradient } from "../lib/scene-gradient"
 import { imageDrawIssue, normalizeImageDraw } from "../lib/scene-image"
 
@@ -240,6 +240,28 @@ export function designPages(design: RhemaDesign): RhemaDesignPage[] {
   return [{ id: design.scene.root, nodeId: design.scene.root, title: "Page 1" }]
 }
 
+/** Cropped, rounded or clipped in the editor: outputs then draw it as the editor does. */
+function pictureEdited(node: SaraswatiImageNode): boolean {
+  return node.cropX !== 0 || node.cropY !== 0 || node.cropWidth !== undefined || node.cropHeight !== undefined || !!node.clipPath || (node.clipPathStack?.length ?? 0) > 0 || (node.borderRadius ?? 0) > 0
+}
+
+/**
+ * The pictures outputs draw covering their box (#448 P2), by node id, with their Scene composer
+ * crop (%): never cropped, rounded or clipped in the editor. The editor previews these the same
+ * way (`renderSceneToCanvas`'s `imageCover`), so a picture stretched out of shape there shows
+ * what the screens will show. Read from the design itself, so approved versions draw as before.
+ */
+export function outputCoverPictures(design: Pick<RhemaDesign, "scene" | "bindings">): Record<string, SceneCrop> {
+  const cover: Record<string, SceneCrop> = {}
+  for (const node of Object.values(design.scene.nodes)) {
+    const binding = design.bindings[node.id]
+    if (node.type === "image" && binding?.kind === "picture" && !binding.imageDraw && !pictureEdited(node)) {
+      cover[node.id] = binding.crop ?? { l: 0, t: 0, r: 0, b: 0 }
+    }
+  }
+  return cover
+}
+
 /**
  * Back to a Rhema scene. Callers must refuse to save when `issues` is nonempty. Supported edits
  * come back in the editor's order with its position, size, visibility and name; unsupported paint,
@@ -344,7 +366,7 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         issues.push({ nodeId: node.id, message: "Image replacement cannot be saved into this Rhema layer yet" })
       }
       const clips = [...(node.clipPathStack ?? []), ...(node.clipPath ? [node.clipPath] : [])]
-      const edited = node.cropX !== 0 || node.cropY !== 0 || node.cropWidth !== undefined || node.cropHeight !== undefined || clips.length > 0 || (node.borderRadius ?? 0) > 0
+      const edited = pictureEdited(node)
       if (!Number.isFinite(node.scaleX) || !Number.isFinite(node.scaleY) || node.scaleX <= 0 || node.scaleY <= 0) {
         issues.push({ nodeId: node.id, message: "Pictures must keep a positive, unflipped scale for Rhema scene output" })
       } else if (edited && !binding.imageDraw && binding.crop && (binding.crop.l || binding.crop.t || binding.crop.r || binding.crop.b)) {

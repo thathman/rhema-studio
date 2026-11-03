@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest"
 
 import { applyCommand, buildRenderCommands } from "@/vendor/avnac/saraswati"
 import { canvas2DRendererBackend } from "@/vendor/avnac/renderer/backends/canvas2d/renderer"
-import { designToScene, sceneToDesign } from "@/design-engine/rhema-scene"
+import { designToScene, outputCoverPictures, sceneToDesign } from "@/design-engine/rhema-scene"
 import { normalizeScene, sceneFrame } from "@/lib/scenes"
 import { drawScene } from "@/lib/scene-renderer"
 import type { Scene, SceneLayer } from "@/types"
@@ -213,4 +213,48 @@ it("filling in a library picture's address keeps its crop", async () => {
   b().saveScene({ ...scene, layers: [{ ...scene.layers[0]!, imageUrl: "asset://m1.png" }] })
   b().saveScene(scene)
   expect(b().scenes.find((s) => s.id === "hydrate")?.layers[0]?.imageDraw).toEqual(scene.layers[0]!.imageDraw)
+})
+
+describe("a picture never cropped in the editor (#448 P2)", () => {
+  /** The editor's preview, drawing pictures as outputs will (what `renderSceneToCanvas` does with `imageCover`). */
+  async function drawPreview(design: ReturnType<typeof sceneToDesign>, cover = true): Promise<Canvas> {
+    const canvas = createCanvas(1920, 1080)
+    const covered = cover ? outputCoverPictures(design) : {}
+    const commands = buildRenderCommands(design.scene).map((c) => (c.type === "image" && covered[c.id] ? { ...c, cover: covered[c.id] } : c))
+    await canvas2DRendererBackend.render(ctxOf(canvas), commands)
+    return canvas
+  }
+
+  it("resized out of shape, the editor previews it covering its box, as outputs draw it", async () => {
+    // Composer-cropped off centre, so where its colours meet shows whether it was stretched.
+    const design = sceneToDesign(pictureScene({ crop: { l: 25, t: 0, r: 0, b: 0 } }))
+    // Stretch it three times wider than tall: the 1.5:1 picture can only cover that by losing its top and bottom.
+    const scene = applyCommand(design.scene, { type: "RESIZE_NODE", id: "pic", x: 384, y: 216, width: 960, height: 320 })
+    const resized = { ...design, scene }
+    const { scene: saved, issues } = designToScene(resized)
+    expect(issues).toEqual([])
+    expect(saved.layers[0]!.imageDraw).toBeUndefined()
+    const out = drawOutput(saved)
+    expect(differing(await drawPreview(resized), out)).toBeLessThan(0.002)
+    // Without the cover, the editor stretched it: the screens would not show what was designed.
+    expect(differing(await drawPreview(resized, false), out)).toBeGreaterThan(0.01)
+  })
+
+  it("keeps its Scene composer crop in the preview", async () => {
+    const design = sceneToDesign(pictureScene({ crop: { l: 50, t: 0, r: 0, b: 0 } }))
+    const out = drawOutput(designToScene(design).scene)
+    expect(near(pixel(out, ...inBox(0.5, 0.25)), GREEN)).toBe(true)
+    expect(differing(await drawPreview(design), out)).toBeLessThan(0.002)
+  })
+
+  it("one cropped, rounded or clipped in the editor, now or before, is previewed as the editor draws it", () => {
+    const cropped = sceneToDesign(pictureScene())
+    cropped.scene = applyCommand(cropped.scene, { type: "SET_IMAGE_BORDER_RADIUS", id: "pic", radius: 20 })
+    expect(outputCoverPictures(cropped)).toEqual({})
+    // Reset after a save: outputs keep drawing it as the editor does, so the preview does too.
+    const before = sceneToDesign(edited({ type: "SET_IMAGE_CROP", id: "pic", cropX: 10, cropY: 0 }))
+    before.scene = applyCommand(before.scene, { type: "SET_IMAGE_CROP", id: "pic", cropX: 0, cropY: 0 })
+    expect(designToScene(before).scene.layers[0]!.imageDraw).toBeDefined()
+    expect(outputCoverPictures(before)).toEqual({})
+  })
 })
