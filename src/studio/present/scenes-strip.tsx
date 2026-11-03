@@ -134,7 +134,7 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
           <SceneAction
             icon={<LayersIcon />}
             label={picked ? `Take scene ${picked.name} to ${output.name}` : `Take scene to ${output.name}`}
-            text={`Take to ${output.name}`}
+            text={picked ? `Take ${picked.name} to ${output.name}` : `Choose a scene for ${output.name}`}
             title={picked ? (rehearsal ? `Rehearse ${picked.name} on ${output.name}. The screen keeps its scene.` : `Take ${picked.name} to ${output.name} only.`) : `Choose a scene to take to ${output.name}.`}
             reason={takeReason}
             descriptionId={details ? takeDetailsId : undefined}
@@ -259,7 +259,7 @@ function SceneAction({ icon, label, text, title, reason, onClick, primary, descr
         )}
       >
         {icon}
-        <span aria-hidden className="max-w-36 truncate">{text}</span>
+        <span aria-hidden className="max-w-56 truncate">{text}</span>
       </button>
       {off && <span id={reasonId} className="sr-only">{reason}</span>}
     </>

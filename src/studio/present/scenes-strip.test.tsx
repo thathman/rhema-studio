@@ -245,7 +245,7 @@ describe("Present's scenes", () => {
       const takeScene = quickControls.querySelector<HTMLButtonElement>('[aria-label="Take scene Camera with the Bible to Overflow"]')!
       expect(toggle.getAttribute("aria-expanded")).toBe("false")
       expect(selection.value).toBe("cam")
-      expect(takeScene.textContent).toContain("Take to Overflow")
+      expect(takeScene.textContent).toContain("Take Camera with the Bible to Overflow")
       expect(takeScene.getAttribute("aria-disabled")).toBeNull()
       expect(quickControls.textContent).toContain("Layout: own feed")
 

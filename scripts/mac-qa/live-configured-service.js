@@ -106,11 +106,12 @@ async function runScenario() {
     takeLabel: sourceTake?.getAttribute("aria-label"),
     takeDisabled: sourceTake?.getAttribute("aria-disabled") === "true",
     selectedScene: scenePicker?.selectedOptions?.[0]?.textContent?.trim(),
+    sceneTakeText: sceneTake?.textContent?.replace(/\s+/g, " ").trim(),
     sceneTakeLabel: sceneTake?.getAttribute("aria-label"),
     sceneTakeDisabled: sceneTake?.getAttribute("aria-disabled") === "true",
     toolbarButtons,
   }
-  if (result.service !== "QA Sunday Service" || !result.saved || result.itemCount !== 1 || result.eventName !== "Opening" || !result.output || !result.selectedOutput?.startsWith(result.output) || result.preview !== "Welcome" || result.takeLabel !== "Take source live" || result.programLive || !result.programUnchanged || result.takeDisabled || result.selectedScene !== "Welcome layout" || result.sceneTakeLabel !== `Take scene Welcome layout to ${result.output}` || result.sceneTakeDisabled || !toolbarButtons.some((label) => label.includes("Find & listen")) || !toolbarButtons.some((label) => label.includes("Live tools")) || toolbarText.includes("Production tools") || toolbarText.includes("More controls") || toolbarText.includes("Listening off") || toolbarText.includes("Saved translations")) {
+  if (result.service !== "QA Sunday Service" || !result.saved || result.itemCount !== 1 || result.eventName !== "Opening" || !result.output || !result.selectedOutput?.startsWith(result.output) || result.preview !== "Welcome" || result.takeLabel !== "Take source live" || result.programLive || !result.programUnchanged || result.takeDisabled || result.selectedScene !== "Welcome layout" || result.sceneTakeText !== `Take ${result.selectedScene} to ${result.output}` || result.sceneTakeLabel !== `Take scene Welcome layout to ${result.output}` || result.sceneTakeDisabled || !toolbarButtons.some((label) => label.includes("Find & listen")) || !toolbarButtons.some((label) => label.includes("Live tools")) || toolbarText.includes("Production tools") || toolbarText.includes("More controls") || toolbarText.includes("Listening off") || toolbarText.includes("Saved translations")) {
     throw new Error(`Unexpected configured Live state: ${JSON.stringify(result)}`)
   }
   return result
