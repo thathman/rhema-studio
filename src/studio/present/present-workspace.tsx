@@ -61,6 +61,12 @@ function moveLiveToolbarFocus(event: ReactKeyboardEvent<HTMLDivElement>): void {
   next.focus()
 }
 
+function ignorePresentArrowsOnNavigationButton(event: ReactKeyboardEvent<HTMLButtonElement>): void {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+  event.preventDefault()
+  event.stopPropagation()
+}
+
 export function PresentWorkspace() {
   const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null)
   const toolsButtonRef = useRef<HTMLButtonElement>(null)
@@ -204,6 +210,7 @@ export function PresentWorkspace() {
                 size="xs"
                 aria-label="Open Permissions because approval status is unavailable"
                 title="The host approval request status could not be loaded. Open Permissions to retry; the pending count is unknown."
+                onKeyDown={ignorePresentArrowsOnNavigationButton}
                 onClick={() => useShellStore.getState().goTo("permissions")}
               >
                 <CircleAlertIcon /> Requests unavailable
@@ -216,6 +223,7 @@ export function PresentWorkspace() {
                 size="xs"
                 aria-label={`Open ${pendingApprovalCount} pending approval ${pendingApprovalCount === 1 ? "request" : "requests"} in Permissions`}
                 title={`${pendingApprovalCount} host-recorded request${pendingApprovalCount === 1 ? "" : "s"} await review. Open Permissions to inspect the exact requests.`}
+                onKeyDown={ignorePresentArrowsOnNavigationButton}
                 onClick={() => useShellStore.getState().goTo("permissions")}
               >
                 <ShieldCheckIcon /> Requests <span className="tabular-nums">{pendingApprovalCount}</span>
