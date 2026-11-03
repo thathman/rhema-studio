@@ -10,9 +10,10 @@ const waitFor = async (predicate, label, timeoutMs = 5000) => {
 }
 const normal = (value) => String(value ?? "").replace(/\s+/g, " ").trim()
 const buttons = () => [...document.querySelectorAll("button, [role=tab]")]
-const clickButton = async (name, { startsWith = false } = {}) => {
+const clickButton = async (name, { startsWith = false, within = null } = {}) => {
+  const scope = within ?? document
   const button = await waitFor(
-    () => buttons().find((candidate) => {
+    () => [...scope.querySelectorAll("button, [role=tab]")].find((candidate) => {
       const label = normal(candidate.getAttribute("aria-label") || candidate.innerText)
       return startsWith ? label.startsWith(name) : label === name
     }),
@@ -28,6 +29,28 @@ const clickButton = async (name, { startsWith = false } = {}) => {
   button.click()
   await sleep(100)
   return button
+}
+const chooseSceneForOutput = async (sceneName, outputName) => {
+  const picker = await waitFor(() => {
+    const quick = [...document.querySelectorAll('[role="group"][aria-label^="Quick scene controls for "]')]
+      .find((element) => element.getAttribute("aria-label") === `Quick scene controls for ${outputName}`)
+    const select = quick?.querySelector("select[aria-label^='Choose scene for ']")
+    if (select) return { select }
+    const group = [...document.querySelectorAll('[role="group"][aria-label^="Scenes for "]')]
+      .find((element) => element.getAttribute("aria-label") === `Scenes for ${outputName}`)
+    return group ? { group } : null
+  }, `scene picker for ${outputName}`)
+  if (picker.select) {
+    const option = [...picker.select.options].find((candidate) => normal(candidate.textContent) === sceneName)
+    if (!option) throw new Error(`Scene “${sceneName}” is not available for ${outputName}`)
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set
+    if (!setter) throw new Error("No value setter for scene picker")
+    setter.call(picker.select, option.value)
+    picker.select.dispatchEvent(new Event("change", { bubbles: true }))
+    await sleep(100)
+    return
+  }
+  await clickButton(sceneName, { startsWith: true, within: picker.group })
 }
 const setInput = async (selector, value) => {
   const input = await waitFor(() => document.querySelector(selector), `input ${selector}`)
@@ -56,11 +79,21 @@ async function runScenario() {
     const sceneName = await waitFor(() => document.querySelector('input[aria-label="Scene name"]'), "scene name field")
     await waitFor(() => sceneName.value === "Full screen", "new scene draft")
 
-    stage = "Take the initial scene to the congregation output"
-    await clickButton("Take Full screen to ", { startsWith: true })
-    const stateAfterInitialTake = qaStores.broadcast.getState()
-    const output = stateAfterInitialTake.outputs.find((candidate) => (candidate.role ?? "congregation") === "congregation")
+    const output = qaStores.broadcast.getState().outputs.find((candidate) => (candidate.role ?? "congregation") === "congregation")
     if (!output) throw new Error("No congregation output is configured")
+
+    stage = "save the initial scene to the library without changing the output"
+    await clickButton("Save scene")
+    await waitFor(() => qaStores.broadcast.getState().scenes.some((scene) => scene.name === "Full screen"), "initial scene revision to save")
+
+    stage = "choose the saved scene in the output's private scene preview"
+    await chooseSceneForOutput("Full screen", output.name)
+    const initialTakeLabel = `Take scene Full screen to ${output.name}`
+    await waitFor(() => buttons().some((button) => button.getAttribute("aria-label") === initialTakeLabel && !button.disabled && button.getAttribute("aria-disabled") !== "true"), "ready named scene Take in Program")
+
+    stage = "Take the initial scene to the congregation output"
+    await clickButton(initialTakeLabel)
+    const stateAfterInitialTake = qaStores.broadcast.getState()
     const outputId = output.id
     await waitFor(() => {
       const current = qaStores.broadcast.getState()
@@ -94,7 +127,9 @@ async function runScenario() {
     if (afterSave.isLive !== liveBeforeEdit) throw new Error("Saving the scene changed Live content state")
 
     stage = "Take the saved revision deliberately"
-    await clickButton("Take QA Scene Draft to ", { startsWith: true })
+    const savedTakeLabel = `Take scene QA Scene Draft to ${output.name}`
+    await waitFor(() => buttons().some((button) => button.getAttribute("aria-label") === savedTakeLabel && !button.disabled && button.getAttribute("aria-disabled") !== "true"), "ready Take for the saved scene revision")
+    await clickButton(savedTakeLabel)
     await waitFor(() => {
       const current = qaStores.broadcast.getState()
       return current.outputs.find((candidate) => candidate.id === outputId)?.sceneSnapshot?.name === "QA Scene Draft"
