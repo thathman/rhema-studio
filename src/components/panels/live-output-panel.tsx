@@ -1,4 +1,5 @@
 import { PauseIcon, PlayIcon } from "lucide-react"
+import type { ReactNode } from "react"
 import { PanelHeader } from "@/components/ui/panel-header"
 import { Button } from "@/components/ui/button"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
@@ -17,7 +18,7 @@ import type { BroadcastOutput, BroadcastOutputStatus } from "@/types"
  * What the screens show. The transport is the only ordinary place to Take or
  * Clear live; this panel reports Program status and offers its scoped controls.
  */
-export function LiveOutputPanel({ outputId }: { outputId?: string | null } = {}) {
+export function LiveOutputPanel({ outputId, sceneTakeAction }: { outputId?: string | null; sceneTakeAction?: ReactNode } = {}) {
   const isLive = useBroadcastStore((s) => s.isLive)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
   const autoMode = useBroadcastStore(autoModeOf)
@@ -93,6 +94,9 @@ export function LiveOutputPanel({ outputId }: { outputId?: string | null } = {})
         />
       </PanelHeader>
 
+      {/* Keep the selected output's named scene action at the top of Program, above the picture. It
+          remains visible when the screen preview is short and stays distinct from source Take. */}
+      {sceneTakeAction}
       <div
         data-slot="live-picture"
         className={cn(

@@ -1,7 +1,20 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const receiverState = vi.hoisted(() => ({ health: null as null | { watching: number; current: boolean; behind: boolean; tvs?: Record<string, number> } }))
+const receiverState = vi.hoisted(() => {
+  if (globalThis.HTMLCanvasElement) {
+    const context = new Proxy({ font: "" }, {
+      get: (target, property) => property === "measureText"
+        ? (text: string) => ({ width: text.length * 8 })
+        : property === "canvas"
+          ? { width: 1920, height: 1080 }
+          : Reflect.get(target, property) ?? (() => undefined),
+      set: (target, property, value) => Reflect.set(target, property, value),
+    })
+    globalThis.HTMLCanvasElement.prototype.getContext = (() => context) as unknown as typeof globalThis.HTMLCanvasElement.prototype.getContext
+  }
+  return { health: null as null | { watching: number; current: boolean; behind: boolean; tvs?: Record<string, number> } }
+})
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
@@ -20,6 +33,7 @@ import { SCENE_PRESETS, newScene } from "@/lib/scenes"
 
 let el: HTMLDivElement
 let root: Root
+const originalViewport = { width: window.innerWidth, height: window.innerHeight }
 const verse: Verse = { id: 1, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "Jn", chapter: 3, verse: 16, text: "For God so loved the world" }
 
 async function render(node: React.ReactNode) {
@@ -40,9 +54,36 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount())
   el.remove()
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: originalViewport.width })
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: originalViewport.height })
 })
 
 describe("Present's Program and Preview panels", () => {
+  it.each([
+    { width: 1024, height: 700 },
+    { width: 1366, height: 768 },
+    { width: 1702, height: 895 },
+    { width: 1920, height: 1080 },
+  ])("keeps the selected output's named scene action structurally attached to Program at $width×$height", async ({ width, height }) => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width })
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: height })
+    await render(<LiveOutputPanel outputId="main" sceneTakeAction={<div data-slot="live-scene-take-action" data-program-context-row className="flex shrink-0"><button type="button">Take Welcome to Sanctuary</button></div>} />)
+    const panel = el.querySelector('[data-slot="live-output-panel"]')!
+    const header = panel.querySelector('[data-slot="panel-header"]')!
+    const contextRow = panel.querySelector('[data-program-context-row]')!
+    const picture = panel.querySelector('[data-slot="live-picture"]')!
+    const action = panel.querySelector('[data-slot="live-scene-take-action"] button')!
+    expect(window.innerWidth).toBe(width)
+    expect(window.innerHeight).toBe(height)
+    expect(action.textContent).toBe("Take Welcome to Sanctuary")
+    expect(panel.querySelectorAll('[data-program-context-row]')).toHaveLength(1)
+    expect(contextRow.className).toContain("shrink-0")
+    expect(contextRow.hasAttribute("hidden")).toBe(false)
+    expect(header.compareDocumentPosition(contextRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(contextRow.compareDocumentPosition(picture) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(action.closest('[role="toolbar"]')).toBeNull()
+  })
+
   it("Program has no second go-live switch and reports whether the screens are on air", async () => {
     await render(<LiveOutputPanel />)
     expect(el.querySelector('[role="switch"]')).toBeNull()

@@ -81,6 +81,7 @@ async function runScenario() {
   await waitFor(() => document.querySelector('[role="region"][aria-label="Live setup actions"]') === null, "configured Live running order")
   await waitFor(() => document.querySelector('[data-studio-live]'), "actual Program panel")
   await waitFor(() => document.querySelector('[data-slot="preview-panel"]'), "private Preview panel")
+  await waitFor(() => document.querySelector('[data-studio-live] [data-slot="live-scene-take-action"] button'), "selected-output scene Take in Program")
   await sleep(300)
 
   const output = qa.broadcast.getState().outputs.find((candidate) => candidate.id === targetOutput.id)
@@ -89,7 +90,17 @@ async function runScenario() {
   const sourceTake = document.querySelector('[aria-label="Take source live"]')
   const sceneControls = [...document.querySelectorAll('[aria-label^="Quick scene controls for "]')].find((element) => element.getAttribute("aria-label") === `Quick scene controls for ${output?.name}`)
   const scenePicker = sceneControls?.querySelector("select")
-  const sceneTake = sceneControls?.querySelector("button[aria-label^='Take scene Welcome layout to ']")
+  const programPanel = document.querySelector('[data-studio-live]')
+  const contextRow = programPanel?.querySelector('[data-program-context-row]')
+  const sceneTake = contextRow?.querySelector("button[aria-label^='Take scene Welcome layout to ']")
+  const programBounds = programPanel?.getBoundingClientRect()
+  const contextBounds = contextRow?.getBoundingClientRect()
+  const pictureBounds = programPanel?.querySelector('[data-slot="live-picture"]')?.getBoundingClientRect()
+  const actionBounds = sceneTake?.getBoundingClientRect()
+  const sceneTakeVisibleWithProgram = !!programBounds && !!contextBounds && !!pictureBounds && !!actionBounds
+    && contextBounds.top >= programBounds.top && contextBounds.bottom <= programBounds.bottom
+    && actionBounds.left >= programBounds.left && actionBounds.right <= programBounds.right
+    && actionBounds.top >= programBounds.top && actionBounds.bottom <= pictureBounds.top
   const liveToolbar = document.querySelector('[role="toolbar"][aria-label="Live tools"]')
   const toolbarButtons = [...(liveToolbar?.querySelectorAll("button") ?? [])].map((button) => button.textContent?.replace(/\s+/g, " ").trim() ?? "")
   const toolbarText = liveToolbar?.textContent?.replace(/\s+/g, " ").trim() ?? ""
@@ -109,9 +120,11 @@ async function runScenario() {
     sceneTakeText: sceneTake?.textContent?.replace(/\s+/g, " ").trim(),
     sceneTakeLabel: sceneTake?.getAttribute("aria-label"),
     sceneTakeDisabled: sceneTake?.getAttribute("aria-disabled") === "true",
+    sceneTakeVisibleWithProgram,
+    sceneTakeContext: contextBounds && programBounds ? { top: contextBounds.top - programBounds.top, bottom: contextBounds.bottom - programBounds.top } : null,
     toolbarButtons,
   }
-  if (result.service !== "QA Sunday Service" || !result.saved || result.itemCount !== 1 || result.eventName !== "Opening" || !result.output || !result.selectedOutput?.startsWith(result.output) || result.preview !== "Welcome" || result.takeLabel !== "Take source live" || result.programLive || !result.programUnchanged || result.takeDisabled || result.selectedScene !== "Welcome layout" || result.sceneTakeText !== `Take ${result.selectedScene} to ${result.output}` || result.sceneTakeLabel !== `Take scene Welcome layout to ${result.output}` || result.sceneTakeDisabled || !toolbarButtons.some((label) => label.includes("Find & listen")) || !toolbarButtons.some((label) => label.includes("Live tools")) || toolbarText.includes("Production tools") || toolbarText.includes("More controls") || toolbarText.includes("Listening off") || toolbarText.includes("Saved translations")) {
+  if (result.service !== "QA Sunday Service" || !result.saved || result.itemCount !== 1 || result.eventName !== "Opening" || !result.output || !result.selectedOutput?.startsWith(result.output) || result.preview !== "Welcome" || result.takeLabel !== "Take source live" || result.programLive || !result.programUnchanged || result.takeDisabled || result.selectedScene !== "Welcome layout" || result.sceneTakeText !== `Take ${result.selectedScene} to ${result.output}` || result.sceneTakeLabel !== `Take scene Welcome layout to ${result.output}` || result.sceneTakeDisabled || !result.sceneTakeVisibleWithProgram || !toolbarButtons.some((label) => label.includes("Find & listen")) || !toolbarButtons.some((label) => label.includes("Live tools")) || toolbarText.includes("Production tools") || toolbarText.includes("More controls") || toolbarText.includes("Listening off") || toolbarText.includes("Saved translations")) {
     throw new Error(`Unexpected configured Live state: ${JSON.stringify(result)}`)
   }
   return result

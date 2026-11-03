@@ -4,30 +4,44 @@ import { cn } from "@/lib/utils"
 import { drawScene } from "@/lib/scene-renderer"
 import { sceneForOutput, sceneFrame, sceneNeedsRefresh } from "@/lib/scenes"
 import { sceneRevisionLabel, sceneTakeDetails } from "@/lib/scene-take-details"
+import { readSceneTakeRevisions, sceneTakeApproval, type ApprovedSceneTake } from "@/lib/scene-take"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useServiceStore } from "@/stores/service-store"
 import { cleanIntentId } from "@/lib/item-intent"
+import { sceneReleaseApprovalBlockReason } from "@/studio/present/scene-take-policy"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { SceneSheetButton } from "@/studio/present/scene-sheet"
-import type { BroadcastOutput, Scene } from "@/types"
+import type { SceneTakeSelection } from "@/studio/present/live-scene-take-action"
+import type { BroadcastOutput, Scene, SceneAppearanceSnapshot } from "@/types"
 
 /** Window heights at which the scenes start folded (a 1440×900 laptop and smaller). */
 export const SCENES_FOLDED_QUERY = "(max-height: 900px)"
 
 const isCongregation = (o: BroadcastOutput) => (o.role ?? "congregation") === "congregation"
 
+type ApprovedPreviewState =
+  | { key: string; status: "idle" | "loading" }
+  | { key: string; status: "ready"; approved: ApprovedSceneTake }
+  | { key: string; status: "error"; message: string }
+
 /** What a scene Take does in rehearsal: like Show live there, it stays in the app and is undone when rehearsal ends. */
 export const SCENES_REHEARSAL_NOTE = "Rehearsal: a Take here is practice. The screens keep their scene, and it comes back when rehearsal ends."
 
 /**
- * Scenes in Present (ADR 0001): change what a congregation screen is arranged to show (camera and
- * Bible, lyrics on a picture…) without leaving the live console. Taking a scene changes the
- * screen's layout, not what is live: the words come from the live sources either way. Scenes are
- * made and edited in Live → Production tools → Scenes (a basic one here too: New / Edit scene); this takes them, goes back to the screen's own
- * feed, and restores the last one. Shown only when there is a congregation screen and a saved scene.
+ * Scenes in Present (ADR 0001): choose a private arrangement for a congregation screen (camera and
+ * Bible, lyrics on a picture…) without leaving the live console. Selection does not change the
+ * screen; the named action on Program applies it. The words still come from the live sources.
+ * Scenes are made and edited in Live → Production tools → Scenes. The operator can return to the
+ * screen's own feed and preview the last scene before the same named Take. Shown only when there
+ * is a congregation screen and a saved scene.
  */
-export function ScenesStrip({ className, outputId }: { className?: string; outputId?: string | null }) {
+export function ScenesStrip({ className, outputId, onTakeSelectionChange }: {
+  className?: string
+  outputId?: string | null
+  onTakeSelectionChange?: (selection: SceneTakeSelection | null) => void
+}) {
   const scenes = useBroadcastStore((s) => s.scenes)
   const outputs = useBroadcastStore((s) => s.outputs)
   const congregation = outputs.filter(isCongregation)
@@ -59,7 +73,7 @@ export function ScenesStrip({ className, outputId }: { className?: string; outpu
         <ChevronDownIcon aria-hidden className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
       <div className={cn("flex flex-col gap-2 border-t border-border", open ? "px-3 pt-2 pb-2.5" : "px-2 py-1.5")}>
-        <ScenePicker key={target.id} output={target} scenes={scenes} planned={planned} open={open} controlsId={bodyId} />
+        <ScenePicker key={target.id} output={target} scenes={scenes} planned={planned} open={open} controlsId={bodyId} onTakeSelectionChange={onTakeSelectionChange} />
       </div>
     </section>
   )
@@ -72,12 +86,21 @@ function usePlannedScene(scenes: Scene[]): Scene | null {
 }
 
 /**
- * One congregation screen: its saved scenes to pick from, and Take scene, its own feed, Restore.
- * The previewed item's planned scene starts picked (never taken: Take scene stays the operator's);
+ * One congregation screen: its saved scenes to preview, its own feed, and a restore preview.
+ * The previewed item's planned scene starts picked (never taken: the Program action stays explicit);
  * a pick of the operator's own holds until Preview's planned scene changes.
  */
-function ScenePicker({ output, scenes, planned, open, controlsId }: { output: BroadcastOutput; scenes: Scene[]; planned: Scene | null; open: boolean; controlsId: string }) {
+function ScenePicker({ output, scenes, planned, open, controlsId, onTakeSelectionChange }: {
+  output: BroadcastOutput
+  scenes: Scene[]
+  planned: Scene | null
+  open: boolean
+  controlsId: string
+  onTakeSelectionChange?: (selection: SceneTakeSelection | null) => void
+}) {
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
+  const service = useServiceStore((s) => s.current)
+  const requireApproval = useSettingsStore((s) => s.requireApproval)
   const themes = useBroadcastStore((s) => s.themes)
   const logoUrl = useSettingsStore((s) => s.brandKit.logoUrl)
   const [refreshed, setRefreshed] = useState(false)
@@ -94,26 +117,104 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
     setOwn(undefined)
   }
   const showing = sceneForOutput(output, scenes)
+  const releaseBlock = sceneReleaseApprovalBlockReason(rehearsal, service, requireApproval)
   // Already on this screen: nothing to pre-pick.
   const suggested = planned && planned.id !== showing?.id ? planned : null
   const pickedId = own !== undefined ? own : (suggested?.id ?? null)
   const picked = scenes.find((s) => s.id === pickedId) ?? null
+  const approvalPreviewRequired = !rehearsal && !!service && service.approved_revision !== null && service.approved_revision !== undefined
+  const [previewAttempt, setPreviewAttempt] = useState(0)
+  const previewKey = approvalPreviewRequired && picked
+    ? `${service.id}\u0000${service.approved_revision}\u0000${output.id}\u0000${picked.id}\u0000${picked.updatedAt}\u0000${previewAttempt}`
+    : ""
+  const [approvedPreview, setApprovedPreview] = useState<ApprovedPreviewState>({ key: "", status: "idle" })
+  useEffect(() => {
+    if (!previewKey || !picked || !service) return
+    let current = true
+    void (async () => {
+      const observed = await readSceneTakeRevisions(output.id, picked.id)
+      if (!current) return
+      if (!observed.ok) {
+        setApprovedPreview({ key: previewKey, status: "error", message: observed.refusal.message })
+        return
+      }
+      if (observed.seen.service !== service.id || observed.seen.approved === null) {
+        setApprovedPreview({ key: previewKey, status: "error", message: "The host is not reporting this service's approved revision." })
+        return
+      }
+      const checked = await sceneTakeApproval(picked.id, [output.id])
+      if (!current) return
+      if (!checked.ok) {
+        setApprovedPreview({ key: previewKey, status: "error", message: checked.refusal.message })
+        return
+      }
+      const pin = checked.approved
+      const appearance = pin?.outputs[output.id]
+      if (!pin || pin.programId !== observed.seen.service || pin.revision !== observed.seen.approved || pin.scene.id !== picked.id || !appearance) {
+        setApprovedPreview({ key: previewKey, status: "error", message: "The approved scene or this output's captured appearance is incomplete or changed. Review the service approval before taking it." })
+        return
+      }
+      setApprovedPreview({ key: previewKey, status: "ready", approved: pin })
+    })().catch((error) => {
+      if (current) setApprovedPreview({ key: previewKey, status: "error", message: error instanceof Error ? error.message : String(error) })
+    })
+    return () => { current = false }
+  }, [previewKey, output.id, picked, service])
+  const currentApprovedPreview = approvedPreview.key === previewKey
+    ? approvedPreview
+    : previewKey
+      ? { key: previewKey, status: "loading" as const }
+      : { key: "", status: "idle" as const }
+  const approvedPin = currentApprovedPreview.status === "ready" ? currentApprovedPreview.approved : null
+  const previewScene = approvalPreviewRequired ? approvedPin?.scene ?? null : picked
+  const approvalPreviewReason = approvalPreviewRequired
+    ? currentApprovedPreview.status === "loading"
+      ? "Checking the approved scene and this output's appearance with the host."
+      : currentApprovedPreview.status === "error"
+        ? `Approved Preview could not be verified: ${currentApprovedPreview.message}`
+        : null
+    : null
   const takeDetailsId = useId()
   const restorable = back ? scenes.find((s) => s.id === back) : undefined
   const b = useBroadcastStore.getState
 
-  const takeReason = !picked ? "Pick a scene above first" : picked.id === showing?.id && picked.updatedAt === showing.updatedAt && !sceneNeedsRefresh(output, scenes, themes, logoUrl) ? `${output.name} already shows ${picked.name}` : null
-  const ownReason = !showing ? `${output.name} already shows its own feed` : null
+  const currentApprovalIsOnOutput = !approvedPin || (
+    output.sceneSnapshot?.id === approvedPin.scene.id
+    && output.sceneSnapshot.updatedAt === approvedPin.scene.updatedAt
+    && output.sceneSnapshot.design?.id === approvedPin.scene.design?.id
+    && output.sceneSnapshot.design?.version === approvedPin.scene.design?.version
+    && output.sceneAppearanceSnapshot?.approved?.programId === approvedPin.programId
+    && output.sceneAppearanceSnapshot.approved.revision === approvedPin.revision
+    && output.sceneAppearanceSnapshot.approved.appearanceComplete !== false
+  )
+  const takeReason = !picked
+    ? "Pick a scene above first"
+    : approvalPreviewReason
+      ?? (previewScene && showing && previewScene.id === showing.id && previewScene.updatedAt === showing.updatedAt && currentApprovalIsOnOutput && !sceneNeedsRefresh(output, scenes, themes, logoUrl) ? `${output.name} already shows ${previewScene.name}` : null)
+  const ownReason = releaseBlock ?? (!showing ? `${output.name} already shows its own feed` : null)
   const restoreReason = showing ? `${output.name} shows ${showing.name}: Restore is for after Back to its own feed` : !restorable ? `${output.name} has not shown a scene yet` : null
   // In rehearsal the scene on a screen is the rehearsal's, never called on air.
   const onAirWord = rehearsal ? "In rehearsal" : "On air"
-  const details = picked && !takeReason ? sceneTakeDetails({
+  const details = picked && previewScene && !takeReason ? sceneTakeDetails({
     outputName: output.name,
-    sceneName: picked.name,
-    revision: sceneRevisionLabel(picked),
+    sceneName: previewScene.name,
+    revision: sceneRevisionLabel(previewScene),
     actor: operatorName,
     rehearsal,
   }) : null
+
+  useEffect(() => {
+    onTakeSelectionChange?.(picked ? {
+      outputId: output.id,
+      outputName: output.name,
+      sceneId: picked.id,
+      sceneName: previewScene?.name ?? picked.name,
+      sceneUpdatedAt: previewScene?.updatedAt ?? picked.updatedAt,
+      revisionLabel: previewScene ? sceneRevisionLabel(previewScene) : sceneRevisionLabel(picked),
+      disabledReason: takeReason,
+      details,
+    } : null)
+  }, [output.id, output.name, picked, previewScene, takeReason, details, onTakeSelectionChange])
 
   return (
     <>
@@ -131,23 +232,9 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
               {scenes.map((scene) => <option key={scene.id} value={scene.id}>{scene.name}</option>)}
             </select>
           </label>
-          <SceneAction
-            icon={<LayersIcon />}
-            label={picked ? `Take scene ${picked.name} to ${output.name}` : `Take scene to ${output.name}`}
-            text={picked ? `Take ${picked.name} to ${output.name}` : `Choose a scene for ${output.name}`}
-            title={picked ? (rehearsal ? `Rehearse ${picked.name} on ${output.name}. The screen keeps its scene.` : `Take ${picked.name} to ${output.name} only.`) : `Choose a scene to take to ${output.name}.`}
-            reason={takeReason}
-            descriptionId={details ? takeDetailsId : undefined}
-            onClick={() => {
-              if (!picked) return
-              b().takeScene(output.id, picked.id)
-              setOwn(null)
-              setRefreshed(false)
-            }}
-            primary
-          />
+          {picked && previewScene && <SceneThumb scene={previewScene} output={output} appearance={approvedPin?.outputs[output.id]} />}
           <span className="min-w-0 flex-1 truncate text-right text-[0.6875rem] text-muted-foreground" title={`${rehearsal ? "Rehearsal layout" : "Current layout"} on ${output.name}`}>
-            {rehearsal ? "Rehearsal layout" : "Layout"}: {showing?.name ?? "own feed"}{showing ? ` · ${sceneRevisionLabel(showing)}` : ""}
+            Private Preview: {previewScene?.name ?? (approvalPreviewRequired ? "approved scene unavailable" : "no scene selected")} · {rehearsal ? "Rehearsal layout" : "Layout"}: {showing?.name ?? "own feed"}{showing ? ` · ${sceneRevisionLabel(showing)}` : ""}
           </span>
         </div>
       )}
@@ -168,7 +255,11 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
                   s.id === pickedId ? "border-primary bg-primary/10 text-foreground" : "border-border hover:bg-muted"
                 )}
               >
-                <SceneThumb scene={s} output={output} />
+                {s.id === pickedId && approvalPreviewRequired
+                  ? previewScene
+                    ? <SceneThumb scene={previewScene} output={output} appearance={approvedPin?.outputs[output.id]} />
+                    : <span data-approved-preview-unavailable={s.id} className="flex h-[27px] w-12 shrink-0 items-center justify-center rounded-sm bg-muted text-xs text-muted-foreground">Checking</span>
+                  : <SceneThumb scene={s} output={output} />}
                 <span className="flex max-w-28 flex-col leading-tight">
                   <span className="truncate font-semibold">{s.name}</span>
                   {onAir && <span className={cn("text-[0.625rem] font-bold tracking-wide uppercase", rehearsal ? "text-tone-amber-foreground" : "text-live-pulse")}>{onAirWord}</span>}
@@ -191,22 +282,6 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
         </p>}
         <div className="flex flex-wrap items-center gap-1.5">
           <SceneAction
-            icon={<LayersIcon />}
-            label={picked ? `Take scene ${picked.name} to ${output.name}` : "Take scene"}
-            text={`Take to ${output.name}`}
-            title={picked ? (rehearsal ? `Rehearse ${picked.name} on ${output.name}. The screen keeps its scene.` : `Arrange ${output.name} as ${picked.name}. What is live stays live.`) : "Take scene"}
-            reason={takeReason}
-            descriptionId={details ? takeDetailsId : undefined}
-            onClick={() => {
-              if (!picked) return
-              b().takeScene(output.id, picked.id)
-              // Nothing stays picked after a Take, so a second click never takes another scene.
-              setOwn(null)
-              setRefreshed(false)
-            }}
-            primary
-          />
-          <SceneAction
             icon={<UndoIcon />}
             label={`${output.name}: back to its own feed`}
             text="Own feed"
@@ -216,11 +291,15 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
           />
           <SceneAction
             icon={<RotateCcwIcon />}
-            label={restorable ? `Restore ${restorable.name} on ${output.name}` : "Restore scene"}
-            text={restorable ? `Restore ${restorable.name}` : "Restore"}
-            title={restorable ? `Put ${restorable.name} back on ${output.name}` : "Restore the last scene"}
+            label={restorable ? `Preview restore ${restorable.name} on ${output.name}` : "Preview restore scene"}
+            text={restorable ? `Preview restore ${restorable.name}` : "Preview restore"}
+            title={restorable ? `Select ${restorable.name} in private Preview. The Program Take stays a separate action.` : "Choose a scene to preview before taking."}
             reason={restoreReason}
-            onClick={() => restorable && b().takeScene(output.id, restorable.id)}
+            onClick={() => {
+              if (!restorable) return
+              setOwn(restorable.id)
+              setRefreshed(false)
+            }}
           />
           <SceneSheetButton output={output} scene={picked} />
           <span className="min-w-0 flex-1 truncate text-right text-[0.6875rem] text-muted-foreground">
@@ -232,16 +311,29 @@ function ScenePicker({ output, scenes, planned, open, controlsId }: { output: Br
         {rehearsal && <p className="text-xs text-tone-amber-foreground">{SCENES_REHEARSAL_NOTE}</p>}
       </div>
       {details && <p id={takeDetailsId} role="note" aria-label="Take details" className="text-xs text-muted-foreground">{details}</p>}
+      {approvalPreviewRequired && picked && (
+        <p role={currentApprovedPreview.status === "error" ? "alert" : "status"} aria-live="polite" className="text-xs text-muted-foreground">
+          {currentApprovedPreview.status === "loading"
+            ? "Checking the approved scene and output appearance with the host. No output changes."
+            : currentApprovedPreview.status === "error"
+              ? `${currentApprovedPreview.message} This scene cannot be taken until the approved Preview is verified.`
+              : currentApprovedPreview.status === "ready"
+                ? `Private Preview · approved service revision ${currentApprovedPreview.approved.revision} · ${output.name} only. Take applies this pinned scene and appearance.`
+                : ""}
+        </p>
+      )}
+      {currentApprovedPreview.status === "error" && picked && approvalPreviewRequired && (
+        <button type="button" className="min-h-11 self-start rounded-md border px-3 text-xs" onClick={() => setPreviewAttempt((attempt) => attempt + 1)}>
+          Refresh approved Preview
+        </button>
+      )}
       {refreshed && <p role="status" className="text-xs text-muted-foreground">Preview refreshed for {output.name}. Take scene to apply it.</p>}
     </>
   )
 }
 
-/**
- * A scene control. Like the transport's, one that cannot act stays focusable and says why. Take
- * scene is outlined teal with a layers icon, so it never reads as the solid Take source live.
- */
-function SceneAction({ icon, label, text, title, reason, onClick, primary, descriptionId }: { icon: ReactNode; label: string; text: string; title: string; reason: string | null; onClick: () => void; primary?: boolean; descriptionId?: string }) {
+/** A scene control that cannot act stays focusable and explains why. */
+function SceneAction({ icon, label, text, title, reason, onClick }: { icon: ReactNode; label: string; text: string; title: string; reason: string | null; onClick: () => void }) {
   const reasonId = useId()
   const off = reason !== null
   return (
@@ -250,12 +342,12 @@ function SceneAction({ icon, label, text, title, reason, onClick, primary, descr
         type="button"
         aria-label={label}
         aria-disabled={off || undefined}
-        aria-describedby={off ? reasonId : descriptionId}
+        aria-describedby={off ? reasonId : undefined}
         title={reason ?? title}
         onClick={off ? undefined : onClick}
         className={cn(
           "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-md border px-3 text-xs font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 [&_svg]:size-3.5",
-          primary ? "border-primary/70 bg-card text-primary-text hover:bg-primary/10 aria-disabled:hover:bg-card" : "border-border bg-card text-foreground hover:bg-muted aria-disabled:hover:bg-card"
+          "border-border bg-card text-foreground hover:bg-muted aria-disabled:hover:bg-card"
         )}
       >
         {icon}
@@ -270,7 +362,7 @@ const THUMB_W = 96
 const THUMB_H = 54
 
 /** A small picture of a scene as this screen would draw it now; redrawn only when the scene or what is live changes. */
-function SceneThumb({ scene, output }: { scene: Scene; output: BroadcastOutput }) {
+function SceneThumb({ scene, output, appearance }: { scene: Scene; output: BroadcastOutput; appearance?: SceneAppearanceSnapshot }) {
   const isLive = useBroadcastStore((s) => s.isLive)
   const liveVerse = useBroadcastStore((s) => s.liveVerse)
   const sources = useBroadcastStore((s) => s.sources)
@@ -283,7 +375,7 @@ function SceneThumb({ scene, output }: { scene: Scene; output: BroadcastOutput }
   useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d")
     if (!ctx) return
-    drawScene(ctx, THUMB_W, THUMB_H, sceneFrame({ isLive, liveVerse, sources, themes, logoUrl }, { ...output, sceneAppearanceSnapshot: undefined }, scene), {
+    drawScene(ctx, THUMB_W, THUMB_H, sceneFrame({ isLive, liveVerse, sources, themes, logoUrl }, { ...output, sceneAppearanceSnapshot: appearance }, scene), {
       imageCache: themeImageCache(),
       layerCanvas: (id) => {
         let c = layers.current.get(id)
@@ -297,13 +389,17 @@ function SceneThumb({ scene, output }: { scene: Scene; output: BroadcastOutput }
         return img ?? null
       },
     })
-  }, [scene, output, isLive, liveVerse, sources, themes, logoUrl, loaded])
+  }, [scene, output, appearance, isLive, liveVerse, sources, themes, logoUrl, loaded])
 
   return (
     <canvas
       ref={canvasRef}
       width={THUMB_W}
       height={THUMB_H}
+      data-scene-preview-id={scene.id}
+      data-scene-preview-updated-at={scene.updatedAt}
+      data-scene-preview-design-id={scene.design?.id}
+      data-scene-preview-design-version={scene.design?.version}
       aria-hidden
       className="h-[27px] w-12 shrink-0 rounded-sm bg-[repeating-conic-gradient(#2a3338_0%_25%,#20282c_0%_50%)] bg-[length:8px_8px]"
     />

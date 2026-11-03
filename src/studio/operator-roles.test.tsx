@@ -272,7 +272,7 @@ describe("a Screens group Take", () => {
       v: 1,
       at: Date.now(),
       church: "Grace Chapel",
-      service: { id: "service-1", title: "Sunday" },
+      service: { id: "service-1", title: "Sunday", approved_revision: null },
       program: { onAir: true, reference: "Welcome", rehearsal: false },
       sources: [],
       event: { mode: "screens", currentId: null },

@@ -414,6 +414,45 @@ describe("editing a scene from a Screens desk", () => {
     expect(has(el, "Edit Welcome")).toBe(false)
     expect(el.textContent).not.toContain("New scene…")
   })
+
+  it("sends a selected scene Take to the host for pinned-appearance validation when approved", async () => {
+    const approved: LiveStateV1 = {
+      ...live,
+      service: { id: "svc-1", title: "Sunday", revision: 4, approved_revision: 4 },
+    }
+    const el = await render("present", approved)
+    const take = button(el, "Take Welcome on Projector")
+    expect(take.disabled).toBe(false)
+    expect(el.textContent).not.toContain("Use its approved running-order Take")
+    await click(take)
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({ command: "take_scene", value: { output: "main", scene: "welcome" } })
+    const release = button(el, "Back to its own feed")
+    expect(release.disabled).toBe(true)
+    expect(release.title).toContain("approved scene appearance")
+  })
+
+  it("fails closed when an older host does not report the service approval revision", async () => {
+    const olderHost: LiveStateV1 = { ...live, service: { id: "svc-1", title: "Sunday", revision: 4 } }
+    const el = await render("present", olderHost)
+    expect(button(el, "Take Welcome on Projector").disabled).toBe(true)
+    expect(el.textContent).toContain("has not shared this service's approval status")
+    expect(sent).toEqual([])
+  })
+
+  it("keeps scene Take private during rehearsal, even for an approved service", async () => {
+    const approvedRehearsal: LiveStateV1 = {
+      ...live,
+      service: { id: "svc-1", title: "Sunday", revision: 4, approved_revision: 4 },
+      program: { ...live.program, rehearsal: true },
+    }
+    const el = await render("present", approvedRehearsal)
+    const take = button(el, "Take Welcome on Projector")
+    expect(take.disabled).toBe(false)
+    await click(take)
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({ command: "take_scene", value: { output: "main", scene: "welcome" } })
+  })
 })
 
 describe("a desk's scene change on the main desk", () => {

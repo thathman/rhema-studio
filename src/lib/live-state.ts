@@ -43,7 +43,7 @@ export interface LiveStateV1 {
   at: number
   church: string
   /** The service open on the host (#246 C16): a desk tags each command with its id, so the host refuses one meant for another service. id and revision are absent from older hosts. */
-  service: { id?: string; title: string; revision?: number } | null
+  service: { id?: string; title: string; revision?: number; approved_revision?: number | null } | null
   program: { onAir: boolean; reference: string | null; rehearsal: boolean }
   /** The host's latest Take attempts. Optional on older hosts; separate from on-air content and event time. */
   takeAttempts?: Omit<TakeAttempt, "error">[]
@@ -250,7 +250,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     v: 1,
     at: now,
     church: useSettingsStore.getState().brandKit.churchName.trim(),
-    service: current ? { id: current.id, title: current.title, revision: current.revision } : null,
+    service: current ? { id: current.id, title: current.title, revision: current.revision, approved_revision: current.approved_revision ?? null } : null,
     program: { onAir: b.isLive, reference: b.isLive ? (b.liveVerse?.reference || null) : null, rehearsal: b.rehearsal },
     takeAttempts: useTakeAttemptStore.getState().attempts.slice(-10).map(({ id, itemId, reference, status, startedAt, finishedAt, outcome, by }) => ({
       id, itemId, reference, status, startedAt,

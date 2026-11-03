@@ -156,7 +156,7 @@ describe("a scene taken in rehearsal never reaches the real screens", () => {
     expect(main().sceneId).toBeUndefined()
   })
 
-  it("Live → Production tools → Scenes: Take in rehearsal is not red and stays in the app", async () => {
+  it("Live → Production tools → Scenes stays an editor; the named Take lives on Program", async () => {
     const el = document.createElement("div")
     document.body.appendChild(el)
     const root = createRoot(el)
@@ -165,11 +165,11 @@ describe("a scene taken in rehearsal never reaches the real screens", () => {
     await act(async () => tab.click())
     const button = (text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent?.includes(text)) as HTMLButtonElement
     await act(async () => button("Camera with the Bible").click())
+    expect(el.textContent).toContain("This editor is private. Save the scene, choose it in Live → Scenes, then use the named Take on Program.")
+    expect([...el.querySelectorAll("button")].some((entry) => entry.textContent?.trim().startsWith("Take "))).toBe(false)
     await rehearse(async () => {
-      await act(async () => button("Take Camera with the Bible").click())
-      expect(main().sceneId).toBe("cam")
-      expect(button("Take Camera with the Bible").className).not.toContain("bg-live-pulse")
-      expect(el.textContent).toContain("Rehearsal ·")
+      expect(main().sceneId).toBe("lyr")
+      expect([...el.querySelectorAll("button")].some((entry) => entry.textContent?.trim().startsWith("Take "))).toBe(false)
     })
     await act(async () => root.unmount())
     el.remove()

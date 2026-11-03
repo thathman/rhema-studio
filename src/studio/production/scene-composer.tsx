@@ -1,20 +1,20 @@
 import { useTimerStore, monotonicNow } from "@/stores/timer-store"
-import { useCallback, useEffect, useId, useRef, useState } from "react"
-import { ArrowDownIcon, ArrowUpIcon, BookmarkPlusIcon, CopyIcon, EyeIcon, EyeOffIcon, PencilIcon, PinIcon, PinOffIcon, PlusIcon, SaveIcon, UndoIcon } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { ArrowDownIcon, ArrowUpIcon, BookmarkPlusIcon, CopyIcon, EyeIcon, EyeOffIcon, PencilIcon, PinIcon, PinOffIcon, PlusIcon, SaveIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { feedFrame } from "@/lib/live-sources"
 import { drawScene } from "@/lib/scene-renderer"
-import { sceneRevisionLabel, sceneTakeDetails } from "@/lib/scene-take-details"
 import { copyScene, FADES, layerBox, newLayer, newScene, ownPreset, SCENE_PRESETS, sceneClock, sceneForOutput, sceneFrame, type ScenePreset } from "@/lib/scenes"
 import { cameraLabelOf, cameraOfUrl, routerStatus, whepUrl, type RouterStatus } from "@/lib/cameras"
 import { overlayFor } from "@/lib/lower-third-style"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { tickerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useServiceStore } from "@/stores/service-store"
 import { useObsStore } from "@/stores/obs-store"
-import { congregationProgramName, onlineProgramName } from "@/lib/program-names"
+import { onlineProgramName } from "@/lib/program-names"
 import { useMediaStore } from "@/stores/media-store"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { CountdownSelect } from "@/studio/production/countdown-select"
@@ -23,17 +23,20 @@ import { useShellStore, type PrepareDesignReturnContext } from "@/studio/shell-s
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import type { BroadcastOutput, BroadcastOutputLanguage, NoSignal, Scene, SceneBox, SceneLayer, SceneLayerKind } from "@/types"
 import { toast } from "sonner"
+import { sceneReleaseApprovalBlockReason } from "@/studio/present/scene-take-policy"
 
 /**
  * The congregation Scene Composer (ADR 0001, ARCH-002): arrange live sources, colours, pictures and
- * camera places on one frame, then Take it to a congregation output. Looks come from Design; this is
- * about where things go. Edits stay in the composer or saved library until Take, so a scene on air never
- * changes while it is being arranged.
+ * camera places on one frame. Looks come from Design; this is about where things go. Edits stay in
+ * the composer or saved library until the operator selects the scene and uses the named Program Take.
  */
 export function SceneComposer() {
   const scenes = useBroadcastStore((s) => s.scenes)
   const outputs = useBroadcastStore((s) => s.outputs)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
+  const service = useServiceStore((s) => s.current)
+  const requireApproval = useSettingsStore((s) => s.requireApproval)
+  const sceneTakeBlockReason = sceneReleaseApprovalBlockReason(rehearsal, service, requireApproval)
   const prepareReturn = useShellStore((s) => s.prepareDesignReturn)
   const obsVideo = useObsStore((s) => (s.status === "connected" ? s.video : null))
   const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation")
@@ -66,11 +69,6 @@ export function SceneComposer() {
     setLayerId(null)
   }
   const save = () => draft && useBroadcastStore.getState().saveScene(draft)
-  const take = () => {
-    if (!draft || !target) return
-    save()
-    useBroadcastStore.getState().takeScene(target.id, draft.id)
-  }
   const returnToPrepare = () => {
     if (dirty) {
       save()
@@ -82,10 +80,10 @@ export function SceneComposer() {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Which of the service's two programs this is (#215 G5.1): the screens in the room, not the stream. */}
-      <header aria-label="Congregation program" className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="text-sm font-bold tracking-[-0.02em]">{congregationProgramName(outputs)}</h2>
-        <p className="text-xs text-muted-foreground">Rhema Studio's scenes for the screens in the room. The {onlineProgramName(obsVideo)} is OBS's, in Live → Production tools → OBS; nothing here changes it.</p>
+      {/* Saved scene design stays separate from the congregation and OBS Program outputs. */}
+      <header aria-label="Scene design context" className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 className="text-sm font-bold tracking-[-0.02em]">Scene design</h2>
+        <p className="text-xs text-muted-foreground">Saved looks for congregation screens. The {onlineProgramName(obsVideo)} is OBS's; scene edits do not change Program.</p>
       </header>
       <div className="grid gap-3 lg:grid-cols-[13rem_minmax(0,1fr)_17rem]">
         <section aria-label="Scenes" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
@@ -167,7 +165,7 @@ export function SceneComposer() {
 
       {prepareReturn
         ? <PrivateSceneBar context={prepareReturn} congregation={congregation} target={target} onTarget={setTargetId} draft={draft} dirty={dirty} onReturn={returnToPrepare} />
-        : <ProgramBar congregation={congregation} target={target} onTarget={setTargetId} draft={draft} dirty={dirty} onSave={save} onTake={take} />}
+        : <ProgramBar congregation={congregation} target={target} onTarget={setTargetId} draft={draft} dirty={dirty} onSave={save} onPreviewRestore={open} sceneTakeBlockReason={sceneTakeBlockReason} />}
     </div>
   )
 }
@@ -672,40 +670,29 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
   return <button type="button" aria-pressed={on} onClick={onClick} className={cn("rounded-full border px-2 py-0.5 text-[0.6875rem] font-semibold", on ? "border-primary bg-primary/10 text-primary-text" : "border-border text-muted-foreground hover:bg-muted")}>{children}</button>
 }
 
-/** What one congregation output shows: which scene, Take, back to its own feed, Restore. */
-function ProgramBar({ congregation, target, onTarget, draft, dirty, onSave, onTake }: { congregation: BroadcastOutput[]; target: BroadcastOutput | undefined; onTarget: (id: string) => void; draft: Scene | null; dirty: boolean; onSave: () => void; onTake: () => void }) {
+/** Read-only output context for design editing; the named Take stays on the main Program card. */
+function ProgramBar({ congregation, target, onTarget, draft, dirty, onSave, onPreviewRestore, sceneTakeBlockReason }: { congregation: BroadcastOutput[]; target: BroadcastOutput | undefined; onTarget: (id: string) => void; draft: Scene | null; dirty: boolean; onSave: () => void; onPreviewRestore: (scene: Scene) => void; sceneTakeBlockReason: string | null }) {
   const scenes = useBroadcastStore((s) => s.scenes)
   const back = useBroadcastStore((s) => (target ? s.sceneReturn[target.id] : undefined))
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
-  const operatorName = useSettingsStore((s) => s.operatorName)
-  const takeDetailsId = useId()
   const showing = target ? sceneForOutput(target, scenes) : undefined
   const restorable = !showing && back ? scenes.find((s) => s.id === back) : undefined
-  const details = target && draft ? sceneTakeDetails({
-    outputName: target.name,
-    sceneName: draft.name,
-    revision: sceneRevisionLabel(draft, dirty, scenes.some((scene) => scene.id === draft.id)),
-    actor: operatorName,
-    rehearsal,
-  }) : null
   if (!target) return <p className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">Add a congregation output (Live → Production tools → Screens) to take a scene to it.</p>
   return (
     // The live console's own colours (dark ink, in every theme), from its tokens.
     <section aria-label="On the screen" className="dark present-surface flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 text-xs text-foreground">
-      <span className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">On the screen</span>
-      <select aria-label="Congregation output" value={target.id} onChange={(e) => onTarget(e.target.value)} className="h-8 rounded-md border border-input bg-secondary px-1.5 text-foreground">
+      <span className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Preview output</span>
+      <select aria-label="Scene preview output" value={target.id} onChange={(e) => onTarget(e.target.value)} className="h-8 rounded-md border border-input bg-secondary px-1.5 text-foreground">
         {congregation.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       </select>
       <span className="min-w-0 flex-1 truncate">
         {rehearsal && <strong className="mr-1.5 text-tone-amber-foreground" title="Rehearsal is on: a Take here stays in the app. The screens keep their scene, and it comes back when rehearsal ends.">Rehearsal ·</strong>}
         {showing ? <>Shows <strong>{showing.name}</strong></> : "Shows its own feed, full screen"}
       </span>
-      {details && <p id={takeDetailsId} role="note" aria-label="Take details" className="basis-full text-xs text-muted-foreground">{details}</p>}
       {draft && dirty && <Button size="sm" variant="outline" onClick={onSave} className="border-input bg-transparent text-foreground hover:bg-muted"><SaveIcon /> Save scene</Button>}
-      {/* In rehearsal nothing reaches a screen, so Take is not red. */}
-      {draft && <Button size="sm" onClick={onTake} aria-label={rehearsal ? `Rehearse ${draft.name} on ${target.name}` : `Take ${draft.name} to ${target.name}`} aria-describedby={details ? takeDetailsId : undefined} className={rehearsal ? "border border-gold bg-transparent text-tone-amber-foreground hover:bg-muted" : "bg-live-pulse text-white hover:bg-live-pulse/90"} title={rehearsal ? `Rehearse ${draft.name} on ${target.name}: the screen keeps its scene${dirty ? " (saves it first)" : ""}` : `Put ${draft.name} on ${target.name}${dirty ? " (saves it first)" : ""}`}>Take {draft.name}</Button>}
-      {showing && <Button size="sm" variant="outline" aria-label={rehearsal ? `Rehearse back to ${target.name}'s own feed` : `Back to ${target.name}'s own feed`} onClick={() => useBroadcastStore.getState().releaseScene(target.id)} className="border-input bg-transparent text-foreground hover:bg-muted">Back to its own feed</Button>}
-      {restorable && <Button size="sm" variant="outline" aria-label={rehearsal ? `Rehearse restore ${restorable.name} on ${target.name}` : `Restore ${restorable.name} to ${target.name}`} onClick={() => useBroadcastStore.getState().takeScene(target.id, restorable.id)} className="border-input bg-transparent text-foreground hover:bg-muted"><UndoIcon /> Restore {restorable.name}</Button>}
+      {draft && <p className="basis-full text-xs text-muted-foreground">This editor is private. Save the scene, choose it in Live → Scenes, then use the named Take on Program.</p>}
+      {showing && <Button size="sm" variant="outline" aria-label={rehearsal ? `Rehearse back to ${target.name}'s own feed` : `Back to ${target.name}'s own feed`} title={sceneTakeBlockReason ?? undefined} disabled={!!sceneTakeBlockReason} onClick={() => useBroadcastStore.getState().releaseScene(target.id)} className="border-input bg-transparent text-foreground hover:bg-muted">Back to its own feed</Button>}
+      {restorable && <Button size="sm" variant="outline" aria-label={`Preview restore ${restorable.name} for ${target.name}`} onClick={() => onPreviewRestore(restorable)} className="border-input bg-transparent text-foreground hover:bg-muted">Preview restore {restorable.name}</Button>}
     </section>
   )
 }

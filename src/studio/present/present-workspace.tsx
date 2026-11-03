@@ -22,6 +22,7 @@ import { ObsChip } from "@/studio/present/obs-chip"
 import { TransportBar } from "@/studio/present/transport-bar"
 import { RecorderDock } from "@/studio/present/recorder-dock"
 import { ScenesStrip } from "@/studio/present/scenes-strip"
+import { LiveSceneTakeAction, type SceneTakeSelection } from "@/studio/present/live-scene-take-action"
 import { LiveToolsDrawer, type LiveToolsTab } from "@/studio/present/live-tools-drawer"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
@@ -208,6 +209,7 @@ function LiveConsoleSurface({
   onToolsTabChange: (tab: LiveToolsTab) => void
   onCloseTools: () => void
 }) {
+  const [sceneTakeSelection, setSceneTakeSelection] = useState<SceneTakeSelection | null>(null)
   // One Preview at a time (the panel also follows translation changes); narrow layouts stack full panes.
   const isLive = useBroadcastStore((s) => s.isLive)
   const count = useQueueStore((s) => s.items.length)
@@ -305,9 +307,12 @@ function LiveConsoleSurface({
         {/* Never shorter than a readable picture with its sources, however many lines they take: the open
             scenes scroll under it instead. */}
         <div className="min-h-[18rem] flex-1 overflow-hidden rounded-xl [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
-          <LiveOutputPanel outputId={outputId} />
+          <LiveOutputPanel
+            outputId={outputId}
+            sceneTakeAction={<LiveSceneTakeAction selection={sceneTakeSelection?.outputId === outputId ? sceneTakeSelection : null} />}
+          />
         </div>
-        <ScenesStrip outputId={outputId} />
+        <ScenesStrip outputId={outputId} onTakeSelectionChange={setSceneTakeSelection} />
       </div>
       <TransportBar className="col-span-2 max-[1200px]:shrink-0 max-[1200px]:sticky max-[1200px]:bottom-0 max-[1200px]:z-10 max-[1200px]:bg-background max-[1023px]:col-span-1" />
 
