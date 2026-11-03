@@ -50,6 +50,30 @@ async function runScenario() {
 
   const savedItem = qa.queue.getState().items[0]
   if (!savedItem) throw new Error("The saved QA service has no opening moment")
+  const targetOutput = qa.broadcast.getState().outputs.find((candidate) => (candidate.role ?? "congregation") === "congregation")
+  if (!targetOutput) throw new Error("The configured Live state has no congregation output")
+  const readProgram = () => {
+    const state = qa.broadcast.getState()
+    const currentOutput = state.outputs.find((candidate) => candidate.id === targetOutput.id)
+    return {
+      isLive: state.isLive,
+      liveVerse: state.liveVerse,
+      liveSourceVerse: state.liveSourceVerse,
+      liveItem: state.liveItem,
+      liveSlide: state.liveSlide,
+      liveItemId: state.liveItemId,
+      heldLive: state.heldLive,
+      sceneTake: state.sceneTakes?.[targetOutput.id] ?? null,
+      outputScene: {
+        id: currentOutput?.sceneId ?? null,
+        snapshot: currentOutput?.sceneSnapshot ?? null,
+        appearance: currentOutput?.sceneAppearanceSnapshot ?? null,
+        momentRestore: currentOutput?.designedMomentRestore ?? null,
+      },
+      activeIndex: qa.queue.getState().activeIndex,
+    }
+  }
+  const programBeforePreview = JSON.stringify(readProgram())
   qa.present.previewItem(savedItem)
   qa.shell.getState().setWorkspace("present")
 
@@ -58,7 +82,7 @@ async function runScenario() {
   await waitFor(() => document.querySelector('[data-slot="preview-panel"]'), "private Preview panel")
   await sleep(300)
 
-  const output = qa.broadcast.getState().outputs.find((candidate) => (candidate.role ?? "congregation") === "congregation")
+  const output = qa.broadcast.getState().outputs.find((candidate) => candidate.id === targetOutput.id)
   const preview = qa.bible.getState().selectedSlide
   const outputPicker = document.querySelector('[aria-label="Named congregation output for Preview language and scene Take"]')
   const sourceTake = document.querySelector('[aria-label="Take source live"]')
@@ -77,6 +101,7 @@ async function runScenario() {
     selectedOutput: outputPicker?.selectedOptions?.[0]?.textContent?.trim(),
     preview: preview?.item.reference,
     programLive: qa.broadcast.getState().isLive,
+    programUnchanged: JSON.stringify(readProgram()) === programBeforePreview,
     takeLabel: sourceTake?.getAttribute("aria-label"),
     takeDisabled: sourceTake?.getAttribute("aria-disabled") === "true",
     selectedScene: scenePicker?.selectedOptions?.[0]?.textContent?.trim(),
@@ -84,7 +109,7 @@ async function runScenario() {
     sceneTakeDisabled: sceneTake?.getAttribute("aria-disabled") === "true",
     toolbarButtons,
   }
-  if (result.service !== "QA Sunday Service" || !result.saved || result.itemCount !== 1 || result.eventName !== "Opening" || !result.output || !result.selectedOutput?.startsWith(result.output) || result.preview !== "Welcome" || result.takeLabel !== "Take source live" || result.programLive || result.takeDisabled || result.selectedScene !== "Welcome layout" || result.sceneTakeLabel !== `Take scene Welcome layout to ${result.output}` || result.sceneTakeDisabled || !toolbarButtons.some((label) => label.includes("Find & listen")) || !toolbarButtons.some((label) => label.includes("Live tools")) || toolbarText.includes("Production tools") || toolbarText.includes("More controls") || toolbarText.includes("Listening off") || toolbarText.includes("Saved translations")) {
+  if (result.service !== "QA Sunday Service" || !result.saved || result.itemCount !== 1 || result.eventName !== "Opening" || !result.output || !result.selectedOutput?.startsWith(result.output) || result.preview !== "Welcome" || result.takeLabel !== "Take source live" || result.programLive || !result.programUnchanged || result.takeDisabled || result.selectedScene !== "Welcome layout" || result.sceneTakeLabel !== `Take scene Welcome layout to ${result.output}` || result.sceneTakeDisabled || !toolbarButtons.some((label) => label.includes("Find & listen")) || !toolbarButtons.some((label) => label.includes("Live tools")) || toolbarText.includes("Production tools") || toolbarText.includes("More controls") || toolbarText.includes("Listening off") || toolbarText.includes("Saved translations")) {
     throw new Error(`Unexpected configured Live state: ${JSON.stringify(result)}`)
   }
   return result
