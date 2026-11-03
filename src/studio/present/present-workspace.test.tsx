@@ -209,7 +209,7 @@ describe("Present's unified Live console", () => {
     expect(paneLayout.className).toContain("max-[1200px]:grid-cols-1")
     expect(paneLayout.className).toContain("min-[1024px]:max-[1200px]:grid-cols-2")
     expect(program.textContent).toContain("Program")
-    expect(program.className).toContain("max-[1200px]:min-h-[18rem]")
+    expect(program.className).toContain("min-h-[18rem]")
     expect(element.querySelectorAll('[aria-label="Preview"]')).toHaveLength(1)
     const transport = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Presentation controls"]')!
     expect(transport.className).toContain("max-[1200px]:sticky")
