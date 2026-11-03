@@ -1,4 +1,14 @@
 {
   "identifier": "com.openbezal.rhema.qa",
-  "productName": "Rhema QA"
+  "productName": "Rhema QA",
+  "app": {
+    "security": {
+      "capabilities": [
+        "default",
+        "desktop-capability",
+        "output",
+        "qa-window-resize"
+      ]
+    }
+  }
 }

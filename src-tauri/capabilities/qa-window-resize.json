@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "qa-window-resize",
+  "description": "Allow the isolated desktop QA app to resize its main window for responsive screenshots.",
+  "windows": ["main"],
+  "permissions": ["core:window:allow-set-size"]
+}
