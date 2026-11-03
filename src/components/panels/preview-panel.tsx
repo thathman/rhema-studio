@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 import { PanelHeader } from "@/components/ui/panel-header"
+import { Button } from "@/components/ui/button"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
+import { SearchIcon } from "lucide-react"
 import { useBibleStore, useBroadcastStore } from "@/stores"
 import { bibleActions } from "@/hooks/use-bible"
 import { toCustomSlideRenderData, toDualVerseRenderData, toImageRenderData, toVideoRenderData, toVerseRenderData } from "@/hooks/use-broadcast"
@@ -26,11 +28,12 @@ import type { Verse } from "@/types"
  * `compact` (Present below 1200 px wide, where the full panel has no room): one line, a small
  * picture with what it is in words, so the operator still sees Preview before Take live.
  */
-export function PreviewPanel({ itemLook = false, compact = false, outputLanguageId, onOutputLanguageIdChange }: {
+export function PreviewPanel({ itemLook = false, compact = false, outputLanguageId, onOutputLanguageIdChange, onEmptyPreviewAction }: {
   itemLook?: boolean
   compact?: boolean
   outputLanguageId?: string | null
   onOutputLanguageIdChange?: (outputId: string) => void
+  onEmptyPreviewAction?: () => void
 } = {}) {
   const selectedVerse = useBibleStore((s) => s.selectedVerse)
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
@@ -115,6 +118,8 @@ export function PreviewPanel({ itemLook = false, compact = false, outputLanguage
 
   const previewed = useSelectedItem()?.item ?? null
   const label = usePreviewLabel()
+  const hasPreviewContent = !!previewed || !!selectedVerse || !!selectedSlide
+  const showLiveEmptyState = !compact && !hasPreviewContent && !!onEmptyPreviewAction
   const bibleItem = previewed && isVerseItem(previewed) ? previewed : null
   const translationChoice = resolveTranslations(bibleItem, { activeTranslationId, secondaryTranslationId, translations, overrideServiceTranslations })
   const secondaryBibleId = isMissing(translationChoice) ? null : translationChoice.secondary
@@ -296,8 +301,25 @@ export function PreviewPanel({ itemLook = false, compact = false, outputLanguage
       {languageFallback && <p role="status" className="px-3 pt-2 text-xs text-confidence-mid">{selectedPreviewOutput?.name}: {OUTPUT_LANGUAGE_FALLBACK_NOTICE}</p>}
       {/* The picture fits the panel both ways, so a short panel never crops it. */}
       <div className="flex min-h-0 flex-1 items-center justify-center p-3 [container-type:size]">
-        <div style={{ width: `min(100cqw, 100cqh * ${activeTheme.resolution.width / activeTheme.resolution.height})` }}>
-          <CanvasVerse theme={activeTheme} verse={outputVerseData} />
+        <div className="relative" style={{ width: `min(100cqw, 100cqh * ${activeTheme.resolution.width / activeTheme.resolution.height})` }}>
+          <div aria-hidden={showLiveEmptyState || undefined}>
+            <CanvasVerse theme={activeTheme} verse={outputVerseData} />
+          </div>
+          {showLiveEmptyState && (
+            <div className="absolute inset-0 flex items-center justify-center p-3 sm:p-5">
+              <div className="flex max-w-sm flex-col items-center gap-2.5 rounded-lg border border-border bg-card/95 px-4 py-3 text-center shadow-md backdrop-blur-sm sm:px-5 sm:py-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Nothing in private Preview</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Choose a running-order item or find a cue. Program stays unchanged until you Take it.
+                  </p>
+                </div>
+                <Button type="button" size="sm" variant="outline" className="min-h-11 px-4" onClick={onEmptyPreviewAction}>
+                  <SearchIcon /> Find &amp; cue
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       {previewed && <ItemPlan item={previewed} />}

@@ -25,7 +25,7 @@ const presentCalls = vi.hoisted(() => {
 })
 
 vi.mock("@/studio/present-actions", () => ({ presentActions: presentCalls }))
-vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, outputLanguageId, onOutputLanguageIdChange }: { compact?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"}>Preview stays private<label>Output<select aria-label="Named congregation output for Preview language and scene Take" value={outputLanguageId ?? ""} onChange={(event) => onOutputLanguageIdChange?.(event.currentTarget.value)}><option value="english-output">English screen</option><option value="yoruba-output">Yoruba screen</option></select></label></section> }))
+vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, outputLanguageId, onOutputLanguageIdChange, onEmptyPreviewAction }: { compact?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void; onEmptyPreviewAction?: () => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"} data-empty-preview-action={onEmptyPreviewAction ? "true" : "false"}>Preview stays private<label>Output<select aria-label="Named congregation output for Preview language and scene Take" value={outputLanguageId ?? ""} onChange={(event) => onOutputLanguageIdChange?.(event.currentTarget.value)}><option value="english-output">English screen</option><option value="yoruba-output">Yoruba screen</option></select></label></section> }))
 vi.mock("@/components/panels/live-output-panel", () => ({ LiveOutputPanel: ({ outputId, sceneTakeAction }: { outputId?: string | null; sceneTakeAction?: React.ReactNode }) => <section data-program-output={outputId ?? "none"}>Program{sceneTakeAction}</section> }))
 vi.mock("@/components/panels/transcript-panel", () => ({ TranscriptPanel: () => <div data-testid="transcript-panel">Transcript</div> }))
 vi.mock("@/components/panels/detections-panel", () => ({ DetectionsPanel: () => <div data-testid="detections-panel">Detections</div> }))
@@ -333,6 +333,7 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[role="group"][aria-label="Present view"]')).toBeNull()
     expect(element.querySelectorAll('[data-testid="rundown-list"]')).toHaveLength(1)
     expect(element.querySelector('[aria-label="Preview"]')?.textContent).toContain("stays private")
+    expect(element.querySelector('[aria-label="Preview"]')?.getAttribute("data-empty-preview-action")).toBe("true")
     expect(element.querySelector("[data-studio-live]")?.textContent).toContain("Program")
     expect(element.querySelector('[aria-label="Rhema recording dock"]')?.textContent).toContain("Rhema recording controls")
     expect(element.querySelector('[role="toolbar"][aria-label="Presentation controls"] button')?.textContent).toBe("Take source live")

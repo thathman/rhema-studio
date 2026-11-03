@@ -4,6 +4,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const { canvasVerses } = vi.hoisted(() => ({ canvasVerses: [] as unknown[] }))
 vi.hoisted(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
+  if (globalThis.HTMLCanvasElement) {
+    const context = new Proxy({ font: "" }, {
+      get: (target, property) => property === "measureText"
+        ? (text: string) => ({ width: text.length * 8 })
+        : property === "canvas"
+          ? { width: 1920, height: 1080 }
+          : Reflect.get(target, property) ?? (() => undefined),
+      set: (target, property, value) => Reflect.set(target, property, value),
+    })
+    globalThis.HTMLCanvasElement.prototype.getContext = (() => context) as unknown as typeof globalThis.HTMLCanvasElement.prototype.getContext
+  }
 })
 
 vi.mock("@/components/ui/canvas-verse", () => ({ CanvasVerse: ({ verse }: { verse: unknown }) => { canvasVerses.push(verse); return null } }))
@@ -125,6 +136,63 @@ afterEach(() => {
 })
 
 describe("Preview translation refresh", () => {
+  it("shows private recovery guidance only when Live Preview is empty and opens Find & cue", async () => {
+    useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null, samplePreview: false })
+    const program = {
+      isLive: useBroadcastStore.getState().isLive,
+      liveVerse: useBroadcastStore.getState().liveVerse,
+      outputs: useBroadcastStore.getState().outputs,
+    }
+    const openFindAndCue = vi.fn()
+
+    await act(async () => root!.render(<PreviewPanel onEmptyPreviewAction={openFindAndCue} />))
+
+    const preview = document.body.querySelector<HTMLElement>('[data-slot="preview-panel"]')!
+    expect(preview.textContent).toContain("Nothing in private Preview")
+    expect(preview.textContent).toContain("Program stays unchanged until you Take it.")
+    expect(preview.querySelector('[aria-hidden="true"]')).not.toBeNull()
+    expect(canvasVerses.at(-1)).toBeNull()
+    const action = preview.querySelector<HTMLButtonElement>("button")!
+    expect(action.textContent).toContain("Find & cue")
+    expect(action.className).toContain("min-h-11")
+
+    await act(async () => action.click())
+
+    expect(openFindAndCue).toHaveBeenCalledTimes(1)
+    expect(useBroadcastStore.getState()).toMatchObject(program)
+  })
+
+  it("does not cover selected slide content when its display reference is empty", async () => {
+    const slide: SlideQueueItem = {
+      ...welcomeSlide,
+      reference: "",
+      slide: { title: "Visible slide", body: "The selected content is here." },
+    }
+    useQueueStore.setState({ items: [slide], headers: [], activeIndex: null })
+    useBibleStore.setState({
+      selectedVerse: null,
+      selectedSlide: { item: slide, index: 0 },
+      selectedQueueItemId: slide.id,
+      samplePreview: false,
+    })
+    const program = {
+      isLive: useBroadcastStore.getState().isLive,
+      liveVerse: useBroadcastStore.getState().liveVerse,
+    }
+
+    await act(async () => root!.render(<PreviewPanel onEmptyPreviewAction={vi.fn()} />))
+
+    const preview = document.body.querySelector<HTMLElement>('[data-slot="preview-panel"]')!
+    expect(preview.textContent).not.toContain("Nothing in private Preview")
+    expect(preview.querySelector("button")).toBeNull()
+    expect(preview.querySelector('[aria-hidden="true"]')).toBeNull()
+    expect(canvasVerses.at(-1)).toMatchObject({
+      reference: "Visible slide",
+      segments: [{ text: "The selected content is here." }],
+    })
+    expect(useBroadcastStore.getState()).toMatchObject(program)
+  })
+
   it("previews the selected congregation output in its configured language without changing Program", async () => {
     const baseOutput = useBroadcastStore.getState().outputs[0]!
     useBroadcastStore.setState({
