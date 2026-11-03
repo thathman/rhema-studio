@@ -347,6 +347,9 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       const edited = node.cropX !== 0 || node.cropY !== 0 || node.cropWidth !== undefined || node.cropHeight !== undefined || clips.length > 0 || (node.borderRadius ?? 0) > 0
       if (!Number.isFinite(node.scaleX) || !Number.isFinite(node.scaleY) || node.scaleX <= 0 || node.scaleY <= 0) {
         issues.push({ nodeId: node.id, message: "Pictures must keep a positive, unflipped scale for Rhema scene output" })
+      } else if (edited && !binding.imageDraw && binding.crop && (binding.crop.l || binding.crop.t || binding.crop.r || binding.crop.b)) {
+        // Its Rhema crop (%) is not shown in the editor; cropping again here would silently lose it.
+        issues.push({ nodeId: node.id, message: "This picture is cropped in the Scene composer; reset that crop there before cropping, rounding or clipping it here" })
       } else if (edited || binding.imageDraw) {
         // Cropped, rounded or clipped in the editor (now or before): drawn on outputs exactly as the editor draws it.
         const raw = { width: node.width, height: node.height, cropX: node.cropX, cropY: node.cropY, cropWidth: node.cropWidth, cropHeight: node.cropHeight, radius: node.borderRadius, clips }

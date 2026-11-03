@@ -1,4 +1,4 @@
-import type { ImageDraw, SceneClip } from "../types/scene"
+import type { ImageDraw, Scene, SceneClip } from "../types/scene"
 
 /**
  * Pictures cropped, rounded and clipped in the Avnac editor (#448 Slice B), kept as the editor
@@ -24,7 +24,7 @@ export function imageDrawIssue(raw: unknown): string | null {
   const d = raw as Partial<ImageDraw> | null
   if (!d || typeof d !== "object") return "A cropped picture needs its size and crop"
   if (!finite(d.width, 0.001, SIZE) || !finite(d.height, 0.001, SIZE)) return "A cropped picture needs a finite size"
-  if (!finite(d.cropX, 0, PIXELS) || !finite(d.cropY, 0, PIXELS)) return "A picture's crop must start inside the picture"
+  if (!finite(d.cropX, 0, PIXELS) || !finite(d.cropY, 0, PIXELS)) return "A picture's crop cannot start before its edge"
   if ((d.cropWidth !== undefined && !finite(d.cropWidth, 1, PIXELS)) || (d.cropHeight !== undefined && !finite(d.cropHeight, 1, PIXELS))) return "A picture's crop needs a size of at least one pixel"
   if (d.radius !== undefined && !finite(d.radius, 0, SIZE)) return "A picture's rounded corners need a finite size"
   if (d.clips !== undefined) {
@@ -51,4 +51,28 @@ export function normalizeImageDraw(raw: unknown): ImageDraw | undefined {
     ...(d.radius ? { radius: d.radius } : {}),
     ...(clips.length ? { clips } : {}),
   }
+}
+
+const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+
+/**
+ * A saved scene's pictures after an edit (`prev` → `next`): the editor's drawing of a picture stays
+ * only while that picture and its Rhema crop are the ones it was made for. Another picture (a new
+ * library pick) or a Rhema crop set over it, with the drawing left as it was, drops the drawing, so
+ * the picture covers its box with that crop as Rhema's own pictures do.
+ */
+export function dropStaleImageDraws(next: Scene, prev: Scene | undefined): Scene {
+  if (!prev) return next
+  const was = new Map(prev.layers.map((l) => [l.id, l]))
+  let changed = false
+  const layers = next.layers.map((l) => {
+    const old = was.get(l.id)
+    if (!l.imageDraw || !old || !same(l.imageDraw, old.imageDraw)) return l
+    if (l.imageUrl === old.imageUrl && l.mediaId === old.mediaId && same(l.crop, old.crop)) return l
+    changed = true
+    const plain = { ...l }
+    delete plain.imageDraw
+    return plain
+  })
+  return changed ? { ...next, layers } : next
 }

@@ -148,3 +148,50 @@ it("a joined desk's save keeps the host's picture crop", async () => {
   const back = mergeDeskScene({ ...sent, name: "Renamed", layers: sent.layers.map((l: SceneLayer) => ({ ...l, imageDraw: { width: 1, height: 1, cropX: 0, cropY: 0 } })) }, scene, { cameras: new Set(), themes: new Set() })!
   expect(back.layers[0]?.imageDraw).toEqual(scene.layers[0]?.imageDraw)
 })
+
+describe("picture drawing after review", () => {
+  it("matches the editor for a picture resized after cropping, a stack of two clips and half opacity", async () => {
+    const design = sceneToDesign(pictureScene({ opacity: 0.5 }))
+    let scene = applyCommand(design.scene, { type: "SET_IMAGE_CROP", id: "pic", cropX: 20, cropY: 10, cropWidth: 150, cropHeight: 80 })
+    const pic = scene.nodes.pic
+    if (pic.type !== "image") throw new Error("image")
+    scene = { ...scene, nodes: { ...scene.nodes, pic: { ...pic, scaleX: 1.25, scaleY: 0.75, clipPathStack: [{ type: "rect", x: -100, y: 0, width: 600, height: 432, radiusX: 40, radiusY: 40 }], clipPath: { type: "ellipse", x: 50, y: 0, width: 700, height: 380 } } } }
+    const { scene: saved, issues } = designToScene({ ...design, scene })
+    expect(issues).toEqual([])
+    expect(saved.layers[0]?.imageDraw?.clips?.map((c) => c.type)).toEqual(["rect", "ellipse"])
+    expect(differing(await drawEditor(saved), drawOutput(saved))).toBeLessThan(0.002)
+  })
+
+  it("another picture or a Rhema crop set over a cropped picture replaces the editor's drawing; the editor's own save keeps it", async () => {
+    const { useBroadcastStore } = await import("@/stores/broadcast-store")
+    const b = () => useBroadcastStore.getState()
+    const scene = edited({ type: "SET_IMAGE_CROP", id: "pic", cropX: 100, cropY: 0, cropWidth: 100, cropHeight: 50 })
+    b().saveScene(scene)
+    const saved = () => b().scenes.find((s) => s.id === scene.id)!.layers[0]!
+    b().saveScene({ ...scene, name: "Renamed" })
+    expect(saved().imageDraw).toEqual(scene.layers[0]!.imageDraw)
+    b().saveScene({ ...scene, layers: [{ ...scene.layers[0]!, mediaId: "m2", imageUrl: "data:image/png;base64,other" }] })
+    expect(saved().imageDraw).toBeUndefined()
+    b().saveScene(scene)
+    b().saveScene({ ...scene, layers: [{ ...scene.layers[0]!, crop: { l: 10, t: 0, r: 0, b: 0 } }] })
+    expect(saved().imageDraw).toBeUndefined()
+    expect(saved().crop).toEqual({ l: 10, t: 0, r: 0, b: 0 })
+  })
+
+  it("refuses to crop in the editor a picture already cropped in the Scene composer, rather than lose that crop", () => {
+    const design = sceneToDesign(pictureScene({ crop: { l: 20, t: 0, r: 0, b: 0 } }))
+    const { issues } = designToScene({ ...design, scene: applyCommand(design.scene, { type: "SET_IMAGE_BORDER_RADIUS", id: "pic", radius: 20 }) })
+    expect(issues).toEqual([{ nodeId: "pic", message: expect.stringContaining("reset that crop there") }])
+  })
+
+  it.each([
+    ["a negative clip size", { clips: [{ type: "ellipse", x: 0, y: 0, width: -5, height: 10 }] }],
+    ["a crop past any picture", { cropX: 200_000 }],
+    ["an oversized picture", { width: 50_000 }],
+    ["a clip of an unknown shape", { clips: [{ type: "star" }] }],
+  ])("drops a stored drawing it cannot draw (%s): the picture covers its box", async (_why, bad) => {
+    const scene = edited({ type: "SET_IMAGE_CROP", id: "pic", cropX: 100, cropY: 0, cropWidth: 100, cropHeight: 50 })
+    const stored = normalizeScene({ ...scene, layers: scene.layers.map((l) => ({ ...l, imageDraw: { ...l.imageDraw, ...bad } })) })!
+    expect(stored.layers[0]?.imageDraw).toBeUndefined()
+  })
+})

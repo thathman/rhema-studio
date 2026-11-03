@@ -277,7 +277,7 @@ describe("picture crop and clipping (#448 Slice B)", () => {
 
   it.each([
     ["a flipped picture", (n: Record<string, unknown>) => ({ ...n, scaleX: -1 }), "positive, unflipped scale"],
-    ["a crop starting outside", (n: Record<string, unknown>) => ({ ...n, cropX: -5 }), "start inside the picture"],
+    ["a crop starting outside", (n: Record<string, unknown>) => ({ ...n, cropX: -5 }), "cannot start before its edge"],
     ["a zero-pixel crop", (n: Record<string, unknown>) => ({ ...n, cropWidth: 0 }), "at least one pixel"],
     ["a polygon clip", (n: Record<string, unknown>) => ({ ...n, clipPath: { type: "polygon", points: [] } }), "rectangles and ellipses only"],
     ["too many clips", (n: Record<string, unknown>) => ({ ...n, clipPathStack: Array.from({ length: 4 }, () => ({ type: "ellipse", x: 0, y: 0, width: 10, height: 10 })) }), "at most 4 clips"],
