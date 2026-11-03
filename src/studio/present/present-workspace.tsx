@@ -179,7 +179,7 @@ export function PresentWorkspace() {
                     </option>
                   ))}
                 </select>
-                <span id="live-output-target-scope" className="sr-only">Preview language and scene Take follow this output. Source Take follows its subscriptions.</span>
+                <span id="live-output-target-scope" className="sr-only">Target selects the Preview language and Program view, and scopes scene Take. Source Take follows its subscriptions.</span>
               </label>
             )}
             {liveStatusLabel && <StatusChip tone={liveStatusTone} label={liveStatusLabel} className="max-w-80" />}
@@ -441,12 +441,15 @@ function LiveConsoleSurface({
         </div>
       ) : (
         <div className="col-span-2 min-h-0 max-[1200px]:h-[10.75rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">
-          <section className="flex h-full min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card p-3" role="group" aria-label="Quick screens">
+          <section className="flex h-full min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card p-3" role="group" aria-label="Quick screens" aria-describedby="live-quick-screen-scope">
             {/* Back sits in the header so it is never clipped on a short (1366x768) screen; the screens scroll if they must. */}
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h2 className="text-sm font-semibold tracking-tight">One-touch moments</h2>
                 <p className="text-xs text-muted-foreground">Temporary screens, with safe return</p>
+                <p id="live-quick-screen-scope" className="text-[0.6875rem] leading-tight text-muted-foreground">
+                  Target selects Preview language and the Program view shown here, and scopes scene Take. Quick screens and Source Take follow output routing; Black and Logo reach every feed.
+                </p>
               </div>
               <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
             </div>

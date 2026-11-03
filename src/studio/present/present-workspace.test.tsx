@@ -350,6 +350,7 @@ describe("Present's unified Live console", () => {
     const target = element.querySelector<HTMLSelectElement>('[aria-label="Target congregation output for Live Preview and Program"]')!
     expect(target.parentElement).not.toBe(preview)
     expect(target.getAttribute("aria-describedby")).toBe("live-output-target-scope")
+    expect(element.querySelector<HTMLElement>("#live-output-target-scope")?.textContent).toBe("Target selects the Preview language and Program view, and scopes scene Take. Source Take follows its subscriptions.")
     expect([...target.options].map((option) => option.textContent)).toEqual([
       "English screen · First language",
       "Yoruba screen · Second language",
@@ -405,6 +406,10 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[aria-label="Rhema recording dock"]')?.textContent).toContain("Rhema recording controls")
     expect(element.querySelector('[role="toolbar"][aria-label="Presentation controls"] button')?.textContent).toBe("Take source live")
     const quickActions = element.querySelector<HTMLElement>('[data-testid="quick-screen-actions"]')!
+    const quickScreenGroup = element.querySelector<HTMLElement>('[role="group"][aria-label="Quick screens"]')!
+    const quickScreenScope = element.querySelector<HTMLElement>("#live-quick-screen-scope")
+    expect(quickScreenGroup.getAttribute("aria-describedby")).toBe("live-quick-screen-scope")
+    expect(quickScreenScope?.textContent).toBe("Target selects Preview language and the Program view shown here, and scopes scene Take. Quick screens and Source Take follow output routing; Black and Logo reach every feed.")
     expect(quickActions.className).toContain("max-[1200px]:grid-cols-4")
     expect(quickActions.className).toContain("max-[800px]:grid-cols-2")
     expect(quickActions.className).toContain("overflow-x-hidden")
