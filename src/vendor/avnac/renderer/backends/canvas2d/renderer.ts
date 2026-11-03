@@ -83,6 +83,31 @@ async function renderCanvas2DImageCommand(
       );
       ctx.clip();
     }
+    if (command.cover) {
+      // As Rhema outputs draw it: the source less its % crop, covering the box as shown (scaled).
+      const c = command.cover;
+      const sw = (sourceSize.width * (100 - c.l - c.r)) / 100;
+      const sh = (sourceSize.height * (100 - c.t - c.b)) / 100;
+      const shownW = command.width * Math.abs(command.scaleX);
+      const shownH = command.height * Math.abs(command.scaleY);
+      if (sw > 0 && sh > 0 && shownW > 0 && shownH > 0) {
+        const scale = Math.max(shownW / sw, shownH / sh);
+        const cw = shownW / scale;
+        const ch = shownH / scale;
+        ctx.drawImage(
+          image,
+          (sourceSize.width * c.l) / 100 + (sw - cw) / 2,
+          (sourceSize.height * c.t) / 100 + (sh - ch) / 2,
+          cw,
+          ch,
+          targetX,
+          targetY,
+          command.width,
+          command.height,
+        );
+        return;
+      }
+    }
     const cropX = Math.max(0, Math.round(command.cropX));
     const cropY = Math.max(0, Math.round(command.cropY));
     const maxSourceWidth = Math.max(1, sourceSize.width - cropX);

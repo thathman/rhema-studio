@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { designStore, type DesignDocument, type DesignInput, type DesignVersion } from "@/design-engine/design-store"
-import { designPages, designToScene, previewDesign, type LivePreviewInput, type RhemaBinding, type RhemaDesignPage, VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rhema-scene"
+import { designPages, designToScene, outputCoverPictures, previewDesign, type LivePreviewInput, type RhemaBinding, type RhemaDesignPage, VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rhema-scene"
 import { createCameraLayer, createClockLayer, createColorLayer, createLiveFeedLayer, createLogoLayer, createLowerThirdLayer, createTickerLayer } from "@/design-engine/design-document-utils"
 import { applyCommand, createSaraswatiEditorStore, getNodeBounds, pointerDown, pointerMove, pointerUp, type SaraswatiClipPath, type SaraswatiCommand, type SaraswatiImageNode, type SaraswatiPointerState } from "@/vendor/avnac/saraswati"
 import { renderSceneToCanvas } from "@/vendor/avnac/renderer/offscreen-render"
@@ -426,7 +426,7 @@ export function DesignDocumentEditor({
       const canvas = canvasRef.current
       const ctx = canvas?.getContext("2d")
       if (!canvas || !ctx) return
-      const rendered = await renderSceneToCanvas(canvasPreviewScene, { multiplier: 1 })
+      const rendered = await renderSceneToCanvas(canvasPreviewScene, { multiplier: 1, imageCover: outputCoverPictures({ scene: canvasPreviewScene, bindings }) })
       if (cancelled || !rendered) return
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.drawImage(rendered, 0, 0, canvas.width, canvas.height)
@@ -445,7 +445,7 @@ export function DesignDocumentEditor({
     }
     void draw().catch(() => setMessage("The editor preview could not be drawn. Your document remains available to edit and save."))
     return () => { cancelled = true }
-  }, [canvasPreviewScene, pageScene, selectedId])
+  }, [bindings, canvasPreviewScene, pageScene, selectedId])
 
   useEffect(() => {
     void designStore.listVersions(document.id).then(setVersions).catch(() => setVersions([]))

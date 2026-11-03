@@ -125,6 +125,11 @@ export type SaraswatiRenderImageCommand = RenderTransform & {
   cropHeight?: number;
   clipPath: SaraswatiClipPath | null;
   clipPathStack: SaraswatiClipPath[];
+  /**
+   * Rhema (#448): draw as Rhema outputs draw a picture never cropped in the editor: cut these % from
+   * the source's edges, then cover the shown box keeping the picture's shape (no stretching).
+   */
+  cover?: { l: number; t: number; r: number; b: number };
 };
 
 export type SaraswatiRenderCommand =
