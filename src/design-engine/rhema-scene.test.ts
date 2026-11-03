@@ -323,6 +323,7 @@ describe("live layers in the editor's preview", () => {
       { id: "timer", reference: "running · 12:30", on: true, state: "running" },
       { id: "camera:pulpit", reference: "pulpit", on: true, state: "sending" },
     ],
+    clockValues: { timer: "running · 12:30", countdown: { next: "running · 12:30" } },
   })
 
   it("show what each live layer would show now, and follow the Live State", () => {
@@ -334,6 +335,25 @@ describe("live layers in the editor's preview", () => {
     expect(first["preview:logo"]).toBeUndefined()
     expect(words(previewDesign(design, live("Romans 8:28")))["preview:verse"]).toBe("Romans 8:28")
     expect(words(previewDesign(design, live(null)))["preview:verse"]).toBe("Nothing on air")
+  })
+
+  it("uses the clock's selected host source and previews the actual Brand Kit image privately", () => {
+    const design = sceneToDesign(sermon)
+    const clockId = Object.entries(design.bindings).find(([, binding]) => binding.kind === "clock")![0]
+    const logoId = Object.entries(design.bindings).find(([, binding]) => binding.kind === "logo")![0]
+    design.bindings[clockId] = { ...design.bindings[clockId]!, clockShows: "until", until: "10:30" }
+    design.scene.nodes[logoId] = { ...design.scene.nodes[logoId]!, visible: true }
+
+    const preview = previewDesign(design, {
+      ...live("John 3:16"),
+      clockValues: { timer: "8:00", time: "10:12", until: { "10:30": "18:00" } },
+      logoUrl: "data:image/png;base64,ZmFrZQ==",
+    })
+
+    expect(preview.nodes[`preview:${clockId}`]).toMatchObject({ type: "text", text: "18:00" })
+    expect(preview.nodes[`preview:${logoId}`]).toMatchObject({ type: "image", src: "data:image/png;base64,ZmFrZQ==" })
+    expect(design.scene.nodes[logoId]?.type).toBe("rect")
+    expect(design.scene.nodes[`preview:${logoId}`]).toBeUndefined()
   })
 
   it("never change the design itself: the saved scene keeps the subscription, not the words", () => {

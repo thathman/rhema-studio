@@ -16,7 +16,7 @@ import {
   type SaraswatiScene,
   type SaraswatiTextNode,
 } from "../vendor/avnac/saraswati"
-import type { DesignPin, Scene, SceneLayer } from "../types/scene"
+import type { CountdownTo, DesignPin, Scene, SceneLayer } from "../types/scene"
 
 /** The editing frame: a 1920×1080 artboard; layer boxes are kept in % of it, as Rhema keeps them. */
 export const DESIGN_WIDTH = 1920
@@ -411,6 +411,13 @@ export async function resolveDesignedMoment(
 export interface LivePreviewInput {
   program: { onAir: boolean; reference: string | null }
   sources: { id: string; reference: string; on: boolean; state?: string }[]
+  clockValues?: {
+    timer?: string | null
+    time?: string | null
+    until?: Record<string, string | null>
+    countdown?: Partial<Record<CountdownTo, string | null>>
+  }
+  logoUrl?: string | null
 }
 
 function liveWords(binding: RhemaBinding, live: LivePreviewInput): string | null {
@@ -425,12 +432,18 @@ function liveWords(binding: RhemaBinding, live: LivePreviewInput): string | null
       const shown = binding.shows.map(on).find((r) => r)
       return shown ?? "Nothing on air"
     }
-    case "clock":
-      return source("timer")?.reference ?? "Service timer"
+    case "clock": {
+      if (binding.clockShows === "time") return live.clockValues?.time ?? "Time of day"
+      if (binding.clockShows === "until") return live.clockValues?.until?.[binding.until ?? ""] ?? "No time target"
+      if (binding.clockShows === "countdown") return live.clockValues?.countdown?.[binding.countdownTo ?? "next"] ?? "No run-of-show target"
+      return live.clockValues?.timer ?? source("timer")?.reference ?? "Service timer"
+    }
     case "ticker":
       return on("ticker") ?? "Ticker (off)"
     case "lowerThird":
       return on("lowerThird") ?? "Lower third (down)"
+    case "logo":
+      return live.logoUrl ? null : "Brand Kit logo not set"
     case "camera": {
       const name = binding.cameraUrl?.split("/").filter(Boolean).at(-2) ?? "Camera"
       const cam = source(`camera:${name}`)
@@ -451,6 +464,31 @@ export function previewDesign(design: RhemaDesign, live: LivePreviewInput): Sara
   for (const { node, visible, groupOpacity } of layerEntries(design.scene)) {
     const binding = design.bindings[node.id]
     if (!binding || !visible || node.type === "line") continue
+    if (binding.kind === "logo" && live.logoUrl && "width" in node && "height" in node) {
+      const logo: SaraswatiImageNode = {
+        id: `preview:${node.id}`,
+        parentId: design.scene.root,
+        name: `${node.name ?? node.id} (Brand Kit preview)`,
+        visible: true,
+        x: node.x,
+        y: node.y,
+        rotation: node.rotation,
+        scaleX: node.scaleX,
+        scaleY: node.scaleY,
+        opacity: node.opacity * groupOpacity,
+        originX: node.originX,
+        originY: node.originY,
+        type: "image",
+        width: node.width,
+        height: node.height,
+        src: live.logoUrl,
+        cropX: 0,
+        cropY: 0,
+        clipPath: null,
+      }
+      preview = applyCommand(preview, { type: "ADD_NODE", node: logo })
+      continue
+    }
     const words = liveWords(binding, live)
     if (!words) continue
     const width = "width" in node ? node.width : 0
@@ -459,7 +497,7 @@ export function previewDesign(design: RhemaDesign, live: LivePreviewInput): Sara
     preview = applyCommand(preview, {
       type: "ADD_NODE",
       node: {
-        id: `preview:${node.id}`, parentId: SARASWATI_ROOT_ID, name: `${node.name ?? node.id} (live)`, visible: true,
+        id: `preview:${node.id}`, parentId: design.scene.root, name: `${node.name ?? node.id} (live)`, visible: true,
         x: node.x, y: node.y + height / 2 - fontSize * 0.6, rotation: 0, scaleX: 1, scaleY: 1, opacity: node.opacity * groupOpacity, originX: "left", originY: "top",
         type: "text", text: words, width, fontSize, fontFamily: "Helvetica", fontWeight: "600", fontStyle: "normal", textAlign: "center",
         lineHeight: 1.2, underline: false, color: { type: "solid", color: "#ffffff" }, stroke: null, strokeWidth: 0,

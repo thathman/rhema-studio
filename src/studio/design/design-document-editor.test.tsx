@@ -28,7 +28,9 @@ import { designToScene, VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rh
 import { applyCommand, type SaraswatiImageNode } from "@/vendor/avnac/saraswati"
 import { DesignDocumentEditor } from "./design-document-editor"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useTimerStore } from "@/stores/timer-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { renderSceneToCanvas } from "@/vendor/avnac/renderer/offscreen-render"
 import { useRouterHealth } from "@/lib/cameras"
 import { defaultBrandKit } from "@/lib/brand-kit"
 import { useMediaStore } from "@/stores/media-store"
@@ -79,10 +81,16 @@ const videoAssetUrl = `asset://localhost/%2Flocal-media%2F${videoAsset.hash}-ser
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   HTMLCanvasElement.prototype.getContext = (() => null) as never
+  vi.mocked(renderSceneToCanvas).mockClear()
   store.listVersions.mockResolvedValue([])
   store.saveDraft.mockReset()
   store.createVersion.mockReset()
   useSettingsStore.setState({ operatorName: "Tolu", brandKit: defaultBrandKit() })
+  useBroadcastStore.setState({
+    isLive: false, liveVerse: null, liveSourceVerse: null, liveItem: null, liveSlide: null, liveItemId: null,
+    sources: {}, stateSources: {}, ticker: null, lowerThird: null, countdowns: null,
+  })
+  useTimerStore.setState({ timer: { durationMs: 0, startedAt: null, accumulatedMs: 0 }, tick: 0 })
   useSettingsStore.setState({ cameras: [] })
   useRouterHealth.setState({ status: null, checked: false })
   useMediaStore.setState({
@@ -1062,6 +1070,50 @@ describe("canonical design editor", () => {
       liveVerse: after.liveVerse,
       liveSlide: after.liveSlide,
     }).toEqual(liveState)
+  })
+
+  it("previews current host values and Brand Kit image privately without changing the design or Program", async () => {
+    const documentValue = documentFixture()
+    const style = useBroadcastStore.getState().tickerStyle
+    useBroadcastStore.setState({
+      isLive: true,
+      liveVerse: { reference: "John 3:16", lines: ["For God so loved the world"], segments: [], content: "bible" } as never,
+      ticker: { items: ["Welcome to service"], style, startedAt: 0 },
+      lowerThird: { line1: "Pastor Tolu", line2: "Senior Pastor" },
+    })
+    useTimerStore.setState({ timer: { durationMs: 120_000, startedAt: null, accumulatedMs: 60_000 }, tick: 1 })
+    useSettingsStore.setState({ brandKit: { ...defaultBrandKit(), logoUrl: imageDataUrl } })
+    const programBefore = useBroadcastStore.getState().liveVerse
+    const documentBefore = JSON.stringify(documentValue.document)
+    const element = await render(documentValue)
+
+    await addLiveLayer(element, "Service clock")
+    await addLiveLayer(element, "Ticker")
+    await addLiveLayer(element, "Lower third")
+    await addLiveLayer(element, "Brand Kit logo")
+    HTMLCanvasElement.prototype.getContext = (() => ({})) as never
+    vi.mocked(renderSceneToCanvas).mockClear()
+    const previewToggle = element.querySelector<HTMLButtonElement>('[aria-label="Preview current Live values"]')!
+    await act(async () => previewToggle.click())
+
+    const previewScene = vi.mocked(renderSceneToCanvas).mock.calls.at(-1)?.[0]
+    expect(previewToggle.getAttribute("aria-pressed")).toBe("true")
+    expect(element.textContent).toContain("Private preview of current host values")
+    expect(previewScene).toBeDefined()
+    const previewText = Object.values(previewScene!.nodes).filter((node) => node.id.startsWith("preview:") && node.type === "text").map((node) => (node as { text: string }).text).join("\n")
+    expect(previewText).toContain("1:00")
+    expect(previewText).toContain("Welcome to service")
+    expect(previewText).toContain("Pastor Tolu · Senior Pastor")
+    expect(Object.values(previewScene!.nodes)).toContainEqual(expect.objectContaining({ id: expect.stringMatching(/^preview:/), type: "image", src: imageDataUrl }))
+    expect(JSON.stringify(documentValue.document)).toBe(documentBefore)
+    expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
+    expect(store.saveDraft).not.toHaveBeenCalled()
+
+    await act(async () => useBroadcastStore.setState({ ticker: { ...useBroadcastStore.getState().ticker!, items: ["Service starts soon"] } }))
+    const updatedScene = vi.mocked(renderSceneToCanvas).mock.calls.at(-1)?.[0]
+    const updatedText = Object.values(updatedScene!.nodes).filter((node) => node.id.startsWith("preview:") && node.type === "text").map((node) => (node as { text: string }).text).join("\n")
+    expect(updatedText).toContain("Service starts soon")
+    expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
   })
 
   it("edits the clock mode and fixed time, and blocks Prepare compatibility until the time is valid", async () => {
