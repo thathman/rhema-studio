@@ -68,7 +68,7 @@ export function PresentWorkspace() {
         : null
   const liveStatusTone = rehearsal ? "warn" : isLive ? "live" : "off"
   const startsAt = useQueueStore((s) => (s.headers.find((h) => h.type === "phase" && h.role === "main") ?? s.headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at ?? null)
-  const onAir = outputs.filter((o) => outputOnAir(o, outputStatus[o.id])).length
+  const onAir = congregationOutputs.filter((o) => outputOnAir(o, outputStatus[o.id])).length
   const closeTools = () => {
     useProductionTab.setState({ open: false, requested: null })
     const returnFocus = toolsTab === "bible" || toolsTab === "listening"
@@ -122,7 +122,7 @@ export function PresentWorkspace() {
             )}
             <StatusChip
               tone={onAir > 0 ? "ok" : "warn"}
-              label={onAir > 0 ? `${onAir}/${outputs.length} outputs on` : "No output on a screen"}
+              label={onAir > 0 ? `${onAir}/${congregationOutputs.length} congregation outputs on` : "No output on a screen"}
               onClick={openOutputs}
               title="Open outputs"
             />
