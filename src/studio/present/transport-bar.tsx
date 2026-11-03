@@ -107,7 +107,11 @@ function TransportButton({
  * action does. The layout follows the bar's own width: on a half-size window source Take gets its
  * own row and the rest become icons with tooltips, never a sideways scroll.
  */
-export function TransportBar({ className }: { className?: string }) {
+export function TransportBar({ className, hasSelectedOutputSceneTake = false }: {
+  className?: string
+  /** A selected scene action for the Program output already owns the primary Take hierarchy. */
+  hasSelectedOutputSceneTake?: boolean
+}) {
   const isLive = useBroadcastStore((s) => s.isLive)
   const hasLiveItem = useBroadcastStore((s) => s.liveVerse !== null)
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
@@ -156,6 +160,11 @@ export function TransportBar({ className }: { className?: string }) {
       : rehearsal
         ? "Rehearsal · public outputs keep their current Program"
         : "Source Take · outputs subscribed to this source"
+  const buttonHint = previewKind === "cue" || previewKind === "audio"
+    ? "Screen Program unchanged"
+    : rehearsal
+      ? "Private rehearsal · public outputs unchanged"
+      : "To subscribed outputs"
 
   return (
     <div role="toolbar" aria-label="Presentation controls" className={cn("@container", className)}>
@@ -209,8 +218,9 @@ export function TransportBar({ className }: { className?: string }) {
             title={takeTitle}
             reason={preview ? null : "Nothing in Preview: click a running-order item or find a verse first"}
             onClick={() => presentActions.showLive()}
-            tone="take"
+            tone={hasSelectedOutputSceneTake ? "neutral" : "take"}
             text={{ value: takeLabel, className: "flex" }}
+            hint={{ value: buttonHint }}
             describedBy={targetId}
           />
           <p id={targetId} className="sr-only">{preview ?? "Nothing in Preview"}. {destinationHint}</p>
