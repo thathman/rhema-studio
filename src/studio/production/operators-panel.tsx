@@ -34,6 +34,7 @@ import { timeChangeWords } from "@/stores/time-change-store"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { openPermissions } from "@/studio/permissions/navigation"
 import { validAspectRatioLabel } from "@/lib/group-take"
+import { EditorLibraryPreview } from "@/studio/production/editor-library-preview"
 
 // The join form has its own module so Rhema Studio Companion (#209) shows it without the studio's desks.
 export { JoinForm }
@@ -288,7 +289,7 @@ function JoinedDesk() {
           {role === "screens" && <UpcomingGraphics queue={live.graphicsQueue} stale={fresh.stale} />}
           {desks.includes("director") && <DirectorBoard readiness={live.readiness} crew={live.presence} />}
           {desks.includes("clock") && <ClockDesk live={live} stale={fresh.stale} />}
-          {desks.includes("prepare") && <PrepareDesk />}
+          {desks.includes("prepare") && <EditorLibraryPreview />}
           {desks.includes("bible") && <BibleConsole live={live} />}
           {desks.includes("songs") && <SongsDesk live={live} />}
           {desks.includes("cameras") && <CameraDesk live={live} />}
@@ -681,36 +682,6 @@ function DeskHold({ live }: { live: LiveStateV1 }) {
       <input aria-label="Reason for the hold" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason, e.g. waiting for the pastor" maxLength={80} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
       <Button size="sm" variant="outline" type="submit" disabled={off} title="Hold: in the host's service log and on its stage display; loops and timed moves wait until Resume">Hold</Button>
     </form>
-  )
-}
-
-/** An editor's desk: a verse or a song into the main desk's Preview, never live (the host checks the role too). */
-function PrepareDesk() {
-  const ok = useCanSend()
-  const [verse, setVerse] = useState("")
-  const [song, setSong] = useState("")
-  const [said, setSaid] = useState("")
-  const send = useJoin.getState().send
-  const put = async (command: "bible_preview" | "song_preview", value: string, clear: () => void) => {
-    const r = await send({ command, value })
-    if (r.ok) {
-      clear()
-      setSaid(`${value} is in the main desk's Preview.`)
-    } else setSaid("")
-  }
-  return (
-    <section aria-label="Prepare desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
-      <p className="font-semibold">Prepare <span className="font-normal text-muted-foreground">· into the main desk's Preview; nothing goes live from here</span></p>
-      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); const v = verse.trim(); if (v) void put("bible_preview", v, () => setVerse("")) }}>
-        <input aria-label="Bible reference to preview" value={verse} onChange={(e) => setVerse(e.target.value)} placeholder="Romans 8:28" maxLength={120} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
-        <Button size="sm" variant="outline" type="submit" disabled={!ok || !verse.trim()}>Preview verse</Button>
-      </form>
-      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); const v = song.trim(); if (v) void put("song_preview", v, () => setSong("")) }}>
-        <input aria-label="Song or hymn title to preview" value={song} onChange={(e) => setSong(e.target.value)} placeholder="Amazing Grace" maxLength={120} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
-        <Button size="sm" variant="outline" type="submit" disabled={!ok || !song.trim()}>Preview song</Button>
-      </form>
-      {said && <p role="status" className="text-muted-foreground">{said}</p>}
-    </section>
   )
 }
 

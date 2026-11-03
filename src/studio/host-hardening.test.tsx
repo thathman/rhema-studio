@@ -10,6 +10,9 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (cmd === "host_status") return hostStatus
     if (cmd === "join_pair") return { token: "tok-1", secure: { port: 8081, fingerprint: FP } }
     if (cmd === "join_me") return { name: "Ade", role: "editor" }
+    if (cmd === "join_lookup" && (args.asked as { what?: string } | undefined)?.what === "translations") return { active: 1, translations: [{ id: 1, abbreviation: "KJV", name: "King James Version", language: "en" }] }
+    if (cmd === "join_lookup" && (args.asked as { what?: string } | undefined)?.what === "search") return { verses: [{ book: 43, bookName: "John", chapter: 3, verse: 16, text: "For God so loved the world" }] }
+    if (cmd === "join_lookup" && (args.asked as { what?: string } | undefined)?.what === "chapter") return { verses: [16, 17, 18].map((verse) => ({ book: 43, bookName: "John", chapter: 3, verse, text: `Verse ${verse}` })) }
     return null
   }),
 }))
@@ -129,13 +132,14 @@ describe("a joined desk over https, and the new roles", () => {
     expect(ed.querySelector('[aria-label="Prepare desk"]')).not.toBeNull()
     expect(ed.querySelector('[aria-label="Scenes desk"]')).not.toBeNull()
     expect(ed.textContent).not.toContain("Take Sermon split")
-    const input = ed.querySelector<HTMLInputElement>('[aria-label="Bible reference to preview"]')!
+    const input = ed.querySelector<HTMLInputElement>('[aria-label="Editor Scripture reference or words"]')!
     await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Romans 8:28")
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "God so loved")
       input.dispatchEvent(new Event("input", { bubbles: true }))
     })
-    await act(async () => input.form!.requestSubmit())
-    expect(calls.find((c) => c.cmd === "join_command")?.args.command).toMatchObject({ command: "bible_preview", value: "Romans 8:28" })
+    await act(async () => ed.querySelector<HTMLFormElement>('[aria-label="Host Bible Library"] form')!.requestSubmit())
+    expect(ed.textContent).toContain("John 3:16")
+    expect(calls.filter((c) => c.cmd === "join_command")).toEqual([])
     useJoin.setState({ me: { name: "Op", role: "viewer" } })
     const v = await render()
     for (const desk of ["Prepare desk", "Scenes desk", "Bible desk", "Event clock desk"]) expect(v.querySelector(`[aria-label="${desk}"]`)).toBeNull()
