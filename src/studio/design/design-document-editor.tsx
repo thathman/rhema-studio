@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { designStore, type DesignDocument, type DesignInput, type DesignVersion } from "@/design-engine/design-store"
-import { designPages, designToScene, type RhemaBinding, type RhemaDesignPage, VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rhema-scene"
+import { designPages, designToScene, previewDesign, type LivePreviewInput, type RhemaBinding, type RhemaDesignPage, VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rhema-scene"
 import { createCameraLayer, createClockLayer, createColorLayer, createLiveFeedLayer, createLogoLayer, createLowerThirdLayer, createTickerLayer } from "@/design-engine/design-document-utils"
 import { createSaraswatiEditorStore, getNodeBounds, pointerDown, pointerMove, pointerUp, type SaraswatiCommand, type SaraswatiPointerState } from "@/vendor/avnac/saraswati"
 import { renderSceneToCanvas } from "@/vendor/avnac/renderer/offscreen-render"
@@ -15,6 +15,10 @@ import { CONTENT_NAMES } from "@/lib/content-names"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import type { BroadcastOutputLanguage } from "@/types/broadcast-output"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useBroadcastStore } from "@/stores/broadcast-store"
+import { monotonicNow, useTimerStore } from "@/stores/timer-store"
+import { clockText, countdownClock, sceneClock, untilClock } from "@/lib/scenes"
+import { crawlElapsed, pageIndex, tickerText } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
 import { cameraOfUrl, useRouterHealth, whepUrl } from "@/lib/cameras"
 import type { MediaAssetStatus } from "@/types"
@@ -125,6 +129,8 @@ export function DesignDocumentEditor({
   const [conflicted, setConflicted] = useState(false)
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState("")
+  const [liveValuesPreview, setLiveValuesPreview] = useState(false)
+  const [previewClockNow, setPreviewClockNow] = useState(() => Date.now())
   const [imagePickerOpen, setImagePickerOpen] = useState(false)
   const [cameraPickerOpen, setCameraPickerOpen] = useState(false)
   const [mediaPickerKind, setMediaPickerKind] = useState<"image" | "video">("image")
@@ -133,6 +139,16 @@ export function DesignDocumentEditor({
   const [editorFlags, setEditorFlags] = useState({ canUndo: false, canRedo: false })
   const operatorName = useSettingsStore((state) => state.operatorName)
   const brandKit = useSettingsStore((state) => state.brandKit)
+  const brandKitLogoUrl = useSettingsStore((state) => liveValuesPreview ? state.brandKit.logoUrl : null)
+  const isLive = useBroadcastStore((state) => liveValuesPreview ? state.isLive : false)
+  const liveVerse = useBroadcastStore((state) => liveValuesPreview ? state.liveVerse : null)
+  const liveSources = useBroadcastStore((state) => liveValuesPreview ? state.sources : null)
+  const stateSources = useBroadcastStore((state) => liveValuesPreview ? state.stateSources : null)
+  const ticker = useBroadcastStore((state) => liveValuesPreview ? state.ticker : null)
+  const lowerThird = useBroadcastStore((state) => liveValuesPreview ? state.lowerThird : null)
+  const countdowns = useBroadcastStore((state) => liveValuesPreview ? state.countdowns : null)
+  const serviceTimer = useTimerStore((state) => liveValuesPreview ? state.timer : null)
+  useTimerStore((state) => liveValuesPreview ? state.tick : 0)
   const cameras = useSettingsStore((state) => state.cameras)
   const routerStatus = useRouterHealth((state) => state.status)
   const cameraRouterReady = !!routerStatus?.running && !!routerStatus.lanAddress
@@ -196,6 +212,71 @@ export function DesignDocumentEditor({
   const designForEditor = useMemo(() => {
     return { ...document.document, pages: pagesForDocument, scene, bindings }
   }, [document.document, pagesForDocument, scene, bindings])
+  useEffect(() => {
+    if (!liveValuesPreview) return
+    const interval = window.setInterval(() => setPreviewClockNow(Date.now()), 1_000)
+    return () => window.clearInterval(interval)
+  }, [liveValuesPreview])
+  const livePreviewInput = useMemo<LivePreviewInput | null>(() => {
+    if (!liveValuesPreview) return null
+    const now = previewClockNow
+    const timerClock = serviceTimer ? sceneClock(serviceTimer, monotonicNow(), now) : null
+    const sources: LivePreviewInput["sources"] = Object.entries(liveSources ?? {}).flatMap(([id, value]) => value ? [{
+      id,
+      reference: value.value.reference || value.value.lines?.filter(Boolean).join(" · ") || "Live content",
+      on: value.on,
+      revision: value.revision,
+    }] : [])
+    const tickerWords = ticker?.style.motion === "pages"
+      ? (() => {
+        const items = ticker.items.map((item) => item.trim()).filter(Boolean)
+        const index = pageIndex(ticker.items, ticker.style.pageSeconds, crawlElapsed(ticker, now))
+        return index >= 0 ? items[index] ?? "" : ""
+      })()
+      : ticker ? tickerText(ticker.items, ticker.style.separator) : ""
+    sources.push({ id: "ticker", reference: tickerWords, on: !!ticker })
+    sources.push({
+      id: "lowerThird",
+      reference: [lowerThird?.line1, lowerThird?.line2].map((line) => line?.trim()).filter(Boolean).join("\n"),
+      on: !!lowerThird,
+    })
+    for (const [id, source] of Object.entries(stateSources ?? {})) {
+      if (!id.startsWith("camera:") || !source) continue
+      sources.push({
+        id,
+        reference: id.slice("camera:".length),
+        on: source.on,
+        state: source?.hold ? "frozen" : source?.backup ? "backup" : source?.on ? "sending" : "off",
+      })
+    }
+    const until: Record<string, string | null> = {}
+    const countdown: NonNullable<LivePreviewInput["clockValues"]>["countdown"] = {}
+    for (const binding of Object.values(bindings)) {
+      if (binding.kind !== "clock") continue
+      if (binding.clockShows === "until" && binding.until) {
+        const clock = untilClock(binding.until, now)
+        until[binding.until] = clock ? clockText(clock, now) : null
+      }
+      if (binding.clockShows === "countdown") {
+        const target = binding.countdownTo ?? "next"
+        const clock = countdownClock(countdowns ?? null, target)
+        countdown[target] = clock ? clockText(clock, now) : null
+      }
+    }
+    const time = clockText({ mode: "time", at: 0, text: "" }, now)
+    const timer = timerClock ? clockText(timerClock, now) : null
+    sources.push({ id: "timer", reference: timer ?? "Service timer not started", on: timer !== null })
+    return {
+      program: { onAir: isLive, reference: liveVerse?.reference || liveVerse?.lines?.[0] || null },
+      sources,
+      clockValues: { timer, time, until, countdown },
+      logoUrl: brandKitLogoUrl,
+    }
+  }, [bindings, brandKitLogoUrl, countdowns, isLive, liveSources, liveValuesPreview, lowerThird, liveVerse, previewClockNow, serviceTimer, stateSources, ticker])
+  const canvasPreviewScene = useMemo(
+    () => liveValuesPreview && livePreviewInput ? previewDesign({ ...designForEditor, scene: pageScene }, livePreviewInput) : pageScene,
+    [designForEditor, livePreviewInput, liveValuesPreview, pageScene],
+  )
   // Keep bindings in editor state so Undo/Redo can restore deleted nodes with their Rhema data.
   // Orphaned bindings are removed only from the document sent to storage.
   const savedBindings = Object.fromEntries(
@@ -229,7 +310,7 @@ export function DesignDocumentEditor({
       const canvas = canvasRef.current
       const ctx = canvas?.getContext("2d")
       if (!canvas || !ctx) return
-      const rendered = await renderSceneToCanvas(pageScene, { multiplier: 1 })
+      const rendered = await renderSceneToCanvas(canvasPreviewScene, { multiplier: 1 })
       if (cancelled || !rendered) return
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.drawImage(rendered, 0, 0, canvas.width, canvas.height)
@@ -248,7 +329,7 @@ export function DesignDocumentEditor({
     }
     void draw().catch(() => setMessage("The editor preview could not be drawn. Your document remains available to edit and save."))
     return () => { cancelled = true }
-  }, [pageScene, selectedId])
+  }, [canvasPreviewScene, pageScene, selectedId])
 
   useEffect(() => {
     void designStore.listVersions(document.id).then(setVersions).catch(() => setVersions([]))
@@ -1026,6 +1107,27 @@ export function DesignDocumentEditor({
             </section>
           )}
           <div className="relative mx-auto w-full max-w-5xl overflow-hidden rounded-md border border-border bg-neutral-950">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-3 py-2">
+              <Button
+                type="button"
+                size="xs"
+                variant={liveValuesPreview ? "secondary" : "outline"}
+                aria-label="Preview current Live values"
+                aria-pressed={liveValuesPreview}
+                onClick={() => {
+                  const next = !liveValuesPreview
+                  if (next) setPreviewClockNow(Date.now())
+                  setLiveValuesPreview(next)
+                }}
+              >
+                {liveValuesPreview ? "Hide Live values" : "Preview Live values"}
+              </Button>
+              <p role={liveValuesPreview ? "status" : undefined} className="max-w-2xl text-[0.6875rem] text-muted-foreground">
+                {liveValuesPreview
+                  ? "Private preview of current host values. It does not change this design, Preview, Program or any output."
+                  : "The canvas is a private design draft. Preview Live values to check current content, clocks and overlays without taking them to a screen."}
+              </p>
+            </div>
             <canvas
               ref={canvasRef}
               width={scene.artboard.width}
