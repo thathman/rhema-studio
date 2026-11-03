@@ -150,6 +150,7 @@ describe("Present's unified Live console", () => {
 
     const timerStatus = element.querySelector<HTMLElement>('[title="Additional timer: Communion prep"]')
     expect(timerStatus?.textContent).toContain("Communion prep")
+    expect(timerStatus?.textContent).toContain("Running extra timer:")
     expect(timerStatus?.textContent).toMatch(/\d:\d{2}/)
     expect(timerStatus?.querySelector("button")).toBeNull()
     expect(element.querySelector('[role="toolbar"][aria-label="Live tools"] [title*="Other timers"]')).toBeNull()
