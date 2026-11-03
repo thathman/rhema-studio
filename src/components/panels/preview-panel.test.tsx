@@ -229,6 +229,22 @@ describe("Preview translation refresh", () => {
     expect(useBroadcastStore.getState().isLive).toBe(true)
   })
 
+  it("can keep the output-specific Preview language while selection lives in the Live command bar", async () => {
+    const baseOutput = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({ outputs: [{ ...baseOutput, id: "yoruba-output", name: "Yoruba screen", role: "congregation", language: "second" }] })
+    useBibleStore.setState({ secondaryTranslationId: 2 })
+    const yoruba = { ...verse, id: 2, translation_id: 2, text: "Nítorí Ọlọ́run fẹ́ aráyé" }
+    vi.spyOn(bibleActions, "fetchVerse").mockImplementation(async (_book, _chapter, _verse, translationId) => translationId === 2 ? yoruba : verse)
+    const program = useBroadcastStore.getState().liveVerse
+
+    await act(async () => root!.render(<PreviewPanel hideOutputPicker outputLanguageId="yoruba-output" />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+
+    expect(document.body.querySelector('[aria-label="Named congregation output for Preview language and scene Take"]')).toBeNull()
+    expect(canvasVerses.at(-1)).toMatchObject({ segments: [{ text: yoruba.text }] })
+    expect(useBroadcastStore.getState().liveVerse).toEqual(program)
+  })
+
   it("keeps the available text and shows checking until a missing secondary translation is confirmed", async () => {
     const baseOutput = useBroadcastStore.getState().outputs[0]!
     useBroadcastStore.setState({ outputs: [{ ...baseOutput, id: "yoruba-output", name: "Yoruba screen", role: "congregation", language: "second" }] })

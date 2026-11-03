@@ -28,9 +28,10 @@ import type { Verse } from "@/types"
  * `compact` (Present below 1200 px wide, where the full panel has no room): one line, a small
  * picture with what it is in words, so the operator still sees Preview before Take live.
  */
-export function PreviewPanel({ itemLook = false, compact = false, outputLanguageId, onOutputLanguageIdChange, onEmptyPreviewAction }: {
+export function PreviewPanel({ itemLook = false, compact = false, hideOutputPicker = false, outputLanguageId, onOutputLanguageIdChange, onEmptyPreviewAction }: {
   itemLook?: boolean
   compact?: boolean
+  hideOutputPicker?: boolean
   outputLanguageId?: string | null
   onOutputLanguageIdChange?: (outputId: string) => void
   onEmptyPreviewAction?: () => void
@@ -237,7 +238,7 @@ export function PreviewPanel({ itemLook = false, compact = false, outputLanguage
   }
   const languageFallback = !!selectedPreviewOutput && !secondaryFetchPending && isOutputLanguageFallback(verseData, previewLanguage)
   const outputVerseData = selectedPreviewOutput ? forOutputLanguage(verseData, previewLanguage) : verseData
-  const outputPicker = onOutputLanguageIdChange && congregationOutputs.length > 0 ? (
+  const outputPicker = !hideOutputPicker && onOutputLanguageIdChange && congregationOutputs.length > 0 ? (
     <label className={compact
       ? "flex min-w-0 items-center gap-1 text-[0.6875rem] font-medium text-muted-foreground"
       : "grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 text-xs font-medium text-muted-foreground"}>

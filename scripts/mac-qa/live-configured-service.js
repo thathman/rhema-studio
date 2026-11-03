@@ -86,8 +86,10 @@ async function runScenario() {
 
   const output = qa.broadcast.getState().outputs.find((candidate) => candidate.id === targetOutput.id)
   const preview = qa.bible.getState().selectedSlide
-  const outputPicker = document.querySelector('[aria-label="Named congregation output for Preview language and scene Take"]')
+  const outputPicker = document.querySelector('[aria-label="Target congregation output for Live Preview and Program"]')
+  const outputPickers = document.querySelectorAll('[aria-label="Target congregation output for Live Preview and Program"]')
   const sourceTake = document.querySelector('[aria-label="Take source live"]')
+  const previewOutputPicker = document.querySelector('[data-slot="preview-panel"] select')
   const sceneControls = [...document.querySelectorAll('[aria-label^="Quick scene controls for "]')].find((element) => element.getAttribute("aria-label") === `Quick scene controls for ${output?.name}`)
   const scenePicker = sceneControls?.querySelector("select")
   const programPanel = document.querySelector('[data-studio-live]')
@@ -111,6 +113,8 @@ async function runScenario() {
     eventName: qa.queue.getState().headers[0]?.name,
     output: output?.name,
     selectedOutput: outputPicker?.selectedOptions?.[0]?.textContent?.trim(),
+    outputPickerCount: outputPickers.length,
+    outputPickerInsidePreview: !!previewOutputPicker,
     preview: preview?.item.reference,
     programLive: qa.broadcast.getState().isLive,
     programUnchanged: JSON.stringify(readProgram()) === programBeforePreview,
@@ -124,7 +128,7 @@ async function runScenario() {
     sceneTakeContext: contextBounds && programBounds ? { top: contextBounds.top - programBounds.top, bottom: contextBounds.bottom - programBounds.top } : null,
     toolbarButtons,
   }
-  if (result.service !== "QA Sunday Service" || !result.saved || result.itemCount !== 1 || result.eventName !== "Opening" || !result.output || !result.selectedOutput?.startsWith(result.output) || result.preview !== "Welcome" || result.takeLabel !== "Take source live" || result.programLive || !result.programUnchanged || result.takeDisabled || result.selectedScene !== "Welcome layout" || result.sceneTakeText !== `Take ${result.selectedScene} to ${result.output}` || result.sceneTakeLabel !== `Take scene Welcome layout to ${result.output}` || result.sceneTakeDisabled || !result.sceneTakeVisibleWithProgram || !toolbarButtons.some((label) => label.includes("Find & listen")) || !toolbarButtons.some((label) => label.includes("Live tools")) || toolbarText.includes("Production tools") || toolbarText.includes("More controls") || toolbarText.includes("Listening off") || toolbarText.includes("Saved translations")) {
+  if (result.service !== "QA Sunday Service" || !result.saved || result.itemCount !== 1 || result.eventName !== "Opening" || !result.output || !result.selectedOutput?.startsWith(result.output) || result.outputPickerCount !== 1 || result.outputPickerInsidePreview || result.preview !== "Welcome" || result.takeLabel !== "Take source live" || result.programLive || !result.programUnchanged || result.takeDisabled || result.selectedScene !== "Welcome layout" || result.sceneTakeText !== `Take ${result.selectedScene} to ${result.output}` || result.sceneTakeLabel !== `Take scene Welcome layout to ${result.output}` || result.sceneTakeDisabled || !result.sceneTakeVisibleWithProgram || !toolbarButtons.some((label) => label.includes("Find & listen")) || !toolbarButtons.some((label) => label.includes("Live tools")) || toolbarText.includes("Production tools") || toolbarText.includes("More controls") || toolbarText.includes("Listening off") || toolbarText.includes("Saved translations")) {
     throw new Error(`Unexpected configured Live state: ${JSON.stringify(result)}`)
   }
   return result
