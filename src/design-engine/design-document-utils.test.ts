@@ -152,6 +152,6 @@ describe("Rhema design document helpers", () => {
       createdAt: new Date(0).toISOString(),
     }, "")
     expect(result.scene).toBeNull()
-    expect(result.issues[0]?.message).toContain("gradient backgrounds")
+    expect(result.issues[0]?.message).toContain("background gradient cannot be drawn")
   })
 })

@@ -25,6 +25,16 @@ export interface SceneCrop {
 }
 
 /**
+ * A linear gradient as the Avnac editor paints it (#448): stops (`offset` 0–1) along a line through
+ * the box's centre at `angle` degrees (0 runs bottom to top, 90 left to right), reaching the box's
+ * edges. Colours are hex (#rgb, #rrggbb, #rrggbbaa) or rgb()/rgba().
+ */
+export interface SceneGradient {
+  angle: number
+  stops: { color: string; offset: number }[]
+}
+
+/**
  * feed: live content (the sources it follows) in an approved look; color and picture: a
  * background; video: a library video playing on a loop, without sound (a moving background); camera: a camera on the church network (a WHEP stream, e.g. from MediaMTX; #209); clock: the
  * service timer in a look (a countdown before the service); ticker: the running ticker, in its box;
@@ -77,6 +87,8 @@ export interface SceneLayer {
   themeId?: string
   /** color, ellipse: the solid fill. */
   color?: string
+  /** color, ellipse: a gradient fill drawn instead of `color`, which older builds show (#448). */
+  gradient?: SceneGradient
   /** text: literal content (not a live source binding). */
   text?: string
   /**
@@ -119,6 +131,8 @@ export interface Scene {
   name: string
   /** "transparent" or a colour. */
   background: string
+  /** A gradient drawn instead of `background`, which older builds show (#448). */
+  backgroundGradient?: SceneGradient
   layers: SceneLayer[]
   /** How it comes on air when taken (and goes when released): a cut, or a cross-fade of this many ms. Absent: a cut. */
   fadeMs?: number
@@ -156,6 +170,8 @@ export interface SceneLayerFrame {
   theme?: BroadcastTheme
   verse?: VerseRenderData | null
   color?: string
+  /** color, ellipse: drawn instead of `color`. */
+  gradient?: SceneGradient
   /** text: static words and their version-pinned style, rendered by every subscribed output. */
   text?: string
   fontSize?: number
@@ -202,6 +218,8 @@ export interface SceneLayerFrame {
 export interface SceneFrame {
   sceneId: string
   background: string
+  /** Drawn instead of `background`, across the scene's area; the bars around it continue its edge colours. */
+  backgroundGradient?: SceneGradient
   layers: SceneLayerFrame[]
   /** Cross-fade to and from this scene, in ms (0 or absent: cut). */
   fadeMs?: number

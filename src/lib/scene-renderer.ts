@@ -3,7 +3,8 @@ import { clockText } from "@/lib/scenes"
 import { drawTicker } from "@/lib/ticker-draw"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { drawBars, drawStatic, noSignalOf } from "@/lib/no-signal"
-import type { LowerThird, SceneFrame, SceneLayerFrame, Ticker } from "@/types"
+import { paintCanvas2DStyle } from "@/vendor/avnac/renderer/backends/canvas2d/shared"
+import type { LowerThird, SceneFrame, SceneGradient, SceneLayerFrame, Ticker } from "@/types"
 
 export interface SceneDrawOptions {
   /** A loaded picture for a URL, or null while it loads (the caller loads it and redraws). */
@@ -58,6 +59,20 @@ export function sceneTicker(frame: SceneFrame | undefined): Ticker | null {
 /** The lower third a scene draws in a box of its own, or null. */
 export function sceneOverlay(frame: SceneFrame | undefined): LowerThird | null {
   return frame?.layers.find((l) => l.kind === "lowerThird" && l.overlay)?.overlay ?? null
+}
+
+/**
+ * A fill for this box: the gradient, painted by the Avnac editor's own canvas code so the screens
+ * match the design exactly, or the solid colour.
+ */
+export function scenePaint(ctx: CanvasRenderingContext2D, color: string, gradient: SceneGradient | undefined, r: { x: number; y: number; w: number; h: number }): string | CanvasGradient {
+  if (!gradient) return color
+  try {
+    return paintCanvas2DStyle(ctx, { type: "gradient", css: "", stops: gradient.stops, angle: gradient.angle }, { x: r.x, y: r.y, width: r.w, height: r.h }) ?? color
+  } catch {
+    // A stop this engine cannot parse: the saved solid colour, never a frame that fails to draw.
+    return color
+  }
 }
 
 function rect(l: SceneLayerFrame, width: number, height: number) {
@@ -256,10 +271,10 @@ export function feedLayerFresh(canvas: HTMLCanvasElement, l: Pick<SceneLayerFram
 /** One layer's content in its box (`ctx`'s alpha is already the layer's opacity). */
 function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions): void {
   if (l.kind === "color") {
-    ctx.fillStyle = l.color ?? "#000"
+    ctx.fillStyle = scenePaint(ctx, l.color ?? "#000", l.gradient, r)
     ctx.fillRect(r.x, r.y, r.w, r.h)
   } else if (l.kind === "ellipse") {
-    ctx.fillStyle = l.color ?? "#3157a4"
+    ctx.fillStyle = scenePaint(ctx, l.color ?? "#3157a4", l.gradient, r)
     ctx.beginPath()
     ctx.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2, 0, 0, Math.PI * 2)
     ctx.fill()
@@ -364,12 +379,12 @@ export function sceneArea(width: number, height: number, aspect: number | undefi
 
 export function drawScene(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, frame: SceneFrame, opts: SceneDrawOptions): void {
   ctx.clearRect(0, 0, canvasWidth, canvasHeight)
-  if (frame.background !== "transparent") {
-    ctx.fillStyle = frame.background
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight)
-  }
   // Layers are laid out in the scene's own area; the background fills the bars around it.
   const area = sceneArea(canvasWidth, canvasHeight, frame.aspect)
+  if (frame.backgroundGradient || frame.background !== "transparent") {
+    ctx.fillStyle = scenePaint(ctx, frame.background, frame.backgroundGradient, area)
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+  }
   const width = area.w
   const height = area.h
   opts.fader?.keep(new Set(frame.layers.map((l) => l.id)))
