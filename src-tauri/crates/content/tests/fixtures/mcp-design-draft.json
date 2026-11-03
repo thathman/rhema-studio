@@ -1,0 +1,311 @@
+{
+  "bindings": {
+    "layer-10": {
+      "id": "layer-10",
+      "imageUrl": "asset://localhost/%2Fmedia%2Fchoir.png",
+      "kind": "picture",
+      "mediaId": "m-choir"
+    },
+    "layer-11": {
+      "id": "layer-11",
+      "kind": "text",
+      "text": "Come with the whole family",
+      "textBoxHeight": 300.0,
+      "textSecond": "Ẹ wá pẹ̀lú gbogbo ìdílé"
+    },
+    "layer-2": {
+      "color": "#c2410c",
+      "id": "layer-2",
+      "kind": "color"
+    },
+    "layer-3": {
+      "id": "layer-3",
+      "kind": "text",
+      "text": "Harvest Thanksgiving",
+      "textBoxHeight": 200.0,
+      "textSecond": "Ìdúpẹ́ Ìkórè"
+    },
+    "layer-6": {
+      "color": "#facc15",
+      "id": "layer-6",
+      "kind": "ellipse"
+    },
+    "layer-7": {
+      "id": "layer-7",
+      "kind": "text",
+      "text": "Sunday 29 November, 10:00",
+      "textBoxHeight": 240.0,
+      "textSecond": "Ọjọ́ Àìkú 29 Oṣù Belu, 10:00"
+    }
+  },
+  "meta": {
+    "createdAt": 1700000000000,
+    "id": "scene-13",
+    "name": "Harvest Thanksgiving announcement",
+    "updatedAt": 1700000000000
+  },
+  "pages": [
+    {
+      "id": "page-id-4",
+      "nodeId": "page-1",
+      "title": "Welcome"
+    },
+    {
+      "id": "page-id-8",
+      "nodeId": "page-5",
+      "title": "When"
+    },
+    {
+      "id": "page-id-12",
+      "nodeId": "page-9",
+      "title": "Picture"
+    }
+  ],
+  "scene": {
+    "artboard": {
+      "bg": {
+        "angle": 135.0,
+        "css": "linear-gradient(135deg, #0b1020 0%, #1e3a8a 100%)",
+        "stops": [
+          {
+            "color": "#0b1020",
+            "offset": 0.0
+          },
+          {
+            "color": "#1e3a8a",
+            "offset": 1.0
+          }
+        ],
+        "type": "gradient"
+      },
+      "height": 1080.0,
+      "width": 1920.0
+    },
+    "nodes": {
+      "layer-10": {
+        "clipPath": null,
+        "cropX": 0,
+        "cropY": 0,
+        "height": 540.0,
+        "id": "layer-10",
+        "name": "Choir",
+        "opacity": 1.0,
+        "originX": "left",
+        "originY": "top",
+        "parentId": "page-9",
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "src": "asset://localhost/%2Fmedia%2Fchoir.png",
+        "type": "image",
+        "visible": true,
+        "width": 960.0,
+        "x": 160.0,
+        "y": 140.0
+      },
+      "layer-11": {
+        "color": {
+          "color": "#ffffff",
+          "type": "solid"
+        },
+        "fontFamily": "Arial",
+        "fontSize": 56.0,
+        "fontStyle": "normal",
+        "fontWeight": "600",
+        "id": "layer-11",
+        "lineHeight": 1.2,
+        "name": "Caption",
+        "opacity": 1.0,
+        "originX": "left",
+        "originY": "top",
+        "parentId": "page-9",
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "stroke": null,
+        "strokeWidth": 0,
+        "text": "Come with the whole family",
+        "textAlign": "center",
+        "type": "text",
+        "underline": false,
+        "visible": true,
+        "width": 600.0,
+        "x": 1200.0,
+        "y": 300.0
+      },
+      "layer-2": {
+        "fill": {
+          "color": "#c2410c",
+          "type": "solid"
+        },
+        "height": 320.0,
+        "id": "layer-2",
+        "name": "Band",
+        "opacity": 1.0,
+        "originX": "left",
+        "originY": "top",
+        "parentId": "page-1",
+        "radiusX": 0,
+        "radiusY": 0,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "stroke": null,
+        "strokeWidth": 0,
+        "type": "rect",
+        "visible": true,
+        "width": 1920.0,
+        "x": 0.0,
+        "y": 760.0
+      },
+      "layer-3": {
+        "color": {
+          "color": "#ffffff",
+          "type": "solid"
+        },
+        "fontFamily": "Arial",
+        "fontSize": 96.0,
+        "fontStyle": "normal",
+        "fontWeight": "800",
+        "id": "layer-3",
+        "lineHeight": 1.2,
+        "name": "Heading",
+        "opacity": 1.0,
+        "originX": "left",
+        "originY": "top",
+        "parentId": "page-1",
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "stroke": null,
+        "strokeWidth": 0,
+        "text": "Harvest Thanksgiving",
+        "textAlign": "center",
+        "type": "text",
+        "underline": false,
+        "visible": true,
+        "width": 1600.0,
+        "x": 160.0,
+        "y": 300.0
+      },
+      "layer-6": {
+        "fill": {
+          "angle": 90.0,
+          "css": "linear-gradient(90deg, #facc15 0%, #f97316 100%)",
+          "stops": [
+            {
+              "color": "#facc15",
+              "offset": 0.0
+            },
+            {
+              "color": "#f97316",
+              "offset": 1.0
+            }
+          ],
+          "type": "gradient"
+        },
+        "height": 400.0,
+        "id": "layer-6",
+        "name": "Sun",
+        "opacity": 1.0,
+        "originX": "left",
+        "originY": "top",
+        "parentId": "page-5",
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "stroke": null,
+        "strokeWidth": 0,
+        "type": "ellipse",
+        "visible": true,
+        "width": 400.0,
+        "x": 1360.0,
+        "y": 120.0
+      },
+      "layer-7": {
+        "color": {
+          "color": "#fef3c7",
+          "type": "solid"
+        },
+        "fontFamily": "Arial",
+        "fontSize": 72.0,
+        "fontStyle": "normal",
+        "fontWeight": "600",
+        "id": "layer-7",
+        "lineHeight": 1.2,
+        "name": "Date",
+        "opacity": 1.0,
+        "originX": "left",
+        "originY": "top",
+        "parentId": "page-5",
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "stroke": null,
+        "strokeWidth": 0,
+        "text": "Sunday 29 November, 10:00",
+        "textAlign": "left",
+        "type": "text",
+        "underline": false,
+        "visible": true,
+        "width": 1100.0,
+        "x": 160.0,
+        "y": 420.0
+      },
+      "page-1": {
+        "children": [
+          "layer-2",
+          "layer-3"
+        ],
+        "id": "page-1",
+        "name": "Welcome",
+        "opacity": 1,
+        "parentId": "root",
+        "rotation": 0,
+        "type": "group",
+        "visible": true
+      },
+      "page-5": {
+        "children": [
+          "layer-6",
+          "layer-7"
+        ],
+        "id": "page-5",
+        "name": "When",
+        "opacity": 1,
+        "parentId": "root",
+        "rotation": 0,
+        "type": "group",
+        "visible": true
+      },
+      "page-9": {
+        "children": [
+          "layer-10",
+          "layer-11"
+        ],
+        "id": "page-9",
+        "name": "Picture",
+        "opacity": 1,
+        "parentId": "root",
+        "rotation": 0,
+        "type": "group",
+        "visible": true
+      },
+      "root": {
+        "children": [
+          "page-1",
+          "page-5",
+          "page-9"
+        ],
+        "id": "root",
+        "opacity": 1,
+        "parentId": null,
+        "rotation": 0,
+        "type": "group",
+        "visible": true
+      }
+    },
+    "root": "root",
+    "version": 1
+  }
+}

@@ -103,12 +103,29 @@ impl ContentDb {
     }
 
     pub fn create_design(&self, input: &DesignInput) -> Result<DesignDocument> {
+        self.insert_design(input, None)
+    }
+
+    /// A new draft an AI assistant proposed over MCP (#443 C5): the ordinary create, recorded as
+    /// made by that assistant (its own name, as it gave it) in the audit trail. Never a version.
+    pub fn create_assistant_design(&self, input: &DesignInput, assistant: &str) -> Result<DesignDocument> {
+        let assistant: String = assistant.trim().chars().take(100).collect();
+        let assistant = if assistant.is_empty() { "an AI assistant".to_string() } else { assistant };
+        crate::as_actor(&format!("{assistant} (AI assistant, MCP)"), || self.insert_design(input, Some(&assistant)))
+    }
+
+    fn insert_design(&self, input: &DesignInput, assistant: Option<&str>) -> Result<DesignDocument> {
         let (title, kind, document) = validate(input)?;
         let mut conn = self.lock()?;
         let tx = conn.transaction()?;
         let id = new_id();
         tx.execute("INSERT INTO design_documents (id, title, kind, document) VALUES (?1, ?2, ?3, ?4)", params![id, title, kind, document])?;
-        audit(&tx, "design", &id, "create", &serde_json::json!({ "title": title, "kind": kind }))?;
+        let mut payload = serde_json::json!({ "title": title, "kind": kind });
+        if let Some(a) = assistant {
+            payload["source"] = serde_json::json!("mcp");
+            payload["assistant"] = serde_json::json!(a);
+        }
+        audit(&tx, "design", &id, "create", &payload)?;
         let saved = load_design(&tx, &id)?.ok_or_else(|| ContentError::NotFound(id.clone()))?;
         tx.commit()?;
         Ok(saved)
