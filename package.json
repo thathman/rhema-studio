@@ -74,6 +74,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@napi-rs/canvas": "0.1.80",
     "@tauri-apps/cli": "^2.10.1",
     "@types/node": "^26.0.0",
     "@types/qrcode": "1.5.5",

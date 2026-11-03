@@ -16,7 +16,8 @@ import {
   type SaraswatiScene,
   type SaraswatiTextNode,
 } from "../vendor/avnac/saraswati"
-import type { CountdownTo, DesignPin, Scene, SceneLayer } from "../types/scene"
+import type { CountdownTo, DesignPin, Scene, SceneGradient, SceneLayer } from "../types/scene"
+import { gradientCss, gradientIssue, normalizeGradient } from "../lib/scene-gradient"
 
 /** The editing frame: a 1920×1080 artboard; layer boxes are kept in % of it, as Rhema keeps them. */
 export const DESIGN_WIDTH = 1920
@@ -39,7 +40,7 @@ export interface RhemaDesign {
   scene: SaraswatiScene
   bindings: Record<string, RhemaBinding>
   /** The Rhema scene's own fields (id, name, fade, dates, library look). */
-  meta: Omit<Scene, "layers" | "background">
+  meta: Omit<Scene, "layers" | "background" | "backgroundGradient">
   /** Absent on legacy single-page documents; existing scene/bindings then form page one. */
   pages?: RhemaDesignPage[]
 }
@@ -59,6 +60,9 @@ export const LIVE_LAYER_PLACEHOLDER: Readonly<Record<"clock" | "ticker" | "lower
 const TEXT_WEIGHTS = new Set(["400", "500", "600", "700", "800", "900"])
 const TEXT_COLOR = /^#[0-9a-f]{6}$/i
 const SAFE_FONT_FAMILY = /^[\p{L}\p{N}, _-]{1,120}$/u
+
+/** A Rhema gradient as the editor's paint value. */
+const gradientPaint = (g: SceneGradient) => ({ type: "gradient" as const, css: gradientCss(g), stops: g.stops.map((s) => ({ ...s })), angle: g.angle })
 
 function basePaint(layer: SceneLayer) {
   return {
@@ -106,13 +110,13 @@ function toNode(layer: SceneLayer): SaraswatiNode {
   if (layer.kind === "ellipse") {
     const ellipse: SaraswatiEllipseNode = {
       ...basePaint(layer), type: "ellipse", width, height,
-      fill: { type: "solid", color: layer.color && TEXT_COLOR.test(layer.color) ? layer.color : "#3157a4" }, stroke: null, strokeWidth: 0,
+      fill: layer.gradient ? gradientPaint(layer.gradient) : { type: "solid", color: layer.color && TEXT_COLOR.test(layer.color) ? layer.color : "#3157a4" }, stroke: null, strokeWidth: 0,
     }
     return ellipse
   }
   const fill = layer.kind === "color" ? (layer.color ?? "#000000") : (PLACEHOLDER[layer.kind] ?? "#333333")
   const rect: SaraswatiRectNode = {
-    ...basePaint(layer), type: "rect", width, height, fill: { type: "solid", color: fill }, stroke: null, strokeWidth: 0, radiusX: 0, radiusY: 0,
+    ...basePaint(layer), type: "rect", width, height, fill: layer.kind === "color" && layer.gradient ? gradientPaint(layer.gradient) : { type: "solid", color: fill }, stroke: null, strokeWidth: 0, radiusX: 0, radiusY: 0,
   }
   return rect
 }
@@ -120,7 +124,7 @@ function toNode(layer: SceneLayer): SaraswatiNode {
 /** Open a Rhema scene in the engine. */
 export function sceneToDesign(scene: Scene): RhemaDesign {
   const bg = scene.background === "transparent" ? "rgba(0,0,0,0)" : scene.background
-  let design = createEmptySaraswatiScene({ width: DESIGN_WIDTH, height: DESIGN_HEIGHT, bg: { type: "solid", color: bg } })
+  let design = createEmptySaraswatiScene({ width: DESIGN_WIDTH, height: DESIGN_HEIGHT, bg: scene.backgroundGradient ? gradientPaint(scene.backgroundGradient) : { type: "solid", color: bg } })
   const bindings: Record<string, RhemaBinding> = {}
   for (const layer of scene.layers) {
     design = applyCommand(design, { type: "ADD_NODE", node: toNode(layer) })
@@ -132,6 +136,7 @@ export function sceneToDesign(scene: Scene): RhemaDesign {
   const meta: Record<string, unknown> = { ...scene }
   delete meta.layers
   delete meta.background
+  delete meta.backgroundGradient
   return { scene: design, bindings, meta: meta as RhemaDesign["meta"] }
 }
 
@@ -239,8 +244,12 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
   if (design.scene.artboard.width !== DESIGN_WIDTH || design.scene.artboard.height !== DESIGN_HEIGHT) {
     issues.push({ nodeId: "__artboard__", message: "Rhema scenes must keep the 1920 × 1080 artboard size" })
   }
-  if (design.scene.artboard.bg.type !== "solid") {
-    issues.push({ nodeId: "__artboard__", message: "Rhema scenes cannot save gradient backgrounds yet" })
+  const artboardBg = design.scene.artboard.bg
+  const backgroundGradient = artboardBg.type === "gradient" ? normalizeGradient(artboardBg) : undefined
+  if (artboardBg.type === "gradient" && !backgroundGradient) {
+    issues.push({ nodeId: "__artboard__", message: `This background gradient cannot be drawn on Rhema outputs: ${gradientIssue(artboardBg)}` })
+  } else if (artboardBg.type !== "solid" && artboardBg.type !== "gradient") {
+    issues.push({ nodeId: "__artboard__", message: "This background paint cannot be drawn on Rhema outputs" })
   }
   for (const node of groupNodesUnder(design.scene, pageRoot)) {
     if (Math.abs(node.opacity - 1) > 0.0001) {
@@ -324,10 +333,19 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         issues.push({ nodeId: node.id, message: "Image crop and clipping cannot be saved into a Rhema scene yet" })
       }
     } else if (node.type === "rect") {
-      if (node.fill.type !== "solid") {
-        issues.push({ nodeId: node.id, message: "Gradient layer fills cannot be saved into a Rhema scene yet" })
+      if (node.fill.type === "gradient" && binding.kind === "color") {
+        const gradient = normalizeGradient(node.fill)
+        if (!gradient) issues.push({ nodeId: node.id, message: `This gradient fill cannot be drawn on Rhema outputs: ${gradientIssue(node.fill)}` })
+        else {
+          // Older builds show the first colour; this build and every output draw the gradient.
+          layer.color = gradient.stops[0]!.color
+          layer.gradient = gradient
+        }
+      } else if (node.fill.type !== "solid") {
+        issues.push({ nodeId: node.id, message: "Gradient fills on this live layer cannot be saved into a Rhema scene yet" })
       } else if (binding.kind === "color") {
         layer.color = node.fill.color
+        delete layer.gradient
       } else if (binding.kind === "video") {
         if (!binding.mediaId || !binding.videoUrl || !binding.mediaFile) {
           issues.push({ nodeId: node.id, message: "A video layer needs its local Library media reference before it can be used in Prepare" })
@@ -350,22 +368,33 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         compatible = false
       }
       if (binding.kind !== "ellipse") refuse("An ellipse needs a Rhema ellipse-layer binding")
-      if (node.fill.type !== "solid" || !TEXT_COLOR.test(node.fill.color)) refuse("Ellipse gradients and non-hex colours cannot be used in Rhema scene output yet")
+      const gradient = node.fill.type === "gradient" ? normalizeGradient(node.fill) : undefined
+      if (node.fill.type === "gradient" && !gradient) refuse(`This ellipse gradient cannot be drawn on Rhema outputs: ${gradientIssue(node.fill)}`)
+      else if (node.fill.type === "solid" && !TEXT_COLOR.test(node.fill.color)) refuse("Ellipse colours must be #rrggbb hex for Rhema scene output")
+      else if (node.fill.type !== "solid" && node.fill.type !== "gradient") refuse("This ellipse paint cannot be drawn on Rhema outputs")
       if (node.stroke || node.strokeWidth !== 0 || node.clipPath || (node.clipPathStack?.length ?? 0) > 0) {
         refuse("Ellipse stroke and clipping cannot be saved into a Rhema scene yet")
       }
       if (!Number.isFinite(node.scaleX) || !Number.isFinite(node.scaleY) || node.scaleX <= 0 || node.scaleY <= 0) {
         refuse("Ellipse must keep a positive, finite scale for Rhema scene output")
       }
-      if (compatible && node.fill.type === "solid") layer.color = node.fill.color
+      if (compatible && node.fill.type === "solid") {
+        layer.color = node.fill.color
+        delete layer.gradient
+      } else if (compatible && gradient) {
+        layer.color = gradient.stops[0]!.color
+        layer.gradient = gradient
+      }
     } else {
       issues.push({ nodeId: node.id, message: "This Avnac shape cannot be saved as a Rhema scene layer yet" })
     }
     layers.push(layer)
   }
-  const bg = design.scene.artboard.bg
-  const background = bg.type === "solid" ? (bg.color === "rgba(0,0,0,0)" ? "transparent" : bg.color) : "#000000"
-  return { scene: { ...design.meta, background, layers }, issues }
+  const background = artboardBg.type === "solid" ? (artboardBg.color === "rgba(0,0,0,0)" ? "transparent" : artboardBg.color) : (backgroundGradient?.stops[0]?.color ?? "#000000")
+  // The artboard alone says the background: a gradient left in older metadata never comes back.
+  const meta: Partial<Scene> = { ...design.meta }
+  delete meta.backgroundGradient
+  return { scene: { ...(meta as RhemaDesign["meta"]), background, ...(backgroundGradient ? { backgroundGradient } : {}), layers }, issues }
 }
 
 /**

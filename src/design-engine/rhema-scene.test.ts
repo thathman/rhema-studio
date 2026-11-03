@@ -116,7 +116,11 @@ describe("Rhema scenes in the Avnac engine", () => {
       type: "SET_NODE_FILL", id: "oval",
       fill: { type: "gradient", css: "linear-gradient(90deg, #d14c62, #3157a4)", stops: [{ color: "#d14c62", offset: 0 }, { color: "#3157a4", offset: 1 }], angle: 90 },
     })
-    expect(designToScene({ ...design, scene: gradient }).issues).toContainEqual({ nodeId: "oval", message: "Ellipse gradients and non-hex colours cannot be used in Rhema scene output yet" })
+    const graded = designToScene({ ...design, scene: gradient })
+    expect(graded.issues).toEqual([])
+    expect(graded.scene.layers[0]).toMatchObject({ color: "#d14c62", gradient: { angle: 90, stops: [{ color: "#d14c62", offset: 0 }, { color: "#3157a4", offset: 1 }] } })
+    const badGradient = applyCommand(design.scene, { type: "SET_NODE_FILL", id: "oval", fill: { type: "gradient", css: "", stops: [{ color: "red", offset: 0 }, { color: "#3157a4", offset: 1 }], angle: 90 } })
+    expect(designToScene({ ...design, scene: badGradient }).issues).toContainEqual({ nodeId: "oval", message: "This ellipse gradient cannot be drawn on Rhema outputs: Gradient colours must be hex (#rrggbb, #rrggbbaa) or rgb()/rgba()" })
     const stroke = applyCommand(design.scene, { type: "SET_NODE_STROKE", id: "oval", stroke: { type: "solid", color: "#ffffff" }, strokeWidth: 2 })
     expect(designToScene({ ...design, scene: stroke }).issues).toContainEqual({ nodeId: "oval", message: "Ellipse stroke and clipping cannot be saved into a Rhema scene yet" })
     const clip = applyCommand(design.scene, { type: "SET_NODE_CLIP_PATH", id: "oval", clipPath: { type: "ellipse", x: 0, y: 0, width: 100, height: 100 } })
@@ -221,27 +225,74 @@ describe("Rhema scenes in the Avnac engine", () => {
     ]))
   })
 
-  it("blocks saves that would drop gradients, layer rotation, or image crop", () => {
+  it("blocks saves that would drop layer rotation or image crop", () => {
     const design = sceneToDesign(sermon)
     let scene = design.scene
-    scene = applyCommand(scene, {
-      type: "SET_ARTBOARD",
-      bg: { type: "gradient", css: "linear-gradient(90deg, #000, #fff)", stops: [{ color: "#000", offset: 0 }, { color: "#fff", offset: 1 }], angle: 90 },
-    })
-    scene = applyCommand(scene, {
-      type: "SET_NODE_FILL",
-      id: "bg",
-      fill: { type: "gradient", css: "linear-gradient(90deg, #202040, #ffffff)", stops: [{ color: "#202040", offset: 0 }, { color: "#ffffff", offset: 1 }], angle: 90 },
-    })
     scene = applyCommand(scene, { type: "ROTATE_NODE", id: "pic", rotation: 20 })
     scene = applyCommand(scene, { type: "SET_IMAGE_CROP", id: "pic", cropX: 12, cropY: 8, cropWidth: 180, cropHeight: 120 })
     const { issues } = designToScene({ ...design, scene })
     expect(issues).toEqual(expect.arrayContaining([
-      { nodeId: "__artboard__", message: "Rhema scenes cannot save gradient backgrounds yet" },
-      { nodeId: "bg", message: "Gradient layer fills cannot be saved into a Rhema scene yet" },
       { nodeId: "pic", message: "Layer rotation cannot be saved into a Rhema scene yet" },
       { nodeId: "pic", message: "Image crop and clipping cannot be saved into a Rhema scene yet" },
     ]))
+  })
+})
+
+describe("gradient paint (#448 Slice A)", () => {
+  const linear = (angle: number, ...stops: [string, number][]) => ({ type: "gradient" as const, css: "", stops: stops.map(([color, offset]) => ({ color, offset })), angle })
+  const graded = () => {
+    let scene = sceneToDesign(sermon).scene
+    scene = applyCommand(scene, { type: "SET_ARTBOARD", bg: linear(135, ["#0b1a3a", 0], ["rgba(209, 76, 98, 0.5)", 0.6], ["#ffffffcc", 1]) })
+    scene = applyCommand(scene, { type: "SET_NODE_FILL", id: "bg", fill: linear(90, ["#202040", 0], ["#3157a4", 1]) })
+    return { ...sceneToDesign(sermon), scene }
+  }
+
+  it("saves the artboard's and a colour layer's gradient as typed paint, and they reopen the same", () => {
+    const { scene, issues } = designToScene(graded())
+    expect(issues).toEqual([])
+    expect(scene.backgroundGradient).toEqual({ angle: 135, stops: [{ color: "#0b1a3a", offset: 0 }, { color: "rgba(209, 76, 98, 0.5)", offset: 0.6 }, { color: "#ffffffcc", offset: 1 }] })
+    expect(scene.background).toBe("#0b1a3a")
+    expect(scene.layers[0]).toMatchObject({ id: "bg", color: "#202040", gradient: { angle: 90, stops: [{ color: "#202040", offset: 0 }, { color: "#3157a4", offset: 1 }] } })
+    // Saved, reopened (JSON, as the store keeps it), opened in the editor again and saved: unchanged.
+    const stored = JSON.parse(JSON.stringify(scene)) as Scene
+    const reopened = designToScene(JSON.parse(JSON.stringify(sceneToDesign(stored))))
+    expect(reopened.issues).toEqual([])
+    expect(reopened.scene).toEqual(stored)
+    expect(sceneToDesign(stored).scene.artboard.bg).toMatchObject({ type: "gradient", angle: 135, css: "linear-gradient(135deg, #0b1a3a 0%, rgba(209, 76, 98, 0.5) 60%, #ffffffcc 100%)" })
+  })
+
+  it("going back to a solid fill leaves no gradient behind", () => {
+    const stored = designToScene(graded()).scene
+    const design = sceneToDesign(stored)
+    let scene = applyCommand(design.scene, { type: "SET_ARTBOARD", bg: { type: "solid", color: "#101020" } })
+    scene = applyCommand(scene, { type: "SET_NODE_FILL", id: "bg", fill: { type: "solid", color: "#112233" } })
+    const solid = designToScene({ ...design, scene, meta: { ...design.meta, backgroundGradient: stored.backgroundGradient } as typeof design.meta })
+    expect(solid.issues).toEqual([])
+    expect(solid.scene.backgroundGradient).toBeUndefined()
+    expect(solid.scene.layers[0]?.gradient).toBeUndefined()
+    expect(solid.scene.layers[0]?.color).toBe("#112233")
+  })
+
+  it.each([
+    ["no stops", linear(90), "between 2 and 16 colour stops"],
+    ["one stop", linear(90, ["#000000", 0]), "between 2 and 16 colour stops"],
+    ["too many stops", linear(90, ...Array.from({ length: 17 }, (_, i): [string, number] => ["#000000", i / 16])), "between 2 and 16 colour stops"],
+    ["a named colour", linear(90, ["red", 0], ["#000000", 1]), "hex (#rrggbb, #rrggbbaa) or rgb()/rgba()"],
+    ["a CSS function", linear(90, ["url(x)", 0], ["#000000", 1]), "hex (#rrggbb, #rrggbbaa) or rgb()/rgba()"],
+    ["a stop past the end", linear(90, ["#000000", 0], ["#ffffff", 2]), "between 0 and 100%"],
+    ["no angle", { ...linear(90, ["#000000", 0], ["#ffffff", 1]), angle: Number.NaN }, "finite angle"],
+  ])("refuses a gradient it cannot draw (%s), saying why", (_why, bad, says) => {
+    const design = sceneToDesign(sermon)
+    const background = designToScene({ ...design, scene: applyCommand(design.scene, { type: "SET_ARTBOARD", bg: bad }) })
+    expect(background.issues).toEqual([{ nodeId: "__artboard__", message: expect.stringContaining(says) }])
+    const fill = designToScene({ ...design, scene: applyCommand(design.scene, { type: "SET_NODE_FILL", id: "bg", fill: bad }) })
+    expect(fill.issues).toEqual([{ nodeId: "bg", message: expect.stringContaining(says) }])
+  })
+
+  it("still refuses a gradient on a live layer's placeholder", () => {
+    const design = sceneToDesign(sermon)
+    const { issues } = designToScene({ ...design, scene: applyCommand(design.scene, { type: "SET_NODE_FILL", id: "cam", fill: linear(90, ["#000000", 0], ["#ffffff", 1]) }) })
+    expect(issues).toContainEqual({ nodeId: "cam", message: "Gradient fills on this live layer cannot be saved into a Rhema scene yet" })
   })
 })
 
