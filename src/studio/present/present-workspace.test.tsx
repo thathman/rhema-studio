@@ -285,6 +285,15 @@ describe("Present's unified Live console", () => {
     expect(useBroadcastStore.getState().liveVerse).toEqual(program)
   })
 
+  it("keeps the actual Program readable above the independently scrolling scene controls", async () => {
+    await renderWorkspace()
+
+    const program = element.querySelector<HTMLElement>("[data-studio-live]")
+    expect(program).not.toBeNull()
+    expect(program?.className).toContain("min-h-[18rem]")
+    expect(program?.textContent).toContain("Program")
+  })
+
   it("renders one console for the legacy Advanced preference and preserves private Preview, Program, queue, listening and keyboard safety", async () => {
     const addListener = vi.spyOn(window, "addEventListener")
     await renderWorkspace()
