@@ -142,7 +142,7 @@ export function LiveSceneTakeAction({ selection }: {
     : currentView.phase === "stale" ? "Review again" : currentView.phase === "checking" ? "Checking…" : currentView.phase === "taking" ? "Taking…" : `Take ${selection.sceneName} to ${selection.outputName}`
 
   return (
-    <div data-slot="live-scene-take-action" className="flex shrink-0 flex-col gap-1.5 border-t border-border px-3 py-2">
+    <div data-slot="live-scene-take-action" data-program-context-row className="flex shrink-0 flex-col gap-1.5 border-b border-border px-3 py-2">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <div className="min-w-0 flex-1">
           <p className="truncate text-[0.6875rem] font-semibold" title={`${selection.sceneName} → ${selection.outputName}`}>

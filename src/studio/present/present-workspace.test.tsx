@@ -1,15 +1,28 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const presentCalls = vi.hoisted(() => ({
-  next: vi.fn(),
-  prev: vi.fn(),
-  clear: vi.fn(),
-  restore: vi.fn(),
-  verseNext: vi.fn(),
-  versePrev: vi.fn(),
-  ticker: vi.fn(),
-}))
+const presentCalls = vi.hoisted(() => {
+  if (globalThis.HTMLCanvasElement) {
+    const context = new Proxy({ font: "" }, {
+      get: (target, property) => property === "measureText"
+        ? (text: string) => ({ width: text.length * 8 })
+        : property === "canvas"
+          ? { width: 1920, height: 1080 }
+          : Reflect.get(target, property) ?? (() => undefined),
+      set: (target, property, value) => Reflect.set(target, property, value),
+    })
+    globalThis.HTMLCanvasElement.prototype.getContext = (() => context) as unknown as typeof globalThis.HTMLCanvasElement.prototype.getContext
+  }
+  return {
+    next: vi.fn(),
+    prev: vi.fn(),
+    clear: vi.fn(),
+    restore: vi.fn(),
+    verseNext: vi.fn(),
+    versePrev: vi.fn(),
+    ticker: vi.fn(),
+  }
+})
 
 vi.mock("@/studio/present-actions", () => ({ presentActions: presentCalls }))
 vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, outputLanguageId, onOutputLanguageIdChange }: { compact?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"}>Preview stays private<label>Output<select aria-label="Named congregation output for Preview language and scene Take" value={outputLanguageId ?? ""} onChange={(event) => onOutputLanguageIdChange?.(event.currentTarget.value)}><option value="english-output">English screen</option><option value="yoruba-output">Yoruba screen</option></select></label></section> }))
@@ -285,6 +298,10 @@ describe("Present's unified Live console", () => {
     expect(element.querySelectorAll('[aria-label="Named congregation output for Preview language and scene Take"]')).toHaveLength(1)
     await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Preview scene for yoruba-output"]')!.click())
     expect(element.querySelector('[data-testid="named-scene-take"]')?.textContent).toBe("Take Welcome to Yoruba screen")
+    expect(element.querySelectorAll('[data-testid="named-scene-take"]')).toHaveLength(1)
+    expect(element.querySelector('[role="toolbar"][aria-label="Presentation controls"]')?.textContent).toContain("Take source live")
+    expect(element.querySelector('[role="toolbar"][aria-label="Presentation controls"]')?.textContent).not.toContain("Take Welcome")
+    expect(element.querySelector('[data-program-output="yoruba-output"] [data-testid="named-scene-take"]')).not.toBeNull()
     expect(useBroadcastStore.getState().liveVerse).toEqual(program)
   })
 

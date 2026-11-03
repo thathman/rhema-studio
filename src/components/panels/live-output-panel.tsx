@@ -94,6 +94,9 @@ export function LiveOutputPanel({ outputId, sceneTakeAction }: { outputId?: stri
         />
       </PanelHeader>
 
+      {/* Keep the selected output's named scene action at the top of Program, above the picture. It
+          remains visible when the screen preview is short and stays distinct from source Take. */}
+      {sceneTakeAction}
       <div
         data-slot="live-picture"
         className={cn(
@@ -113,7 +116,6 @@ export function LiveOutputPanel({ outputId, sceneTakeAction }: { outputId?: stri
           )}
         </div>
       </div>
-      {sceneTakeAction}
       <div
         className="flex min-h-9 shrink-0 items-center gap-2 border-t border-border px-3 py-1.5"
         data-program-delivery-state={delivery.label}

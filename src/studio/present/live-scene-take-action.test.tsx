@@ -1,11 +1,20 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const api = vi.hoisted(() => ({
-  read: vi.fn(),
-  take: vi.fn(),
-  drawn: vi.fn(),
-}))
+const api = vi.hoisted(() => {
+  if (globalThis.HTMLCanvasElement) {
+    const context = new Proxy({ font: "" }, {
+      get: (target, property) => property === "measureText"
+        ? (text: string) => ({ width: text.length * 8 })
+        : property === "canvas"
+          ? { width: 1920, height: 1080 }
+          : Reflect.get(target, property) ?? (() => undefined),
+      set: (target, property, value) => Reflect.set(target, property, value),
+    })
+    globalThis.HTMLCanvasElement.prototype.getContext = (() => context) as unknown as typeof globalThis.HTMLCanvasElement.prototype.getContext
+  }
+  return { read: vi.fn(), take: vi.fn(), drawn: vi.fn() }
+})
 
 vi.mock("@/lib/scene-take", () => ({
   readSceneTakeRevisions: api.read,
