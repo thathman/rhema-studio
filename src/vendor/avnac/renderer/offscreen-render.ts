@@ -20,6 +20,8 @@ export type OffscreenRenderOptions = {
    * glyphs; pass false for time-critical internal previews.
    */
   awaitFonts?: boolean;
+  /** Rhema (#448): image node ids drawn as Rhema outputs cover them (see the image command's `cover`). */
+  imageCover?: Record<string, { l: number; t: number; r: number; b: number }>;
 };
 
 export async function renderSceneToCanvas(
@@ -69,6 +71,10 @@ export async function renderSceneToCanvas(
   }
 
   let commands = buildRenderCommands(scene);
+  const cover = options.imageCover;
+  if (cover) {
+    commands = commands.map((c) => (c.type === "image" && cover[c.id] ? { ...c, cover: cover[c.id] } : c));
+  }
   if (options.skipArtboardBackgroundCommand) {
     commands = commands.slice(1);
   }
