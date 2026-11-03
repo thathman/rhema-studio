@@ -62,7 +62,7 @@ async function runScenario() {
     selectedOutput: outputPicker?.selectedOptions?.[0]?.textContent?.trim(),
     preview: preview?.item.reference,
     programLive: qa.broadcast.getState().isLive,
-    takeLabel: sourceTake?.textContent?.replace(/\s+/g, " ").trim(),
+    takeLabel: sourceTake?.getAttribute("aria-label"),
     takeDisabled: sourceTake?.getAttribute("aria-disabled") === "true",
   }
   if (result.service !== "QA Sunday Service" || !result.saved || result.itemCount !== 1 || result.eventName !== "Opening" || !result.output || !result.selectedOutput?.startsWith(result.output) || result.preview !== "Welcome" || result.takeLabel !== "Take source live" || result.programLive || result.takeDisabled) {
