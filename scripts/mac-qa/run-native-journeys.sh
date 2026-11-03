@@ -152,6 +152,8 @@ resize_live_window() {
   if ! "$ROOT/scripts/mac-qa/qa.py" main "$name" - 20 > "$QA_SCRATCH/$name.json" <<EOF
 const label = window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label
 if (!label) throw new Error("The current native window label is unavailable")
+await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: false })
+await sleep(250)
 const resize = (width, height) => window.__TAURI_INTERNALS__.invoke("plugin:window|set_size", {
   label,
   value: { Logical: { width, height } },
@@ -162,6 +164,11 @@ let actual = { width: window.innerWidth, height: window.innerHeight }
 for (let correction = 0; correction < 2 && (actual.width !== $width || actual.height !== $height); correction += 1) {
   await resize($width + ($width - actual.width), $height + ($height - actual.height))
   await sleep(500)
+  actual = { width: window.innerWidth, height: window.innerHeight }
+}
+if ((actual.width !== $width || actual.height !== $height) && $width >= 1920 && $height >= 1080) {
+  await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: true })
+  await sleep(1000)
   actual = { width: window.innerWidth, height: window.innerHeight }
 }
 if (actual.width !== $width || actual.height !== $height) {
