@@ -18,6 +18,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { clockText, countdownClock, sceneClock, untilClock } from "@/lib/scenes"
+import { crawlElapsed, pageIndex, tickerText } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
 import { cameraOfUrl, useRouterHealth, whepUrl } from "@/lib/cameras"
 import type { MediaAssetStatus } from "@/types"
@@ -138,14 +139,15 @@ export function DesignDocumentEditor({
   const [editorFlags, setEditorFlags] = useState({ canUndo: false, canRedo: false })
   const operatorName = useSettingsStore((state) => state.operatorName)
   const brandKit = useSettingsStore((state) => state.brandKit)
-  const isLive = useBroadcastStore((state) => state.isLive)
-  const liveVerse = useBroadcastStore((state) => state.liveVerse)
-  const liveSources = useBroadcastStore((state) => state.sources)
-  const stateSources = useBroadcastStore((state) => state.stateSources)
-  const ticker = useBroadcastStore((state) => state.ticker)
-  const lowerThird = useBroadcastStore((state) => state.lowerThird)
-  const countdowns = useBroadcastStore((state) => state.countdowns)
-  const serviceTimer = useTimerStore((state) => state.timer)
+  const brandKitLogoUrl = useSettingsStore((state) => liveValuesPreview ? state.brandKit.logoUrl : null)
+  const isLive = useBroadcastStore((state) => liveValuesPreview ? state.isLive : false)
+  const liveVerse = useBroadcastStore((state) => liveValuesPreview ? state.liveVerse : null)
+  const liveSources = useBroadcastStore((state) => liveValuesPreview ? state.sources : null)
+  const stateSources = useBroadcastStore((state) => liveValuesPreview ? state.stateSources : null)
+  const ticker = useBroadcastStore((state) => liveValuesPreview ? state.ticker : null)
+  const lowerThird = useBroadcastStore((state) => liveValuesPreview ? state.lowerThird : null)
+  const countdowns = useBroadcastStore((state) => liveValuesPreview ? state.countdowns : null)
+  const serviceTimer = useTimerStore((state) => liveValuesPreview ? state.timer : null)
   useTimerStore((state) => liveValuesPreview ? state.tick : 0)
   const cameras = useSettingsStore((state) => state.cameras)
   const routerStatus = useRouterHealth((state) => state.status)
@@ -215,22 +217,30 @@ export function DesignDocumentEditor({
     const interval = window.setInterval(() => setPreviewClockNow(Date.now()), 1_000)
     return () => window.clearInterval(interval)
   }, [liveValuesPreview])
-  const livePreviewInput: LivePreviewInput = (() => {
+  const livePreviewInput = useMemo<LivePreviewInput | null>(() => {
+    if (!liveValuesPreview) return null
     const now = previewClockNow
-    const timerClock = sceneClock(serviceTimer, monotonicNow(), now)
-    const sources: LivePreviewInput["sources"] = Object.entries(liveSources).flatMap(([id, value]) => value ? [{
+    const timerClock = serviceTimer ? sceneClock(serviceTimer, monotonicNow(), now) : null
+    const sources: LivePreviewInput["sources"] = Object.entries(liveSources ?? {}).flatMap(([id, value]) => value ? [{
       id,
       reference: value.value.reference || value.value.lines?.filter(Boolean).join(" · ") || "Live content",
       on: value.on,
+      revision: value.revision,
     }] : [])
-    const tickerText = ticker?.items.map((item) => item.trim()).filter(Boolean).join(" · ") ?? ""
-    sources.push({ id: "ticker", reference: tickerText, on: !!ticker })
+    const tickerWords = ticker?.style.motion === "pages"
+      ? (() => {
+        const items = ticker.items.map((item) => item.trim()).filter(Boolean)
+        const index = pageIndex(ticker.items, ticker.style.pageSeconds, crawlElapsed(ticker, now))
+        return index >= 0 ? items[index] ?? "" : ""
+      })()
+      : ticker ? tickerText(ticker.items, ticker.style.separator) : ""
+    sources.push({ id: "ticker", reference: tickerWords, on: !!ticker })
     sources.push({
       id: "lowerThird",
-      reference: [lowerThird?.line1, lowerThird?.line2].map((line) => line?.trim()).filter(Boolean).join(" · "),
+      reference: [lowerThird?.line1, lowerThird?.line2].map((line) => line?.trim()).filter(Boolean).join("\n"),
       on: !!lowerThird,
     })
-    for (const [id, source] of Object.entries(stateSources)) {
+    for (const [id, source] of Object.entries(stateSources ?? {})) {
       if (!id.startsWith("camera:") || !source) continue
       sources.push({
         id,
@@ -249,7 +259,7 @@ export function DesignDocumentEditor({
       }
       if (binding.clockShows === "countdown") {
         const target = binding.countdownTo ?? "next"
-        const clock = countdownClock(countdowns, target)
+        const clock = countdownClock(countdowns ?? null, target)
         countdown[target] = clock ? clockText(clock, now) : null
       }
     }
@@ -260,11 +270,11 @@ export function DesignDocumentEditor({
       program: { onAir: isLive, reference: liveVerse?.reference || liveVerse?.lines?.[0] || null },
       sources,
       clockValues: { timer, time, until, countdown },
-      logoUrl: brandKit.logoUrl,
+      logoUrl: brandKitLogoUrl,
     }
-  })()
+  }, [bindings, brandKitLogoUrl, countdowns, isLive, liveSources, liveValuesPreview, lowerThird, liveVerse, previewClockNow, serviceTimer, stateSources, ticker])
   const canvasPreviewScene = useMemo(
-    () => liveValuesPreview ? previewDesign({ ...designForEditor, scene: pageScene }, livePreviewInput) : pageScene,
+    () => liveValuesPreview && livePreviewInput ? previewDesign({ ...designForEditor, scene: pageScene }, livePreviewInput) : pageScene,
     [designForEditor, livePreviewInput, liveValuesPreview, pageScene],
   )
   // Keep bindings in editor state so Undo/Redo can restore deleted nodes with their Rhema data.
@@ -1104,7 +1114,11 @@ export function DesignDocumentEditor({
                 variant={liveValuesPreview ? "secondary" : "outline"}
                 aria-label="Preview current Live values"
                 aria-pressed={liveValuesPreview}
-                onClick={() => setLiveValuesPreview((value) => !value)}
+                onClick={() => {
+                  const next = !liveValuesPreview
+                  if (next) setPreviewClockNow(Date.now())
+                  setLiveValuesPreview(next)
+                }}
               >
                 {liveValuesPreview ? "Hide Live values" : "Preview Live values"}
               </Button>

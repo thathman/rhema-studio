@@ -351,9 +351,37 @@ describe("live layers in the editor's preview", () => {
     })
 
     expect(preview.nodes[`preview:${clockId}`]).toMatchObject({ type: "text", text: "18:00" })
-    expect(preview.nodes[`preview:${logoId}`]).toMatchObject({ type: "image", src: "data:image/png;base64,ZmFrZQ==" })
+    expect(preview.nodes[logoId]).toMatchObject({ type: "image", src: "data:image/png;base64,ZmFrZQ==", name: "logo (Brand Kit preview)" })
+    expect(preview.nodes[`preview:${logoId}`]).toBeUndefined()
+    expect(preview.nodes[logoId]?.parentId).toBe(design.scene.nodes[logoId]?.parentId)
     expect(design.scene.nodes[logoId]?.type).toBe("rect")
-    expect(design.scene.nodes[`preview:${logoId}`]).toBeUndefined()
+    expect(design.scene.nodes[logoId]?.visible).toBe(true)
+  })
+
+  it("uses the newest active source in a feed that follows multiple source kinds", () => {
+    const design = sceneToDesign(sermon)
+    design.bindings.verse = { ...design.bindings.verse!, shows: ["ticker", "lowerThird", "bible", "song"] as never }
+    const preview = previewDesign(design, {
+      ...live("John 3:16"),
+      sources: [
+        { id: "bible", reference: "Romans 8:28", on: true, revision: 4 },
+        { id: "song", reference: "Amazing Grace · Verse 1", on: true, revision: 9 },
+        { id: "ticker", reference: "Welcome to service", on: true, revision: 99 },
+        { id: "lowerThird", reference: "Pastor Tolu", on: true, revision: 100 },
+      ],
+    })
+
+    expect(preview.nodes["preview:verse"]).toMatchObject({ type: "text", text: "Amazing Grace · Verse 1" })
+
+    design.bindings.verse = { ...design.bindings.verse!, shows: ["ticker", "lowerThird"] as never }
+    const overlaysOnly = previewDesign(design, {
+      ...live("John 3:16"),
+      sources: [
+        { id: "ticker", reference: "Welcome to service", on: true, revision: 99 },
+        { id: "lowerThird", reference: "Pastor Tolu", on: true, revision: 100 },
+      ],
+    })
+    expect(overlaysOnly.nodes["preview:verse"]).toMatchObject({ type: "text", text: "Nothing on air" })
   })
 
   it("never change the design itself: the saved scene keeps the subscription, not the words", () => {

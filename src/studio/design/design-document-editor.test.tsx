@@ -22,7 +22,7 @@ vi.mock("@/lib/verse-renderer", () => ({ drawLowerThird: vi.fn(), onThemeFontsLo
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { createBlankRhemaDesign } from "@/design-engine/design-document-utils"
+import { createBlankRhemaDesign, createLiveFeedLayer } from "@/design-engine/design-document-utils"
 import type { DesignDocument, DesignInput, DesignVersion } from "@/design-engine/design-store"
 import { designToScene, VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rhema-scene"
 import { applyCommand, type SaraswatiImageNode } from "@/vendor/avnac/saraswati"
@@ -1074,16 +1074,33 @@ describe("canonical design editor", () => {
 
   it("previews current host values and Brand Kit image privately without changing the design or Program", async () => {
     const documentValue = documentFixture()
-    const style = useBroadcastStore.getState().tickerStyle
+    const feed = createLiveFeedLayer({ x: 100, y: 100 })
+    documentValue.document.scene = applyCommand(documentValue.document.scene, { type: "ADD_NODE", node: feed.node })
+    documentValue.document.bindings[feed.node.id] = { ...feed.binding, shows: ["bible", "song"] }
+    const style = { ...useBroadcastStore.getState().tickerStyle, motion: "pages" as const, pageSeconds: 60, separator: " | " }
     useBroadcastStore.setState({
       isLive: true,
       liveVerse: { reference: "John 3:16", lines: ["For God so loved the world"], segments: [], content: "bible" } as never,
-      ticker: { items: ["Welcome to service"], style, startedAt: 0 },
+      sources: {
+        bible: { value: { reference: "Romans 8:28", lines: ["All things work"], segments: [], content: "bible" }, itemId: null, revision: 4, activatedAt: 1, on: true },
+        song: { value: { reference: "Amazing Grace · Verse 1", lines: ["Amazing grace"], segments: [], content: "song" }, itemId: null, revision: 9, activatedAt: 2, on: true },
+      } as never,
+      ticker: { items: ["Earlier announcement", "Welcome to service"], style, startedAt: Date.now() - 75_000 },
       lowerThird: { line1: "Pastor Tolu", line2: "Senior Pastor" },
     })
     useTimerStore.setState({ timer: { durationMs: 120_000, startedAt: null, accumulatedMs: 60_000 }, tick: 1 })
     useSettingsStore.setState({ brandKit: { ...defaultBrandKit(), logoUrl: imageDataUrl } })
     const programBefore = useBroadcastStore.getState().liveVerse
+    const broadcastBefore = useBroadcastStore.getState()
+    const outputStateBefore = {
+      scenes: broadcastBefore.scenes,
+      outputs: broadcastBefore.outputs,
+      outputStatus: broadcastBefore.outputStatus,
+      outputFrames: broadcastBefore.outputFrames,
+      sceneTakes: broadcastBefore.sceneTakes,
+      isLive: broadcastBefore.isLive,
+      liveVerse: broadcastBefore.liveVerse,
+    }
     const documentBefore = JSON.stringify(documentValue.document)
     const element = await render(documentValue)
 
@@ -1091,6 +1108,7 @@ describe("canonical design editor", () => {
     await addLiveLayer(element, "Ticker")
     await addLiveLayer(element, "Lower third")
     await addLiveLayer(element, "Brand Kit logo")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Live content")!.click())
     HTMLCanvasElement.prototype.getContext = (() => ({})) as never
     vi.mocked(renderSceneToCanvas).mockClear()
     const previewToggle = element.querySelector<HTMLButtonElement>('[aria-label="Preview current Live values"]')!
@@ -1103,16 +1121,32 @@ describe("canonical design editor", () => {
     const previewText = Object.values(previewScene!.nodes).filter((node) => node.id.startsWith("preview:") && node.type === "text").map((node) => (node as { text: string }).text).join("\n")
     expect(previewText).toContain("1:00")
     expect(previewText).toContain("Welcome to service")
-    expect(previewText).toContain("Pastor Tolu · Senior Pastor")
-    expect(Object.values(previewScene!.nodes)).toContainEqual(expect.objectContaining({ id: expect.stringMatching(/^preview:/), type: "image", src: imageDataUrl }))
+    expect(previewText).not.toContain("Earlier announcement")
+    expect(previewText).toContain("Pastor Tolu\nSenior Pastor")
+    expect(previewText).toContain("Amazing Grace · Verse 1")
+    expect(Object.values(previewScene!.nodes)).toContainEqual(expect.objectContaining({ type: "image", src: imageDataUrl, name: expect.stringContaining("Brand Kit preview") }))
     expect(JSON.stringify(documentValue.document)).toBe(documentBefore)
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
+    const broadcastAfter = useBroadcastStore.getState()
+    expect({
+      scenes: broadcastAfter.scenes,
+      outputs: broadcastAfter.outputs,
+      outputStatus: broadcastAfter.outputStatus,
+      outputFrames: broadcastAfter.outputFrames,
+      sceneTakes: broadcastAfter.sceneTakes,
+      isLive: broadcastAfter.isLive,
+      liveVerse: broadcastAfter.liveVerse,
+    }).toEqual(outputStateBefore)
     expect(store.saveDraft).not.toHaveBeenCalled()
 
-    await act(async () => useBroadcastStore.setState({ ticker: { ...useBroadcastStore.getState().ticker!, items: ["Service starts soon"] } }))
+    await act(async () => useBroadcastStore.setState({ ticker: {
+      ...useBroadcastStore.getState().ticker!,
+      items: ["Service starts soon", "Prayer begins now"],
+      style: { ...useBroadcastStore.getState().ticker!.style, motion: "crawl", separator: " | " },
+    } }))
     const updatedScene = vi.mocked(renderSceneToCanvas).mock.calls.at(-1)?.[0]
     const updatedText = Object.values(updatedScene!.nodes).filter((node) => node.id.startsWith("preview:") && node.type === "text").map((node) => (node as { text: string }).text).join("\n")
-    expect(updatedText).toContain("Service starts soon")
+    expect(updatedText).toContain("Service starts soon   |   Prayer begins now")
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
   })
 

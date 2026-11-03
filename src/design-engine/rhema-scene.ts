@@ -52,6 +52,7 @@ export interface DesignIssue {
 const PLACEHOLDER: Record<string, string> = {
   feed: "#2b3a67", camera: "#1f4d3a", clock: "#5a3d1f", ticker: "#4d1f3a", lowerThird: "#3a1f4d", video: "#1f3a4d", logo: "#4d4d1f",
 }
+const OVERLAY_SOURCE_IDS: ReadonlySet<string> = new Set(["ticker", "lowerThird"])
 export const VIDEO_LAYER_PLACEHOLDER_COLOR = PLACEHOLDER.video
 /** The editor's placeholder colour for each live layer kind (what an output fills with live data). */
 export const LIVE_LAYER_PLACEHOLDER: Readonly<Record<"clock" | "ticker" | "lowerThird" | "logo", string>> = { clock: PLACEHOLDER.clock, ticker: PLACEHOLDER.ticker, lowerThird: PLACEHOLDER.lowerThird, logo: PLACEHOLDER.logo }
@@ -410,7 +411,7 @@ export async function resolveDesignedMoment(
 /** What a live layer would show now, from the host's Live State (the parts a preview needs). */
 export interface LivePreviewInput {
   program: { onAir: boolean; reference: string | null }
-  sources: { id: string; reference: string; on: boolean; state?: string }[]
+  sources: { id: string; reference: string; on: boolean; revision?: number; state?: string }[]
   clockValues?: {
     timer?: string | null
     time?: string | null
@@ -429,8 +430,13 @@ function liveWords(binding: RhemaBinding, live: LivePreviewInput): string | null
   switch (binding.kind) {
     case "feed": {
       if (!binding.shows?.length) return live.program.onAir ? (live.program.reference ?? "On air") : "Nothing on air"
-      const shown = binding.shows.map(on).find((r) => r)
-      return shown ?? "Nothing on air"
+      const shown = binding.shows.reduce<typeof live.sources[number] | undefined>((best, id) => {
+        if (OVERLAY_SOURCE_IDS.has(id)) return best
+        const candidate = source(id)
+        if (!candidate?.on) return best
+        return !best || (candidate.revision ?? 0) > (best.revision ?? 0) ? candidate : best
+      }, undefined)
+      return shown?.reference || "Nothing on air"
     }
     case "clock": {
       if (binding.clockShows === "time") return live.clockValues?.time ?? "Time of day"
@@ -466,8 +472,8 @@ export function previewDesign(design: RhemaDesign, live: LivePreviewInput): Sara
     if (!binding || !visible || node.type === "line") continue
     if (binding.kind === "logo" && live.logoUrl && "width" in node && "height" in node) {
       const logo: SaraswatiImageNode = {
-        id: `preview:${node.id}`,
-        parentId: design.scene.root,
+        id: node.id,
+        parentId: node.parentId,
         name: `${node.name ?? node.id} (Brand Kit preview)`,
         visible: true,
         x: node.x,
@@ -486,7 +492,7 @@ export function previewDesign(design: RhemaDesign, live: LivePreviewInput): Sara
         cropY: 0,
         clipPath: null,
       }
-      preview = applyCommand(preview, { type: "ADD_NODE", node: logo })
+      preview = applyCommand(preview, { type: "REPLACE_NODE", node: logo })
       continue
     }
     const words = liveWords(binding, live)
