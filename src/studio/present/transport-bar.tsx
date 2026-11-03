@@ -202,7 +202,7 @@ export function TransportBar({ className }: { className?: string }) {
         <span aria-hidden className="hidden h-7 w-px bg-border @min-[32rem]:block" />
 
         {/* Source Take follows subscriptions; the named-output scene action stays separately scoped below Program. */}
-        <div role="group" aria-label={takeLabel} className="flex min-w-0 flex-1 items-center gap-3 @max-[32rem]:order-first @max-[32rem]:basis-full">
+        <div role="group" aria-label={takeLabel} className="flex min-w-0 items-center gap-3 @max-[32rem]:order-first @max-[32rem]:basis-full">
           <TransportButton
             icon={<MonitorIcon />}
             label={takeLabel}
@@ -213,10 +213,7 @@ export function TransportBar({ className }: { className?: string }) {
             text={{ value: takeLabel, className: "flex" }}
             describedBy={targetId}
           />
-          <p id={targetId} className="min-w-0 flex-1 text-xs leading-tight">
-            <span className="block truncate font-medium text-foreground">{preview ?? "Nothing in Preview"}</span>
-            <span className="block truncate text-muted-foreground">{destinationHint}</span>
-          </p>
+          <p id={targetId} className="sr-only">{preview ?? "Nothing in Preview"}. {destinationHint}</p>
         </div>
 
         <span aria-hidden className="hidden h-7 w-px bg-border @min-[32rem]:block" />

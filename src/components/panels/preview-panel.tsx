@@ -233,13 +233,17 @@ export function PreviewPanel({ itemLook = false, compact = false, outputLanguage
   const languageFallback = !!selectedPreviewOutput && !secondaryFetchPending && isOutputLanguageFallback(verseData, previewLanguage)
   const outputVerseData = selectedPreviewOutput ? forOutputLanguage(verseData, previewLanguage) : verseData
   const outputPicker = onOutputLanguageIdChange && congregationOutputs.length > 0 ? (
-    <label className="flex items-center gap-1 text-[0.6875rem] font-medium text-muted-foreground">
-      <span aria-hidden className="shrink-0">{compact ? "Output" : "Preview & scene"}</span>
+    <label className={compact
+      ? "flex min-w-0 items-center gap-1 text-[0.6875rem] font-medium text-muted-foreground"
+      : "grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 text-xs font-medium text-muted-foreground"}>
+      <span aria-hidden className="shrink-0">Output</span>
       <select
         aria-label="Named congregation output for Preview language and scene Take"
         value={selectedPreviewOutput?.id ?? ""}
         onChange={(event) => onOutputLanguageIdChange(event.currentTarget.value)}
-        className="max-w-44 rounded border border-border bg-background px-1.5 py-1 text-[0.6875rem] text-foreground"
+        className={compact
+          ? "min-w-0 max-w-44 rounded border border-border bg-background px-1.5 py-1 text-[0.6875rem] text-foreground"
+          : "h-9 min-w-0 w-full rounded border border-border bg-background px-2 text-xs text-foreground"}
       >
         {congregationOutputs.map((output) => (
           <option key={output.id} value={output.id}>
@@ -258,9 +262,9 @@ export function PreviewPanel({ itemLook = false, compact = false, outputLanguage
           <CanvasVerse theme={activeTheme} verse={outputVerseData} />
         </div>
         <div className="min-w-0 flex-1 text-xs leading-tight">
-          <p className="flex items-center gap-2">
-            <span className="text-[0.625rem] font-bold tracking-[0.08em] text-muted-foreground uppercase">Preview</span>
-            <span className="truncate text-[0.6875rem] text-muted-foreground">Only you see this</span>
+          <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="shrink-0 text-[0.625rem] font-bold tracking-[0.08em] text-muted-foreground uppercase">Preview</span>
+            <span className="shrink-0 text-[0.6875rem] text-muted-foreground">Only you see this</span>
             {outputPicker}
           </p>
           {sampleNotice && <p className="truncate text-[0.6875rem] text-muted-foreground">{sampleNotice}</p>}
@@ -279,9 +283,14 @@ export function PreviewPanel({ itemLook = false, compact = false, outputLanguage
       className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card"
     >
       <PanelHeader title="Preview">
-        {outputPicker}
-        <span className="text-xs text-muted-foreground">{ownLook ? `In its look, ${ownLook.name} · ` : ""}Only you see this</span>
+        <span className="min-w-0 truncate text-xs text-muted-foreground" title={ownLook ? `In its look, ${ownLook.name} · Only you see this` : "Only you see this"}>
+          {ownLook ? `In its look, ${ownLook.name} · ` : ""}Only you see this
+        </span>
       </PanelHeader>
+      {outputPicker && <div className="border-b border-border px-3 py-2">
+        {outputPicker}
+        <p className="mt-1 text-[0.6875rem] leading-tight text-muted-foreground">Scene Take targets this output. Source Take follows its subscriptions.</p>
+      </div>}
       {sampleNotice && <p className="px-3 pt-2 text-xs text-muted-foreground">{sampleNotice}</p>}
       {secondaryFetchPending && <p role="status" className="px-3 pt-2 text-xs text-muted-foreground">Checking the selected output’s second language…</p>}
       {languageFallback && <p role="status" className="px-3 pt-2 text-xs text-confidence-mid">{selectedPreviewOutput?.name}: {OUTPUT_LANGUAGE_FALLBACK_NOTICE}</p>}
