@@ -1,4 +1,4 @@
-// Native Tauri acceptance scenario for six-event Prepare save/reopen and Preview/Program isolation.
+// Native Tauri acceptance for six-event Prepare, reversible phases, save/reopen, and Preview/Program isolation.
 // Fixtures live in the isolated QA profile: the English hymn text is public domain;
 // Scripture, the Yorùbá QA line, announcement, audio file, scene, and camera name are synthetic.
 const waitFor = async (predicate, label, timeoutMs = 8000) => {
@@ -94,6 +94,7 @@ const programSnapshot = (qa) => {
     liveVerse: live.liveVerse,
   }))
 }
+const phaseHeaderSnapshot = (headers) => JSON.parse(JSON.stringify(headers.filter((header) => header.type === "phase")))
 const listenTauriEvent = async (event, handler) => {
   const callback = window.__TAURI_INTERNALS__.transformCallback(handler)
   const eventId = await window.__TAURI_INTERNALS__.invoke("plugin:event|listen", {
@@ -512,6 +513,57 @@ async function runScenario() {
       [audioMoment.id],
       [hymn.id, slide.id],
     ]
+
+    stage = "organise the complete service into phases, switch views, and Undo without changing the plan selection or Program"
+    const planSnapshot = () => {
+      const queue = qa.queue.getState()
+      return JSON.stringify({ items: queue.items, headers: queue.headers, activeIndex: queue.activeIndex })
+    }
+    const selectedMomentId = () => qa.bible.getState().selectedQueueItemId
+    const flatPlanBeforePhases = planSnapshot()
+    const selectionBeforePhases = selectedMomentId()
+    const programBeforePhases = JSON.stringify(programSnapshot(qa))
+
+    await clickButton("Organise into phases")
+    await clickButton("Add phases")
+    await waitFor(() => qa.queue.getState().headers.filter((header) => header.type === "phase").length === 4, "four default service phases")
+    const organisedPhases = phaseHeaderSnapshot(qa.queue.getState().headers)
+    if (organisedPhases.map((phase) => phase.role).join("|") !== "pre|warmup|main|post") {
+      throw new Error(`The default phase roles were not created in order: ${JSON.stringify(organisedPhases)}`)
+    }
+    const planWithPhases = planSnapshot()
+    const phaseViewSwitches = 20
+    for (let toggle = 0; toggle < phaseViewSwitches; toggle += 1) {
+      const view = toggle % 2 === 0 ? "Simple list" : "Grouped by phase"
+      const viewButton = [...document.querySelectorAll('[aria-label="Running order view"] button')]
+        .find((button) => normal(button.innerText) === view)
+      if (!viewButton) throw new Error(`The ${view} view control is missing`)
+      await activateButton(viewButton)
+      if (viewButton.getAttribute("aria-pressed") !== "true") throw new Error(`${view} did not become the selected rundown view`)
+      if (planSnapshot() !== planWithPhases || selectedMomentId() !== selectionBeforePhases) {
+        throw new Error(`${view} changed service structure, item order, active position, or selected Preview moment`)
+      }
+      if (JSON.stringify(programSnapshot(qa)) !== programBeforePhases) throw new Error(`${view} changed Program`)
+    }
+
+    await clickButton("Undo")
+    await waitFor(() => planSnapshot() === flatPlanBeforePhases, "Undo to restore the exact unphased service plan")
+    const phaseUndoRestoredUnphasedPlan = planSnapshot() === flatPlanBeforePhases
+    if (selectedMomentId() !== selectionBeforePhases) throw new Error("Undo after organising phases changed the selected Preview moment")
+    if (JSON.stringify(programSnapshot(qa)) !== programBeforePhases) throw new Error("Undo after organising phases changed Program")
+
+    stage = "organise phases again and save the phase structure for reopen verification"
+    await clickButton("Organise into phases")
+    await clickButton("Add phases")
+    await waitFor(() => qa.queue.getState().headers.filter((header) => header.type === "phase").length === 4, "phases to be restored for the saved service")
+    const expectedPhaseHeaders = phaseHeaderSnapshot(qa.queue.getState().headers)
+    if (qa.queue.getState().items.map((item) => item.id).join("|") !== expectedIds.join("|")) {
+      throw new Error("Organising into phases changed the service moment IDs or order")
+    }
+    if (selectedMomentId() !== selectionBeforePhases) throw new Error("Reorganising phases changed the selected Preview moment")
+    if (JSON.stringify(programSnapshot(qa)) !== programBeforePhases) throw new Error("Reorganising phases changed Program")
+    const phaseOperationsKeptProgramUnchanged = JSON.stringify(programSnapshot(qa)) === programBeforePhases
+
     if (JSON.stringify(programSnapshot(qa)) !== JSON.stringify(programBeforePrepareEdits)) {
       throw new Error("Adding the six-event service content changed Program before Take")
     }
@@ -563,6 +615,10 @@ async function runScenario() {
     const reopened = qa.queue.getState()
     const reopenedIds = reopened.items.map((item) => item.id)
     if (JSON.stringify(reopenedIds) !== JSON.stringify(expectedIds)) throw new Error(`Saved service changed item IDs/order: ${JSON.stringify(reopenedIds)}`)
+    if (JSON.stringify(phaseHeaderSnapshot(reopened.headers)) !== JSON.stringify(expectedPhaseHeaders)) {
+      throw new Error(`Saved service changed phase IDs, order, timing or rules: ${JSON.stringify(phaseHeaderSnapshot(reopened.headers))}`)
+    }
+    const reopenedPhaseHeaders = phaseHeaderSnapshot(reopened.headers)
     const reopenedEvents = reopened.headers.filter((header) => header.event).sort((a, b) => a.at - b.at)
     if (JSON.stringify(reopenedEvents.map((header) => header.id)) !== JSON.stringify(expectedEventIds)) {
       throw new Error(`Saved service changed event IDs/order: ${JSON.stringify(reopenedEvents.map((header) => [header.id, header.name, header.at]))}`)
@@ -728,6 +784,12 @@ async function runScenario() {
       }),
       eventIdsInOrder: reopenedEvents.map((header) => header.id),
       itemIdsInOrder: reopenedIds,
+      phaseOrganization: {
+        phases: reopenedPhaseHeaders,
+        undoRestoredUnphasedPlan: phaseUndoRestoredUnphasedPlan,
+        viewSwitches: phaseViewSwitches,
+        programUnchanged: phaseOperationsKeptProgramUnchanged,
+      },
       fixtures: {
         hymn: {
           title: songTitle,
