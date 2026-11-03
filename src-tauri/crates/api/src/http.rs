@@ -924,6 +924,8 @@ impl SceneTakeRefusal {
     pub const UNAVAILABLE: Self = Self { code: "unavailable", message: "The host is not ready to check this Take yet; try again in a moment" };
     pub const INVALID: Self = Self { code: "invalid", message: "Choose a valid output and scene" };
     pub const NOT_MAIN_DESK: Self = Self { code: "not-main-desk", message: "Scenes are taken from the main desk" };
+    /// The open service is approved, and this scene or output has no usable pinned snapshot in it.
+    pub const NOT_APPROVED: Self = Self { code: "not-approved", message: "This scene is not pinned for that output in the approved service; refresh the approval before taking it" };
 
     fn from_check((_, message, code): (StatusCode, &'static str, Option<&'static str>)) -> Self {
         Self { code: code.unwrap_or("stale"), message }
@@ -3112,12 +3114,20 @@ async fn command_handler<S: CommandSink + 'static>(
                     );
                 }
             }
+            if let Err(why) = state.sink.approved_scene_take(state.live.service().as_deref(), &take.scene, &take.outputs) {
+                log::info!("HTTP group Take from {by} refused: {}", why.code);
+                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(why.message.into()), code: Some(why.code), ..Default::default() }));
+            }
         }
     } else {
         if let RemoteCommand::TakeScene(take) = &command {
             if let Err((status, why, code)) = validate_scene_take_live(state.live.current().as_deref(), take) {
                 log::info!("HTTP Take from {by} refused: {why}");
                 return (status, Json(CommandResponse { success: false, error: Some(why.into()), code, ..Default::default() }));
+            }
+            if let Err(why) = state.sink.approved_scene_take(state.live.service().as_deref(), &take.scene, std::slice::from_ref(&take.output)) {
+                log::info!("HTTP Take from {by} refused: {}", why.code);
+                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(why.message.into()), code: Some(why.code), ..Default::default() }));
             }
         }
         if let Some(seen) = request.seen.as_ref() {
@@ -5611,6 +5621,8 @@ mod tests {
         bible_revision: u64,
         /// The service log: one line per command carried out.
         journal: Vec<String>,
+        /// Service s1 is approved with only this scene pinned (#410); None: not approved.
+        pinned: Option<&'static str>,
     }
 
     impl Model {
@@ -5660,6 +5672,31 @@ mod tests {
         fn invoke_backend(&self, _: &str, _: &str) -> Result<(), CommandError> {
             Ok(())
         }
+        fn approved_scene_take(&self, service: Option<&str>, scene: &str, _: &[String]) -> Result<(), SceneTakeRefusal> {
+            match self.model.lock().unwrap().pinned {
+                Some(pinned) if service == Some("s1") && scene != pinned => Err(SceneTakeRefusal::NOT_APPROVED),
+                _ => Ok(()),
+            }
+        }
+    }
+
+    /// #410: in an approved service a desk takes only the scene pinned in it. Anything else is
+    /// refused before it reaches the host app, and the output and its revision stay as they were.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn an_approved_service_refuses_a_desks_take_of_an_unpinned_scene() {
+        let host = HostSim::new(Model { pinned: Some("choir"), ..Model::default() });
+        let (port, mut handle) = sim_server(&host).await;
+        let seen = read_revisions(port, "ka").await;
+        let take = |scene: &str| serde_json::json!({ "command": "take_scene", "value": { "output": "main", "scene": scene }, "seen": seen, "service": "s1" });
+        let (status, body) = press(port, "ka", take("pulpit")).await;
+        assert_eq!(status, 409, "{body}");
+        assert!(body.contains(r#""code":"not-approved""#), "{body}");
+        settle().await;
+        let m = host.model.lock().unwrap().clone();
+        assert_eq!((m.scene, m.scene_revision, m.journal.len()), (None, 0, 0), "nothing reached the output");
+        assert_eq!(read_revisions(port, "ka").await, seen, "no revision moved");
+        assert_eq!(press(port, "ka", take("choir")).await.0, 200, "the pinned scene goes through");
+        handle.stop();
     }
 
     const DESKS: [(&str, &str); 6] = [("ka", "Desk A"), ("kb", "Desk B"), ("kc", "Desk C"), ("kd", "Desk D"), ("ke", "Desk E"), ("kf", "Desk F")];

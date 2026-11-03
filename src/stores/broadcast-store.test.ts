@@ -259,6 +259,26 @@ describe("broadcast store sync", () => {
     expect(useBroadcastStore.getState().outputFrames.main.scene?.background).toBe(edited.background)
   })
 
+  it("puts up an approved service's pinned scene and looks in a group Take, never the saved scene (#410)", async () => {
+    const { useBroadcastStore, scene, outputIds, requestedRevisions, hostCheck } = await groupTakeFixture()
+    const look = (name: string) => ({ themes: { pinned: { ...useBroadcastStore.getState().themes[0], id: "pinned", name } }, logoUrl: null })
+    const pinned = { programId: "service-1", revision: 3, approvedAt: null, approvedBy: "Pastor", scene: { ...scene, background: "#00aa00" }, outputs: { main: look("Main gold"), overflow: look("Overflow gold") } }
+    // A pin missing one target refuses the whole group; nothing changes.
+    expect(useBroadcastStore.getState().recordGroupTakePending("request-partial", outputIds, scene.id, "service-1", "screens-hash", "Screens desk")).toBe(true)
+    const before = useBroadcastStore.getState().outputs
+    expect(useBroadcastStore.getState().takeGroupScene("request-partial", outputIds, scene.id, "screens-hash", hostCheck(), requestedRevisions, "Screens desk", { ...pinned, outputs: { main: pinned.outputs.main } })).toBe(false)
+    expect(useBroadcastStore.getState().outputs).toBe(before)
+
+    expect(useBroadcastStore.getState().recordGroupTakePending("request-pinned", outputIds, scene.id, "service-1", "screens-hash", "Screens desk")).toBe(true)
+    expect(useBroadcastStore.getState().takeGroupScene("request-pinned", outputIds, scene.id, "screens-hash", hostCheck(), requestedRevisions, "Screens desk", pinned)).toBe(true)
+    for (const id of outputIds) {
+      const output = useBroadcastStore.getState().outputs.find((o) => o.id === id)!
+      expect(output.sceneSnapshot?.background).toBe("#00aa00")
+      expect(output.sceneAppearanceSnapshot?.themes.pinned?.name).toBe(id === "main" ? "Main gold" : "Overflow gold")
+      expect(output.sceneAppearanceSnapshot?.approved).toMatchObject({ programId: "service-1", revision: 3, appearanceComplete: true })
+    }
+  })
+
   it("applies a group Take to all valid outputs in one host state update and fails closed", async () => {
     const { useBroadcastStore, scene, outputIds, requestedRevisions, hostCheck } = await groupTakeFixture()
     expect(useBroadcastStore.getState().recordGroupTakePending("request-1", outputIds, scene.id, "service-1", "screens-hash", "Screens desk")).toBe(true)

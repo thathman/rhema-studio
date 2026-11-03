@@ -210,6 +210,7 @@ pub fn run() {
             commands::remote::remote_group_take_preflight,
             commands::remote::live_take_revisions,
             commands::remote::local_scene_take,
+            commands::remote::scene_take_approval,
             commands::remote::feeds_set,
             commands::remote::feed_publish,
             commands::remote::voice_answer,

@@ -281,6 +281,10 @@ impl CommandSink for TauriSink {
         answer_requests(&self.app, by, q)
     }
 
+    fn approved_scene_take(&self, service: Option<&str>, scene: &str, outputs: &[String]) -> Result<(), SceneTakeRefusal> {
+        approved_scene_take(&self.app, service, scene, outputs).map(|_| ())
+    }
+
     fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
         // A scene change that must wait for the main desk becomes a host approval request first.
         emit_recorded_event(
@@ -1099,28 +1103,144 @@ fn scene_take_of(window: &tauri::WebviewWindow, output: String, scene: String) -
     Ok(rhema_api::command::SceneTake { output, scene })
 }
 
-/// What the main desk reviews in Preview before Take (#410): the output's and the scene's
-/// revisions on this host now. Main window only; no server or network needed.
-#[tauri::command]
-pub fn live_take_revisions(window: tauri::WebviewWindow, state: State<'_, Mutex<HttpRuntime>>, output: String, scene: String) -> Result<SceneTakeRevisions, SceneTakeRefusal> {
-    let take = scene_take_of(&window, output, scene)?;
-    let live = state.lock().map_err(|_| SceneTakeRefusal::UNAVAILABLE)?.live.clone();
-    live.scene_take_revisions(&take)
+/// What an approved service pinned for a scene Take (#410): the scene and each output's look as
+/// approved, with the approval they came from. The app applies these, never the saved scene as it is now.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovedSceneTake {
+    pub program_id: String,
+    pub revision: i64,
+    pub approved_at: Option<String>,
+    pub approved_by: Option<String>,
+    pub scene: serde_json::Value,
+    pub outputs: serde_json::Map<String, serde_json::Value>,
 }
 
-/// The main desk's single-output scene Take (#410), checked and accepted by this host against the
-/// revisions it reviewed (`live_take_revisions`). Returns the output's accepted revision; the app
-/// then applies it (`takeScene`), and only a receiver's acknowledgement says it was drawn.
+/// The approved-service rule for every scene Take, from the main desk, a joined desk or a group
+/// Take (#410). No service open, or one never approved: `None`, the saved scene may be taken. An
+/// approved service: only its pinned scene, and only to outputs whose look was pinned with it;
+/// anything missing or incomplete is refused (`not-approved`), never filled in from what is saved now.
+pub(crate) fn approved_scene_take_in(db: &rhema_content::ContentDb, service: Option<&str>, scene: &str, outputs: &[String]) -> Result<Option<ApprovedSceneTake>, SceneTakeRefusal> {
+    let Some(service) = service.filter(|s| !s.is_empty()) else { return Ok(None) };
+    let program = db.get_program(service).map_err(|_| SceneTakeRefusal::UNAVAILABLE)?.ok_or(SceneTakeRefusal::STALE)?.program;
+    let Some(revision) = program.approved_revision else { return Ok(None) };
+    let designs = db.approved_designs(service, revision).map_err(|_| SceneTakeRefusal::UNAVAILABLE)?.ok_or(SceneTakeRefusal::NOT_APPROVED)?;
+    let pinned = designs.scenes.get(scene).ok_or(SceneTakeRefusal::NOT_APPROVED)?;
+    let pinned_scene = pinned
+        .get("scene")
+        .filter(|s| s.get("id").and_then(serde_json::Value::as_str) == Some(scene) && s.get("layers").is_some_and(serde_json::Value::is_array))
+        .ok_or(SceneTakeRefusal::NOT_APPROVED)?;
+    let mut looks = serde_json::Map::new();
+    for output in outputs {
+        let look = pinned
+            .get("outputs")
+            .and_then(|o| o.get(output))
+            .filter(|a| a.get("themes").is_some_and(serde_json::Value::is_object) && a.get("logoUrl").is_some())
+            .ok_or(SceneTakeRefusal::NOT_APPROVED)?;
+        looks.insert(output.clone(), look.clone());
+    }
+    Ok(Some(ApprovedSceneTake {
+        program_id: program.id,
+        revision,
+        approved_at: program.approved_at,
+        approved_by: program.approved_by,
+        scene: pinned_scene.clone(),
+        outputs: looks,
+    }))
+}
+
+/// `approved_scene_take_in` against this computer's services. A service open with no database to
+/// check it against is refused, not assumed unapproved.
+fn approved_scene_take(app: &AppHandle, service: Option<&str>, scene: &str, outputs: &[String]) -> Result<Option<ApprovedSceneTake>, SceneTakeRefusal> {
+    if service.unwrap_or("").is_empty() {
+        return Ok(None);
+    }
+    let content = app.try_state::<super::content::ContentState>().ok_or(SceneTakeRefusal::UNAVAILABLE)?;
+    let guard = content.0.lock().map_err(|_| SceneTakeRefusal::UNAVAILABLE)?;
+    approved_scene_take_in(guard.as_ref().ok_or(SceneTakeRefusal::UNAVAILABLE)?, service, scene, outputs)
+}
+
+/// What the main desk reviews in Preview before Take (#410): the output's and scene's revisions,
+/// the service open and its approved revision (`approved`, null when not approved).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct LocalTakeSeen {
+    pub output: u64,
+    pub scene: u64,
+    #[serde(default)]
+    pub service: Option<String>,
+    #[serde(default)]
+    pub approved: Option<i64>,
+}
+
+/// A main-desk Take the host accepted: the output's new revision, and the pinned scene and look
+/// to apply when the service is approved.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct LocalTakeAccepted {
+    pub revision: u64,
+    pub approved: Option<ApprovedSceneTake>,
+}
+
+/// What the main desk reviews in Preview before Take (#410). Main window only; no server or
+/// network needed. A scene an approved service cannot take is refused here already.
 #[tauri::command]
-pub fn local_scene_take(window: tauri::WebviewWindow, state: State<'_, Mutex<HttpRuntime>>, output: String, scene: String, seen: SceneTakeRevisions) -> Result<u64, SceneTakeRefusal> {
+pub fn live_take_revisions(window: tauri::WebviewWindow, app: AppHandle, state: State<'_, Mutex<HttpRuntime>>, output: String, scene: String) -> Result<LocalTakeSeen, SceneTakeRefusal> {
     let take = scene_take_of(&window, output, scene)?;
     let live = state.lock().map_err(|_| SceneTakeRefusal::UNAVAILABLE)?.live.clone();
-    let accepted = live.accept_scene_take(&take, seen);
+    let revisions = live.scene_take_revisions(&take)?;
+    let service = live.service();
+    let approved = approved_scene_take(&app, service.as_deref(), &take.scene, std::slice::from_ref(&take.output))?.map(|a| a.revision);
+    Ok(LocalTakeSeen { output: revisions.output, scene: revisions.scene, service, approved })
+}
+
+/// The main desk's single-output scene Take (#410), checked and accepted by this host against what
+/// Preview reviewed (`live_take_revisions`): the revisions, the same service and the same approval.
+/// The app then applies the pinned scene and look it returns (or the saved scene, unapproved), and
+/// only a receiver's acknowledgement says it was drawn.
+#[tauri::command]
+pub fn local_scene_take(window: tauri::WebviewWindow, app: AppHandle, state: State<'_, Mutex<HttpRuntime>>, output: String, scene: String, seen: LocalTakeSeen) -> Result<LocalTakeAccepted, SceneTakeRefusal> {
+    let take = scene_take_of(&window, output, scene)?;
+    let live = state.lock().map_err(|_| SceneTakeRefusal::UNAVAILABLE)?.live.clone();
+    let accepted = local_take_check(&live, &seen, |service| approved_scene_take(&app, service, &take.scene, std::slice::from_ref(&take.output)), &take);
     match &accepted {
-        Ok(revision) => log::info!("scene Take {} -> {} accepted at output revision {revision}", take.scene, take.output),
+        Ok(a) => log::info!("scene Take {} -> {} accepted at output revision {} ({})", take.scene, take.output, a.revision, if a.approved.is_some() { "approved snapshot" } else { "unapproved service" }),
         Err(why) => log::info!("scene Take {} -> {} refused: {}", take.scene, take.output, why.code),
     }
     accepted
+}
+
+/// What the main window applies for a scene Take a joined desk or group Take was accepted for
+/// (#410): the approved service's pinned scene and looks for these outputs, `None` when the
+/// service open is not approved, or the refusal. The same rule the server checked before accepting.
+#[tauri::command]
+pub fn scene_take_approval(window: tauri::WebviewWindow, app: AppHandle, state: State<'_, Mutex<HttpRuntime>>, scene: String, outputs: Vec<String>) -> Result<Option<ApprovedSceneTake>, SceneTakeRefusal> {
+    if outputs.is_empty() || outputs.len() > 32 {
+        return Err(SceneTakeRefusal::INVALID);
+    }
+    for output in &outputs {
+        scene_take_of(&window, output.clone(), scene.clone())?;
+    }
+    let service = state.lock().map_err(|_| SceneTakeRefusal::UNAVAILABLE)?.live.service();
+    approved_scene_take(&app, service.as_deref(), &scene, &outputs)
+}
+
+/// The order of a main-desk Take's checks: same service, same approval, then the revisions, which
+/// move only when everything before them holds.
+fn local_take_check(
+    live: &rhema_api::LiveHub,
+    seen: &LocalTakeSeen,
+    approval: impl FnOnce(Option<&str>) -> Result<Option<ApprovedSceneTake>, SceneTakeRefusal>,
+    take: &rhema_api::command::SceneTake,
+) -> Result<LocalTakeAccepted, SceneTakeRefusal> {
+    let service = live.service();
+    if seen.service != service {
+        return Err(SceneTakeRefusal::STALE);
+    }
+    let approved = approval(service.as_deref())?;
+    if approved.as_ref().map(|a| a.revision) != seen.approved {
+        return Err(SceneTakeRefusal::STALE);
+    }
+    let revision = live.accept_scene_take(take, SceneTakeRevisions { output: seen.output, scene: seen.scene })?;
+    Ok(LocalTakeAccepted { revision, approved })
 }
 
 fn valid_group_take_aspect_ratio(value: &str) -> bool {
@@ -1509,6 +1629,93 @@ pub fn feed_status(state: State<'_, Mutex<HttpRuntime>>, id: String) -> Result<O
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pinned_manifest() -> rhema_content::ApprovedDesignSnapshot {
+        let look = serde_json::json!({ "themes": { "t1": { "id": "t1", "name": "Approved gold" } }, "logoUrl": null });
+        rhema_content::ApprovedDesignSnapshot {
+            version: 1,
+            scenes: serde_json::json!({
+                "sermon": { "scene": { "id": "sermon", "name": "Sermon", "layers": [{ "id": "approved" }] }, "outputs": { "main": look, "lobby": { "logoUrl": null } } },
+                "broken": { "outputs": { "main": look } },
+            }),
+            looks: serde_json::json!({}),
+            media_ids: vec![],
+            moments: serde_json::Value::Null,
+        }
+    }
+
+    /// #410: one rule for every scene Take in an approved service. Only the pinned scene, only to
+    /// outputs pinned with it, always as pinned; a gap in the approval refuses, never falls back.
+    #[test]
+    fn an_approved_service_takes_only_its_pinned_scene_and_look() {
+        let db = rhema_content::ContentDb::open_in_memory().unwrap();
+        let take = |service: &str, scene: &str, outputs: &[&str]| {
+            approved_scene_take_in(&db, Some(service), scene, &outputs.iter().map(ToString::to_string).collect::<Vec<_>>())
+        };
+        let open = db.create_program("Rehearsal", None).unwrap();
+        assert_eq!(take(&open.id, "anything", &["main"]), Ok(None), "an unapproved service takes the saved scene");
+        assert_eq!(approved_scene_take_in(&db, None, "sermon", &["main".into()]), Ok(None), "no service open");
+
+        let p = db.create_program("9 AM", None).unwrap();
+        let p = db.approve_program_with_designs(&p.id, p.revision, &pinned_manifest()).unwrap();
+        // The service is edited after approval: the approved revision still decides what is taken.
+        db.update_program(&p.id, p.revision, "9 AM (edited)", None).unwrap();
+        let approved = take(&p.id, "sermon", &["main"]).unwrap().expect("pinned");
+        assert_eq!(approved.revision, p.approved_revision.unwrap());
+        assert_eq!(approved.scene["layers"][0]["id"], "approved", "the pinned scene, not the saved one");
+        assert_eq!(approved.outputs["main"]["themes"]["t1"]["name"], "Approved gold", "the output's pinned look");
+        assert_eq!(approved.outputs.len(), 1);
+
+        for (scene, outputs, why) in [
+            ("choir", &["main"][..], "a scene not pinned"),
+            ("sermon", &["overflow"][..], "an output not captured at approval"),
+            ("sermon", &["main", "overflow"][..], "a group with one output not captured"),
+            ("sermon", &["lobby"][..], "an incomplete look"),
+            ("broken", &["main"][..], "a pin without its scene"),
+        ] {
+            assert_eq!(take(&p.id, scene, outputs), Err(SceneTakeRefusal::NOT_APPROVED), "{why}");
+        }
+        assert_eq!(take("gone", "sermon", &["main"]), Err(SceneTakeRefusal::STALE), "a service this host does not have");
+
+        let old = db.create_program("Approved before snapshots", None).unwrap();
+        db.approve_program(&old.id, old.revision).unwrap();
+        assert_eq!(take(&old.id, "sermon", &["main"]), Err(SceneTakeRefusal::NOT_APPROVED), "no manifest: fail closed");
+    }
+
+    /// #410: the main desk's Take is accepted only for the service and approval Preview reviewed,
+    /// and the output's revision moves only when it is.
+    #[test]
+    fn a_main_desk_take_checks_service_and_approval_before_moving_the_output() {
+        type Case = (LocalTakeSeen, Result<Option<ApprovedSceneTake>, SceneTakeRefusal>, &'static str);
+        let live = rhema_api::new_live_hub();
+        live.publish(r#"{"v":1,"service":{"id":"s1"},"outputs":[{"id":"main","name":"Main"},{"id":"overflow","name":"Overflow"}],"scenes":[{"id":"sermon","name":"Sermon","layers":[]}]}"#.into());
+        let take = rhema_api::command::SceneTake { output: "main".into(), scene: "sermon".into() };
+        let r = live.scene_take_revisions(&take).unwrap();
+        let seen = |service: Option<&str>, approved: Option<i64>| LocalTakeSeen { output: r.output, scene: r.scene, service: service.map(String::from), approved };
+        let pinned = |revision: i64| ApprovedSceneTake { program_id: "s1".into(), revision, approved_at: None, approved_by: None, scene: serde_json::json!({ "id": "sermon" }), outputs: serde_json::Map::new() };
+        let overflow = live.revision("output:overflow");
+
+        let refused: [Case; 5] = [
+            (seen(Some("s2"), None), Ok(None), "another service was reviewed"),
+            (seen(None, None), Ok(None), "no service was reviewed"),
+            (seen(Some("s1"), None), Ok(Some(pinned(5))), "approved since Preview"),
+            (seen(Some("s1"), Some(4)), Ok(Some(pinned(5))), "approved again since Preview"),
+            (seen(Some("s1"), Some(5)), Err(SceneTakeRefusal::NOT_APPROVED), "not pinned"),
+        ];
+        for (seen, approval, why) in refused {
+            assert!(local_take_check(&live, &seen, |_| approval.clone(), &take).is_err(), "{why}");
+            assert_eq!(live.revision("output:main"), Some(r.output), "{why}: nothing moved");
+        }
+
+        let ok = local_take_check(&live, &seen(Some("s1"), Some(5)), |s| { assert_eq!(s, Some("s1")); Ok(Some(pinned(5))) }, &take).unwrap();
+        assert_eq!((ok.revision, ok.approved.map(|a| a.revision)), (r.output + 1, Some(5)));
+        assert_eq!(live.revision("output:overflow"), overflow, "only the named output");
+
+        // Unapproved service: the saved scene, on what was reviewed.
+        let r = live.scene_take_revisions(&take).unwrap();
+        let ok = local_take_check(&live, &LocalTakeSeen { output: r.output, scene: r.scene, service: Some("s1".into()), approved: None }, |_| Ok(None), &take).unwrap();
+        assert_eq!((ok.revision, ok.approved), (r.output + 1, None));
+    }
 
     #[test]
     fn a_copy_that_never_bound_the_port_is_not_the_approval_authority() {
