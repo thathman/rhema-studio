@@ -57,6 +57,8 @@ import { createRoot, type Root } from "react-dom/client"
 import { useBibleStore, useBroadcastStore, useDetectionStore, useQueueStore, useTranscriptStore } from "@/stores"
 import { useAuxTimers } from "@/stores/aux-timers-store"
 import { useShellStore } from "@/studio/shell-store"
+import { useJoin } from "@/stores/join-store"
+import { useApprovalRequestsStore, type ApprovalRequest } from "@/studio/permissions/approval-requests-store"
 import { openProductionTab, useProductionTab } from "@/studio/production/production-tab"
 import { useServiceStore } from "@/stores/service-store"
 import type { Program, QueueItem, TranscriptSegment, Verse } from "@/types"
@@ -114,6 +116,24 @@ const initialQueue = useQueueStore.getState()
 const initialTranscript = useTranscriptStore.getState()
 const initialDetections = useDetectionStore.getState()
 const initialService = useServiceStore.getState()
+const initialJoin = useJoin.getState()
+const initialApprovalRequests = useApprovalRequestsStore.getState()
+
+const pendingApprovalRequest: ApprovalRequest = {
+  id: "request-1",
+  kind: "scene_save",
+  targetId: "scene-1",
+  baseRevision: 3,
+  requester: { id: "operator-1", name: "Screens operator" },
+  payload: {},
+  reason: null,
+  state: "submitted",
+  createdAt: "2026-11-03T10:00:00Z",
+  expiresAt: "2026-11-03T11:00:00Z",
+  decidedBy: null,
+  decidedAt: null,
+  decisionNote: null,
+}
 
 let element: HTMLDivElement
 let root: Root
@@ -140,6 +160,8 @@ beforeEach(() => {
   useTranscriptStore.setState({ segments: [transcript], isTranscribing: true })
   useDetectionStore.setState({ detections: [{ verse_ref: "John 3:16", verse_text: verse.text, book_name: "John", book_number: 43, chapter: 3, verse: 16, confidence: 1, source: "direct", auto_queued: false, transcript_snippet: transcript.text, is_chapter_only: false }] })
   useAuxTimers.setState({ timers: [] })
+  useJoin.setState({ status: "off" })
+  useApprovalRequestsStore.setState({ requests: [], hydrated: true, error: null })
 })
 
 afterEach(() => {
@@ -153,6 +175,8 @@ afterEach(() => {
   useDetectionStore.setState(initialDetections)
   useAuxTimers.setState({ timers: [] })
   useServiceStore.setState(initialService)
+  useJoin.setState(initialJoin)
+  useApprovalRequestsStore.setState(initialApprovalRequests)
   useProductionTab.setState(useProductionTab.getInitialState())
   vi.restoreAllMocks()
 })
@@ -518,5 +542,74 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[aria-label="Preview"]')?.textContent).toContain("stays private")
     expect(element.querySelector("[data-studio-live]")?.textContent).toContain("Program")
     expect([...element.querySelectorAll('[role="toolbar"][aria-label="Presentation controls"] button')].filter((button) => button.textContent === "Take source live")).toHaveLength(1)
+  })
+
+  it("surfaces pending host requests in Live and opens the existing Permissions route", async () => {
+    useApprovalRequestsStore.setState({ requests: [], hydrated: false, error: null })
+    await renderWorkspace()
+    expect(element.querySelector('[aria-label="Open 1 pending approval request in Permissions"]')).toBeNull()
+
+    await act(async () => useApprovalRequestsStore.setState({
+      requests: [pendingApprovalRequest, { ...pendingApprovalRequest, id: "already-approved", state: "approved" }],
+      hydrated: true,
+      error: null,
+    }))
+
+    const requestCue = element.querySelector<HTMLButtonElement>('[aria-label="Open 1 pending approval request in Permissions"]')
+    expect(requestCue?.textContent).toContain("Requests")
+    expect(element.querySelector('[aria-label="Open 2 pending approval requests in Permissions"]')).toBeNull()
+    const arrow = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })
+    await act(async () => requestCue?.dispatchEvent(arrow))
+    expect(arrow.defaultPrevented).toBe(true)
+    expect(presentCalls.next).not.toHaveBeenCalled()
+    await act(async () => requestCue?.click())
+    expect(useShellStore.getState().goRequest).toBe("permissions")
+  })
+
+  it("shows an actionable unknown-status cue instead of implying the host inbox is empty", async () => {
+    useApprovalRequestsStore.setState({ requests: [], hydrated: true, error: "Host unavailable" })
+    await renderWorkspace()
+
+    const unavailableCue = element.querySelector<HTMLButtonElement>('[aria-label="Open Permissions because approval status is unavailable"]')
+    expect(unavailableCue?.title).toContain("pending count is unknown")
+    await act(async () => unavailableCue?.click())
+    expect(useShellStore.getState().goRequest).toBe("permissions")
+  })
+
+  it("does not expose the host approval count on a joined desk", async () => {
+    useJoin.setState({ status: "connected" })
+    useApprovalRequestsStore.setState({ requests: [pendingApprovalRequest], hydrated: true, error: null })
+    await renderWorkspace()
+
+    expect(element.querySelector('[aria-label="Open 1 pending approval request in Permissions"]')).toBeNull()
+    expect(element.textContent).not.toContain("Requests unavailable")
+  })
+
+  it("uses Live toolbar arrow keys to move focus without changing Program", async () => {
+    await renderWorkspace()
+
+    const toolbar = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Live tools"]')!
+    const findAndListen = toolbar.querySelector<HTMLButtonElement>('[data-tour="live-tools"]')!
+    const liveTools = toolbar.querySelector<HTMLButtonElement>('[aria-label="Toggle Live tools"]')!
+    await act(async () => findAndListen.focus())
+
+    expect(findAndListen.tabIndex).toBe(0)
+    expect(liveTools.tabIndex).toBe(-1)
+
+    const right = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })
+    await act(async () => findAndListen.dispatchEvent(right))
+    expect(document.activeElement).toBe(liveTools)
+    expect(right.defaultPrevented).toBe(true)
+    expect(presentCalls.next).not.toHaveBeenCalled()
+
+    const left = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true })
+    await act(async () => liveTools.dispatchEvent(left))
+    expect(document.activeElement).toBe(findAndListen)
+    expect(left.defaultPrevented).toBe(true)
+    expect(presentCalls.prev).not.toHaveBeenCalled()
+
+    const tab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })
+    await act(async () => findAndListen.dispatchEvent(tab))
+    expect(tab.defaultPrevented).toBe(false)
   })
 })

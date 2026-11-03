@@ -1,14 +1,16 @@
 import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
-import { useEffect, useRef, useState } from "react"
-import { ArrowUpIcon, BookOpenIcon, FolderOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, PlusIcon, SearchIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react"
+import { ArrowUpIcon, BookOpenIcon, CircleAlertIcon, FolderOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, PlusIcon, SearchIcon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { LiveOutputPanel } from "@/components/panels/live-output-panel"
 import { useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
+import { useJoin } from "@/stores/join-store"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
+import { useApprovalRequestsStore } from "@/studio/permissions/approval-requests-store"
 import { presentActions } from "@/studio/present-actions"
 import { keyToPresentAction, shouldIgnoreKeyboard } from "@/studio/present-keys"
 import { BigButton } from "@/studio/ui/big-button"
@@ -30,10 +32,46 @@ import { useProductionTab } from "@/studio/production/production-tab"
 import { usePreviewLabel } from "@/hooks/use-preview-label"
 import { nextVisibleItem, plannedTimes } from "@/lib/run-of-show"
 
+const LIVE_TOOLBAR_FOCUSABLE = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+
+function liveToolbarItems(toolbar: HTMLElement): HTMLElement[] {
+  return Array.from(toolbar.querySelectorAll<HTMLElement>(LIVE_TOOLBAR_FOCUSABLE))
+}
+
+function syncLiveToolbarTabStop(toolbar: HTMLElement): void {
+  const items = liveToolbarItems(toolbar)
+  const active = items.find((item) => item === document.activeElement)
+  const current = active ?? items.find((item) => item.tabIndex === 0) ?? items[0]
+  for (const item of items) item.tabIndex = item === current ? 0 : -1
+}
+
+function moveLiveToolbarFocus(event: ReactKeyboardEvent<HTMLDivElement>): void {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+  const toolbar = event.currentTarget
+  const target = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>(LIVE_TOOLBAR_FOCUSABLE) : null
+  if (!target) return
+  const items = liveToolbarItems(toolbar)
+  const index = items.indexOf(target)
+  if (index < 0 || items.length < 2) return
+  const direction = event.key === "ArrowRight" ? 1 : -1
+  const next = items[(index + direction + items.length) % items.length]
+  if (!next) return
+  event.preventDefault()
+  event.stopPropagation()
+  next.focus()
+}
+
+function ignorePresentArrowsOnNavigationButton(event: ReactKeyboardEvent<HTMLButtonElement>): void {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+  event.preventDefault()
+  event.stopPropagation()
+}
+
 export function PresentWorkspace() {
   const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null)
   const toolsButtonRef = useRef<HTMLButtonElement>(null)
   const liveToolsButtonRef = useRef<HTMLButtonElement>(null)
+  const liveToolsToolbarRef = useRef<HTMLDivElement>(null)
   const toolsOpen = useProductionTab((s) => s.open)
   const toolsTab = useProductionTab((s) => s.liveToolsTab)
   const openOutputs = useShellStore((s) => s.openOutputs)
@@ -56,6 +94,10 @@ export function PresentWorkspace() {
   const autoLive = useBroadcastStore((s) => s.autoLive)
   const cloudSpeechProvider = useCloudConsentStore((s) => s.runningProvider === "deepgram" || s.runningProvider === "openai" ? s.runningProvider : null)
   const service = useServiceStore((s) => s.current)
+  const joinStatus = useJoin((s) => s.status)
+  const approvalRequestsHydrated = useApprovalRequestsStore((s) => s.hydrated)
+  const approvalRequestsError = useApprovalRequestsStore((s) => s.error)
+  const pendingApprovalCount = useApprovalRequestsStore((s) => s.requests.filter((request) => request.state === "submitted").length)
   const warning = useBroadcastStore((s) => s.presentWarning)
   const takeAttempts = useTakeAttemptStore((s) => s.attempts)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
@@ -93,6 +135,18 @@ export function PresentWorkspace() {
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
+  }, [])
+
+  // Keep the toolbar to one Tab stop, even when conditional controls appear, and
+  // let its own Left/Right arrows move focus instead of changing Program.
+  useEffect(() => {
+    const toolbar = liveToolsToolbarRef.current
+    if (!toolbar) return
+    const sync = () => syncLiveToolbarTabStop(toolbar)
+    sync()
+    const observer = new MutationObserver(sync)
+    observer.observe(toolbar, { childList: true, subtree: true })
+    return () => observer.disconnect()
   }, [])
 
   return (
@@ -149,9 +203,43 @@ export function PresentWorkspace() {
               onClick={openOutputs}
               title="Open outputs"
             />
+            {joinStatus === "off" && approvalRequestsHydrated && approvalRequestsError && (
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                aria-label="Open Permissions because approval status is unavailable"
+                title="The host approval request status could not be loaded. Open Permissions to retry; the pending count is unknown."
+                onKeyDown={ignorePresentArrowsOnNavigationButton}
+                onClick={() => useShellStore.getState().goTo("permissions")}
+              >
+                <CircleAlertIcon /> Requests unavailable
+              </Button>
+            )}
+            {joinStatus === "off" && approvalRequestsHydrated && !approvalRequestsError && pendingApprovalCount > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                aria-label={`Open ${pendingApprovalCount} pending approval ${pendingApprovalCount === 1 ? "request" : "requests"} in Permissions`}
+                title={`${pendingApprovalCount} host-recorded request${pendingApprovalCount === 1 ? "" : "s"} await review. Open Permissions to inspect the exact requests.`}
+                onKeyDown={ignorePresentArrowsOnNavigationButton}
+                onClick={() => useShellStore.getState().goTo("permissions")}
+              >
+                <ShieldCheckIcon /> Requests <span className="tabular-nums">{pendingApprovalCount}</span>
+              </Button>
+            )}
           </div>
         </div>
-        <div role="toolbar" aria-label="Live tools" className="flex flex-wrap items-center gap-2">
+        <div
+          ref={liveToolsToolbarRef}
+          role="toolbar"
+          aria-label="Live tools"
+          aria-orientation="horizontal"
+          onFocusCapture={(event) => syncLiveToolbarTabStop(event.currentTarget)}
+          onKeyDown={moveLiveToolbarFocus}
+          className="flex flex-wrap items-center gap-2"
+        >
           <Button
             ref={toolsButtonRef}
             type="button"
