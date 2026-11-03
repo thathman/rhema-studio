@@ -70,7 +70,7 @@ export function ServiceTimer() {
           aria-label={`Service timer ${idle ? "not started" : label}`}
         >
           <TimerIcon className="size-3.5" />
-          {idle ? "Timer" : label}
+          {idle ? "Service timer" : <><span className="text-muted-foreground">Service</span><span>{label}</span></>}
           {tone === "over" && <span className="text-[0.6875rem] font-bold uppercase">over</span>}
           {endBy && endByLeft !== null && (
             <span

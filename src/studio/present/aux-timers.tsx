@@ -38,9 +38,9 @@ export function AuxTimerStatus() {
   const running = timers.find((t) => isRunning(t.timer))
   if (!running) return null
   return (
-    <div className="flex h-8 max-w-56 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium tabular-nums" title={`Running auxiliary timer: ${running.label}`}>
+    <div role="group" aria-label="Additional timer status" className="flex h-8 max-w-56 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium tabular-nums" title={`Additional timer: ${running.label}`}>
       <AlarmClockIcon className="size-3.5 shrink-0" aria-hidden="true" />
-      <span className="sr-only">Running timer: </span>
+      <span className="text-[0.625rem] font-semibold text-muted-foreground">Extra</span>
       <span className="min-w-0 truncate">{running.label}</span>
       <span className={cn("shrink-0", toneClass(timerTone(running.timer, now)))}>{formatMs(remainingMs(running.timer, now))}</span>
     </div>
