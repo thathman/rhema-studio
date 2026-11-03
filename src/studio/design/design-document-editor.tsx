@@ -7,15 +7,16 @@ import { Input } from "@/components/ui/input"
 import { designStore, type DesignDocument, type DesignInput, type DesignVersion } from "@/design-engine/design-store"
 import { designPages, designToScene, previewDesign, type LivePreviewInput, type RhemaBinding, type RhemaDesignPage, VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rhema-scene"
 import { createCameraLayer, createClockLayer, createColorLayer, createLiveFeedLayer, createLogoLayer, createLowerThirdLayer, createTickerLayer } from "@/design-engine/design-document-utils"
-import { createSaraswatiEditorStore, getNodeBounds, pointerDown, pointerMove, pointerUp, type SaraswatiCommand, type SaraswatiPointerState } from "@/vendor/avnac/saraswati"
+import { applyCommand, createSaraswatiEditorStore, getNodeBounds, pointerDown, pointerMove, pointerUp, type SaraswatiClipPath, type SaraswatiCommand, type SaraswatiImageNode, type SaraswatiPointerState } from "@/vendor/avnac/saraswati"
 import { renderSceneToCanvas } from "@/vendor/avnac/renderer/offscreen-render"
-import type { SaraswatiEllipseNode, SaraswatiGroupNode, SaraswatiNode, SaraswatiRectNode, SaraswatiRenderableNode, SaraswatiScene, SaraswatiTextNode } from "@/vendor/avnac/saraswati"
+import type { SaraswatiColor, SaraswatiEllipseNode, SaraswatiGroupNode, SaraswatiNode, SaraswatiRectNode, SaraswatiRenderableNode, SaraswatiScene, SaraswatiTextNode } from "@/vendor/avnac/saraswati"
 import { cn } from "@/lib/utils"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import type { BroadcastOutputLanguage } from "@/types/broadcast-output"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { gradientCss, normalizeGradient } from "@/lib/scene-gradient"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { clockText, countdownClock, sceneClock, untilClock } from "@/lib/scenes"
 import { crawlElapsed, pageIndex, tickerText } from "@/lib/ticker"
@@ -64,18 +65,41 @@ function bindingSnapshot(bindings: Record<string, RhemaBinding>): BindingSnapsho
   return { ...bindings }
 }
 
+function fullImageEllipseClip(node: Pick<SaraswatiImageNode, "width" | "height">): SaraswatiClipPath {
+  return { type: "ellipse", x: node.width / 2, y: node.height / 2, width: node.width, height: node.height }
+}
+
+function hasFullImageEllipse(node: SaraswatiImageNode): boolean {
+  const clip = node.clipPath
+  return !node.clipPathStack?.length && clip?.type === "ellipse" &&
+    clip.x === node.width / 2 && clip.y === node.height / 2 &&
+    clip.width === node.width && clip.height === node.height
+}
+
+function imageMaskChoice(node: SaraswatiImageNode): "none" | "ellipse" | "custom" {
+  const clips = [...(node.clipPathStack ?? []), ...(node.clipPath ? [node.clipPath] : [])]
+  if (!clips.length) return "none"
+  return clips.length === 1 && hasFullImageEllipse({ ...node, clipPath: clips[0]!, clipPathStack: undefined }) ? "ellipse" : "custom"
+}
+
 function moveValue(node: SaraswatiRenderableNode, field: "x" | "y" | "width" | "height", value: number): SaraswatiRenderableNode {
   if (!Number.isFinite(value)) return node
   if (field === "x" || field === "y") return { ...node, [field]: value }
   if (!("width" in node)) return node
-  return { ...node, [field]: Math.max(1, value) }
+  if (node.type === "image" && hasFullImageEllipse(node)) {
+    const resized = { ...node, [field]: Math.max(1, value) }
+    return { ...resized, clipPath: fullImageEllipseClip(resized), clipPathStack: undefined }
+  }
+  const resized = { ...node, [field]: Math.max(1, value) }
+  return resized
 }
 
-function NumberField({ label, value, min, max, onCommit }: {
+function NumberField({ label, value, min, max, disabled, onCommit }: {
   label: string
   value: number
   min?: number
   max?: number
+  disabled?: boolean
   onCommit: (value: number) => void
 }) {
   const commit = (raw: string) => {
@@ -85,8 +109,92 @@ function NumberField({ label, value, min, max, onCommit }: {
   return (
     <label className="flex min-w-0 flex-col gap-1 text-[0.6875rem] font-medium text-muted-foreground">
       {label}
-      <Input key={label + ":" + value} type="number" min={min} max={max} defaultValue={String(Math.round(value))} onBlur={(event) => commit(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur() }} className="h-8 text-xs text-foreground" />
+      <Input key={label + ":" + value} type="number" min={min} max={max} defaultValue={String(Math.round(value))} disabled={disabled} onBlur={(event) => commit(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur() }} className="h-8 text-xs text-foreground" />
     </label>
+  )
+}
+
+function GradientColorField({ label, value, onCommit }: { label: string; value: string; onCommit: (value: string) => boolean }) {
+  const [draft, setDraft] = useState(value)
+  const [invalid, setInvalid] = useState(false)
+  const commit = () => {
+    const next = draft.trim()
+    const accepted = onCommit(next)
+    setInvalid(!accepted)
+    if (accepted) setDraft(next)
+  }
+  return (
+    <label className="flex min-w-0 flex-col gap-1 text-[0.6875rem] font-medium text-muted-foreground">
+      {label}
+      <Input value={draft} maxLength={48} aria-label={label} aria-invalid={invalid} onChange={(event) => setDraft(event.currentTarget.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur() }} className="h-8 text-xs text-foreground" />
+      {invalid && <span role="alert" className="font-normal text-destructive">Enter a supported hex or RGB colour.</span>}
+    </label>
+  )
+}
+
+function paintGradient(angle: number, stops: Array<{ color: string; offset: number }>): SaraswatiColor | undefined {
+  const normalized = normalizeGradient({ angle, stops })
+  if (!normalized) return undefined
+  return { type: "gradient", css: gradientCss(normalized), stops: normalized.stops, angle: normalized.angle }
+}
+
+function PaintControls({ label, paint, accentColor, onChange }: {
+  label: string
+  paint: SaraswatiColor
+  accentColor: string
+  onChange: (paint: SaraswatiColor) => void
+}) {
+  const changeGradient = (angle: number, stops = paint.type === "gradient" ? paint.stops : []) => {
+    const next = paintGradient(angle, stops)
+    if (!next) return false
+    onChange(next)
+    return true
+  }
+  const changeStop = (index: number, color: string) => {
+    if (paint.type !== "gradient") return false
+    const stops = paint.stops.map((stop, stopIndex) => stopIndex === index ? { ...stop, color } : stop)
+    return changeGradient(paint.angle, stops)
+  }
+  const setStyle = (style: string) => {
+    if (style === "solid") {
+      if (paint.type === "gradient") onChange({ type: "solid", color: paint.stops[0]?.color ?? "#111827" })
+      return
+    }
+    if (style === "gradient" && paint.type === "solid") {
+      const secondColor = paint.color.toLowerCase() === accentColor.toLowerCase() ? "#ffffff" : accentColor
+      changeGradient(90, [{ color: paint.color, offset: 0 }, { color: secondColor, offset: 1 }])
+    }
+  }
+  const solidPickerCompatible = paint.type === "solid" && /^#[0-9a-f]{6}$/i.test(paint.color)
+
+  return (
+    <section className="space-y-2 rounded-md border border-border p-2" aria-label={`${label} paint controls`}>
+      <label className="flex flex-col gap-1 text-[0.6875rem] font-medium text-muted-foreground">
+        {label} style
+        <select aria-label={`${label} paint style`} value={paint.type} onChange={(event) => setStyle(event.currentTarget.value)} className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground">
+          <option value="solid">Solid colour</option>
+          <option value="gradient">Linear gradient</option>
+        </select>
+      </label>
+      {paint.type === "solid" ? (
+        solidPickerCompatible
+          ? <label className="flex items-center justify-between gap-2 text-[0.6875rem] font-medium text-muted-foreground">Solid colour
+              <Input aria-label={`${label} solid colour`} type="color" value={paint.color} onChange={(event) => onChange({ type: "solid", color: event.currentTarget.value })} className="h-8 w-14 p-1" />
+            </label>
+          : <label className="flex flex-col gap-1 text-[0.6875rem] font-medium text-muted-foreground">Solid colour
+              <Input aria-label={`${label} solid colour`} value={paint.color} onChange={(event) => onChange({ type: "solid", color: event.currentTarget.value })} className="h-8 text-xs text-foreground" />
+            </label>
+      ) : (
+        <>
+          <NumberField label={`${label} gradient angle (deg)`} min={0} max={360} value={paint.angle} onCommit={(angle) => changeGradient(Math.min(360, Math.max(0, Math.round(angle))))} />
+          <div className="grid grid-cols-2 gap-2">
+            <GradientColorField key={`${label}:start:${paint.stops[0]?.color}`} label={`${label} gradient start colour`} value={paint.stops[0]?.color ?? "#111827"} onCommit={(color) => changeStop(0, color)} />
+            <GradientColorField key={`${label}:end:${paint.stops.at(-1)?.color}`} label={`${label} gradient end colour`} value={paint.stops.at(-1)?.color ?? "#ffffff"} onCommit={(color) => changeStop(paint.stops.length - 1, color)} />
+          </div>
+          <p className="text-[0.6875rem] text-muted-foreground">Intermediate stops stay in place when you edit the end colours.</p>
+        </>
+      )}
+    </section>
   )
 }
 
@@ -291,6 +399,14 @@ export function DesignDocumentEditor({
     ? mediaAssets.find((asset) => asset.id === selectedBinding.mediaId)
     : undefined
   const selectedVideoMissing = selectedBinding?.kind === "video" && mediaLoaded && !mediaError && !selectedVideoAsset?.present
+  const selectedPictureAsset = selectedBinding?.kind === "picture"
+    ? mediaAssets.find((asset) => asset.id === selectedBinding.mediaId)
+    : undefined
+  const pictureSourceWidth = selectedPictureAsset?.width && selectedPictureAsset.width > 0 ? selectedPictureAsset.width : null
+  const pictureSourceHeight = selectedPictureAsset?.height && selectedPictureAsset.height > 0 ? selectedPictureAsset.height : null
+  const selectedPictureHasSceneCrop = selectedBinding?.kind === "picture" && !!selectedBinding.crop &&
+    !selectedBinding.imageDraw &&
+    !!(selectedBinding.crop.l || selectedBinding.crop.t || selectedBinding.crop.r || selectedBinding.crop.b)
   const issues = useMemo(() => designToScene({
     ...designForEditor,
     meta: { ...document.document.meta, name: title },
@@ -552,6 +668,53 @@ export function DesignDocumentEditor({
   const commitNumber = (field: "x" | "y" | "width" | "height", value: number) => {
     if (selectedRenderable) updateNode(moveValue(selectedRenderable, field, value))
   }
+  const commitImageCrop = (field: "left" | "top" | "width" | "height", value: number) => {
+    if (selectedRenderable?.type !== "image" || selectedPictureHasSceneCrop || !pictureSourceWidth || !pictureSourceHeight) return
+    const cropX = field === "left"
+      ? Math.min(pictureSourceWidth - 1, Math.max(0, Math.round(value)))
+      : Math.min(pictureSourceWidth - 1, Math.max(0, selectedRenderable.cropX))
+    const cropY = field === "top"
+      ? Math.min(pictureSourceHeight - 1, Math.max(0, Math.round(value)))
+      : Math.min(pictureSourceHeight - 1, Math.max(0, selectedRenderable.cropY))
+    const fullWidth = pictureSourceWidth - cropX
+    const fullHeight = pictureSourceHeight - cropY
+    const previousWidth = selectedRenderable.cropWidth ?? pictureSourceWidth - selectedRenderable.cropX
+    const previousHeight = selectedRenderable.cropHeight ?? pictureSourceHeight - selectedRenderable.cropY
+    const visibleWidth = field === "width"
+      ? Math.min(fullWidth, Math.max(1, Math.round(value)))
+      : Math.min(fullWidth, previousWidth)
+    const visibleHeight = field === "height"
+      ? Math.min(fullHeight, Math.max(1, Math.round(value)))
+      : Math.min(fullHeight, previousHeight)
+    dispatch({
+      type: "SET_IMAGE_CROP",
+      id: selectedRenderable.id,
+      cropX,
+      cropY,
+      cropWidth: visibleWidth < fullWidth ? visibleWidth : undefined,
+      cropHeight: visibleHeight < fullHeight ? visibleHeight : undefined,
+    })
+  }
+  const chooseImageMask = (choice: string) => {
+    if (selectedRenderable?.type !== "image" || selectedPictureHasSceneCrop || (choice !== "none" && choice !== "ellipse")) return
+    editor.beginBatch()
+    dispatch({ type: "SET_NODE_CLIP_STACK", id: selectedRenderable.id, clipPathStack: [] })
+    dispatch({
+      type: "SET_NODE_CLIP_PATH",
+      id: selectedRenderable.id,
+      clipPath: choice === "ellipse" ? fullImageEllipseClip(selectedRenderable) : null,
+    })
+    editor.endBatch()
+  }
+  const resetImageAppearance = () => {
+    if (selectedRenderable?.type !== "image" || selectedPictureHasSceneCrop) return
+    editor.beginBatch()
+    dispatch({ type: "SET_IMAGE_CROP", id: selectedRenderable.id, cropX: 0, cropY: 0 })
+    dispatch({ type: "SET_IMAGE_BORDER_RADIUS", id: selectedRenderable.id, radius: 0 })
+    dispatch({ type: "SET_NODE_CLIP_STACK", id: selectedRenderable.id, clipPathStack: [] })
+    dispatch({ type: "SET_NODE_CLIP_PATH", id: selectedRenderable.id, clipPath: null })
+    editor.endBatch()
+  }
   const pointInScene = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     return {
@@ -574,7 +737,21 @@ export function DesignDocumentEditor({
     const point = pointInScene(event)
     const next = pointerMove(pointerRef.current, event.pointerId, point.x, point.y)
     pointerRef.current = next.state
-    if (next.command) dispatch(next.command)
+    if (!next.command) return
+    const current = editor.getState().scene
+    const resizing = next.command.type === "RESIZE_NODE" ? current.nodes[next.command.id] : undefined
+    if (next.command.type === "RESIZE_NODE" && resizing?.type === "image" && hasFullImageEllipse(resizing)) {
+      const resizedScene = applyCommand(current, next.command)
+      const resized = resizedScene.nodes[resizing.id]
+      editor.beginBatch()
+      dispatch(next.command)
+      if (resized?.type === "image") {
+        dispatch({ type: "SET_NODE_CLIP_PATH", id: resized.id, clipPath: fullImageEllipseClip(resized) })
+      }
+      editor.endBatch()
+      return
+    }
+    dispatch(next.command)
   }
   const onPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (!pointerRef.current) return
@@ -1216,6 +1393,37 @@ export function DesignDocumentEditor({
                   {"height" in selectedRenderable && <NumberField label="Height" min={1} max={scene.artboard.height * 2} value={selectedRenderable.height} onCommit={(value) => commitNumber("height", value)} />}
                   <NumberField label="Opacity %" min={0} max={100} value={selectedRenderable.opacity * 100} onCommit={(value) => dispatch({ type: "SET_NODE_OPACITY", id: selectedRenderable.id, opacity: value / 100 })} />
                 </div>
+                {selectedRenderable.type === "image" && selectedBinding?.kind === "picture" && (
+                  <section className="space-y-2 border-t border-border pt-3" aria-label="Picture appearance">
+                    <div>
+                      <h4 className="text-[0.6875rem] font-semibold">Picture appearance</h4>
+                      {pictureSourceWidth && pictureSourceHeight
+                        ? <p className="text-[0.6875rem] text-muted-foreground">Crop values use the original {pictureSourceWidth} × {pictureSourceHeight} picture pixels.</p>
+                        : <p role="status" className="text-[0.6875rem] text-muted-foreground">The original picture size is unavailable, so crop controls are disabled.</p>}
+                    </div>
+                    {selectedPictureHasSceneCrop && <p role="alert" className="text-[0.6875rem] text-destructive">This picture is cropped in the Scene composer. Reset that crop there before changing crop, corners or mask here.</p>}
+                    {pictureSourceWidth && pictureSourceHeight && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <NumberField label="Crop left (px)" min={0} max={pictureSourceWidth - 1} value={selectedRenderable.cropX} disabled={selectedPictureHasSceneCrop} onCommit={(value) => commitImageCrop("left", value)} />
+                        <NumberField label="Crop top (px)" min={0} max={pictureSourceHeight - 1} value={selectedRenderable.cropY} disabled={selectedPictureHasSceneCrop} onCommit={(value) => commitImageCrop("top", value)} />
+                        <NumberField label="Visible width (px)" min={1} max={pictureSourceWidth - selectedRenderable.cropX} value={selectedRenderable.cropWidth ?? pictureSourceWidth - selectedRenderable.cropX} disabled={selectedPictureHasSceneCrop} onCommit={(value) => commitImageCrop("width", value)} />
+                        <NumberField label="Visible height (px)" min={1} max={pictureSourceHeight - selectedRenderable.cropY} value={selectedRenderable.cropHeight ?? pictureSourceHeight - selectedRenderable.cropY} disabled={selectedPictureHasSceneCrop} onCommit={(value) => commitImageCrop("height", value)} />
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                      <NumberField label="Corner radius (px)" min={0} max={Math.floor(Math.min(selectedRenderable.width, selectedRenderable.height) / 2)} value={selectedRenderable.borderRadius ?? 0} disabled={selectedPictureHasSceneCrop} onCommit={(radius) => dispatch({ type: "SET_IMAGE_BORDER_RADIUS", id: selectedRenderable.id, radius })} />
+                      <label className="flex min-w-0 flex-col gap-1 text-[0.6875rem] font-medium text-muted-foreground">
+                        Shape mask
+                        <select aria-label="Picture shape mask" value={imageMaskChoice(selectedRenderable)} disabled={selectedPictureHasSceneCrop} onChange={(event) => chooseImageMask(event.currentTarget.value)} className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground">
+                          <option value="none">None</option>
+                          <option value="ellipse">Oval</option>
+                          {imageMaskChoice(selectedRenderable) === "custom" && <option value="custom" disabled>Custom mask · preserved</option>}
+                        </select>
+                      </label>
+                    </div>
+                    <Button size="xs" variant="outline" disabled={selectedPictureHasSceneCrop} onClick={resetImageAppearance}>Reset picture appearance</Button>
+                  </section>
+                )}
                 <section className="space-y-2 border-t border-border pt-3" aria-label="Align selected layer">
                   <h4 className="text-[0.6875rem] font-semibold">Align to page</h4>
                   <div role="group" aria-label="Horizontal alignment" className="flex flex-wrap gap-1.5">
@@ -1230,11 +1438,13 @@ export function DesignDocumentEditor({
                   </div>
                 </section>
                 {selectedPaintNode && (
-                  <label className="flex items-center justify-between gap-2 text-[0.6875rem] font-medium text-muted-foreground">Fill colour
-                    {selectedPaintNode.fill.type === "solid"
-                      ? <Input type="color" value={selectedPaintNode.fill.color} onChange={(event) => dispatch({ type: "SET_NODE_FILL", id: selectedPaintNode.id, fill: { type: "solid", color: event.currentTarget.value } })} className="h-8 w-14 p-1" />
-                      : <span className="text-[0.6875rem]">Gradient preserved</span>}
-                  </label>
+                  selectedPaintNode.type === "rect" && selectedBinding?.kind === "color" || selectedPaintNode.type === "ellipse" && selectedBinding?.kind === "ellipse"
+                    ? <PaintControls label="Fill" paint={selectedPaintNode.fill} accentColor={brandKit.colors.accent} onChange={(fill) => dispatch({ type: "SET_NODE_FILL", id: selectedPaintNode.id, fill })} />
+                    : <label className="flex items-center justify-between gap-2 text-[0.6875rem] font-medium text-muted-foreground">Fill colour
+                        {selectedPaintNode.fill.type === "solid"
+                          ? <Input type="color" value={selectedPaintNode.fill.color} onChange={(event) => dispatch({ type: "SET_NODE_FILL", id: selectedPaintNode.id, fill: { type: "solid", color: event.currentTarget.value } })} className="h-8 w-14 p-1" />
+                          : <span className="text-[0.6875rem]">Gradient preserved</span>}
+                      </label>
                 )}
                 {(selectedRenderable.type === "text" || !!selectedPaintNode) && (
                   <section className="space-y-2 border-t border-border pt-3" aria-label="Brand Kit styles">
@@ -1429,11 +1639,7 @@ export function DesignDocumentEditor({
             ) : <p className="text-xs text-muted-foreground">Select a layer on the canvas or in this list to edit its placement.</p>}
             <div className="mt-5 border-t border-border pt-3">
               <h3 className="text-xs font-bold">Artboard</h3>
-              <label className="mt-2 flex items-center justify-between gap-2 text-[0.6875rem] font-medium text-muted-foreground">Background colour
-                {scene.artboard.bg.type === "solid" ? (
-                  <Input type="color" value={scene.artboard.bg.color} onChange={(event) => dispatch({ type: "SET_ARTBOARD", bg: { type: "solid", color: event.currentTarget.value } })} className="h-8 w-14 p-1" />
-                ) : <span className="text-[0.6875rem]">Gradient is not supported for Rhema output</span>}
-              </label>
+              <PaintControls label="Artboard background" paint={scene.artboard.bg} accentColor={brandKit.colors.accent} onChange={(bg) => dispatch({ type: "SET_ARTBOARD", bg })} />
             </div>
             <div className="mt-5 border-t border-border pt-3">
               <h3 className="text-xs font-bold">Saved versions</h3>

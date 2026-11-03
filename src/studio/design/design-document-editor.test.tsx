@@ -140,6 +140,22 @@ function setValue(element: HTMLInputElement, value: string) {
   element.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
+function inputForLabel(element: HTMLElement, labelText: string): HTMLInputElement {
+  const label = [...element.querySelectorAll("label")].find((candidate) => candidate.textContent?.trim().startsWith(labelText))
+  const input = label?.querySelector("input")
+  if (!(input instanceof HTMLInputElement)) throw new Error(`Input "${labelText}" was not rendered`)
+  return input
+}
+
+async function commitNumberInput(element: HTMLElement, labelText: string, value: string) {
+  const input = inputForLabel(element, labelText)
+  await act(async () => {
+    setValue(input, value)
+    input.focus()
+    input.blur()
+  })
+}
+
 function setTextAreaValue(element: HTMLTextAreaElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!
   setter.call(element, value)
@@ -341,10 +357,11 @@ describe("canonical design editor", () => {
     const element = await render(documentValue)
 
     await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Background")!.click())
-    expect(element.textContent).toContain("Gradient preserved")
+    expect(element.querySelector<HTMLSelectElement>('[aria-label="Fill paint style"]')?.value).toBe("gradient")
     expect(element.textContent).toContain("including a gradient fill, with a solid color copied into this draft")
     await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Apply Brand Kit primary fill"]')!.click())
-    expect(element.querySelector<HTMLInputElement>('input[type="color"]')?.value).toBe(kit.colors.primary)
+    expect(element.querySelector<HTMLSelectElement>('[aria-label="Fill paint style"]')?.value).toBe("solid")
+    expect(element.querySelector<HTMLInputElement>('[aria-label="Fill solid colour"]')?.value).toBe(kit.colors.primary)
     await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
 
     const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
@@ -482,6 +499,185 @@ describe("canonical design editor", () => {
       liveVerse: after.liveVerse,
       liveSlide: after.liveSlide,
     }).toEqual(liveSnapshot)
+  })
+
+  it("edits Rhema-supported linear gradients on the artboard and a colour layer", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const before = useBroadcastStore.getState()
+    const liveSnapshot = { scenes: before.scenes, outputs: before.outputs, outputStatus: before.outputStatus, outputFrames: before.outputFrames, sceneReturn: before.sceneReturn, sceneTakes: before.sceneTakes, isLive: before.isLive, liveVerse: before.liveVerse, liveSlide: before.liveSlide }
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Background")!.click())
+    await act(async () => setSelectValue(element.querySelector<HTMLSelectElement>('[aria-label="Fill paint style"]')!, "gradient"))
+    await commitNumberInput(element, "Fill gradient angle (deg)", "135")
+    await act(async () => {
+      const input = element.querySelector<HTMLInputElement>('[aria-label="Fill gradient start colour"]')!
+      setValue(input, "#0b1a3a")
+      input.focus()
+      input.blur()
+    })
+    await act(async () => {
+      const input = element.querySelector<HTMLInputElement>('[aria-label="Fill gradient end colour"]')!
+      setValue(input, "#ffffff")
+      input.focus()
+      input.blur()
+    })
+
+    await act(async () => setSelectValue(element.querySelector<HTMLSelectElement>('[aria-label="Artboard background paint style"]')!, "gradient"))
+    await commitNumberInput(element, "Artboard background gradient angle (deg)", "45")
+    await act(async () => {
+      const input = element.querySelector<HTMLInputElement>('[aria-label="Artboard background gradient start colour"]')!
+      setValue(input, "#112233")
+      input.focus()
+      input.blur()
+    })
+    await act(async () => {
+      const input = element.querySelector<HTMLInputElement>('[aria-label="Artboard background gradient end colour"]')!
+      setValue(input, "#ddeeff")
+      input.focus()
+      input.blur()
+    })
+    expect(element.textContent).not.toContain("Gradient is not supported for Rhema output")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const fill = Object.values(saved.document.scene.nodes).find((node) => node.type === "rect" && node.name === "Background")
+    expect(fill?.type === "rect" && fill.fill).toMatchObject({ type: "gradient", angle: 135, stops: [{ color: "#0b1a3a", offset: 0 }, { color: "#ffffff", offset: 1 }] })
+    const prepared = designToScene(saved.document)
+    expect(prepared.issues).toEqual([])
+    expect(prepared.scene.backgroundGradient).toEqual({ angle: 45, stops: [{ color: "#112233", offset: 0 }, { color: "#ddeeff", offset: 1 }] })
+    expect(prepared.scene.layers.find((layer) => layer.id === fill?.id)?.gradient).toEqual({ angle: 135, stops: [{ color: "#0b1a3a", offset: 0 }, { color: "#ffffff", offset: 1 }] })
+    const after = useBroadcastStore.getState()
+    expect({ scenes: after.scenes, outputs: after.outputs, outputStatus: after.outputStatus, outputFrames: after.outputFrames, sceneReturn: after.sceneReturn, sceneTakes: after.sceneTakes, isLive: after.isLive, liveVerse: after.liveVerse, liveSlide: after.liveSlide }).toEqual(liveSnapshot)
+  })
+
+  it("keeps intermediate gradient stops when editing the endpoint colours", async () => {
+    const documentValue = documentFixture()
+    const background = Object.values(documentValue.document.scene.nodes).find((node) => node.type === "rect" && node.name === "Background")
+    if (background?.type !== "rect") throw new Error("Expected the fixture background rectangle")
+    documentValue.document.scene = applyCommand(documentValue.document.scene, {
+      type: "SET_NODE_FILL",
+      id: background.id,
+      fill: {
+        type: "gradient",
+        css: "linear-gradient(90deg, #111111 0%, #777777 50%, #eeeeee 100%)",
+        stops: [{ color: "#111111", offset: 0 }, { color: "#777777", offset: 0.5 }, { color: "#eeeeee", offset: 1 }],
+        angle: 90,
+      },
+    })
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Background")!.click())
+    await commitNumberInput(element, "Fill gradient angle (deg)", "225")
+    await act(async () => {
+      const input = element.querySelector<HTMLInputElement>('[aria-label="Fill gradient start colour"]')!
+      setValue(input, "#123456")
+      input.focus()
+      input.blur()
+    })
+    await act(async () => {
+      const input = element.querySelector<HTMLInputElement>('[aria-label="Fill gradient end colour"]')!
+      setValue(input, "#abcdef")
+      input.focus()
+      input.blur()
+    })
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const edited = saved.document.scene.nodes[background.id]
+    expect(edited?.type === "rect" && edited.fill).toEqual({
+      type: "gradient",
+      css: "linear-gradient(225deg, #123456 0%, #777777 50%, #abcdef 100%)",
+      angle: 225,
+      stops: [{ color: "#123456", offset: 0 }, { color: "#777777", offset: 0.5 }, { color: "#abcdef", offset: 1 }],
+    })
+  })
+
+  it("exposes ellipse gradient editing only for an output-compatible ellipse", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Ellipse")!.click())
+    await act(async () => setSelectValue(element.querySelector<HTMLSelectElement>('[aria-label="Fill paint style"]')!, "gradient"))
+    await commitNumberInput(element, "Fill gradient angle (deg)", "270")
+    await act(async () => {
+      const input = element.querySelector<HTMLInputElement>('[aria-label="Fill gradient start colour"]')!
+      setValue(input, "#d14c62")
+      input.focus()
+      input.blur()
+    })
+    await act(async () => {
+      const input = element.querySelector<HTMLInputElement>('[aria-label="Fill gradient end colour"]')!
+      setValue(input, "#3157a4")
+      input.focus()
+      input.blur()
+    })
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const ellipse = Object.values(saved.document.scene.nodes).find((node) => node.type === "ellipse")
+    expect(ellipse?.type === "ellipse" && ellipse.fill).toMatchObject({ type: "gradient", angle: 270, stops: [{ color: "#d14c62", offset: 0 }, { color: "#3157a4", offset: 1 }] })
+    const prepared = designToScene(saved.document)
+    expect(prepared.issues).toEqual([])
+    expect(prepared.scene.layers.find((layer) => layer.id === ellipse?.id)?.gradient).toEqual({ angle: 270, stops: [{ color: "#d14c62", offset: 0 }, { color: "#3157a4", offset: 1 }] })
+  })
+
+  it("edits a Library picture crop, rounded corners and oval mask in the draft and saved output", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
+      ...documentValue,
+      revision: 5,
+      document: input.document,
+    }))
+    const liveScenes = useBroadcastStore.getState().scenes
+    const element = await render(documentValue)
+
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Image from Library")!.click())
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Add Welcome background as image layer"]')!.click())
+    expect(element.querySelector('[aria-label="Picture appearance"]')).toBeTruthy()
+
+    await commitNumberInput(element, "Crop left (px)", "100")
+    await commitNumberInput(element, "Crop top (px)", "50")
+    await commitNumberInput(element, "Visible width (px)", "800")
+    await commitNumberInput(element, "Visible height (px)", "400")
+    await commitNumberInput(element, "Corner radius (px)", "32")
+    await act(async () => setSelectValue(element.querySelector<HTMLSelectElement>('[aria-label="Picture shape mask"]')!, "ellipse"))
+    await commitNumberInput(element, "Width", "720")
+    await commitNumberInput(element, "Height", "400")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const image = Object.values(saved.document.scene.nodes).find((node) => node.type === "image")
+    expect(image).toMatchObject({ type: "image", width: 720, height: 400, cropX: 100, cropY: 50, cropWidth: 800, cropHeight: 400, borderRadius: 32 })
+    expect(image?.type === "image" && image.clipPath).toMatchObject({ type: "ellipse", x: 360, y: 200, width: 720, height: 400 })
+    const prepared = designToScene(saved.document)
+    expect(prepared.issues).toEqual([])
+    expect(prepared.scene.layers.find((layer) => layer.id === image?.id)?.imageDraw).toMatchObject({
+      width: 720,
+      height: 400,
+      cropX: 100,
+      cropY: 50,
+      cropWidth: 800,
+      cropHeight: 400,
+      radius: 32,
+      clips: [{ type: "ellipse", x: 360, y: 200, width: 720, height: 400 }],
+    })
+    expect(useBroadcastStore.getState().scenes).toEqual(liveScenes)
   })
 
   it("adds a Library video as a private editable layer with a scene-compatible media binding", async () => {
