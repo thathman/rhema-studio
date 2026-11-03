@@ -253,7 +253,7 @@
   }
   // Production notices (Rhema Comms): those for this phone's role, everyone's, and its own; answer
   // Seen / Ready / Unable. Private: never on a screen.
-  let me = null, lastLive = null
+  let me = null, meAt = 0, lastLive = null
   const ANSWERS = { seen: "Seen", ready: "Ready", unable: "Unable" }
   // Why a request this phone tried could not be done, by notice id (shown on its card).
   const failed = {}
@@ -287,9 +287,12 @@
   const QUEUE_ROLES = ["present", "configure", "editor"]
   const isFor = (n, role) => n.to === "all" || n.to === role || (role === "configure" && n.to === "present") || (!!n.to && typeof n.to === "object" && String(n.to.name).toLowerCase() === String(me.name).toLowerCase())
   async function notices(live) {
-    if (!me) {
+    // Asked again every 10 s: the main desk may change this phone's role mid-service, and its notices
+    // (a Timekeeper's reminders) must show without a reload (#411 phone QA). The last answer stays on a failure.
+    if (!me || Date.now() - meAt > 10000) {
       const r = await fetch("/api/v1/me", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
-      me = r && r.ok ? await r.json().catch(() => null) : null
+      const now = r && r.ok ? await r.json().catch(() => null) : null
+      if (now) { me = now; meAt = Date.now() }
     }
     const box = $("notices")
     box.replaceChildren()
