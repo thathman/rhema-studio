@@ -23,7 +23,7 @@ import { useShellStore, type PrepareDesignReturnContext } from "@/studio/shell-s
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import type { BroadcastOutput, BroadcastOutputLanguage, NoSignal, Scene, SceneBox, SceneLayer, SceneLayerKind } from "@/types"
 import { toast } from "sonner"
-import { sceneTakeApprovalBlockReason } from "@/studio/present/scene-take-policy"
+import { sceneReleaseApprovalBlockReason } from "@/studio/present/scene-take-policy"
 
 /**
  * The congregation Scene Composer (ADR 0001, ARCH-002): arrange live sources, colours, pictures and
@@ -36,7 +36,7 @@ export function SceneComposer() {
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
   const service = useServiceStore((s) => s.current)
   const requireApproval = useSettingsStore((s) => s.requireApproval)
-  const sceneTakeBlockReason = sceneTakeApprovalBlockReason(rehearsal, service, requireApproval)
+  const sceneTakeBlockReason = sceneReleaseApprovalBlockReason(rehearsal, service, requireApproval)
   const prepareReturn = useShellStore((s) => s.prepareDesignReturn)
   const obsVideo = useObsStore((s) => (s.status === "connected" ? s.video : null))
   const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation")

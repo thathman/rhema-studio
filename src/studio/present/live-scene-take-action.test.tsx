@@ -42,7 +42,7 @@ const selection: SceneTakeSelection = {
   disabledReason: null,
   details: "Affected output: Sanctuary Main only. Scene: Welcome. Revision: Nov 3, 2026.",
 }
-const seen = { output: 4, scene: 2 }
+const seen = { output: 4, scene: 2, service: null, approved: null }
 
 let element: HTMLDivElement
 let root: Root
@@ -110,13 +110,51 @@ describe("Live's named scene Take", () => {
     expect(button("Take scene Welcome to Sanctuary Main").disabled).toBe(false)
   })
 
-  it("fails closed for an approved service until the host can apply its pinned scene appearance", async () => {
+  it("lets the host-reviewed pinned appearance be taken for an approved service", async () => {
     useServiceStore.setState({ current: { id: "service", title: "Sunday", approved_revision: 3 } as Program })
+    const approvedSeen = { output: 4, scene: 2, service: "service", approved: 3 }
+    api.read.mockResolvedValue({ ok: true, seen: approvedSeen })
+    await render(<LiveSceneTakeAction selection={selection} />)
+
+    expect(button("Take scene Welcome to Sanctuary Main").disabled).toBe(false)
+    expect(element.textContent).toContain("Private Preview")
+    await click(button("Take scene Welcome to Sanctuary Main"))
+    expect(api.take).toHaveBeenCalledExactlyOnceWith("sanctuary-main", "welcome", approvedSeen, expect.any(Function))
+  })
+
+  it("invalidates an accepted result when the service approval changes in flight", async () => {
+    useServiceStore.setState({ current: { id: "service", title: "Sunday", approved_revision: 3 } as Program })
+    api.read.mockResolvedValue({ ok: true, seen: { output: 4, scene: 2, service: "service", approved: 3 } })
+    let currentTake!: () => boolean
+    let finishTake!: (result: Awaited<ReturnType<typeof api.take>>) => void
+    api.take.mockImplementation((_output, _scene, _seen, isCurrent) => {
+      currentTake = isCurrent
+      return new Promise((resolve) => { finishTake = resolve })
+    })
+    await render(<LiveSceneTakeAction selection={selection} />)
+
+    await click(button("Take scene Welcome to Sanctuary Main"))
+    expect(currentTake()).toBe(true)
+    api.read.mockResolvedValueOnce({ ok: true, seen: { output: 5, scene: 3, service: "service", approved: 4 } })
+    await act(async () => useServiceStore.setState({ current: { id: "service", title: "Sunday", approved_revision: 4 } as Program }))
+    expect(currentTake()).toBe(false)
+    await act(async () => finishTake({
+      ok: false,
+      acceptedRevision: 5,
+      refusal: { code: "not-applied", message: "Approval changed while Take was being checked; nothing was applied to Program." },
+    }))
+    expect(button("Take scene Welcome to Sanctuary Main").disabled).toBe(false)
+    expect(api.read).toHaveBeenCalledTimes(2)
+  })
+
+  it("keeps an approved service fail-closed when the host cannot find a complete pinned appearance", async () => {
+    useServiceStore.setState({ current: { id: "service", title: "Sunday", approved_revision: 3 } as Program })
+    api.read.mockResolvedValue({ ok: false, refusal: { code: "not-approved", message: "This scene is not pinned for that output" } })
     await render(<LiveSceneTakeAction selection={selection} />)
 
     expect(button("Take scene Welcome to Sanctuary Main").disabled).toBe(true)
-    expect(element.textContent).toContain("Use its approved running-order Take")
-    expect(api.read).not.toHaveBeenCalled()
+    expect(element.textContent).toContain("This scene is not pinned for that output")
+    expect(button("Retry host review for Welcome on Sanctuary Main")).toBeTruthy()
     expect(api.take).not.toHaveBeenCalled()
   })
 

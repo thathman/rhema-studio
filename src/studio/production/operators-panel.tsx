@@ -35,7 +35,7 @@ import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { openPermissions } from "@/studio/permissions/navigation"
 import { validAspectRatioLabel } from "@/lib/group-take"
 import { EditorLibraryPreview } from "@/studio/production/editor-library-preview"
-import { deskSceneTakeApprovalBlockReason } from "@/studio/present/scene-take-policy"
+import { deskSceneReleaseApprovalBlockReason, deskSceneTakeApprovalBlockReason } from "@/studio/present/scene-take-policy"
 
 // The join form has its own module so Rhema Studio Companion (#209) shows it without the studio's desks.
 export { JoinForm }
@@ -751,6 +751,7 @@ function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveSta
   // A camera desk and an editor change scenes but never put one on a screen.
   const takes = role !== "camera" && role !== "editor"
   const takeBlockReason = deskSceneTakeApprovalBlockReason(live.program.rehearsal, live.service, live.requireApproval ?? false)
+  const releaseBlockReason = deskSceneReleaseApprovalBlockReason(live.program.rehearsal, live.service, live.requireApproval ?? false)
   const edits = editsScenes(role)
   const cameraOnly = role === "camera"
   const open = editing === "new" ? null : live.scenes.find((s) => s.id === editing)
@@ -993,6 +994,7 @@ function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveSta
         <p role={role === "screens" ? "status" : undefined} className="text-muted-foreground">{role === "screens" ? "No congregation output is assigned to this desk. Ask the main host to review output scope in Permissions." : "The host has no congregation output."}</p>
       )}
       {takes && takeBlockReason && <p role="status" className="text-xs text-amber-700">{takeBlockReason}</p>}
+      {takes && output?.sceneId && releaseBlockReason && <p role="status" className="text-xs text-amber-700">{releaseBlockReason}</p>}
       {receiverStatus && <p role={receiver?.error ? "alert" : "status"} aria-live="polite" className="text-xs text-muted-foreground">{receiverStatus}</p>}
       <ul className="flex flex-wrap gap-1.5">
         {live.scenes.map((s) => (
@@ -1005,7 +1007,7 @@ function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveSta
         {live.scenes.length === 0 && <li className="text-muted-foreground">No scenes yet{edits && !cameraOnly ? "" : ": they are made on the host (Live → Production tools → Scenes)"}.</li>}
       </ul>
       <div className="flex flex-wrap gap-2">
-        {takes && output?.sceneId && !groupMode && <Button size="sm" variant="ghost" title={takeBlockReason ?? undefined} disabled={!ok || !!takeBlockReason} onClick={() => void send({ command: "release_scene", value: output.id })}>Back to its own feed</Button>}
+        {takes && output?.sceneId && !groupMode && <Button size="sm" variant="ghost" title={releaseBlockReason ?? undefined} disabled={!ok || !!releaseBlockReason} onClick={() => void send({ command: "release_scene", value: output.id })}>Back to its own feed</Button>}
         {/* An older host says nothing about approvals and takes no scenes from a desk. */}
         {edits && !cameraOnly && editing === null && live.requireApproval !== undefined && <Button size="sm" variant="outline" disabled={!ok} onClick={() => { setSaid(""); setEditing("new") }}>New scene…</Button>}
       </div>

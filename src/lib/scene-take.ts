@@ -141,6 +141,7 @@ export async function takeSceneOnOutput(
     // Accepted, but not applied (the scene or output went in between): the screen is unchanged.
     // The moved revision only makes other desks look again; it never means the output changed.
     return { ok: false, acceptedRevision, refusal: { code: "not-applied", message: "That output or scene changed as you pressed Take; nothing changed on screen. Check Preview and Take again" } }
+  }
   const output = useBroadcastStore.getState().outputs.find((o) => o.id === outputId)!
   if (output.type !== "browser" || !useBroadcastStore.getState().outputStatus[outputId]?.feedActive) {
     return { ok: true, acceptedRevision, receiver: { kind: "none" } }

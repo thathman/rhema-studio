@@ -37,7 +37,8 @@ export function LiveSceneTakeAction({ selection }: {
   const service = useServiceStore((s) => s.current)
   const requireApproval = useSettingsStore((s) => s.requireApproval)
   const approvalBlock = sceneTakeApprovalBlockReason(rehearsal, service, requireApproval)
-  const key = selection ? `${selection.outputId}\u0000${selection.sceneId}\u0000${selection.sceneUpdatedAt}\u0000${rehearsal ? "rehearsal" : "live"}` : ""
+  const serviceContext = `${service?.id ?? "no-service"}\u0000${service?.approved_revision ?? "unapproved"}`
+  const key = selection ? `${selection.outputId}\u0000${selection.sceneId}\u0000${selection.sceneUpdatedAt}\u0000${rehearsal ? "rehearsal" : "live"}\u0000${serviceContext}` : ""
   const outputId = selection?.outputId
   const sceneId = selection?.sceneId
   const revisionLabel = selection?.revisionLabel
@@ -62,7 +63,7 @@ export function LiveSceneTakeAction({ selection }: {
       if (operation.current !== id || currentKey.current !== key || blockRef.current) return
       setView(result.ok
         ? { key, phase: "ready", seen: result.seen, message: `Private Preview · ${revisionLabel} · only ${outputName} is affected.` }
-        : { key, phase: refusalPhase(result.refusal.code), message: result.refusal.message, canReview: result.refusal.code === "unavailable" })
+        : { key, phase: refusalPhase(result.refusal.code), message: result.refusal.message, canReview: result.refusal.code === "unavailable" || result.refusal.code === "not-approved" })
     })
     return () => { if (operation.current === id) operation.current += 1 }
   }, [key, outputId, sceneId, approvalBlock, outputName, revisionLabel, rehearsal])
@@ -85,7 +86,7 @@ export function LiveSceneTakeAction({ selection }: {
     if (operation.current !== id || currentKey.current !== key || blockRef.current) return
     setView(result.ok
       ? { key, phase: "ready", seen: result.seen, message: `Reviewed ${selection.revisionLabel}. Take remains a separate action.` }
-      : { key, phase: refusalPhase(result.refusal.code), message: result.refusal.message, canReview: result.refusal.code === "unavailable" })
+      : { key, phase: refusalPhase(result.refusal.code), message: result.refusal.message, canReview: result.refusal.code === "unavailable" || result.refusal.code === "not-approved" })
   }
 
   const take = async () => {
@@ -103,7 +104,7 @@ export function LiveSceneTakeAction({ selection }: {
     )
     if (operation.current !== id || currentKey.current !== key) return
     if (!result.ok) {
-      setView({ key, phase: refusalPhase(result.refusal.code), message: `${result.refusal.message}${result.refusal.code === "stale" ? ". No scene was applied; review again before another Take." : ""}`, canReview: result.refusal.code === "stale" || result.refusal.code === "unavailable" })
+      setView({ key, phase: refusalPhase(result.refusal.code), message: `${result.refusal.message}${result.refusal.code === "stale" ? ". No scene was applied; review again before another Take." : ""}`, canReview: result.refusal.code === "stale" || result.refusal.code === "not-approved" || result.refusal.code === "not-applied" || result.refusal.code === "unavailable" })
       return
     }
 
@@ -169,4 +170,4 @@ export function LiveSceneTakeAction({ selection }: {
   )
 }
 
-const refusalPhase = (code: "stale" | "not-congregation" | "unavailable" | "invalid" | "not-main-desk"): Phase => code === "stale" ? "stale" : "refused"
+const refusalPhase = (code: "stale" | "not-congregation" | "not-approved" | "unavailable" | "invalid" | "not-main-desk" | "not-applied"): Phase => code === "stale" ? "stale" : "refused"

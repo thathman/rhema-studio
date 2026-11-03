@@ -415,17 +415,21 @@ describe("editing a scene from a Screens desk", () => {
     expect(el.textContent).not.toContain("New scene…")
   })
 
-  it("blocks alternate scene Takes when a service has an approved design revision", async () => {
+  it("sends a selected scene Take to the host for pinned-appearance validation when approved", async () => {
     const approved: LiveStateV1 = {
       ...live,
       service: { id: "svc-1", title: "Sunday", revision: 4, approved_revision: 4 },
     }
     const el = await render("present", approved)
     const take = button(el, "Take Welcome on Projector")
-    expect(take.disabled).toBe(true)
-    expect(el.textContent).toContain("Use its approved running-order Take")
+    expect(take.disabled).toBe(false)
+    expect(el.textContent).not.toContain("Use its approved running-order Take")
     await click(take)
-    expect(sent).toEqual([])
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({ command: "take_scene", value: { output: "main", scene: "welcome" } })
+    const release = button(el, "Back to its own feed")
+    expect(release.disabled).toBe(true)
+    expect(release.title).toContain("approved scene appearance")
   })
 
   it("fails closed when an older host does not report the service approval revision", async () => {

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
+const host = vi.hoisted(() => ({ invoke: vi.fn() }))
+vi.mock("@tauri-apps/api/core", () => ({ invoke: host.invoke }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
 vi.mock("@/lib/scene-renderer", () => ({ drawScene: vi.fn() }))
 
@@ -11,7 +12,7 @@ import { ScenesStrip } from "./scenes-strip"
 import type { SceneTakeSelection } from "@/studio/present/live-scene-take-action"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { SCENE_PRESETS, newScene } from "@/lib/scenes"
-import { MAIN_OUTPUT_ID, defaultNdiSettings, type BroadcastOutput, type QueueItem, type Verse } from "@/types"
+import { MAIN_OUTPUT_ID, defaultNdiSettings, type BroadcastOutput, type QueueItem, type Scene, type Verse } from "@/types"
 import { useBibleStore } from "@/stores/bible-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
@@ -50,6 +51,7 @@ function latestSelection(callback: ReturnType<typeof vi.fn>) {
 
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  host.invoke.mockReset().mockResolvedValue(null)
   take = vi.fn<State["takeScene"]>(original.takeScene)
   release = vi.fn<State["releaseScene"]>(original.releaseScene)
   useBroadcastStore.setState({ outputs: outputs(), scenes: [camera, lyrics], sceneReturn: {}, sources: {}, isLive: false, liveVerse: null, rehearsal: false, takeScene: take, releaseScene: release })
@@ -149,10 +151,42 @@ describe("Present's private scene selection", () => {
     await render()
     const own = button("Sanctuary: back to its own feed")
     expect(own.getAttribute("aria-disabled")).toBe("true")
-    expect(document.getElementById(own.getAttribute("aria-describedby")!)?.textContent).toContain("approved design revision")
+    expect(document.getElementById(own.getAttribute("aria-describedby")!)?.textContent).toContain("approved scene appearance")
     await click(own)
     expect(output(MAIN_OUTPUT_ID).sceneId).toBe(camera.id)
     expect(release).not.toHaveBeenCalled()
+  })
+
+  it("previews the host-pinned scene version and enables Take when Program shows an older version", async () => {
+    const savedV3 = { ...camera, updatedAt: 30, design: { id: "design-1", version: 3 } } as Scene
+    const programV2 = { ...camera, updatedAt: 20, design: { id: "design-1", version: 2 } } as Scene
+    const appearance = { themes: {}, logoUrl: null }
+    useBroadcastStore.setState((state) => ({
+      scenes: [savedV3, lyrics],
+      outputs: state.outputs.map((candidate) => candidate.id === MAIN_OUTPUT_ID
+        ? { ...candidate, sceneId: camera.id, sceneSnapshot: programV2, sceneAppearanceSnapshot: { ...appearance, approved: { programId: "svc", revision: 4, appearanceComplete: true } } }
+        : candidate),
+    }))
+    useServiceStore.setState({ current: { id: "svc", title: "Sunday", revision: 5, approved_revision: 5, service_date: null, created_at: "", updated_at: "", item_count: 0 } })
+    const approvedScene = { ...camera, name: "Pinned Camera", updatedAt: 25, design: { id: "design-1", version: 3 } } as Scene
+    host.invoke.mockImplementation(async (command: string) => {
+      if (command === "live_take_revisions") return { output: 8, scene: 3, service: "svc", approved: 5 }
+      if (command === "scene_take_approval") return { programId: "svc", revision: 5, approvedAt: null, approvedBy: "Pastor", scene: approvedScene, outputs: { [MAIN_OUTPUT_ID]: appearance } }
+      return null
+    })
+    const selection = vi.fn<(value: SceneTakeSelection | null) => void>()
+    await render(MAIN_OUTPUT_ID, selection)
+    await click(sceneButton(camera.name))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+
+    const pinnedPreview = element.querySelector<HTMLCanvasElement>('canvas[data-scene-preview-id="cam"]')
+    expect(pinnedPreview?.dataset.scenePreviewUpdatedAt).toBe("25")
+    expect(pinnedPreview?.dataset.scenePreviewDesignVersion).toBe("3")
+    expect(element.textContent).toContain("Private Preview · approved service revision 5")
+    expect(latestSelection(selection)?.disabledReason).toBeNull()
+    expect(output(MAIN_OUTPUT_ID).sceneSnapshot?.updatedAt).toBe(20)
+    expect(take).not.toHaveBeenCalled()
+    expect(host.invoke).toHaveBeenCalledWith("scene_take_approval", { scene: camera.id, outputs: [MAIN_OUTPUT_ID] })
   })
 
   it("folds scene details but keeps the Preview selection tied to the chosen output", async () => {

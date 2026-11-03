@@ -1,10 +1,6 @@
 import type { Program } from "@/types"
 
-/**
- * The local scene bridge currently applies the mutable saved scene. It is safe to offer only
- * when no approved service snapshot must be applied. Keep this guard in one place for every
- * Live scene entry point; the host remains authoritative for the actual command.
- */
+/** The backend checks both service approval and the pinned scene/output appearance on every Take. */
 export function sceneTakeApprovalBlockReason(
   rehearsal: boolean,
   current: Pick<Program, "approved_revision"> | null,
@@ -12,12 +8,24 @@ export function sceneTakeApprovalBlockReason(
 ): string | null {
   if (rehearsal) return null
   if (!current) return null
-  if (current.approved_revision !== null && current.approved_revision !== undefined) {
-    return "This service has an approved design revision. Use its approved running-order Take; manual scene Take stays unavailable until the host can apply the pinned scene and captured output appearance."
-  }
   if (requireApproval && (current.approved_revision === null || current.approved_revision === undefined)) {
     return "Approve this service before taking a scene to Program."
   }
+  return null
+}
+
+/** Releasing a scene still uses a local mutable-state action, so it cannot change an approved Program. */
+export function sceneReleaseApprovalBlockReason(
+  rehearsal: boolean,
+  current: Pick<Program, "approved_revision"> | null,
+  requireApproval: boolean,
+): string | null {
+  if (rehearsal) return null
+  if (!current) return null
+  if (current.approved_revision !== null && current.approved_revision !== undefined) {
+    return "This service has an approved scene appearance. Use a host-checked Take to change it."
+  }
+  if (requireApproval) return "Approve this service before changing a scene on Program."
   return null
 }
 
@@ -32,4 +40,17 @@ export function deskSceneTakeApprovalBlockReason(
     return "The host has not shared this service's approval status. Refresh the desk before taking a scene."
   }
   return sceneTakeApprovalBlockReason(rehearsal, current, requireApproval)
+}
+
+/** Connected desks cannot use the local release command to bypass an approved scene appearance. */
+export function deskSceneReleaseApprovalBlockReason(
+  rehearsal: boolean,
+  current: Pick<Program, "approved_revision"> | null,
+  requireApproval: boolean,
+): string | null {
+  if (rehearsal || !current) return null
+  if (current.approved_revision === undefined) {
+    return "The host has not shared this service's approval status. Refresh the desk before changing its scene."
+  }
+  return sceneReleaseApprovalBlockReason(rehearsal, current, requireApproval)
 }
