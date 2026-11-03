@@ -1,0 +1,23 @@
+/* Geist has no ṣ or Ṣ (U+1E62, U+1E63), which Yorùbá needs; its other Yorùbá letters (ẹ ọ, tone
+   marks) are in its own files. Inter, bundled too and close in design, draws those two inside the
+   "Geist Variable" family, so every Geist look shows Yorùbá in one face, never a system fallback.
+   Loaded after the fontsource imports (Geist's upright and italic faces), so these are tried first
+   for that range. An italic face here needs Geist's own italic faces loaded too, or italic Geist
+   would lose the letters it synthesised from the upright ones. */
+@font-face {
+  font-family: "Geist Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../node_modules/@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+1E62-1E63;
+}
+
+@font-face {
+  font-family: "Geist Variable";
+  font-style: italic;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../node_modules/@fontsource-variable/inter/files/inter-latin-ext-wght-italic.woff2") format("woff2-variations");
+  unicode-range: U+1E62-1E63;
+}
