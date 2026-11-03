@@ -300,7 +300,7 @@ function LiveConsoleSurface({
       {/* Wide windows use the workspace grid; 1024–1200 keeps two readable panes, while smaller widths stack. */}
       <div className="contents max-[1200px]:row-span-3 max-[1200px]:grid max-[1200px]:grid-cols-1 min-[1024px]:max-[1200px]:grid-cols-2 max-[1200px]:min-h-0 max-[1200px]:gap-2 max-[1200px]:overflow-y-auto max-[1200px]:pb-40">
       <div className="min-h-0 overflow-hidden rounded-xl max-[1200px]:min-h-[18rem] max-[1200px]:shrink-0 [&>div]:h-full">
-        <PreviewPanel outputLanguageId={outputId} onOutputLanguageIdChange={onOutputChange} />
+        <PreviewPanel outputLanguageId={outputId} onOutputLanguageIdChange={onOutputChange} onEmptyPreviewAction={focusQuickFind} />
       </div>
       {/* Live, with the congregation scenes under it: a scene Take changes a screen's layout, not what is live.
           Opening the scenes on a short window scrolls this column instead of covering the transport. */}
