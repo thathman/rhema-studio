@@ -105,6 +105,22 @@ public final class ReadyCheck {
                 java.util.Arrays.equals(drewThenGone, new long[] {1_000, 2_000, 4_000, 8_000}));
         check("deaths minutes apart each wait a second", d.rendererGone(u + Ready.GONE_RUN_MS) == 1_000);
 
+        // The network comes back (#213): load at once, not after the backoff, but not in a loop.
+        Ready n = new Ready();
+        n.started();
+        check("a network at start (no loss before it) loads nothing extra", !n.networkBack(100_000));
+        n.networkLost();
+        check("back after a loss, nothing drawn: load now", n.networkBack(100_000));
+        check("reported twice: once", !n.networkBack(100_001));
+        n.networkLost();
+        check("flapping within NET_BACK_GAP_MS: no second load", !n.networkBack(100_000 + Ready.NET_BACK_GAP_MS - 1));
+        n.networkLost();
+        check("after the gap: load again", n.networkBack(100_000 + Ready.NET_BACK_GAP_MS * 2));
+        n.drew();
+        n.networkLost();
+        check("a drawn page reconnects by itself: no load", !n.networkBack(200_000));
+        check("the first loss at boot (elapsedRealtime 0) still counts", networkAtZero());
+
         // What counts as this screen's acknowledgement.
         check("the page's acknowledgement", Guard.ackOf(LINK, "POST", ACK));
         check("an encoded feed id, as the page encodes it", Guard.ackOf("https://192.168.3.10:8081/feed/a%20b?k=x", "POST", "https://192.168.3.10:8081/api/v1/feed/a%20b/ack?k=x"));
@@ -128,6 +144,12 @@ public final class ReadyCheck {
             System.exit(1);
         }
         System.out.println("ReadyCheck: all checks passed");
+    }
+
+    private static boolean networkAtZero() {
+        Ready z = new Ready();
+        z.networkLost();
+        return z.networkBack(0);
     }
 
     private static void check(String what, boolean ok) {

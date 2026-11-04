@@ -9,6 +9,8 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.net.Uri;
 import android.net.http.SslCertificate;
 import android.net.http.SslError;
@@ -188,6 +190,7 @@ public class MainActivity extends Activity {
         server = new ShowServer(PORT, this);
         server.start();
         advertise();
+        watchNetwork();
         if (shown() != null) {
             // The last picture of this feed, until Rhema Studio answers (1.5).
             showStill();
@@ -319,6 +322,43 @@ public class MainActivity extends Activity {
         showStill();
         // A refused certificate keeps its reason (the new page is checked against the pin again).
         retry(certRefused ? NOT_THAT_RHEMA : "this screen's page stopped (the TV may be short of memory); starting it again", wait);
+    }
+
+    private ConnectivityManager.NetworkCallback net;
+
+    /**
+     * The network coming back loads a page that is not showing at once (#213), instead of after the
+     * rest of its reload wait (up to 75 s on a stale picture after the Wi-Fi returns). Ready decides.
+     */
+    private void watchNetwork() {
+        net = new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onLost(Network n) {
+                ui.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        ready.networkLost();
+                    }
+                });
+            }
+
+            @Override
+            public void onAvailable(Network n) {
+                ui.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (shown() == null || REVOKED.equals(problem) || !ready.networkBack(SystemClock.elapsedRealtime())) return;
+                        ui.removeCallbacks(reload);
+                        reload.run();
+                    }
+                });
+            }
+        };
+        try {
+            ((ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE)).registerDefaultNetworkCallback(net);
+        } catch (RuntimeException e) {
+            net = null;
+        }
     }
 
     private String shown() {
@@ -697,6 +737,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (net != null) {
+            try { ((ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE)).unregisterNetworkCallback(net); } catch (RuntimeException ignored) { }
+            net = null;
+        }
         if (advert != null) {
             try { nsd.unregisterService(advert); } catch (RuntimeException ignored) { }
             advert = null;

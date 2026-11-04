@@ -75,6 +75,30 @@ final class Ready {
         return Math.min(MAX_WAIT_MS, 1_000L << Math.min(gone - 1, 6));
     }
 
+    /** The soonest the network coming back loads the page again after the last time it did. */
+    static final long NET_BACK_GAP_MS = 5_000;
+    private boolean netLost;
+    private long netBackAt = -NET_BACK_GAP_MS;
+
+    /** The TV lost its network. */
+    void networkLost() {
+        netLost = true;
+    }
+
+    /**
+     * A network came back at now (elapsedRealtime): whether to load the page at once instead of
+     * waiting out the reload backoff (up to 75 s). Only after a loss (a network is also reported
+     * when the app starts), only while nothing is drawn (a drawn page reconnects by itself), and
+     * not more often than NET_BACK_GAP_MS (Wi-Fi flapping).
+     */
+    boolean networkBack(long now) {
+        if (!netLost) return false;
+        netLost = false;
+        if (drawn || now - netBackAt < NET_BACK_GAP_MS) return false;
+        netBackAt = now;
+        return true;
+    }
+
     /** A revoked or replaced link: nothing carries over to the next one. */
     void forget() {
         drawn = false;
