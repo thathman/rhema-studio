@@ -25,7 +25,7 @@ const presentCalls = vi.hoisted(() => {
 })
 
 vi.mock("@/studio/present-actions", () => ({ presentActions: presentCalls }))
-vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, outputLanguageId, onOutputLanguageIdChange, onEmptyPreviewAction }: { compact?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void; onEmptyPreviewAction?: () => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"} data-empty-preview-action={onEmptyPreviewAction ? "true" : "false"}>Preview stays private<label>Output<select aria-label="Named congregation output for Preview language and scene Take" value={outputLanguageId ?? ""} onChange={(event) => onOutputLanguageIdChange?.(event.currentTarget.value)}><option value="english-output">English screen</option><option value="yoruba-output">Yoruba screen</option></select></label></section> }))
+vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: ({ compact, hideOutputPicker, outputLanguageId, onOutputLanguageIdChange, onEmptyPreviewAction }: { compact?: boolean; hideOutputPicker?: boolean; outputLanguageId?: string | null; onOutputLanguageIdChange?: (id: string) => void; onEmptyPreviewAction?: () => void }) => <section aria-label="Preview" data-compact={compact ? "true" : "false"} data-preview-output={outputLanguageId ?? "none"} data-empty-preview-action={onEmptyPreviewAction ? "true" : "false"}>Preview stays private{!hideOutputPicker && <label>Output<select aria-label="Named congregation output for Preview language and scene Take" value={outputLanguageId ?? ""} onChange={(event) => onOutputLanguageIdChange?.(event.currentTarget.value)}><option value="english-output">English screen</option><option value="yoruba-output">Yoruba screen</option></select></label>}</section> }))
 vi.mock("@/components/panels/live-output-panel", () => ({ LiveOutputPanel: ({ outputId, sceneTakeAction }: { outputId?: string | null; sceneTakeAction?: React.ReactNode }) => <section data-program-output={outputId ?? "none"}>Program{sceneTakeAction}</section> }))
 vi.mock("@/components/panels/transcript-panel", () => ({ TranscriptPanel: () => <div data-testid="transcript-panel">Transcript</div> }))
 vi.mock("@/components/panels/detections-panel", () => ({ DetectionsPanel: () => <div data-testid="detections-panel">Detections</div> }))
@@ -57,6 +57,8 @@ import { createRoot, type Root } from "react-dom/client"
 import { useBibleStore, useBroadcastStore, useDetectionStore, useQueueStore, useTranscriptStore } from "@/stores"
 import { useAuxTimers } from "@/stores/aux-timers-store"
 import { useShellStore } from "@/studio/shell-store"
+import { useJoin } from "@/stores/join-store"
+import { useApprovalRequestsStore, type ApprovalRequest } from "@/studio/permissions/approval-requests-store"
 import { openProductionTab, useProductionTab } from "@/studio/production/production-tab"
 import { useServiceStore } from "@/stores/service-store"
 import type { Program, QueueItem, TranscriptSegment, Verse } from "@/types"
@@ -114,6 +116,24 @@ const initialQueue = useQueueStore.getState()
 const initialTranscript = useTranscriptStore.getState()
 const initialDetections = useDetectionStore.getState()
 const initialService = useServiceStore.getState()
+const initialJoin = useJoin.getState()
+const initialApprovalRequests = useApprovalRequestsStore.getState()
+
+const pendingApprovalRequest: ApprovalRequest = {
+  id: "request-1",
+  kind: "scene_save",
+  targetId: "scene-1",
+  baseRevision: 3,
+  requester: { id: "operator-1", name: "Screens operator" },
+  payload: {},
+  reason: null,
+  state: "submitted",
+  createdAt: "2026-11-03T10:00:00Z",
+  expiresAt: "2026-11-03T11:00:00Z",
+  decidedBy: null,
+  decidedAt: null,
+  decisionNote: null,
+}
 
 let element: HTMLDivElement
 let root: Root
@@ -140,6 +160,8 @@ beforeEach(() => {
   useTranscriptStore.setState({ segments: [transcript], isTranscribing: true })
   useDetectionStore.setState({ detections: [{ verse_ref: "John 3:16", verse_text: verse.text, book_name: "John", book_number: 43, chapter: 3, verse: 16, confidence: 1, source: "direct", auto_queued: false, transcript_snippet: transcript.text, is_chapter_only: false }] })
   useAuxTimers.setState({ timers: [] })
+  useJoin.setState({ status: "off" })
+  useApprovalRequestsStore.setState({ requests: [], hydrated: true, error: null })
 })
 
 afterEach(() => {
@@ -153,6 +175,8 @@ afterEach(() => {
   useDetectionStore.setState(initialDetections)
   useAuxTimers.setState({ timers: [] })
   useServiceStore.setState(initialService)
+  useJoin.setState(initialJoin)
+  useApprovalRequestsStore.setState(initialApprovalRequests)
   useProductionTab.setState(useProductionTab.getInitialState())
   vi.restoreAllMocks()
 })
@@ -182,6 +206,7 @@ describe("Present's unified Live console", () => {
     expect(recovery.textContent).toContain("No service open")
     expect(recovery.querySelector('p[title*="Plan changes never update Program"]')).not.toBeNull()
     expect(recovery.textContent).toContain("Take waits for a Preview item")
+    expect(element.querySelector('[data-testid="live-activity-strip"] [data-testid="host-notices-trigger"]')?.textContent).toContain("Comms")
     expect(element.querySelector('[data-tour="quick-find"]')).toBeNull()
     expect(element.querySelector('[data-studio-live]')?.textContent).toContain("Program")
     expect(element.querySelector('[data-tour="present-rundown"]')?.className).toContain("row-span-1")
@@ -253,6 +278,7 @@ describe("Present's unified Live console", () => {
     const preview = element.querySelector<HTMLElement>('[aria-label="Preview"]')!
     const paneLayout = preview.parentElement!.parentElement!
     const program = element.querySelector<HTMLElement>('[data-studio-live]')!
+    const programColumn = program.parentElement!
     expect(preview.dataset.compact).toBe("false")
     expect(preview.parentElement?.className).toContain("max-[1200px]:min-h-[18rem]")
     expect(preview.parentElement?.className).toContain("max-[1200px]:shrink-0")
@@ -260,11 +286,18 @@ describe("Present's unified Live console", () => {
     expect(paneLayout.className).toContain("min-[1024px]:max-[1200px]:grid-cols-2")
     expect(program.textContent).toContain("Program")
     expect(program.className).toContain("min-h-[18rem]")
+    expect(program.className).toContain("max-[1200px]:flex-none")
+    expect(programColumn.className).toContain("max-[1200px]:h-fit")
+    expect(programColumn.className).not.toContain("max-[1200px]:overflow-visible")
     expect(element.querySelectorAll('[aria-label="Preview"]')).toHaveLength(1)
     const transport = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Presentation controls"]')!
-    expect(transport.className).toContain("max-[1200px]:sticky")
-    expect(transport.className).toContain("max-[1200px]:bottom-0")
-    expect(transport.parentElement?.className).toContain("max-[1200px]:pb-40")
+    expect(transport.className).not.toContain("sticky")
+    expect(transport.className).not.toContain("bottom-0")
+    expect(transport.className).toContain("max-[1200px]:shrink-0")
+    expect(transport.parentElement?.className).toContain("max-[1200px]:overflow-y-auto")
+    expect(transport.parentElement?.className).not.toContain("pb-40")
+    expect(transport.parentElement?.parentElement?.parentElement?.className).toContain("[@media(max-height:860px)]:gap-0.5")
+    expect(transport.parentElement?.parentElement?.parentElement?.className).toContain("[@media(max-height:860px)]:pt-1")
   })
 
   it("keeps a zero-moment event visible instead of treating its plan as no service", async () => {
@@ -323,15 +356,23 @@ describe("Present's unified Live console", () => {
 
     const preview = element.querySelector<HTMLElement>('[aria-label="Preview"]')!
     expect(preview.dataset.previewOutput).toBe("english-output")
+    const target = element.querySelector<HTMLSelectElement>('[aria-label="Target congregation output for Live Preview and Program"]')!
+    expect(target.parentElement).not.toBe(preview)
+    expect(target.getAttribute("aria-describedby")).toBe("live-output-target-scope")
+    expect(element.querySelector<HTMLElement>("#live-output-target-scope")?.textContent).toBe("Target selects the Preview language and Program view, and scopes scene Take. Source Take follows its subscriptions.")
+    expect([...target.options].map((option) => option.textContent)).toEqual([
+      "English screen · First language",
+      "Yoruba screen · Second language",
+    ])
     await act(async () => {
-      const selector = preview.querySelector<HTMLSelectElement>('[aria-label="Named congregation output for Preview language and scene Take"]')!
-      selector.value = "yoruba-output"
-      selector.dispatchEvent(new Event("change", { bubbles: true }))
+      target.value = "yoruba-output"
+      target.dispatchEvent(new Event("change", { bubbles: true }))
     })
     expect(preview.dataset.previewOutput).toBe("yoruba-output")
     expect(element.querySelector<HTMLElement>("[data-program-output]")?.dataset.programOutput).toBe("yoruba-output")
     expect(element.querySelector<HTMLElement>("[data-testid=scene-target]")?.dataset.sceneOutput).toBe("yoruba-output")
-    expect(element.querySelectorAll('[aria-label="Named congregation output for Preview language and scene Take"]')).toHaveLength(1)
+    expect(element.querySelectorAll('[aria-label="Target congregation output for Live Preview and Program"]')).toHaveLength(1)
+    expect(preview.querySelector("select")).toBeNull()
     await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Preview scene for yoruba-output"]')!.click())
     expect(element.querySelector('[data-testid="named-scene-take"]')?.textContent).toBe("Take Welcome to Yoruba screen")
     expect(element.querySelectorAll('[data-testid="named-scene-take"]')).toHaveLength(1)
@@ -342,7 +383,7 @@ describe("Present's unified Live console", () => {
     expect(useBroadcastStore.getState().liveVerse).toEqual(program)
 
     await act(async () => {
-      const selector = preview.querySelector<HTMLSelectElement>('[aria-label="Named congregation output for Preview language and scene Take"]')!
+      const selector = element.querySelector<HTMLSelectElement>('[aria-label="Target congregation output for Live Preview and Program"]')!
       selector.value = "english-output"
       selector.dispatchEvent(new Event("change", { bubbles: true }))
     })
@@ -374,6 +415,10 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[aria-label="Rhema recording dock"]')?.textContent).toContain("Rhema recording controls")
     expect(element.querySelector('[role="toolbar"][aria-label="Presentation controls"] button')?.textContent).toBe("Take source live")
     const quickActions = element.querySelector<HTMLElement>('[data-testid="quick-screen-actions"]')!
+    const quickScreenGroup = element.querySelector<HTMLElement>('[role="group"][aria-label="Quick screens"]')!
+    const quickScreenScope = element.querySelector<HTMLElement>("#live-quick-screen-scope")
+    expect(quickScreenGroup.getAttribute("aria-describedby")).toBe("live-quick-screen-scope")
+    expect(quickScreenScope?.textContent).toBe("Target selects Preview language and the Program view shown here, and scopes scene Take. Quick screens and Source Take follow output routing; Black and Logo reach every feed.")
     expect(quickActions.className).toContain("max-[1200px]:grid-cols-4")
     expect(quickActions.className).toContain("max-[800px]:grid-cols-2")
     expect(quickActions.className).toContain("overflow-x-hidden")
@@ -511,5 +556,71 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[aria-label="Preview"]')?.textContent).toContain("stays private")
     expect(element.querySelector("[data-studio-live]")?.textContent).toContain("Program")
     expect([...element.querySelectorAll('[role="toolbar"][aria-label="Presentation controls"] button')].filter((button) => button.textContent === "Take source live")).toHaveLength(1)
+  })
+
+  it("surfaces pending host requests in Live and opens the existing Permissions route", async () => {
+    useApprovalRequestsStore.setState({ requests: [], hydrated: false, error: null })
+    await renderWorkspace()
+    expect(element.querySelector('[aria-label="Open 1 pending approval request in Permissions"]')).toBeNull()
+
+    await act(async () => useApprovalRequestsStore.setState({
+      requests: [pendingApprovalRequest, { ...pendingApprovalRequest, id: "already-approved", state: "approved" }],
+      hydrated: true,
+      error: null,
+    }))
+
+    const requestCue = element.querySelector<HTMLButtonElement>('[aria-label="Open 1 pending approval request in Permissions"]')
+    expect(requestCue?.textContent).toContain("Requests")
+    expect(element.querySelector('[data-testid="live-activity-strip"]')?.contains(requestCue ?? null)).toBe(true)
+    expect(element.querySelector('[aria-label="Open 2 pending approval requests in Permissions"]')).toBeNull()
+    await act(async () => requestCue?.click())
+    expect(useShellStore.getState().goRequest).toBe("permissions")
+  })
+
+  it("shows an actionable unknown-status cue instead of implying the host inbox is empty", async () => {
+    useApprovalRequestsStore.setState({ requests: [], hydrated: true, error: "Host unavailable" })
+    await renderWorkspace()
+
+    const unavailableCue = element.querySelector<HTMLButtonElement>('[aria-label="Open Permissions because approval status is unavailable"]')
+    expect(unavailableCue?.title).toContain("pending count is unknown")
+    await act(async () => unavailableCue?.click())
+    expect(useShellStore.getState().goRequest).toBe("permissions")
+  })
+
+  it("does not expose the host approval count on a joined desk", async () => {
+    useJoin.setState({ status: "connected" })
+    useApprovalRequestsStore.setState({ requests: [pendingApprovalRequest], hydrated: true, error: null })
+    await renderWorkspace()
+
+    expect(element.querySelector('[aria-label="Open 1 pending approval request in Permissions"]')).toBeNull()
+    expect(element.textContent).not.toContain("Requests unavailable")
+  })
+
+  it("uses Live toolbar arrow keys to move focus without changing Program", async () => {
+    await renderWorkspace()
+
+    const toolbar = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Live tools"]')!
+    const findAndListen = toolbar.querySelector<HTMLButtonElement>('[data-tour="live-tools"]')!
+    const liveTools = toolbar.querySelector<HTMLButtonElement>('[aria-label="Toggle Live tools"]')!
+    await act(async () => findAndListen.focus())
+
+    expect(findAndListen.tabIndex).toBe(0)
+    expect(liveTools.tabIndex).toBe(-1)
+
+    const right = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })
+    await act(async () => findAndListen.dispatchEvent(right))
+    expect(document.activeElement).toBe(liveTools)
+    expect(right.defaultPrevented).toBe(true)
+    expect(presentCalls.next).not.toHaveBeenCalled()
+
+    const left = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true })
+    await act(async () => liveTools.dispatchEvent(left))
+    expect(document.activeElement).toBe(findAndListen)
+    expect(left.defaultPrevented).toBe(true)
+    expect(presentCalls.prev).not.toHaveBeenCalled()
+
+    const tab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })
+    await act(async () => findAndListen.dispatchEvent(tab))
+    expect(tab.defaultPrevented).toBe(false)
   })
 })

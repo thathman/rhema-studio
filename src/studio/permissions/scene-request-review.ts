@@ -1,6 +1,7 @@
 import { takeSteps } from "@/lib/item-intent"
 import { projectRunOfShowEvents, type OutlineHeader } from "@/lib/run-of-show"
 import { mergeDeskScene } from "@/lib/desk-scenes"
+import { normalizeGradient } from "@/lib/scene-gradient"
 import type { QueueItem, Scene, SceneLayer } from "@/types"
 import type { SceneApprovalRecovery } from "@/stores/broadcast-store"
 import type { ApprovalRequest } from "./approval-requests-store"
@@ -38,7 +39,7 @@ function hasHostMedia(layer: SceneLayer | undefined): boolean {
   return Boolean(layer && (layer.mediaId || layer.mediaFile || layer.imageUrl || layer.videoUrl))
 }
 
-function normalizeRequestedScene(request: ApprovalRequest, currentScene: Scene | undefined): { scene: Scene | null; error: string | null } {
+function normalizeRequestedScene(request: ApprovalRequest, currentScene: Scene | undefined): { scene: Scene | null; error: string | null; unappliedChanges?: string[] } {
   const rawScene = plainRecord(plainRecord(request.payload)?.scene)
   if (!rawScene) return { scene: null, error: "The request does not include a scene that can be reviewed." }
   if (rawScene.id !== request.targetId) return { scene: null, error: "The requested scene ID does not match the approval target." }
@@ -89,13 +90,52 @@ function normalizeRequestedScene(request: ApprovalRequest, currentScene: Scene |
   if (!scene || scene.id !== request.targetId || scene.layers.length !== rawScene.layers.length) {
     return { scene: null, error: "One or more requested layers cannot be reproduced on this host. Ask the operator to submit a complete scene." }
   }
-  return { scene, error: null }
+  const unappliedChanges = requestedGradientChanges(rawScene, currentScene)
+  const error = unappliedChanges.length
+    ? "This request changes gradient paint that cannot be applied from a joined desk. Review the listed changes and ask the operator to submit a compatible request."
+    : null
+  return { scene, error, unappliedChanges }
 }
 
 function stable(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stable)
   if (!value || typeof value !== "object") return value
   return Object.fromEntries(Object.entries(value as PlainRecord).sort(([a], [b]) => a.localeCompare(b)).map(([key, nested]) => [key, stable(nested)]))
+}
+
+function gradientReviewValue(value: unknown): string {
+  if (value === undefined || value === null) return "none"
+  const gradient = normalizeGradient(value)
+  if (!gradient) return "invalid gradient"
+  const stops = gradient.stops.map((stop) => `${stop.color} ${Math.round(stop.offset * 1000) / 10}%`).join(" → ")
+  return `${gradient.angle}° · ${stops}`
+}
+
+function sameGradient(a: unknown, b: unknown): boolean {
+  if (a === undefined || a === null) return b === undefined || b === null
+  if (b === undefined || b === null) return false
+  const first = normalizeGradient(a)
+  const second = normalizeGradient(b)
+  return first && second ? JSON.stringify(first) === JSON.stringify(second) : a === b
+}
+
+function requestedGradientChanges(requested: PlainRecord, current: Scene | undefined): string[] {
+  const changes: string[] = []
+  const backgroundGradient = requested.backgroundGradient
+  if (backgroundGradient !== undefined && !sameGradient(backgroundGradient, current?.backgroundGradient)) {
+    changes.push(`Background gradient: ${gradientReviewValue(current?.backgroundGradient)} → ${gradientReviewValue(backgroundGradient)} (not applied from a joined desk).`)
+  }
+
+  const previousLayers = new Map(current?.layers.map((layer) => [layer.id, layer]) ?? [])
+  if (Array.isArray(requested.layers)) for (const value of requested.layers) {
+    const layer = plainRecord(value)
+    if (!layer || layer.gradient === undefined) continue
+    const previous = typeof layer.id === "string" ? previousLayers.get(layer.id) : undefined
+    if (sameGradient(layer.gradient, previous?.gradient)) continue
+    const name = typeof layer.name === "string" && layer.name.trim() ? layer.name.trim().slice(0, 80) : "Unnamed layer"
+    changes.push(`${name} gradient: ${gradientReviewValue(previous?.gradient)} → ${gradientReviewValue(layer.gradient)} (not applied from a joined desk).`)
+  }
+  return changes
 }
 
 function sceneContent(scene: Scene): unknown {
@@ -121,7 +161,9 @@ export function sceneLayerReviewSummary(layer: SceneLayer, cameraLabelForUrl?: C
     if (layer.textAlign) details.push(`align ${layer.textAlign}`)
     if (layer.underline) details.push("underlined")
   }
-  if (layer.kind === "color" || layer.kind === "ellipse") details.push(`color ${reviewedValue("color", layer.color)}`)
+  if (layer.kind === "color" || layer.kind === "ellipse") {
+    details.push(layer.gradient ? `gradient ${gradientReviewValue(layer.gradient)}` : `color ${reviewedValue("color", layer.color)}`)
+  }
   if (layer.kind === "feed") {
     details.push(layer.shows?.length ? `shows ${reviewedValue("shows", layer.shows)}` : "no content sources selected")
     if (layer.language) details.push(`language ${layer.language}`)
@@ -146,7 +188,7 @@ export function sceneLayerReviewSummary(layer: SceneLayer, cameraLabelForUrl?: C
 
 const REVIEW_LAYER_FIELDS = [
   ["name", "Name"], ["kind", "Type"], ["text", "Text"], ["box", "Position and size"], ["opacity", "Opacity"],
-  ["visible", "Visibility"], ["color", "Color"], ["textColor", "Text color"], ["fontFamily", "Font"],
+  ["visible", "Visibility"], ["color", "Color"], ["gradient", "Gradient"], ["textColor", "Text color"], ["fontFamily", "Font"],
   ["fontSize", "Font size"], ["fontWeight", "Weight"], ["fontStyle", "Style"], ["textAlign", "Text alignment"],
   ["lineHeight", "Line spacing"], ["underline", "Underline"], ["crop", "Crop"], ["shows", "Content types"],
   ["language", "Language"], ["cameraUrl", "Camera source"], ["cameraFallback", "Camera fallback"], ["noSignal", "No-signal behavior"],
@@ -156,6 +198,7 @@ const REVIEW_LAYER_FIELDS = [
 
 function reviewedValue(key: string, value: unknown, cameraLabelForUrl?: CameraLabel): string {
   if (value === undefined || value === null) return "unset"
+  if (key === "gradient") return gradientReviewValue(value)
   if (key === "cameraUrl") return typeof value === "string" && value ? cameraLabelForUrl?.(value) ?? "configured source · name unavailable" : "not bound"
   if (key === "box" || key === "crop") {
     const record = plainRecord(value)
@@ -186,6 +229,9 @@ function sceneChanges(before: Scene | null, after: Scene | null, kind: string, c
   const changes: string[] = []
   if (before.name !== after.name) changes.push(`Name: “${before.name}” → “${after.name}”.`)
   if (before.background !== after.background) changes.push(`Background: ${before.background} → ${after.background}.`)
+  if (JSON.stringify(stable(before.backgroundGradient)) !== JSON.stringify(stable(after.backgroundGradient))) {
+    changes.push(`Background gradient: ${gradientReviewValue(before.backgroundGradient)} → ${gradientReviewValue(after.backgroundGradient)}.`)
+  }
   if ((before.fadeMs ?? 0) !== (after.fadeMs ?? 0)) changes.push(`Transition: ${before.fadeMs ?? 0} ms → ${after.fadeMs ?? 0} ms.`)
 
   const beforeById = new Map(before.layers.map((layer) => [layer.id, layer]))
@@ -238,9 +284,11 @@ export function sceneRequestReviewModel(
   let blockReason: string | null = null
   let applyBlockReason: string | null = null
   let reviewNotice: string | null = null
+  let unappliedAppearanceChanges: string[] = []
   if (request.kind === "scene_save") {
     const proposal = normalizeRequestedScene(request, sceneMergeBase ?? undefined)
     requestedScene = proposal.scene
+    unappliedAppearanceChanges = proposal.unappliedChanges ?? []
     blockReason = proposal.error
     applyBlockReason = proposal.error
     if (!applied && !currentScene && request.baseRevision !== null) {
@@ -274,9 +322,10 @@ export function sceneRequestReviewModel(
   const baseRevisionLabel = request.baseRevision === null
     ? request.kind === "scene_save" && !currentScene ? "New scene · no prior host revision" : "Host base revision missing"
     : `Submitted against host revision ${request.baseRevision}`
-  const changes = request.kind === "scene_save" && !beforeScene && request.baseRevision !== null
+  const sceneDiff = request.kind === "scene_save" && !beforeScene && request.baseRevision !== null
     ? ["No trustworthy before snapshot is available for this host revision."]
     : sceneChanges(beforeScene, request.kind === "scene_delete" ? null : requestedScene, request.kind, cameraLabelForUrl)
+  const changes = [...sceneDiff, ...unappliedAppearanceChanges]
 
   return { beforeScene, beforeStatus, beforeLabel, requestedScene, requestedLabel, baseRevisionLabel, blockReason, applyBlockReason, reviewNotice, changes }
 }

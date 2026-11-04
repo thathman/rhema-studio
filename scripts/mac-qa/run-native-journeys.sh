@@ -115,11 +115,17 @@ fi
 capture_live_state() {
   local name="$1"
   local scenario="$2"
-  local screenshot="$QA_SCRATCH/artifacts/live-${name}.png"
-  mkdir -p "$QA_SCRATCH/artifacts"
   "$ROOT/scripts/mac-qa/qa.py" main "live-${name}" "$ROOT/scripts/mac-qa/${scenario}" 60 > "$QA_SCRATCH/live-${name}.json"
+  mkdir -p "$QA_SCRATCH/artifacts"
   cp "$QA_RUN/out/live-${name}.json" "$QA_SCRATCH/artifacts/live-${name}-state.json"
   sleep 1
+  capture_live_window "live-${name}"
+}
+
+capture_live_window() {
+  local name="$1"
+  local screenshot="$QA_SCRATCH/artifacts/${name}.png"
+  mkdir -p "$QA_SCRATCH/artifacts"
   local window_id
   window_id="$(swift "$ROOT/scripts/mac-qa/rhema-window-id.swift")"
   screencapture -x -l "$window_id" "$screenshot"
@@ -139,10 +145,141 @@ print(f"Captured {path.name}: {width}x{height}, {len(data)} bytes")
 PY
 }
 
+resize_live_window() {
+  local name="$1"
+  local width="$2"
+  local height="$3"
+  if ! "$ROOT/scripts/mac-qa/qa.py" main "$name" - 20 > "$QA_SCRATCH/$name.json" <<EOF
+const label = window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label
+if (!label) throw new Error("The current native window label is unavailable")
+const fullscreen = () => window.__TAURI_INTERNALS__.invoke("plugin:window|is_fullscreen", { label })
+const maximized = () => window.__TAURI_INTERNALS__.invoke("plugin:window|is_maximized", { label })
+const startedFullscreen = await fullscreen()
+const startedMaximized = await maximized()
+await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: false })
+if (startedFullscreen || startedMaximized) {
+  let stableWindowSamples = 0
+  for (let attempt = 0; stableWindowSamples < 10 && attempt < 60; attempt += 1) {
+    const isFullscreen = await fullscreen()
+    const isMaximized = await maximized()
+    if (isFullscreen) {
+      await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: false })
+      stableWindowSamples = 0
+    } else if (isMaximized) {
+      await window.__TAURI_INTERNALS__.invoke("plugin:window|unmaximize", { label })
+      stableWindowSamples = 0
+    } else {
+      stableWindowSamples += 1
+    }
+    await sleep(100)
+  }
+  if (stableWindowSamples < 10) {
+    throw new Error("Native window did not settle out of fullscreen/maximized state before resize: " + JSON.stringify({ fullscreen: await fullscreen(), maximized: await maximized() }))
+  }
+}
+const currentSize = () => ({ width: window.innerWidth, height: window.innerHeight })
+let previousSize = currentSize()
+let stableSamples = 0
+for (let attempt = 0; stableSamples < 2 && attempt < 30; attempt += 1) {
+  await sleep(100)
+  const observedSize = currentSize()
+  if (observedSize.width === previousSize.width && observedSize.height === previousSize.height) {
+    stableSamples += 1
+  } else {
+    stableSamples = 0
+  }
+  previousSize = observedSize
+}
+if (stableSamples < 2) throw new Error("Native window size did not settle after fullscreen exit: " + JSON.stringify(previousSize))
+const resize = (width, height) => window.__TAURI_INTERNALS__.invoke("plugin:window|set_size", {
+  label,
+  value: { Logical: { width, height } },
+})
+await resize($width, $height)
+await sleep(500)
+let actual = currentSize()
+for (let correction = 0; correction < 2 && (actual.width !== $width || actual.height !== $height); correction += 1) {
+  await resize($width + ($width - actual.width), $height + ($height - actual.height))
+  await sleep(500)
+  actual = currentSize()
+}
+if ((actual.width !== $width || actual.height !== $height) && $width >= 1920 && $height >= 1080) {
+  await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: true })
+  await sleep(1000)
+  actual = { width: window.innerWidth, height: window.innerHeight }
+}
+if (actual.width !== $width || actual.height !== $height) {
+  throw new Error("Requested " + $width + "x" + $height + ", native content area is " + actual.width + "x" + actual.height + ", fullscreen=" + await fullscreen() + ", maximized=" + await maximized())
+}
+const transport = document.querySelector('[role="toolbar"][aria-label="Presentation controls"]')
+const previewPanel = document.querySelector('[data-slot="preview-panel"]')
+const preview = previewPanel?.parentElement
+const program = document.querySelector('[data-studio-live]')?.parentElement
+const quickScreens = document.querySelector('[role="group"][aria-label="Quick screens"]')
+if (!transport || !preview || !program || !quickScreens) {
+  throw new Error("Live layout is missing Preview, Program, transport, or quick screens")
+}
+const scrollRegion = transport.parentElement
+if (scrollRegion && getComputedStyle(scrollRegion).overflowY === "auto") {
+  scrollRegion.scrollTop = 0
+  await sleep(50)
+}
+const rect = (element) => {
+  const { top, right, bottom, left } = element.getBoundingClientRect()
+  return { top, right, bottom, left }
+}
+const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+const transportRect = rect(transport)
+const previewRect = rect(preview)
+const programRect = rect(program)
+const quickScreensRect = rect(quickScreens)
+if (transportRect.top < 0 || transportRect.bottom > actual.height) {
+  throw new Error("Presentation controls are outside the viewport: " + JSON.stringify({ viewport: actual, transport: transportRect }))
+}
+for (const [name, panelRect] of [["Preview", previewRect], ["Program and scenes", programRect], ["Quick screens", quickScreensRect]]) {
+  if (overlaps(transportRect, panelRect)) {
+    throw new Error("Presentation controls overlap " + name + ": " + JSON.stringify({ viewport: actual, transport: transportRect, panel: panelRect }))
+  }
+}
+return {
+  ...actual,
+  devicePixelRatio: window.devicePixelRatio,
+  transport: transportRect,
+  preview: previewRect,
+  programAndScenes: programRect,
+  quickScreens: quickScreensRect,
+}
+EOF
+  then
+    mkdir -p "$QA_SCRATCH/artifacts"
+    cp "$QA_SCRATCH/$name.json" "$QA_SCRATCH/artifacts/$name-result.json"
+    cat "$QA_SCRATCH/$name.json" >&2
+    return 1
+  fi
+  mkdir -p "$QA_SCRATCH/artifacts"
+  cp "$QA_RUN/out/$name.json" "$QA_SCRATCH/artifacts/$name.json"
+}
+
+capture_live_viewports() {
+  local state="$1"
+  local viewport width height
+  for viewport in 1024x700 1366x768 1702x895 1920x1080; do
+    width="${viewport%x*}"
+    height="${viewport#*x}"
+    resize_live_window "live-${state}-${viewport}-viewport" "$width" "$height"
+    sleep 1
+    capture_live_window "live-${state}-${viewport}"
+  done
+  # Return to the QA window's configured size for the next scenario.
+  resize_live_window "live-${state}-viewport-reset" 1280 800
+}
+
 # Capture both states from the built Tauri window. These PNGs come from the
 # native app window, not the browser shim or an illustrative mockup.
 capture_live_state empty-service live-empty-service.js
+capture_live_viewports empty-service
 capture_live_state configured-service live-configured-service.js
+capture_live_viewports configured-service
 capture_live_state find-drawer live-find-drawer.js
 if [[ "${LIVE_SCREENSHOTS_ONLY:-0}" == 1 ]]; then
   echo "Native Live screenshots captured; LIVE_SCREENSHOTS_ONLY=1 skips the longer recorder and scene journeys."

@@ -1,7 +1,7 @@
 import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react"
 import { ArrowUpIcon, BookOpenIcon, FolderOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, PlusIcon, SearchIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PreviewPanel } from "@/components/panels/preview-panel"
@@ -25,15 +25,46 @@ import { ScenesStrip } from "@/studio/present/scenes-strip"
 import { LiveSceneTakeAction, type SceneTakeSelection } from "@/studio/present/live-scene-take-action"
 import { LiveToolsDrawer, type LiveToolsTab } from "@/studio/present/live-tools-drawer"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
+import { LiveActivityStrip } from "@/studio/present/live-activity-strip"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 import { useProductionTab } from "@/studio/production/production-tab"
 import { usePreviewLabel } from "@/hooks/use-preview-label"
 import { nextVisibleItem, plannedTimes } from "@/lib/run-of-show"
 
+const LIVE_TOOLBAR_FOCUSABLE = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+
+function liveToolbarItems(toolbar: HTMLElement): HTMLElement[] {
+  return Array.from(toolbar.querySelectorAll<HTMLElement>(LIVE_TOOLBAR_FOCUSABLE))
+}
+
+function syncLiveToolbarTabStop(toolbar: HTMLElement): void {
+  const items = liveToolbarItems(toolbar)
+  const active = items.find((item) => item === document.activeElement)
+  const current = active ?? items.find((item) => item.tabIndex === 0) ?? items[0]
+  for (const item of items) item.tabIndex = item === current ? 0 : -1
+}
+
+function moveLiveToolbarFocus(event: ReactKeyboardEvent<HTMLDivElement>): void {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+  const toolbar = event.currentTarget
+  const target = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>(LIVE_TOOLBAR_FOCUSABLE) : null
+  if (!target) return
+  const items = liveToolbarItems(toolbar)
+  const index = items.indexOf(target)
+  if (index < 0 || items.length < 2) return
+  const direction = event.key === "ArrowRight" ? 1 : -1
+  const next = items[(index + direction + items.length) % items.length]
+  if (!next) return
+  event.preventDefault()
+  event.stopPropagation()
+  next.focus()
+}
+
 export function PresentWorkspace() {
   const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null)
   const toolsButtonRef = useRef<HTMLButtonElement>(null)
   const liveToolsButtonRef = useRef<HTMLButtonElement>(null)
+  const liveToolsToolbarRef = useRef<HTMLDivElement>(null)
   const toolsOpen = useProductionTab((s) => s.open)
   const toolsTab = useProductionTab((s) => s.liveToolsTab)
   const openOutputs = useShellStore((s) => s.openOutputs)
@@ -95,6 +126,18 @@ export function PresentWorkspace() {
     return () => window.removeEventListener("keydown", onKey)
   }, [])
 
+  // Keep the toolbar to one Tab stop, even when conditional controls appear, and
+  // let its own Left/Right arrows move focus instead of changing Program.
+  useEffect(() => {
+    const toolbar = liveToolsToolbarRef.current
+    if (!toolbar) return
+    const sync = () => syncLiveToolbarTabStop(toolbar)
+    sync()
+    const observer = new MutationObserver(sync)
+    observer.observe(toolbar, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <div className="flex h-full flex-col">
       {/* One Live console: Run of show, Preview, Program and Take never change with a view preference. */}
@@ -105,6 +148,29 @@ export function PresentWorkspace() {
             <p className="truncate text-[0.6875rem] text-muted-foreground">{service ? `${service.title}${startsAt ? ` · starts ${startsAt}` : ""}` : "What is next in your service"}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {outputId && congregationOutputs.length > 0 && (
+              <label
+                className="flex h-8 min-w-0 items-center gap-2 rounded-full border border-border bg-card px-3 text-xs"
+                title="Scene Take affects this congregation output. Source Take follows subscriptions."
+              >
+                <span className="shrink-0 text-[0.625rem] font-semibold tracking-wide text-muted-foreground uppercase">Target</span>
+                <select
+                  aria-label="Target congregation output for Live Preview and Program"
+                  aria-describedby="live-output-target-scope"
+                  data-testid="live-output-target"
+                  value={outputId}
+                  onChange={(event) => setSelectedOutputId(event.currentTarget.value)}
+                  className="max-w-48 min-w-0 bg-transparent text-xs font-semibold text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  {congregationOutputs.map((output) => (
+                    <option key={output.id} value={output.id}>
+                      {output.name} · {output.language === "first" ? "First language" : output.language === "second" ? "Second language" : "Both languages"}
+                    </option>
+                  ))}
+                </select>
+                <span id="live-output-target-scope" className="sr-only">Target selects the Preview language and Program view, and scopes scene Take. Source Take follows its subscriptions.</span>
+              </label>
+            )}
             {liveStatusLabel && <StatusChip tone={liveStatusTone} label={liveStatusLabel} className="max-w-80" />}
             <StatusChip
               tone={rehearsal ? "warn" : "off"}
@@ -128,7 +194,15 @@ export function PresentWorkspace() {
             />
           </div>
         </div>
-        <div role="toolbar" aria-label="Live tools" className="flex flex-wrap items-center gap-2">
+        <div
+          ref={liveToolsToolbarRef}
+          role="toolbar"
+          aria-label="Live tools"
+          aria-orientation="horizontal"
+          onFocusCapture={(event) => syncLiveToolbarTabStop(event.currentTarget)}
+          onKeyDown={moveLiveToolbarFocus}
+          className="flex flex-wrap items-center gap-2"
+        >
           <Button
             ref={toolsButtonRef}
             type="button"
@@ -193,7 +267,6 @@ export function PresentWorkspace() {
       <div className="relative min-h-0 flex-1">
         <LiveConsoleSurface
           outputId={outputId}
-          onOutputChange={setSelectedOutputId}
           toolsOpen={toolsOpen}
           toolsTab={toolsTab}
           onToolsTabChange={selectToolsTab}
@@ -206,14 +279,12 @@ export function PresentWorkspace() {
 
 function LiveConsoleSurface({
   outputId,
-  onOutputChange,
   toolsOpen,
   toolsTab,
   onToolsTabChange,
   onCloseTools,
 }: {
   outputId: string | null
-  onOutputChange: (outputId: string) => void
   toolsOpen: boolean
   toolsTab: LiveToolsTab
   onToolsTabChange: (tab: LiveToolsTab) => void
@@ -246,7 +317,7 @@ function LiveConsoleSurface({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3 [@media(max-height:860px)]:gap-2 [@media(max-height:860px)]:pt-2.5">
+    <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3 [@media(max-height:860px)]:gap-0.5 [@media(max-height:860px)]:pt-1">
     <PhaseStrip />
     <RecorderDock />
     <div className={`grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] ${bottomRow} gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2`}>
@@ -258,6 +329,7 @@ function LiveConsoleSurface({
           </div>
           <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{count} {count === 1 ? "item" : "items"}</span>
         </div>
+        <LiveActivityStrip />
         {hasTimedItems && (
           <div className="flex justify-end border-b border-border px-4 py-1.5">
             <TimedMoves />
@@ -308,16 +380,15 @@ function LiveConsoleSurface({
         )}
       </section>
       {/* Wide windows use the workspace grid; 1024–1200 keeps two readable panes, while smaller widths stack. */}
-      <div className="contents max-[1200px]:row-span-3 max-[1200px]:grid max-[1200px]:grid-cols-1 min-[1024px]:max-[1200px]:grid-cols-2 max-[1200px]:min-h-0 max-[1200px]:gap-2 max-[1200px]:overflow-y-auto max-[1200px]:pb-40">
+      <div className="contents max-[1200px]:row-span-3 max-[1200px]:grid max-[1200px]:grid-cols-1 min-[1024px]:max-[1200px]:grid-cols-2 max-[1200px]:min-h-0 max-[1200px]:gap-2 max-[1200px]:overflow-y-auto">
       <div className="min-h-0 overflow-hidden rounded-xl max-[1200px]:min-h-[18rem] max-[1200px]:shrink-0 [&>div]:h-full">
-        <PreviewPanel outputLanguageId={outputId} onOutputLanguageIdChange={onOutputChange} onEmptyPreviewAction={focusQuickFind} />
+        <PreviewPanel hideOutputPicker outputLanguageId={outputId} onEmptyPreviewAction={focusQuickFind} />
       </div>
       {/* Live, with the congregation scenes under it: a scene Take changes a screen's layout, not what is live.
-          Opening the scenes on a short window scrolls this column instead of covering the transport. */}
-      <div className="flex min-h-0 flex-col gap-2 overflow-y-auto max-[1200px]:min-h-fit max-[1200px]:shrink-0 max-[1200px]:overflow-visible">
-        {/* Never shorter than a readable picture with its sources, however many lines they take: the open
-            scenes scroll under it instead. */}
-        <div className="min-h-[18rem] flex-1 overflow-hidden rounded-xl [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
+          Compact layouts keep this column and the transport in normal flow so neither covers the other. */}
+      <div className="flex min-h-0 flex-col gap-2 overflow-y-auto max-[1200px]:h-fit">
+        {/* Never shorter than a readable picture with its sources. Wide layouts scroll scenes in this column. */}
+        <div className="min-h-[18rem] flex-1 overflow-hidden rounded-xl max-[1200px]:flex-none [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
           <LiveOutputPanel
             outputId={outputId}
             sceneTakeAction={<LiveSceneTakeAction selection={selectedOutputSceneTake} />}
@@ -325,7 +396,7 @@ function LiveConsoleSurface({
         </div>
         <ScenesStrip outputId={outputId} onTakeSelectionChange={setSceneTakeSelection} />
       </div>
-      <TransportBar hasSelectedOutputSceneTake={selectedOutputSceneTake !== null} className="col-span-2 max-[1200px]:shrink-0 max-[1200px]:sticky max-[1200px]:bottom-0 max-[1200px]:z-10 max-[1200px]:bg-background max-[1023px]:col-span-1" />
+      <TransportBar hasSelectedOutputSceneTake={selectedOutputSceneTake !== null} className="col-span-2 max-[1200px]:shrink-0 max-[1023px]:col-span-1" />
 
       {toolsOpen ? (
         <div className="col-span-2 min-h-0 overflow-hidden max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">
@@ -333,12 +404,15 @@ function LiveConsoleSurface({
         </div>
       ) : (
         <div className="col-span-2 min-h-0 max-[1200px]:h-[10.75rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">
-          <section className="flex h-full min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card p-3" role="group" aria-label="Quick screens">
+          <section className="flex h-full min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card p-3" role="group" aria-label="Quick screens" aria-describedby="live-quick-screen-scope">
             {/* Back sits in the header so it is never clipped on a short (1366x768) screen; the screens scroll if they must. */}
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h2 className="text-sm font-semibold tracking-tight">One-touch moments</h2>
                 <p className="text-xs text-muted-foreground">Temporary screens, with safe return</p>
+                <p id="live-quick-screen-scope" className="text-[0.6875rem] leading-tight text-muted-foreground">
+                  Target selects Preview language and the Program view shown here, and scopes scene Take. Quick screens and Source Take follow output routing; Black and Logo reach every feed.
+                </p>
               </div>
               <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
             </div>

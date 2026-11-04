@@ -51,6 +51,42 @@ describe("scene approval review", () => {
     expect(model.blockReason).toBeNull()
   })
 
+  it("shows and blocks a background-gradient-only request that the desk sanitizer cannot apply", () => {
+    const before: Scene = {
+      ...scene("Welcome"),
+      background: "#112233",
+      backgroundGradient: { angle: 90, stops: [{ color: "#112233", offset: 0 }, { color: "#445566", offset: 1 }] },
+    }
+    const requestedGradient = { angle: 180, stops: [{ color: "#112233", offset: 0 }, { color: "#ffffff", offset: 1 }] }
+    const model = sceneRequestReviewModel(request({ payload: { scene: {
+      id: "welcome", name: "Welcome", background: "#112233", backgroundGradient: requestedGradient, layers: before.layers,
+    } } }), [before])
+
+    expect(model.blockReason).toContain("gradient")
+    expect(model.changes.join(" ")).toContain("Background gradient")
+    expect(model.changes.join(" ")).toContain("90°")
+    expect(model.changes.join(" ")).toContain("180°")
+    expect(model.requestedScene?.backgroundGradient).toEqual(before.backgroundGradient)
+  })
+
+  it("names a shape-layer gradient change and keeps approval disabled until it is supported", () => {
+    const currentGradient = { angle: 45, stops: [{ color: "#112233", offset: 0 }, { color: "#445566", offset: 1 }] }
+    const requestedGradient = { angle: 270, stops: [{ color: "#112233", offset: 0 }, { color: "#ffffff", offset: 1 }] }
+    const panel: SceneLayer = { id: "panel", name: "Backdrop", kind: "color", color: "#112233", gradient: currentGradient, box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true }
+    const before = { ...scene("Welcome"), layers: [panel] }
+    const submittedPanel = { ...panel, gradient: requestedGradient }
+    const model = sceneRequestReviewModel(request({ payload: { scene: {
+      id: "welcome", name: "Welcome", background: "#000000", layers: [submittedPanel],
+    } } }), [before])
+
+    expect(model.blockReason).toContain("gradient")
+    expect(model.changes.join(" ")).toContain("Backdrop gradient")
+    expect(model.changes.join(" ")).toContain("45°")
+    expect(model.changes.join(" ")).toContain("270°")
+    expect(model.requestedScene?.layers[0]?.gradient).toEqual(currentGradient)
+    expect(sceneLayerReviewSummary(panel)).toContain("gradient 45°")
+  })
+
   it("shows concrete layer geometry, style, and order changes", () => {
     const before = scene("Welcome")
     const subtitle: SceneLayer = { ...textLayer("Sunday service"), id: "subtitle", name: "Subtitle", box: { x: 5, y: 34, w: 90, h: 12 } }
