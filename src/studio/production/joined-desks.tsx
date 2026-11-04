@@ -181,25 +181,25 @@ function StageDeskAssignedView({ live, stale, stageOutputs }: { live: LiveStateV
   )
 }
 
-/** The cameras (Camera): which are sending, hide one from scenes until it is framed, show it again. */
+/** Camera source health and the human Ready/Unable handoff; source availability stays with the host until its impact can be reviewed. */
 export function CameraDesk({ live }: { live: LiveStateV1 }) {
-  const ok = useCanSend()
-  const [result, setResult] = useState<SendResult | null>(null)
   const cams = live.sources.filter((s) => s.id.startsWith("camera:"))
   const STATE: Record<string, string> = { sending: "sending", frozen: "frozen (nothing arriving)", "not-sending": "not sending", "router-off": "camera router off", hidden: "hidden from scenes" }
   return (
     <section aria-label="Camera desk" className={box}>
       <p className="font-semibold">Cameras</p>
       {cams.length === 0 && <p className="text-muted-foreground">No cameras on the host yet (Live → Production tools → Cameras there).</p>}
-      <ul className="flex flex-col gap-1">
+      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {cams.map((c) => (
-          <li key={c.id} className="flex flex-wrap items-center gap-2">
-            <span className="min-w-0 flex-1 truncate">{c.reference || c.id.slice(7)}{c.state ? <span className="text-muted-foreground"> · {STATE[c.state] ?? c.state}</span> : null}</span>
-            <Button size="xs" variant="outline" disabled={!ok} title={c.on ? "Every scene with this camera shows its fallback there until you show it again" : undefined} onClick={async () => setResult(await useJoin.getState().send({ command: c.on ? "clear_source" : "restore_source", value: c.id }))}>{c.on ? "Hide from scenes" : "Show in scenes"}</Button>
+          <li key={c.id} className="flex min-w-0 flex-col gap-1 rounded-md border border-border p-2">
+            <span className="truncate font-medium">{c.reference || c.id.slice(7)}</span>
+            <span role="status" aria-label={`${c.reference || c.id.slice(7)} camera status`} className={c.state === "sending" ? "text-confidence-high" : c.state === "hidden" ? "text-muted-foreground" : "text-confidence-mid"}>
+              {c.state ? STATE[c.state] ?? c.state : "status unavailable"}
+            </span>
           </li>
         ))}
       </ul>
-      <Result result={result} />
+      <p role="note" className="text-muted-foreground">Hiding or restoring a camera can change every scene and output that uses it. This desk does not receive the scene map needed to review that impact; ask the host to check Live → Scenes and current outputs before changing source availability from Live.</p>
       <p className="text-muted-foreground">“Is it framed?” requests arrive in Notices below: answer Ready or Unable. The camera boxes of each scene are under Scenes.</p>
     </section>
   )
