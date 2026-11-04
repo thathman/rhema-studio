@@ -7,13 +7,37 @@
  */
 export const FEED_STALE_AFTER_MS = 10_000
 
-export function feedStale(o: {
-  now: number
+export type FeedFreshness = {
   lastHeard: number
   beats: boolean
   hasContent: boolean
   disconnected: boolean
-}): boolean {
+}
+
+export const initialFeedFreshness = (now: number): FeedFreshness => ({
+  lastHeard: now,
+  beats: false,
+  hasContent: false,
+  disconnected: false,
+})
+
+export const feedConnectionLost = (state: FeedFreshness): FeedFreshness => ({ ...state, disconnected: true })
+
+export const feedReceivedFrame = (state: FeedFreshness, now: number): FeedFreshness => ({
+  ...state,
+  lastHeard: now,
+  hasContent: true,
+  disconnected: false,
+})
+
+export const feedReceivedBeat = (state: FeedFreshness, now: number): FeedFreshness => ({
+  ...state,
+  lastHeard: now,
+  beats: true,
+  disconnected: false,
+})
+
+export function feedStale(o: FeedFreshness & { now: number }): boolean {
   if (!o.hasContent) return false
   if (o.disconnected) return true
   const quiet = o.now - o.lastHeard > FEED_STALE_AFTER_MS
