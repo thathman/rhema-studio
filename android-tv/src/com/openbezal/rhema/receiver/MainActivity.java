@@ -347,7 +347,9 @@ public class MainActivity extends Activity {
                 ui.post(new Runnable() {
                     @Override
                     public void run() {
-                        if (shown() == null || REVOKED.equals(problem) || !ready.networkBack(SystemClock.elapsedRealtime())) return;
+                        // Asked first, so a loss is used up even when nothing loads.
+                        boolean back = ready.networkBack(SystemClock.elapsedRealtime());
+                        if (!back || shown() == null || REVOKED.equals(problem)) return;
                         ui.removeCallbacks(reload);
                         reload.run();
                     }

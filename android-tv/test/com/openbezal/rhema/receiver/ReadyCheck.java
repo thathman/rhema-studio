@@ -120,6 +120,13 @@ public final class ReadyCheck {
         n.networkLost();
         check("a drawn page reconnects by itself: no load", !n.networkBack(200_000));
         check("the first loss at boot (elapsedRealtime 0) still counts", networkAtZero());
+        Ready c = new Ready();
+        c.started();
+        long w = c.rendererGone(300_000);
+        c.networkLost();
+        check("a renderer-gone wait is not cut by the network coming back", !c.networkBack(300_000 + w - 1));
+        c.networkLost();
+        check("after that wait, the network coming back loads again", c.networkBack(300_000 + w + Ready.NET_BACK_GAP_MS));
 
         // What counts as this screen's acknowledgement.
         check("the page's acknowledgement", Guard.ackOf(LINK, "POST", ACK));
