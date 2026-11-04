@@ -252,7 +252,7 @@ export interface CountdownFrame {
   endsAt: number | null
   /** Held (paused or not started): the time left as it stands; counting up, minus the time so far. */
   leftMs: number
-  /** Nothing to count, and why ("Start the service timer in Present"). */
+  /** Nothing to count, and why ("Start the service timer in Live"). */
   idle?: string
   /** The counted item's own warning (Prepare → Timing), ms before its end: the first step comes on then. */
   warnMs?: number

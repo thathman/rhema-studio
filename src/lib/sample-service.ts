@@ -43,7 +43,7 @@ export function sampleServiceItems(verses: Verse[], now = Date.now(), newId: () 
     planned_minutes: 3,
   }))
   return [
-    slide(newId(), "Welcome", "We are glad you are here.", "Sample service: try Show live in Present. Nothing is saved unless you save it.", now),
+    slide(newId(), "Welcome", "We are glad you are here.", "Sample service: try Show live in the Live workspace. Nothing is saved unless you save it.", now),
     ...passages.slice(0, 2),
     slide(newId(), "Notices", "Midweek service · Wednesday 6 pm\nPrayer meeting · Friday 7 pm", "Change these to your church's own notices, or delete them.", now),
     ...passages.slice(2),
