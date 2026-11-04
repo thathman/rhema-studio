@@ -302,6 +302,33 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
+  it("shows a gradient-only scene request and disables approval when its appearance cannot be applied", async () => {
+    const currentGradient = { angle: 90, stops: [{ color: "#112233", offset: 0 }, { color: "#445566", offset: 1 }] }
+    const requestedGradient = { angle: 180, stops: [{ color: "#112233", offset: 0 }, { color: "#ffffff", offset: 1 }] }
+    const currentScene = { id: "remote-scene", name: "Welcome", background: "#112233", backgroundGradient: currentGradient, layers: [] }
+    const request = {
+      id: "gradient-scene-request", kind: "scene_save", targetId: "remote-scene", baseRevision: 7,
+      requester: { id: "desk-key", name: "Screens desk" },
+      payload: { scene: { ...currentScene, backgroundGradient: requestedGradient } },
+      reason: "Update the welcome scene", state: "submitted", createdAt: "2026-10-30T09:00:00Z",
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: null, decidedAt: null, decisionNote: null,
+    }
+    useBroadcastStore.setState({ scenes: [currentScene] as never })
+    tauri.invoke.mockImplementation(async (command: string) => command === "approvals_list" ? [request] : null)
+    resetApprovalRequests()
+    await reloadApprovalRequests()
+    const el = await mount()
+
+    expect(el.textContent).toContain("Background gradient: 90°")
+    expect(el.textContent).toContain("180°")
+    expect(el.textContent).toContain("not applied from a joined desk")
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("cannot be applied from a joined desk")
+    const approve = [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Approve"))
+    expect(approve?.disabled).toBe(true)
+    expect(tauri.invoke.mock.calls.some(([command]) => command === "approvals_decide")).toBe(false)
+    await act(async () => root.unmount())
+  })
+
   it("confirms an approved plan request through the host's revision check", async () => {
     const request = {
       id: "plan-request-uuid", kind: "plan_approve", targetId: "service-1", baseRevision: 4,
