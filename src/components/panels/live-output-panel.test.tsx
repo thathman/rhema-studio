@@ -99,15 +99,71 @@ describe("Present's Program and Preview panels", () => {
     expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe("Rehearsal")
   })
 
-  it("shows the empty Program once while keeping its off-air detail available to assistive tech", async () => {
+  it("shows the empty Program and reports a closed local output window", async () => {
     await render(<LiveOutputPanel />)
 
     expect(el.textContent).toContain("Nothing on air")
-    const delivery = el.querySelector<HTMLElement>('[data-program-delivery-state="Off air"]')!
-    expect(delivery.textContent).toContain("Off air")
+    const delivery = el.querySelector<HTMLElement>('[data-program-delivery-state="Window closed"]')!
+    expect(delivery.textContent).toContain("Window closed")
     const detail = delivery.querySelector<HTMLElement>('[role="status"]')!
-    expect(detail.textContent).toContain("Host Program is off air.")
-    expect(detail.className).toContain("sr-only")
+    expect(detail.textContent).toContain("Host Program is off air; output window is closed")
+    expect(detail.className).not.toContain("sr-only")
+  })
+
+  it("does not hide a disconnected named browser output behind the off-air Program state", async () => {
+    const base = useBroadcastStore.getState().outputs[0]!
+    const output = { ...base, id: "sanctuary", name: "Sanctuary Main", type: "browser" as const, role: "congregation" as const }
+    useBroadcastStore.setState({
+      outputs: [output],
+      outputStatus: { sanctuary: { previewOpen: false, ndiActive: false, feedActive: false } },
+      isLive: false,
+      rehearsal: false,
+      liveVerse: null,
+    })
+
+    await render(<LiveOutputPanel outputId="sanctuary" />)
+
+    expect(el.querySelector('[data-slot="panel-header"]')?.textContent).toContain("Off air")
+    expect(el.textContent).toContain("Nothing on air")
+    expect(el.textContent).toContain("Sanctuary Main")
+    expect(el.querySelector('[data-program-delivery-state="Not sending"]')?.textContent).toContain("Not sending")
+    expect(el.querySelector('[role="status"]')?.textContent).toContain("Host Program is off air; host is not sending to this browser feed.")
+  })
+
+  it("shows a disconnected receiver even when no frame is currently on air", async () => {
+    const base = useBroadcastStore.getState().outputs[0]!
+    const output = { ...base, id: "foyer", name: "Foyer TV", type: "browser" as const, role: "congregation" as const }
+    receiverState.health = { watching: 0, current: false, behind: false }
+    useBroadcastStore.setState({
+      outputs: [output],
+      outputStatus: { foyer: { previewOpen: false, ndiActive: false, feedActive: true } },
+      isLive: false,
+      rehearsal: false,
+      liveVerse: null,
+    })
+
+    await render(<LiveOutputPanel outputId="foyer" />)
+
+    expect(el.querySelector('[data-program-delivery-state="No receiver"]')?.textContent).toContain("No receiver")
+    expect(el.querySelector('[role="status"]')?.textContent).toContain("Host Program is off air; feed is publishing, but no receiver is connected.")
+  })
+
+  it("surfaces a stopped NDI sender while Program is off air", async () => {
+    const base = useBroadcastStore.getState().outputs[0]!
+    const output = { ...base, id: "overflow", name: "Overflow NDI", type: "ndi" as const, role: "congregation" as const }
+    useBroadcastStore.setState({
+      outputs: [output],
+      outputStatus: { overflow: { previewOpen: false, ndiActive: false, feedActive: false } },
+      isLive: false,
+      rehearsal: false,
+      liveVerse: null,
+    })
+
+    await render(<LiveOutputPanel outputId="overflow" />)
+
+    expect(el.querySelector('[data-slot="panel-header"]')?.textContent).toContain("Off air")
+    expect(el.querySelector('[data-program-delivery-state="NDI stopped"]')?.textContent).toContain("NDI stopped")
+    expect(el.querySelector('[role="status"]')?.textContent).toContain("NDI sender is stopped.")
   })
 
   it("the one-line Preview says what Take live will put up, and the item's plan", async () => {
