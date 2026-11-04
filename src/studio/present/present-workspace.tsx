@@ -63,7 +63,7 @@ function moveLiveToolbarFocus(event: ReactKeyboardEvent<HTMLDivElement>): void {
 }
 
 export function PresentWorkspace() {
-  const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null)
+  const selectedOutputId = useProductionTab((s) => s.liveOutputId)
   const toolsButtonRef = useRef<HTMLButtonElement>(null)
   const liveToolsButtonRef = useRef<HTMLButtonElement>(null)
   const liveToolsToolbarRef = useRef<HTMLDivElement>(null)
@@ -109,6 +109,12 @@ export function PresentWorkspace() {
       : liveToolsButtonRef.current
     queueMicrotask(() => returnFocus?.focus())
   }
+
+  useEffect(() => {
+    if (selectedOutputId && !outputs.some((output) => output.id === selectedOutputId && (output.role ?? "congregation") === "congregation")) {
+      useProductionTab.setState({ liveOutputId: null })
+    }
+  }, [outputs, selectedOutputId])
 
   const selectToolsTab = (tab: LiveToolsTab) => {
     useProductionTab.setState({ liveToolsTab: tab, open: true, requested: null })
@@ -161,7 +167,7 @@ export function PresentWorkspace() {
                   aria-describedby="live-output-target-scope"
                   data-testid="live-output-target"
                   value={outputId}
-                  onChange={(event) => setSelectedOutputId(event.currentTarget.value)}
+                  onChange={(event) => useProductionTab.setState({ liveOutputId: event.currentTarget.value })}
                   className="max-w-48 min-w-0 bg-transparent text-xs font-semibold text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   {congregationOutputs.map((output) => (

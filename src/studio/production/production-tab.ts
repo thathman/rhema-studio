@@ -14,7 +14,8 @@ export const useProductionTab = create<{
   scene: string | null
   open: boolean
   liveToolsTab: LiveToolsTab
-}>(() => ({ requested: null, selected: "timekeeper", scene: null, open: false, liveToolsTab: "bible" }))
+  liveOutputId: string | null
+}>(() => ({ requested: null, selected: "timekeeper", scene: null, open: false, liveToolsTab: "bible", liveOutputId: null }))
 
 export function openProductionTab(tab: ProductionTab, opts: { sceneId?: string } = {}): void {
   useProductionTab.setState({ requested: tab, selected: tab, scene: opts.sceneId ?? null, open: true, liveToolsTab: "production" })
