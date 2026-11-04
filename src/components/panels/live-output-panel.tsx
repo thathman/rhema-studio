@@ -140,15 +140,39 @@ function programDelivery(
 ): { label: string; tone: "ok" | "warn" | "off" | "info"; detail: string } {
   if (!output) return { label: "No output", tone: "warn", detail: "Add a congregation output to see its Program state." }
   if (rehearsal) return { label: "Rehearsal", tone: "warn", detail: "Public Program stays on the frame shown before practice." }
-  if (!isLive) return { label: "Off air", tone: "off", detail: "Host Program is off air." }
 
   if (output.type === "browser") {
-    if (!status?.feedActive) return { label: "Not sending", tone: "warn", detail: "Host is not sending to this browser feed." }
-    if (!feed) return { label: "Checking", tone: "info", detail: "Feed is publishing; checking for a receiver." }
-    if (feed.watching === 0) return { label: "No receiver", tone: "warn", detail: "Feed is publishing; no receiver is connected." }
+    if (!status?.feedActive) {
+      return {
+        label: "Not sending",
+        tone: "warn",
+        detail: isLive
+          ? "Host is not sending to this browser feed."
+          : "Host Program is off air; host is not sending to this browser feed.",
+      }
+    }
+    if (!feed) {
+      return {
+        label: "Checking",
+        tone: "info",
+        detail: isLive
+          ? "Feed is publishing; checking for a receiver."
+          : "Host Program is off air; feed is publishing while receiver presence is checked.",
+      }
+    }
+    if (feed.watching === 0) {
+      return {
+        label: "No receiver",
+        tone: "warn",
+        detail: isLive
+          ? "Feed is publishing; no receiver is connected."
+          : "Host Program is off air; feed is publishing, but no receiver is connected.",
+      }
+    }
     const pages = `${feed.watching} browser ${feed.watching === 1 ? "page" : "pages"}`
     const televisions = Object.values(feed.tvs ?? {}).reduce((total, count) => total + count, 0)
     const tvs = televisions > 0 ? ` · ${televisions} Google ${televisions === 1 ? "TV" : "TVs"}` : ""
+    if (!isLive) return { label: "Off air", tone: "off", detail: `Host Program is off air. ${pages} connected${tvs}.` }
     if (feed.behind) return { label: "Behind", tone: "warn", detail: `${pages} connected; the latest Program frame is not confirmed${tvs}.` }
     if (feed.current) return { label: "Receiver confirmed", tone: "ok", detail: `${pages} showing the latest Program frame${tvs}.` }
     return { label: "Waiting", tone: "info", detail: `${pages} connected; waiting for a draw acknowledgement${tvs}.` }
@@ -157,13 +181,28 @@ function programDelivery(
   if (output.type === "ndi") {
     if (status?.ndiError) return { label: "NDI error", tone: "warn", detail: `NDI sender error · ${status.ndiError}` }
     if (!status?.ndiActive) return { label: "NDI stopped", tone: "warn", detail: "NDI sender is stopped." }
+    if (!isLive) {
+      const receivers = typeof status.ndiReceivers === "number" && status.ndiReceivers > 0
+        ? ` ${status.ndiReceivers} ${status.ndiReceivers === 1 ? "receiver is" : "receivers are"} connected.`
+        : " No receiver connection is reported."
+      return { label: "Off air", tone: "off", detail: `Host Program is off air. NDI sender is active; frame acknowledgement is unavailable.${receivers}` }
+    }
     if (typeof status.ndiReceivers === "number" && status.ndiReceivers > 0) {
       return { label: "NDI active", tone: "info", detail: `${status.ndiReceivers} ${status.ndiReceivers === 1 ? "receiver" : "receivers"} connected; frame acknowledgement is unavailable.` }
     }
     return { label: "NDI active", tone: "info", detail: "No receiver connection is reported." }
   }
 
-  return status?.previewOpen
+  if (!status?.previewOpen) {
+    return {
+      label: "Window closed",
+      tone: "warn",
+      detail: isLive
+        ? "Host output window is closed; local displays do not report receiver acknowledgement."
+        : "Host Program is off air; output window is closed and local displays do not report receiver acknowledgement.",
+    }
+  }
+  return isLive
     ? { label: "Window open", tone: "info", detail: "Host output window is open; local displays do not report receiver acknowledgement." }
-    : { label: "Window closed", tone: "warn", detail: "Host output window is closed; local displays do not report receiver acknowledgement." }
+    : { label: "Off air", tone: "off", detail: "Host Program is off air. Output window is open; local displays do not report receiver acknowledgement." }
 }
