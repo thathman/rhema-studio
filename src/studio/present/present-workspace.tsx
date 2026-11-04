@@ -480,7 +480,10 @@ function NowNextSummary() {
     ? "Same event · no separate timer"
     : eventTimingStatus(nextTiming, timing?.held ?? false, now)
   const nextDetails = next ? [nextTimingDetails, itemDetails(next.index, next.item)].filter(Boolean).join(" · ") : ""
-  const nowLabel = liveTiming?.label ?? current?.reference ?? "Not started"
+  const currentMomentLabel = current && liveTiming && currentTiming?.id === liveTiming.id && current.reference !== liveTiming.label
+    ? `${current.reference} · ${liveTiming.label}`
+    : null
+  const nowLabel = currentMomentLabel ?? liveTiming?.label ?? current?.reference ?? "Not started"
 
   return (
     <section aria-label="Run of show Now and Next" className="grid grid-cols-2 gap-2 border-b border-border px-3 py-2 max-[1200px]:grid-cols-1">

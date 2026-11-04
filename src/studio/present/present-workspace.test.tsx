@@ -372,6 +372,35 @@ describe("Present's unified Live console", () => {
     expect(useBroadcastStore.getState().liveVerse).toEqual(program)
   })
 
+  it("keeps the active moment visible inside a timed grouped event", async () => {
+    const now = Date.UTC(2026, 10, 4, 10, 6)
+    vi.spyOn(Date, "now").mockReturnValue(now)
+    const timeZone = useSettingsStore.getState().setup.timeZone || undefined
+    const startsAt = new Date(now - 6 * 60_000).toLocaleTimeString("en-GB", {
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(timeZone ? { timeZone } : {}),
+    })
+    const current = { ...queueItem, id: "sermon-scripture" }
+    const upcoming = { ...secondQueueItem, id: "sermon-slide" }
+    const program = useBroadcastStore.getState().liveVerse
+    useQueueStore.setState({
+      items: [current, upcoming],
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: startsAt },
+        { id: "sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1, duration_minutes: 30 } },
+      ],
+      activeIndex: 0,
+    })
+    useEventClock.setState({ currentId: "sermon" })
+    useJournalStore.setState({ entries: [{ kind: "event", label: "Sermon", eventId: "sermon", at: now - 6 * 60_000, mono: 0 }] })
+    await renderWorkspace()
+
+    const summary = element.querySelector<HTMLElement>('[aria-label="Run of show Now and Next"]')!
+    expect(summary.querySelector('[aria-label="Now in the run of show"]')?.textContent).toContain("John 3:16 · Sermon")
+    expect(summary.querySelector('[data-testid="now-event-timing"]')?.textContent).toContain("Event timer · 24 min left")
+    expect(summary.querySelector('[data-testid="next-event-timing"]')?.textContent).toContain("Same event · no separate timer")
+    expect(useBroadcastStore.getState().liveVerse).toEqual(program)
+  })
+
   it("does not invent a countdown for a service that has not started", async () => {
     const now = Date.UTC(2026, 10, 4, 9, 55)
     vi.spyOn(Date, "now").mockReturnValue(now)
