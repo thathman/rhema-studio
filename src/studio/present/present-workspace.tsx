@@ -404,14 +404,15 @@ function LiveConsoleSurface({
         </div>
         <ScenesStrip outputId={outputId} onTakeSelectionChange={setSceneTakeSelection} />
       </div>
-      <TransportBar hasSelectedOutputSceneTake={selectedOutputSceneTake !== null} className="col-span-2 max-[1200px]:shrink-0 max-[1023px]:col-span-1" />
+      {/* The empty rundown stops spanning rows, so pin wide-layout controls below Preview + Program. */}
+      <TransportBar hasSelectedOutputSceneTake={selectedOutputSceneTake !== null} className="col-span-2 min-[1201px]:col-start-2 max-[1200px]:shrink-0 max-[1023px]:col-span-1" />
 
       {toolsOpen ? (
-        <div className="col-span-2 min-h-0 overflow-hidden max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">
+        <div className="col-span-2 min-[1201px]:col-start-2 min-h-0 overflow-hidden max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">
           <LiveToolsDrawer tab={toolsTab} onTabChange={onToolsTabChange} onClose={onCloseTools} />
         </div>
       ) : (
-        <div className="col-span-2 min-h-0 max-[1200px]:h-[10.75rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">
+        <div className="col-span-2 min-[1201px]:col-start-2 min-h-0 max-[1200px]:h-[10.75rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">
           <section className="flex h-full min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card p-3" role="group" aria-label="Quick screens" aria-describedby="live-quick-screen-scope">
             {/* Back sits in the header so it is never clipped on a short (1366x768) screen; the screens scroll if they must. */}
             <div className="flex items-start justify-between gap-2">
