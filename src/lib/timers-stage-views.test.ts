@@ -3,7 +3,15 @@ import { DEFAULT_COUNTDOWN_LOOK, lookCounting, NO_COUNTDOWN_SOURCES, normalizeCo
 import { clockText, stageClock, zoneCity } from "./stage-clock"
 import { DEFAULT_STAGE_STYLE, normalizeStageStyle } from "./stage-style"
 import { drawStage, ROLE_LAYOUTS, stageOnCanvas, stageSurface } from "./stage-canvas"
-import { FEED_STALE_AFTER_MS, feedStale, pageClockSkew } from "./feed-freshness"
+import {
+  FEED_STALE_AFTER_MS,
+  feedConnectionLost,
+  feedReceivedBeat,
+  feedReceivedFrame,
+  feedStale,
+  initialFeedFreshness,
+  pageClockSkew,
+} from "./feed-freshness"
 import { feedHealthLabel } from "./browser-feeds"
 import { outputEditPatch, outputPresentation } from "./output-summary"
 import type { BroadcastOutput, StagePayload } from "@/types"
@@ -142,11 +150,34 @@ describe("stage layouts per role, portrait and night (R6)", () => {
 })
 
 describe("feed pages that say they are out of date, and clocks that differ (R5)", () => {
-  it("out of date after the host has been quiet; an older host (no beats) only once the link is lost", () => {
-    expect(feedStale({ now: FEED_STALE_AFTER_MS, lastHeard: 0, beats: true, connected: true })).toBe(false)
-    expect(feedStale({ now: FEED_STALE_AFTER_MS + 1, lastHeard: 0, beats: true, connected: true })).toBe(true)
-    expect(feedStale({ now: 60_000, lastHeard: 0, beats: false, connected: true })).toBe(false)
-    expect(feedStale({ now: 60_000, lastHeard: 0, beats: false, connected: false })).toBe(true)
+  it("does not warn before the receiver has displayed any host content", () => {
+    const initial = initialFeedFreshness(0)
+    expect(feedStale({ ...initial, now: 60_000 })).toBe(false)
+    expect(feedStale({ ...feedConnectionLost(initial), now: 60_000 })).toBe(false)
+  })
+
+  it("warns immediately after a previously displayed feed loses its connection", () => {
+    const displayed = feedReceivedFrame(initialFeedFreshness(0), 1_000)
+    const disconnected = feedConnectionLost(displayed)
+    expect(feedStale({ ...disconnected, now: 1_001 })).toBe(true)
+  })
+
+  it("uses the heartbeat timeout for quiet live links and clears after valid resumed communication", () => {
+    const initial = initialFeedFreshness(0)
+    const live = feedReceivedBeat(feedReceivedFrame(initial, 0), 0)
+    expect(feedStale({ ...live, now: FEED_STALE_AFTER_MS })).toBe(false)
+    expect(feedStale({ ...live, now: FEED_STALE_AFTER_MS + 1 })).toBe(true)
+
+    const legacy = feedReceivedFrame(initial, 0)
+    expect(feedStale({ ...legacy, now: 60_000 })).toBe(false)
+    expect(feedStale({ ...feedConnectionLost(legacy), now: 1 })).toBe(true)
+
+    const disconnected = feedConnectionLost(feedReceivedFrame(initial, 1_000))
+    expect(feedStale({ ...disconnected, now: 1_001 })).toBe(true)
+    const resumedFrame = feedReceivedFrame(disconnected, 2_000)
+    expect(feedStale({ ...resumedFrame, now: 2_001 })).toBe(false)
+    const resumedBeat = feedReceivedBeat(disconnected, 2_000)
+    expect(feedStale({ ...resumedBeat, now: 2_001 })).toBe(false)
     expect(pageClockSkew(1_000, 4_500)).toBe(3_500)
   })
 
