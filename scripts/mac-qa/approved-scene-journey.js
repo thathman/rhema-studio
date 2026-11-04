@@ -288,13 +288,32 @@ async function runScenario() {
     await clickButton("Edit event: Sermon")
     await clickButton("Event scenes")
     await clickButton("Choose a scene design for QA Designed Moment")
+    stage = "scope the pinned design to Main in the Prepare screen picker"
+    const audience = await waitFor(() => document.querySelector('fieldset[aria-label="Designed moment audience"]'), "designed moment audience picker")
+    const specificScreens = [...audience.querySelectorAll('input[type="radio"]')]
+      .find((radio) => radio.parentElement?.textContent?.includes("Choose specific screens"))
+    if (!specificScreens) throw new Error("Prepare did not offer a specific-screen audience option")
+    specificScreens.click()
+    const mainTarget = [...audience.querySelectorAll('input[type="checkbox"]')]
+      .find((input) => input.getAttribute("aria-label") === `Include ${main.name}`)
+    const secondaryTarget = [...audience.querySelectorAll('input[type="checkbox"]')]
+      .find((input) => input.getAttribute("aria-label") === `Include ${secondary.name}`)
+    if (!mainTarget || !secondaryTarget) throw new Error("Prepare did not list both congregation screens for this design")
+    if (!mainTarget.checked) mainTarget.click()
+    if (secondaryTarget.checked) secondaryTarget.click()
+    await waitFor(() => mainTarget.checked && !secondaryTarget.checked, "Main-only design audience")
     await clickButton("My Designs")
     await clickButton("Preview version 1")
     await waitFor(() => document.body.innerText.includes("Private artwork preview"), "saved design artwork preview")
     await clickButton("Use in Prepare")
     const pinnedItem = await waitFor(() => {
       const item = qa.queue.getState().items.find((candidate) => candidate.id === designedItem.id)
-      return item?.slide?.designRef?.id === designDocument.id && item.slide.designRef.version === 1 && item.scene_id ? item : null
+      return item?.slide?.designRef?.id === designDocument.id
+        && item.slide.designRef.version === 1
+        && JSON.stringify(item.slide.designRef.outputs) === JSON.stringify([main.id])
+        && item.scene_id
+        ? item
+        : null
     }, "saved Design version to be pinned to the chosen Prepare moment")
     const pinnedSceneId = pinnedItem.scene_id
     const pinnedScene = qa.broadcast.getState().scenes.find((candidate) => candidate.id === pinnedSceneId)
@@ -332,6 +351,9 @@ async function runScenario() {
     if (reopenedDesigned?.slide?.designRef?.id !== designDocument.id || reopenedDesigned.slide.designRef.version !== 1 || reopenedDesigned.scene_id !== pinnedSceneId) {
       throw new Error("Save/reopen changed the pinned Design identity, version, or scene")
     }
+    if (JSON.stringify(reopenedDesigned.slide.designRef.outputs) !== JSON.stringify([main.id])) {
+      throw new Error("Save/reopen changed the designed moment's Main-only audience")
+    }
 
     stage = "approve the saved service through Prepare"
     await clickButton("Approve")
@@ -344,6 +366,7 @@ async function runScenario() {
         && service.approvedDesigns?.scenes[sceneId]?.outputs?.["qa-secondary"]
         && service.approvedDesigns?.moments?.[designedItem.id]?.id === designDocument.id
         && service.approvedDesigns?.moments?.[designedItem.id]?.version === 1
+        && JSON.stringify(service.approvedDesigns?.moments?.[designedItem.id]?.outputs) === JSON.stringify([main.id])
     }, "approved service scene and output snapshots")
     const serviceAtApproval = qa.service.getState()
     const approvedManualScene = serviceAtApproval.approvedDesigns.scenes[sceneId].scene
@@ -488,35 +511,40 @@ async function runScenario() {
     const designSceneId = designedMomentSceneId(designRef)
     await waitFor(() => {
       const state = qa.broadcast.getState()
+      const mainOutput = state.outputs.find((candidate) => candidate.id === main.id)
+      const secondaryOutput = state.outputs.find((candidate) => candidate.id === secondary.id)
       return state.liveItemId === designedItem.id
-        && state.outputs.filter((candidate) => (candidate.role ?? "congregation") === "congregation")
-          .every((candidate) => candidate.sceneId === designSceneId
-            && candidate.sceneSnapshot?.design?.id === designRef.id
-            && candidate.sceneSnapshot?.design?.version === designRef.version
-            && candidate.sceneSnapshot?.design?.pageId === designRef.pageId
-            && candidate.sceneSnapshot?.background === "#123456")
-    }, "approved Design version 1 on congregation outputs")
+        && mainOutput?.sceneId === designSceneId
+        && mainOutput.sceneSnapshot?.design?.id === designRef.id
+        && mainOutput.sceneSnapshot.design.version === designRef.version
+        && mainOutput.sceneSnapshot.design.pageId === designRef.pageId
+        && mainOutput.sceneSnapshot.background === "#123456"
+        && secondaryOutput?.sceneId === secondaryAfterManual.sceneId
+        && JSON.stringify(sceneState(qa.broadcast, secondary.id)) === JSON.stringify(secondaryAfterManual)
+    }, "approved Main-only Design version 1 with the other output unchanged")
     const afterDesignedTake = qa.broadcast.getState()
     const mainAfterDesigned = sceneState(qa.broadcast, "main")
     const secondaryAfterDesigned = sceneState(qa.broadcast, "qa-secondary")
     if (!afterDesignedTake.isLive || afterDesignedTake.liveItemId !== designedItem.id) {
       throw new Error("Taking the pinned design did not activate its content")
     }
-    if (mainAfterDesigned.sceneId !== designSceneId || secondaryAfterDesigned.sceneId !== designSceneId) {
-      throw new Error("The pinned design did not reach every configured congregation output")
+    if (mainAfterDesigned.sceneId !== designSceneId) {
+      throw new Error("The pinned design did not reach its selected Main congregation output")
     }
-    if (mainAfterDesigned.sceneSnapshot?.design?.id !== designRef.id || mainAfterDesigned.sceneSnapshot.design.version !== designRef.version || mainAfterDesigned.sceneSnapshot.design.pageId !== designRef.pageId
-      || secondaryAfterDesigned.sceneSnapshot?.design?.id !== designRef.id || secondaryAfterDesigned.sceneSnapshot.design.version !== designRef.version || secondaryAfterDesigned.sceneSnapshot.design.pageId !== designRef.pageId) {
-      throw new Error("The output did not retain the exact approved Design identity and version")
+    if (mainAfterDesigned.sceneSnapshot?.design?.id !== designRef.id || mainAfterDesigned.sceneSnapshot.design.version !== designRef.version || mainAfterDesigned.sceneSnapshot.design.pageId !== designRef.pageId) {
+      throw new Error("The selected output did not retain the exact approved Design identity and version")
     }
-    if (mainAfterDesigned.sceneSnapshot?.background !== "#123456" || secondaryAfterDesigned.sceneSnapshot?.background !== "#123456") {
+    if (mainAfterDesigned.sceneSnapshot?.background !== "#123456") {
       throw new Error("Taking version 1 used the newer draft/version 2 design content")
+    }
+    if (JSON.stringify(secondaryAfterDesigned) !== JSON.stringify(secondaryAfterManual)) {
+      throw new Error("The Main-only designed moment changed the other congregation output")
     }
     const mainProgramAfterDesignedTake = await captureProgramOutput("main", "after-designed-take-main", {
       expectedChangeFromHash: mainProgramAfterManualTake.hash,
     })
     const secondaryProgramAfterDesignedTake = await captureProgramOutput("qa-secondary", "after-designed-take-secondary", {
-      expectedChangeFromHash: secondaryProgramAfterManualTake.hash,
+      expectedHash: secondaryProgramAfterManualTake.hash,
     })
 
     stage = "move on and restore each output's previous scene"
@@ -547,14 +575,14 @@ async function runScenario() {
       expectedChangeFromHash: mainProgramAfterDesignedTake.hash,
     })
     const secondaryProgramAfterRestore = await captureProgramOutput("qa-secondary", "after-designed-restore-secondary", {
-      expectedChangeFromHash: secondaryProgramAfterDesignedTake.hash,
+      expectedHash: secondaryProgramAfterDesignedTake.hash,
     })
 
     return {
       design: { id: designDocument.id, title: designDocument.title, takenVersion: 1, newerVersion: 2 },
       service: { id: serviceAtApproval.current.id, title: serviceAtApproval.current.title, revision: approvalRevision },
       manualScene: { id: sceneId, name: approvedManualScene.name, background: approvedManualScene.background },
-      pinnedMoment: { itemId: designedItem.id, designId: designRef.id, version: designRef.version, pageId: designRef.pageId, sceneId: designSceneId, preparedSceneId: pinnedSceneId },
+      pinnedMoment: { itemId: designedItem.id, designId: designRef.id, version: designRef.version, pageId: designRef.pageId, outputs: designRef.outputs, sceneId: designSceneId, preparedSceneId: pinnedSceneId },
       beforePreview: { main: mainBefore, secondary: secondaryBefore },
       afterManualTake: { main: mainAfterManual, secondary: secondaryAfterManual },
       afterDesignedTake: { main: mainAfterDesigned, secondary: secondaryAfterDesigned },
