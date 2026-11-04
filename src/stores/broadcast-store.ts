@@ -7,6 +7,7 @@ import type {
   SongWithSections,
   BroadcastOutput,
   DesignedMomentRestore,
+  BroadcastOutputLanguage,
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
@@ -24,7 +25,7 @@ import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import type { TimerState } from "@/lib/timer"
 import { useSongStore } from "@/stores/song-store"
 import { nextVisibleItem, type OutlineHeader } from "@/lib/run-of-show"
-import { forOutputLanguage, isOutputLanguageFallback, OUTPUT_LANGUAGE_FALLBACK_NOTICE } from "@/lib/output-language"
+import { forOutputLanguage, isOutputLanguageFallback, OUTPUT_LANGUAGE_FALLBACK_NOTICE, withLanguageOverride, type LanguageOverride } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
@@ -148,6 +149,8 @@ interface BroadcastState {
   outputs: BroadcastOutput[]
   /** Runtime on-air state per output id. Not persisted. */
   outputStatus: Record<string, BroadcastOutputStatus>
+  /** Languages chosen in Live for this session, by output id (#446). Never saved; journaled. */
+  languageOverrides: Record<string, LanguageOverride>
   isLive: boolean
   liveVerse: VerseRenderData | null
   // The Verse the live output was presented from, kept so it can be
@@ -369,6 +372,8 @@ interface BroadcastState {
   // Output management
   addOutput: (output: BroadcastOutput) => void
   updateOutput: (id: string, patch: Partial<Omit<BroadcastOutput, "id">>) => void
+  /** Show another language on one output for this session only (null: back to its saved language). */
+  setLanguageOverride: (outputId: string, language: BroadcastOutputLanguage | null) => void
   removeOutput: (id: string) => void
   duplicateOutput: (id: string) => void
   renameOutput: (id: string, name: string) => void
@@ -808,6 +813,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   activeThemeId: BUILTIN_THEMES[0].id,
   outputs: [defaultMainOutput()],
   outputStatus: {},
+  languageOverrides: {},
   isLive: false,
   liveVerse: null,
   liveSourceVerse: null,
@@ -988,8 +994,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     })),
   syncBroadcastOutputFor: (outputId: string) => {
     const s = get()
-    const output = s.outputs.find((o) => o.id === outputId)
-    if (!output) return
+    const savedOutput = s.outputs.find((o) => o.id === outputId)
+    if (!savedOutput) return
+    // Its language as Live has it now: saved, or this session's override (#446).
+    const output = withLanguageOverride(savedOutput, s.languageOverrides)
     // The look for what is on air: this output's theme for that kind of content, else its main theme.
     const shown = feedFrame(s, output.shows)
     const scene = sceneForOutput(output, s.scenes)
@@ -1114,6 +1122,17 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         ? s.outputs
         : [...s.outputs, withSceneSnapshot(output, s.scenes)],
     })),
+  setLanguageOverride: (outputId, language) => {
+    const output = get().outputs.find((o) => o.id === outputId)
+    if (!output) return
+    const rest = { ...get().languageOverrides }
+    delete rest[outputId]
+    // Back to the saved language is no override at all.
+    const by = currentActor()
+    const next = language === null || language === (output.language ?? "both") ? rest : { ...rest, [outputId]: { language, ...(by ? { by } : {}) } }
+    set({ languageOverrides: next })
+    get().syncBroadcastOutputFor(outputId)
+  },
   updateOutput: (id, patch) => {
     set((s) => ({
       outputs: s.outputs.map((o) => {

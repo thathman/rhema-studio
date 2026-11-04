@@ -11,6 +11,7 @@ import { CONTENT_NAMES } from "@/lib/content-names"
 import { lowerThirdWords, tickerWords, type SourceId, type StateSource, type StateSourceId } from "@/lib/live-sources"
 import { cameraWords } from "@/lib/show-health"
 import { sceneForOutput } from "@/lib/scenes"
+import { LANGUAGE_NAMES } from "@/lib/output-language"
 import type { ContentType } from "@/types/broadcast"
 import { systemTimeZone } from "@/lib/setup-readiness"
 import { validTimeZone } from "@/lib/church-time"
@@ -355,6 +356,21 @@ export function remapJournalItemIds(re: (id: string | null | undefined) => strin
   useJournalStore.setState((j) => ({ entries: j.entries.map((e) => (e.itemId ? { ...e, itemId: re(e.itemId) } : e)) }))
   if (seenBeforeRehearsal) seenBeforeRehearsal = { ...seenBeforeRehearsal, liveItemId: re(seenBeforeRehearsal.liveItemId) }
 }
+
+// A language chosen in Live for one output (#446): who, which output, from what to what.
+useBroadcastStore.subscribe((s, prev) => {
+  if (s.languageOverrides === prev.languageOverrides) return
+  const add = useJournalStore.getState().add
+  for (const output of s.outputs) {
+    const a = prev.languageOverrides[output.id]
+    const b = s.languageOverrides[output.id]
+    if (a?.language === b?.language) continue
+    const saved = LANGUAGE_NAMES[output.language ?? "both"]
+    const by = b?.by ?? (a ? useSettingsStore.getState().operatorName.trim() || undefined : undefined)
+    const label = b ? `${output.name}: ${LANGUAGE_NAMES[b.language]} for this session (saved: ${saved})` : `${output.name}: back to its saved language (${saved})`
+    add({ kind: "source", source: "Language", label: `${label}${by ? ` · by ${by}` : ""}`, ...(by ? { by } : {}) })
+  }
+})
 
 // Record every change of what is on air, from the one store that owns it.
 useBroadcastStore.subscribe((s, prev) => {

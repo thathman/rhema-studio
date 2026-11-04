@@ -46,7 +46,7 @@ async function render(node: React.ReactNode) {
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   receiverState.health = null
-  useBroadcastStore.setState({ isLive: false, liveVerse: null, rehearsal: false })
+  useBroadcastStore.setState({ isLive: false, liveVerse: null, rehearsal: false, languageOverrides: {} })
   useBibleStore.setState({ selectedVerse: null, selectedSlide: null })
   useQueueStore.setState({ items: [] })
 })
@@ -97,6 +97,20 @@ describe("Present's Program and Preview panels", () => {
     await act(async () => useBroadcastStore.setState({ rehearsal: true }))
     expect(header.textContent).toContain("Rehearsal")
     expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe("Rehearsal")
+  })
+
+  it("offers this session's language for the selected output, and says when one is chosen (#446)", async () => {
+    await render(<LiveOutputPanel outputId="main" />)
+    const control = el.querySelector<HTMLElement>('[aria-label^="Languages on "][aria-label$=" for this session"]')
+    expect(control).not.toBeNull()
+    expect(control!.textContent).toContain("As saved (both languages)")
+    const header = el.querySelector('[data-slot="panel-header"]')!
+    expect(header.textContent).not.toContain("Language · this session")
+    await act(async () => useBroadcastStore.getState().setLanguageOverride("main", "first"))
+    expect(header.textContent).toContain("Language · this session")
+    expect(control!.textContent).toContain("First language only")
+    await act(async () => useBroadcastStore.getState().setLanguageOverride("main", null))
+    expect(header.textContent).not.toContain("Language · this session")
   })
 
   it("shows the empty Program and reports a closed local output window", async () => {

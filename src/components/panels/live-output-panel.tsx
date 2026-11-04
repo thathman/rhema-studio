@@ -9,10 +9,10 @@ import { cn } from "@/lib/utils"
 import { useBroadcastStore } from "@/stores"
 import { autoModeOf, type AutoMode } from "@/stores/broadcast-store"
 import { outputOnAir } from "@/lib/output-on-air"
-import { forOutputLanguage } from "@/lib/output-language"
+import { forOutputLanguage, LANGUAGE_NAMES, withLanguageOverride } from "@/lib/output-language"
 import { LiveSourcesStrip } from "@/studio/present/live-sources-strip"
 import { StatusChip } from "@/studio/ui/status-chip"
-import type { BroadcastOutput, BroadcastOutputStatus } from "@/types"
+import type { BroadcastOutput, BroadcastOutputLanguage, BroadcastOutputStatus } from "@/types"
 
 /**
  * What the screens show. The transport is the only ordinary place to Take or
@@ -27,7 +27,11 @@ export function LiveOutputPanel({ outputId, sceneTakeAction }: { outputId?: stri
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
   const outputs = useBroadcastStore((s) => s.outputs)
   const congregationOutputs = outputs.filter((output) => (output.role ?? "congregation") === "congregation")
-  const output = congregationOutputs.find((candidate) => candidate.id === outputId) ?? congregationOutputs[0]
+  const savedOutput = congregationOutputs.find((candidate) => candidate.id === outputId) ?? congregationOutputs[0]
+  const languageOverride = useBroadcastStore((s) => (savedOutput ? s.languageOverrides[savedOutput.id] : undefined))
+  // As Live renders it now: its saved language, or this session's choice (#446).
+  const output = savedOutput && languageOverride ? withLanguageOverride(savedOutput, { [savedOutput.id]: languageOverride }) : savedOutput
+  const savedLanguage: BroadcastOutputLanguage = savedOutput?.language ?? "both"
   const status = useBroadcastStore((s) => (output ? s.outputStatus[output.id] : undefined))
   const outputLive = output ? outputOnAir(output, status) : false
   const feed = useFeedHealth(output?.id ?? "", !!output && output.type === "browser" && outputLive)
@@ -85,6 +89,28 @@ export function LiveOutputPanel({ outputId, sceneTakeAction }: { outputId?: stri
             </SelectContent>
           </Select>
         </label>
+        {savedOutput && (
+          <>
+            <span aria-hidden className="mx-2 h-4 w-px bg-border" />
+            <label
+              className="flex items-center gap-2"
+              title={`Languages on ${savedOutput.name} for this session only: it is not saved (Edit output keeps ${LANGUAGE_NAMES[savedLanguage].toLowerCase()}), goes when Rhema Studio restarts, and every change is in the service log.`}
+            >
+              <span className={cn("text-xs font-medium", languageOverride ? "text-foreground" : "text-muted-foreground")}>
+                {languageOverride ? "Language · this session" : "Language"}
+              </span>
+              <Select value={languageOverride?.language ?? "saved"} onValueChange={(v) => useBroadcastStore.getState().setLanguageOverride(savedOutput.id, v === "saved" ? null : (v as BroadcastOutputLanguage))}>
+                <SelectTrigger size="sm" className="text-xs" aria-label={`Languages on ${savedOutput.name} for this session`}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="saved">As saved ({LANGUAGE_NAMES[savedLanguage].toLowerCase()})</SelectItem>
+                  {(["both", "first", "second"] as const).filter((l) => l !== savedLanguage).map((l) => (
+                    <SelectItem key={l} value={l}>{LANGUAGE_NAMES[l]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+          </>
+        )}
         <span aria-hidden className="mx-2 h-4 w-px bg-border" />
         <StatusChip
           tone={!isLive ? "off" : rehearsal ? "warn" : "live"}

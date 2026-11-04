@@ -31,3 +31,15 @@ describe("per-output language", () => {
     expect(isOutputLanguageFallback({ reference: "Empty", segments: [] }, "second")).toBe(false)
   })
 })
+
+describe("a language chosen in Live for this session (#446)", () => {
+  it("overrides one output's saved language, and only when it differs", async () => {
+    const { withLanguageOverride } = await import("./output-language")
+    const output = { id: "overflow", language: "first" as const }
+    expect(withLanguageOverride(output, {})).toBe(output)
+    expect(withLanguageOverride(output, { overflow: { language: "second" } }).language).toBe("second")
+    expect(withLanguageOverride(output, { overflow: { language: "first" } })).toBe(output)
+    expect(withLanguageOverride(output, { other: { language: "second" } })).toBe(output)
+    expect(withLanguageOverride({ id: "x" }, { x: { language: "both" } })).toEqual({ id: "x" })
+  })
+})

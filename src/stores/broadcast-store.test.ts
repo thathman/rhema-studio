@@ -991,6 +991,38 @@ describe("updateDraftNested deep paths", () => {
     expect(useBroadcastStore.getState().outputFrames.stream).toBeUndefined()
   })
 
+  it("a language chosen in Live changes one output for this session only, and is logged (#446)", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const { useJournalStore } = await import("./journal-store")
+    const { useSettingsStore } = await import("./settings-store")
+    useSettingsStore.setState({ operatorName: "Femi" })
+    useJournalStore.setState({ entries: [] })
+    const s = useBroadcastStore.getState()
+    s.addOutput({ id: "overflow", name: "Overflow", type: "ndi", themeId: s.themes[0].id, monitorIndex: 0, ndi: ndiDefaults })
+    useBroadcastStore.setState({ isLive: true, liveVerse: { ...sampleLiveVerse, translationLines: ["For God so loved", "Nítorí Ọlọ́run"] } })
+    useBroadcastStore.getState().syncBroadcastOutput()
+    expect(useBroadcastStore.getState().outputFrames.overflow.verse?.translationLines).toHaveLength(2)
+
+    useBroadcastStore.getState().setLanguageOverride("overflow", "second")
+    const frames = useBroadcastStore.getState().outputFrames
+    expect(frames.overflow.verse?.segments).toEqual([{ text: "Nítorí Ọlọ́run" }]) // Yorùbá kept as written
+    expect(frames.main.verse?.translationLines).toHaveLength(2) // other outputs unchanged
+    expect(useBroadcastStore.getState().outputs.find((o) => o.id === "overflow")?.language).toBeUndefined() // never saved
+    expect(useJournalStore.getState().entries.at(-1)).toMatchObject({ kind: "source", source: "Language", by: "Femi", label: "Overflow: Second language only for this session (saved: Both languages) · by Femi" })
+
+    // A later sync keeps the choice; back to as saved ends it, and says so.
+    useBroadcastStore.getState().syncBroadcastOutput()
+    expect(useBroadcastStore.getState().outputFrames.overflow.verse?.segments).toEqual([{ text: "Nítorí Ọlọ́run" }])
+    useBroadcastStore.getState().setLanguageOverride("overflow", null)
+    expect(useBroadcastStore.getState().languageOverrides).toEqual({})
+    expect(useBroadcastStore.getState().outputFrames.overflow.verse?.translationLines).toHaveLength(2)
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Overflow: back to its saved language (Both languages) · by Femi")
+
+    // Choosing the saved language is no override.
+    useBroadcastStore.getState().setLanguageOverride("overflow", "both")
+    expect(useBroadcastStore.getState().languageOverrides).toEqual({})
+  })
+
   it("applies a stage output's selected language to lyrics and Scripture", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const s = useBroadcastStore.getState()
