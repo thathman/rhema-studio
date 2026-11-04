@@ -266,6 +266,8 @@ impl FeedHub {
                     })
                     .collect();
                 f.tvs = tvs;
+                let ids: Vec<&str> = f.tvs.iter().map(|t| t.id.as_str()).collect();
+                f.video.keep_tvs(&ids);
             }
         }
         self.changed.notify_waiters();
@@ -296,7 +298,7 @@ impl FeedHub {
             f.acked_at = Some(std::time::Instant::now());
         }
         if let Some((from, cameras)) = video {
-            let tv = matches!(f.admits(token), Some(Some(_)));
+            let tv = f.admits(token).flatten().map(|t| t.id.clone());
             f.video.report(from, cameras, std::time::Instant::now(), tv);
         }
         if let Some(skew) = clock {
@@ -2623,7 +2625,7 @@ async fn camera_status_handler<S: CommandSink + 'static>(
 /// `GET /api/v1/camera/{name}/tally` with `Authorization: Bearer <the camera's secret>`: whether
 /// this camera is on a Program now (#209), so the phone's light says which, never one red light
 /// for "sending". `online`: a paired OBS companion has it in Program (its tally, at most 15 s old).
-/// `congregation`: a paired Google TV's page plays it (its report, at most 10 s old). A projector
+/// `congregation`: a paired Google TV's page plays it (its report, at most 3.5 s old). A projector
 /// Rhema drives from its own window reports nothing and is not counted. Only the camera's own.
 async fn camera_tally_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
