@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const sent: Record<string, unknown>[] = []
 const asked: Record<string, unknown>[] = []
@@ -20,7 +20,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
 
 import { act } from "react"
-import { createRoot } from "react-dom/client"
+import { createRoot, type Root } from "react-dom/client"
 import { useJoin } from "@/stores/join-store"
 import { useBibleStore } from "@/stores/bible-store"
 import { OperatorsPanel } from "@/studio/production/operators-panel"
@@ -37,11 +37,14 @@ const live: LiveStateV1 = {
   presence: [{ name: "Femi's laptop", role: "bible", connected: true, lastSeenMs: 0 }, { name: "Stage iPad", role: "stage", connected: false, lastSeenMs: null }],
 }
 
+const roots: Root[] = []
 const render = async (role: string, state: LiveStateV1 = live) => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   useJoin.setState({ status: "connected", me: { name: "Op", role, ...(role === "screens" ? { outputScope: ["main"] } : {}) }, live: state, error: null, paused: false, note: null })
   const el = document.createElement("div")
-  await act(async () => createRoot(el).render(<OperatorsPanel />))
+  const root = createRoot(el)
+  roots.push(root)
+  await act(async () => root.render(<OperatorsPanel />))
   return el
 }
 const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent?.trim() === text)!
@@ -58,6 +61,9 @@ beforeEach(() => {
   sent.length = 0
   asked.length = 0
   useBibleStore.setState({ books: [{ id: 43, translation_id: 1, book_number: 43, name: "John", abbreviation: "Jn", testament: "NT" } as never] })
+})
+afterEach(() => {
+  act(() => { for (const root of roots.splice(0)) root.unmount() })
 })
 
 describe("desk consoles on a joined computer (#197)", () => {
