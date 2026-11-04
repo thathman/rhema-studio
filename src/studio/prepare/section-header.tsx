@@ -51,25 +51,29 @@ export function SectionHeader({ header, summary, collapsed, selected = false, dr
     .filter(({ candidate }) => !!candidate.event)
     .sort((a, b) => a.candidate.at - b.candidate.at || a.order - b.order)
   const eventOrder = orderedEvents.findIndex(({ candidate }) => candidate.id === header.id)
+  const orderedGroups = headers.map((candidate, order) => ({ candidate, order }))
+    .filter(({ candidate }) => candidate.type === "group" && !candidate.event)
+    .sort((a, b) => a.candidate.at - b.candidate.at || a.order - b.order)
+  const groupOrder = orderedGroups.findIndex(({ candidate }) => candidate.id === header.id)
   const { ref: dropRef, isDropTarget } = useDroppable({
     id: `section:${header.id}`,
     data: { kind: "section", headerId: header.id, headerType: header.type, isEvent: !!header.event, eventOrder },
     collisionPriority: 4,
     collisionDetector: pointerIntersection,
   })
+  const dragKind = header.event ? "event" : header.type === "group" ? "group" : null
   const { ref: draggableRef, handleRef, isDragging } = useDraggable({
-    id: `event:${header.id}`,
-    data: { kind: "event", headerId: header.id, eventOrder },
-    disabled: !header.event,
+    id: `${dragKind ?? "phase"}:${header.id}`,
+    data: { kind: dragKind, headerId: header.id, eventOrder },
+    disabled: dragKind === null,
   })
   const setHeaderRef = useCallback((element: Element | null) => {
     dropRef(element)
-    // Phase and group rows are drop targets only. Do not register their DOM
-    // element as a disabled draggable: the accessibility plugin exposes that
-    // disabled draggable as a button and can make the row's child controls
-    // appear unavailable to assistive technology.
-    draggableRef(header.event ? element : null)
-  }, [dropRef, draggableRef, header.event])
+    // Phases are drop targets only. Do not register the DOM element as a
+    // disabled draggable: its synthetic button can make child controls appear
+    // unavailable to assistive technology.
+    draggableRef(dragKind ? element : null)
+  }, [dropRef, draggableRef, dragKind])
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(header.name)
   const [removePhaseOpen, setRemovePhaseOpen] = useState(false)
@@ -111,11 +115,11 @@ export function SectionHeader({ header, summary, collapsed, selected = false, dr
       <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={`${collapsed ? "Show" : "Hide"} ${header.name}`} className="flex size-6 shrink-0 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&_svg]:size-3.5">
         {collapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
       </button>
-      {header.event && <button
+      {dragKind && <button
         ref={handleRef}
         type="button"
-        aria-label={`Drag event ${header.name} with its moments`}
-        title="Drag this event and its moments to another event or phase"
+        aria-label={header.event ? `Drag event ${header.name} with its moments` : `Drag group ${header.name} with its items`}
+        title={header.event ? "Drag this event and its moments to another event or phase" : "Drag this group and its items to another phase, event, group or rundown position"}
         className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:text-foreground active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring/50"
       ><GripVerticalIcon className="size-3.5" /></button>}
       {/* On a narrow column how it runs and its counts wrap under the name rather than cutting both short. */}
@@ -174,6 +178,11 @@ export function SectionHeader({ header, summary, collapsed, selected = false, dr
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled={eventOrder <= 0} onSelect={() => useQueueStore.getState().moveEvent(header.id, -1)}>Move event up</DropdownMenuItem>
             <DropdownMenuItem disabled={eventOrder < 0 || eventOrder === orderedEvents.length - 1} onSelect={() => useQueueStore.getState().moveEvent(header.id, 1)}>Move event down</DropdownMenuItem>
+          </>}
+          {!phase && !header.event && <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled={groupOrder <= 0} onSelect={() => useQueueStore.getState().moveGroup(header.id, -1)}>Move group up</DropdownMenuItem>
+            <DropdownMenuItem disabled={groupOrder < 0 || groupOrder === orderedGroups.length - 1} onSelect={() => useQueueStore.getState().moveGroup(header.id, 1)}>Move group down</DropdownMenuItem>
           </>}
           {phase && (
             <>

@@ -306,10 +306,17 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
               const bounds = target.shape?.boundingRectangle ?? target.element?.getBoundingClientRect()
               if (bounds) next = { targetId, placement: placementAtPointer(position.current.y, bounds) }
             }
+          } else if (sourceData.kind === "group") {
+            if (sourceData.headerId !== targetData.headerId && (targetData.headerType === "phase" || targetData.isEvent)) {
+              next = { targetId, placement: "inside" }
+            } else if (sourceData.headerId !== targetData.headerId && targetData.headerType === "group") {
+              const bounds = target.shape?.boundingRectangle ?? target.element?.getBoundingClientRect()
+              if (bounds) next = { targetId, placement: placementAtPointer(position.current.y, bounds) }
+            }
           } else {
             next = { targetId, placement: "inside" }
           }
-        } else if (sourceData.kind !== "event") {
+        } else if (sourceData.kind !== "event" && sourceData.kind !== "group") {
           const sourceId = String(source.id)
           if (isSortable(target) && sourceId !== targetId) {
             const bounds = target.shape?.boundingRectangle ?? target.element?.getBoundingClientRect()
@@ -339,7 +346,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
         if (!source || !target) return
         const sourceData = source.data as { kind?: string; headerId?: string; eventOrder?: number }
         const sourceId = String(source.id)
-        const targetData = target.data as { kind?: string; headerId?: string }
+        const targetData = target.data as { kind?: string; headerId?: string; headerType?: string; isEvent?: boolean }
         const queue = useQueueStore.getState()
         if (sourceData.kind === "event" && sourceData.headerId) {
           if (targetData.kind === "section" && targetData.headerId && (targetData as { headerType?: string }).headerType === "phase") {
@@ -352,6 +359,23 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
             if (!bounds) return
             const placement = placementAtPointer(event.operation.position.current.y, bounds)
             queue.moveEventToTarget(sourceData.headerId, { kind: "event", eventId: eventTarget.headerId, placement })
+          }
+          return
+        }
+        if (sourceData.kind === "group" && sourceData.headerId) {
+          if (targetData.kind === "section" && targetData.headerId) {
+            if (targetData.headerId === sourceData.headerId) return
+            if (targetData.headerType === "phase" || targetData.isEvent) {
+              queue.moveGroupToTarget(sourceData.headerId, { kind: "section", headerId: targetData.headerId })
+            } else if (targetData.headerType === "group") {
+              const bounds = target.shape?.boundingRectangle ?? target.element?.getBoundingClientRect()
+              if (!bounds) return
+              queue.moveGroupToTarget(sourceData.headerId, {
+                kind: "group",
+                groupId: targetData.headerId,
+                placement: placementAtPointer(event.operation.position.current.y, bounds),
+              })
+            }
           }
           return
         }
