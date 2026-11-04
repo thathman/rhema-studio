@@ -210,6 +210,32 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[role="toolbar"][aria-label="Live tools"] [title*="Other timers"]')).toBeNull()
   })
 
+  it("shows every running auxiliary timer from one compact Live status and excludes paused timers", async () => {
+    const now = performance.now()
+    useAuxTimers.setState({ timers: [
+      { id: "communion-prep", label: "Communion prep", timer: { durationMs: 300_000, startedAt: now - 30_000, accumulatedMs: 0 }, onStage: false, owner: "" },
+      { id: "interpreter", label: "Interpreter", timer: { durationMs: 600_000, startedAt: now - 45_000, accumulatedMs: 0 }, onStage: false, owner: "" },
+      { id: "paused-prep", label: "Paused prep", timer: { durationMs: 180_000, startedAt: null, accumulatedMs: 30_000 }, onStage: false, owner: "" },
+    ] })
+    await renderWorkspace()
+
+    const summary = element.querySelector<HTMLButtonElement>('button[aria-label="2 additional timers running"]')
+    expect(summary?.textContent).toContain("2 running")
+    expect(element.textContent).not.toContain("Communion prep")
+
+    await act(async () => {
+      summary?.click()
+      await Promise.resolve()
+    })
+
+    const list = document.body.querySelector<HTMLUListElement>('ul[aria-label="Running additional timers"]')
+    expect(list?.querySelectorAll("li")).toHaveLength(2)
+    expect(list?.textContent).toContain("Communion prep")
+    expect(list?.textContent).toContain("Interpreter")
+    expect(list?.textContent).not.toContain("Paused prep")
+    expect(list?.textContent).toMatch(/\d:\d{2}/)
+  })
+
   it("offers safe next steps when no service is open without changing Program or the rundown", async () => {
     const program = useBroadcastStore.getState().liveVerse
     const wasLive = useBroadcastStore.getState().isLive
