@@ -152,23 +152,30 @@ resize_live_window() {
   if ! "$ROOT/scripts/mac-qa/qa.py" main "$name" - 20 > "$QA_SCRATCH/$name.json" <<EOF
 const label = window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label
 if (!label) throw new Error("The current native window label is unavailable")
-await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: false })
 const fullscreen = () => window.__TAURI_INTERNALS__.invoke("plugin:window|is_fullscreen", { label })
 const maximized = () => window.__TAURI_INTERNALS__.invoke("plugin:window|is_maximized", { label })
-let isFullscreen = await fullscreen()
-for (let attempt = 0; isFullscreen && attempt < 30; attempt += 1) {
-  await sleep(100)
-  isFullscreen = await fullscreen()
-}
-if (isFullscreen) throw new Error("Native window did not leave fullscreen before resize")
-if (await maximized()) {
-  await window.__TAURI_INTERNALS__.invoke("plugin:window|unmaximize", { label })
-  let stillMaximized = await maximized()
-  for (let attempt = 0; stillMaximized && attempt < 30; attempt += 1) {
+const startedFullscreen = await fullscreen()
+const startedMaximized = await maximized()
+await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: false })
+if (startedFullscreen || startedMaximized) {
+  let stableWindowSamples = 0
+  for (let attempt = 0; stableWindowSamples < 10 && attempt < 60; attempt += 1) {
+    const isFullscreen = await fullscreen()
+    const isMaximized = await maximized()
+    if (isFullscreen) {
+      await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: false })
+      stableWindowSamples = 0
+    } else if (isMaximized) {
+      await window.__TAURI_INTERNALS__.invoke("plugin:window|unmaximize", { label })
+      stableWindowSamples = 0
+    } else {
+      stableWindowSamples += 1
+    }
     await sleep(100)
-    stillMaximized = await maximized()
   }
-  if (stillMaximized) throw new Error("Native window did not leave maximized state before resize")
+  if (stableWindowSamples < 10) {
+    throw new Error("Native window did not settle out of fullscreen/maximized state before resize: " + JSON.stringify({ fullscreen: await fullscreen(), maximized: await maximized() }))
+  }
 }
 const currentSize = () => ({ width: window.innerWidth, height: window.innerHeight })
 let previousSize = currentSize()
