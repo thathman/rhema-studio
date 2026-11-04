@@ -273,7 +273,7 @@ describe("Prepare → Permissions → Live journey", () => {
     expect(host.querySelector("[data-studio-live]")).not.toBeNull()
     expect(host.textContent).toContain("John 3:16")
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
-    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Take source live"]')!.click())
+    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Take John 3:16 live"]')!.click())
 
     expect(useBroadcastStore.getState().liveVerse).toMatchObject({ reference: "John 3:16 (KJV)", content: "bible" })
     expect(useBroadcastStore.getState().liveSourceVerse).toMatchObject({ book_number: 43, chapter: 3, verse: 16 })
@@ -335,7 +335,7 @@ describe("Prepare → Permissions → Live journey", () => {
     await act(async () => navButton("Live").click())
     expect(host.textContent).toContain("Welcome")
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
-    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Take source live"]')!.click())
+    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Take Welcome live"]')!.click())
     expect(useBroadcastStore.getState().liveVerse).toMatchObject({ reference: "Welcome", kind: "slide", content: "slide" })
     expect(useBroadcastStore.getState().liveItemId).toBe("welcome-slide")
   })
@@ -477,7 +477,7 @@ describe("Prepare → Permissions → Live journey", () => {
     expect(host.textContent).toContain("Welcome")
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
     await act(async () => {
-      host.querySelector<HTMLButtonElement>('button[aria-label="Take source live"]')!.click()
+      host.querySelector<HTMLButtonElement>('button[aria-label="Take Welcome live"]')!.click()
       await vi.waitFor(() => expect(useBroadcastStore.getState().liveVerse).toMatchObject({ reference: "Welcome", kind: "slide", content: "slide" }))
     })
     expect(useBroadcastStore.getState().liveVerse).toMatchObject({ reference: "Welcome", kind: "slide", content: "slide" })

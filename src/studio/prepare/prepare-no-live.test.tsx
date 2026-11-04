@@ -567,7 +567,7 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(liveCanvas()?.getAttribute("aria-label")).toBe(liveAtStart)
     expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveItemId: "currently-on-air", liveVerse: alreadyLive })
 
-    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Take source live"]')!.click())
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Take Edited sermon title live"]')!.click())
     expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveItemId: slideMoment.id, liveVerse: { reference: "Edited sermon title", lines: ["Revised words for Sunday"] } })
     expect(liveCanvas()?.getAttribute("aria-label")).toContain("Edited sermon title")
     expect(liveCanvas()?.getAttribute("aria-label")).toContain("Revised words for Sunday")
