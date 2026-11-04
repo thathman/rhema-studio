@@ -139,14 +139,7 @@ describe("each specialist desk sees only its part", () => {
     expect(sent).toContainEqual({ command: "worship_set", value: { op: "repeat", item: "b" } })
   })
 
-  it("a stage desk sends the stage message", async () => {
-    const el = await render("stage")
-    await type(el.querySelector<HTMLInputElement>('[aria-label="Message to stage"]')!, "Wrap up")
-    await click(button(el, "Send"))
-    expect(sent).toEqual([{ command: "stage_message", value: "Wrap up" }])
-  })
-
-  it("a Stage desk can send privately only to one assigned display", async () => {
+  it("a Stage desk exposes only the assigned-recipient private send", async () => {
     const state: LiveStateV1 = {
       ...live,
       outputs: [
@@ -157,13 +150,72 @@ describe("each specialist desk sees only its part", () => {
     const el = await render("stage", state)
     expect(el.textContent).toContain("Stage East")
     expect(el.textContent).not.toContain("Projector")
-    await type(el.querySelector<HTMLSelectElement>('[aria-label="Stage display for private message"]')!, "stage-east")
+    expect(el.querySelector('[aria-label="Message to stage"]')).toBeNull()
+    expect(el.querySelector('[aria-label="Stage display for private message"]')).toBeNull()
+    const recipient = el.querySelector<HTMLSelectElement>('[aria-label="Assigned Stage display"]')!
+    await type(recipient, "stage-east")
     await type(el.querySelector<HTMLInputElement>('[aria-label="Private message text"]')!, "Choir enters now")
-    await click(button(el, "Send privately"))
+    await click(button(el, "Send privately to Stage East"))
     expect(sent).toContainEqual({ command: "stage_send", value: { target: "stage-east", text: "Choir enters now" } })
     expect(sent).not.toContainEqual({ command: "stage_message", value: "Choir enters now" })
-    await click(button(el, "Clear private message from Stage East"))
-    expect(sent).toContainEqual({ command: "stage_send", value: { target: "stage-east", text: "" } })
+    expect([...el.querySelectorAll("button")].some((item) => item.getAttribute("aria-label") === "Clear private message from Stage East")).toBe(false)
+  })
+
+  it("requires a fresh recipient choice after the host changes Stage assignments", async () => {
+    const initial: LiveStateV1 = {
+      ...live,
+      outputs: [...live.outputs.filter((output) => output.id === "main"),
+        { id: "stage-east", name: "Stage East", role: "stage", sceneId: null }],
+    }
+    const el = await render("stage", initial)
+    const recipient = el.querySelector<HTMLSelectElement>('[aria-label="Assigned Stage display"]')!
+    await type(recipient, "stage-east")
+    await type(el.querySelector<HTMLInputElement>('[aria-label="Private message text"]')!, "Old recipient draft")
+    await act(async () => {
+      useJoin.setState({ live: {
+        ...initial,
+        outputs: [...initial.outputs.filter((output) => output.id === "main"),
+          { id: "stage-west", name: "Stage West", role: "stage", sceneId: null }],
+      } })
+    })
+    const updatedRecipient = el.querySelector<HTMLSelectElement>('[aria-label="Assigned Stage display"]')!
+    expect(updatedRecipient.value).toBe("")
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Private message text"]')!.value).toBe("")
+    const send = button(el, "Choose a display to send")
+    expect(send.disabled).toBe(true)
+    expect(el.textContent).toContain("Choose an assigned Stage display")
+    expect(sent).toEqual([])
+    await type(updatedRecipient, "stage-west")
+    await type(el.querySelector<HTMLInputElement>('[aria-label="Private message text"]')!, "Choir standby")
+    await click(button(el, "Send privately to Stage West"))
+    expect(sent).toEqual([{ command: "stage_send", value: { target: "stage-west", text: "Choir standby" } }])
+    await act(async () => { useJoin.setState({ live: initial }) })
+    const restoredRecipient = el.querySelector<HTMLSelectElement>('[aria-label="Assigned Stage display"]')!
+    expect(restoredRecipient.value).toBe("")
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Private message text"]')!.value).toBe("")
+  })
+
+  it("shows a shared host Stage cue as read only", async () => {
+    const state: LiveStateV1 = {
+      ...live,
+      stageMessage: "5 minutes left",
+      outputs: [...live.outputs.filter((output) => output.id === "main"),
+        { id: "stage-east", name: "Stage East", role: "stage", sceneId: null }],
+    }
+    const el = await render("stage", state)
+    expect(el.querySelector('[aria-label="Shared Stage cue"]')?.textContent).toContain("5 minutes left")
+    expect(el.querySelector('[aria-label="Message to stage"]')).toBeNull()
+    expect([...el.querySelectorAll("button")].some((item) => item.textContent?.trim() === "Take it off")).toBe(false)
+    expect(sent).toEqual([])
+  })
+
+  it("does not offer a send control when the host has assigned no Stage displays", async () => {
+    const el = await render("stage")
+    expect(el.querySelector('[aria-label="Assigned Stage display"]')).toBeNull()
+    expect(el.querySelector('[aria-label="Private message text"]')).toBeNull()
+    expect(el.textContent).toContain("No Stage display is assigned to this desk")
+    expect(el.querySelector('[aria-label="Message to stage"]')).toBeNull()
+    expect(sent).toEqual([])
   })
 
   it("shows the host service clock read only and does not claim the Stage display received a cue", async () => {
