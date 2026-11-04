@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 import type { OutlineHeader } from "@/lib/run-of-show"
-import type { QueueItem, Scene, SceneLayer } from "@/types"
+import type { BroadcastOutput, QueueItem, Scene, SceneLayer } from "@/types"
 import type { ApprovalRequest } from "./approval-requests-store"
-import { sceneLayerReviewSummary, scenePlanReferenceLabels, sceneRequestReviewModel } from "./scene-request-review"
+import { sceneLayerReviewSummary, sceneOutputReviewRows, scenePlanReferenceLabels, sceneRequestReviewModel } from "./scene-request-review"
 
 function textLayer(text: string): SceneLayer {
   return {
@@ -67,6 +67,7 @@ describe("scene approval review", () => {
     expect(model.changes.join(" ")).toContain("90°")
     expect(model.changes.join(" ")).toContain("180°")
     expect(model.requestedScene?.backgroundGradient).toEqual(before.backgroundGradient)
+    expect(model.requestedAppearanceScene?.backgroundGradient).toEqual(requestedGradient)
   })
 
   it("names a shape-layer gradient change and keeps approval disabled until it is supported", () => {
@@ -84,6 +85,7 @@ describe("scene approval review", () => {
     expect(model.changes.join(" ")).toContain("45°")
     expect(model.changes.join(" ")).toContain("270°")
     expect(model.requestedScene?.layers[0]?.gradient).toEqual(currentGradient)
+    expect(model.requestedAppearanceScene?.layers[0]?.gradient).toEqual(requestedGradient)
     expect(sceneLayerReviewSummary(panel)).toContain("gradient 45°")
   })
 
@@ -102,6 +104,47 @@ describe("scene approval review", () => {
     expect(model.changes.join(" ")).toContain("Layers added: Welcome badge (color) · x 1%, y 2%, w 20%, h 10% · 90% opacity · visible · color #336699")
     expect(model.changes.join(" ")).toContain("Layers removed: Subtitle (text) · x 5%, y 34%, w 90%, h 12% · 100% opacity · visible · text “Sunday service”")
     expect(model.changes.join(" ")).toContain("Layer order:")
+  })
+
+  it("shows the changed words each assigned output will display", () => {
+    const beforeLayer: SceneLayer = {
+      ...textLayer("Welcome"),
+      textSecond: "Ẹ káàbọ̀",
+    }
+    const requestedLayer: SceneLayer = {
+      ...beforeLayer,
+      text: "Welcome to church",
+      textSecond: "Ẹ káàbọ̀ sí ilé ìjọsìn",
+    }
+    const outputs = [
+      { id: "sanctuary", name: "Sanctuary", language: "first" },
+      { id: "stream", name: "Stream", language: "second" },
+      { id: "stage", name: "Stage" },
+    ] as BroadcastOutput[]
+
+    expect(sceneOutputReviewRows(
+      { ...scene("Welcome"), layers: [beforeLayer] },
+      { ...scene("Welcome"), layers: [requestedLayer] },
+      outputs,
+    )).toEqual([
+      { outputId: "sanctuary", outputName: "Sanctuary", languageLabel: "First language only", textChanges: ["Heading: “Welcome” → “Welcome to church”"] },
+      { outputId: "stream", outputName: "Stream", languageLabel: "Second language only", textChanges: ["Heading: “Ẹ káàbọ̀” → “Ẹ káàbọ̀ sí ilé ìjọsìn”"] },
+      { outputId: "stage", outputName: "Stage", languageLabel: "Both languages (default)", textChanges: ["Heading: “Welcome · Ẹ káàbọ̀” → “Welcome to church · Ẹ káàbọ̀ sí ilé ìjọsìn”"] },
+    ])
+  })
+
+  it("identifies when a text layer overrides an output's language setting", () => {
+    const beforeLayer = { ...textLayer("Welcome"), textSecond: "Ẹ káàbọ̀" }
+    const requestedLayer = { ...beforeLayer, language: "second" as const, text: "Welcome home" }
+    const output = { id: "sanctuary", name: "Sanctuary", language: "first" } as BroadcastOutput
+
+    expect(sceneOutputReviewRows(
+      { ...scene("Welcome"), layers: [beforeLayer] },
+      { ...scene("Welcome"), layers: [requestedLayer] },
+      [output],
+    )[0]?.textChanges).toEqual([
+      "Heading (language: output First language only → Second language only): “Welcome” → “Ẹ káàbọ̀”",
+    ])
   })
 
   it("shows camera bindings and fallback behavior without exposing the stream URL", () => {

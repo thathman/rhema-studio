@@ -305,15 +305,22 @@ describe("Permissions workspace", () => {
   it("shows a gradient-only scene request and disables approval when its appearance cannot be applied", async () => {
     const currentGradient = { angle: 90, stops: [{ color: "#112233", offset: 0 }, { color: "#445566", offset: 1 }] }
     const requestedGradient = { angle: 180, stops: [{ color: "#112233", offset: 0 }, { color: "#ffffff", offset: 1 }] }
-    const currentScene = { id: "remote-scene", name: "Welcome", background: "#112233", backgroundGradient: currentGradient, layers: [] }
+    const currentScene = {
+      id: "remote-scene", name: "Welcome", background: "#112233", backgroundGradient: currentGradient,
+      layers: [{ id: "heading", name: "Heading", kind: "text", text: "Welcome", textSecond: "Ẹ káàbọ̀", box: { x: 5, y: 8, w: 90, h: 20 }, opacity: 1, visible: true }],
+    }
+    const requestedLayer = { ...currentScene.layers[0]!, text: "Welcome home", textSecond: "Ẹ káàbọ̀ wá" }
     const request = {
       id: "gradient-scene-request", kind: "scene_save", targetId: "remote-scene", baseRevision: 7,
       requester: { id: "desk-key", name: "Screens desk" },
-      payload: { scene: { ...currentScene, backgroundGradient: requestedGradient } },
+      payload: { scene: { ...currentScene, backgroundGradient: requestedGradient, layers: [requestedLayer] } },
       reason: "Update the welcome scene", state: "submitted", createdAt: "2026-10-30T09:00:00Z",
       expiresAt: "2026-10-31T09:00:00Z", decidedBy: null, decidedAt: null, decisionNote: null,
     }
-    useBroadcastStore.setState({ scenes: [currentScene] as never })
+    useBroadcastStore.setState({
+      scenes: [currentScene] as never,
+      outputs: [{ id: "main", name: "Sanctuary", type: "display", role: "congregation", language: "first", sceneId: "remote-scene", themeId: "classic-dark", monitorIndex: 0 }] as never,
+    })
     tauri.invoke.mockImplementation(async (command: string) => command === "approvals_list" ? [request] : null)
     resetApprovalRequests()
     await reloadApprovalRequests()
@@ -322,6 +329,14 @@ describe("Permissions workspace", () => {
     expect(el.textContent).toContain("Background gradient: 90°")
     expect(el.textContent).toContain("180°")
     expect(el.textContent).toContain("not applied from a joined desk")
+    expect(el.textContent).toContain("Sanctuary · First language only")
+    expect(el.textContent).toContain("Heading: “Welcome” → “Welcome home”")
+    const backgroundSwatches = [...el.querySelectorAll<HTMLElement>('[aria-label$="background paint preview"]')]
+    expect(backgroundSwatches.map((swatch) => swatch.style.backgroundImage)).toEqual(expect.arrayContaining([
+      expect.stringContaining("linear-gradient(90deg"),
+      expect.stringContaining("linear-gradient(180deg"),
+    ]))
+    expect(el.textContent).toContain("not a pixel-perfect output preview")
     expect(el.querySelector('[role="alert"]')?.textContent).toContain("cannot be applied from a joined desk")
     const approve = [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Approve"))
     expect(approve?.disabled).toBe(true)

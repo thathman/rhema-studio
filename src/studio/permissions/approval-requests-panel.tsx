@@ -1,15 +1,17 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type CSSProperties } from "react"
 import { CheckIcon, CircleAlertIcon, HistoryIcon, RefreshCwIcon, ShieldCheckIcon, XIcon } from "lucide-react"
+import { gradientCss, gradientFallback, normalizeGradient } from "@/lib/scene-gradient"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { outputsForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { scenesOnScreen } from "@/lib/desk-scenes"
 import { cameraLabelOf } from "@/lib/cameras"
+import type { BroadcastOutput, Scene } from "@/types"
 import { useQueueStore } from "@/stores/queue-store"
 import { useJoin } from "@/stores/join-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
-import { sceneLayerReviewSummary, scenePlanReferenceLabels, sceneRequestReviewModel, type SceneRequestReviewModel } from "./scene-request-review"
+import { sceneLayerReviewSummary, sceneOutputReviewRows, scenePlanReferenceLabels, sceneRequestReviewModel, type SceneRequestReviewModel } from "./scene-request-review"
 import {
   applySceneApprovalRequest,
   applyStageSendApprovalRequest,
@@ -81,17 +83,36 @@ function sceneDeleteInstruction(request: ApprovalRequest): string {
   return "This request did not remove the scene from the library."
 }
 
-function SceneCompositionSummary({ scene, missingText, cameraLabelForUrl }: {
-  scene: import("@/types").Scene | null
+const CHECKER = "repeating-conic-gradient(#c5cdd1 0% 25%, #edf0f1 0% 50%)"
+
+function paintSwatchStyle(gradient: Scene["backgroundGradient"], solid: string): CSSProperties {
+  const normalized = normalizeGradient(gradient)
+  if (normalized) return {
+    backgroundColor: gradientFallback(normalized),
+    backgroundImage: `${gradientCss(normalized)}, ${CHECKER}`,
+    backgroundSize: "auto, 8px 8px",
+  }
+  return { backgroundColor: solid === "transparent" ? undefined : solid, backgroundImage: solid === "transparent" ? CHECKER : undefined, backgroundSize: "8px 8px" }
+}
+
+function SceneCompositionSummary({ scene, reviewLabel, missingText, cameraLabelForUrl }: {
+  scene: Scene | null
+  reviewLabel: string
   missingText: string
   cameraLabelForUrl: (url: string) => string | undefined
 }) {
   if (!scene) return <p className="mt-1 text-xs text-muted-foreground">{missingText}</p>
   return (
     <div className="mt-1 space-y-1 text-xs text-muted-foreground">
-      <p>{scene.name} · {scene.background} · {scene.layers.length} visual layer{scene.layers.length === 1 ? "" : "s"}</p>
-      {scene.layers.length > 0 ? <ol className="list-inside list-decimal space-y-0.5">
-        {scene.layers.map((layer) => <li key={layer.id}>{sceneLayerReviewSummary(layer, cameraLabelForUrl)}</li>)}
+      <div className="flex items-center gap-2">
+        <span aria-label={`${reviewLabel} background paint preview`} role="img" className="size-7 shrink-0 rounded border border-border" style={paintSwatchStyle(scene.backgroundGradient, scene.background)} />
+        <p>{scene.name} · {scene.backgroundGradient ? "background gradient" : scene.background} · {scene.layers.length} visual layer{scene.layers.length === 1 ? "" : "s"}</p>
+      </div>
+      {scene.layers.length > 0 ? <ol className="list-inside list-decimal space-y-0.5 break-words">
+        {scene.layers.map((layer) => <li key={layer.id}>
+          <span>{sceneLayerReviewSummary(layer, cameraLabelForUrl)}</span>
+          {(layer.kind === "color" || layer.kind === "ellipse") && <span aria-label={`${reviewLabel} ${layer.name} paint preview`} role="img" className="ml-2 inline-block size-4 align-middle rounded border border-border" style={paintSwatchStyle(layer.gradient, layer.color ?? "#3157a4")} />}
+        </li>)}
       </ol> : <p>Blank composition · no visual layers</p>}
     </div>
   )
@@ -107,11 +128,12 @@ function SceneRequestReview({
 }: {
   request: ApprovalRequest
   model: SceneRequestReviewModel
-  assignedOutputs: string[]
+  assignedOutputs: BroadcastOutput[]
   rehearsal: boolean
   planReferences: string[]
   cameraLabelForUrl: (url: string) => string | undefined
 }) {
+  const outputReviewRows = sceneOutputReviewRows(model.beforeScene, model.requestedScene, assignedOutputs)
   return (
     <section aria-label="Scene change review" className="mt-3 rounded-md border border-border bg-muted/20 p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -124,6 +146,7 @@ function SceneRequestReview({
           <h5 className="text-xs font-semibold">{model.beforeLabel}</h5>
           <SceneCompositionSummary
             scene={model.beforeScene}
+            reviewLabel={model.beforeLabel}
             missingText={model.beforeStatus === "unavailable" ? "No trustworthy pre-Apply snapshot is available." : "No scene with this ID is present in the local library."}
             cameraLabelForUrl={cameraLabelForUrl}
           />
@@ -132,7 +155,7 @@ function SceneRequestReview({
           <h5 className="text-xs font-semibold">{model.requestedLabel}</h5>
           {request.kind === "scene_delete"
             ? <p className="mt-1 text-xs text-muted-foreground">{sceneDeleteInstruction(request)}</p>
-            : <SceneCompositionSummary scene={model.requestedScene} missingText="The requested scene version cannot be reproduced safely." cameraLabelForUrl={cameraLabelForUrl} />}
+            : <SceneCompositionSummary scene={model.requestedAppearanceScene} reviewLabel={model.requestedLabel} missingText="The requested scene version cannot be reproduced safely." cameraLabelForUrl={cameraLabelForUrl} />}
         </div>
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -143,9 +166,12 @@ function SceneRequestReview({
           </ul>
         </div>
         <div>
-          <h5 className="text-xs font-semibold">Current {rehearsal ? "rehearsal " : ""}screen assignments</h5>
-          <p className="mt-1 text-xs text-muted-foreground">{assignedOutputs.length ? assignedOutputs.join(", ") : "No matching assignment in the local screen state."}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Local review only; this is not a receiver acknowledgement.</p>
+          <h5 className="text-xs font-semibold">Appearance for current {rehearsal ? "rehearsal " : ""}screen assignments</h5>
+          {outputReviewRows.length ? <ul className="mt-1 space-y-2 break-words text-xs text-muted-foreground">{outputReviewRows.map((row) => <li key={row.outputId}>
+            <p className="font-medium text-foreground">{row.outputName} · {row.languageLabel}</p>
+            {row.textChanges.length ? <ul className="mt-0.5 list-inside list-disc space-y-0.5">{row.textChanges.map((change) => <li key={change}>{change}</li>)}</ul> : <p className="mt-0.5">No language-specific text change for this output; scene paint and layout are listed above.</p>}
+          </li>)}</ul> : <p className="mt-1 text-xs text-muted-foreground">No matching assignment in the local screen state.</p>}
+          <p className="mt-1 text-xs text-muted-foreground">Text follows each output’s language setting. This is local review context, not a pixel-perfect output preview or receiver acknowledgement.</p>
         </div>
         <div>
           <h5 className="text-xs font-semibold">Current local service plan references</h5>
@@ -322,7 +348,7 @@ export function ApprovalRequestsPanel() {
               const needsLocalRecovery = sceneApprovalNeedsLocalRecovery(request, scenes, localApplicationErrors[request.id], localRecoveryDismissed[request.id])
               const hasNewerLocalConflict = sceneApprovalHasNewerLocalConflict(request, scenes, recovery)
               const sceneReview = request.kind.startsWith("scene_") ? sceneRequestReviewModel(request, scenes, recovery, cameraLabelForUrl) : null
-              const assignedOutputs = outputsOnScreens.filter((output) => output.sceneId === request.targetId).map((output) => output.name)
+              const assignedOutputs = outputsOnScreens.filter((output) => output.sceneId === request.targetId)
               const planReferences = sceneReview ? scenePlanReferenceLabels(queueItems, queueHeaders, request.targetId) : []
               return (
                 <li key={request.id} className="flex flex-wrap items-start gap-3 py-3 first:pt-0 last:pb-0">

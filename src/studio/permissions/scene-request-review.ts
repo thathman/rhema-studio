@@ -2,7 +2,8 @@ import { takeSteps } from "@/lib/item-intent"
 import { projectRunOfShowEvents, type OutlineHeader } from "@/lib/run-of-show"
 import { mergeDeskScene } from "@/lib/desk-scenes"
 import { normalizeGradient } from "@/lib/scene-gradient"
-import type { QueueItem, Scene, SceneLayer } from "@/types"
+import { staticText } from "@/lib/scenes"
+import type { BroadcastOutput, QueueItem, Scene, SceneLayer } from "@/types"
 import type { SceneApprovalRecovery } from "@/stores/broadcast-store"
 import type { ApprovalRequest } from "./approval-requests-store"
 
@@ -13,6 +14,7 @@ export interface SceneRequestReviewModel {
   beforeStatus: "available" | "none" | "unavailable"
   beforeLabel: string
   requestedScene: Scene | null
+  requestedAppearanceScene: Scene | null
   requestedLabel: string
   baseRevisionLabel: string
   blockReason: string | null
@@ -138,6 +140,26 @@ function requestedGradientChanges(requested: PlainRecord, current: Scene | undef
   return changes
 }
 
+function submittedAppearancePreview(request: ApprovalRequest, safeScene: Scene | null): Scene | null {
+  if (!safeScene) return null
+  const rawScene = plainRecord(plainRecord(request.payload)?.scene)
+  if (!rawScene || !Array.isArray(rawScene.layers)) return safeScene
+  const rawLayers = new Map(rawScene.layers.flatMap((value) => {
+    const layer = plainRecord(value)
+    return typeof layer?.id === "string" ? [[layer.id, layer] as const] : []
+  }))
+  const backgroundGradient = normalizeGradient(rawScene.backgroundGradient)
+  return {
+    ...safeScene,
+    ...(backgroundGradient ? { backgroundGradient } : {}),
+    layers: safeScene.layers.map((layer) => {
+      if (layer.kind !== "color" && layer.kind !== "ellipse") return layer
+      const gradient = normalizeGradient(rawLayers.get(layer.id)?.gradient)
+      return gradient ? { ...layer, gradient } : layer
+    }),
+  }
+}
+
 function sceneContent(scene: Scene): unknown {
   return stable(Object.fromEntries(Object.entries(scene).filter(([key]) => !["createdAt", "updatedAt", "updatedBy"].includes(key))))
 }
@@ -184,6 +206,66 @@ export function sceneLayerReviewSummary(layer: SceneLayer, cameraLabelForUrl?: C
   }
   if ((layer.kind === "picture" || layer.kind === "video" || layer.kind === "logo") && hasHostMedia(layer)) details.push("host media attached")
   return `${layer.name} (${layer.kind}) · ${details.join(" · ")}`
+}
+
+export interface SceneOutputReviewRow {
+  outputId: string
+  outputName: string
+  languageLabel: string
+  textChanges: string[]
+}
+
+type SceneReviewOutput = Pick<BroadcastOutput, "id" | "name" | "language">
+
+function outputLanguageLabel(language: BroadcastOutput["language"]): string {
+  if (language === "first") return "First language only"
+  if (language === "second") return "Second language only"
+  return language === "both" ? "Both languages" : "Both languages (default)"
+}
+
+function textForOutput(layer: SceneLayer | undefined, output: SceneReviewOutput): string | null {
+  if (!layer || layer.kind !== "text") return null
+  return staticText(layer, layer.language ?? output.language ?? "both")
+}
+
+function textForReview(value: string | null): string {
+  if (value === null) return "not shown"
+  const text = value.split(/\r?\n/).map((line) => line.trim().replace(/\s+/g, " ")).filter(Boolean).join(" · ")
+  if (!text) return "blank"
+  return text.length > 160 ? `${text.slice(0, 157)}…` : text
+}
+
+/** The text each currently assigned output sees when a reviewed scene version changes. */
+export function sceneOutputReviewRows(
+  before: Scene | null,
+  after: Scene | null,
+  outputs: readonly SceneReviewOutput[],
+): SceneOutputReviewRow[] {
+  return outputs.map((output) => {
+    const beforeById = new Map(before?.layers.map((layer) => [layer.id, layer]) ?? [])
+    const afterById = new Map(after?.layers.map((layer) => [layer.id, layer]) ?? [])
+    const changedIds = new Set([...beforeById.keys(), ...afterById.keys()])
+    const textChanges = [...changedIds].flatMap((id) => {
+      const previous = beforeById.get(id)
+      const next = afterById.get(id)
+      const beforeText = textForOutput(previous, output)
+      const afterText = textForOutput(next, output)
+      if (beforeText === afterText) return []
+      const name = next?.name ?? previous?.name ?? "Unnamed text layer"
+      const beforeLanguage = previous?.kind === "text" ? previous.language : undefined
+      const afterLanguage = next?.kind === "text" ? next.language : undefined
+      const beforeScope = beforeLanguage ? outputLanguageLabel(beforeLanguage) : `output ${outputLanguageLabel(output.language)}`
+      const afterScope = afterLanguage ? outputLanguageLabel(afterLanguage) : `output ${outputLanguageLabel(output.language)}`
+      const scopeChange = beforeScope === afterScope ? "" : ` (language: ${beforeScope} → ${afterScope})`
+      return [`${name}${scopeChange}: “${textForReview(beforeText)}” → “${textForReview(afterText)}”`]
+    })
+    return {
+      outputId: output.id,
+      outputName: output.name,
+      languageLabel: outputLanguageLabel(output.language),
+      textChanges,
+    }
+  })
 }
 
 const REVIEW_LAYER_FIELDS = [
@@ -326,8 +408,9 @@ export function sceneRequestReviewModel(
     ? ["No trustworthy before snapshot is available for this host revision."]
     : sceneChanges(beforeScene, request.kind === "scene_delete" ? null : requestedScene, request.kind, cameraLabelForUrl)
   const changes = [...sceneDiff, ...unappliedAppearanceChanges]
+  const requestedAppearanceScene = request.kind === "scene_save" ? submittedAppearancePreview(request, requestedScene) : requestedScene
 
-  return { beforeScene, beforeStatus, beforeLabel, requestedScene, requestedLabel, baseRevisionLabel, blockReason, applyBlockReason, reviewNotice, changes }
+  return { beforeScene, beforeStatus, beforeLabel, requestedScene, requestedAppearanceScene, requestedLabel, baseRevisionLabel, blockReason, applyBlockReason, reviewNotice, changes }
 }
 
 export function scenePlanReferenceLabels(items: readonly QueueItem[], headers: readonly OutlineHeader[], sceneId: string): string[] {
