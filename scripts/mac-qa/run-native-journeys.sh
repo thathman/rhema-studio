@@ -179,13 +179,12 @@ const resize = (width, height) => window.__TAURI_INTERNALS__.invoke("plugin:wind
   value: { Logical: { width, height } },
 })
 await resize($width, $height)
+await sleep(500)
 let actual = currentSize()
-for (let attempt = 0; attempt < 15 && (actual.width !== $width || actual.height !== $height); attempt += 1) {
-  await sleep(150)
+for (let correction = 0; correction < 2 && (actual.width !== $width || actual.height !== $height); correction += 1) {
+  await resize($width + ($width - actual.width), $height + ($height - actual.height))
+  await sleep(500)
   actual = currentSize()
-  if ((attempt === 4 || attempt === 9) && (actual.width !== $width || actual.height !== $height)) {
-    await resize($width, $height)
-  }
 }
 if ((actual.width !== $width || actual.height !== $height) && $width >= 1920 && $height >= 1080) {
   await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: true })
