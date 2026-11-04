@@ -246,10 +246,13 @@ describe("each specialist desk sees only its part", () => {
     expect(button(rehearsing, "Take Pulpit to the stream").disabled).toBe(true)
   })
 
-  it("a camera desk hides a camera from scenes", async () => {
+  it("shows camera health and withholds global availability changes without a scene impact map", async () => {
     const el = await render("camera")
-    await click(button(el, "Hide from scenes"))
-    expect(sent).toEqual([{ command: "clear_source", value: "camera:pulpit" }])
+    expect(el.querySelector('[aria-label="Pulpit camera status"]')?.textContent).toBe("sending")
+    expect(el.textContent).toContain("does not receive the scene map needed to review that impact")
+    expect([...el.querySelectorAll("button")].map((item) => item.textContent?.trim())).not.toContain("Hide from scenes")
+    expect([...el.querySelectorAll("button")].map((item) => item.textContent?.trim())).not.toContain("Show in scenes")
+    expect(sent).toEqual([])
     expect(el.textContent).not.toContain("Take Sermon split")
   })
 })
