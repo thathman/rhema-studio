@@ -103,6 +103,16 @@ fn what_outputs_cannot_draw_is_refused_by_name_never_dropped() {
 }
 
 #[test]
+fn unknown_fields_inside_fills_and_gradient_stops_are_refused() {
+    let mut p = proposal();
+    p["pages"][0]["layers"][0]["fill"]["shadow"] = json!({ "blur": 4 });
+    p["background"]["stops"][0]["url"] = json!("file:///tmp/secret.png");
+    let e = errors(&p);
+    assert!(has(&e, "pages[0].layers[0].fill.shadow", "unknown fields are refused"), "{e:?}");
+    assert!(has(&e, "background.stops[0].url", "unknown fields are refused"), "{e:?}");
+}
+
+#[test]
 fn addresses_markup_and_hidden_characters_are_refused() {
     let mut p = proposal();
     let layers = p["pages"][2]["layers"].as_array_mut().unwrap();
@@ -249,4 +259,17 @@ fn only_a_present_library_picture_can_be_used() {
     let video = db.register_media(&media("video", "loop.mp4")).unwrap();
     assert!(library_picture(&db, &dir.join("media"), &video.id).unwrap_err().contains("not a picture"));
     assert!(library_picture(&db, &dir.join("media"), "nope").unwrap_err().contains("not a picture in the church's media library"));
+
+    #[cfg(unix)]
+    {
+        let outside = dir.join("outside.png");
+        std::fs::write(&outside, b"private file").unwrap();
+        std::os::unix::fs::symlink(&outside, dir.join("media/escape.png")).unwrap();
+        let escaped = db.register_media(&MediaInput {
+            kind: "image".into(), name: "Escaping image".into(), file: "escape.png".into(),
+            hash: "c".repeat(64), size: 12, mime: "image/png".into(), width: None, height: None,
+            duration_ms: None, source: "local".into(), source_ref: String::new(), original_path: String::new(),
+        }).unwrap();
+        assert!(library_picture(&db, &dir.join("media"), &escaped.id).unwrap_err().contains("missing from the media folder"));
+    }
 }

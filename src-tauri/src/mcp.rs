@@ -19,6 +19,7 @@ use serde_json::{json, Value};
 const APP_ID: &str = "com.openbezal.rhema";
 const HYMN_TAG: &str = "cacghb";
 const MAX_LIST: usize = 50;
+const MAX_MCP_FRAME_BYTES: usize = 1_000_000;
 /// MCP versions this server speaks, newest first (#252 VR1). A client asking for another one is
 /// answered with the newest, and decides itself whether it can go on.
 const PROTOCOL_VERSIONS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -674,25 +675,69 @@ fn handle(s: &mut Server, msg: &Value) -> Option<Value> {
     Some(json!({ "jsonrpc": "2.0", "id": id, "result": result }))
 }
 
+enum InputFrame {
+    End,
+    Message(Vec<u8>),
+    TooLarge,
+}
+
+/// Read one newline-delimited MCP frame without ever storing more than its limit. An over-limit
+/// frame is drained through its newline so the next request remains aligned.
+fn read_bounded_frame(reader: &mut impl BufRead, limit: usize) -> std::io::Result<InputFrame> {
+    let mut frame = Vec::with_capacity(limit.min(8192));
+    let mut too_large = false;
+    loop {
+        let available = reader.fill_buf()?;
+        if available.is_empty() {
+            return Ok(if frame.is_empty() && !too_large {
+                InputFrame::End
+            } else if too_large {
+                InputFrame::TooLarge
+            } else {
+                InputFrame::Message(frame)
+            });
+        }
+        let newline = available.iter().position(|byte| *byte == b'\n');
+        let body_len = newline.unwrap_or(available.len());
+        if !too_large {
+            if body_len > limit.saturating_sub(frame.len()) {
+                too_large = true;
+                frame.clear();
+            } else {
+                frame.extend_from_slice(&available[..body_len]);
+            }
+        }
+        reader.consume(body_len + usize::from(newline.is_some()));
+        if newline.is_some() {
+            return Ok(if too_large { InputFrame::TooLarge } else { InputFrame::Message(frame) });
+        }
+    }
+}
+
 /// Serve MCP on stdin/stdout until stdin closes. Logs go to stderr only.
 pub fn serve() {
     let mut server = Server::open();
     eprintln!("[rhema-mcp] ready (enabled: {}, services: {}, bible: {})", server.enabled, server.content.is_some(), server.bible.is_some());
     let stdin = std::io::stdin();
+    let mut input = stdin.lock();
     let mut out = std::io::stdout().lock();
-    for line in stdin.lock().lines() {
-        let Ok(line) = line else { break };
-        if line.trim().is_empty() {
-            continue;
+    loop {
+        let frame = match read_bounded_frame(&mut input, MAX_MCP_FRAME_BYTES) {
+            Ok(frame) => frame,
+            Err(_) => break,
+        };
+        match &frame {
+            InputFrame::End => break,
+            InputFrame::Message(line) if line.iter().all(u8::is_ascii_whitespace) => continue,
+            _ => {}
         }
-        // A message over 1 MB is not a planning request.
-        let reply = if line.len() > 1_000_000 {
-            Some(json!({ "jsonrpc": "2.0", "id": Value::Null, "error": { "code": -32600, "message": "message too large" } }))
-        } else {
-            match serde_json::from_str::<Value>(&line) {
+        let reply = match frame {
+            InputFrame::TooLarge => Some(json!({ "jsonrpc": "2.0", "id": Value::Null, "error": { "code": -32600, "message": "message too large" } })),
+            InputFrame::Message(line) => match serde_json::from_slice::<Value>(&line) {
                 Ok(msg) => handle(&mut server, &msg),
                 Err(_) => Some(json!({ "jsonrpc": "2.0", "id": Value::Null, "error": { "code": -32700, "message": "parse error" } })),
-            }
+            },
+            InputFrame::End => break,
         };
         if let Some(r) = reply {
             if writeln!(out, "{r}").and_then(|()| out.flush()).is_err() {
@@ -705,6 +750,22 @@ pub fn serve() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn oversized_mcp_frame_is_bounded_and_does_not_eat_the_next_request() {
+        let mut input = std::io::Cursor::new(b"123456789\n{}\n".to_vec());
+        assert!(matches!(read_bounded_frame(&mut input, 8).unwrap(), InputFrame::TooLarge));
+        assert!(matches!(read_bounded_frame(&mut input, 8).unwrap(), InputFrame::Message(bytes) if bytes == b"{}"));
+        assert!(matches!(read_bounded_frame(&mut input, 8).unwrap(), InputFrame::End));
+    }
+
+    #[test]
+    fn frame_limit_accepts_exact_size_without_newline_and_reports_oversize_at_eof() {
+        let mut exact = std::io::Cursor::new(b"12345678".to_vec());
+        assert!(matches!(read_bounded_frame(&mut exact, 8).unwrap(), InputFrame::Message(bytes) if bytes == b"12345678"));
+        let mut oversized = std::io::Cursor::new(b"123456789".to_vec());
+        assert!(matches!(read_bounded_frame(&mut oversized, 8).unwrap(), InputFrame::TooLarge));
+    }
 
     fn off() -> Server {
         Server { dir: None, client: Value::Null, content: None, bible: None, enabled: false, church: String::new(), problem: None, live_settings: false, rate: Rate::new(CALLS_PER_MINUTE) }

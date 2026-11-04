@@ -176,6 +176,15 @@ fn string<'v>(ctx: &mut Ctx, o: &'v Map<String, Value>, path: &str, key: &str) -
     }
 }
 
+fn refuse_unknown(ctx: &mut Ctx, o: &Map<String, Value>, path: &str, allowed: &[&str], shape: &str) {
+    for key in o.keys().filter(|key| !allowed.contains(&key.as_str())) {
+        ctx.err(
+            &format!("{path}.{key}"),
+            format!("\"{key}\" is not part of {shape} (unknown fields are refused)"),
+        );
+    }
+}
+
 /// A fill as the editor stores it, and the solid colour older readers show.
 fn paint(ctx: &mut Ctx, v: Option<&Value>, path: &str) -> (Value, String) {
     let fallback = (
@@ -191,6 +200,7 @@ fn paint(ctx: &mut Ctx, v: Option<&Value>, path: &str) -> (Value, String) {
     };
     match p.get("type").and_then(Value::as_str) {
         Some("solid") => {
+            refuse_unknown(ctx, p, path, &["type", "color"], "a solid fill");
             if let Some(c) = p.get("color").and_then(Value::as_str).filter(|c| hex6(c)) {
                 (json!({ "type": "solid", "color": c }), c.to_string())
             } else {
@@ -202,6 +212,7 @@ fn paint(ctx: &mut Ctx, v: Option<&Value>, path: &str) -> (Value, String) {
             }
         }
         Some("gradient") => {
+            refuse_unknown(ctx, p, path, &["type", "angle", "stops"], "a gradient fill");
             let angle = p
                 .get("angle")
                 .and_then(Value::as_f64)
@@ -224,6 +235,15 @@ fn paint(ctx: &mut Ctx, v: Option<&Value>, path: &str) -> (Value, String) {
             let mut out = Vec::new();
             let mut last = 0.0;
             for (i, s) in stops.iter().enumerate() {
+                if let Some(stop) = s.as_object() {
+                    refuse_unknown(
+                        ctx,
+                        stop,
+                        &format!("{path}.stops[{i}]"),
+                        &["color", "offset"],
+                        "a gradient stop",
+                    );
+                }
                 let color = s
                     .get("color")
                     .and_then(Value::as_str)
@@ -682,9 +702,16 @@ pub fn library_picture(db: &crate::ContentDb, media_dir: &std::path::Path, id: &
     }
     let plain = !asset.file.is_empty() && !asset.file.contains(['/', '\\']) && asset.file != "." && asset.file != "..";
     let path = media_dir.join(&asset.file);
-    if !plain || !path.is_file() {
+    let canonical_path = if plain {
+        media_dir.canonicalize().ok().zip(path.canonicalize().ok()).and_then(|(root, file)| {
+            (file.starts_with(root) && file.is_file()).then_some(file)
+        })
+    } else {
+        None
+    };
+    let Some(path) = canonical_path else {
         return Err(format!("the picture \"{}\" is missing from the media folder on this computer", asset.name));
-    }
+    };
     #[expect(clippy::cast_precision_loss, reason = "picture sizes are far below 2^52")]
     let size = |v: Option<i64>| v.filter(|n| *n > 0).map(|n| n as f64);
     Ok(Picture { url: local_asset_url(&path), width: size(asset.width), height: size(asset.height) })
