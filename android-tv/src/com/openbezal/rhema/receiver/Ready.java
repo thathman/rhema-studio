@@ -56,6 +56,25 @@ final class Ready {
         return queued;
     }
 
+    /**
+     * Renderer deaths closer than this to the last one count as a run (a page that keeps crashing it,
+     * even one that draws first). Deaths minutes apart each wait a second.
+     */
+    static final long GONE_RUN_MS = 2 * 60_000;
+    private int gone;
+    private long goneAt;
+
+    /**
+     * The page's renderer died at now (elapsedRealtime): how long to wait before loading it again.
+     * One second, doubling for each death in a run, up to MAX_WAIT_MS, so a page that keeps running
+     * the TV out of memory is not reloaded in a tight loop. Not reset by forget(): it is the TV's.
+     */
+    long rendererGone(long now) {
+        gone = gone > 0 && now - goneAt < GONE_RUN_MS ? gone + 1 : 1;
+        goneAt = now;
+        return Math.min(MAX_WAIT_MS, 1_000L << Math.min(gone - 1, 6));
+    }
+
     /** A revoked or replaced link: nothing carries over to the next one. */
     void forget() {
         drawn = false;
