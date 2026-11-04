@@ -364,6 +364,12 @@ impl CameraHub {
         list
     }
 
+    /// Whether a paired OBS companion has `name` in Program now (its tally at most 15 s old).
+    #[must_use]
+    pub fn on_program(&self, name: &str) -> bool {
+        self.tallies.read().unwrap_or_else(PoisonError::into_inner).values().any(|(_, at, t)| at.elapsed() < TALLY_FRESH && t.program.iter().any(|n| n == name))
+    }
+
     /// A companion's tally arrived (by its key hash); one that is not a paired companion is ignored.
     pub fn set_tally(&self, hash: &str, tally: Tally) -> bool {
         let Some(name) = self.readers.read().unwrap_or_else(PoisonError::into_inner).get(hash).map(|r| r.name.clone()) else { return false };
@@ -699,10 +705,12 @@ mod tests {
         assert!(hub.set_tally(&a, Tally { program: vec!["pulpit".into(), "../bad".into()], preview: vec!["choir".into()], receiving: vec!["pulpit".into(), "choir".into()] }));
         let w = hub.watch();
         assert_eq!(w[0].obs, vec![ObsTally { desk: "Media desk".into(), program: true, preview: false, receiving: true }]);
+        assert!(hub.on_program("pulpit") && !hub.on_program("choir"), "Program only, not Preview");
         assert_eq!(w[1].obs, vec![ObsTally { desk: "Media desk".into(), program: false, preview: true, receiving: true }]);
         // Unpaired: its tally goes with it.
         hub.sync_readers(&[]);
         assert!(hub.watch().iter().all(|c| c.obs.is_empty()));
+        assert!(!hub.on_program("pulpit"), "an unpaired companion's tally counts for nothing");
     }
 
     #[test]

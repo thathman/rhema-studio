@@ -296,7 +296,8 @@ impl FeedHub {
             f.acked_at = Some(std::time::Instant::now());
         }
         if let Some((from, cameras)) = video {
-            f.video.report(from, cameras, std::time::Instant::now());
+            let tv = matches!(f.admits(token), Some(Some(_)));
+            f.video.report(from, cameras, std::time::Instant::now(), tv);
         }
         if let Some(skew) = clock {
             // Several pages on one feed: the one furthest off is the one to warn about, until it reports again.
@@ -305,6 +306,13 @@ impl FeedHub {
             f.clock = Some(keep.unwrap_or((skew, now)));
         }
         Ok(first)
+    }
+
+    /// Whether any paired TV shows `camera` now, on any feed (#209 congregation tally).
+    #[must_use]
+    pub fn on_tv(&self, camera: &str) -> bool {
+        let now = std::time::Instant::now();
+        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).values().any(|f| f.video.on_tv(camera, now))
     }
 
     /// How the feed is doing, for the output card.
@@ -1404,6 +1412,7 @@ where
         .route("/api/v1/camera/{name}/whip", post(camera_whip_handler::<S>))
         .route("/api/v1/camera/{name}/whip/{session}", axum::routing::patch(camera_session_handler::<S>).delete(camera_session_handler::<S>))
         .route("/api/v1/camera/{name}/status", post(camera_status_handler::<S>))
+        .route("/api/v1/camera/{name}/tally", get(camera_tally_handler::<S>))
         .route("/api/v1/cameras/{name}/whep", post(desk_camera_handler::<S>))
         .route("/api/v1/feed/{id}/camera/{name}/whep", post(feed_camera_handler::<S>))
         .route("/api/v1/cameras/watch", get(companion_cameras_handler::<S>))
@@ -2609,6 +2618,27 @@ async fn camera_status_handler<S: CommandSink + 'static>(
         return StatusCode::BAD_REQUEST.into_response();
     };
     if state.cameras.set_phone(&name, token, status) { StatusCode::NO_CONTENT.into_response() } else { StatusCode::FORBIDDEN.into_response() }
+}
+
+/// `GET /api/v1/camera/{name}/tally` with `Authorization: Bearer <the camera's secret>`: whether
+/// this camera is on a Program now (#209), so the phone's light says which, never one red light
+/// for "sending". `online`: a paired OBS companion has it in Program (its tally, at most 15 s old).
+/// `congregation`: a paired Google TV's page plays it (its report, at most 10 s old). A projector
+/// Rhema drives from its own window reports nothing and is not counted. Only the camera's own.
+async fn camera_tally_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    if !state.rate.allow(peer.ip()) {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    let token = headers.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).unwrap_or("").trim();
+    if !state.cameras.knows(&name, token) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    Json(serde_json::json!({ "online": state.cameras.on_program(&name), "congregation": state.feeds.on_tv(&name) })).into_response()
 }
 
 /// `PATCH` (more ICE candidates) and `DELETE` (hang up) on a camera's WHIP session.
@@ -4502,6 +4532,41 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         (port, seen)
+    }
+
+    #[tokio::test]
+    async fn a_phones_tally_says_which_program_it_is_on_with_its_own_secret_only() {
+        let cameras = crate::cameras::new_camera_hub();
+        cameras.set(&[("pulpit".into(), "0123456789abcdef".into()), ("choir".into(), "fedcba9876543210".into())]);
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), cameras: cameras.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let send = |path: &'static str, extra: &'static str| async move {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+            s.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{extra}Connection: close\r\n\r\n").as_bytes()).await.unwrap();
+            let mut out = String::new();
+            s.read_to_string(&mut out).await.unwrap();
+            out
+        };
+        // Its tally (#209): with its own secret in a header only; which Program it is on, not "sending".
+        assert!(send("/api/v1/camera/pulpit/tally", "Authorization: Bearer wrong\r\n").await.contains("403"));
+        assert!(send("/api/v1/camera/pulpit/tally?k=0123456789abcdef", "").await.contains("403"), "never the secret in the address");
+        let off = send("/api/v1/camera/pulpit/tally", "Authorization: Bearer 0123456789abcdef\r\n").await;
+        assert!(off.contains("200") && off.contains(r#""online":false"#) && off.contains(r#""congregation":false"#), "{off}");
+        let desk = "d".repeat(64);
+        cameras.sync_readers(&[(desk.clone(), "Media desk".into())]);
+        assert!(cameras.set_tally(&desk, crate::cameras::Tally { program: vec!["pulpit".into()], ..crate::cameras::Tally::default() }));
+        let on = send("/api/v1/camera/pulpit/tally", "Authorization: Bearer 0123456789abcdef\r\n").await;
+        assert!(on.contains(r#""online":true"#) && on.contains(r#""congregation":false"#), "{on}");
+        assert!(cameras.set_tally(&desk, crate::cameras::Tally { preview: vec!["pulpit".into()], ..crate::cameras::Tally::default() }));
+        assert!(send("/api/v1/camera/pulpit/tally", "Authorization: Bearer 0123456789abcdef\r\n").await.contains(r#""online":false"#), "in Preview is not on air");
+        assert!(send("/api/v1/camera/pulpit/tally", "Authorization: Bearer fedcba9876543210\r\n").await.contains("403"), "another camera's secret");
+        cameras.set(&[]);
+        assert!(send("/api/v1/camera/pulpit/tally", "Authorization: Bearer 0123456789abcdef\r\n").await.contains("403"), "a removed camera");
+        let mut h = result.handle;
+        h.stop();
     }
 
     #[tokio::test]

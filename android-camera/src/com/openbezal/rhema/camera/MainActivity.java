@@ -46,7 +46,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 /**
- * The viewfinder: the camera's picture, full screen, with a small LIVE/CONNECTING/NOT SENDING
+ * The viewfinder: the camera's picture, full screen, with a small ON AIR/SENDING/CONNECTING/NOT SENDING
  * status and an idle CONNECT/SEND action. The Settings gear and screen-off button hide by
  * themselves. Tap to focus and expose there, double-tap to follow the scene again, pinch to zoom.
  * Opens pairing links (rhema-camera://pair?…) from the phone's QR scanner too.
@@ -644,8 +644,10 @@ public final class MainActivity extends Activity {
         CameraService s = service;
         Pairing p = Prefs.pairing(this);
         boolean live = s != null && s.sending && s.publisher() != null && s.publisher().live();
-        CamAction.State state = CamAction.resolve(p != null, s != null && s.sending, live);
-        int color = "LIVE".equals(state.status) ? Ui.LIVE
+        CamAction.State state = CamAction.resolve(p != null, s != null && s.sending, live, s == null ? CamAction.TALLY_UNKNOWN : s.tally());
+        // Red only on air (#209); sending but on no Program is teal, connecting amber.
+        int color = CamAction.onAir(state) ? Ui.LIVE
+                : state.status.startsWith("SENDING") ? Ui.TEAL_TEXT
                 : "CONNECTING".equals(state.status) ? Ui.AMBER : Ui.IDLE;
         String label = state.status;
         // Views change only when what they show changes (no layout work twice a second for nothing).

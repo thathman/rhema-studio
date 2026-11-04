@@ -19,7 +19,10 @@ Version 1.2.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) an
    **Pair**. The app goes live at once (unless **Start sending when the app opens** is off).
 3. The viewfinder: **tap** to focus and expose there (the focus then holds), **double-tap** to follow
    the scene again, **pinch** to zoom (below 1× on phones with an ultra-wide lens, Android 11+). The
-   dot top left is the tally: **LIVE** (red), **CONNECTING** (amber), **NOT SENDING** (grey); tap it
+   dot top left is the tally: **ON AIR · ONLINE** / **ON AIR · CONGREGATION** (red: OBS has this camera in
+   Program / a Google TV shows it), **SENDING** (teal: sent, on no Program), **SENDING · NO TALLY** (Rhema
+   has not said, or is older), **CONNECTING** (amber), **NOT SENDING** (grey). A projector Rhema drives
+   from its own window is not counted (it reports nothing). Tap it
    to start, hold it to stop. The gear opens Settings; the moon blacks the screen out.
 4. Keep the phone on a charger on a stand. It may lock: the viewfinder shows over the lock screen
    (Settings asks for the PIN; turn it off in Settings → On screen → Show over the lock screen), and

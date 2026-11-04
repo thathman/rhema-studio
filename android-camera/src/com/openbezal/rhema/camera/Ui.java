@@ -14,7 +14,7 @@ import android.widget.TextView;
 final class Ui {
     private Ui() { }
 
-    // Rhema's dark palette (#215): ink and slate, deep teal for actions, red only for LIVE.
+    // Rhema's dark palette (#215): ink and slate, deep teal for actions, red only for ON AIR.
     static final int BG = 0xFF121C22;
     static final int CARD = 0xFF1A262E;
     static final int FG = 0xFFE6ECEE;
