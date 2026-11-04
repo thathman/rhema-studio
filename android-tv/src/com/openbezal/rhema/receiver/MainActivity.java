@@ -343,7 +343,8 @@ public class MainActivity extends Activity {
         String age = Guard.stillAgeLabel(
                 prefs.getString("stillOf", null), shown(),
                 prefs.getLong("stillCapturedAt", 0L), System.currentTimeMillis());
-        String message = "Not updating · last picture " + age;
+        // No picture under the label: the black cover over an old feed's page (show()).
+        String message = still.getDrawable() == null ? "Not live" : "Not updating · last picture " + age;
         if (why != null && !why.trim().isEmpty()) message += " · " + why.trim();
         note.setText(message);
         note.setVisibility(View.VISIBLE);
@@ -753,6 +754,10 @@ public class MainActivity extends Activity {
                 if (!url.equals(shown())) {
                     forgetStill();
                     forgetReady();
+                    // The old feed's page stays up until the new one starts loading, and loading is not
+                    // drawing (#604): cover it in black until the new feed's own acknowledgement
+                    // (frameDrawn, checked against the new link and this load) takes the cover off.
+                    still.setVisibility(View.VISIBLE);
                 }
                 prefs.edit().putString("url", url).putString("pin", pin).apply();
                 problem = null;

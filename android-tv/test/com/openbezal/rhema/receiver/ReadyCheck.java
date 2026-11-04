@@ -66,6 +66,21 @@ public final class ReadyCheck {
         r.started();
         check("forgotten: waits start again", r.noFrame() == 5_000);
 
+        // Another feed assigned while this one is on screen: the old page's acknowledgements, even
+        // ones already on their way, never take the cover off; only the new feed's own does.
+        String next = "https://192.168.3.10:8081/feed/l9?k=n3w";
+        Ready a = new Ready();
+        a.started();
+        a.drew();
+        a.forget();
+        check("reassigned: not shown", !a.drawn());
+        check("reassigned: the old feed's acknowledgement is not the new one's", !Guard.ackOf(next, "POST", ACK));
+        check("reassigned: nor the old feed's under the new key", !Guard.ackOf(next, "POST", ACK.replace("s3cr%2Bt", "n3w")));
+        check("reassigned: nor the new id under the old key", !Guard.ackOf(next, "POST", ACK.replace("/l3/", "/l9/")));
+        a.started();
+        check("reassigned: the new feed's acknowledgement shows it",
+                Guard.ackOf(next, "POST", "https://192.168.3.10:8081/api/v1/feed/l9/ack?k=n3w") && a.drew());
+
         // What counts as this screen's acknowledgement.
         check("the page's acknowledgement", Guard.ackOf(LINK, "POST", ACK));
         check("an encoded feed id, as the page encodes it", Guard.ackOf("https://192.168.3.10:8081/feed/a%20b?k=x", "POST", "https://192.168.3.10:8081/api/v1/feed/a%20b/ack?k=x"));
