@@ -79,6 +79,56 @@ final class Guard {
         }
     }
 
+    /**
+     * Whether a request the feed page makes is its acknowledgement of a drawn frame (#604, Ready):
+     * a POST to /api/v1/feed/<id>/ack?k=<key> at the same https address as the link shown, for the
+     * same feed and with the same key. Anything else (another feed's page, an old link, another
+     * computer) proves nothing about this screen.
+     */
+    static boolean ackOf(String shown, String method, String request) {
+        if (shown == null || request == null || !"POST".equalsIgnoreCase(method)) return false;
+        try {
+            java.net.URI s = new java.net.URI(shown);
+            java.net.URI r = new java.net.URI(request);
+            String id = decode(lastSegment(s.getRawPath()));
+            String key = query(s.getRawQuery(), "k");
+            String path = r.getRawPath();
+            String prefix = "/api/v1/feed/";
+            String sent = path != null && path.startsWith(prefix) && path.endsWith("/ack") && path.length() > prefix.length() + 4
+                    ? path.substring(prefix.length(), path.length() - 4) : null;
+            return "https".equals(r.getScheme()) && r.getRawUserInfo() == null && s.getHost() != null
+                    && s.getHost().equalsIgnoreCase(r.getHost()) && s.getPort() == r.getPort()
+                    && id != null && !id.isEmpty() && key != null && !key.isEmpty()
+                    && sent != null && sent.indexOf('/') < 0 && id.equals(decode(sent)) && key.equals(query(r.getRawQuery(), "k"));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** The page reads its feed id as the last part of its raw path, decoded (feed.ts), so this does too. */
+    private static String lastSegment(String path) {
+        return path == null ? null : path.substring(path.lastIndexOf('/') + 1);
+    }
+
+    /** decodeURIComponent: %XX only ("+" stays "+", as in a path). */
+    private static String decode(String s) throws java.io.UnsupportedEncodingException {
+        return s == null ? null : java.net.URLDecoder.decode(s.replace("+", "%2B"), "UTF-8");
+    }
+
+    /** One query value, decoded as the page's URLSearchParams does; null when absent or repeated. */
+    private static String query(String raw, String name) throws java.io.UnsupportedEncodingException {
+        if (raw == null) return null;
+        String found = null;
+        for (String part : raw.split("&")) {
+            int eq = part.indexOf('=');
+            String k = java.net.URLDecoder.decode(eq < 0 ? part : part.substring(0, eq), "UTF-8");
+            if (!k.equals(name)) continue;
+            if (found != null) return null;
+            found = java.net.URLDecoder.decode(eq < 0 ? "" : part.substring(eq + 1), "UTF-8");
+        }
+        return found;
+    }
+
     /** A certificate fingerprint as Rhema writes it: SHA-256, 64 lowercase hex digits. */
     static boolean fingerprint(String hex) {
         if (hex == null || hex.length() != 64) return false;

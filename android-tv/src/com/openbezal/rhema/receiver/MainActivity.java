@@ -115,6 +115,10 @@ public class MainActivity extends Activity {
     private volatile int displayH;
     /** How often the picture is kept while a feed shows. */
     private static final long STILL_EVERY_MS = 60_000;
+    /** Whether the page has drawn a frame since it loaded (#604): until then the kept picture stays. */
+    private final Ready ready = new Ready();
+    /** Counts page loads, so an acknowledgement queued by the page before a reload is not the new one's. */
+    private volatile int loads;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -164,8 +168,9 @@ public class MainActivity extends Activity {
             public void onReceivedHttpError(WebView view, WebResourceRequest req, WebResourceResponse res) {
                 if (!req.isForMainFrame()) return;
                 if (res.getStatusCode() == 403) {
-                    // Revoked (1.5) or a new link: its kept picture goes too.
+                    // Revoked (1.5) or a new link: its kept picture goes too, and whatever it had shown.
                     forgetStill();
+                    forgetReady();
                     problem = "This screen's link no longer works (this TV was revoked, or a new link was made in Rhema Studio). Send the feed again.";
                     showInfo(true);
                 } else {
@@ -173,17 +178,41 @@ public class MainActivity extends Activity {
                 }
             }
 
+            /** Every load, ours or the page's own reload: it must draw again before it counts as shown (#604). */
+            @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                loads++;
+                ui.removeCallbacks(hideStill);
+                ui.removeCallbacks(keepStill);
+                ui.removeCallbacks(noFrame);
+                ui.postDelayed(noFrame, ready.started());
+            }
+
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (problem == null && shown() != null) {
-                    hideInfo();
-                    if (still.getVisibility() != View.VISIBLE) note.setVisibility(View.GONE);
-                    // The page draws its first frame a moment after it loads; then the kept picture goes.
-                    ui.removeCallbacks(hideStill);
-                    ui.postDelayed(hideStill, 2_000);
-                    ui.removeCallbacks(keepStill);
-                    ui.postDelayed(keepStill, 8_000);
+                // Loaded is not shown (#604): the HTML can arrive without its script. The kept
+                // picture goes when the page acknowledges a frame it drew (frameDrawn).
+                if (problem == null && shown() != null) hideInfo();
+            }
+
+            /**
+             * Watched, never answered here: the page's acknowledgement of a drawn frame (Guard.ackOf),
+             * sent to Rhema Studio with this screen's key, is the proof a picture is up (#604).
+             */
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
+                final String url = req.getUrl().toString();
+                if (url.contains("/ack") && "POST".equalsIgnoreCase(req.getMethod())) {
+                    final int load = loads;
+                    ui.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            // Checked against the link shown now (a new feed's page must prove itself).
+                            if (load == loads && Guard.ackOf(shown(), "POST", url)) frameDrawn();
+                        }
+                    });
                 }
+                return null;
             }
         });
 
@@ -314,10 +343,59 @@ public class MainActivity extends Activity {
         String age = Guard.stillAgeLabel(
                 prefs.getString("stillOf", null), shown(),
                 prefs.getLong("stillCapturedAt", 0L), System.currentTimeMillis());
-        String message = "Not updating · last picture " + age;
+        // No picture under the label: the black cover over an old feed's page (show()).
+        String message = still.getDrawable() == null ? "Not live" : "Not updating · last picture " + age;
         if (why != null && !why.trim().isEmpty()) message += " · " + why.trim();
         note.setText(message);
         note.setVisibility(View.VISIBLE);
+    }
+
+    /** The page drew a frame (#604): the first time since it loaded, the kept picture gives way to it. */
+    private void frameDrawn() {
+        if (!ready.drew()) return;
+        ui.removeCallbacks(noFrame);
+        if (problem != null) return;
+        // Drawn after the wait ran out but before its reload: the healthy page is not loaded again.
+        // (A reload for a load error is retry()'s, with problem set, and is kept.)
+        if (ready.cancelQueuedReload()) ui.removeCallbacks(reload);
+        if (still.getVisibility() != View.VISIBLE) note.setVisibility(View.GONE);
+        // The acknowledgement follows the drawing; a moment more lets the screen show it.
+        ui.removeCallbacks(hideStill);
+        ui.postDelayed(hideStill, 300);
+        ui.removeCallbacks(keepStill);
+        ui.postDelayed(keepStill, 8_000);
+    }
+
+    /**
+     * The page loaded but drew nothing in Ready.FIRST_FRAME_MS (#604; its script did not arrive, or
+     * it never heard from Rhema Studio). The kept picture stays, labelled; the page loads again
+     * after a wait that grows to a minute.
+     */
+    private final Runnable noFrame = new Runnable() {
+        @Override
+        public void run() {
+            if (shown() == null || problem != null) return;
+            long wait = ready.noFrame();
+            if (wait < 0) return;
+            // Also what an output that is off looks like before its first change (the page acknowledges
+            // frames only once something is published), so it says no more than it knows.
+            String why = "no picture from Rhema Studio yet (its output may be off); trying again in " + (wait / 1000) + " s";
+            if (still.getVisibility() == View.VISIBLE) {
+                showStillNotice(why);
+            } else if (panel.getVisibility() != View.VISIBLE) {
+                note.setText("Not live · " + why);
+                note.setVisibility(View.VISIBLE);
+            }
+            ui.removeCallbacks(reload);
+            ui.postDelayed(reload, wait);
+        }
+    };
+
+    /** A revoked or replaced link: no proof, wait or pending reload of the old one carries over. */
+    private void forgetReady() {
+        ready.forget();
+        ui.removeCallbacks(noFrame);
+        ui.removeCallbacks(hideStill);
     }
 
     private final Runnable hideStill = new Runnable() {
@@ -351,7 +429,8 @@ public class MainActivity extends Activity {
             ui.removeCallbacks(keepStill);
             ui.postDelayed(keepStill, STILL_EVERY_MS);
             final String url = shown();
-            if (url == null || problem != null || certRefused || panel.getVisibility() == View.VISIBLE || still.getVisibility() == View.VISIBLE) return;
+            // Only of a page that has drawn (#604): a loaded-but-black page is never kept.
+            if (url == null || !ready.drawn() || problem != null || certRefused || panel.getVisibility() == View.VISIBLE || still.getVisibility() == View.VISIBLE) return;
             int[] size = Guard.stillSize(web.getWidth(), web.getHeight());
             if (size == null) return;
             final Bitmap bmp;
@@ -671,8 +750,15 @@ public class MainActivity extends Activity {
         ui.post(new Runnable() {
             @Override
             public void run() {
-                // Another feed (or this TV's new key): the picture kept of the last one goes.
-                if (!url.equals(shown())) forgetStill();
+                // Another feed (or this TV's new key): the picture kept of the last one goes, and its proof.
+                if (!url.equals(shown())) {
+                    forgetStill();
+                    forgetReady();
+                    // The old feed's page stays up until the new one starts loading, and loading is not
+                    // drawing (#604): cover it in black until the new feed's own acknowledgement
+                    // (frameDrawn, checked against the new link and this load) takes the cover off.
+                    still.setVisibility(View.VISIBLE);
+                }
                 prefs.edit().putString("url", url).putString("pin", pin).apply();
                 problem = null;
                 certRefused = false;
