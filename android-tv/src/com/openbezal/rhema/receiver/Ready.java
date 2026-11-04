@@ -63,6 +63,8 @@ final class Ready {
     static final long GONE_RUN_MS = 2 * 60_000;
     private int gone;
     private long goneAt;
+    /** Until when the reload after a renderer death waits; the network coming back does not cut it. */
+    private long goneUntil;
 
     /**
      * The page's renderer died at now (elapsedRealtime): how long to wait before loading it again.
@@ -72,7 +74,34 @@ final class Ready {
     long rendererGone(long now) {
         gone = gone > 0 && now - goneAt < GONE_RUN_MS ? gone + 1 : 1;
         goneAt = now;
-        return Math.min(MAX_WAIT_MS, 1_000L << Math.min(gone - 1, 6));
+        long wait = Math.min(MAX_WAIT_MS, 1_000L << Math.min(gone - 1, 6));
+        goneUntil = now + wait;
+        return wait;
+    }
+
+    /** The soonest the network coming back loads the page again after the last time it did. */
+    static final long NET_BACK_GAP_MS = 5_000;
+    private boolean netLost;
+    private long netBackAt = -NET_BACK_GAP_MS;
+
+    /** The TV lost its network. */
+    void networkLost() {
+        netLost = true;
+    }
+
+    /**
+     * A network came back at now (elapsedRealtime): whether to load the page at once instead of
+     * waiting out the reload backoff (up to 75 s). Only after a loss (a network is also reported
+     * when the app starts), only while nothing is drawn (a drawn page reconnects by itself), and
+     * not more often than NET_BACK_GAP_MS (Wi-Fi flapping), and never inside a renderer-gone wait
+     * (a page that crashes the TV keeps its backoff). Always takes the loss, even when it says no.
+     */
+    boolean networkBack(long now) {
+        if (!netLost) return false;
+        netLost = false;
+        if (drawn || now < goneUntil || now - netBackAt < NET_BACK_GAP_MS) return false;
+        netBackAt = now;
+        return true;
     }
 
     /** A revoked or replaced link: nothing carries over to the next one. */
