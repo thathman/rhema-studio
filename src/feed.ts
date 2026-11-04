@@ -7,9 +7,11 @@ import { noiseFrame } from "@/lib/no-signal"
 import { drawStage, stageSurface } from "@/lib/stage-canvas"
 import { CountdownFade, nextChangeIn } from "@/lib/countdown-display"
 import {
+  FEED_RECONNECT_AFTER_MS,
   feedConnectionLost,
   feedReceivedBeat,
   feedReceivedFrame,
+  feedReconnectDue,
   feedStale,
   initialFeedFreshness,
   pageClockSkew,
@@ -391,8 +393,11 @@ const ack = (body: object) => fetch(`/api/v1/feed/${encodeURIComponent(id)}/ack?
 setInterval(() => {
   if (drawnSeq > 0 && cameras.size > 0) void ack({ seq: drawnSeq, video: cameraReports(cameras) })
 }, 2000)
-// EventSource reconnects by itself after a dropped connection; the host sends the current frame first.
-let events = new EventSource(`/api/v1/feed/${encodeURIComponent(id)}/events?k=${encodeURIComponent(key)}`)
+// EventSource retries explicit errors; the watchdog below also handles a silent, stuck network path.
+const feedEventsUrl = `/api/v1/feed/${encodeURIComponent(id)}/events?k=${encodeURIComponent(key)}`
+let events = new EventSource(feedEventsUrl)
+let eventSourceStartedAt = performance.now()
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
  * Out of date (#196): when the host has not been heard (no frame, no beat) for a while, a small
@@ -452,22 +457,39 @@ setInterval(checkStale, 1000)
  * that the link is not valid and Rhema Studio Receiver goes back to its code screen. Anything
  * else: try again shortly, keeping the last picture (and the rule for a lost host) meanwhile.
  */
-async function streamStopped() {
+async function streamStopped(source: EventSource) {
   const r = await fetch(`/feed/${encodeURIComponent(id)}?k=${encodeURIComponent(key)}`, { cache: "no-store" }).catch(() => null)
+  if (source !== events) return
   if (r?.status === 403) return location.reload()
-  setTimeout(() => {
-    events = new EventSource(`/api/v1/feed/${encodeURIComponent(id)}/events?k=${encodeURIComponent(key)}`)
-    listen(events)
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    if (source === events) restartEventSource()
   }, 5000)
 }
-function listen(events: EventSource) {
-  events.addEventListener("error", () => {
+function restartEventSource() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+  events.close()
+  events = new EventSource(feedEventsUrl)
+  eventSourceStartedAt = performance.now()
+  listen(events)
+}
+function listen(source: EventSource) {
+  source.addEventListener("open", () => {
+    if (source === events) eventSourceStartedAt = performance.now()
+  })
+  source.addEventListener("error", () => {
+    if (source !== events) return
     freshness = feedConnectionLost(freshness)
     checkStale()
-    if (events.readyState === EventSource.CLOSED) void streamStopped()
+    if (source.readyState === EventSource.CLOSED) void streamStopped(source)
   })
   // The host's clock, between frames: count by it, and tell the host how far this screen's clock is off (it warns over 2 s).
-  events.addEventListener("beat", (e) => {
+  source.addEventListener("beat", (e) => {
+    if (source !== events) return
     const hostNow = Number((e as MessageEvent<string>).data)
     if (!Number.isFinite(hostNow)) return
     offset = hostNow - Date.now()
@@ -475,7 +497,8 @@ function listen(events: EventSource) {
     checkStale()
     if (drawnSeq > 0 && beatCount++ % 2 === 0) void ack({ seq: drawnSeq, clock: pageClockSkew(hostNow, Date.now()) })
   })
-  events.addEventListener("frame", (e) => {
+  source.addEventListener("frame", (e) => {
+    if (source !== events) return
     const ev = e as MessageEvent<string>
     try {
       show(JSON.parse(ev.data) as Frame)
@@ -496,3 +519,11 @@ function listen(events: EventSource) {
   })
 }
 listen(events)
+setInterval(() => {
+  const now = performance.now()
+  if (events.readyState !== EventSource.OPEN || !feedReconnectDue(freshness, now, eventSourceStartedAt)) return
+  // A quiet OPEN socket can survive a lost Wi-Fi path without firing EventSource's error event.
+  freshness = feedConnectionLost(freshness)
+  checkStale()
+  restartEventSource()
+}, Math.min(1000, FEED_RECONNECT_AFTER_MS / 3))
