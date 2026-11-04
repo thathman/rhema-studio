@@ -253,7 +253,8 @@ describe("Prepare movement keeps the plan separate from Live", () => {
     const liveBefore = live()
     const el = await render()
 
-    expect(el.querySelector('[aria-label="Drag group Scripture moments with its items"]')).not.toBeNull()
+    const groupHandle = el.querySelector<HTMLButtonElement>('[aria-label="Drag group Scripture moments with its items"]')
+    expect(groupHandle?.title).toBe("Drag this group and its items to another phase, event or group")
     await drop(drag.draggables.get("group:nested"), {
       id: "Response",
       data: {},

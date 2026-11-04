@@ -119,7 +119,7 @@ export function SectionHeader({ header, summary, collapsed, selected = false, dr
         ref={handleRef}
         type="button"
         aria-label={header.event ? `Drag event ${header.name} with its moments` : `Drag group ${header.name} with its items`}
-        title={header.event ? "Drag this event and its moments to another event or phase" : "Drag this group and its items to another phase, event, group or rundown position"}
+        title={header.event ? "Drag this event and its moments to another event or phase" : "Drag this group and its items to another phase, event or group"}
         className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:text-foreground active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring/50"
       ><GripVerticalIcon className="size-3.5" /></button>}
       {/* On a narrow column how it runs and its counts wrap under the name rather than cutting both short. */}
