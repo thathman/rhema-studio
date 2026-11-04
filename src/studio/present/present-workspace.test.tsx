@@ -356,6 +356,15 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[data-tour="present-rundown"]')?.className).toContain("row-span-3")
   })
 
+  it("counts the running order by its events first, as Prepare does (#404)", async () => {
+    useQueueStore.setState({ items: [queueItem, secondQueueItem], headers: [{ id: "event", type: "group", name: "Welcome", at: 0, event: { schema_version: 1 } }, { id: "after", type: "phase", name: "After", at: 1 }] })
+    await renderWorkspace()
+    const header = element.querySelector('[data-tour="present-rundown"]')?.firstElementChild?.textContent ?? ""
+
+    expect(header).toContain("1 event · 1 item")
+    expect(header).not.toContain("2 items")
+  })
+
   it("shows the run-of-show Now and Next with planned timing, separately from Program", async () => {
     const program = useBroadcastStore.getState().liveVerse
     useQueueStore.setState({

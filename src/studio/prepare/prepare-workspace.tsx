@@ -17,7 +17,7 @@ import { AddItems } from "@/studio/prepare/add-items"
 import { AiDrafts } from "@/studio/prepare/ai-drafts"
 import { TimingPanel } from "@/studio/prepare/timing-panel"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
-import { RULE_LABEL, interleave, newPhase, organiseHeadersIntoDefaultPhases, projectRunOfShowEvents, runOfShowClockRows, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
+import { RULE_LABEL, interleave, newPhase, organiseHeadersIntoDefaultPhases, orderCounts, projectRunOfShowEvents, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
 import { CalendarDaysIcon, ClockIcon, EllipsisIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
 import { RundownTools } from "@/studio/prepare/bulk-bar"
 import { useBibleStore } from "@/stores"
@@ -58,12 +58,7 @@ export function PrepareWorkspace() {
   const items = useQueueStore((s) => s.items)
   const headers = useQueueStore((s) => s.headers)
   const phaseCount = headers.filter((header) => header.type === "phase").length
-  const orderRows = runOfShowClockRows(items, headers).rows
-  const eventCount = orderRows.filter((row) => row.kind === "event").length
-  const looseItemCount = orderRows.filter((row) => row.kind === "item").length
-  const orderCountLabel = eventCount > 0
-    ? `${eventCount} ${eventCount === 1 ? "event" : "events"}${looseItemCount > 0 ? ` · ${looseItemCount} ${looseItemCount === 1 ? "item" : "items"}` : ""}`
-    : `${count} ${count === 1 ? "item" : "items"}`
+  const orderCountLabel = orderCounts(items, headers).label
   const prepareMomentFocus = useShellStore((s) => s.prepareMomentFocus)
   const prepareMomentSelection = useShellStore((s) => s.prepareMomentSelection)
   const [designReturn] = useState(() => useShellStore.getState().prepareDesignReturn)

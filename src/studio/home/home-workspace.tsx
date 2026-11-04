@@ -14,7 +14,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
 import { type ReadinessCheck, type ReadinessFix } from "@/studio/readiness"
 import { isImageItem, isSongItem } from "@/types"
-import { isSkipped, nextVisibleItem, plannedTimes, projectRunOfShowEvents } from "@/lib/run-of-show"
+import { isSkipped, nextVisibleItem, orderCounts, plannedTimes, projectRunOfShowEvents } from "@/lib/run-of-show"
 import { formatMinutes } from "@/lib/service-timing"
 import { useReadiness } from "@/studio/use-readiness"
 import { ChurchFolderCard } from "@/studio/home/church-folder-card"
@@ -47,6 +47,8 @@ export function HomeWorkspace() {
   }
 
   const next = nextVisibleItem(items, headers, activeIndex)
+  // Event-first, as in Prepare and Live (#404).
+  const order = orderCounts(items, headers)
   // Warnings need something done; notes ("Listening is off") are listed but not counted against readiness.
   const okCount = checks.filter((c) => c.status === "ok").length
   const warnings = checks.filter((c) => c.status === "warn")
@@ -116,7 +118,7 @@ export function HomeWorkspace() {
         </section>
 
         <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-1">
-          <Stat icon={<CalendarDaysIcon />} label="Sunday plan" value={String(items.length)} unit={items.length === 1 ? "item" : "items"} detail={current ? `${current.title}${events.length ? ` · ${events.length} ${events.length === 1 ? "event" : "events"}` : ""}${skippedCount ? ` · ${skippedCount} skipped` : ""}${minutes ? ` · ${formatMinutes(minutes * 60_000)} scheduled` : ""}${dirty ? " · unsaved changes" : ""}` : "No saved service open"} />
+          <Stat icon={<CalendarDaysIcon />} label="Sunday plan" value={String(order.events || order.items)} unit={order.events ? (order.events === 1 ? "event" : "events") : (order.items === 1 ? "item" : "items")} detail={current ? `${current.title}${order.events && order.loose ? ` · ${order.loose} ${order.loose === 1 ? "item" : "items"} outside events` : ""}${skippedCount ? ` · ${skippedCount} skipped` : ""}${minutes ? ` · ${formatMinutes(minutes * 60_000)} scheduled` : ""}${dirty ? " · unsaved changes" : ""}` : "No saved service open"} />
           {/* Checks counted, not a percentage (#298: no arbitrary percentages). */}
           <Stat icon={<CheckIcon />} label="Service readiness" value={String(okCount)} unit={`of ${counted} check${counted === 1 ? "" : "s"}`} detail={ready ? "Ready to present" : `${warnings.length} to check`} />
           <Stat icon={<MonitorIcon />} label="Screens" value={String(onAir)} unit={`of ${outputs.length} on`} detail={onAir ? "On air when you show something live" : "Turn them on in Outputs"} />

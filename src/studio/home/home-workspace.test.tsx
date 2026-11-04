@@ -170,6 +170,23 @@ describe("Home workspace", () => {
     expect(planStat?.textContent).toContain("12 min scheduled")
   })
 
+  it("counts the Sunday plan by its events first, as Prepare and Live do (#404)", async () => {
+    const rows = await render(
+      [slide("Welcome"), slide("Prayer"), slide("Notices")],
+      [
+        { id: "opening", type: "group", name: "Opening", at: 0, event: { schema_version: 1 } },
+        { id: "after", type: "phase", name: "After", at: 2 },
+      ],
+      0,
+    )
+    const planStat = [...rows.ownerDocument.body.querySelectorAll<HTMLParagraphElement>("p")]
+      .find((paragraph) => paragraph.textContent?.trim() === "Sunday plan")?.parentElement
+
+    expect(planStat?.textContent).toContain("1event")
+    expect(planStat?.textContent).toContain("1 item outside events")
+    expect(planStat?.textContent).not.toContain("3items")
+  })
+
   it("explains when every item is hidden or in a skipped phase", async () => {
     const rows = await render(
       [slide("Hidden one", { hidden: true }), slide("Skipped phase item")],
