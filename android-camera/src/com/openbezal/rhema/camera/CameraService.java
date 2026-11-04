@@ -784,6 +784,39 @@ public final class CameraService extends Service {
         });
     }
 
+    /** Rhema's last tally for this camera (#209) and when it came (elapsedRealtime, 0: never). */
+    private volatile int tally = CamAction.TALLY_UNKNOWN;
+    private volatile long tallyOkAt;
+    private long tallyAskedAt;
+    private volatile boolean tallyAsking;
+
+    /** The tally to show now: unknown when Rhema has not said within Report.TALLY_FRESH_MS. */
+    int tally() {
+        long at = tallyOkAt;
+        return at > 0 && SystemClock.elapsedRealtime() - at < Report.TALLY_FRESH_MS ? tally : CamAction.TALLY_UNKNOWN;
+    }
+
+    /** Ask Rhema for the tally on the report thread; one question at a time. */
+    private void askTally() {
+        final Pairing p = Prefs.pairing(this);
+        if (p == null || p.tallyUrl() == null || tallyAsking) return;
+        tallyAsking = true;
+        reporter.post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    int t = Report.tally(p);
+                    tally = t;
+                    if (t != CamAction.TALLY_UNKNOWN) tallyOkAt = SystemClock.elapsedRealtime();
+                } catch (IOException e) {
+                    // Unreachable: the tally goes unknown after TALLY_FRESH_MS (never a stale ON AIR).
+                } finally {
+                    tallyAsking = false;
+                }
+            }
+        });
+    }
+
     Publisher publisher() {
         return pub;
     }
@@ -808,6 +841,11 @@ public final class CameraService extends Service {
                 report();
             }
             if (!sending) reportAt = 0;
+            if (sending && now - tallyAskedAt >= Report.TALLY_EVERY_MS) {
+                tallyAskedAt = now;
+                askTally();
+            }
+            if (!sending) tallyOkAt = 0;
             if (sending && now - batteryLogAt >= 60000) {
                 batteryLogAt = now;
                 float[] b = battery();

@@ -104,6 +104,11 @@ final class Pairing {
         return api == 0 ? null : "https://" + host + ":" + api + "/api/v1/camera/" + name + "/status";
     }
 
+    /** Where its tally is read (#209); null for a link without a report port (an older Rhema). */
+    String tallyUrl() {
+        return api == 0 ? null : "https://" + host + ":" + api + "/api/v1/camera/" + name + "/tally";
+    }
+
     /** What to call this camera on screen. */
     String title() {
         return label.isEmpty() ? name : label;

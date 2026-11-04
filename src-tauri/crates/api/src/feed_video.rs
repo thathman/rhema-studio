@@ -11,6 +11,9 @@ use serde::{Deserialize, Serialize};
 
 /// A page's report older than this is not shown (the page went away or stopped reporting).
 const FRESH: Duration = Duration::from_secs(10);
+/// A page reports every 2 s while it plays cameras and goes quiet when it plays none, so the tally
+/// (#209) trusts a report for less than two of those: a TV that cut away is off air within 3.5 s.
+const ON_TV_FRESH: Duration = Duration::from_millis(3500);
 /// Pages remembered per feed at most; the oldest report goes first.
 const MAX_PAGES: usize = 32;
 /// Cameras per report at most (a scene has a few).
@@ -84,19 +87,33 @@ pub struct PageVideo {
 /// The reports of one feed's pages, by address.
 #[derive(Debug, Default)]
 pub struct FeedVideo {
-    pages: HashMap<IpAddr, (Instant, Vec<CameraPlayback>)>,
+    /// When it reported, the paired TV whose own key it used (a congregation screen), what it plays.
+    pages: HashMap<IpAddr, (Instant, Option<String>, Vec<CameraPlayback>)>,
 }
 
 impl FeedVideo {
-    /// A page at `from` reported what it plays.
-    pub fn report(&mut self, from: IpAddr, cameras: Vec<CameraPlayback>, now: Instant) {
-        self.pages.retain(|_, (at, _)| now.saturating_duration_since(*at) < FRESH);
+    /// A page at `from` reported what it plays; `tv`: the paired TV whose own key it signed in with.
+    pub fn report(&mut self, from: IpAddr, cameras: Vec<CameraPlayback>, now: Instant, tv: Option<String>) {
+        self.pages.retain(|_, (at, _, _)| now.saturating_duration_since(*at) < FRESH);
         if self.pages.len() >= MAX_PAGES && !self.pages.contains_key(&from) {
-            if let Some(oldest) = self.pages.iter().min_by_key(|(_, (at, _))| *at).map(|(ip, _)| *ip) {
+            if let Some(oldest) = self.pages.iter().min_by_key(|(_, (at, _, _))| *at).map(|(ip, _)| *ip) {
                 self.pages.remove(&oldest);
             }
         }
-        self.pages.insert(from, (now, cameras.into_iter().take(MAX_CAMERAS).map(CameraPlayback::clean).collect()));
+        self.pages.insert(from, (now, tv, cameras.into_iter().take(MAX_CAMERAS).map(CameraPlayback::clean).collect()));
+    }
+
+    /// Whether a paired TV's page shows `camera` now (#209 congregation tally): it said lately that it
+    /// has a picture from it, held or moving. A page on the feed's own key (OBS, a browser) is not a TV.
+    #[must_use]
+    pub fn on_tv(&self, camera: &str, now: Instant) -> bool {
+        !camera.is_empty()
+            && self.pages.values().any(|(at, tv, cams)| tv.is_some() && now.saturating_duration_since(*at) < ON_TV_FRESH && cams.iter().any(|c| c.playing && c.camera == camera))
+    }
+
+    /// The paired TVs are now `tvs` (by id): a revoked TV's report counts for nothing from now on.
+    pub fn keep_tvs(&mut self, tvs: &[&str]) {
+        self.pages.retain(|_, (_, tv, _)| tv.as_deref().is_none_or(|id| tvs.contains(&id)));
     }
 
     /// The pages that reported lately, by address.
@@ -105,8 +122,8 @@ impl FeedVideo {
         let mut v: Vec<PageVideo> = self
             .pages
             .iter()
-            .filter(|(_, (at, _))| now.saturating_duration_since(*at) < FRESH)
-            .map(|(ip, (at, cams))| PageVideo { from: ip.to_string(), ago_ms: u64::try_from(now.saturating_duration_since(*at).as_millis()).unwrap_or(u64::MAX), cameras: cams.clone() })
+            .filter(|(_, (at, _, _))| now.saturating_duration_since(*at) < FRESH)
+            .map(|(ip, (at, _, cams))| PageVideo { from: ip.to_string(), ago_ms: u64::try_from(now.saturating_duration_since(*at).as_millis()).unwrap_or(u64::MAX), cameras: cams.clone() })
             .collect();
         v.sort_by(|a, b| a.from.cmp(&b.from));
         v
@@ -127,9 +144,9 @@ mod tests {
         let t0 = Instant::now();
         let tv: IpAddr = "192.168.1.40".parse().unwrap();
         let obs: IpAddr = "192.168.1.31".parse().unwrap();
-        v.report(tv, vec![cam("pulpit", 29.8)], t0);
-        v.report(obs, vec![cam("choir", 30.0)], t0);
-        v.report(tv, vec![cam("pulpit", 24.0)], t0 + Duration::from_secs(2));
+        v.report(tv, vec![cam("pulpit", 29.8)], t0, None);
+        v.report(obs, vec![cam("choir", 30.0)], t0, None);
+        v.report(tv, vec![cam("pulpit", 24.0)], t0 + Duration::from_secs(2), None);
         let p = v.pages(t0 + Duration::from_secs(3));
         assert_eq!(p.iter().map(|x| x.from.as_str()).collect::<Vec<_>>(), vec!["192.168.1.31", "192.168.1.40"]);
         assert_eq!(p[1].cameras[0].fps, Some(24.0));
@@ -145,7 +162,7 @@ mod tests {
         let mut v = FeedVideo::default();
         let t0 = Instant::now();
         let odd = CameraPlayback { camera: "Bad Name\n".into(), fps: Some(f64::NAN), dropped_pct: Some(250.0), width: Some(0), jitter_ms: Some(-3.0), loss_pct: Some(400.0), rtt_ms: Some(f64::INFINITY), decode_fps: Some(59.9), ..cam("x", 1.0) };
-        v.report("10.0.0.2".parse().unwrap(), (0..40).map(|_| odd.clone()).collect(), t0);
+        v.report("10.0.0.2".parse().unwrap(), (0..40).map(|_| odd.clone()).collect(), t0, None);
         let p = v.pages(t0);
         assert_eq!(p[0].cameras.len(), MAX_CAMERAS);
         let c = &p[0].cameras[0];
@@ -157,11 +174,29 @@ mod tests {
     }
 
     #[test]
+    fn only_a_tvs_page_playing_a_camera_puts_it_on_the_congregation_tally() {
+        let mut v = FeedVideo::default();
+        let t0 = Instant::now();
+        v.report("192.168.1.31".parse().unwrap(), vec![cam("choir", 30.0)], t0, None);
+        v.report("192.168.1.40".parse().unwrap(), vec![cam("pulpit", 30.0), CameraPlayback { playing: false, ..cam("wide", 0.0) }], t0, Some("192.168.1.40".into()));
+        assert!(v.on_tv("pulpit", t0), "a TV plays it");
+        assert!(!v.on_tv("choir", t0), "only OBS's browser page plays it");
+        assert!(!v.on_tv("wide", t0), "in the TV's scene, but no picture");
+        assert!(!v.on_tv("", t0), "an address typed by hand is no camera");
+        assert!(v.on_tv("pulpit", t0 + Duration::from_secs(3)), "a report is missed now and then");
+        assert!(!v.on_tv("pulpit", t0 + ON_TV_FRESH), "the TV cut away (it reports only while it plays cameras)");
+        v.report("192.168.1.40".parse().unwrap(), vec![cam("pulpit", 30.0)], t0, Some("192.168.1.40".into()));
+        v.keep_tvs(&["192.168.1.41"]);
+        assert!(!v.on_tv("pulpit", t0), "revoked: at once");
+        assert_eq!(v.pages(t0).len(), 1, "the OBS page stays");
+    }
+
+    #[test]
     fn many_pages_keep_the_newest() {
         let mut v = FeedVideo::default();
         let t0 = Instant::now();
         for i in 0..40u8 {
-            v.report(IpAddr::from([10, 0, 0, i]), vec![], t0 + Duration::from_millis(u64::from(i)));
+            v.report(IpAddr::from([10, 0, 0, i]), vec![], t0 + Duration::from_millis(u64::from(i)), None);
         }
         let p = v.pages(t0 + Duration::from_millis(50));
         assert_eq!(p.len(), MAX_PAGES);

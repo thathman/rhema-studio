@@ -82,30 +82,11 @@ final class Report {
     static int send(Pairing p, String body) throws IOException {
         String url = p.statusUrl();
         if (url == null) return 0;
-        SSLContext ctx;
+        HttpsURLConnection c = open(p, url);
         try {
-            ctx = SSLContext.getInstance("TLS");
-            ctx.init(null, new TrustManager[] {new Pin(p.fp)}, null);
-        } catch (GeneralSecurityException e) {
-            throw new IOException("This phone cannot make a secure connection", e);
-        }
-        HttpsURLConnection c = (HttpsURLConnection) new URL(url).openConnection();
-        try {
-            c.setSSLSocketFactory(ctx.getSocketFactory());
-            // The certificate is pinned (above), so its name need not match the address.
-            c.setHostnameVerifier(new HostnameVerifier() {
-                @Override
-                public boolean verify(String hostname, SSLSession session) {
-                    return true;
-                }
-            });
-            c.setConnectTimeout(4000);
-            c.setReadTimeout(4000);
             c.setRequestMethod("POST");
             c.setDoOutput(true);
-            c.setUseCaches(false);
             c.setRequestProperty("Content-Type", "application/json");
-            c.setRequestProperty("Authorization", authorization(p));
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             c.setFixedLengthStreamingMode(bytes.length);
             OutputStream out = c.getOutputStream();
@@ -121,6 +102,72 @@ final class Report {
         } finally {
             c.disconnect();
         }
+    }
+
+    /** How often the tally is read while sending (ms), and how old a tally may be before it is unknown. */
+    static final long TALLY_EVERY_MS = 2000;
+    static final long TALLY_FRESH_MS = 6000;
+
+    /**
+     * Read the camera's tally (#209): CamAction.ONLINE and/or CONGREGATION, 0 for neither, or
+     * CamAction.TALLY_UNKNOWN when Rhema could not say (an older Rhema answers 404). Throws when
+     * Rhema could not be reached. Same pinned https and header sign-in as the report.
+     */
+    static int tally(Pairing p) throws IOException {
+        String url = p.tallyUrl();
+        if (url == null) return CamAction.TALLY_UNKNOWN;
+        HttpsURLConnection c = open(p, url);
+        try {
+            c.setRequestMethod("GET");
+            int code = c.getResponseCode();
+            InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+            byte[] buf = new byte[512];
+            int n = 0;
+            if (in != null) {
+                try {
+                    for (int r; n < buf.length && (r = in.read(buf, n, buf.length - n)) > 0; ) n += r;
+                } finally {
+                    in.close();
+                }
+            }
+            return code == HttpURLConnection.HTTP_OK ? parseTally(new String(buf, 0, n, StandardCharsets.UTF_8)) : CamAction.TALLY_UNKNOWN;
+        } finally {
+            c.disconnect();
+        }
+    }
+
+    /** Rhema's tally reply ({"online":true,"congregation":false}); unknown if it is not one. */
+    static int parseTally(String json) {
+        String j = json.replace(" ", "");
+        boolean on = j.contains("\"online\":true"), off = j.contains("\"online\":false");
+        boolean room = j.contains("\"congregation\":true"), noRoom = j.contains("\"congregation\":false");
+        if (!(on || off) || !(room || noRoom)) return CamAction.TALLY_UNKNOWN;
+        return (on ? CamAction.ONLINE : 0) | (room ? CamAction.CONGREGATION : 0);
+    }
+
+    /** A connection to the paired Rhema only (its pinned certificate), signed in with the camera's secret. */
+    private static HttpsURLConnection open(Pairing p, String url) throws IOException {
+        SSLContext ctx;
+        try {
+            ctx = SSLContext.getInstance("TLS");
+            ctx.init(null, new TrustManager[] {new Pin(p.fp)}, null);
+        } catch (GeneralSecurityException e) {
+            throw new IOException("This phone cannot make a secure connection", e);
+        }
+        HttpsURLConnection c = (HttpsURLConnection) new URL(url).openConnection();
+        c.setSSLSocketFactory(ctx.getSocketFactory());
+        // The certificate is pinned (above), so its name need not match the address.
+        c.setHostnameVerifier(new HostnameVerifier() {
+            @Override
+            public boolean verify(String hostname, SSLSession session) {
+                return true;
+            }
+        });
+        c.setConnectTimeout(4000);
+        c.setReadTimeout(4000);
+        c.setUseCaches(false);
+        c.setRequestProperty("Authorization", authorization(p));
+        return c;
     }
 
     /** Whether Rhema took the report. */

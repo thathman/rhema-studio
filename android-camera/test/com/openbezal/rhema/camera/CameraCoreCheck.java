@@ -57,8 +57,17 @@ public final class CameraCoreCheck {
                 connecting.status.equals("CONNECTING") && connecting.action.isEmpty());
 
         CamAction.State live = CamAction.resolve(true, true, true);
-        check("cam action: live publisher says LIVE",
-                live.status.equals("LIVE") && live.action.isEmpty());
+        check("cam action: sending with no word from Rhema never claims on air or off air",
+                live.status.equals("SENDING · NO TALLY") && !CamAction.onAir(live) && live.action.isEmpty());
+
+        // #209: sending is not on air, and the light names the Program.
+        check("tally: sending, on no Program", CamAction.resolve(true, true, true, 0).status.equals("SENDING") && !CamAction.onAir(CamAction.resolve(true, true, true, 0)));
+        check("tally: online", CamAction.resolve(true, true, true, CamAction.ONLINE).status.equals("ON AIR · ONLINE"));
+        check("tally: congregation", CamAction.resolve(true, true, true, CamAction.CONGREGATION).status.equals("ON AIR · CONGREGATION"));
+        CamAction.State both = CamAction.resolve(true, true, true, CamAction.ONLINE | CamAction.CONGREGATION);
+        check("tally: both", both.status.equals("ON AIR · ONLINE + CONGREGATION") && CamAction.onAir(both));
+        check("tally: not yet connected is never on air", CamAction.resolve(true, true, false, CamAction.ONLINE).status.equals("CONNECTING"));
+        check("tally: not sending is never on air", CamAction.resolve(true, false, false, CamAction.ONLINE).status.equals("NOT SENDING"));
     }
 
     static void pairing() {
@@ -502,6 +511,14 @@ public final class CameraCoreCheck {
         }
         check("report: a bad port is refused", refused);
         check("report: taken", Report.ok(204) && !Report.ok(403));
+        check("tally: where it is read", "https://192.168.1.20:8081/api/v1/camera/pulpit/tally".equals(p.tallyUrl()) && !p.tallyUrl().contains(TOKEN));
+        check("tally: an older link has none", Pairing.parse(LINK).tallyUrl() == null);
+        check("tally: Rhema's reply", Report.parseTally("{\"online\":true,\"congregation\":false}") == CamAction.ONLINE
+                && Report.parseTally("{\"online\":false,\"congregation\":true}") == CamAction.CONGREGATION
+                && Report.parseTally("{\"online\":true, \"congregation\":true}") == (CamAction.ONLINE | CamAction.CONGREGATION)
+                && Report.parseTally("{\"online\":false,\"congregation\":false}") == 0);
+        check("tally: anything else is unknown, never off air", Report.parseTally("") == CamAction.TALLY_UNKNOWN
+                && Report.parseTally("{\"online\":true}") == CamAction.TALLY_UNKNOWN && Report.parseTally("<html>404</html>") == CamAction.TALLY_UNKNOWN);
     }
 
     static void check(String name, boolean ok) {
