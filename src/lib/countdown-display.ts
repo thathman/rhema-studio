@@ -327,7 +327,7 @@ export function lookCounting(
   const idle = (label: string, why: string): Counting => ({ label, totalMs: 0, endsAt: null, leftMs: 0, idle: why })
   switch (look.counts) {
     case "timer": {
-      if (timer.durationMs === 0 && timer.startedAt === null && timer.accumulatedMs === 0) return idle("Service timer", "Set the service timer in Present")
+      if (timer.durationMs === 0 && timer.startedAt === null && timer.accumulatedMs === 0) return idle("Service timer", "Set the service timer in Live")
       // The item on now's own warning applies to the service timer too, as on its chip.
       const c = timerCounting("Service timer", timer, mono, wall)
       return sources.itemWarnMs ? { ...c, warnMs: sources.itemWarnMs } : c

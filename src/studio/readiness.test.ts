@@ -234,10 +234,10 @@ describe("preflight: timers, the countdown display and TV overscan (#213)", () =
   const byId = (checks: ReadinessCheck[], id: string) => checks.find((c) => c.id === id)
 
   it("a countdown with nothing to count says why; a warning only near the service", () => {
-    const later = computeReadiness({ ...base, countdownIdle: [{ output: "Pulpit countdown", why: "Set the service timer in Present" }] }).checks
+    const later = computeReadiness({ ...base, countdownIdle: [{ output: "Pulpit countdown", why: "Set the service timer in Live" }] }).checks
     expect(byId(later, "countdown-idle:Pulpit countdown")).toMatchObject({ status: "info", label: "Pulpit countdown: the countdown has nothing to count" })
-    expect(byId(later, "countdown-idle:Pulpit countdown")?.detail).toContain("Set the service timer in Present")
-    const soon = computeReadiness({ ...base, serviceSoon: true, countdownIdle: [{ output: "Pulpit countdown", why: "Set the service timer in Present" }] })
+    expect(byId(later, "countdown-idle:Pulpit countdown")?.detail).toContain("Set the service timer in Live")
+    const soon = computeReadiness({ ...base, serviceSoon: true, countdownIdle: [{ output: "Pulpit countdown", why: "Set the service timer in Live" }] })
     expect(byId(soon.checks, "countdown-idle:Pulpit countdown")?.status).toBe("warn")
     expect(soon.ready).toBe(false)
   })

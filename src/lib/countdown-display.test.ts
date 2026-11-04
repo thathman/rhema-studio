@@ -49,7 +49,7 @@ describe("countdown display steps (owner request: black, amber at 25 %, red at 1
     expect(countdownText(0, -65_000)).toBe("1:05")
     expect(countdownNow(frame({ totalMs: 0, endsAt: 0, leftMs: 0 }), 65_000)).toMatchObject({ background: "#000000", time: "1:05", over: false, pulse: false })
     expect(activeStep([], TEN, -1)).toBe(-1)
-    expect(countdownNow(frame({ idle: "Set the service timer in Present" }), 0)).toMatchObject({ step: -1, time: "–:––", background: "#000000" })
+    expect(countdownNow(frame({ idle: "Set the service timer in Live" }), 0)).toMatchObject({ step: -1, time: "–:––", background: "#000000" })
   })
 
   it("a paused timer keeps its step's colours and message, but nothing moves (no pulse)", () => {

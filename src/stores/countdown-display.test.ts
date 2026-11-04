@@ -69,7 +69,7 @@ describe("the countdown display on the host", () => {
 
   it("before the timer is set it says so instead of counting", () => {
     useBroadcastStore.getState().syncBroadcastOutputFor("cd")
-    expect(lastCountdown()).toMatchObject({ idle: "Set the service timer in Present", endsAt: null })
+    expect(lastCountdown()).toMatchObject({ idle: "Set the service timer in Live", endsAt: null })
   })
 
   it("counts the item on now from when it went on air, for its planned minutes", () => {

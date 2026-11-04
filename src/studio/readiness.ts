@@ -260,7 +260,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
       ? [{ id: "fonts", status: "warn" as const, label: `${i.missingFonts.length} theme font${i.missingFonts.length === 1 ? " is" : "s are"} not installed`, detail: i.missingFonts.map((m) => `${m.theme}: ${m.font}`).join(", ") + ". The screen will use a fallback font.", fix: "outputs" as const, fixLabel: "Open outputs" }]
       : []),
     ...(i.missingTranslations?.length
-      ? [{ id: "missing-translations", status: "warn" as const, label: `Some verses are saved for ${i.missingTranslations.join(", ")}, which ${i.missingTranslations.length === 1 ? "is" : "are"} not installed here`, detail: 'They will not show. Install the translation, or turn on "Use my translation" in Present to show them in yours.', fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      ? [{ id: "missing-translations", status: "warn" as const, label: `Some verses are saved for ${i.missingTranslations.join(", ")}, which ${i.missingTranslations.length === 1 ? "is" : "are"} not installed here`, detail: 'They will not show. Install the translation, or turn on "Use my translation" in Live to show them in yours.', fix: "prepare" as const, fixLabel: "Open Prepare" }]
       : []),
     ...(i.unsupportedItems
       ? [{ id: "unsupported-items", status: "warn" as const, label: `${i.unsupportedItems} item${i.unsupportedItems === 1 ? "" : "s"} from a newer version of Rhema Studio`, detail: "This version cannot show them. Update Rhema Studio on this computer.", fix: "prepare" as const, fixLabel: "Open Prepare" }]

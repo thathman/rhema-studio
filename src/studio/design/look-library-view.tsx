@@ -488,7 +488,7 @@ async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab
     }
     case "lower-third":
       if (edit) onOpen("lower-thirds", added.lowerThirdStyle?.id)
-      toast(`Added “${added.lowerThirdStyle?.name}” to your lower-third styles.`, { description: `${keptNote}Pick it when you show a name in Present. A band on air now keeps its look.` })
+      toast(`Added “${added.lowerThirdStyle?.name}” to your lower-third styles.`, { description: `${keptNote}Pick it when you show a name in Live. A band on air now keeps its look.` })
       return
     case "ticker":
       if (edit) onOpen("ticker")
