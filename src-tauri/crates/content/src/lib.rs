@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 
 mod approvals;
 mod attachments;
+mod design_proposal;
 mod designs;
 mod folder;
 mod logs;
@@ -31,6 +32,9 @@ mod slides;
 mod songs;
 mod usage;
 pub use approvals::*;
+pub mod proposal {
+    pub use crate::design_proposal::*;
+}
 pub use designs::*;
 pub use folder::*;
 pub use logs::*;
@@ -249,6 +253,20 @@ impl ContentDb {
     pub fn open_read_only(path: &Path) -> Result<Self> {
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
+        Self::without_migrating(conn, path)
+    }
+
+    /// Open the running app's existing database to write, beside it (the MCP server saving one new
+    /// design draft, #443 C5): never creates the file, never migrates, and refuses a database from a
+    /// newer or not-yet-updated Rhema exactly as `open_read_only` does. SQLite's own locking (WAL,
+    /// a 5 s busy wait) keeps each write transaction whole against the app's.
+    pub fn open_existing(path: &Path) -> Result<Self> {
+        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
+        conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;")?;
+        Self::without_migrating(conn, path)
+    }
+
+    fn without_migrating(conn: Connection, path: &Path) -> Result<Self> {
         let db = Self { conn: Mutex::new(conn), path: Some(path.to_path_buf()), last_backup: None };
         let newer: Vec<String> = db.applied_migrations()?.into_iter().filter(|v| !MIGRATIONS.iter().any(|(k, _)| k == v)).collect();
         if !newer.is_empty() {

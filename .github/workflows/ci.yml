@@ -117,6 +117,9 @@ jobs:
       - name: App crate check
         working-directory: src-tauri
         run: cargo check -p rhema
+      - name: MCP design drafts end to end (the real `Rhema --mcp` over stdio, #443)
+        working-directory: src-tauri
+        run: cargo test -p rhema --test mcp_design_drafts
       - name: Dependency licences (Rust crates)
         run: bun scripts/check-licenses.ts --rust
       - name: App crate clippy (pre-existing warnings allowed, errors not)

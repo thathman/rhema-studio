@@ -35,7 +35,9 @@ lyrics, revisions, text as data, remote access left to the owner): `24-adr-0003-
   camera, or change a setting. Steps a draft plans for an item's Take run only when a person Takes it.
 - **Read-only:** the content database is opened with SQLite's read-only flag
   (`ContentDb::open_read_only`, which also refuses a database from a newer Rhema) and the Bible
-  database is immutable. Nothing can change a service, a song, a setting or a screen.
+  database is immutable. Nothing can change a service, a song, a setting or a screen. The one
+  database write is a new design draft (`rhema_create_design_draft`, below), saved through a handle
+  opened for that save only.
 - **Scripture only from the installed editions** (`rhema_lookup_bible_reference`); **no lyrics**:
   songs and hymns are described by title, other titles, numbers, authors and licence.
 - **Local:** Rhema sends nothing anywhere. An online assistant does send its own conversation (and
@@ -60,6 +62,10 @@ lyrics, revisions, text as data, remote access left to the owner): `24-adr-0003-
 | `rhema_list_looks_and_scenes` | The church's looks (built-in and its own, from Design) and congregation scenes, by name, for suggestions in a draft (MCP-004) |
 | `rhema_list_service_drafts` | The drafts waiting for review: id, title, date, items, revision, made / revised, by which assistant (MCP-003) |
 | `rhema_get_service_draft` | One waiting draft as saved: phases, groups, items with end-by times, assumptions, revision (MCP-005) |
+| `rhema_get_design_capabilities` | What a proposed design may hold: 1920 × 1080 pages of text (both languages), rectangles and ellipses (solid or gradient), library pictures by id; limits and refusals (#443, `docs/contracts/mcp-design-drafts-v1.md`) |
+| `rhema_list_designs` | Designs by title: id, title, kind, draft revision, latest version. No documents |
+| `rhema_validate_design_draft` | Checks a proposed design without saving: every error with where it is, warnings (a missing second language) |
+| `rhema_create_design_draft` | Saves a checked design as a new draft in Design → My Designs, audited as the assistant; never a version, an edit, a pin, an approval or a screen |
 | `rhema_update_service_draft` | Replaces a waiting draft with a revised one (same id, checked like create, `updated_at` set). Needs the `revision` the assistant read; if the draft changed since, nothing is saved and the error says to read it again (MCP-005). Refused once people removed it; services people already saved from it are never touched (MCP-003) |
 
 ## Resources (MCP-006)
