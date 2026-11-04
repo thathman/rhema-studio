@@ -287,9 +287,11 @@ describe("Present's unified Live console", () => {
     expect(program.className).toContain("min-h-[18rem]")
     expect(element.querySelectorAll('[aria-label="Preview"]')).toHaveLength(1)
     const transport = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Presentation controls"]')!
-    expect(transport.className).toContain("max-[1200px]:sticky")
-    expect(transport.className).toContain("max-[1200px]:bottom-0")
-    expect(transport.parentElement?.className).toContain("max-[1200px]:pb-40")
+    expect(transport.className).not.toContain("sticky")
+    expect(transport.className).not.toContain("bottom-0")
+    expect(transport.className).toContain("max-[1200px]:shrink-0")
+    expect(transport.parentElement?.className).toContain("max-[1200px]:overflow-y-auto")
+    expect(transport.parentElement?.className).not.toContain("pb-40")
   })
 
   it("keeps a zero-moment event visible instead of treating its plan as no service", async () => {

@@ -380,15 +380,14 @@ function LiveConsoleSurface({
         )}
       </section>
       {/* Wide windows use the workspace grid; 1024–1200 keeps two readable panes, while smaller widths stack. */}
-      <div className="contents max-[1200px]:row-span-3 max-[1200px]:grid max-[1200px]:grid-cols-1 min-[1024px]:max-[1200px]:grid-cols-2 max-[1200px]:min-h-0 max-[1200px]:gap-2 max-[1200px]:overflow-y-auto max-[1200px]:pb-40">
+      <div className="contents max-[1200px]:row-span-3 max-[1200px]:grid max-[1200px]:grid-cols-1 min-[1024px]:max-[1200px]:grid-cols-2 max-[1200px]:min-h-0 max-[1200px]:gap-2 max-[1200px]:overflow-y-auto">
       <div className="min-h-0 overflow-hidden rounded-xl max-[1200px]:min-h-[18rem] max-[1200px]:shrink-0 [&>div]:h-full">
         <PreviewPanel hideOutputPicker outputLanguageId={outputId} onEmptyPreviewAction={focusQuickFind} />
       </div>
       {/* Live, with the congregation scenes under it: a scene Take changes a screen's layout, not what is live.
-          Opening the scenes on a short window scrolls this column instead of covering the transport. */}
+          Compact layouts keep this column and the transport in normal flow so neither covers the other. */}
       <div className="flex min-h-0 flex-col gap-2 overflow-y-auto max-[1200px]:min-h-fit max-[1200px]:shrink-0 max-[1200px]:overflow-visible">
-        {/* Never shorter than a readable picture with its sources, however many lines they take: the open
-            scenes scroll under it instead. */}
+        {/* Never shorter than a readable picture with its sources. Wide layouts scroll scenes in this column. */}
         <div className="min-h-[18rem] flex-1 overflow-hidden rounded-xl [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
           <LiveOutputPanel
             outputId={outputId}
@@ -397,7 +396,7 @@ function LiveConsoleSurface({
         </div>
         <ScenesStrip outputId={outputId} onTakeSelectionChange={setSceneTakeSelection} />
       </div>
-      <TransportBar hasSelectedOutputSceneTake={selectedOutputSceneTake !== null} className="col-span-2 max-[1200px]:shrink-0 max-[1200px]:sticky max-[1200px]:bottom-0 max-[1200px]:z-10 max-[1200px]:bg-background max-[1023px]:col-span-1" />
+      <TransportBar hasSelectedOutputSceneTake={selectedOutputSceneTake !== null} className="col-span-2 max-[1200px]:shrink-0 max-[1023px]:col-span-1" />
 
       {toolsOpen ? (
         <div className="col-span-2 min-h-0 overflow-hidden max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">
