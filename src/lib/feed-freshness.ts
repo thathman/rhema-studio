@@ -7,6 +7,11 @@
  */
 export const FEED_STALE_AFTER_MS = 10_000
 
+/** Keep aligned with FEED_BEAT in the host's feed server. */
+export const FEED_BEAT_INTERVAL_MS = 3_000
+/** Reopen a still-open browser stream after three beats went missing. */
+export const FEED_RECONNECT_AFTER_MS = FEED_BEAT_INTERVAL_MS * 3
+
 export type FeedFreshness = {
   lastHeard: number
   beats: boolean
@@ -42,6 +47,13 @@ export function feedStale(o: FeedFreshness & { now: number }): boolean {
   if (o.disconnected) return true
   const quiet = o.now - o.lastHeard > FEED_STALE_AFTER_MS
   return quiet && o.beats
+}
+
+/** A heartbeat-capable EventSource may stay OPEN after its network path has gone quiet. */
+export function feedReconnectDue(state: FeedFreshness, now: number, eventSourceStartedAt: number): boolean {
+  return state.beats
+    && now - state.lastHeard >= FEED_RECONNECT_AFTER_MS
+    && now - eventSourceStartedAt >= FEED_RECONNECT_AFTER_MS
 }
 
 /** The page's clock minus the host's (ms), from a beat's host time and when it arrived here. */
