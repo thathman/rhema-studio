@@ -531,6 +531,32 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[data-testid="named-scene-take"]')).toBeNull()
   })
 
+  it("keeps the selected congregation output when returning from another workspace and falls back if it was removed", async () => {
+    const baseOutput = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({ outputs: [
+      { ...baseOutput, id: "english-output", name: "English screen", role: "congregation", language: "first" },
+      { ...baseOutput, id: "yoruba-output", name: "Yoruba screen", role: "congregation", language: "second" },
+    ] })
+    await renderWorkspace()
+
+    const target = element.querySelector<HTMLSelectElement>('[aria-label="Target congregation output for Live Preview and Program"]')!
+    await act(async () => {
+      target.value = "yoruba-output"
+      target.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    expect(useProductionTab.getState().liveOutputId).toBe("yoruba-output")
+
+    await act(async () => root.unmount())
+    element.remove()
+    await renderWorkspace()
+    expect(element.querySelector<HTMLSelectElement>('[aria-label="Target congregation output for Live Preview and Program"]')?.value).toBe("yoruba-output")
+    expect(element.querySelector<HTMLElement>("[data-program-output]")?.dataset.programOutput).toBe("yoruba-output")
+
+    await act(async () => useBroadcastStore.setState({ outputs: [useBroadcastStore.getState().outputs[0]!] }))
+    expect(element.querySelector<HTMLSelectElement>('[aria-label="Target congregation output for Live Preview and Program"]')?.value).toBe("english-output")
+    expect(useProductionTab.getState().liveOutputId).toBeNull()
+  })
+
   it("keeps the actual Program readable above the independently scrolling scene controls", async () => {
     await renderWorkspace()
 
