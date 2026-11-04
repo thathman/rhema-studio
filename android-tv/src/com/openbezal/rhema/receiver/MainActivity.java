@@ -31,6 +31,7 @@ import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebResourceResponse;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -85,6 +86,8 @@ public class MainActivity extends Activity {
     private final SecureRandom random = new SecureRandom();
     private SharedPreferences prefs;
     private WebView web;
+    /** What the screen is made of: the page, the kept picture over it, the note, the code panel. */
+    private FrameLayout root;
     /** The idle/code screen: the Rhema Studio Receiver logo over the TV's name, address and code. */
     private LinearLayout panel;
     private TextView info;
@@ -128,9 +131,77 @@ public class MainActivity extends Activity {
 
         // A debug build (RECEIVER_DEBUG=1) lets chrome://inspect read the page: WebRTC stats, console.
         if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) WebView.setWebContentsDebuggingEnabled(true);
-        web = new WebView(this);
-        web.setBackgroundColor(Color.BLACK);
-        WebSettings s = web.getSettings();
+        web = newWeb();
+
+        info = new TextView(this);
+        info.setTextColor(Color.WHITE);
+        info.setTextSize(28);
+        info.setLineSpacing(0, 1.25f);
+        info.setGravity(Gravity.CENTER);
+
+        // The approved landscape logo (brand/02_Product_Logos/Rhema-Studio-Receiver-Light-Text.png, as is).
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.receiver_logo);
+        logo.setAdjustViewBounds(true);
+        logo.setContentDescription("Rhema Studio Receiver");
+        float dp = getResources().getDisplayMetrics().density;
+        panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setGravity(Gravity.CENTER_HORIZONTAL);
+        panel.setBackgroundColor(Color.argb(230, 0, 0, 0));
+        panel.setPadding(80, 48, 80, 60);
+        LinearLayout.LayoutParams logoSize = new LinearLayout.LayoutParams((int) (360 * dp), -2);
+        logoSize.bottomMargin = (int) (16 * dp);
+        panel.addView(logo, logoSize);
+        panel.addView(info, new LinearLayout.LayoutParams(-2, -2));
+
+        still = new ImageView(this);
+        still.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        still.setBackgroundColor(Color.BLACK);
+        still.setVisibility(View.GONE);
+        note = new TextView(this);
+        note.setTextColor(Color.rgb(255, 197, 71));
+        note.setTextSize(16);
+        note.setBackgroundColor(Color.argb(160, 0, 0, 0));
+        note.setPadding(24, 10, 24, 10);
+        note.setVisibility(View.GONE);
+
+        root = new FrameLayout(this);
+        root.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        root.addView(still, new FrameLayout.LayoutParams(-1, -1));
+        FrameLayout.LayoutParams corner = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
+        corner.topMargin = (int) (16 * dp);
+        corner.rightMargin = (int) (16 * dp);
+        root.addView(note, corner);
+        root.addView(panel, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+        setContentView(root);
+        immersive();
+
+        newCode();
+        // A feed sent by Rhema before 1.3 (a plain http link, no certificate): sent again, it comes secure.
+        if (shown() != null && (!Guard.feedLink(shown()) || !Guard.fingerprint(prefs.getString("pin", null)))) {
+            prefs.edit().remove("url").remove("pin").apply();
+            problem = "Rhema Studio Receiver was updated and now opens only Rhema Studio's secure page. Send the feed again: in Rhema Studio, Outputs → the feed → Show on a Google TV.";
+        }
+        measureDisplay();
+        server = new ShowServer(PORT, this);
+        server.start();
+        advertise();
+        if (shown() != null) {
+            // The last picture of this feed, until Rhema Studio answers (1.5).
+            showStill();
+            web.loadUrl(shown());
+            panel.setVisibility(View.GONE);
+        } else {
+            showInfo(true);
+        }
+    }
+
+    /** The feed page's WebView, with its checks (a new one when the renderer dies). */
+    private WebView newWeb() {
+        final WebView w = new WebView(this);
+        w.setBackgroundColor(Color.BLACK);
+        WebSettings s = w.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         // Cameras in scenes are video: they start by themselves, muted (no echo in the room).
@@ -138,8 +209,8 @@ public class MainActivity extends Activity {
         // The feed page is https now, but cameras in scenes still ask the camera router over plain
         // http (as before); nothing secret goes there, and the browser sends it no link.
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        web.setWebChromeClient(new WebChromeClient());
-        web.setWebViewClient(new WebViewClient() {
+        w.setWebChromeClient(new WebChromeClient());
+        w.setWebViewClient(new WebViewClient() {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
                 if (req.isForMainFrame()) retry(certRefused ? NOT_THAT_RHEMA : "Looking for Rhema Studio at " + Uri.parse(shown()).getAuthority() + "…");
@@ -214,70 +285,37 @@ public class MainActivity extends Activity {
                 }
                 return null;
             }
+
+            /**
+             * The page's renderer died (out of memory on a small TV, or a crash). Unhandled, Android
+             * closes the app and the TV drops to its home screen mid-service (#198). A new WebView
+             * takes the dead one's place; the kept picture stays up, labelled, until the new page draws.
+             */
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                if (view == web) rendererGone();
+                return true;
+            }
         });
+        return w;
+    }
 
-        info = new TextView(this);
-        info.setTextColor(Color.WHITE);
-        info.setTextSize(28);
-        info.setLineSpacing(0, 1.25f);
-        info.setGravity(Gravity.CENTER);
-
-        // The approved landscape logo (brand/02_Product_Logos/Rhema-Studio-Receiver-Light-Text.png, as is).
-        ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.receiver_logo);
-        logo.setAdjustViewBounds(true);
-        logo.setContentDescription("Rhema Studio Receiver");
-        float dp = getResources().getDisplayMetrics().density;
-        panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setGravity(Gravity.CENTER_HORIZONTAL);
-        panel.setBackgroundColor(Color.argb(230, 0, 0, 0));
-        panel.setPadding(80, 48, 80, 60);
-        LinearLayout.LayoutParams logoSize = new LinearLayout.LayoutParams((int) (360 * dp), -2);
-        logoSize.bottomMargin = (int) (16 * dp);
-        panel.addView(logo, logoSize);
-        panel.addView(info, new LinearLayout.LayoutParams(-2, -2));
-
-        still = new ImageView(this);
-        still.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        still.setBackgroundColor(Color.BLACK);
-        still.setVisibility(View.GONE);
-        note = new TextView(this);
-        note.setTextColor(Color.rgb(255, 197, 71));
-        note.setTextSize(16);
-        note.setBackgroundColor(Color.argb(160, 0, 0, 0));
-        note.setPadding(24, 10, 24, 10);
-        note.setVisibility(View.GONE);
-
-        FrameLayout root = new FrameLayout(this);
-        root.addView(web, new FrameLayout.LayoutParams(-1, -1));
-        root.addView(still, new FrameLayout.LayoutParams(-1, -1));
-        FrameLayout.LayoutParams corner = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
-        corner.topMargin = (int) (16 * dp);
-        corner.rightMargin = (int) (16 * dp);
-        root.addView(note, corner);
-        root.addView(panel, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
-        setContentView(root);
-        immersive();
-
-        newCode();
-        // A feed sent by Rhema before 1.3 (a plain http link, no certificate): sent again, it comes secure.
-        if (shown() != null && (!Guard.feedLink(shown()) || !Guard.fingerprint(prefs.getString("pin", null)))) {
-            prefs.edit().remove("url").remove("pin").apply();
-            problem = "Rhema Studio Receiver was updated and now opens only Rhema Studio's secure page. Send the feed again: in Rhema Studio, Outputs → the feed → Show on a Google TV.";
-        }
-        measureDisplay();
-        server = new ShowServer(PORT, this);
-        server.start();
-        advertise();
-        if (shown() != null) {
-            // The last picture of this feed, until Rhema Studio answers (1.5).
-            showStill();
-            web.loadUrl(shown());
-            panel.setVisibility(View.GONE);
-        } else {
-            showInfo(true);
-        }
+    /** After onRenderProcessGone: a new WebView, then the page again after a backoff (Ready.rendererGone). */
+    private void rendererGone() {
+        long wait = ready.rendererGone(SystemClock.elapsedRealtime());
+        WebView dead = web;
+        web = newWeb();
+        root.removeView(dead);
+        dead.destroy();
+        root.addView(web, 0, new FrameLayout.LayoutParams(-1, -1));
+        // Acknowledgements queued by the dead page are not the new one's.
+        loads++;
+        ui.removeCallbacks(noFrame);
+        ui.removeCallbacks(hideStill);
+        ui.removeCallbacks(keepStill);
+        if (shown() == null) return;
+        showStill();
+        retry("this screen's page stopped (the TV may be short of memory); starting it again", wait);
     }
 
     private String shown() {
@@ -306,6 +344,10 @@ public class MainActivity extends Activity {
     }
 
     private void retry(String why) {
+        retry(why, 5_000);
+    }
+
+    private void retry(String why, long wait) {
         problem = why;
         if (still.getVisibility() == View.VISIBLE && panel.getVisibility() != View.VISIBLE) {
             // The last picture stays up (1.5); a small line says it is not live. OK shows the code.
@@ -314,7 +356,7 @@ public class MainActivity extends Activity {
             showInfo(true);
         }
         ui.removeCallbacks(reload);
-        ui.postDelayed(reload, 5_000);
+        ui.postDelayed(reload, wait);
     }
 
     /** The kept picture of the feed (1.5): one JPEG in the app's own storage. */
