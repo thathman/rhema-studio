@@ -65,6 +65,24 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # The packages this job installs, kept between runs (#604 follow-up): the runner's mirror has
+      # trickled one package for minutes at a time and timed the step out (4 Nov, runs 41860147604,
+      # 41882278283 and 41898262614). apt still checks every kept file against the signed index and fetches what is
+      # missing or changed, so nothing is trusted that was not before; only the download is saved.
+      - name: Runner image (the kept packages are per image)
+        id: image
+        run: |
+          echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
+          echo "version=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+      - name: Restore kept apt packages
+        id: apt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-archives
+          key: apt-${{ github.job }}-${{ steps.image.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            apt-${{ github.job }}-${{ steps.image.outputs.version }}-
+            apt-${{ github.job }}-${{ steps.image.outputs.os }}-
       # A stuck package mirror once held this step for the whole job (45 min): fail fast, retry slow fetches.
       - name: Install Linux dependencies
         # The runner's mirror is sometimes slow (about a second a package): give it room, still failing fast on a real hang.
@@ -81,6 +99,9 @@ jobs:
           echo "APT_UPDATE_FINISHED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ') elapsed_seconds=$APT_UPDATE_ELAPSED_SECONDS"
           # CI compiles/tests these apps but never runs their WebKit windows; skip
           # optional multimedia/runtime recommendations to keep mirror downloads bounded.
+          # Kept packages first (see "Restore kept apt packages").
+          if compgen -G "$HOME/apt-archives/*.deb" >/dev/null; then sudo cp "$HOME"/apt-archives/*.deb /var/cache/apt/archives/; fi
+          echo "APT_KEPT_PACKAGES=$(ls /var/cache/apt/archives/*.deb 2>/dev/null | wc -l)"
           APT_INSTALL_START_SECONDS=$(date +%s)
           echo "APT_INSTALL_STARTED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           sudo apt-get $APT install -y --no-install-recommends \
@@ -88,6 +109,28 @@ jobs:
             libasound2-dev libudev-dev patchelf cmake clang libclang-dev
           APT_INSTALL_ELAPSED_SECONDS=$(($(date +%s) - APT_INSTALL_START_SECONDS))
           echo "APT_INSTALL_FINISHED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ') elapsed_seconds=$APT_INSTALL_ELAPSED_SECONDS"
+      # Also after a timeout: what the slow mirror did deliver is kept, so a cold cache fills over runs
+      # instead of timing out the same way each time. Packages the index no longer lists are dropped
+      # (autoclean), and nothing is saved when the set did not change. The job's result is untouched.
+      - name: Collect apt packages for the next run
+        id: apt-keep
+        if: always() && steps.image.outcome == 'success'
+        run: |
+          timeout 120 sudo apt-get -qq autoclean || true
+          new=$(cd /var/cache/apt/archives && ls -- *.deb 2>/dev/null | sort || true)
+          old=$(cd "$HOME/apt-archives" 2>/dev/null && ls -- *.deb 2>/dev/null | sort || true)
+          echo "APT_COLLECTED_PACKAGES=$(printf '%s' "$new" | grep -c . || true)"
+          if [ -n "$new" ] && [ "$new" != "$old" ]; then
+            rm -rf "$HOME/apt-archives" && mkdir -p "$HOME/apt-archives"
+            cp /var/cache/apt/archives/*.deb "$HOME/apt-archives/"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Keep apt packages for the next run
+        if: always() && steps.apt-keep.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/apt-archives
+          key: apt-${{ github.job }}-${{ steps.image.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: ./src-tauri
@@ -141,6 +184,24 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # The packages this job installs, kept between runs (#604 follow-up): the runner's mirror has
+      # trickled one package for minutes at a time and timed the step out (4 Nov, runs 41860147604,
+      # 41882278283 and 41898262614). apt still checks every kept file against the signed index and fetches what is
+      # missing or changed, so nothing is trusted that was not before; only the download is saved.
+      - name: Runner image (the kept packages are per image)
+        id: image
+        run: |
+          echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
+          echo "version=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+      - name: Restore kept apt packages
+        id: apt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-archives
+          key: apt-${{ github.job }}-${{ steps.image.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            apt-${{ github.job }}-${{ steps.image.outputs.version }}-
+            apt-${{ github.job }}-${{ steps.image.outputs.os }}-
       - name: Install Linux dependencies
         timeout-minutes: 20
         env:
@@ -153,11 +214,36 @@ jobs:
           APT_UPDATE_ELAPSED_SECONDS=$(($(date +%s) - APT_UPDATE_START_SECONDS))
           echo "APT_UPDATE_FINISHED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ') elapsed_seconds=$APT_UPDATE_ELAPSED_SECONDS"
           # CI compiles/tests the companion but never launches its WebKit window.
+          # Kept packages first (see "Restore kept apt packages").
+          if compgen -G "$HOME/apt-archives/*.deb" >/dev/null; then sudo cp "$HOME"/apt-archives/*.deb /var/cache/apt/archives/; fi
+          echo "APT_KEPT_PACKAGES=$(ls /var/cache/apt/archives/*.deb 2>/dev/null | wc -l)"
           APT_INSTALL_START_SECONDS=$(date +%s)
           echo "APT_INSTALL_STARTED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           sudo apt-get $APT install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libssl-dev libayatana-appindicator3-dev libdbus-1-dev
           APT_INSTALL_ELAPSED_SECONDS=$(($(date +%s) - APT_INSTALL_START_SECONDS))
           echo "APT_INSTALL_FINISHED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ') elapsed_seconds=$APT_INSTALL_ELAPSED_SECONDS"
+      # Also after a timeout: what the slow mirror did deliver is kept, so a cold cache fills over runs
+      # instead of timing out the same way each time. Packages the index no longer lists are dropped
+      # (autoclean), and nothing is saved when the set did not change. The job's result is untouched.
+      - name: Collect apt packages for the next run
+        id: apt-keep
+        if: always() && steps.image.outcome == 'success'
+        run: |
+          timeout 120 sudo apt-get -qq autoclean || true
+          new=$(cd /var/cache/apt/archives && ls -- *.deb 2>/dev/null | sort || true)
+          old=$(cd "$HOME/apt-archives" 2>/dev/null && ls -- *.deb 2>/dev/null | sort || true)
+          echo "APT_COLLECTED_PACKAGES=$(printf '%s' "$new" | grep -c . || true)"
+          if [ -n "$new" ] && [ "$new" != "$old" ]; then
+            rm -rf "$HOME/apt-archives" && mkdir -p "$HOME/apt-archives"
+            cp /var/cache/apt/archives/*.deb "$HOME/apt-archives/"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Keep apt packages for the next run
+        if: always() && steps.apt-keep.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/apt-archives
+          key: apt-${{ github.job }}-${{ steps.image.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: |
