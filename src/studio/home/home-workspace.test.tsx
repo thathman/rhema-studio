@@ -166,7 +166,7 @@ describe("Home workspace", () => {
       .find((paragraph) => paragraph.textContent?.trim() === "Sunday plan")?.parentElement
 
     expect(planStat?.textContent).toContain("4items")
-    expect(planStat?.textContent).toContain("2 skipped")
+    expect(planStat?.textContent).toContain("2 items skipped")
     expect(planStat?.textContent).toContain("12 min scheduled")
   })
 

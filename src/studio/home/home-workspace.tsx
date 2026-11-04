@@ -118,7 +118,7 @@ export function HomeWorkspace() {
         </section>
 
         <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-1">
-          <Stat icon={<CalendarDaysIcon />} label="Sunday plan" value={String(order.events || order.items)} unit={order.events ? (order.events === 1 ? "event" : "events") : (order.items === 1 ? "item" : "items")} detail={current ? `${current.title}${order.events && order.loose ? ` · ${order.loose} ${order.loose === 1 ? "item" : "items"} outside events` : ""}${skippedCount ? ` · ${skippedCount} skipped` : ""}${minutes ? ` · ${formatMinutes(minutes * 60_000)} scheduled` : ""}${dirty ? " · unsaved changes" : ""}` : "No saved service open"} />
+          <Stat icon={<CalendarDaysIcon />} label="Sunday plan" value={String(order.events || order.items)} unit={order.events ? (order.events === 1 ? "event" : "events") : (order.items === 1 ? "item" : "items")} detail={current ? `${current.title}${order.events && order.loose ? ` · ${order.loose} ${order.loose === 1 ? "item" : "items"} outside events` : ""}${skippedCount ? ` · ${skippedCount} ${skippedCount === 1 ? "item" : "items"} skipped` : ""}${minutes ? ` · ${formatMinutes(minutes * 60_000)} scheduled` : ""}${dirty ? " · unsaved changes" : ""}` : "No saved service open"} />
           {/* Checks counted, not a percentage (#298: no arbitrary percentages). */}
           <Stat icon={<CheckIcon />} label="Service readiness" value={String(okCount)} unit={`of ${counted} check${counted === 1 ? "" : "s"}`} detail={ready ? "Ready to present" : `${warnings.length} to check`} />
           <Stat icon={<MonitorIcon />} label="Screens" value={String(onAir)} unit={`of ${outputs.length} on`} detail={onAir ? "On air when you show something live" : "Turn them on in Outputs"} />

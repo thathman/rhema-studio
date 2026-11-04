@@ -170,19 +170,6 @@ type ClockItem = {
  * moments and its planned length; services without event headers retain one clock row per item.
  * Phase and ordinary group boundaries are projected onto the resulting event order for timing.
  */
-/**
- * How a run of show is counted for people (#404, event-first): its events and any loose items
- * outside them ("3 events · 2 items"); a plan with no events yet is counted in items.
- */
-export function orderCounts<T extends ClockItem>(items: T[], headers: OutlineHeader[]): { events: number; loose: number; items: number; label: string } {
-  const rows = runOfShowClockRows(items, headers).rows
-  const events = rows.filter((row) => row.kind === "event").length
-  const loose = rows.filter((row) => row.kind === "item").length
-  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`
-  const label = events > 0 ? `${n(events, "event", "events")}${loose > 0 ? ` · ${n(loose, "item", "items")}` : ""}` : n(items.length, "item", "items")
-  return { events, loose, items: items.length, label }
-}
-
 export function runOfShowClockRows<T extends ClockItem>(items: T[], headers: OutlineHeader[]): { rows: RunOfShowClockRow<T>[]; headers: OutlineHeader[] } {
   const sorted = sortHeaders(headers)
   const eventHeaders = sorted.filter((h) => h.event)
@@ -233,6 +220,19 @@ export function runOfShowClockRows<T extends ClockItem>(items: T[], headers: Out
     return [{ ...header, at }]
   })
   return { rows, headers: projectedHeaders }
+}
+
+/**
+ * How a run of show is counted for people (#404, event-first): its events and any loose items
+ * outside them ("3 events · 2 items"); a plan with no events yet is counted in items.
+ */
+export function orderCounts<T extends ClockItem>(items: T[], headers: OutlineHeader[]): { events: number; loose: number; items: number; label: string } {
+  const rows = runOfShowClockRows(items, headers).rows
+  const events = rows.filter((row) => row.kind === "event").length
+  const loose = rows.filter((row) => row.kind === "item").length
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`
+  const label = events > 0 ? `${n(events, "event", "events")}${loose > 0 ? ` · ${n(loose, "item", "items")}` : ""}` : n(items.length, "item", "items")
+  return { events, loose, items: items.length, label }
 }
 
 const shift = (headers: OutlineHeader[], from: number, by: 1 | -1): OutlineHeader[] =>

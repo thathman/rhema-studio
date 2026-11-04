@@ -133,6 +133,9 @@ describe("section summaries", () => {
     expect(orderCounts(items, [event("Opening", 0), { id: "p", type: "phase", name: "After", at: 2 }]).label).toBe("1 event · 1 item")
     expect(orderCounts(items, [event("Opening", 0), event("Word", 1), { id: "p", type: "phase", name: "After", at: 2 }]).label).toBe("2 events · 1 item")
     expect(orderCounts([], []).label).toBe("0 items")
+    // An event with no moments yet is still an event; a hidden item still belongs to the service.
+    expect(orderCounts([], [event("Welcome", 0)]).label).toBe("1 event")
+    expect(orderCounts([{ ...items[0], hidden: true }, items[1]], []).label).toBe("2 items")
   })
 
   it("creates versioned event plans and treats legacy approval as non-authoritative", () => {
