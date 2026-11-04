@@ -9,12 +9,16 @@ vi.hoisted(() => {
   ;(globalThis as { PointerEvent?: typeof PointerEvent }).PointerEvent ??= MouseEvent as unknown as typeof PointerEvent
   ;(globalThis as { CSS?: { escape: (s: string) => string } }).CSS ??= { escape: (s: string) => s }
 })
-const drag = vi.hoisted(() => ({ droppables: new Map<string, ReturnType<typeof import("@dnd-kit/react").useDroppable>["droppable"]>(), current: null as ComponentProps<typeof DragDropProvider> | null, sortables: new Map<string, ReturnType<typeof import("@dnd-kit/react/sortable").useSortable>["sortable"]>() }))
+const drag = vi.hoisted(() => ({ draggables: new Map<string, ReturnType<typeof import("@dnd-kit/react").useDraggable>["draggable"]>(), droppables: new Map<string, ReturnType<typeof import("@dnd-kit/react").useDroppable>["droppable"]>(), current: null as ComponentProps<typeof DragDropProvider> | null, sortables: new Map<string, ReturnType<typeof import("@dnd-kit/react/sortable").useSortable>["sortable"]>() }))
 // Keep the actual provider/hooks; expose its callbacks for deterministic collision fixtures.
 vi.mock("@dnd-kit/react", async (importOriginal) => {
   const original = await importOriginal<typeof import("@dnd-kit/react")>()
   const { createElement } = await import("react")
-  return { ...original, useDroppable: (input: Parameters<typeof original.useDroppable>[0]) => {
+  return { ...original, useDraggable: (input: Parameters<typeof original.useDraggable>[0]) => {
+    const result = original.useDraggable(input)
+    drag.draggables.set(String(input.id), result.draggable)
+    return result
+  }, useDroppable: (input: Parameters<typeof original.useDroppable>[0]) => {
     const result = original.useDroppable(input)
     drag.droppables.set(String(input.id), result.droppable)
     return result
@@ -93,6 +97,7 @@ afterEach(async () => {
   useServiceStore.setState({ current: null, dirty: false, saving: false })
   database.saved = null
   drag.current = null
+  drag.draggables.clear()
   drag.sortables.clear()
   drag.droppables.clear()
 })
@@ -238,6 +243,95 @@ describe("Prepare movement keeps the plan separate from Live", () => {
     await drop(source, { id: "section:post", data: { kind: "section", headerId: "post", headerType: "phase" } }, 0)
     expect(order()).toEqual(["pre", "main", "sermon", "Sermon", "Response", "post", "prayer", "Prayer", "nested", "Scripture"])
     expect(q().past).toHaveLength(1)
+    expect(live()).toEqual(liveBefore)
+  })
+
+  it("moves a nested group and its items to another phase as one undoable, saved block", async () => {
+    useServiceStore.setState({ current: { id: "service", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 10 }, dirty: false })
+    q().setActive(1)
+    const before = { items: q().items, headers: q().headers }
+    const liveBefore = live()
+    const el = await render()
+
+    const groupHandle = el.querySelector<HTMLButtonElement>('[aria-label="Drag group Scripture moments with its items"]')
+    expect(groupHandle?.title).toBe("Drag this group and its items to another phase, event or group")
+    await drop(drag.draggables.get("group:nested"), {
+      id: "Response",
+      data: {},
+      shape: { boundingRectangle: { top: 100, bottom: 180 } },
+    }, 160)
+    expect(order()).toEqual(["pre", "prayer", "Prayer", "nested", "Scripture", "main", "sermon", "Sermon", "Response", "post"])
+    expect(q().past).toHaveLength(0)
+
+    await drop(drag.draggables.get("group:nested"), {
+      id: "section:post",
+      data: { kind: "section", headerId: "post", headerType: "phase", isEvent: false },
+    }, 0)
+
+    const movedOrder = ["pre", "prayer", "Prayer", "main", "sermon", "Sermon", "Response", "post", "nested", "Scripture"]
+    expect(order()).toEqual(movedOrder)
+    expect(ids()).toEqual(["Prayer", "Sermon", "Response", "Scripture"])
+    expect(q().items[q().activeIndex!].id).toBe("Scripture")
+    expect(q().activeIndex).toBe(3)
+    expect(q().headers.find((header) => header.id === "nested")?.payload_extra).toEqual({ future: "keep group" })
+    expect(q().past).toHaveLength(1)
+    expect(live()).toEqual(liveBefore)
+
+    await act(async () => q().undo())
+    expect(q().items).toEqual(before.items)
+    expect(q().headers).toEqual(before.headers)
+    expect(q().activeIndex).toBe(1)
+    expect(live()).toEqual(liveBefore)
+
+    await act(async () => q().redo())
+    expect(order()).toEqual(movedOrder)
+    await act(async () => { expect(await useServiceStore.getState().saveCurrent()).toBe("saved") })
+    const savedRows = toItemInputs(q().items, undefined, undefined, q().headers)
+
+    await act(async () => {
+      expect(useServiceStore.getState().closeProgram()).toBe("closed")
+      useQueueStore.setState({ items: [], headers: [] })
+      expect(await useServiceStore.getState().openProgram("service")).toBe("ok")
+    })
+    expect(order()).toEqual(movedOrder)
+    expect(toItemInputs(q().items, undefined, undefined, q().headers)).toEqual(savedRows)
+    expect(q().headers.find((header) => header.id === "nested")?.payload_extra).toEqual({ future: "keep group" })
+    expect(live()).toEqual(liveBefore)
+  })
+
+  it("moves groups from the keyboard options menu and restores them with Undo", async () => {
+    useQueueStore.setState({
+      items: [slide("a"), slide("b"), slide("c"), slide("d")],
+      headers: [
+        { id: "pre", type: "phase", name: "Pre-service", at: 0, rule: "manual" },
+        { id: "group-one", type: "group", name: "Opening", at: 0 },
+        { id: "group-two", type: "group", name: "Scripture", at: 2 },
+        { id: "post", type: "phase", name: "Post-service", at: 4, rule: "manual" },
+      ],
+      activeIndex: 1,
+    })
+    q().resetHistory()
+    const before = order()
+    const liveBefore = live()
+    const el = await render()
+    const options = el.querySelector<HTMLButtonElement>('[aria-label="Opening: options"]')!
+    options.focus()
+    await act(async () => keyDown(options, "Enter"))
+    let active = document.activeElement as HTMLElement
+    for (let step = 0; step < 8 && active.textContent?.trim() !== "Move group down"; step += 1) {
+      await act(async () => keyDown(active, "ArrowDown"))
+      active = document.activeElement as HTMLElement
+    }
+    expect(active.textContent?.trim()).toBe("Move group down")
+    await act(async () => keyDown(active, "Enter"))
+
+    expect(order()).toEqual(["pre", "group-two", "c", "d", "group-one", "a", "b", "post"])
+    expect(q().items[q().activeIndex!].id).toBe("b")
+    expect(q().past).toHaveLength(1)
+    expect(live()).toEqual(liveBefore)
+    await act(async () => q().undo())
+    expect(order()).toEqual(before)
+    expect(q().items[q().activeIndex!].id).toBe("b")
     expect(live()).toEqual(liveBefore)
   })
 })
