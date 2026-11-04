@@ -37,7 +37,7 @@ const clickButton = async (name, { startsWith = false } = {}) => {
   const button = await waitFor(
     () => buttons().find((candidate) => {
       const label = normal(candidate.getAttribute("aria-label") || candidate.textContent)
-      return startsWith ? label.startsWith(name) : label === name
+      return startsWith ? label.startsWith(name) : label === name || (name === "Take source live" && label.startsWith("Take ") && label.endsWith(" live"))
     }),
     "button “" + name + "”",
   )

@@ -12,7 +12,10 @@ const normal = (value) => String(value ?? "").replace(/\s+/g, " ").trim()
 const buttons = () => [...document.querySelectorAll("button, [role=tab]")]
 const clickButton = async (name) => {
   const button = await waitFor(
-    () => buttons().find((candidate) => normal(candidate.getAttribute("aria-label") || candidate.innerText) === name),
+    () => buttons().find((candidate) => {
+      const label = normal(candidate.getAttribute("aria-label") || candidate.innerText)
+      return label === name || (name === "Take source live" && label.startsWith("Take ") && label.endsWith(" live"))
+    }),
     `button “${name}”`,
   )
   if (button.disabled || button.getAttribute("aria-disabled") === "true") throw new Error(`Button “${name}” is disabled`)
