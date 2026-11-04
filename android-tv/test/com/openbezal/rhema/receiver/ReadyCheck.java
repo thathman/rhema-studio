@@ -92,6 +92,8 @@ public final class ReadyCheck {
         g.forget();
         check("a new link does not reset the run (it is the TV running short)", g.rendererGone(t + Ready.GONE_RUN_MS + 1) == 2_000);
         check("the first death at boot (elapsedRealtime 0) waits a second", new Ready().rendererGone(0) == 1_000);
+        g.started();
+        check("a page that drew after a death ends the run", g.drew() && g.rendererGone(t + Ready.GONE_RUN_MS + 2) == 1_000);
 
         // What counts as this screen's acknowledgement.
         check("the page's acknowledgement", Guard.ackOf(LINK, "POST", ACK));

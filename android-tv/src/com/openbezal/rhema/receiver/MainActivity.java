@@ -80,6 +80,7 @@ public class MainActivity extends Activity {
     private static final long PENDING_MS = 30_000;
     /** How long a code still works after it leaves the screen (time to finish typing it). */
     private static final long GRACE_MS = 120_000;
+    private static final String REVOKED = "This screen's link no longer works (this TV was revoked, or a new link was made in Rhema Studio). Send the feed again.";
     private static final String NOT_THAT_RHEMA = "This TV did not open the feed: the computer answering is not the Rhema Studio that sent it, or Rhema Studio made a new certificate. Send the feed again: in Rhema Studio, Outputs → the feed → Show on a Google TV.";
 
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -242,7 +243,7 @@ public class MainActivity extends Activity {
                     // Revoked (1.5) or a new link: its kept picture goes too, and whatever it had shown.
                     forgetStill();
                     forgetReady();
-                    problem = "This screen's link no longer works (this TV was revoked, or a new link was made in Rhema Studio). Send the feed again.";
+                    problem = REVOKED;
                     showInfo(true);
                 } else {
                     retry("Rhema Studio answered " + res.getStatusCode() + "; trying again…");
@@ -313,7 +314,8 @@ public class MainActivity extends Activity {
         ui.removeCallbacks(noFrame);
         ui.removeCallbacks(hideStill);
         ui.removeCallbacks(keepStill);
-        if (shown() == null) return;
+        // Revoked is final (the 403 handler loads nothing more): its word stays, no reload.
+        if (shown() == null || REVOKED.equals(problem)) return;
         showStill();
         retry("this screen's page stopped (the TV may be short of memory); starting it again", wait);
     }

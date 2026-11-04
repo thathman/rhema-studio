@@ -35,6 +35,8 @@ final class Ready {
         if (drawn) return false;
         drawn = true;
         blank = 0;
+        // A page that drew after a renderer death ends the run: the next death waits a second again.
+        gone = 0;
         return true;
     }
 
@@ -59,7 +61,7 @@ final class Ready {
     /** Renderer deaths closer than this to the last one count as a run (a page that keeps crashing it). */
     static final long GONE_RUN_MS = 10 * 60_000;
     private int gone;
-    private long goneAt = -1;
+    private long goneAt;
 
     /**
      * The page's renderer died at now (elapsedRealtime): how long to wait before loading it again.
@@ -67,7 +69,7 @@ final class Ready {
      * the TV out of memory is not reloaded in a tight loop. Not reset by forget(): it is the TV's.
      */
     long rendererGone(long now) {
-        gone = goneAt >= 0 && now - goneAt < GONE_RUN_MS ? gone + 1 : 1;
+        gone = gone > 0 && now - goneAt < GONE_RUN_MS ? gone + 1 : 1;
         goneAt = now;
         return Math.min(MAX_WAIT_MS, 1_000L << Math.min(gone - 1, 6));
     }
