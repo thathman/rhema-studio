@@ -127,7 +127,7 @@ capture_live_window() {
   local screenshot="$QA_SCRATCH/artifacts/${name}.png"
   mkdir -p "$QA_SCRATCH/artifacts"
   local window_id
-  window_id="$(swift "$ROOT/scripts/mac-qa/rhema-window-id.swift")"
+  window_id="$(swift "$ROOT/scripts/mac-qa/rhema-window-id.swift" "$APP_PID")"
   screencapture -x -l "$window_id" "$screenshot"
   python3 - "$screenshot" <<'PY'
 import struct
