@@ -39,6 +39,26 @@ public final class ReadyCheck {
         r.started();
         check("drawing again shows it", r.drew());
 
+        // A late acknowledgement: after FIRST_FRAME_MS (a reload is queued) but before that reload.
+        Ready late = new Ready();
+        late.started();
+        check("the wait runs out and queues a reload", late.noFrame() == 5_000);
+        check("then the page draws", late.drew());
+        check("the queued reload is cancelled", late.cancelQueuedReload());
+        check("only once", !late.cancelQueuedReload());
+        check("the healthy page is not loaded again", late.noFrame() == -1);
+        late.started();
+        late.drew();
+        check("an acknowledgement in time cancels nothing", !late.cancelQueuedReload());
+        late.started();
+        late.noFrame();
+        late.started();
+        late.drew();
+        check("a reload that already started is not cancelled again", !late.cancelQueuedReload());
+        late.noFrame();
+        late.forget();
+        check("forgotten: no reload to cancel", !late.cancelQueuedReload());
+
         // Revoked, or a new feed: nothing carries over.
         r.noFrame();
         r.forget();

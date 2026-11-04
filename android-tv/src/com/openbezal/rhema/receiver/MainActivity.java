@@ -354,6 +354,9 @@ public class MainActivity extends Activity {
         if (!ready.drew()) return;
         ui.removeCallbacks(noFrame);
         if (problem != null) return;
+        // Drawn after the wait ran out but before its reload: the healthy page is not loaded again.
+        // (A reload for a load error is retry()'s, with problem set, and is kept.)
+        if (ready.cancelQueuedReload()) ui.removeCallbacks(reload);
         if (still.getVisibility() != View.VISIBLE) note.setVisibility(View.GONE);
         // The acknowledgement follows the drawing; a moment more lets the screen show it.
         ui.removeCallbacks(hideStill);

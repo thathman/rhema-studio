@@ -20,10 +20,13 @@ final class Ready {
     private boolean drawn;
     /** Loads in a row that drew nothing. */
     private int blank;
+    /** noFrame queued a reload that has not started yet. */
+    private boolean reloadQueued;
 
     /** A page load started (ours, or the page reloading itself): nothing is proven for it yet. */
     long started() {
         drawn = false;
+        reloadQueued = false;
         return FIRST_FRAME_MS;
     }
 
@@ -39,13 +42,25 @@ final class Ready {
     long noFrame() {
         if (drawn) return -1;
         blank++;
+        reloadQueued = true;
         return Math.min(MAX_WAIT_MS, FIRST_WAIT_MS << Math.min(blank - 1, 4));
+    }
+
+    /**
+     * After drew(): whether a reload noFrame queued is still waiting and must be cancelled (the
+     * acknowledgement came late, after FIRST_FRAME_MS but before the reload: the page is healthy).
+     */
+    boolean cancelQueuedReload() {
+        boolean queued = drawn && reloadQueued;
+        if (queued) reloadQueued = false;
+        return queued;
     }
 
     /** A revoked or replaced link: nothing carries over to the next one. */
     void forget() {
         drawn = false;
         blank = 0;
+        reloadQueued = false;
     }
 
     boolean drawn() {
