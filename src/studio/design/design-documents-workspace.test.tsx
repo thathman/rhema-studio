@@ -101,6 +101,31 @@ describe("My Designs workspace", () => {
     await expect(mayLeaveDesignDocumentDraft()).resolves.toBe(true)
   })
 
+  it("opens the exact Design document requested by a pinned scene", async () => {
+    const design: DesignDocument = {
+      id: "design-pinned-scene",
+      title: "Sunday welcome",
+      kind: "design",
+      document: createBlankRhemaDesign("Sunday welcome"),
+      revision: 4,
+      latestVersion: 3,
+      createdAt: "2026-10-30T00:00:00Z",
+      updatedAt: "2026-10-30T00:00:00Z",
+    }
+    store.list.mockResolvedValue([{ id: design.id, title: design.title, kind: design.kind, revision: design.revision, latestVersion: design.latestVersion, updatedAt: design.updatedAt }])
+    store.get.mockResolvedValue(design)
+    const handled = vi.fn()
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => root!.render(<DesignDocumentsWorkspace initialDesignId={design.id} onInitialDesignHandled={handled} />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    expect(store.get).toHaveBeenCalledWith("design-pinned-scene")
+    expect(host.querySelector<HTMLInputElement>("#design-document-title")?.value).toBe("Sunday welcome")
+    expect(handled).toHaveBeenCalledTimes(1)
+  })
+
   it("registers a dirty design with the shell guard and clears it when the editor closes", async () => {
     const design: DesignDocument = {
       id: "design-unsaved",

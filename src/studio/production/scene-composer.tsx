@@ -2,6 +2,7 @@ import { useTimerStore, monotonicNow } from "@/stores/timer-store"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ArrowDownIcon, ArrowUpIcon, BookmarkPlusIcon, CopyIcon, EyeIcon, EyeOffIcon, PencilIcon, PinIcon, PinOffIcon, PlusIcon, SaveIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { feedFrame } from "@/lib/live-sources"
@@ -16,6 +17,8 @@ import { useServiceStore } from "@/stores/service-store"
 import { useObsStore } from "@/stores/obs-store"
 import { onlineProgramName } from "@/lib/program-names"
 import { useMediaStore } from "@/stores/media-store"
+import { dropReplacedGradients, gradientCss } from "@/lib/scene-gradient"
+import { dropStaleImageDraws } from "@/lib/scene-image"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { CountdownSelect } from "@/studio/production/countdown-select"
 import { useProductionTab } from "@/studio/production/production-tab"
@@ -51,9 +54,11 @@ export function SceneComposer() {
     if (useProductionTab.getState().scene) useProductionTab.setState({ scene: null })
   }, [])
   const [layerId, setLayerId] = useState<string | null>(null)
+  const [pendingSceneAction, setPendingSceneAction] = useState<"save" | "return" | "design" | null>(null)
   const saved = draft ? scenes.find((s) => s.id === draft.id) : undefined
   const dirty = !!draft && (!saved || JSON.stringify({ ...saved, updatedAt: 0 }) !== JSON.stringify({ ...draft, updatedAt: 0 }))
   const layer = draft?.layers.find((l) => l.id === layerId) ?? null
+  const sceneSaveLosses = draft && saved ? sceneDesignDetailsLostOnSave(draft, saved) : []
 
   useEffect(() => {
     if (prepareReturn && !scenes.some((scene) => scene.id === prepareReturn.sceneId)) {
@@ -68,13 +73,58 @@ export function SceneComposer() {
     setDraft(s)
     setLayerId(null)
   }
-  const save = () => draft && useBroadcastStore.getState().saveScene(draft)
+  const openPinnedDesign = () => {
+    if (!draft?.design) return
+    useShellStore.getState().openDesignDocument(draft.design.id)
+  }
+  const saveNow = (showUndo: boolean) => {
+    if (!draft) return
+    const before = saved
+    useBroadcastStore.getState().saveScene(draft)
+    const persisted = useBroadcastStore.getState().scenes.find((scene) => scene.id === draft.id)
+    if (persisted) setDraft(persisted)
+    if (!showUndo || !before || !persisted || sceneSaveLosses.length === 0) return
+    const savedRevision = persisted.updatedAt
+    toast.success("Scene saved with the listed Design changes", {
+      description: "The pinned Design version is unchanged. Undo restores the previous Scene appearance if this scene has not changed again.",
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const current = useBroadcastStore.getState().scenes.find((scene) => scene.id === before.id)
+          if (!current || current.updatedAt !== savedRevision) {
+            toast.error("This scene changed again", { description: "Reopen the saved Design version and choose it again to restore its complete appearance." })
+            return
+          }
+          useBroadcastStore.getState().saveScene(before)
+          const restored = useBroadcastStore.getState().scenes.find((scene) => scene.id === before.id)
+          if (restored) setDraft(restored)
+          toast.success("Saved Design appearance restored")
+        },
+      },
+    })
+  }
+  const save = () => {
+    if (!draft) return
+    if (sceneSaveLosses.length) setPendingSceneAction("save")
+    else saveNow(false)
+  }
   const returnToPrepare = () => {
-    if (dirty) {
-      save()
-      toast.success("Scene saved to Designs", { description: "The service moment keeps this scene. No output was changed." })
-    }
+    if (dirty && sceneSaveLosses.length) { setPendingSceneAction("return"); return }
+    if (dirty) saveNow(false)
     useShellStore.getState().goTo("prepare")
+  }
+  const confirmSceneAction = () => {
+    const action = pendingSceneAction
+    setPendingSceneAction(null)
+    if (action === "design") { openPinnedDesign(); return }
+    if (!action) return
+    saveNow(true)
+    if (action === "return") useShellStore.getState().goTo("prepare")
+  }
+  const requestOpenPinnedDesign = () => {
+    if (!draft?.design) return
+    if (dirty) { setPendingSceneAction("design"); return }
+    openPinnedDesign()
   }
   const onAir = (id: string) => outputs.filter((o) => o.sceneId === id)
 
@@ -121,10 +171,11 @@ export function SceneComposer() {
                 <input aria-label="Scene name" value={draft.name} maxLength={80} onChange={(e) => edit({ name: e.target.value })} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-sm font-semibold" />
                 <label className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
                   Background
-                  <input type="color" aria-label="Background colour" disabled={draft.background === "transparent"} value={draft.background === "transparent" ? "#000000" : draft.background} onChange={(e) => edit({ background: e.target.value })} className="h-7 w-9 rounded border border-border bg-transparent p-0.5" />
+                  {draft.backgroundGradient && <span aria-label="Scene background gradient preview" title={`Pinned gradient · ${draft.backgroundGradient.angle}° · ${draft.backgroundGradient.stops.length} stops`} className="size-6 rounded border border-border" style={{ background: gradientCss(draft.backgroundGradient) }} />}
+                  <input type="color" aria-label="Background colour" disabled={draft.background === "transparent"} value={draft.background === "transparent" ? "#000000" : draft.background} onChange={(e) => edit({ background: e.target.value, backgroundGradient: undefined })} className="h-7 w-9 rounded border border-border bg-transparent p-0.5" />
                 </label>
                 <label className="flex items-center gap-1 text-[0.6875rem] text-muted-foreground">
-                  <input type="checkbox" checked={draft.background === "transparent"} onChange={(e) => edit({ background: e.target.checked ? "transparent" : "#000000" })} /> Transparent
+                  <input type="checkbox" checked={draft.background === "transparent"} onChange={(e) => edit({ background: e.target.checked ? "transparent" : "#000000", backgroundGradient: undefined })} /> Transparent
                 </label>
                 <label className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
                   Take
@@ -135,10 +186,18 @@ export function SceneComposer() {
                     <option value={1000}>Fade 1 s</option>
                   </select>
                 </label>
-                {!prepareReturn && <Button size="sm" variant="outline" onClick={() => open(copyScene(draft, `${draft.name} copy`))}><CopyIcon /> Duplicate</Button>}
-                {!prepareReturn && <SaveAsPreset key={draft.id} scene={draft} />}
+                {!prepareReturn && <Button size="sm" variant="outline" disabled={sceneSaveLosses.length > 0} title={sceneSaveLosses.length ? "Confirm the appearance change with Save before duplicating this scene." : undefined} onClick={() => open(copyScene(draft, `${draft.name} copy`))}><CopyIcon /> Duplicate</Button>}
+                {!prepareReturn && <SaveAsPreset key={draft.id} scene={draft} disabled={sceneSaveLosses.length > 0} />}
                 {!prepareReturn && saved && <ConfirmDelete label={`Delete ${draft.name}`} onConfirm={() => { useBroadcastStore.getState().deleteScene(draft.id); open(null) }} />}
               </div>
+              {(draft.backgroundGradient || draft.layers.some((item) => item.gradient || item.imageDraw)) && (
+                <div aria-label="Scene appearance details" className="flex flex-wrap items-center gap-2 rounded-md border border-tone-amber/40 bg-tone-amber/10 px-2.5 py-2 text-xs">
+                  <span className="min-w-0 flex-1 text-tone-amber-foreground">
+                    This scene includes precise gradient or picture appearance details. Changing a solid colour, picture or crop replaces the related detail only after you confirm Save. Save the change before duplicating or making a preset.
+                  </span>
+                  {draft.design ? <Button size="xs" variant="outline" onClick={requestOpenPinnedDesign}><PencilIcon /> Open source Design · pinned v{draft.design.version}</Button> : <span className="text-muted-foreground">No linked Design document is available for this scene.</span>}
+                </div>
+              )}
               {target && <ScenePreview scene={draft} output={target} selected={layerId} onSelect={setLayerId} onMove={(id, box) => editLayer(id, { box })} />}
               <AddLayer onAdd={(kind) => { const l = newLayer(kind, { box: kind === "feed" ? { x: 10, y: 60, w: 80, h: 35 } : layerBox(kind) }); setDraft({ ...draft, layers: [...draft.layers, l] }); setLayerId(l.id) }} />
               <ol aria-label="Layers, bottom first" className="flex flex-col gap-1">
@@ -159,13 +218,35 @@ export function SceneComposer() {
 
         <section aria-label="Layer" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 text-xs">
           <h3 className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Layer</h3>
-          {draft && layer ? <Inspector layer={layer} onChange={(p) => editLayer(layer.id, p)} onRemove={() => { setDraft({ ...draft, layers: draft.layers.filter((l) => l.id !== layer.id) }); setLayerId(null) }} target={target} /> : <p className="text-muted-foreground">Select a layer in the preview or the list. Drag it to move it; drag its corner to resize; arrow keys nudge it.</p>}
+          {draft && layer ? <Inspector layer={layer} onChange={(p) => editLayer(layer.id, p)} onOpenDesign={requestOpenPinnedDesign} hasPinnedDesign={!!draft.design} onRemove={() => { setDraft({ ...draft, layers: draft.layers.filter((l) => l.id !== layer.id) }); setLayerId(null) }} target={target} /> : <p className="text-muted-foreground">Select a layer in the preview or the list. Drag it to move it; drag its corner to resize; arrow keys nudge it.</p>}
         </section>
       </div>
 
       {prepareReturn
         ? <PrivateSceneBar context={prepareReturn} congregation={congregation} target={target} onTarget={setTargetId} draft={draft} dirty={dirty} onReturn={returnToPrepare} />
         : <ProgramBar congregation={congregation} target={target} onTarget={setTargetId} draft={draft} dirty={dirty} onSave={save} onPreviewRestore={open} sceneTakeBlockReason={sceneTakeBlockReason} />}
+
+      <Dialog open={pendingSceneAction !== null} onOpenChange={(open) => { if (!open) setPendingSceneAction(null) }}>
+        <DialogContent aria-describedby="scene-design-loss-description">
+          <DialogHeader>
+            <DialogTitle>{pendingSceneAction === "design" ? "Open the source Design?" : "Replace precise Design details?"}</DialogTitle>
+            <DialogDescription id="scene-design-loss-description">
+              {pendingSceneAction === "design"
+                ? `Your unsaved Scene changes will be discarded. The source Design and pinned v${draft?.design?.version ?? "?"} will stay unchanged.`
+                : "Saving this Scene will replace the listed precise Design details with the current solid colour or picture crop. This changes the saved Scene appearance; it does not change Program or any output."}
+            </DialogDescription>
+          </DialogHeader>
+          {pendingSceneAction !== "design" && sceneSaveLosses.length > 0 && (
+            <ul className="list-disc space-y-1 pl-5 text-sm" aria-label="Design details being replaced">
+              {sceneSaveLosses.map((loss) => <li key={loss}>{loss}</li>)}
+            </ul>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingSceneAction(null)}>Keep editing</Button>
+            <Button onClick={confirmSceneAction}>{pendingSceneAction === "design" ? "Discard draft and open source Design" : pendingSceneAction === "return" ? "Replace details and return" : "Replace details and save"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -202,15 +283,32 @@ function PrivateSceneBar({ context, congregation, target, onTarget, draft, dirty
 
 function describe(l: SceneLayer): string {
   if (l.kind === "feed") return l.shows?.length ? l.shows.map((k) => CONTENT_NAMES[k]).join(" + ") + (l.held ? " · held" : "") : "whatever is on air" + (l.held ? " · held" : "")
-  if (l.kind === "color") return "colour"
-  if (l.kind === "ellipse") return "ellipse · solid fill"
-  if (l.kind === "picture") return "picture"
+  if (l.kind === "color") return l.gradient ? `colour · ${l.gradient.stops.length}-stop gradient` : "colour"
+  if (l.kind === "ellipse") return l.gradient ? `ellipse · ${l.gradient.stops.length}-stop gradient` : "ellipse · solid fill"
+  if (l.kind === "picture") return l.imageDraw ? "picture · precise Design crop" : "picture"
   if (l.kind === "video") return l.videoUrl ? "video, looping, no sound" : "video (none chosen yet)"
   if (l.kind === "clock") return "clock"
   if (l.kind === "ticker") return "the running ticker"
   if (l.kind === "lowerThird") return "the lower third on air"
   if (l.kind === "logo") return "the church logo"
   return l.cameraUrl ? "camera" : "camera (none chosen yet)"
+}
+
+/** Name the Design paint or image treatment that saveScene would otherwise replace. */
+function sceneDesignDetailsLostOnSave(next: Scene, previous: Scene): string[] {
+  const committed = dropStaleImageDraws(dropReplacedGradients(next, previous), previous)
+  const losses: string[] = []
+  if (previous.backgroundGradient && !committed.backgroundGradient) {
+    losses.push(`Scene background gradient (${previous.backgroundGradient.stops.length} stops, ${previous.backgroundGradient.angle}°)`)
+  }
+  const nextLayers = new Map(committed.layers.map((layer) => [layer.id, layer]))
+  for (const layer of previous.layers) {
+    const current = nextLayers.get(layer.id)
+    if (!current) continue // Removing a whole layer is an explicit scene edit.
+    if (layer.gradient && !current.gradient) losses.push(`Gradient fill on “${layer.name}”`)
+    if (layer.imageDraw && !current.imageDraw) losses.push(`Precise Design crop, corners, or clips on “${layer.name}”`)
+  }
+  return losses
 }
 
 /** The new-scene menu: the ready-made arrangements, then the church's own presets (rename, delete). */
@@ -246,13 +344,13 @@ function NewFrom({ onNew }: { onNew: (p: ScenePreset) => void }) {
 }
 
 /** Keep this scene's arrangement as one of the church's presets, for new scenes. */
-function SaveAsPreset({ scene }: { scene: Scene }) {
+function SaveAsPreset({ scene, disabled = false }: { scene: Scene; disabled?: boolean }) {
   const [name, setName] = useState<string | null>(null)
-  if (name === null) return <Button size="sm" variant="outline" onClick={() => setName(scene.name)} title="Keep this arrangement as a preset for new scenes"><BookmarkPlusIcon /> Save as preset</Button>
+  if (name === null) return <Button size="sm" variant="outline" disabled={disabled} onClick={() => setName(scene.name)} title={disabled ? "Confirm the appearance change with Save before making a preset." : "Keep this arrangement as a preset for new scenes"}><BookmarkPlusIcon /> Save as preset</Button>
   return (
     <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); useBroadcastStore.getState().saveScenePreset(scene, name); setName(null) }}>
       <input aria-label="Preset name" autoFocus value={name} maxLength={80} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setName(null) }} title="A preset of the same name is replaced" className="h-8 w-40 rounded-md border border-input bg-transparent px-2 text-xs" />
-      <Button size="sm" type="submit" disabled={!name.trim()}>Save preset</Button>
+      <Button size="sm" type="submit" disabled={!name.trim() || disabled} title={disabled ? "Confirm the appearance change with Save before making a preset." : undefined}>Save preset</Button>
       <Button size="sm" variant="ghost" type="button" onClick={() => setName(null)}>Cancel</Button>
     </form>
   )
@@ -402,7 +500,7 @@ function Num({ label, value, onChange, min = 0, max = 100 }: { label: string; va
   )
 }
 
-function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; onChange: (p: Partial<SceneLayer>) => void; onRemove: () => void; target: BroadcastOutput | undefined }) {
+function Inspector({ layer, onChange, onRemove, onOpenDesign, hasPinnedDesign, target }: { layer: SceneLayer; onChange: (p: Partial<SceneLayer>) => void; onRemove: () => void; onOpenDesign: () => void; hasPinnedDesign: boolean; target: BroadcastOutput | undefined }) {
   const themes = useBroadcastStore((s) => s.themes)
   const assets = useMediaStore((s) => s.assets)
   const crop = layer.crop ?? { l: 0, t: 0, r: 0, b: 0 }
@@ -452,29 +550,42 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
         </>
       )}
       {(layer.kind === "color" || layer.kind === "ellipse") && (
-        <label className="flex items-center justify-between gap-2">
-          <span>{layer.kind === "ellipse" ? "Ellipse fill" : "Colour"}</span>
-          <input type="color" aria-label={layer.kind === "ellipse" ? "Ellipse fill" : "Layer colour"} value={layer.color ?? (layer.kind === "ellipse" ? "#3157a4" : "#000000")} onChange={(e) => onChange({ color: e.target.value })} className="h-7 w-10 rounded border border-border bg-transparent p-0.5" />
-        </label>
+        <>
+          {layer.gradient && <div aria-label="Pinned Design gradient fill" className="flex flex-wrap items-center gap-2 rounded-md border border-tone-amber/40 bg-tone-amber/10 p-2">
+            <span className="size-8 shrink-0 rounded border border-border" aria-hidden="true" style={{ background: gradientCss(layer.gradient) }} />
+            <span className="min-w-0 flex-1 text-tone-amber-foreground">Pinned Design gradient · {layer.gradient.angle}° · {layer.gradient.stops.length} stops. Choosing a solid colour replaces this fill after Save.</span>
+            {hasPinnedDesign && <Button size="xs" variant="outline" onClick={onOpenDesign}><PencilIcon /> Open Design</Button>}
+          </div>}
+          <label className="flex items-center justify-between gap-2">
+            <span>{layer.kind === "ellipse" ? "Ellipse fill" : "Colour"}</span>
+            <input type="color" aria-label={layer.kind === "ellipse" ? "Ellipse fill" : "Layer colour"} value={layer.color ?? (layer.kind === "ellipse" ? "#3157a4" : "#000000")} onChange={(e) => onChange({ color: e.target.value, gradient: undefined })} className="h-7 w-10 rounded border border-border bg-transparent p-0.5" />
+          </label>
+        </>
       )}
       {layer.kind === "picture" && (
-        <label className="flex flex-col gap-0.5">
-          <span className="text-xs text-muted-foreground">Picture (from Library)</span>
-          <select
-            aria-label="Picture"
-            value={layer.mediaId ?? ""}
-            onChange={async (e) => {
-              const id = e.target.value
-              if (!id) return onChange({ mediaId: undefined, imageUrl: undefined })
-              const url = await useMediaStore.getState().dataUrl(id).catch(() => null)
-              onChange({ mediaId: id, imageUrl: url ?? undefined })
-            }}
-            className="h-8 rounded-md border border-input bg-card px-1.5"
-          >
-            <option value="">Choose a picture…</option>
-            {assets.filter((a) => a.kind === "image" && a.present !== false).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        </label>
+        <>
+          {layer.imageDraw && <div aria-label="Pinned Design image treatment" className="flex flex-wrap items-center gap-2 rounded-md border border-tone-amber/40 bg-tone-amber/10 p-2">
+            <span className="min-w-0 flex-1 text-tone-amber-foreground">This picture has a precise Design crop, corners or clips. Choosing another picture or percentage crop replaces that treatment after Save.</span>
+            {hasPinnedDesign && <Button size="xs" variant="outline" onClick={onOpenDesign}><PencilIcon /> Open Design</Button>}
+          </div>}
+          <label className="flex flex-col gap-0.5">
+            <span className="text-xs text-muted-foreground">Picture (from Library)</span>
+            <select
+              aria-label="Picture"
+              value={layer.mediaId ?? ""}
+              onChange={async (e) => {
+                const id = e.target.value
+                if (!id) return onChange({ mediaId: undefined, imageUrl: undefined, imageDraw: undefined })
+                const url = await useMediaStore.getState().dataUrl(id).catch(() => null)
+                onChange({ mediaId: id, imageUrl: url ?? undefined, imageDraw: undefined })
+              }}
+              className="h-8 rounded-md border border-input bg-card px-1.5"
+            >
+              <option value="">Choose a picture…</option>
+              {assets.filter((a) => a.kind === "image" && a.present !== false).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </label>
+        </>
       )}
       {layer.kind === "video" && <VideoPicker layer={layer} onChange={onChange} />}
       {layer.kind === "clock" && (
@@ -524,10 +635,10 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
       {layer.kind === "logo" && <LogoNote />}
       {layer.kind !== "color" && layer.kind !== "ellipse" && layer.kind !== "ticker" && layer.kind !== "lowerThird" && (
         <div className="grid grid-cols-4 gap-1.5">
-          <Num label="Crop left" value={crop.l} max={90 - crop.r} onChange={(l) => onChange({ crop: { ...crop, l } })} />
-          <Num label="Crop top" value={crop.t} max={90 - crop.b} onChange={(t) => onChange({ crop: { ...crop, t } })} />
-          <Num label="Crop right" value={crop.r} max={90 - crop.l} onChange={(r) => onChange({ crop: { ...crop, r } })} />
-          <Num label="Crop bottom" value={crop.b} max={90 - crop.t} onChange={(bb) => onChange({ crop: { ...crop, b: bb } })} />
+          <Num label="Crop left" value={crop.l} max={90 - crop.r} onChange={(l) => onChange({ crop: { ...crop, l }, ...(layer.kind === "picture" ? { imageDraw: undefined } : {}) })} />
+          <Num label="Crop top" value={crop.t} max={90 - crop.b} onChange={(t) => onChange({ crop: { ...crop, t }, ...(layer.kind === "picture" ? { imageDraw: undefined } : {}) })} />
+          <Num label="Crop right" value={crop.r} max={90 - crop.l} onChange={(r) => onChange({ crop: { ...crop, r }, ...(layer.kind === "picture" ? { imageDraw: undefined } : {}) })} />
+          <Num label="Crop bottom" value={crop.b} max={90 - crop.t} onChange={(bb) => onChange({ crop: { ...crop, b: bb }, ...(layer.kind === "picture" ? { imageDraw: undefined } : {}) })} />
         </div>
       )}
       {FADES(layer.kind) && (
@@ -548,7 +659,7 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
         <span className="w-9 text-right tabular-nums">{Math.round(layer.opacity * 100)}%</span>
       </label>
       <div className="flex justify-between gap-2">
-        <Button size="sm" variant="outline" onClick={() => onChange({ box: { x: 0, y: 0, w: 100, h: 100 }, crop: undefined })}>Fill the frame</Button>
+        <Button size="sm" variant="outline" onClick={() => onChange({ box: { x: 0, y: 0, w: 100, h: 100 }, crop: undefined, ...(layer.kind === "picture" ? { imageDraw: undefined } : {}) })}>Fill the frame</Button>
         <ConfirmDelete label={`Remove ${layer.name}`} verb="Remove" onConfirm={onRemove} />
       </div>
     </div>

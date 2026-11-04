@@ -31,9 +31,11 @@ export type InitialDesignTemplate = {
   customize: boolean
 }
 
-export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemplateHandled }: {
+export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemplateHandled, initialDesignId = null, onInitialDesignHandled }: {
   initialTemplate?: InitialDesignTemplate | null
   onInitialTemplateHandled?: () => void
+  initialDesignId?: string | null
+  onInitialDesignHandled?: () => void
 }) {
   const [documents, setDocuments] = useState<DesignSummary[]>([])
   const [active, setActive] = useState<DesignDocument | null>(null)
@@ -47,6 +49,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
   const [error, setError] = useState("")
   const [reloadToken, setReloadToken] = useState(0)
   const handledInitialTemplate = useRef<InitialDesignTemplate | null>(null)
+  const handledInitialDesign = useRef<string | null>(null)
   const mainRef = useRef<HTMLElement>(null)
   const chosenDesignHeadingRef = useRef<HTMLHeadingElement>(null)
   const focusEditorId = useRef<string | null>(null)
@@ -87,7 +90,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
     return () => { cancelled = true }
   }, [query, reloadToken])
 
-  const confirmDiscard = async () => {
+  const confirmDiscard = useCallback(async () => {
     if (!activeDirty) return true
     try {
       return await ask("Your design changes are not saved. Discard them?", {
@@ -99,9 +102,9 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
     } catch {
       return false
     }
-  }
+  }, [activeDirty])
 
-  const open = async (id: string) => {
+  const open = useCallback(async (id: string) => {
     if (active?.id === id || !(await confirmDiscard())) return
     setLoading(true)
     try {
@@ -119,7 +122,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
     } finally {
       setLoading(false)
     }
-  }
+  }, [active?.id, confirmDiscard])
 
   const createBlank = async () => {
     if (!(await confirmDiscard())) return
@@ -186,6 +189,12 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
     void createFromTemplate(initialTemplate.look, initialTemplate.customize)
     onInitialTemplateHandled?.()
   }, [createFromTemplate, initialTemplate, onInitialTemplateHandled])
+
+  useEffect(() => {
+    if (!initialDesignId || handledInitialDesign.current === initialDesignId || loading) return
+    handledInitialDesign.current = initialDesignId
+    void open(initialDesignId).finally(() => onInitialDesignHandled?.())
+  }, [initialDesignId, loading, onInitialDesignHandled, open])
 
   const showTemplates = async () => {
     if (!(await confirmDiscard())) return

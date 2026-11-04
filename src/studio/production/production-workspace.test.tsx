@@ -8,15 +8,18 @@ vi.hoisted(() => {
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
+const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }))
+vi.mock("sonner", () => ({ toast: toastMock }))
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
+import { toast } from "sonner"
 import { ProductionWorkspace } from "./production-workspace"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { openProductionTab, useProductionTab } from "./production-tab"
 import { useShellStore } from "@/studio/shell-store"
-import { newScene } from "@/lib/scenes"
+import { newLayer, newScene } from "@/lib/scenes"
 import { useAuxTimers } from "@/stores/aux-timers-store"
 
 // Each test's page is taken down after it, so a composer left open does not answer the next test's request.
@@ -28,13 +31,16 @@ const mount = (el: HTMLElement, embedded = false) => {
   roots.push(root)
   root.render(<ProductionWorkspace embedded={embedded} />)
 }
-beforeEach(() => useProductionTab.setState({ requested: null, selected: "timekeeper", scene: null, open: false }))
+beforeEach(() => {
+  vi.clearAllMocks()
+  useProductionTab.setState({ requested: null, selected: "timekeeper", scene: null, open: false })
+})
 afterEach(() => {
   act(() => { for (const r of roots.splice(0)) r.unmount() })
   useSettingsStore.setState({ operatorName: originalOperatorName })
   useBroadcastStore.setState({ takeScene: originalTakeScene })
   useAuxTimers.setState({ timers: [] })
-  useShellStore.setState({ workspace: "home", goRequest: null, prepareDesignReturn: null })
+  useShellStore.setState({ workspace: "home", goRequest: null, prepareDesignReturn: null, designRequest: null, designDocumentRequest: null })
 })
 
 describe("Production control", () => {
@@ -171,6 +177,133 @@ describe("Production control", () => {
     expect(after.liveItemId).toBe("live-item")
     expect(takeScene).not.toHaveBeenCalled()
     expect(useShellStore.getState().goRequest).toBe("prepare")
+  })
+
+  it("warns before replacing pinned Design paint, preserves Live outputs, and offers guarded Undo", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const before = useBroadcastStore.getState()
+    const scene = {
+      ...newScene("Welcome design"),
+      design: { id: "design-welcome", version: 3 },
+      background: "#101820",
+      backgroundGradient: { angle: 90, stops: [{ color: "#101820", offset: 0 }, { color: "#3157a4", offset: 1 }] },
+      layers: [
+        newLayer("color", { id: "gradient-layer", name: "Gradient panel", color: "#101820", gradient: { angle: 45, stops: [{ color: "#101820", offset: 0 }, { color: "#3157a4", offset: 1 }] } }),
+        newLayer("picture", { id: "design-picture", name: "Design picture", mediaId: "media-welcome", imageUrl: "data:image/png;base64,AAAA", imageDraw: { width: 1600, height: 900, cropX: 200, cropY: 80, cropWidth: 900, cropHeight: 600, radius: 18, clips: [{ type: "ellipse", x: 0, y: 0, width: 900, height: 600 }] } }),
+      ],
+    }
+    useBroadcastStore.setState({ scenes: [scene], outputs: before.outputs, sceneReturn: {}, isLive: true, liveItemId: "live-item" })
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    await act(async () => mount(el))
+    await act(async () => ([...el.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === "Scenes") as HTMLButtonElement).click())
+
+    expect(el.querySelector('[aria-label="Scene appearance details"]')?.textContent).toContain("precise gradient")
+    expect(el.querySelector('[aria-label="Scene background gradient preview"]')?.getAttribute("style")).toContain("linear-gradient")
+    await act(async () => ([...el.querySelectorAll('[aria-label="Layers, bottom first"] button')].find((button) => button.textContent?.includes("Gradient panel")) as HTMLButtonElement).click())
+    expect(el.querySelector('[aria-label="Pinned Design gradient fill"]')?.textContent).toContain("45°")
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!
+    const colour = el.querySelector<HTMLInputElement>('[aria-label="Layer colour"]')!
+    await act(async () => { setValue.call(colour, "#d12233"); colour.dispatchEvent(new Event("input", { bubbles: true })) })
+    const backgroundColour = el.querySelector<HTMLInputElement>('[aria-label="Background colour"]')!
+    await act(async () => { setValue.call(backgroundColour, "#243648"); backgroundColour.dispatchEvent(new Event("input", { bubbles: true })) })
+    await act(async () => ([...el.querySelectorAll('[aria-label="Layers, bottom first"] button')].find((button) => button.textContent?.includes("Design picture")) as HTMLButtonElement).click())
+    const crop = el.querySelector<HTMLInputElement>('[aria-label="Crop left"]')!
+    await act(async () => { setValue.call(crop, "10"); crop.dispatchEvent(new Event("input", { bubbles: true })) })
+    expect([...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Duplicate"))?.disabled).toBe(true)
+    expect([...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save as preset"))?.disabled).toBe(true)
+
+    await act(async () => ([...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Save scene")) as HTMLButtonElement).click())
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("Scene background gradient")
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("Gradient fill on “Gradient panel”")
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("Precise Design crop, corners, or clips on “Design picture”")
+    expect(useBroadcastStore.getState().scenes[0]?.backgroundGradient).toEqual(scene.backgroundGradient)
+    expect(useBroadcastStore.getState().scenes[0]?.layers[0]?.gradient).toEqual(scene.layers[0]?.gradient)
+    expect(useBroadcastStore.getState().scenes[0]?.layers[1]?.imageDraw).toEqual(scene.layers[1]?.imageDraw)
+    expect(useBroadcastStore.getState().outputs).toBe(before.outputs)
+    expect(useBroadcastStore.getState().isLive).toBe(true)
+
+    await act(async () => ([...document.body.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes("Replace details and save")) as HTMLButtonElement).click())
+    const saved = useBroadcastStore.getState().scenes.find((item) => item.id === scene.id)!
+    expect(saved.backgroundGradient).toBeUndefined()
+    expect(saved.layers[0]?.gradient).toBeUndefined()
+    expect(saved.layers[1]?.imageDraw).toBeUndefined()
+    expect([...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Duplicate"))?.disabled).toBe(false)
+    expect(useBroadcastStore.getState().outputs).toBe(before.outputs)
+    expect(useBroadcastStore.getState().isLive).toBe(true)
+
+    const confirmation = vi.mocked(toast.success).mock.calls.find(([message]) => message === "Scene saved with the listed Design changes")
+    expect(confirmation).toBeTruthy()
+    const undo = (confirmation?.[1] as unknown as { action: { onClick: () => void } }).action.onClick
+    await act(async () => undo())
+    const restored = useBroadcastStore.getState().scenes.find((item) => item.id === scene.id)!
+    expect(restored.backgroundGradient).toEqual(scene.backgroundGradient)
+    expect(restored.layers[0]?.gradient).toEqual(scene.layers[0]?.gradient)
+    expect(restored.layers[1]?.imageDraw).toEqual(scene.layers[1]?.imageDraw)
+    expect(useBroadcastStore.getState().outputs).toBe(before.outputs)
+    expect(useBroadcastStore.getState().isLive).toBe(true)
+
+    useBroadcastStore.getState().saveScene({ ...restored, name: "A newer saved edit" })
+    const newer = useBroadcastStore.getState().scenes.find((item) => item.id === scene.id)!
+    await act(async () => undo())
+    const preserved = useBroadcastStore.getState().scenes.find((item) => item.id === scene.id)!
+    expect(preserved.name).toBe("A newer saved edit")
+    expect(preserved.updatedAt).toBe(newer.updatedAt)
+    expect(toast.error).toHaveBeenCalledWith("This scene changed again", expect.objectContaining({ description: expect.stringContaining("Reopen the saved Design version") }))
+  })
+
+  it("opens the exact pinned Design document from the Scene Composer", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const scene = { ...newScene("Pinned scene"), design: { id: "design-pinned", version: 2 }, backgroundGradient: { angle: 0, stops: [{ color: "#101820", offset: 0 }, { color: "#3157a4", offset: 1 }] } }
+    useBroadcastStore.setState({ scenes: [scene], sceneReturn: {} })
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    await act(async () => mount(el))
+    await act(async () => ([...el.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === "Scenes") as HTMLButtonElement).click())
+    await act(async () => ([...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Open source Design")) as HTMLButtonElement).click())
+    expect(useShellStore.getState().designRequest).toBe("my-designs")
+    expect(useShellStore.getState().designDocumentRequest).toBe("design-pinned")
+  })
+
+  it("requires the same appearance confirmation when returning an edited scene to Prepare", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const before = useBroadcastStore.getState()
+    const scene = {
+      ...newScene("Opening design"),
+      design: { id: "design-opening", version: 2 },
+      background: "#101820",
+      backgroundGradient: { angle: 135, stops: [{ color: "#101820", offset: 0 }, { color: "#3157a4", offset: 1 }] },
+    }
+    useBroadcastStore.setState({ scenes: [scene], outputs: before.outputs, sceneReturn: {}, isLive: true, liveItemId: "live-item" })
+    useShellStore.setState({
+      workspace: "present",
+      prepareDesignReturn: { serviceId: "service-1", eventId: "event-1", momentId: "moment-1", eventTitle: "Sunday service", momentTitle: "Opening", sceneId: scene.id },
+    })
+    openProductionTab("programs", { sceneId: scene.id })
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    await act(async () => mount(el))
+
+    const background = el.querySelector<HTMLInputElement>('[aria-label="Background colour"]')!
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!
+    await act(async () => { setValue.call(background, "#253647"); background.dispatchEvent(new Event("input", { bubbles: true })) })
+    const saveAndReturn = () => el.querySelector<HTMLButtonElement>('[aria-label="Save scene and return to Prepare"]')!
+    await act(async () => saveAndReturn().click())
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("Replace precise Design details")
+    expect(useBroadcastStore.getState().scenes[0]?.backgroundGradient).toEqual(scene.backgroundGradient)
+    const routeBeforeCancel = useShellStore.getState().goRequest
+
+    await act(async () => ([...document.body.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent === "Keep editing") as HTMLButtonElement).click())
+    expect(useShellStore.getState().goRequest).toBe(routeBeforeCancel)
+    expect(useBroadcastStore.getState().scenes[0]?.backgroundGradient).toEqual(scene.backgroundGradient)
+    await act(async () => saveAndReturn().click())
+    await act(async () => ([...document.body.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes("Replace details and return")) as HTMLButtonElement).click())
+
+    expect(useShellStore.getState().goRequest).toBe("prepare")
+    expect(useBroadcastStore.getState().scenes[0]?.backgroundGradient).toBeUndefined()
+    expect(useBroadcastStore.getState().outputs).toBe(before.outputs)
+    expect(useBroadcastStore.getState().isLive).toBe(true)
+    expect(useBroadcastStore.getState().liveItemId).toBe("live-item")
   })
 
   it("names the two programs (#215 G5.1): the congregation's from its NDI senders, the online one's usual format while OBS is off", async () => {

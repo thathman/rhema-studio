@@ -47,6 +47,7 @@ export function DesignWorkspace() {
   const activeTool = DESIGN_TOOLS.find(([id]) => id === (tab === "outputs" ? "used-on" : tab))
   const [styleId, setStyleId] = useState<string>()
   const [pendingTemplate, setPendingTemplate] = useState<InitialDesignTemplate | null>(null)
+  const documentRequest = useShellStore((s) => s.designDocumentRequest)
   const changeTab = async (next: DesignTab) => {
     if (next === tab || !(await mayLeaveDesignDocumentDraft())) return
     setTab(next)
@@ -147,7 +148,14 @@ export function DesignWorkspace() {
         ) : (
           <div className="h-full overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-panel">
             {tab === "library" && <LookLibraryView onOpen={(next, id) => { setStyleId(id); void changeTab(next) }} onSceneTemplate={(look, customize) => { void startTemplate(look, customize) }} />}
-            {tab === "my-designs" && <DesignDocumentsWorkspace initialTemplate={pendingTemplate} onInitialTemplateHandled={() => setPendingTemplate(null)} />}
+            {tab === "my-designs" && <DesignDocumentsWorkspace
+              initialTemplate={pendingTemplate}
+              onInitialTemplateHandled={() => setPendingTemplate(null)}
+              initialDesignId={documentRequest}
+              onInitialDesignHandled={() => {
+                if (documentRequest) useShellStore.getState().clearDesignDocumentRequest(documentRequest)
+              }}
+            />}
             {tab === "lower-thirds" && <LowerThirdDesigner initialId={styleId} />}
             {tab === "ticker" && <TickerDesigner />}
             {tab === "stage" && <StageDesigner />}

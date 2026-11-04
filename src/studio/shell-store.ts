@@ -118,6 +118,10 @@ interface ShellState extends ShellPrefs {
   /** Ask the shell to go to Design at this section (it runs the same guards as the sidebar). */
   designRequest: DesignTab | null
   openDesign: (tab: DesignTab) => void
+  /** Open a specific canonical document in Design (for example, the design pinned to a scene). */
+  designDocumentRequest: string | null
+  openDesignDocument: (designId: string) => void
+  clearDesignDocumentRequest: (expectedId: string) => void
   /** Ask the shell to go to a workspace (it runs the same guards as the sidebar). */
   goRequest: Workspace | null
   goTo: (workspace: Workspace) => void
@@ -186,6 +190,9 @@ export const useShellStore = create<ShellState>((set) => ({
   setDesignTab: (tab) => set({ designTab: designTabOf(tab) }),
   designRequest: null,
   openDesign: (tab) => set({ designRequest: designTabOf(tab) }),
+  designDocumentRequest: null,
+  openDesignDocument: (designId) => set({ designRequest: "my-designs", designDocumentRequest: designId }),
+  clearDesignDocumentRequest: (expectedId) => set((state) => state.designDocumentRequest === expectedId ? { designDocumentRequest: null } : {}),
   deskMenuRequest: 0,
   openDeskMenu: () => set((s) => ({ deskMenuRequest: s.deskMenuRequest + 1 })),
   goRequest: null,

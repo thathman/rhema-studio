@@ -72,6 +72,17 @@ describe("the old Design → Output looks link (#299 UX15-4)", () => {
     useShellStore.getState().setDesignTab("brand")
     expect(useShellStore.getState().designTab).toBe("brand")
   })
+  it("routes a scene to its source Design document and only clears the matching request", () => {
+    useShellStore.getState().openDesignDocument("design-first")
+    expect(useShellStore.getState().designRequest).toBe("my-designs")
+    expect(useShellStore.getState().designDocumentRequest).toBe("design-first")
+
+    useShellStore.getState().openDesignDocument("design-second")
+    useShellStore.getState().clearDesignDocumentRequest("design-first")
+    expect(useShellStore.getState().designDocumentRequest).toBe("design-second")
+    useShellStore.getState().clearDesignDocumentRequest("design-second")
+    expect(useShellStore.getState().designDocumentRequest).toBeNull()
+  })
   it("Open output asks for the outputs with that output's editor, a new request each time", () => {
     useShellStore.setState({ outputsDialogOpen: false, editOutputRequest: null })
     useShellStore.getState().editOutput("stream")
