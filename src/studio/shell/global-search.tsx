@@ -51,8 +51,9 @@ function itemIcon(it: QueueItem) {
 
 /**
  * Find anything (Cmd/Ctrl+K): places, design and settings sections, this
- * service's items (previewed in Present, never shown live), and scripture,
- * hymns and songs through Present's Quick find.
+ * service's items (previewed in Live, never shown live), and scripture,
+ * hymns and songs through Live's Quick find (#407: it says so, and that
+ * results there are previews: nothing goes on screen until Take).
  */
 export function GlobalSearch() {
   const open = useShellStore((s) => s.searchOpen)
@@ -67,17 +68,18 @@ export function GlobalSearch() {
     f()
   }
   return (
-    <CommandDialog open={open} onOpenChange={(o) => (o ? useShellStore.getState().setSearchOpen(true) : close())} title="Find anything" description="Places, settings, this service, scripture, hymns and songs" className="sm:max-w-xl">
+    <CommandDialog open={open} onOpenChange={(o) => (o ? useShellStore.getState().setSearchOpen(true) : close())} title="Find anything" description="Places, settings and this service here; scripture, hymns and songs open in Live’s Quick find as previews" className="sm:max-w-xl">
       {/* cmdk needs its root around the input and list (this dialog does not add one). */}
       <Command>
       <CommandInput placeholder="Find a place, a setting, an item, a verse or a song…" value={query} onValueChange={setQuery} />
       <CommandList>
-        <CommandEmpty>Nothing here by that name. Press Enter on the first line to look in scripture and songs.</CommandEmpty>
+        <CommandEmpty>Nothing here by that name. Type two letters or more to look in scripture, hymns and songs in Live.</CommandEmpty>
         {query.trim().length > 1 && (
-          <CommandGroup heading="Scripture, hymns and songs">
+          <CommandGroup heading="Scripture, hymns and songs (in Live)">
             <CommandItem value={`find ${query}`} onSelect={() => run(() => useShellStore.getState().findInPresent(query.trim()))}>
-              <SearchIcon /> Find “{query.trim()}” in Present
-              <ArrowRightIcon className="ml-auto" />
+              <SearchIcon /> <span className="truncate">Search “{query.trim()}” in Live’s Quick find</span>
+              <span className="ml-auto shrink-0 text-xs text-muted-foreground">opens Live · preview only</span>
+              <ArrowRightIcon />
             </CommandItem>
           </CommandGroup>
         )}

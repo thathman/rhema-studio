@@ -209,7 +209,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
                     onClick={() => { const after = items[index + 1]; if (after) useQueueStore.getState().moveItemsToTarget([item.id], { kind: "after", itemId: after.id }) }}>
                     <ArrowDownIcon />
                   </Button>
-                  <Button variant="ghost" size="icon-xs" className="size-11" aria-label={item.hidden ? `Show ${item.reference} in Present` : `Hide ${item.reference} in Present`} title={item.hidden ? "Show it in Present again" : "Hide: kept in the service, skipped in Present"}
+                  <Button variant="ghost" size="icon-xs" className="size-11" aria-label={item.hidden ? `Show ${item.reference} in Live` : `Hide ${item.reference} in Live`} title={item.hidden ? "Show it in Live again" : "Hide: kept in the service, skipped in Live"}
                     onClick={() => useQueueStore.getState().setHidden([item.id], !item.hidden)}>
                     {item.hidden ? <EyeIcon /> : <EyeOffIcon />}
                   </Button>

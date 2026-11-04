@@ -511,7 +511,7 @@ export function ServiceBar() {
         </span>
       )}
       {pinnedElsewhere.length > 0 && (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground" role="status" title={override ? `Items saved with ${pinnedElsewhere.join(", ")} are shown in ${activeAbbrev ?? "the active translation"} because the override is on in Present. Saving keeps ${pinnedElsewhere.join(", ")}.` : `Items saved with ${pinnedElsewhere.join(", ")} go live in ${pinnedElsewhere.join(", ")}, not in ${activeAbbrev ?? "the active translation"}. Turn on the override in Present to use ${activeAbbrev ?? "the active translation"} instead.`}>
+        <span className="flex items-center gap-1 text-xs text-muted-foreground" role="status" title={override ? `Items saved with ${pinnedElsewhere.join(", ")} are shown in ${activeAbbrev ?? "the active translation"} because the override is on in Live. Saving keeps ${pinnedElsewhere.join(", ")}.` : `Items saved with ${pinnedElsewhere.join(", ")} go live in ${pinnedElsewhere.join(", ")}, not in ${activeAbbrev ?? "the active translation"}. Turn on the override in Live to use ${activeAbbrev ?? "the active translation"} instead.`}>
           <TriangleAlertIcon className="size-3.5" /> Saved as {pinnedElsewhere.join(", ")}{override ? ` · override: shows in ${activeAbbrev ?? "active"}` : ` · shows in ${pinnedElsewhere.join(", ")}`}
         </span>
       )}

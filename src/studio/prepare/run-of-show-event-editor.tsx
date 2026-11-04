@@ -121,7 +121,7 @@ export function RunOfShowEventEditor({
           <section className="space-y-3">
             <div>
               <h3 className="text-sm font-semibold">Moments in this event</h3>
-              <p className="mt-1 text-xs text-muted-foreground">These ordered moments belong to this event. Open one to preview and edit it; only a deliberate Take in Present changes an audience output.</p>
+              <p className="mt-1 text-xs text-muted-foreground">These ordered moments belong to this event. Open one to preview and edit it; only a deliberate Take in Live changes an audience output.</p>
             </div>
             {moments.length > 0 ? (
               <ol aria-label="Event moments" className="space-y-2">

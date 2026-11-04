@@ -443,7 +443,7 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
     if (l.kind === "clock") {
       const theme = themeForId(l.themeId ?? output.themeId)
       const clock = l.clockShows === "time" ? { mode: "time" as const, at: 0, text: "" } : l.clockShows === "until" ? untilClock(l.until, s.now ?? Date.now()) : l.clockShows === "countdown" ? countdownClock(s.countdowns, l.countdownTo) : (s.clock ?? null)
-      const missing = l.clockShows === "until" ? "choose the time to count down to" : l.clockShows === "countdown" ? ((l.countdownTo ?? "next") === "next" ? "no next item in the run of show now" : "not in the run of show now") : "set the service timer in Present"
+      const missing = l.clockShows === "until" ? "choose the time to count down to" : l.clockShows === "countdown" ? ((l.countdownTo ?? "next") === "next" ? "no next item in the run of show now" : "not in the run of show now") : "set the service timer in Live"
       return { ...base, theme, clock, ...(preview && !clock ? { label: `${l.name} · ${missing}` } : {}) }
     }
     if (l.kind === "text") {
