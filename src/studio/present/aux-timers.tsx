@@ -1,6 +1,7 @@
 import { AlarmClockIcon, PaletteIcon, PauseIcon, PlayIcon, PlusIcon, RotateCcwIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Switch } from "@/components/ui/switch"
 import { formatMs, isRunning, remainingMs, timerTone } from "@/lib/timer"
 import { cn } from "@/lib/utils"
@@ -30,20 +31,54 @@ import { monotonicNow } from "@/stores/timer-store"
 
 const toneClass = (tone: "ok" | "warn" | "over") => (tone === "over" ? "text-destructive" : tone === "warn" ? "text-confidence-mid" : "")
 
-/** Read-only at-a-glance status for the running auxiliary timer; management lives in the Timekeeper tools. */
+/** Read-only at-a-glance status for running auxiliary timers; management lives in Timekeeper tools. */
 export function AuxTimerStatus() {
   const timers = useAuxTimers((s) => s.timers)
   useAuxTimers((s) => s.tick)
   const now = monotonicNow()
-  const running = timers.find((t) => isRunning(t.timer))
-  if (!running) return null
+  const running = timers.filter((t) => isRunning(t.timer))
+  if (running.length === 0) return null
+
+  if (running.length > 1) {
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={`${running.length} additional timers running`}
+            title="Show running additional timers"
+            className="flex h-8 max-w-40 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium tabular-nums hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <AlarmClockIcon className="size-3.5 shrink-0" aria-hidden="true" />
+            <span className="text-[0.6875rem] font-semibold text-muted-foreground">Extra</span>
+            <span className="truncate">{running.length} running</span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" sideOffset={8} className="w-72 gap-2 p-3">
+          <h2 className="text-xs font-semibold text-muted-foreground">Running extra timers</h2>
+          <ul className="flex flex-col gap-1.5" aria-label="Running additional timers">
+            {running.map((entry) => (
+              <li key={entry.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-2.5 py-2 text-xs">
+                <span className="min-w-0 truncate font-medium">{entry.label}</span>
+                <span className={cn("shrink-0 font-semibold tabular-nums", toneClass(timerTone(entry.timer, now)))}>
+                  {formatMs(remainingMs(entry.timer, now))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </PopoverContent>
+      </Popover>
+    )
+  }
+
+  const [timer] = running
   return (
-    <div role="group" aria-label="Additional timer status" className="flex h-8 max-w-56 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium tabular-nums" title={`Additional timer: ${running.label}`}>
+    <div role="group" aria-label="Additional timer status" className="flex h-8 max-w-56 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium tabular-nums" title={`Additional timer: ${timer.label}`}>
       <AlarmClockIcon className="size-3.5 shrink-0" aria-hidden="true" />
       <span className="sr-only">Running extra timer: </span>
       <span className="text-[0.6875rem] font-semibold text-muted-foreground">Extra</span>
-      <span className="min-w-0 truncate">{running.label}</span>
-      <span className={cn("shrink-0", toneClass(timerTone(running.timer, now)))}>{formatMs(remainingMs(running.timer, now))}</span>
+      <span className="min-w-0 truncate">{timer.label}</span>
+      <span className={cn("shrink-0", toneClass(timerTone(timer.timer, now)))}>{formatMs(remainingMs(timer.timer, now))}</span>
     </div>
   )
 }
