@@ -174,7 +174,44 @@ if ((actual.width !== $width || actual.height !== $height) && $width >= 1920 && 
 if (actual.width !== $width || actual.height !== $height) {
   throw new Error("Requested " + $width + "x" + $height + ", native content area is " + actual.width + "x" + actual.height)
 }
-return { ...actual, devicePixelRatio: window.devicePixelRatio }
+const transport = document.querySelector('[role="toolbar"][aria-label="Presentation controls"]')
+const previewPanel = document.querySelector('[data-slot="preview-panel"]')
+const preview = previewPanel?.parentElement
+const program = document.querySelector('[data-studio-live]')?.parentElement
+const quickScreens = document.querySelector('[role="group"][aria-label="Quick screens"]')
+if (!transport || !preview || !program || !quickScreens) {
+  throw new Error("Live layout is missing Preview, Program, transport, or quick screens")
+}
+const scrollRegion = transport.parentElement
+if (scrollRegion && getComputedStyle(scrollRegion).overflowY === "auto") {
+  scrollRegion.scrollTop = 0
+  await sleep(50)
+}
+const rect = (element) => {
+  const { top, right, bottom, left } = element.getBoundingClientRect()
+  return { top, right, bottom, left }
+}
+const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+const transportRect = rect(transport)
+const previewRect = rect(preview)
+const programRect = rect(program)
+const quickScreensRect = rect(quickScreens)
+if (transportRect.top < 0 || transportRect.bottom > actual.height) {
+  throw new Error("Presentation controls are outside the viewport: " + JSON.stringify({ viewport: actual, transport: transportRect }))
+}
+for (const [name, panelRect] of [["Preview", previewRect], ["Program and scenes", programRect], ["Quick screens", quickScreensRect]]) {
+  if (overlaps(transportRect, panelRect)) {
+    throw new Error("Presentation controls overlap " + name + ": " + JSON.stringify({ viewport: actual, transport: transportRect, panel: panelRect }))
+  }
+}
+return {
+  ...actual,
+  devicePixelRatio: window.devicePixelRatio,
+  transport: transportRect,
+  preview: previewRect,
+  programAndScenes: programRect,
+  quickScreens: quickScreensRect,
+}
 EOF
   then
     mkdir -p "$QA_SCRATCH/artifacts"
