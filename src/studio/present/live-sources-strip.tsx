@@ -1,10 +1,11 @@
-import { useEffect, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { EyeOffIcon, PauseIcon, PlayIcon, RotateCcwIcon, XIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import type { BroadcastOutput } from "@/types"
 import type { Scene } from "@/types/scene"
 import { cameraSending, useRouterHealth, watchRouter } from "@/lib/cameras"
 import { CONTENT_NAMES } from "@/lib/content-names"
-import { activatedLabel, cameraPathOf, cameraSourceId, followerCount, followsLowerThird, followsTicker, lowerThirdWords, tickerWords, timerWords, type AnySourceId } from "@/lib/live-sources"
+import { activatedLabel, cameraPathOf, followerCount, followsLowerThird, followsTicker, lowerThirdWords, tickerWords, timerWords, type AnySourceId } from "@/lib/live-sources"
 import { cameraWords } from "@/lib/show-health"
 import { sceneForOutput } from "@/lib/scenes"
 import { tickerForScreens, timerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
@@ -25,6 +26,15 @@ const SENDING_WORDS = { sending: "Sending", frozen: "Frozen: nothing arriving", 
  * timer, hide a camera from scenes and bring it back.
  */
 export function LiveSourcesStrip() {
+  const [cameraConfirmation, setCameraConfirmation] = useState<{
+    id: `camera:${string}`
+    name: string
+    expectedOn: boolean
+    expectedRevision: number | null
+    impactSignature: string
+    command: "hide" | "restore"
+    stale: boolean
+  } | null>(null)
   const sources = useBroadcastStore((s) => s.sources)
   const liveVerse = useBroadcastStore((s) => s.liveVerse)
   const stateSources = useBroadcastStore((s) => s.stateSources)
@@ -57,6 +67,9 @@ export function LiveSourcesStrip() {
   const tickerFeeds = outputs.filter((o) => followsTicker(o) && o.role !== "stage").length
   const ltFeeds = lowerThirdFeeds(outputs, scenes)
   const stageScreens = outputs.filter((o) => o.role === "stage").length
+  const openCameraReview = (id: `camera:${string}`, name: string, expectedOn: boolean, expectedRevision: number | undefined, impactSignature: string, command: "hide" | "restore") => {
+    setCameraConfirmation({ id, name, expectedOn, expectedRevision: expectedRevision ?? null, impactSignature, command, stale: false })
+  }
   return (
     <div role="group" aria-label="Live sources" className="flex shrink-0 flex-wrap items-center gap-x-1.5 gap-y-3 border-t border-border px-3 py-2.5">
       <span className="text-[0.625rem] font-bold tracking-[0.08em] text-muted-foreground uppercase">Sources</span>
@@ -106,25 +119,74 @@ export function LiveSourcesStrip() {
         </Chip>
       )}
       {cameras.map((cam) => {
-        const id = cameraSourceId(cam.name)
+        const id = `camera:${cam.name}` as const
         const x = stateSources[id]
         const held = x?.on === false
         const sending = cameraSending(router, cam.name)
-        const inScenes = scenes.filter((sc) => sc.layers.some((l) => l.kind === "camera" && !!l.cameraUrl && cameraPathOf(l.cameraUrl) === cam.name)).length
+        const impact = cameraSceneImpact(cam.name, scenes, outputs)
         const state = held ? "hidden from scenes" : sending ? SENDING_WORDS[sending] : "checking…"
         const name = cameraWords(cam.label)
         return (
-          <Chip key={id} on={!held && sending === "sending"} name={name} what={state} who={x ? activatedLabel(x) : ""} extra={`in ${inScenes} ${inScenes === 1 ? "scene" : "scenes"}`}>
+          <Chip key={id} on={!held && sending === "sending"} name={name} what={state} who={x ? activatedLabel(x) : ""} extra={`in ${impact.scenes.length} ${impact.scenes.length === 1 ? "scene" : "scenes"}`}>
             {held ? (
-              <IconButton disabled={rehearsal} onClick={() => useBroadcastStore.getState().restoreSource(id)} label={`Show ${name} in scenes again`} title="Back in every scene that has it"><RotateCcwIcon /></IconButton>
+              <IconButton disabled={rehearsal} onClick={() => openCameraReview(id, name, false, x?.revision, impact.signature, "restore")} label={`Review showing ${name} in scenes`} title="Review the scenes and outputs affected before showing this camera again"><RotateCcwIcon /></IconButton>
             ) : (
-              <IconButton disabled={rehearsal} onClick={() => useBroadcastStore.getState().clearSource(id)} label={`Hide ${name} from scenes`} title="Every scene with it shows its fallback there instead; the scenes stay as they are"><EyeOffIcon /></IconButton>
+              <IconButton disabled={rehearsal} onClick={() => openCameraReview(id, name, true, x?.revision, impact.signature, "hide")} label={`Review hiding ${name} from scenes`} title="Review the scenes and outputs affected before hiding this camera"><EyeOffIcon /></IconButton>
             )}
           </Chip>
         )
       })}
+      {cameraConfirmation && (() => {
+        const current = useBroadcastStore.getState()
+        const source = current.stateSources[cameraConfirmation.id]
+        const currentImpact = cameraSceneImpact(cameraConfirmation.id.slice("camera:".length), current.scenes, current.outputs)
+        const stale = cameraConfirmation.stale
+          || current.rehearsal
+          || (source?.on !== false) !== cameraConfirmation.expectedOn
+          || (source?.revision ?? null) !== cameraConfirmation.expectedRevision
+          || currentImpact.signature !== cameraConfirmation.impactSignature
+        const affectedScenes = currentImpact.scenes.map((scene) => scene.name)
+        const affectedOutputs = currentImpact.outputs.map((output) => `${output.name} (${output.sceneName})`)
+        const verb = cameraConfirmation.command === "hide" ? "Hide" : "Show"
+        return (
+          <div role="alertdialog" aria-label={`${verb} ${cameraConfirmation.name} across scenes?`} className="flex min-w-full flex-col gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 p-3 text-xs sm:min-w-96">
+            <p className="font-semibold">Review camera impact</p>
+            <p>{cameraConfirmation.command === "hide" ? "This will hide this source in every Rhema scene that uses it." : "This will restore this source in every Rhema scene that uses it."} It does not Take a scene. OBS camera inputs are unchanged.</p>
+            <p><span className="font-semibold">Scenes using this camera:</span> {affectedScenes.length ? affectedScenes.join(", ") : "None in the saved scene list."}</p>
+            <p><span className="font-semibold">Current output assignments:</span> {affectedOutputs.length ? affectedOutputs.join(", ") : "None."}</p>
+            {stale ? <p role="alert" className="font-semibold text-confidence-mid">The source, scene usage, outputs, or rehearsal state changed while you were reviewing. Cancel and open the review again.</p> : null}
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant={cameraConfirmation.command === "hide" ? "destructive" : "default"} disabled={rehearsal || stale} onClick={() => {
+                const latest = useBroadcastStore.getState()
+                const latestSource = latest.stateSources[cameraConfirmation.id]
+                const latestImpact = cameraSceneImpact(cameraConfirmation.id.slice("camera:".length), latest.scenes, latest.outputs)
+                if (latest.rehearsal || (latestSource?.on !== false) !== cameraConfirmation.expectedOn || (latestSource?.revision ?? null) !== cameraConfirmation.expectedRevision || latestImpact.signature !== cameraConfirmation.impactSignature) {
+                  setCameraConfirmation((pending) => pending ? { ...pending, stale: true } : pending)
+                  return
+                }
+                if (cameraConfirmation.command === "hide") latest.clearSource(cameraConfirmation.id)
+                else latest.restoreSource(cameraConfirmation.id)
+                setCameraConfirmation(null)
+              }}>{cameraConfirmation.command === "hide" ? "Hide in all listed scenes" : "Restore in all listed scenes"}</Button>
+              <Button size="sm" variant="ghost" onClick={() => setCameraConfirmation(null)}>Cancel</Button>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
+
+}
+
+function cameraSceneImpact(camera: string, scenes: readonly Scene[], outputs: readonly BroadcastOutput[]): { scenes: { id: string; name: string }[]; outputs: { id: string; name: string; sceneName: string }[]; signature: string } {
+  const usesCamera = (scene: Scene | undefined): scene is Scene => !!scene?.layers.some((layer) => layer.kind === "camera" && !!layer.cameraUrl && cameraPathOf(layer.cameraUrl) === camera)
+  const saved = scenes.filter(usesCamera).map((scene) => ({ id: scene.id, name: scene.name }))
+  const assigned = outputs.flatMap((output) => {
+    const scene = sceneForOutput(output, scenes)
+    return usesCamera(scene) ? [{ id: output.id, name: output.name, sceneName: scene.name }] : []
+  })
+  const signature = JSON.stringify({ saved, assigned })
+  return { scenes: saved, outputs: assigned, signature }
 }
 
 /** Congregation outputs that draw the lower third: over the frame, or in the box of the scene they show. */
