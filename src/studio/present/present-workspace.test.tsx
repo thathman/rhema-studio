@@ -228,6 +228,10 @@ describe("Present's unified Live console", () => {
     expect(element.querySelector('[data-tour="present-rundown"]')?.className).toContain("row-span-1")
     expect(element.querySelector('[data-tour="present-rundown"]')?.className).toContain("h-fit")
     expect(element.querySelector('[data-tour="present-rundown"]')?.className).toContain("self-start")
+    const transport = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Presentation controls"]')!
+    const moments = element.querySelector<HTMLElement>('[role="group"][aria-label="Quick screens"]')!
+    expect(transport.className).toContain("min-[1201px]:col-start-2")
+    expect(moments.parentElement?.className).toContain("min-[1201px]:col-start-2")
     expect(element.querySelector('[data-testid="rundown-list"]')).toBeNull()
 
     const button = (label: string) => [...recovery.querySelectorAll("button")].find((candidate) => candidate.getAttribute("aria-label") === label)!
