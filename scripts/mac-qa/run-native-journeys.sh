@@ -154,12 +154,22 @@ const label = window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label
 if (!label) throw new Error("The current native window label is unavailable")
 await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: false })
 const fullscreen = () => window.__TAURI_INTERNALS__.invoke("plugin:window|is_fullscreen", { label })
+const maximized = () => window.__TAURI_INTERNALS__.invoke("plugin:window|is_maximized", { label })
 let isFullscreen = await fullscreen()
 for (let attempt = 0; isFullscreen && attempt < 30; attempt += 1) {
   await sleep(100)
   isFullscreen = await fullscreen()
 }
 if (isFullscreen) throw new Error("Native window did not leave fullscreen before resize")
+if (await maximized()) {
+  await window.__TAURI_INTERNALS__.invoke("plugin:window|unmaximize", { label })
+  let stillMaximized = await maximized()
+  for (let attempt = 0; stillMaximized && attempt < 30; attempt += 1) {
+    await sleep(100)
+    stillMaximized = await maximized()
+  }
+  if (stillMaximized) throw new Error("Native window did not leave maximized state before resize")
+}
 const currentSize = () => ({ width: window.innerWidth, height: window.innerHeight })
 let previousSize = currentSize()
 let stableSamples = 0
@@ -192,7 +202,7 @@ if ((actual.width !== $width || actual.height !== $height) && $width >= 1920 && 
   actual = { width: window.innerWidth, height: window.innerHeight }
 }
 if (actual.width !== $width || actual.height !== $height) {
-  throw new Error("Requested " + $width + "x" + $height + ", native content area is " + actual.width + "x" + actual.height)
+  throw new Error("Requested " + $width + "x" + $height + ", native content area is " + actual.width + "x" + actual.height + ", fullscreen=" + await fullscreen() + ", maximized=" + await maximized())
 }
 const transport = document.querySelector('[role="toolbar"][aria-label="Presentation controls"]')
 const previewPanel = document.querySelector('[data-slot="preview-panel"]')
