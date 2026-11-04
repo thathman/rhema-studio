@@ -317,7 +317,8 @@ public class MainActivity extends Activity {
         // Revoked is final (the 403 handler loads nothing more): its word stays, no reload.
         if (shown() == null || REVOKED.equals(problem)) return;
         showStill();
-        retry("this screen's page stopped (the TV may be short of memory); starting it again", wait);
+        // A refused certificate keeps its reason (the new page is checked against the pin again).
+        retry(certRefused ? NOT_THAT_RHEMA : "this screen's page stopped (the TV may be short of memory); starting it again", wait);
     }
 
     private String shown() {

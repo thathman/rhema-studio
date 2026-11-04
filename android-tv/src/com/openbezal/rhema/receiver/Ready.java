@@ -35,8 +35,6 @@ final class Ready {
         if (drawn) return false;
         drawn = true;
         blank = 0;
-        // A page that drew after a renderer death ends the run: the next death waits a second again.
-        gone = 0;
         return true;
     }
 
@@ -58,8 +56,11 @@ final class Ready {
         return queued;
     }
 
-    /** Renderer deaths closer than this to the last one count as a run (a page that keeps crashing it). */
-    static final long GONE_RUN_MS = 10 * 60_000;
+    /**
+     * Renderer deaths closer than this to the last one count as a run (a page that keeps crashing it,
+     * even one that draws first). Deaths minutes apart each wait a second.
+     */
+    static final long GONE_RUN_MS = 2 * 60_000;
     private int gone;
     private long goneAt;
 

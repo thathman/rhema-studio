@@ -92,8 +92,18 @@ public final class ReadyCheck {
         g.forget();
         check("a new link does not reset the run (it is the TV running short)", g.rendererGone(t + Ready.GONE_RUN_MS + 1) == 2_000);
         check("the first death at boot (elapsedRealtime 0) waits a second", new Ready().rendererGone(0) == 1_000);
-        g.started();
-        check("a page that drew after a death ends the run", g.drew() && g.rendererGone(t + Ready.GONE_RUN_MS + 2) == 1_000);
+        // A page that draws, then runs the TV out of memory again at once: drawing does not end the run.
+        Ready d = new Ready();
+        long u = 5_000_000;
+        long[] drewThenGone = new long[4];
+        for (int i = 0; i < drewThenGone.length; i++) {
+            drewThenGone[i] = d.rendererGone(u += 10_000);
+            d.started();
+            d.drew();
+        }
+        check("draws then dies, again and again: the waits still grow",
+                java.util.Arrays.equals(drewThenGone, new long[] {1_000, 2_000, 4_000, 8_000}));
+        check("deaths minutes apart each wait a second", d.rendererGone(u + Ready.GONE_RUN_MS) == 1_000);
 
         // What counts as this screen's acknowledgement.
         check("the page's acknowledgement", Guard.ackOf(LINK, "POST", ACK));
