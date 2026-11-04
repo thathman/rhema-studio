@@ -25,7 +25,7 @@ import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import type { TimerState } from "@/lib/timer"
 import { useSongStore } from "@/stores/song-store"
 import { nextVisibleItem, type OutlineHeader } from "@/lib/run-of-show"
-import { forOutputLanguage, isOutputLanguageFallback, OUTPUT_LANGUAGE_FALLBACK_NOTICE, withLanguageOverride, type LanguageOverride } from "@/lib/output-language"
+import { forOutputLanguage, isOutputLanguageFallback, OUTPUT_LANGUAGE_FALLBACK_NOTICE, liveLanguage, withLanguageOverride, type LanguageOverride } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
@@ -1124,7 +1124,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     })),
   setLanguageOverride: (outputId, language) => {
     const output = get().outputs.find((o) => o.id === outputId)
-    if (!output) return
+    // Rehearsal freezes the outputs and the service log: a choice made then would reach the
+    // congregation afterwards unrecorded, so it waits until rehearsal is over.
+    if (!output || get().rehearsal) return
     const rest = { ...get().languageOverrides }
     delete rest[outputId]
     // Back to the saved language is no override at all.
@@ -1151,12 +1153,23 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         : {}),
     }))
     if ("role" in patch && patch.role !== "signage") forgetSignage(id)
+    // A new saved language replaces this session's choice for that output (and the log says so).
+    if ("language" in patch && get().languageOverrides[id]) {
+      const languageOverrides = { ...get().languageOverrides }
+      delete languageOverrides[id]
+      set({ languageOverrides })
+    }
     if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch || "shows" in patch || "sceneId" in patch || "stageLayout" in patch || "stageOrientation" in patch || "stageNight" in patch) get().syncBroadcastOutputFor(id)
     // A feed's rule for a lost host or its overscan (#198): its screens get the last frame again with it.
     else if ("hostLost" in patch || "overscan" in patch) resendLast(id)
   },
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
+    if (get().languageOverrides[id]) {
+      const languageOverrides = { ...get().languageOverrides }
+      delete languageOverrides[id]
+      set({ languageOverrides })
+    }
     forgetSignage(id)
     lastProgram.delete(id)
     if (get().outputTests[id]) {
@@ -1559,7 +1572,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       const sameThemeRevisions = JSON.stringify(Object.entries(themeRevisions).sort()) === JSON.stringify(Object.entries(expected.themeRevisions ?? {}).sort())
       const outputTheme = s.themes.find((theme) => theme.id === output.themeId) ?? s.themes[0]
       if ((output.sceneId ?? null) !== expected.sceneId || (s.sceneTakes[output.id]?.revision ?? null) !== expected.sceneRevision) return false
-      if ((output.language ?? "both") !== expected.language || output.themeId !== expected.themeId || !sameThemeFor || !sameThemeNames || !sameThemeRevisions) return false
+      if (liveLanguage(output, s.languageOverrides) !== expected.language || output.themeId !== expected.themeId || !sameThemeFor || !sameThemeNames || !sameThemeRevisions) return false
       if ((output.shows ?? []).join("\u001f") !== (expected.shows ?? []).join("\u001f") || expected.aspectRatio !== aspectRatioLabel(outputTheme?.resolution)) return false
     }
     // An approved service puts up its pinned scene and each output's pinned look (#410), as the host

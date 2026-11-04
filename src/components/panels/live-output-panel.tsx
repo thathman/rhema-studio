@@ -94,12 +94,12 @@ export function LiveOutputPanel({ outputId, sceneTakeAction }: { outputId?: stri
             <span aria-hidden className="mx-2 h-4 w-px bg-border" />
             <label
               className="flex items-center gap-2"
-              title={`Languages on ${savedOutput.name} for this session only: it is not saved (Edit output keeps ${LANGUAGE_NAMES[savedLanguage].toLowerCase()}), goes when Rhema Studio restarts, and every change is in the service log.`}
+              title={rehearsal ? "Rehearsal keeps the screens as they were: choose a language for this session after it." : `Languages on ${savedOutput.name} for this session only: it is not saved (Edit output keeps ${LANGUAGE_NAMES[savedLanguage].toLowerCase()}), goes when Rhema Studio restarts, and every change is in the service log.`}
             >
               <span className={cn("text-xs font-medium", languageOverride ? "text-foreground" : "text-muted-foreground")}>
                 {languageOverride ? "Language · this session" : "Language"}
               </span>
-              <Select value={languageOverride?.language ?? "saved"} onValueChange={(v) => useBroadcastStore.getState().setLanguageOverride(savedOutput.id, v === "saved" ? null : (v as BroadcastOutputLanguage))}>
+              <Select disabled={rehearsal} value={languageOverride?.language ?? "saved"} onValueChange={(v) => useBroadcastStore.getState().setLanguageOverride(savedOutput.id, v === "saved" ? null : (v as BroadcastOutputLanguage))}>
                 <SelectTrigger size="sm" className="text-xs" aria-label={`Languages on ${savedOutput.name} for this session`}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="saved">As saved ({LANGUAGE_NAMES[savedLanguage].toLowerCase()})</SelectItem>

@@ -1,3 +1,4 @@
+import { liveLanguage } from "@/lib/output-language"
 import { invoke } from "@tauri-apps/api/core"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import { serviceTiming, type EventState, type OffsetMode, type ServiceTiming } from "@/lib/timing-engine"
@@ -302,7 +303,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
         sceneId: o.sceneId ?? null,
         sceneRevision: take?.revision ?? null,
         impact: {
-          language: o.language ?? "both",
+          language: liveLanguage(o, b.languageOverrides),
           aspectRatio: aspectRatioLabel(outputTheme?.resolution),
           themeId: o.themeId,
           themeFor: { ...(o.themeFor ?? {}) },

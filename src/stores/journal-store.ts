@@ -361,7 +361,8 @@ export function remapJournalItemIds(re: (id: string | null | undefined) => strin
 useBroadcastStore.subscribe((s, prev) => {
   if (s.languageOverrides === prev.languageOverrides) return
   const add = useJournalStore.getState().add
-  for (const output of s.outputs) {
+  const outputs = [...s.outputs, ...prev.outputs.filter((p) => !s.outputs.some((o) => o.id === p.id))]
+  for (const output of outputs) {
     const a = prev.languageOverrides[output.id]
     const b = s.languageOverrides[output.id]
     if (a?.language === b?.language) continue

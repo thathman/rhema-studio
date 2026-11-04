@@ -1023,6 +1023,36 @@ describe("updateDraftNested deep paths", () => {
     expect(useBroadcastStore.getState().languageOverrides).toEqual({})
   })
 
+  it("a Live language choice waits out rehearsal, ends with a new saved language or the output, and desks see it (#446)", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const { useJournalStore } = await import("./journal-store")
+    const { buildLiveState } = await import("@/lib/live-state")
+    useJournalStore.setState({ entries: [] })
+    const s = useBroadcastStore.getState()
+    s.addOutput({ id: "overflow", name: "Overflow", type: "ndi", themeId: s.themes[0].id, monitorIndex: 0, ndi: ndiDefaults })
+
+    // Rehearsal freezes the screens and the log: no choice is taken then.
+    useBroadcastStore.setState({ rehearsal: true })
+    useBroadcastStore.getState().setLanguageOverride("overflow", "second")
+    expect(useBroadcastStore.getState().languageOverrides).toEqual({})
+    useBroadcastStore.setState({ rehearsal: false })
+
+    // Desks reviewing a Group Take see the language shown now, not the saved one.
+    useBroadcastStore.getState().setLanguageOverride("overflow", "second")
+    expect(buildLiveState().outputs.find((o) => o.id === "overflow")).toMatchObject({ impact: { language: "second" } })
+
+    // Saving a language for the output replaces the session's choice, and the log says so.
+    useBroadcastStore.getState().updateOutput("overflow", { language: "first" })
+    expect(useBroadcastStore.getState().languageOverrides).toEqual({})
+    expect(useJournalStore.getState().entries.at(-1)?.label).toContain("Overflow: back to its saved language (First language only)")
+
+    // Removing the output ends its choice too, logged under its name.
+    useBroadcastStore.getState().setLanguageOverride("overflow", "both")
+    useBroadcastStore.getState().removeOutput("overflow")
+    expect(useBroadcastStore.getState().languageOverrides).toEqual({})
+    expect(useJournalStore.getState().entries.at(-1)?.label).toContain("Overflow: back to its saved language")
+  })
+
   it("applies a stage output's selected language to lyrics and Scripture", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const s = useBroadcastStore.getState()

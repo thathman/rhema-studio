@@ -17,7 +17,7 @@ import { planLines } from "@/lib/item-intent"
 import { useSettingsStore } from "@/stores/settings-store"
 import { usePreviewLabel } from "@/hooks/use-preview-label"
 import { useServiceStore } from "@/stores/service-store"
-import { forOutputLanguage, isOutputLanguageFallback, OUTPUT_LANGUAGE_FALLBACK_NOTICE } from "@/lib/output-language"
+import { forOutputLanguage, isOutputLanguageFallback, LANGUAGE_SHORT_NAMES, liveLanguage, OUTPUT_LANGUAGE_FALLBACK_NOTICE } from "@/lib/output-language"
 import { isMissing, resolveTranslations } from "@/lib/translation-policy"
 import type { Verse } from "@/types"
 
@@ -131,7 +131,9 @@ export function PreviewPanel({ itemLook = false, compact = false, hideOutputPick
   const selectedPreviewOutput = outputLanguageId === undefined
     ? undefined
     : congregationOutputs.find((output) => output.id === outputLanguageId) ?? congregationOutputs[0]
-  const previewLanguage = selectedPreviewOutput?.language ?? "both"
+  const languageOverrides = useBroadcastStore((s) => s.languageOverrides)
+  // What Take will show there: this session's language when one was chosen in Live (#446).
+  const previewLanguage = selectedPreviewOutput ? liveLanguage(selectedPreviewOutput, languageOverrides) : "both"
   const selectedVerseId = selectedVerse?.id
   const selectedBookNumber = selectedVerse?.book_number
   const selectedChapter = selectedVerse?.chapter
@@ -253,7 +255,7 @@ export function PreviewPanel({ itemLook = false, compact = false, hideOutputPick
       >
         {congregationOutputs.map((output) => (
           <option key={output.id} value={output.id}>
-            {output.name} · {output.language === "first" ? "First language" : output.language === "second" ? "Second language" : "Both languages"}
+            {output.name} · {LANGUAGE_SHORT_NAMES[liveLanguage(output, languageOverrides)]}{languageOverrides[output.id] ? " (this session)" : ""}
           </option>
         ))}
       </select>

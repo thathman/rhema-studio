@@ -1,3 +1,4 @@
+import { LANGUAGE_SHORT_NAMES, liveLanguage } from "@/lib/output-language"
 import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
@@ -63,6 +64,7 @@ function moveLiveToolbarFocus(event: ReactKeyboardEvent<HTMLDivElement>): void {
 }
 
 export function PresentWorkspace() {
+  const languageOverrides = useBroadcastStore((s) => s.languageOverrides)
   const selectedOutputId = useProductionTab((s) => s.liveOutputId)
   const toolsButtonRef = useRef<HTMLButtonElement>(null)
   const liveToolsButtonRef = useRef<HTMLButtonElement>(null)
@@ -172,7 +174,7 @@ export function PresentWorkspace() {
                 >
                   {congregationOutputs.map((output) => (
                     <option key={output.id} value={output.id}>
-                      {output.name} · {output.language === "first" ? "First language" : output.language === "second" ? "Second language" : "Both languages"}
+                      {output.name} · {LANGUAGE_SHORT_NAMES[liveLanguage(output, languageOverrides)]}{languageOverrides[output.id] ? " (this session)" : ""}
                     </option>
                   ))}
                 </select>
