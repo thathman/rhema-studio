@@ -7,7 +7,7 @@ everything else is in Settings. It sends to the camera router that comes with Rh
 encrypted, on the church network only. Rhema's scenes and TVs and OBS take it from there as they take
 any camera.
 
-Version 1.2.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) and newer · target API 34.
+Version 1.3.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) and newer · target API 34.
 
 ## Using it
 
@@ -19,7 +19,8 @@ Version 1.2.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) an
    **Pair**. The app goes live at once (unless **Start sending when the app opens** is off).
 3. The viewfinder: **tap** to focus and expose there (the focus then holds), **double-tap** to follow
    the scene again, **pinch** to zoom (below 1× on phones with an ultra-wide lens, Android 11+). The
-   dot top left is the tally: **ON AIR · ONLINE** / **ON AIR · CONGREGATION** (red: OBS has this camera in
+   dot top left is the tally: **ON AIR · ONLINE** / **ON AIR · CONGREGATION** / **ON AIR · ONLINE +
+   CONGREGATION** (red: OBS has this camera in
    Program / a Google TV shows it), **SENDING** (teal: sent, on no Program), **SENDING · NO TALLY** (Rhema
    has not said, or is older), **CONNECTING** (amber), **NOT SENDING** (grey). A projector Rhema drives
    from its own window is not counted (it reports nothing). Tap it
