@@ -63,7 +63,7 @@ export function BulkBar() {
           </DropdownMenuContent>
         </DropdownMenu>
       )}
-      <Button variant="ghost" size="xs" onClick={() => q().setHidden(ids, !allHidden)} title={allHidden ? "Show them in Present again" : "Kept in the service, skipped in Present"}>
+      <Button variant="ghost" size="xs" onClick={() => q().setHidden(ids, !allHidden)} title={allHidden ? "Show them in Live again" : "Kept in the service, skipped in Live"}>
         {allHidden ? <EyeIcon /> : <EyeOffIcon />} {allHidden ? "Show" : "Hide"}
       </Button>
       <Button variant="ghost" size="xs" onClick={() => copy(ids)}><CopyIcon /> Copy</Button>

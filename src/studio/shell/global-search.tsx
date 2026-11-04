@@ -68,7 +68,7 @@ export function GlobalSearch() {
     f()
   }
   return (
-    <CommandDialog open={open} onOpenChange={(o) => (o ? useShellStore.getState().setSearchOpen(true) : close())} title="Find anything" description="Places, settings and this service here; scripture, hymns and songs open in Live's Quick find as previews" className="sm:max-w-xl">
+    <CommandDialog open={open} onOpenChange={(o) => (o ? useShellStore.getState().setSearchOpen(true) : close())} title="Find anything" description="Places, settings and this service here; scripture, hymns and songs open in Live’s Quick find as previews" className="sm:max-w-xl">
       {/* cmdk needs its root around the input and list (this dialog does not add one). */}
       <Command>
       <CommandInput placeholder="Find a place, a setting, an item, a verse or a song…" value={query} onValueChange={setQuery} />

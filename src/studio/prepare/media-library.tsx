@@ -117,7 +117,7 @@ export function MediaLibrary({ onAdded, onUseItem }: { onAdded?: (id: string) =>
       </ul>
       {sounds.length > 0 && (
         <div className="flex flex-col gap-1 border-t border-border pt-2">
-          <p className="text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">Sounds <span className="normal-case tracking-normal">· add one to the service to play it when reached, or play it any time from ♪ in Present</span></p>
+          <p className="text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">Sounds <span className="normal-case tracking-normal">· add one to the service to play it when reached, or play it any time from ♪ in Live</span></p>
           <ul className="max-h-32 overflow-y-auto" aria-label="Sounds">
             {sounds.map((a) => (
               <li key={a.id} className="flex items-center gap-2 px-1 py-0.5 text-xs">

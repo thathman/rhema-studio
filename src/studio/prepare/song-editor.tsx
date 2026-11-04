@@ -560,7 +560,7 @@ function Attachments({ songId }: { songId: string }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs font-medium text-muted-foreground">Chord charts, sheets and backing tracks</span>
-      {files.length === 0 && <p className="text-xs text-muted-foreground">None yet. A PDF or picture opens in the computer's own viewer, never on screen. A sound (MP3, M4A, WAV, OGG) is offered under the Sound button in Present while this song is up.</p>}
+      {files.length === 0 && <p className="text-xs text-muted-foreground">None yet. A PDF or picture opens in the computer's own viewer, never on screen. A sound (MP3, M4A, WAV, OGG) is offered under the Sound button in Live while this song is up.</p>}
       <ul className="flex flex-col gap-1">
         {files.map((m) => (
           <li key={m.id} className="flex items-center gap-2 text-xs">

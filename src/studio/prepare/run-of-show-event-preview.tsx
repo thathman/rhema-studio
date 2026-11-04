@@ -109,7 +109,7 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
       <section className="space-y-3" aria-labelledby="event-preview-heading">
         <div>
           <h3 id="event-preview-heading" className="text-sm font-semibold">Preview {eventTitle}</h3>
-          <p className="mt-1 text-xs text-muted-foreground">Choose a moment and audience to inspect the scene layout. Preview only; an operator still has to Take in Present.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Choose a moment and audience to inspect the scene layout. Preview only; an operator still has to Take in Live.</p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">

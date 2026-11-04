@@ -61,7 +61,7 @@ export function TickerDesigner() {
   }
   return (
     <div className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">How the news ticker looks and moves. Preview and save a draft here; applying is a deliberate action. The words are typed in Present (Ticker).</p>
+        <p className="text-sm text-muted-foreground">How the news ticker looks and moves. Preview and save a draft here; applying is a deliberate action. The words are typed in Live (Ticker).</p>
         <DesignDraftActions
           dirty={draft.dirty}
           saved={draft.saved}

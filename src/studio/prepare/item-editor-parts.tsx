@@ -33,7 +33,7 @@ const commentTime = (at: string) => new Date(at).toLocaleString(undefined, { wee
 export function ImageItemControls({ item }: { item: ImageQueueItem }) {
   const isVideo = useMediaStore((s) => s.assets.find((a) => a.id === item.image.media_id)?.kind === "video")
   const isSound = useMediaStore((s) => s.assets.find((a) => a.id === item.image.media_id)?.kind === "audio")
-  if (isSound) return <p className="ml-7 py-1 pl-2 text-xs text-muted-foreground">Plays when this item is reached (not in rehearsal); the screens keep what they show. Pause, fade or stop it with ♪ in Present.</p>
+  if (isSound) return <p className="ml-7 py-1 pl-2 text-xs text-muted-foreground">Plays when this item is reached (not in rehearsal); the screens keep what they show. Pause, fade or stop it with ♪ in Live.</p>
   const setImage = (patch: Partial<ImageQueueItem["image"]>) => useQueueStore.getState().updateItem(item.id, (i) => (isImageItem(i) ? { ...i, image: { ...i.image, ...patch } } : i))
   return (
     <div className="ml-7 flex flex-wrap items-center gap-2 py-1 pl-2 text-xs">
@@ -464,7 +464,7 @@ export function SongApprovalNote({ item }: { item: SongQueueItem }) {
   return (
     <div role="status" className="mx-2 mt-2 flex flex-wrap items-center gap-2 rounded-md bg-tone-amber px-2 py-1.5 text-xs text-tone-amber-foreground">
       <span className="min-w-0 flex-1">
-        Changed since approval: the song was edited in the library (approved at revision {state.approvedRevision}, now {state.libraryRevision}). {state.usingNew ? "Present shows the new words in this service." : "Present shows the approved words. Approve the service again to use the new ones, or choose them in Present."}
+        Changed since approval: the song was edited in the library (approved at revision {state.approvedRevision}, now {state.libraryRevision}). {state.usingNew ? "Present shows the new words in this service." : "Present shows the approved words. Approve the service again to use the new ones, or choose them in Live."}
       </span>
       {state.usingNew && <Button size="xs" variant="outline" onClick={() => useSongPins.getState().setLatest(item.song.song_id, false)}>Back to the approved words</Button>}
     </div>
@@ -580,7 +580,7 @@ export function CueItemEditor({ item }: { item: CueQueueItem }) {
           onChange={(e) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, reference: e.target.value }))}
         />
       </label>
-      <p className="text-muted-foreground">A moment in the run of show with nothing on screen, e.g. "Sermon begins" with an OBS recording marker. Taking it in Present fires its cues (set them in Signals) and starts its time; the screens keep what they show.</p>
+      <p className="text-muted-foreground">A moment in the run of show with nothing on screen, e.g. "Sermon begins" with an OBS recording marker. Taking it in Live fires its cues (set them in Signals) and starts its time; the screens keep what they show.</p>
     </div>
   )
 }
@@ -832,7 +832,7 @@ export function TimedAdvance({ item }: { item: QueueItem }) {
       <span>
         <span className="font-medium">Move on by itself{minutes ? ` after ${minutes} min` : ""}</span>
         <span className="block text-muted-foreground">
-          {minutes ? "Goes to the next item in its phase, only while Timed moves is on in Present. Anything you do to what is live cancels it." : "Give it planned minutes first."}
+          {minutes ? "Goes to the next item in its phase, only while Timed moves is on in Live. Anything you do to what is live cancels it." : "Give it planned minutes first."}
         </span>
       </span>
     </label>
