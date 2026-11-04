@@ -394,6 +394,10 @@ let events = new EventSource(`/api/v1/feed/${encodeURIComponent(id)}/events?k=${
 let lastHeard = performance.now()
 let beats = false
 let beatCount = 0
+let hasContent = false
+// Keep the disconnected state latched after EventSource's transient error until a valid frame or
+// host beat proves that communication has resumed. `readyState` can return to OPEN before data.
+let disconnected = false
 const staleMark = document.createElement("div")
 staleMark.setAttribute("role", "status")
 staleMark.textContent = "Not updating"
@@ -433,9 +437,9 @@ function showLost(stale: boolean) {
     lostTime.textContent = v.time
   }
 }
-const heard = () => { lastHeard = performance.now(); checkStale() }
+const heard = () => { lastHeard = performance.now(); disconnected = false; checkStale() }
 function checkStale() {
-  const stale = feedStale({ now: performance.now(), lastHeard, beats, connected: events.readyState === EventSource.OPEN })
+  const stale = feedStale({ now: performance.now(), lastHeard, beats, hasContent, disconnected })
   const show = stale ? "block" : "none"
   if (staleMark.style.display !== show) staleMark.style.display = show
   showLost(stale)
@@ -457,6 +461,7 @@ async function streamStopped() {
 }
 function listen(events: EventSource) {
   events.addEventListener("error", () => {
+    disconnected = true
     checkStale()
     if (events.readyState === EventSource.CLOSED) void streamStopped()
   })
@@ -470,7 +475,6 @@ function listen(events: EventSource) {
     if (drawnSeq > 0 && beatCount++ % 2 === 0) void ack({ seq: drawnSeq, clock: pageClockSkew(hostNow, Date.now()) })
   })
   events.addEventListener("frame", (e) => {
-    heard()
     const ev = e as MessageEvent<string>
     try {
       show(JSON.parse(ev.data) as Frame)
@@ -478,6 +482,8 @@ function listen(events: EventSource) {
       // A frame this page cannot read: keep the last one (and do not say it was drawn).
       return
     }
+    hasContent = true
+    heard()
     // Tell the host this frame is on this screen (receiver trust), after it is drawn.
     const seq = Number(ev.lastEventId)
     if (Number.isFinite(seq) && seq > 0) {

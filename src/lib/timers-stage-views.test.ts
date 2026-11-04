@@ -142,11 +142,55 @@ describe("stage layouts per role, portrait and night (R6)", () => {
 })
 
 describe("feed pages that say they are out of date, and clocks that differ (R5)", () => {
-  it("out of date after the host has been quiet; an older host (no beats) only once the link is lost", () => {
-    expect(feedStale({ now: FEED_STALE_AFTER_MS, lastHeard: 0, beats: true, connected: true })).toBe(false)
-    expect(feedStale({ now: FEED_STALE_AFTER_MS + 1, lastHeard: 0, beats: true, connected: true })).toBe(true)
-    expect(feedStale({ now: 60_000, lastHeard: 0, beats: false, connected: true })).toBe(false)
-    expect(feedStale({ now: 60_000, lastHeard: 0, beats: false, connected: false })).toBe(true)
+  it("does not warn before the receiver has displayed any host content", () => {
+    expect(feedStale({
+      now: 60_000,
+      lastHeard: 0,
+      beats: false,
+      hasContent: false,
+      disconnected: true,
+    })).toBe(false)
+  })
+
+  it("warns immediately after a previously displayed feed loses its connection", () => {
+    expect(feedStale({
+      now: 1_001,
+      lastHeard: 1_000,
+      beats: false,
+      hasContent: true,
+      disconnected: true,
+    })).toBe(true)
+  })
+
+  it("uses the heartbeat timeout for quiet live links and clears after valid resumed communication", () => {
+    expect(feedStale({
+      now: FEED_STALE_AFTER_MS,
+      lastHeard: 0,
+      beats: true,
+      hasContent: true,
+      disconnected: false,
+    })).toBe(false)
+    expect(feedStale({
+      now: FEED_STALE_AFTER_MS + 1,
+      lastHeard: 0,
+      beats: true,
+      hasContent: true,
+      disconnected: false,
+    })).toBe(true)
+    expect(feedStale({
+      now: 60_000,
+      lastHeard: 0,
+      beats: false,
+      hasContent: true,
+      disconnected: false,
+    })).toBe(false)
+    expect(feedStale({
+      now: 50_001,
+      lastHeard: 50_000,
+      beats: true,
+      hasContent: true,
+      disconnected: false,
+    })).toBe(false)
     expect(pageClockSkew(1_000, 4_500)).toBe(3_500)
   })
 

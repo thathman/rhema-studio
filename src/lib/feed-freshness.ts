@@ -7,9 +7,17 @@
  */
 export const FEED_STALE_AFTER_MS = 10_000
 
-export function feedStale(o: { now: number; lastHeard: number; beats: boolean; connected: boolean }): boolean {
+export function feedStale(o: {
+  now: number
+  lastHeard: number
+  beats: boolean
+  hasContent: boolean
+  disconnected: boolean
+}): boolean {
+  if (!o.hasContent) return false
+  if (o.disconnected) return true
   const quiet = o.now - o.lastHeard > FEED_STALE_AFTER_MS
-  return quiet && (o.beats || !o.connected)
+  return quiet && o.beats
 }
 
 /** The page's clock minus the host's (ms), from a beat's host time and when it arrived here. */
