@@ -93,12 +93,11 @@ export function SongsDesk({ live }: { live: LiveStateV1 }) {
   )
 }
 
-/** The stage message (Stage): write it, take it off, put it back. Only stage screens show it. */
+/** Scoped Stage operator desk: host clock, assigned-recipient cue composer and truthful receiver status. */
 export function StageDesk({ live, stale = false }: { live: LiveStateV1; stale?: boolean }) {
   const ok = useCanSend()
-  const [text, setText] = useState("")
   const [privateText, setPrivateText] = useState("")
-  const [target, setTarget] = useState("")
+  const [targetChoice, setTargetChoice] = useState<{ id: string; assignment: string } | null>(null)
   const [result, setResult] = useState<SendResult | null>(null)
   const send = async (command: { command: string; value?: string | Record<string, unknown> }) => {
     const sent = await useJoin.getState().send(command)
@@ -117,12 +116,29 @@ export function StageDesk({ live, stale = false }: { live: LiveStateV1; stale?: 
   const elapsed = timer ? timer.elapsedMs + (timer.running ? Math.max(0, now - receivedAt) : 0) : null
   const left = timer?.durationMs && elapsed !== null ? timer.durationMs - elapsed : null
   const currentEvent = (live.event.targets ?? live.rundown).find((item) => item.id === live.event.currentId)?.reference
-  const stage = live.sources.find((s) => s.id === "stage")
+  // The host publishes only this Stage desk's assigned displays. Never silently fall back to
+  // another receiver when an assignment changes; require the operator to confirm the new target.
   const stageOutputs = live.outputs.filter((output) => output.role === "stage")
-  const selectedTarget = stageOutputs.some((output) => output.id === target) ? target : (stageOutputs[0]?.id ?? "")
-  const selectedOutputName = stageOutputs.find((output) => output.id === selectedTarget)?.name ?? "selected display"
+  const assignmentSignature = stageOutputs.map((output) => `${output.id}\u0000${output.name}`).join("\u0001")
+  const selectedOutput = targetChoice?.assignment === assignmentSignature
+    ? stageOutputs.find((output) => output.id === targetChoice.id)
+    : undefined
+  const selectedTarget = selectedOutput?.id ?? ""
+  const selectedOutputName = selectedOutput?.name ?? ""
   return (
     <section aria-label="Stage desk" className={box}>
+      <section aria-label="Assigned Stage recipient" className="flex flex-col gap-2 rounded-md border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Assigned Stage display</p>
+          <p className="mt-1 text-sm text-muted-foreground">Recipients are assigned by the host. Choose the display before preparing a private cue.</p>
+        </div>
+        {stageOutputs.length === 0 ? <p role="status" className="text-sm font-semibold">No Stage display is assigned to this desk. Ask the host to assign one in Permissions.</p> : (
+          <select aria-label="Assigned Stage display" value={selectedTarget} onChange={(event) => setTargetChoice({ id: event.currentTarget.value, assignment: assignmentSignature })} className={cn(field, "w-full sm:max-w-64")}>
+            <option value="" disabled>Choose an assigned Stage display</option>
+            {stageOutputs.map((output) => <option key={output.id} value={output.id}>{output.name}</option>)}
+          </select>
+        )}
+      </section>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <section aria-label="Host service clock" className="flex min-h-24 flex-col justify-center rounded-md bg-[#16242b] p-3 text-[#d6e2df]">
           <p className="text-xs font-semibold uppercase tracking-wide text-[#9fb2b0]">Host service clock</p>
@@ -137,41 +153,29 @@ export function StageDesk({ live, stale = false }: { live: LiveStateV1; stale?: 
         </section>
         <section aria-label="Stage receiver status" className="flex min-h-24 flex-col justify-center rounded-md border border-border p-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stage receiver status</p>
-          <p className="mt-1 font-semibold">Display not confirmed</p>
+          <p className="mt-1 font-semibold">{selectedOutputName || "No display selected"} · Display not confirmed</p>
           <p className="text-xs text-muted-foreground">The host does not currently send Stage display receipts to this desk, so it cannot confirm what a monitor shows.</p>
           <p className="mt-1 text-xs text-muted-foreground">Host connection: {stale || connection !== "connected" ? "not current" : "current"}</p>
         </section>
       </div>
-      <p className="font-semibold">Stage message <span className="font-normal text-muted-foreground">· {live.stageMessage ? `“${live.stageMessage}”` : "none up"}</span></p>
-      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (text.trim()) { void send({ command: "stage_message", value: text.trim() }); setText("") } }}>
-        <input aria-label="Message to stage" value={text} onChange={(e) => setText(e.target.value)} placeholder="Wrap up in 2 minutes" maxLength={120} className={cn(field, "flex-1")} />
-        <Button size="sm" type="submit" disabled={!ok || !text.trim()}>Send</Button>
-      </form>
-      <div className="flex flex-wrap gap-2">
-        {live.stageMessage && <Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "clear_source", value: "stage" })}>Take it off</Button>}
-        {!live.stageMessage && stage?.reference && <Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "restore_source", value: "stage" })}>Put back “{stage.reference}”</Button>}
-      </div>
-      <section aria-label="Send to one Stage display" className="flex flex-col gap-2 rounded-md border border-border p-2">
-        <p className="text-sm font-semibold">Private message to one Stage display</p>
-        {stageOutputs.length === 0 ? <p role="status" className="text-xs text-muted-foreground">No Stage display is assigned to this desk. Ask the host to assign one in Permissions.</p> : (
-          <form className="flex flex-wrap gap-2" onSubmit={(event) => {
-            event.preventDefault()
-            const clean = privateText.trim()
-            if (!clean || !selectedTarget) return
-            void send({ command: "stage_send", value: { target: selectedTarget, text: clean } }).then((response) => { if (response.ok) setPrivateText("") })
-          }}>
-            <select aria-label="Stage display for private message" value={selectedTarget} onChange={(event) => setTarget(event.currentTarget.value)} className={cn(field, "max-w-full flex-1 sm:max-w-64")}>
-              {stageOutputs.map((output) => <option key={output.id} value={output.id}>{output.name}</option>)}
-            </select>
-            <input aria-label="Private message text" value={privateText} onChange={(event) => setPrivateText(event.currentTarget.value)} placeholder="For this display only" maxLength={120} className={cn(field, "min-w-40 flex-1")} />
-            <Button size="sm" type="submit" disabled={!ok || !selectedTarget || !privateText.trim()}>Send privately</Button>
-            <Button size="sm" type="button" variant="outline" aria-label={`Clear private message from ${selectedOutputName}`} disabled={!ok || !selectedTarget} onClick={() => void send({ command: "stage_send", value: { target: selectedTarget, text: "" } })}>Clear private message</Button>
-          </form>
-        )}
-        <p className="text-xs text-muted-foreground">Only the selected display receives this message. The host can update its frame, but the receiver does not confirm playback.</p>
-      </section>
+      {live.stageMessage && <p aria-label="Shared Stage cue" className="rounded-md bg-muted/50 px-3 py-2 text-sm">Shared Stage cue · {live.stageMessage} <span className="text-muted-foreground">(read only in this desk)</span></p>}
+      {stageOutputs.length > 0 && <section aria-label="Private Stage cue" className="flex flex-col gap-2 rounded-md border border-border p-3">
+        <div>
+          <p className="text-sm font-semibold">Prepare a private cue</p>
+          <p className="text-xs text-muted-foreground">This desk sends only to its host-assigned display. Receiver playback is not confirmed.</p>
+        </div>
+        <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(event) => {
+          event.preventDefault()
+          const clean = privateText.trim()
+          if (!clean || !selectedTarget) return
+          void send({ command: "stage_send", value: { target: selectedTarget, text: clean } }).then((response) => { if (response.ok) setPrivateText("") })
+        }}>
+          <input aria-label="Private message text" value={privateText} onChange={(event) => setPrivateText(event.currentTarget.value)} placeholder={selectedTarget ? `Message for ${selectedOutputName}` : "Choose an assigned Stage display"} maxLength={120} className={cn(field, "min-w-40 flex-1")} />
+          <Button size="sm" type="submit" disabled={!ok || !selectedTarget || !privateText.trim()}>{selectedTarget ? `Send privately to ${selectedOutputName}` : "Choose a display to send"}</Button>
+        </form>
+      </section>}
       <Result result={result} />
-      <p className="text-muted-foreground">Shown big on the stage screens only; the congregation never sees it.</p>
+      <p className="text-xs text-muted-foreground">This desk edits only private cues for its assigned Stage displays. The congregation does not receive them.</p>
     </section>
   )
 }
