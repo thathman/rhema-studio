@@ -29,7 +29,9 @@ import { LiveActivityStrip } from "@/studio/present/live-activity-strip"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 import { useProductionTab } from "@/studio/production/production-tab"
 import { usePreviewLabel } from "@/hooks/use-preview-label"
-import { nextVisibleItem, plannedTimes } from "@/lib/run-of-show"
+import { nextVisibleItem, plannedTimes, runOfShowClockRows } from "@/lib/run-of-show"
+import type { EventTiming } from "@/lib/timing-engine"
+import { useServiceTiming } from "@/studio/use-service-timing"
 
 const LIVE_TOOLBAR_FOCUSABLE = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
 
@@ -448,32 +450,72 @@ function NowNextSummary() {
   const items = useQueueStore((s) => s.items)
   const headers = useQueueStore((s) => s.headers)
   const activeIndex = useQueueStore((s) => s.activeIndex)
+  const { timing, now } = useServiceTiming()
   const current = activeIndex === null ? null : items[activeIndex] ?? null
   const next = nextVisibleItem(items, headers, activeIndex)
   const planned = plannedTimes(items, headers)
+  const clockRows = runOfShowClockRows(items, headers).rows
   const timeFor = (index: number) => planned.get(index)
+
+  const timingForIndex = (index: number | null): EventTiming | null => {
+    if (index === null || !timing) return null
+    const row = clockRows.find((candidate) => index >= candidate.sourceAt && index < candidate.sourceAt + candidate.moments.length)
+    return row ? timing.events.find((event) => event.id === row.id) ?? null : null
+  }
+  const currentTiming = timingForIndex(activeIndex)
+  const liveTiming = timing?.events.find((event) => event.state === "live") ?? null
+  const nowTiming = liveTiming ?? currentTiming
+  const nextTiming = next ? timingForIndex(next.index) : null
 
   const itemDetails = (index: number, item: { planned_minutes?: number | null }) => {
     const at = timeFor(index)
     const minutes = item.planned_minutes
     return [at ? `Planned ${at}` : null, typeof minutes === "number" && minutes > 0 ? `${minutes} min` : null].filter(Boolean).join(" · ")
   }
-  const currentDetails = current && activeIndex !== null ? itemDetails(activeIndex, current) : ""
+  const currentDetails = [
+    eventTimingStatus(nowTiming, timing?.held ?? false, now),
+    current && activeIndex !== null && (!liveTiming || currentTiming?.id === liveTiming.id) ? itemDetails(activeIndex, current) : null,
+  ].filter(Boolean).join(" · ")
+  const nextTimingDetails = nextTiming && nowTiming?.id === nextTiming.id
+    ? "Same event · no separate timer"
+    : eventTimingStatus(nextTiming, timing?.held ?? false, now)
+  const nextDetails = next ? [nextTimingDetails, itemDetails(next.index, next.item)].filter(Boolean).join(" · ") : ""
+  const nowLabel = liveTiming?.label ?? current?.reference ?? "Not started"
 
   return (
     <section aria-label="Run of show Now and Next" className="grid grid-cols-2 gap-2 border-b border-border px-3 py-2 max-[1200px]:grid-cols-1">
       <div role="group" aria-label="Now in the run of show" className="min-w-0 rounded-md bg-background/60 px-2 py-1.5">
         <span className="block text-[0.6875rem] font-bold tracking-wide text-muted-foreground uppercase">Now</span>
-        <span className="block truncate text-xs font-semibold max-[1200px]:whitespace-normal" title={current?.reference ?? "No active run-of-show item"}>{current?.reference ?? "Not started"}</span>
-        {current && <span className="block truncate text-[0.6875rem] text-muted-foreground max-[1200px]:whitespace-normal" title={currentDetails || "Current run position"}>{currentDetails || "Current run position"}</span>}
+        <span className="block truncate text-xs font-semibold max-[1200px]:whitespace-normal" title={liveTiming?.label ?? current?.reference ?? "No active run-of-show item"}>{nowLabel}</span>
+        {(current || nowTiming) && <span data-testid="now-event-timing" className="block truncate text-[0.6875rem] text-muted-foreground max-[1200px]:whitespace-normal" title={currentDetails || "Current run position"}>{currentDetails || "Current run position"}</span>}
       </div>
       <div role="group" aria-label="Next in the run of show" className="min-w-0 rounded-md bg-background/60 px-2 py-1.5">
         <span className="block text-[0.6875rem] font-bold tracking-wide text-muted-foreground uppercase">Next</span>
         <span className="block truncate text-xs font-semibold max-[1200px]:whitespace-normal" title={next?.label ?? "No next run-of-show item"}>{next?.label ?? "No next item"}</span>
-        {next && <span className="block truncate text-[0.6875rem] text-muted-foreground max-[1200px]:whitespace-normal" title={itemDetails(next.index, next.item) || "Up next in the running order"}>{itemDetails(next.index, next.item) || "Up next in the running order"}</span>}
+        {next && <span data-testid="next-event-timing" className="block truncate text-[0.6875rem] text-muted-foreground max-[1200px]:whitespace-normal" title={nextDetails || "Up next in the running order"}>{nextDetails || "Up next in the running order"}</span>}
       </div>
     </section>
   )
+}
+
+function eventTimingStatus(event: EventTiming | null, held: boolean, now: number): string | null {
+  if (!event) return null
+  if (event.state === "live") {
+    if (event.untrusted) return "Time needs confirmation after restart"
+    if (event.milestone) return "Cue · no countdown"
+    if (event.overrun) return "Past time limit"
+    if (event.expectedEnd <= now) return "Time limit reached"
+    const minutesLeft = Math.ceil((event.expectedEnd - now) / 60_000)
+    return `${held ? "On hold" : "Event timer"} · ${minutesLeft} min left`
+  }
+  if (event.state === "upcoming") {
+    const minutesUntil = Math.ceil((event.expectedStart - now) / 60_000)
+    const start = minutesUntil > 0 ? `Starts in ${minutesUntil} min` : "Ready to start"
+    if (event.conflict) return `Schedule conflict · ${start.toLowerCase()}`
+    if (event.squeezed) return `Shortened for end time · ${start.toLowerCase()}`
+    return start
+  }
+  return event.state === "done" ? "Completed" : "Skipped"
 }
 
 const QUICK_ICONS = {

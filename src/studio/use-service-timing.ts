@@ -34,5 +34,5 @@ export function useServiceTiming() {
   }, [])
   const input = timingInputNow()
   const timing = serviceTiming(input)
-  return { timing, first: input.firstOnAir, onAir: input.onAirMs, zone: input.timeZone ?? "", state: runStateNow() }
+  return { timing, now: input.now, first: input.firstOnAir, onAir: input.onAirMs, zone: input.timeZone ?? "", state: runStateNow() }
 }

@@ -54,13 +54,17 @@ vi.mock("@/studio/production/production-workspace", () => ({
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { useBibleStore, useBroadcastStore, useDetectionStore, useQueueStore, useTranscriptStore } from "@/stores"
+import { useBibleStore, useBroadcastStore, useDetectionStore, useQueueStore, useSettingsStore, useTranscriptStore } from "@/stores"
 import { useAuxTimers } from "@/stores/aux-timers-store"
+import { useEventClock } from "@/stores/event-clock-store"
+import { useHold } from "@/stores/hold-store"
+import { useJournalStore } from "@/stores/journal-store"
 import { useShellStore } from "@/studio/shell-store"
 import { useJoin } from "@/stores/join-store"
 import { useApprovalRequestsStore, type ApprovalRequest } from "@/studio/permissions/approval-requests-store"
 import { openProductionTab, useProductionTab } from "@/studio/production/production-tab"
 import { useServiceStore } from "@/stores/service-store"
+import { useTimingTrust } from "@/stores/timing-trust-store"
 import type { Program, QueueItem, TranscriptSegment, Verse } from "@/types"
 import { PresentWorkspace } from "./present-workspace"
 
@@ -118,6 +122,10 @@ const initialDetections = useDetectionStore.getState()
 const initialService = useServiceStore.getState()
 const initialJoin = useJoin.getState()
 const initialApprovalRequests = useApprovalRequestsStore.getState()
+const initialEventClock = useEventClock.getState()
+const initialJournal = useJournalStore.getState()
+const initialTimingTrust = useTimingTrust.getState()
+const initialHold = useHold.getState()
 
 const pendingApprovalRequest: ApprovalRequest = {
   id: "request-1",
@@ -157,6 +165,10 @@ beforeEach(() => {
   useBibleStore.setState({ selectedVerse: verse, selectedSlide: null, selectedQueueItemId: "stable-item" })
   useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "Program item", segments: [] } })
   useQueueStore.setState({ items: [queueItem, secondQueueItem], headers: [] })
+  useEventClock.setState({ currentId: null, currentMomentId: null })
+  useJournalStore.setState({ entries: [] })
+  useTimingTrust.setState({ untrusted: null })
+  useHold.setState({ hold: null, past: [] })
   useTranscriptStore.setState({ segments: [transcript], isTranscribing: true })
   useDetectionStore.setState({ detections: [{ verse_ref: "John 3:16", verse_text: verse.text, book_name: "John", book_number: 43, chapter: 3, verse: 16, confidence: 1, source: "direct", auto_queued: false, transcript_snippet: transcript.text, is_chapter_only: false }] })
   useAuxTimers.setState({ timers: [] })
@@ -177,6 +189,10 @@ afterEach(() => {
   useServiceStore.setState(initialService)
   useJoin.setState(initialJoin)
   useApprovalRequestsStore.setState(initialApprovalRequests)
+  useEventClock.setState(initialEventClock)
+  useJournalStore.setState(initialJournal)
+  useTimingTrust.setState(initialTimingTrust)
+  useHold.setState(initialHold)
   useProductionTab.setState(useProductionTab.getInitialState())
   vi.restoreAllMocks()
 })
@@ -327,6 +343,100 @@ describe("Present's unified Live console", () => {
     expect(summary.querySelector('[aria-label="Next in the run of show"]')?.textContent).toContain("Welcome")
     expect(summary.querySelector('[aria-label="Next in the run of show"]')?.textContent).toContain("10:12")
     expect(useBroadcastStore.getState().liveVerse).toEqual(program)
+  })
+
+  it("shows the canonical running event countdown and expected start for Next without changing Program", async () => {
+    const now = Date.UTC(2026, 10, 4, 10, 6)
+    vi.spyOn(Date, "now").mockReturnValue(now)
+    const timeZone = useSettingsStore.getState().setup.timeZone || undefined
+    const startsAt = new Date(now - 6 * 60_000).toLocaleTimeString("en-GB", {
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(timeZone ? { timeZone } : {}),
+    })
+    const current = { ...queueItem, id: "timed-current", planned_minutes: 12 }
+    const upcoming = { ...secondQueueItem, id: "timed-next", planned_minutes: 8 }
+    const program = useBroadcastStore.getState().liveVerse
+    useQueueStore.setState({
+      items: [current, upcoming],
+      headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: startsAt }],
+      activeIndex: 0,
+    })
+    useEventClock.setState({ currentId: current.id })
+    useJournalStore.setState({ entries: [{ kind: "event", label: current.reference, itemId: current.id, at: now - 6 * 60_000, mono: 0 }] })
+    await renderWorkspace()
+
+    const summary = element.querySelector<HTMLElement>('[aria-label="Run of show Now and Next"]')!
+    expect(summary.querySelector('[aria-label="Now in the run of show"]')?.textContent).toContain("John 3:16")
+    expect(summary.querySelector('[data-testid="now-event-timing"]')?.textContent).toContain("Event timer · 6 min left")
+    expect(summary.querySelector('[aria-label="Next in the run of show"]')?.textContent).toContain("Welcome")
+    expect(summary.querySelector('[data-testid="next-event-timing"]')?.textContent).toContain("Starts in 6 min")
+    expect(useBroadcastStore.getState().liveVerse).toEqual(program)
+  })
+
+  it("does not invent a countdown for a service that has not started", async () => {
+    const now = Date.UTC(2026, 10, 4, 9, 55)
+    vi.spyOn(Date, "now").mockReturnValue(now)
+    const timeZone = useSettingsStore.getState().setup.timeZone || undefined
+    const startsAt = new Date(now + 5 * 60_000).toLocaleTimeString("en-GB", {
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(timeZone ? { timeZone } : {}),
+    })
+    useQueueStore.setState({
+      items: [{ ...queueItem, planned_minutes: 12 }, secondQueueItem],
+      headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: startsAt }],
+      activeIndex: 0,
+    })
+    await renderWorkspace()
+
+    const summary = element.querySelector<HTMLElement>('[aria-label="Run of show Now and Next"]')!
+    expect(summary.querySelector('[data-testid="now-event-timing"]')?.textContent).toContain("Starts in 5 min")
+    expect(summary.textContent).not.toContain("Event timer ·")
+  })
+
+  it("does not show stale remaining time after a restart or after an event runs over", async () => {
+    const now = Date.UTC(2026, 10, 4, 10, 20)
+    vi.spyOn(Date, "now").mockReturnValue(now)
+    const timeZone = useSettingsStore.getState().setup.timeZone || undefined
+    const startsAt = new Date(now - 20 * 60_000).toLocaleTimeString("en-GB", {
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(timeZone ? { timeZone } : {}),
+    })
+    const current = { ...queueItem, id: "timed-current", planned_minutes: 12 }
+    useQueueStore.setState({
+      items: [current, secondQueueItem],
+      headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: startsAt }],
+      activeIndex: 0,
+    })
+    useEventClock.setState({ currentId: current.id })
+    useJournalStore.setState({ entries: [{ kind: "event", label: current.reference, itemId: current.id, at: now - 20 * 60_000, mono: 0 }] })
+    useTimingTrust.setState({ untrusted: { itemId: current.id, eventId: current.id, label: current.reference, lastSeen: now - 20 * 60_000, restartedAt: now - 1_000 } })
+    await renderWorkspace()
+
+    const nowTiming = element.querySelector<HTMLElement>('[data-testid="now-event-timing"]')!
+    expect(nowTiming.textContent).toContain("Time needs confirmation after restart")
+    expect(nowTiming.textContent).not.toContain("min left")
+
+    await act(async () => useTimingTrust.setState({ untrusted: null }))
+    expect(nowTiming.textContent).toContain("Past time limit")
+    expect(nowTiming.textContent).not.toContain("min left")
+  })
+
+  it("shows the adjusted event time while the service is on hold", async () => {
+    const now = Date.UTC(2026, 10, 4, 10, 6)
+    vi.spyOn(Date, "now").mockReturnValue(now)
+    const timeZone = useSettingsStore.getState().setup.timeZone || undefined
+    const startsAt = new Date(now - 6 * 60_000).toLocaleTimeString("en-GB", {
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(timeZone ? { timeZone } : {}),
+    })
+    const current = { ...queueItem, id: "timed-current", planned_minutes: 12 }
+    useQueueStore.setState({
+      items: [current, secondQueueItem],
+      headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: startsAt }],
+      activeIndex: 0,
+    })
+    useEventClock.setState({ currentId: current.id })
+    useJournalStore.setState({ entries: [{ kind: "event", label: current.reference, itemId: current.id, at: now - 6 * 60_000, mono: 0 }] })
+    useHold.setState({ hold: { reason: "Waiting for the pastor", since: now - 2 * 60_000 }, past: [] })
+    await renderWorkspace()
+
+    expect(element.querySelector('[data-testid="now-event-timing"]')?.textContent).toContain("On hold · 8 min left")
   })
 
   it("takes an open but empty service to Prepare to add its first event", async () => {
