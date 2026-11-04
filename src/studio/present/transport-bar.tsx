@@ -64,7 +64,7 @@ function TransportButton({
   onClick: () => void
   tone?: Tone
   /** Visible words; their class decides the widths that show them. */
-  text?: { value: string; className?: string }
+  text?: { value: string; className?: string; valueClassName?: string }
   /** Small second line under the words, e.g. "Next: Chorus". */
   hint?: { value: string; className?: string }
   describedBy?: string
@@ -90,7 +90,7 @@ function TransportButton({
         {icon}
         {text && (
           <span aria-hidden className={cn("flex-col items-start leading-tight", text.className)}>
-            <span>{text.value}</span>
+            <span className={cn("block", text.valueClassName)}>{text.value}</span>
             {hint && <span className={cn("text-[0.6875rem] font-normal opacity-70", hint.className)}>{hint.value}</span>}
           </span>
         )}
@@ -134,7 +134,15 @@ export function TransportBar({ className, hasSelectedOutputSceneTake = false }: 
     : previewItem && (isAudioItem(previewItem) || imagePreviewIsAudio)
       ? "audio"
       : "source"
-  const takeLabel = previewKind === "cue" ? "Run cue" : previewKind === "audio" ? "Play audio cue" : "Take source live"
+  const sourcePreview = preview?.trim() || null
+  const takeLabel = previewKind === "cue"
+    ? "Run cue"
+    : previewKind === "audio"
+      ? "Play audio cue"
+      : sourcePreview
+        ? `Take ${sourcePreview} live`
+        : "Take source live"
+  const takeText = previewKind === "source" && sourcePreview ? `Take ${sourcePreview}` : takeLabel
   const takeTitle = previewKind === "cue"
     ? `Run ${preview ?? "the selected"} cue. It does not change screen Program.`
     : previewKind === "audio"
@@ -219,7 +227,11 @@ export function TransportBar({ className, hasSelectedOutputSceneTake = false }: 
             reason={preview ? null : "Nothing in Preview: click a running-order item or find a verse first"}
             onClick={() => presentActions.showLive()}
             tone={hasSelectedOutputSceneTake ? "neutral" : "take"}
-            text={{ value: takeLabel, className: "flex" }}
+            text={{
+              value: takeText,
+              className: previewKind === "source" && sourcePreview ? "flex max-w-44 min-w-0" : "flex",
+              valueClassName: previewKind === "source" && sourcePreview ? "max-w-full truncate" : undefined,
+            }}
             hint={{ value: buttonHint }}
             describedBy={targetId}
           />

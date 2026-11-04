@@ -80,7 +80,7 @@ describe("Present's transport bar", () => {
     await click("Next")
     await click("Previous verse")
     await click("Next verse")
-    await click("Take source live")
+    await click("Take John 3:16 live")
     await click("Clear")
     expect(calls.prev).toHaveBeenCalledTimes(1)
     expect(calls.next).toHaveBeenCalledTimes(1)
@@ -156,19 +156,21 @@ describe("Present's transport bar", () => {
     await render()
     const toolbar = el.querySelector('[role="toolbar"][aria-label="Presentation controls"]')!
     const names = [...toolbar.querySelectorAll("button")].map((b) => b.getAttribute("aria-label"))
-    expect(names.filter((n) => n === "Take source live")).toHaveLength(1)
+    expect(names.filter((n) => n === "Take John 3:16 live")).toHaveLength(1)
     expect(names).not.toContain("Show live")
 
-    const target = () => document.getElementById(button("Take source live").getAttribute("aria-describedby")!)!.textContent
+    const take = button("Take John 3:16 live")
+    const target = () => document.getElementById(take.getAttribute("aria-describedby")!)!.textContent
     expect(target()).toContain("John 3:16")
     expect(target()).toContain("Source Take · outputs subscribed to this source")
-    expect(button("Take source live").textContent).toContain("To subscribed outputs")
-    expect(button("Take source live").title).toContain("does not limit this source Take")
-    expect(button("Take source live").className).toContain("bg-primary")
+    expect(take.textContent).toContain("Take John 3:16")
+    expect(take.textContent).toContain("To subscribed outputs")
+    expect(take.title).toContain("does not limit this source Take")
+    expect(take.className).toContain("bg-primary")
 
     await act(async () => useBroadcastStore.setState({ rehearsal: true }))
     expect(target()).toContain("Rehearsal · public outputs keep their current Program")
-    expect(button("Take source live").textContent).toContain("Private rehearsal · public outputs unchanged")
+    expect(take.textContent).toContain("Private rehearsal · public outputs unchanged")
   })
 
   it("demotes the transport Take, cue and audio actions when the selected output has a scene Take", async () => {
@@ -181,7 +183,7 @@ describe("Present's transport bar", () => {
       expect(button(name).className).not.toContain("bg-primary")
       expect(button(name).className).not.toContain("text-primary-foreground")
     }
-    secondary("Take source live")
+    secondary("Take John 3:16 live")
 
     await act(async () => useBibleStore.setState({
       selectedVerse: null,
