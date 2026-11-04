@@ -182,7 +182,9 @@ function cameraSceneImpact(camera: string, scenes: readonly Scene[], outputs: re
   const usesCamera = (scene: Scene | undefined): scene is Scene => !!scene?.layers.some((layer) => layer.kind === "camera" && !!layer.cameraUrl && cameraPathOf(layer.cameraUrl) === camera)
   const saved = scenes.filter(usesCamera).map((scene) => ({ id: scene.id, name: scene.name }))
   const assigned = outputs.flatMap((output) => {
-    const scene = sceneForOutput(output, scenes)
+    const scene = output.sceneId
+      ? output.sceneSnapshot?.id === output.sceneId ? output.sceneSnapshot : scenes.find((item) => item.id === output.sceneId)
+      : undefined
     return usesCamera(scene) ? [{ id: output.id, name: output.name, sceneName: scene.name }] : []
   })
   const signature = JSON.stringify({ saved, assigned })
