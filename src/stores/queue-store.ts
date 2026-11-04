@@ -62,6 +62,10 @@ interface QueueState {
   moveToSection: (ids: string[], headerId: string) => void
   /** Move items, in rundown order, before/after a stable item or to the end of a stable section. */
   moveItemsToTarget: (ids: string[], target: QueueMoveTarget) => void
+  /** Move one non-event group with all of its items within or between phases, events and groups. */
+  moveGroupToTarget: (id: string, target: QueueGroupMoveTarget) => void
+  /** Move a group one place up (-1) or down (1) through the group order. */
+  moveGroup: (id: string, dir: -1 | 1) => void
   /** Move one event with all of its moments and nested groups to another event or phase. */
   moveEventToTarget: (id: string, target: QueueEventMoveTarget) => void
   /** Move an event one place up (-1) or down (1) through the event order. */
@@ -75,6 +79,10 @@ export type QueueMoveTarget =
 export type QueueEventMoveTarget =
   | { kind: "phase"; phaseId: string }
   | { kind: "event"; eventId: string; placement: "before" | "after" }
+
+export type QueueGroupMoveTarget =
+  | { kind: "section"; headerId: string }
+  | { kind: "group"; groupId: string; placement: "before" | "after" }
 
 export interface RundownSnapshot {
   items: QueueItem[]
@@ -420,6 +428,47 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
       const next = rundownFromRows(nextRows)
       return { ...withActiveKept(state, next.items), headers: next.headers }
     }),
+  moveGroupToTarget: (id, target) =>
+    set((state) => {
+      const rows = rundownRows(state.items, state.headers)
+      const start = rows.findIndex((row) => row.kind === "header" && row.header.id === id && row.header.type === "group" && !row.header.event)
+      if (start === -1) return state
+
+      // Ordinary groups own the rows up to the next header. Move that complete
+      // block so no moment is detached or silently reassigned to a neighbour.
+      const end = rows.findIndex((row, index) => index > start && row.kind === "header")
+      const stop = end === -1 ? rows.length : end
+      const moving = rows.slice(start, stop)
+      const remaining = [...rows.slice(0, start), ...rows.slice(stop)]
+
+      let insertion: number
+      if (target.kind === "section") {
+        const sectionStart = remaining.findIndex((row) => row.kind === "header" && row.header.id === target.headerId)
+        if (sectionStart === -1) return state
+        const section = (remaining[sectionStart] as Extract<RundownRow, { kind: "header" }>).header
+        // A group can join a phase or become a moment group in an event. It
+        // cannot become a child of another ordinary group (the model is one level deep).
+        if (section.type !== "phase" && !section.event) return state
+        const sectionEnd = remaining.findIndex((row, index) => index > sectionStart && row.kind === "header" && (
+          section.type === "phase" ? row.header.type === "phase"
+            : row.header.type === "phase" || !!row.header.event
+        ))
+        insertion = sectionEnd === -1 ? remaining.length : sectionEnd
+      } else if (target.kind === "group") {
+        const groupStart = remaining.findIndex((row) => row.kind === "header" && row.header.id === target.groupId && row.header.type === "group" && !row.header.event)
+        if (groupStart === -1 || target.groupId === id) return state
+        if (target.placement === "before") insertion = groupStart
+        else {
+          const groupEnd = remaining.findIndex((row, index) => index > groupStart && row.kind === "header")
+          insertion = groupEnd === -1 ? remaining.length : groupEnd
+        }
+      } else return state
+
+      const movedRows = [...remaining.slice(0, insertion), ...moving, ...remaining.slice(insertion)]
+      if (sameRundownRows(rows, movedRows)) return state
+      const next = rundownFromRows(movedRows)
+      return { ...withActiveKept(state, next.items), headers: next.headers }
+    }),
   moveEventToTarget: (id, target) =>
     set((state) => {
       const rows = rundownRows(state.items, state.headers)
@@ -453,6 +502,14 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
       const next = rundownFromRows(nextRows)
       return { ...withActiveKept(state, next.items), headers: next.headers }
     }),
+  moveGroup: (id, dir) => {
+    const groups = rundownRows(get().items, get().headers)
+      .flatMap((row) => row.kind === "header" && row.header.type === "group" && !row.header.event ? [row.header] : [])
+    const index = groups.findIndex((group) => group.id === id)
+    const target = groups[index + dir]
+    if (!target) return
+    get().moveGroupToTarget(id, { kind: "group", groupId: target.id, placement: dir < 0 ? "before" : "after" })
+  },
   moveEvent: (id, dir) => {
     const rows = rundownRows(get().items, get().headers)
     const events = rows.flatMap((row) => row.kind === "header" && row.header.event ? [row.header] : [])
