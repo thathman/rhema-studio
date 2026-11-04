@@ -95,9 +95,16 @@ export function SongsDesk({ live }: { live: LiveStateV1 }) {
 
 /** Scoped Stage operator desk: host clock, assigned-recipient cue composer and truthful receiver status. */
 export function StageDesk({ live, stale = false }: { live: LiveStateV1; stale?: boolean }) {
+  const stageOutputs = live.outputs.filter((output) => output.role === "stage")
+  const assignmentKey = stageOutputs.map((output) => `${output.id}\u0000${output.name}`).sort().join("\u0001")
+  // Reassigning or renaming a receiver clears the previous recipient choice and unsent cue draft.
+  return <StageDeskAssignedView key={assignmentKey} live={live} stale={stale} stageOutputs={stageOutputs} />
+}
+
+function StageDeskAssignedView({ live, stale, stageOutputs }: { live: LiveStateV1; stale: boolean; stageOutputs: LiveStateV1["outputs"] }) {
   const ok = useCanSend()
   const [privateText, setPrivateText] = useState("")
-  const [targetChoice, setTargetChoice] = useState<{ id: string; assignment: string } | null>(null)
+  const [target, setTarget] = useState("")
   const [result, setResult] = useState<SendResult | null>(null)
   const send = async (command: { command: string; value?: string | Record<string, unknown> }) => {
     const sent = await useJoin.getState().send(command)
@@ -116,13 +123,7 @@ export function StageDesk({ live, stale = false }: { live: LiveStateV1; stale?: 
   const elapsed = timer ? timer.elapsedMs + (timer.running ? Math.max(0, now - receivedAt) : 0) : null
   const left = timer?.durationMs && elapsed !== null ? timer.durationMs - elapsed : null
   const currentEvent = (live.event.targets ?? live.rundown).find((item) => item.id === live.event.currentId)?.reference
-  // The host publishes only this Stage desk's assigned displays. Never silently fall back to
-  // another receiver when an assignment changes; require the operator to confirm the new target.
-  const stageOutputs = live.outputs.filter((output) => output.role === "stage")
-  const assignmentSignature = stageOutputs.map((output) => `${output.id}\u0000${output.name}`).join("\u0001")
-  const selectedOutput = targetChoice?.assignment === assignmentSignature
-    ? stageOutputs.find((output) => output.id === targetChoice.id)
-    : undefined
+  const selectedOutput = stageOutputs.find((output) => output.id === target)
   const selectedTarget = selectedOutput?.id ?? ""
   const selectedOutputName = selectedOutput?.name ?? ""
   return (
@@ -133,7 +134,7 @@ export function StageDesk({ live, stale = false }: { live: LiveStateV1; stale?: 
           <p className="mt-1 text-sm text-muted-foreground">Recipients are assigned by the host. Choose the display before preparing a private cue.</p>
         </div>
         {stageOutputs.length === 0 ? <p role="status" className="text-sm font-semibold">No Stage display is assigned to this desk. Ask the host to assign one in Permissions.</p> : (
-          <select aria-label="Assigned Stage display" value={selectedTarget} onChange={(event) => setTargetChoice({ id: event.currentTarget.value, assignment: assignmentSignature })} className={cn(field, "w-full sm:max-w-64")}>
+          <select aria-label="Assigned Stage display" value={selectedTarget} onChange={(event) => setTarget(event.currentTarget.value)} className={cn(field, "w-full sm:max-w-64")}>
             <option value="" disabled>Choose an assigned Stage display</option>
             {stageOutputs.map((output) => <option key={output.id} value={output.id}>{output.name}</option>)}
           </select>

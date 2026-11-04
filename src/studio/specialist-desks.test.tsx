@@ -170,6 +170,7 @@ describe("each specialist desk sees only its part", () => {
     const el = await render("stage", initial)
     const recipient = el.querySelector<HTMLSelectElement>('[aria-label="Assigned Stage display"]')!
     await type(recipient, "stage-east")
+    await type(el.querySelector<HTMLInputElement>('[aria-label="Private message text"]')!, "Old recipient draft")
     await act(async () => {
       useJoin.setState({ live: {
         ...initial,
@@ -179,6 +180,7 @@ describe("each specialist desk sees only its part", () => {
     })
     const updatedRecipient = el.querySelector<HTMLSelectElement>('[aria-label="Assigned Stage display"]')!
     expect(updatedRecipient.value).toBe("")
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Private message text"]')!.value).toBe("")
     const send = button(el, "Choose a display to send")
     expect(send.disabled).toBe(true)
     expect(el.textContent).toContain("Choose an assigned Stage display")
@@ -187,6 +189,10 @@ describe("each specialist desk sees only its part", () => {
     await type(el.querySelector<HTMLInputElement>('[aria-label="Private message text"]')!, "Choir standby")
     await click(button(el, "Send privately to Stage West"))
     expect(sent).toEqual([{ command: "stage_send", value: { target: "stage-west", text: "Choir standby" } }])
+    await act(async () => { useJoin.setState({ live: initial }) })
+    const restoredRecipient = el.querySelector<HTMLSelectElement>('[aria-label="Assigned Stage display"]')!
+    expect(restoredRecipient.value).toBe("")
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Private message text"]')!.value).toBe("")
   })
 
   it("shows a shared host Stage cue as read only", async () => {
