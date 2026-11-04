@@ -153,18 +153,39 @@ resize_live_window() {
 const label = window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label
 if (!label) throw new Error("The current native window label is unavailable")
 await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: false })
-await sleep(250)
+const fullscreen = () => window.__TAURI_INTERNALS__.invoke("plugin:window|is_fullscreen", { label })
+let isFullscreen = await fullscreen()
+for (let attempt = 0; isFullscreen && attempt < 30; attempt += 1) {
+  await sleep(100)
+  isFullscreen = await fullscreen()
+}
+if (isFullscreen) throw new Error("Native window did not leave fullscreen before resize")
+const currentSize = () => ({ width: window.innerWidth, height: window.innerHeight })
+let previousSize = currentSize()
+let stableSamples = 0
+for (let attempt = 0; stableSamples < 2 && attempt < 30; attempt += 1) {
+  await sleep(100)
+  const observedSize = currentSize()
+  if (observedSize.width === previousSize.width && observedSize.height === previousSize.height) {
+    stableSamples += 1
+  } else {
+    stableSamples = 0
+  }
+  previousSize = observedSize
+}
+if (stableSamples < 2) throw new Error("Native window size did not settle after fullscreen exit: " + JSON.stringify(previousSize))
 const resize = (width, height) => window.__TAURI_INTERNALS__.invoke("plugin:window|set_size", {
   label,
   value: { Logical: { width, height } },
 })
 await resize($width, $height)
-await sleep(500)
-let actual = { width: window.innerWidth, height: window.innerHeight }
-for (let correction = 0; correction < 2 && (actual.width !== $width || actual.height !== $height); correction += 1) {
-  await resize($width + ($width - actual.width), $height + ($height - actual.height))
-  await sleep(500)
-  actual = { width: window.innerWidth, height: window.innerHeight }
+let actual = currentSize()
+for (let attempt = 0; attempt < 15 && (actual.width !== $width || actual.height !== $height); attempt += 1) {
+  await sleep(150)
+  actual = currentSize()
+  if ((attempt === 4 || attempt === 9) && (actual.width !== $width || actual.height !== $height)) {
+    await resize($width, $height)
+  }
 }
 if ((actual.width !== $width || actual.height !== $height) && $width >= 1920 && $height >= 1080) {
   await window.__TAURI_INTERNALS__.invoke("plugin:window|set_fullscreen", { label, value: true })
