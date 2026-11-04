@@ -386,9 +386,9 @@ function LiveConsoleSurface({
       </div>
       {/* Live, with the congregation scenes under it: a scene Take changes a screen's layout, not what is live.
           Compact layouts keep this column and the transport in normal flow so neither covers the other. */}
-      <div className="flex min-h-0 flex-col gap-2 overflow-y-auto max-[1200px]:min-h-fit max-[1200px]:shrink-0 max-[1200px]:overflow-visible">
+      <div className="flex min-h-0 flex-col gap-2 overflow-y-auto max-[1200px]:h-fit">
         {/* Never shorter than a readable picture with its sources. Wide layouts scroll scenes in this column. */}
-        <div className="min-h-[18rem] flex-1 overflow-hidden rounded-xl [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
+        <div className="min-h-[18rem] flex-1 overflow-hidden rounded-xl max-[1200px]:flex-none [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
           <LiveOutputPanel
             outputId={outputId}
             sceneTakeAction={<LiveSceneTakeAction selection={selectedOutputSceneTake} />}

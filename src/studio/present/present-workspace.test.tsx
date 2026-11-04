@@ -278,6 +278,7 @@ describe("Present's unified Live console", () => {
     const preview = element.querySelector<HTMLElement>('[aria-label="Preview"]')!
     const paneLayout = preview.parentElement!.parentElement!
     const program = element.querySelector<HTMLElement>('[data-studio-live]')!
+    const programColumn = program.parentElement!
     expect(preview.dataset.compact).toBe("false")
     expect(preview.parentElement?.className).toContain("max-[1200px]:min-h-[18rem]")
     expect(preview.parentElement?.className).toContain("max-[1200px]:shrink-0")
@@ -285,6 +286,9 @@ describe("Present's unified Live console", () => {
     expect(paneLayout.className).toContain("min-[1024px]:max-[1200px]:grid-cols-2")
     expect(program.textContent).toContain("Program")
     expect(program.className).toContain("min-h-[18rem]")
+    expect(program.className).toContain("max-[1200px]:flex-none")
+    expect(programColumn.className).toContain("max-[1200px]:h-fit")
+    expect(programColumn.className).not.toContain("max-[1200px]:overflow-visible")
     expect(element.querySelectorAll('[aria-label="Preview"]')).toHaveLength(1)
     const transport = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Presentation controls"]')!
     expect(transport.className).not.toContain("sticky")
