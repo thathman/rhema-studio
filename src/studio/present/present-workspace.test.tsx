@@ -296,6 +296,8 @@ describe("Present's unified Live console", () => {
     expect(transport.className).toContain("max-[1200px]:shrink-0")
     expect(transport.parentElement?.className).toContain("max-[1200px]:overflow-y-auto")
     expect(transport.parentElement?.className).not.toContain("pb-40")
+    expect(transport.parentElement?.parentElement?.parentElement?.className).toContain("[@media(max-height:860px)]:gap-1")
+    expect(transport.parentElement?.parentElement?.parentElement?.className).toContain("[@media(max-height:860px)]:pt-2")
   })
 
   it("keeps a zero-moment event visible instead of treating its plan as no service", async () => {
