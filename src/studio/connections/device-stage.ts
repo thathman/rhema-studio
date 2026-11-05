@@ -22,7 +22,7 @@ export function deviceStage(o: { paired: boolean; assigned: boolean; reporting: 
 /** What to do next at a stage, said plainly. */
 export function nextStep(stage: DeviceStage, kind: "tv" | "camera" | "desk"): string | null {
   if (stage === "ready") return null
-  if (stage === "discovered") return kind === "tv" ? "Send it a feed with the code on the TV" : kind === "camera" ? "Scan its QR code with the phone" : "Pair it with the code"
+  if (stage === "discovered") return kind === "tv" ? "Send it the feed again with the code on the TV, so it has a key of its own" : kind === "camera" ? "Scan its QR code with the phone" : "Pair it with the code"
   if (stage === "paired") return kind === "desk" ? "Give it a role in Permissions" : "Assign it a feed"
   return kind === "tv" ? "Check the TV is on and on the church network" : kind === "camera" ? "Open Rhema Studio Cam on the phone and send" : "Open Rhema Studio on that device"
 }

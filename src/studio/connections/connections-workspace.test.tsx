@@ -217,8 +217,9 @@ describe("Connections hub (#401)", () => {
   it("shows each device's Found › Paired › Assigned › Ready stage from what it reports (#445)", async () => {
     useSettingsStore.setState({ remoteDevices: [{ hash: "a".repeat(64), name: "Stage phone", paired_at: "2026-10-26T00:00:00Z", role: undefined as never }] })
     const feed = { ...originalOutputs[0], id: "hall-feed", name: "Hall feed", type: "browser" as const, feedToken: "safe-test-token", tvs: [
-      { name: "Sanctuary TV", address: "192.168.1.61:8095", sentAt: Date.now() },
-      { name: "Foyer TV", address: "192.168.1.62:8095", sentAt: Date.now() },
+      { name: "Sanctuary TV", address: "192.168.1.61:8095", sentAt: Date.now(), token: "sanctuary-key-0123456" },
+      { name: "Foyer TV", address: "192.168.1.62:8095", sentAt: Date.now(), token: "foyer-key-0123456789" },
+      { name: "Old TV", address: "192.168.1.63:8095", sentAt: Date.now() },
     ] }
     useBroadcastStore.setState({ outputs: [...originalOutputs, feed] })
     mockedInvoke.mockImplementation(async (command) => {
@@ -232,7 +233,12 @@ describe("Connections hub (#401)", () => {
     const stageOf = (name: string) => [...host.querySelectorAll("li")].find((li) => li.textContent?.includes(name))?.querySelector('[aria-label^="Stage:"]')?.getAttribute("aria-label")
     expect(stageOf("Sanctuary TV")).toBe("Stage: Ready")
     expect(stageOf("Foyer TV")).toBe("Stage: Assigned. Next: Check the TV is on and on the church network")
-    expect(stageOf("Stage phone")).toBe("Stage: Paired. Next: Give it a role in Permissions")
+    // On the feed's shared link: no key of its own, so not Paired, and the fix is said.
+    expect(stageOf("Old TV")).toBe("Stage: Found. Next: Send it the feed again with the code on the TV, so it has a key of its own")
+    // No role is View only (Viewer), so it is assigned; not connected now.
+    expect(stageOf("Stage phone")).toBe("Stage: Assigned. Next: Open Rhema Studio on that device")
+    const current = [...host.querySelectorAll('[aria-current="step"]')].map((el) => el.textContent)
+    expect(current).toContain("Ready")
   })
 
   it("routes app entry points to the same Connections page", () => {
