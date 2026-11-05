@@ -68,6 +68,23 @@ describe("approval before go-live (CL-002, opt-in)", () => {
     expect(useJournalStore.getState().entries.filter((e) => e.kind === "approval")).toHaveLength(1)
   })
 
+  it("a let-through belongs to its own service's run only (#409)", async () => {
+    useJournalStore.setState({ entries: [], runContext: null })
+    // Service A (approved) is running; B is let through unapproved, then goes live: a new run for B.
+    useServiceStore.setState({ current: program({ id: "a", approved_revision: 3 }) })
+    useJournalStore.getState().add({ kind: "live", label: "A welcome", itemId: "a1" })
+    useServiceStore.setState({ current: program({ id: "b", title: "Evening" }) })
+    expect(approvalHolds(() => useJournalStore.getState().add({ kind: "live", label: "B welcome", itemId: "b1" }))).toBe(true)
+    useApprovalGateStore.getState().presentAnyway()
+    expect(useJournalStore.getState().runContext?.programId).toBe("b")
+    expect(useJournalStore.getState().entries.map((e) => [e.kind, e.programId ?? null])).toEqual([["approval", "b"], ["live", null]])
+
+    // A later run for another service within the minute does not take B's let-through.
+    useServiceStore.setState({ current: program({ id: "c", approved_revision: 3 }) })
+    useJournalStore.getState().add({ kind: "live", label: "C welcome", itemId: "c1" })
+    expect(useJournalStore.getState().entries.some((e) => e.kind === "approval")).toBe(false)
+  })
+
   it("logs nothing for Not now", () => {
     useJournalStore.setState({ entries: [], runContext: null })
     expect(approvalHolds(() => {})).toBe(true)

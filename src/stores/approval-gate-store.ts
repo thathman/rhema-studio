@@ -42,7 +42,7 @@ export const useApprovalGateStore = create<ApprovalGateState>((set, get) => ({
     // #447): who, which service and version. Logged as the decision it is (the go-live, or a
     // refusal of it, is its own entry after); kept when that go-live starts the run's log.
     const by = currentActor()
-    useJournalStore.getState().add({ kind: "approval", label: `Present anyway: "${held.title}" v${held.revision} was not approved${by ? ` · by ${by}` : ""}`, ...(by ? { by } : {}) })
+    useJournalStore.getState().add({ kind: "approval", label: `Present anyway: "${held.title}" v${held.revision} was not approved${by ? ` · by ${by}` : ""}`, programId: held.id, ...(by ? { by } : {}) })
     set({ acknowledged: [...acknowledged, held.id], held: null, retry: null })
     retry?.()
   },

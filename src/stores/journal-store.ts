@@ -75,8 +75,10 @@ export const useJournalStore = create<JournalState>((set, get) => ({
     const startsRun = entry.kind === "live" || (entry.kind === "event" && Boolean(entry.eventId || entry.itemId))
     const contextChanged = !!current.runContext && current.runContext.programId !== (service?.id ?? null)
     const startsNewRun = startsRun && (!current.runContext || contextChanged || current.runStatus === "finished")
+    // A "Present anyway" for the service starting now belongs to its run, never to the run it ends.
+    const forOtherService = (e: JournalEntry) => e.kind === "approval" && !!e.programId && e.programId !== current.runContext?.programId
     if (startsRun && contextChanged && current.runContext && current.runStatus !== "finished") {
-      const previous = snapshotRun(current)
+      const previous = snapshotRun({ ...current, entries: current.entries.filter((e) => !forOtherService(e)) })
       // Persist and close the previous run before the new run's checkpoint is queued.
       if (previous) void persistRunSnapshot(previous).then(() => interruptServiceRun(previous.context.runId)).catch((error: unknown) => {
           useJournalStore.setState({ checkpointStatus: "error", checkpointError: `The previous service run could not be saved: ${String(error)}` })
@@ -98,7 +100,7 @@ export const useJournalStore = create<JournalState>((set, get) => ({
     // fetched first): its decision goes into the new run instead of being dropped with the old log.
     // ponytail: "moments" is 60 s; a run id on the decision if a let-through ever takes longer.
     const now = monotonicNow()
-    const carried = (s: JournalState) => (startsNewRun ? s.entries.filter((e) => e.kind === "approval" && now - e.mono < 60_000) : s.entries)
+    const carried = (s: JournalState) => (startsNewRun ? s.entries.filter((e) => e.kind === "approval" && e.programId === service?.id && now - e.mono < 60_000) : s.entries)
     set((s) => ({
       ...runChange,
       entries: capJournal([...carried(s), { ...entry, at: Date.now(), mono: now }]),

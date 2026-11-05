@@ -26,6 +26,8 @@ export interface JournalEntry {
   /** A scene entry: the output it was taken to or released from, and the scene (absent: back to its own feed). */
   outputId?: string
   sceneId?: string
+  /** An "approval" entry (#409): the service that was let through unapproved. */
+  programId?: string
 }
 
 export interface ActualDuration {
