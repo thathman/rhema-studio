@@ -80,6 +80,18 @@ afterEach(() => {
 })
 
 describe("History's native recording archive", () => {
+  it("names the service run each recording files under (#447)", async () => {
+    native.invoke.mockImplementation(async (command: string, args?: { rehearsal?: boolean }) => {
+      if (command === "content_list_service_runs") return [{ run_id: "run-1", title: "Sunday Worship", service_date: "2026-11-08", program_id: "p", program_revision: 1, time_zone: null, started_at: "", updated_at: "", finished_at: null, status: "finished" }]
+      if (command !== "recorder_list") return []
+      return args?.rehearsal ? [] : [{ ...serviceRecording, serviceRunId: "run-1" }, { ...serviceRecording, sessionId: "loose", serviceRunId: null }]
+    })
+    await renderArchive()
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    const labels = [...host!.querySelectorAll("[data-recording-run]")].map((p) => p.textContent)
+    expect(labels).toEqual(["Service run: Sunday Worship · 2026-11-08", "Not linked to a service run (none was running when it started)"])
+  })
+
   it("keeps service and rehearsal recordings in separate lists and reports recovery honestly", async () => {
     await renderArchive()
     expect(native.invoke).toHaveBeenCalledWith("recorder_list", {
@@ -146,7 +158,10 @@ describe("History's native recording archive", () => {
   })
 
   it("shows a local availability error instead of an empty archive when the recorder API fails", async () => {
-    native.invoke.mockRejectedValueOnce(new Error("unsupported platform"))
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "recorder_list") throw new Error("unsupported platform")
+      return []
+    })
     await renderArchive()
     expect(host?.textContent).toContain(
       "Recording history is unavailable: unsupported platform"
