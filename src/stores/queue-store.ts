@@ -418,13 +418,19 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
         const start = remaining.findIndex((row) => row.kind === "header" && row.header.id === target.headerId)
         if (start === -1) return state
         const header = (remaining[start] as Extract<RundownRow, { kind: "header" }>).header
-        // Keep same-index headers on their original side of the boundary, including
-        // the next phase's nested groups. Numeric offsets alone lose that order.
-        const end = remaining.findIndex((row, index) => index > start && row.kind === "header" && (
-          header.type === "phase" ? row.header.type === "phase"
-            : header.event ? row.header.type === "phase" || !!row.header.event : true
-        ))
-        insertion = end === -1 ? remaining.length : end
+        if (header.type === "phase") {
+          // Owner decision (#444, 5 Nov): Move to a phase puts the items first in that phase, right
+          // after its header and before its first event or group, as phase-level items: never into
+          // an event of it. Works the same with no events, and never reaches the next phase.
+          insertion = start + 1
+        } else {
+          // Keep same-index headers on their original side of the boundary, including
+          // the next phase's nested groups. Numeric offsets alone lose that order.
+          const end = remaining.findIndex((row, index) => index > start && row.kind === "header" && (
+            header.event ? row.header.type === "phase" || !!row.header.event : true
+          ))
+          insertion = end === -1 ? remaining.length : end
+        }
       } else {
         const index = remaining.findIndex((row) => row.kind === "item" && row.item.id === target.itemId)
         if (index === -1) return state

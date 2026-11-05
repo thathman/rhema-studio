@@ -124,14 +124,47 @@ describe("several items at once (#193)", () => {
     expect(ids()).toEqual(["c", "b", "a", "d"])
   })
 
-  it("moves items to the end of another phase, keeping their order and the headers", () => {
+  it("moves items to the start of another phase, keeping their order and the headers (#444)", () => {
     useQueueStore.setState({ headers: [phase("p1", 0), phase("p2", 2)] })
     q().moveToSection(["a", "b"], "p2")
-    expect(ids()).toEqual(["c", "d", "a", "b"])
+    expect(ids()).toEqual(["a", "b", "c", "d"])
     expect(q().headers.find((h) => h.id === "p2")!.at).toBe(0)
     q().moveToSection(["d"], "p1")
-    expect(ids()).toEqual(["d", "c", "a", "b"])
+    expect(ids()).toEqual(["d", "a", "b", "c"])
     expect(q().headers.find((h) => h.id === "p2")!.at).toBe(1)
+  })
+
+  it("Move to a phase puts items first in it, before its first event, never into an event (owner, #444)", () => {
+    // Pre (event A: a, b) · Main (event W: c · event S: d) · Post loop (empty)
+    useQueueStore.setState({
+      headers: [
+        phase("pre", 0),
+        { id: "A", type: "group", name: "Welcome", at: 0, event: { schema_version: 1 } },
+        phase("main", 2),
+        { id: "W", type: "group", name: "Worship", at: 2, event: { schema_version: 1 } },
+        { id: "S", type: "group", name: "Sermon", at: 3, event: { schema_version: 1 } },
+        { ...phase("post", 4), rule: "loop" },
+      ],
+      activeIndex: null,
+    })
+    const live = useQueueStore.getState().activeIndex
+    q().moveToSection(["b", "a"], "main")
+    const events = projectRunOfShowEvents(q().items, q().headers)
+    const rows = interleave(q().items, q().headers).map((r) => ("header" in r ? `#${r.header.id}` : r.item.id))
+    // Their relative order kept, first in Main, before Worship; A keeps its header, now empty.
+    expect(rows).toEqual(["#pre", "#A", "#main", "a", "b", "#W", "c", "#S", "d", "#post"])
+    expect(events.find((e) => e.id === "W")?.moments.map((m) => m.id)).toEqual(["c"])
+    expect(events.find((e) => e.id === "S")?.moments.map((m) => m.id)).toEqual(["d"])
+    // A phase with no events (the trailing loop, chosen explicitly) takes it right after its header.
+    q().moveToSection(["c"], "post")
+    expect(interleave(q().items, q().headers).map((r) => ("header" in r ? `#${r.header.id}` : r.item.id)).slice(-2)).toEqual(["#post", "c"])
+    // Moving into a named event still nests there.
+    q().moveToSection(["a"], "S")
+    expect(projectRunOfShowEvents(q().items, q().headers).find((e) => e.id === "S")?.moments.map((m) => m.id)).toEqual(["d", "a"])
+    // Planning only: the live position is untouched; undo brings the plan back.
+    expect(useQueueStore.getState().activeIndex).toBe(live)
+    q().undo(); q().undo(); q().undo()
+    expect(ids()).toEqual(["a", "b", "c", "d"])
   })
   it("moves selected items before a stable item id across phases in one undoable edit", () => {
     useQueueStore.setState({
