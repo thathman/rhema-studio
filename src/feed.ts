@@ -276,7 +276,7 @@ function draw() {
       },
       image: (url) => {
         const img = themeImageCache().get(url)
-        if (!img) void loadThemeImage(url).then(redraw)
+        if (!img) void loadThemeImage(url).then((ok) => { if (ok) redraw() })
         return img ?? null
       },
     })

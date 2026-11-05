@@ -244,7 +244,7 @@ function EventSceneCanvas({ scene, output }: { scene: Scene; output: BroadcastOu
       },
       image: (url) => {
         const image = themeImageCache().get(url)
-        if (!image) void loadThemeImage(url).then(() => redraw((value) => value + 1))
+        if (!image) void loadThemeImage(url).then((ok) => { if (ok) redraw((value) => value + 1) })
         return image ?? null
       },
     })
