@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { approvalState } from "@/lib/approval"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { currentActor, useBroadcastStore } from "@/stores/broadcast-store"
+import { useJournalStore } from "@/stores/journal-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
 
@@ -37,6 +38,11 @@ export const useApprovalGateStore = create<ApprovalGateState>((set, get) => ({
   presentAnyway: () => {
     const { held, retry, acknowledged } = get()
     if (!held) return
+    // The decision to go live with a version nobody approved is part of the service's record (#409,
+    // #447): who, which service and version. Logged as the decision it is (the go-live, or a
+    // refusal of it, is its own entry after); kept when that go-live starts the run's log.
+    const by = currentActor()
+    useJournalStore.getState().add({ kind: "approval", label: `Present anyway: "${held.title}" v${held.revision} was not approved${by ? ` · by ${by}` : ""}`, programId: held.id, ...(by ? { by } : {}) })
     set({ acknowledged: [...acknowledged, held.id], held: null, retry: null })
     retry?.()
   },
