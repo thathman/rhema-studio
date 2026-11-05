@@ -160,4 +160,12 @@ describe("a Live language choice is for one service (#446)", () => {
     expect(useBroadcastStore.getState().languageOverrides).toEqual({})
     expect(logged.some((label) => label.includes("back to its saved language"))).toBe(true)
   })
+
+  it("is left alone in rehearsal, as any language change is", async () => {
+    const output = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({ rehearsal: true, outputs: [{ ...output, language: "both" }], languageOverrides: { [output.id]: { language: "first" } } })
+    await startNewJournal()
+    expect(useBroadcastStore.getState().languageOverrides[output.id]?.language).toBe("first")
+    useBroadcastStore.setState({ rehearsal: false, languageOverrides: {} })
+  })
 })
