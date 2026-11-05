@@ -509,7 +509,8 @@ mod tests {
 
         keys.write().unwrap().entries.clear();
         handle_message_from_live(&next("desk-token"), &sink, &keys, None, Some((&rate, lan)));
-        assert_eq!(sink.command_count(), 1, "a revoked key is refused, and an empty list never reopens OSC");
+        // Revoking the last key keeps the requirement (only remote_set_keys' explicit switch opens it).
+        assert_eq!(sink.command_count(), 1, "a revoked key is refused while a key is required");
     }
 
     #[test]
