@@ -37,16 +37,27 @@ export function useLiveTranslationFollow(): void {
 }
 
 export function followTranslationOnAir(byVoice: boolean, before?: { activeTranslationId: number; secondaryTranslationId: number | null }): void {
-  const { liveSourceVerse, liveItem, liveItemId, autoLive } = useBroadcastStore.getState()
-  if (!liveSourceVerse) return
+  const { liveSourceVerse, liveItem, liveItemId, autoLive, sources } = useBroadcastStore.getState()
   if (byVoice && !autoLive) return
   // An item's saved translations can make the change irrelevant to what is on air.
-  if (before) {
+  const changesFor = (item: typeof liveItem) => {
+    if (!before) return true
     const bible = useBibleStore.getState()
-    const was = resolveTranslations(liveItem, { ...bible, ...before })
-    const now = resolveTranslations(liveItem, bible)
-    if (!isMissing(was) && !isMissing(now) && was.primary === now.primary && was.secondary === now.secondary) return
+    const was = resolveTranslations(item, { ...bible, ...before })
+    const now = resolveTranslations(item, bible)
+    return isMissing(was) || isMissing(now) || was.primary !== now.primary || was.secondary !== now.secondary
   }
+  // A verse sent to the Bible feeds alone (Auto "Bible feeds only"), other than Program's: it follows
+  // too, after Program, so the feeds keep showing it and not Program's verse (#446).
+  const feed = sources.bible?.on && sources.bible.verse ? sources.bible : null
+  const sameVerse = (a: { book_number: number; chapter: number; verse: number }, b: typeof a | null) => !!b && a.book_number === b.book_number && a.chapter === b.chapter && a.verse === b.verse
+  const feedApart = feed && !sameVerse(feed.verse!, liveSourceVerse) && changesFor(feed.item ?? null) ? feed : null
+  const program = liveSourceVerse && changesFor(liveItem) ? liveSourceVerse : null
+  if (!program && !feedApart) return
   const background = liveItemId ? (useQueueStore.getState().items.find((i) => i.id === liveItemId)?.background ?? null) : null
-  void presentVerse(liveSourceVerse, { item: liveItem, itemId: liveItemId, background, follow: true })
+  // One after the other: each present supersedes one still loading.
+  void (async () => {
+    if (program) await presentVerse(program, { item: liveItem, itemId: liveItemId, background, follow: true })
+    if (feedApart) await presentVerse(feedApart.verse!, { item: feedApart.item ?? null, itemId: feedApart.itemId, sourceOnly: true })
+  })()
 }

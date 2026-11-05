@@ -256,7 +256,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
     ? toDualVerseRenderData(renderEntries)
     : toVerseRenderData(renderEntries[0]?.verse ?? verseToPresent, renderEntries[0]?.translation ?? "KJV")
   if (opts.sourceOnly) {
-    useBroadcastStore.getState().activateSource({ ...data, ...layer, content: "bible" }, opts.itemId ?? null, by)
+    useBroadcastStore.getState().activateSource({ ...data, ...layer, content: "bible" }, opts.itemId ?? null, by, { verse: verseToPresent, item: opts.item ?? null })
     mark(`presentVerse end ${ref} (Bible source only)`)
     return "presented"
   }
