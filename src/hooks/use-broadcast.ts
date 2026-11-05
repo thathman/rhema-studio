@@ -204,7 +204,10 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
     })
     ),
   ])
-  const verseToPresent = fetchedVerses[0] ?? verse
+  // The verse as given stands in only when it is already in the chosen first translation (#446): never
+  // another edition's words under this one's name.
+  const inPrimary = verse.translation_id === translationIds[0] ? verse : null
+  const verseToPresent = fetchedVerses[0] ?? inPrimary ?? { ...verse, text: "" }
   mark(
     `presentVerse get_verse done ${verse.book_name} ${verse.chapter}:${verse.verse}`
   )
@@ -233,7 +236,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
 
   const renderEntries = fetchedVerses
     .map((fetchedVerse, index) => {
-      const sourceVerse = fetchedVerse ?? (index === 0 ? verse : null)
+      const sourceVerse = fetchedVerse ?? (index === 0 ? inPrimary : null)
       if (!sourceVerse?.text?.trim()) return null
       return {
         verse: sourceVerse,
@@ -264,6 +267,10 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
       verseToPresent,
       { goLive: opts.goLive, item: opts.item ?? null, itemId: opts.itemId ?? null, follow: opts.follow, by }
     )
+  // A second language the screens should show but that has no text here: said, not silently dropped (#446).
+  if (translationIds.length > 1 && renderEntries.length < 2 && !opts.follow && useBroadcastStore.getState().isLive) {
+    useBroadcastStore.getState().setPresentWarning(`${ref}: no text in ${getTranslationLabel(translationIds[1], "the second translation")}; shown in ${getTranslationLabel(translationIds[0], "the first")} only.`)
+  }
   mark(`presentVerse end ${ref}`)
   return "presented"
 }

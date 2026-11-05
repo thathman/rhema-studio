@@ -20,8 +20,9 @@ export interface PolicyInput {
   overrideServiceTranslations: boolean
 }
 
+/** An installed translation by its abbreviation: one listed but not downloaded is missing (#446), never used. */
 const byAbbrev = (translations: Translation[], abbrev: string): Translation | undefined =>
-  translations.find((t) => t.abbreviation.toLowerCase() === abbrev.toLowerCase())
+  translations.find((t) => t.abbreviation.toLowerCase() === abbrev.toLowerCase() && t.is_downloaded !== false)
 
 /**
  * The one rule for which translations a verse is shown in.
