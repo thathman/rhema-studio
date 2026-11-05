@@ -347,8 +347,9 @@ function stepQueue(offset: number): Promise<void> {
   // the end of the service does not replay a final sound.
   if (current !== null && isSoundItem(items[target])) {
     if (offset < 0) {
-      while (target > 0 && isSoundItem(items[target])) target -= 1
-      if (isSoundItem(items[target])) return Promise.resolve()
+      // Stepping over sounds still passes over hidden items and skipped phases (#411).
+      while (target >= 0 && isSoundItem(items[target])) target = shownFrom(target - 1, -1)
+      if (target < 0 || isSoundItem(items[target])) return Promise.resolve()
     } else if (target === current) return Promise.resolve()
   }
   const atEdge = target === current
@@ -379,6 +380,8 @@ export async function stepLiveVerse(offset: 1 | -1): Promise<void> {
   }
   verseStepSeq += 1
   const ticket = verseStepSeq
+  // What is on air now: a Clear, Next or anything else put live while the chapter loads wins (#411).
+  const airBefore = { isLive: useBroadcastStore.getState().isLive, liveVerse: useBroadcastStore.getState().liveVerse }
   const bible = useBibleStore.getState()
   const choice = resolveTranslations(liveItem, bible)
   const translationId = isMissing(choice) ? bible.activeTranslationId : choice.primary
@@ -398,6 +401,8 @@ export async function stepLiveVerse(offset: 1 | -1): Promise<void> {
       if (prev.length > 0) target = { chapter: source.chapter - 1, verse: prev[prev.length - 1].verse }
     }
     if (ticket !== verseStepSeq) return
+    const airNow = useBroadcastStore.getState()
+    if (airNow.isLive !== airBefore.isLive || airNow.liveVerse !== airBefore.liveVerse) return
     if (!target) {
       useBroadcastStore.getState().setPresentWarning(
         offset === 1 ? `${source.book_name} ends at ${source.chapter}:${source.verse}.` : `${source.book_name} starts at 1:1.`
