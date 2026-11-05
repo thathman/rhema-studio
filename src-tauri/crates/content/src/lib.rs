@@ -900,13 +900,14 @@ pub(crate) fn has_archive_column(conn: &Connection) -> bool {
 fn approval_cols(conn: &Connection) -> String {
     let approval = if has_approval_column(conn) { ", p.approved_revision, p.approved_at" } else { ", NULL, NULL" };
     let archive = if has_archive_column(conn) { ", p.archived_at, p.is_template, p.approved_by" } else { ", NULL, 0, NULL" };
-    // Run-of-show events (#404): groups whose payload says they are events; none before payloads (0003).
+    // Run-of-show events (#404): groups whose payload is an event the app reads (schema 1, as
+    // parseRunOfShowEvent accepts); none before payloads (0003).
     let has_payload = conn
         .prepare("SELECT 1 FROM pragma_table_info('program_items') WHERE name = 'payload'")
         .and_then(|mut st| st.exists([]))
         .unwrap_or(false);
     let events = if has_payload {
-        ", (SELECT COUNT(*) FROM program_items e WHERE e.program_id = p.id AND e.kind = 'group' AND json_valid(e.payload) AND json_extract(e.payload, '$.run_of_show_event') IS NOT NULL)"
+        ", (SELECT COUNT(*) FROM program_items e WHERE e.program_id = p.id AND e.kind = 'group' AND json_valid(e.payload) AND json_extract(e.payload, '$.run_of_show_event.schema_version') = 1)"
     } else {
         ", 0"
     };
@@ -1744,6 +1745,8 @@ mod tests {
             verse("John 3:16", 43, 3, 16),
             header("group", "Sermon", Some(r#"{"run_of_show_event":{"schema_version":1,"duration_minutes":30}}"#)),
             header("group", "Readings", None),
+            // A newer event shape the app does not read opens as a plain group, so it is not counted.
+            header("group", "Later", Some(r#"{"run_of_show_event":{"schema_version":2}}"#)),
             verse("Psalms 23:1", 19, 23, 1),
         ];
         let saved = db.replace_items(&p.id, 1, &rows).unwrap();

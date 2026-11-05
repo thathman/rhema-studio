@@ -269,9 +269,9 @@ describe("a clock time as an instant", () => {
 })
 
 describe("saved services in a list are counted event-first (#404)", () => {
-  it("says events and moments, or items with no events (and from an older host)", () => {
-    expect(savedCount({ item_count: 12, event_count: 2 })).toBe("2 events · 12 moments")
-    expect(savedCount({ item_count: 1, event_count: 1 })).toBe("1 event · 1 moment")
+  it("says events and every item, or items with no events (and from an older host)", () => {
+    expect(savedCount({ item_count: 12, event_count: 2 })).toBe("2 events · 12 items in all")
+    expect(savedCount({ item_count: 1, event_count: 1 })).toBe("1 event · 1 item in all")
     expect(savedCount({ item_count: 5, event_count: 0 })).toBe("5 items")
     expect(savedCount({ item_count: 1 })).toBe("1 item")
   })
