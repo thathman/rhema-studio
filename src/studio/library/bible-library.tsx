@@ -30,8 +30,17 @@ function manualVerseItem(
 /** Local Scripture references saved for reuse in future services. */
 export function BibleLibrary({ onUseItem }: { onUseItem?: LibraryItemUseHandler } = {}) {
   const translations = useBibleStore((s) => s.translations)
-  const activeTranslationId = useBibleStore((s) => s.activeTranslationId)
-  const books = useBibleStore((s) => s.books)
+  // Library's own edition (#447, owner decision 5 Nov 2026): choosing one here never changes the
+  // active edition, which Live's Preview reads. It follows the active one until one is chosen.
+  const storeTranslationId = useBibleStore((s) => s.activeTranslationId)
+  const storeBooks = useBibleStore((s) => s.books)
+  const [libraryEdition, setLibraryEdition] = useState<{ id: number; books: Book[] } | null>(null)
+  const activeTranslationId = libraryEdition?.id ?? storeTranslationId
+  const books = libraryEdition?.books ?? storeBooks
+  const editionRef = useRef(activeTranslationId)
+  useEffect(() => {
+    editionRef.current = activeTranslationId
+  }, [activeTranslationId])
   const savedPassages = useBibleStore((s) => s.savedPassages)
   const [query, setQuery] = useState("")
   const queryRef = useRef("")
@@ -172,7 +181,7 @@ export function BibleLibrary({ onUseItem }: { onUseItem?: LibraryItemUseHandler 
         activeTranslationId
       )
       if (
-        useBibleStore.getState().activeTranslationId !== activeTranslationId ||
+        editionRef.current !== activeTranslationId ||
         queryRef.current.trim() !== trimmed
       ) {
         setMessage(
@@ -363,10 +372,11 @@ export function BibleLibrary({ onUseItem }: { onUseItem?: LibraryItemUseHandler 
                   const id = Number(event.target.value)
                   operationInFlight.current = true
                   setBusy(true)
-                  useBibleStore.getState().setActiveTranslation(id)
                   setFound(null)
+                  // Library's own: the active edition (and Live's Preview) stays as it is.
                   void bibleActions
-                    .loadBooks(id)
+                    .fetchBooks(id)
+                    .then((editionBooks) => { if (mounted.current) setLibraryEdition({ id, books: editionBooks }) })
                     .catch((error: unknown) =>
                       setMessage(
                         `The Bible catalogue could not be loaded: ${error instanceof Error ? error.message : String(error)}`

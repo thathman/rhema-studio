@@ -860,6 +860,52 @@ describe("Library workspace", () => {
     )
   })
 
+  it("choosing a Bible edition in Library is Library's own: the active edition, and Live's Preview, stay (#447)", async () => {
+    const webJohn = { ...john, id: 2, translation_id: 5 }
+    mockInvoke.mockImplementation(async (command: string, args?: { translationId?: number }) => {
+      if (command === "list_books") return args?.translationId === 5 ? [webJohn] : [john]
+      if (command === "get_verse") return args?.translationId === 5 ? { ...bibleVerse, id: 99, translation_id: 5, text: "For God so loved the world (WEB)" } : bibleVerse
+      return []
+    })
+    useBibleStore.setState({
+      translations: [
+        { id: 4, abbreviation: "KJV", title: "King James Version", language: "en", is_copyrighted: false, is_downloaded: true },
+        { id: 5, abbreviation: "WEB", title: "World English Bible", language: "en", is_copyrighted: false, is_downloaded: true },
+      ],
+      activeTranslationId: 4,
+      books: [john],
+    })
+    // A verse already in Live's Preview, in the active edition: it must stay exactly as it is.
+    useBibleStore.setState({ selectedVerse: { ...bibleVerse, text: "Preview verse in KJV" } as never })
+    const previewBefore = useBibleStore.getState().selectedVerse
+    expect(previewBefore).not.toBeNull()
+    await act(async () => {
+      root!.render(<LibraryWorkspace />)
+    })
+    const tab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent === "Bible")!
+    await act(async () => tab.click())
+    const edition = document.querySelector<HTMLSelectElement>('[aria-label="Bible edition"]')!
+    await act(async () => {
+      edition.value = "5"
+      edition.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(useBibleStore.getState().activeTranslationId).toBe(4)
+    expect(useBibleStore.getState().books).toEqual([john])
+    expect(edition.value).toBe("5")
+
+    const reference = document.querySelector<HTMLInputElement>('[aria-label="Scripture reference"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(reference, "John 3:16")
+      reference.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Find passage"))!.click())
+    expect(mockInvoke).toHaveBeenCalledWith("get_verse", expect.objectContaining({ translationId: 5 }))
+    expect(document.body.textContent).toContain("For God so loved the world (WEB)")
+    expect(useBibleStore.getState().activeTranslationId).toBe(4)
+    expect(useBibleStore.getState().selectedVerse).toEqual(previewBefore)
+  })
+
   it("discards a lookup result if the selected Bible edition changes while it is loading", async () => {
     let releaseVerse!: (verse: typeof bibleVerse) => void
     mockInvoke.mockImplementation((command: string) =>
