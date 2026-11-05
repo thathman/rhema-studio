@@ -1,3 +1,4 @@
+import type { BroadcastOutput } from "@/types"
 /**
  * Display outputs point at a monitor by its index in the OS list. When a
  * projector cable is pulled, or two outputs share one monitor, the operator
@@ -53,4 +54,28 @@ export function monitorProblems(outputs: DisplayOutputRef[], monitors: number | 
   }
   const shared = [...byMonitor.values()].filter((names) => names.length > 1)
   return { missing, shared }
+}
+
+/**
+ * Whether an output edit moves it (another screen, type or NDI format), so an output on air is closed
+ * and reopened. Its screen as the editor showed it, where the OS put it now: the OS renumbering
+ * screens is no change, so a theme or language edit never blanks a screen on air (#411).
+ */
+export function outputTransportChanged(
+  existing: BroadcastOutput,
+  next: BroadcastOutput,
+  names: (string | null)[],
+  outputs: BroadcastOutput[],
+): boolean {
+  // Both against the same list: the editor may have opened before the screens were listed.
+  const others = outputs.filter((o) => o.type === "display" && o.id !== existing.id)
+  const at = (o: BroadcastOutput) => (o.type === "display" ? resolveMonitorIndex(o, names, others) ?? o.monitorIndex : o.monitorIndex)
+  return existing.type !== next.type ||
+    at(existing) !== at(next) ||
+    (existing.windowed === true) !== (next.windowed === true) ||
+    existing.monitorName !== next.monitorName ||
+    existing.ndi.sourceName !== next.ndi.sourceName ||
+    existing.ndi.resolution !== next.ndi.resolution ||
+    existing.ndi.frameRate !== next.ndi.frameRate ||
+    existing.ndi.alphaMode !== next.ndi.alphaMode
 }
