@@ -214,6 +214,27 @@ describe("Connections hub (#401)", () => {
     expect(host.querySelector('[aria-label="Revoke Stage phone"]')).toBeNull()
   })
 
+  it("shows each device's Found › Paired › Assigned › Ready stage from what it reports (#445)", async () => {
+    useSettingsStore.setState({ remoteDevices: [{ hash: "a".repeat(64), name: "Stage phone", paired_at: "2026-10-26T00:00:00Z", role: undefined as never }] })
+    const feed = { ...originalOutputs[0], id: "hall-feed", name: "Hall feed", type: "browser" as const, feedToken: "safe-test-token", tvs: [
+      { name: "Sanctuary TV", address: "192.168.1.61:8095", sentAt: Date.now() },
+      { name: "Foyer TV", address: "192.168.1.62:8095", sentAt: Date.now() },
+    ] }
+    useBroadcastStore.setState({ outputs: [...originalOutputs, feed] })
+    mockedInvoke.mockImplementation(async (command) => {
+      if (command === "host_status") return { running: true, lan: true, port: 8080, tlsPort: 8081, addresses: [], desks: [] }
+      if (command === "camera_router_status") return { installed: true, running: false, wanted: false, lanAddress: null, ports: {}, restarts: 0, error: null, paths: [] }
+      if (command === "feed_status") return { watching: 1, seq: 1, acked: 1, tvs: [{ id: "192.168.1.61:8095", watching: 1 }] }
+      return null
+    })
+    await mount()
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    const stageOf = (name: string) => [...host.querySelectorAll("li")].find((li) => li.textContent?.includes(name))?.querySelector('[aria-label^="Stage:"]')?.getAttribute("aria-label")
+    expect(stageOf("Sanctuary TV")).toBe("Stage: Ready")
+    expect(stageOf("Foyer TV")).toBe("Stage: Assigned. Next: Check the TV is on and on the church network")
+    expect(stageOf("Stage phone")).toBe("Stage: Paired. Next: Give it a role in Permissions")
+  })
+
   it("routes app entry points to the same Connections page", () => {
     openConnectionsHub()
     expect(useShellStore.getState().goRequest).toBe("connections")

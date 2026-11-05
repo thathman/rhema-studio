@@ -20,6 +20,7 @@ import { PairDeviceDialog } from "./pair-device-dialog"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useNearbyConnection } from "./connections-store"
 import { cn } from "@/lib/utils"
+import { DEVICE_STAGES, deviceStage, nextStep, type DeviceStage } from "./device-stage"
 import { openPermissions } from "@/studio/permissions/navigation"
 
 type NearbyDevice = { name: string; address: string }
@@ -51,12 +52,27 @@ function State({ tone, children }: { tone: "ok" | "warn" | "off"; children: Reac
   return <span className={cn("shrink-0 rounded-full px-2 py-1 text-[0.625rem] font-bold uppercase", tone === "ok" ? "bg-tone-green text-tone-green-foreground" : tone === "warn" ? "bg-tone-amber text-tone-amber-foreground" : "bg-tone-neutral text-tone-neutral-foreground")}>{children}</span>
 }
 
-function Row({ title, detail, state, tone = "off", action }: { title: string; detail?: string; state: string; tone?: "ok" | "warn" | "off"; action?: React.ReactNode }) {
+/** Found › Paired › Assigned › Ready (#445), with the current step marked, and what to do next. */
+function Stage({ stage, kind }: { stage: DeviceStage; kind: "tv" | "camera" | "desk" }) {
+  const at = DEVICE_STAGES.findIndex(([s]) => s === stage)
+  const next = nextStep(stage, kind)
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-1 text-[0.625rem]" aria-label={`Stage: ${DEVICE_STAGES[at]![1]}${next ? `. Next: ${next}` : ""}`}>
+      {DEVICE_STAGES.map(([s, label], i) => (
+        <span key={s} className={cn("rounded px-1 py-0.5", i < at ? "text-muted-foreground" : i === at ? "bg-muted font-bold text-foreground" : "text-muted-foreground/60")}>{label}</span>
+      ))}
+      {next && <span className="text-muted-foreground">· {next}</span>}
+    </span>
+  )
+}
+
+function Row({ title, detail, state, tone = "off", action, stage }: { title: string; detail?: string; state: string; tone?: "ok" | "warn" | "off"; action?: React.ReactNode; stage?: { stage: DeviceStage; kind: "tv" | "camera" | "desk" } }) {
   return (
     <li className="flex min-w-0 flex-wrap items-center gap-2 border-b border-border py-2 last:border-0 last:pb-0 first:pt-0">
       <span className="min-w-0 flex-1">
         <span className="block truncate font-semibold">{title}</span>
         {detail && <span className="block break-words text-muted-foreground">{detail}</span>}
+        {stage && <Stage stage={stage.stage} kind={stage.kind} />}
       </span>
       <State tone={tone}>{state}</State>
       {action}
@@ -208,6 +224,7 @@ export function ConnectionsWorkspace() {
               {savedTvs.length === 0 ? <p className="text-muted-foreground">No Google TV Receiver has been sent a feed yet. Display and NDI outputs can still be used on this computer.</p> : (
                 <ul aria-label="Connected TVs">
                   {savedTvs.map((tv) => <Row key={`${tv.outputId}-${tv.address}`} title={tv.name || "Google TV"} detail={`${tv.feedName} · ${tv.address}`} state={onAirTvs(tv.outputId, tv.address) ? "Showing now" : feedHealth[tv.outputId] ? "Not reporting now" : "Feed sent · status unknown"} tone={onAirTvs(tv.outputId, tv.address) ? "ok" : "off"}
+                    stage={{ kind: "tv", stage: deviceStage({ paired: true, assigned: true, reporting: onAirTvs(tv.outputId, tv.address) }) }}
                     action={isHost && tv.token ? <RevokeAction label={`${tv.name || "Google TV"} at ${tv.address}`} what={`Its link to ${tv.feedName} stops at once and the TV goes back to its code; other screens carry on.`} onRevoke={() => void revokeTv(tv.outputId, tv.address)} /> : undefined} />)}
                 </ul>
               )}
@@ -222,7 +239,7 @@ export function ConnectionsWorkspace() {
                     const path = router.status?.paths.find((p) => p.name === camera.name)
                     const sending = cameraSending(router, camera.name)
                     const state = sending === "sending" ? path?.frozen ? "Signal frozen" : "Sending" : sending === "not-sending" ? "Not sending" : sending === "router-off" ? "Router off" : "Checking"
-                    return <Row key={camera.name} title={camera.label} detail={path?.live ? `${path.readers} receiver${path.readers === 1 ? "" : "s"}` : "Waiting for the phone or camera"} state={state} tone={state === "Sending" ? "ok" : state === "Checking" ? "off" : "warn"} />
+                    return <Row key={camera.name} title={camera.label} detail={path?.live ? `${path.readers} receiver${path.readers === 1 ? "" : "s"}` : "Waiting for the phone or camera"} state={state} tone={state === "Sending" ? "ok" : state === "Checking" ? "off" : "warn"} stage={{ kind: "camera", stage: deviceStage({ paired: true, assigned: true, reporting: state === "Sending" }) }} />
                   })}
                 </ul>
               )}
@@ -235,6 +252,7 @@ export function ConnectionsWorkspace() {
               {operators.length === 0 ? <p className="text-muted-foreground">No phone remotes or operator computers are paired. Pairing is optional; the main desk keeps full control.</p> : (
                 <ul aria-label="Paired phones and operators">
                   {operators.map(({ device, hash, name, seen }) => <Row key={hash} title={device?.name ?? name ?? "Shared key device"} detail={device ? roleLabel(device.role ?? "viewer") : "Shared network key"} state={hostDeviceState(host, seen, now)} tone={seen?.connected ? "ok" : hostDeviceState(host, seen, now) === "Not connected" ? "warn" : "off"}
+                    stage={device ? { kind: "desk", stage: deviceStage({ paired: true, assigned: !!device.role, reporting: !!seen?.connected }) } : undefined}
                     action={isHost && device ? <RevokeAction label={device.name} what={`${device.name}'s key is removed: it is disconnected now and must pair again. This computer keeps full control.`} onRevoke={() => void useSettingsStore.getState().revokeRemoteDevice(device.hash)} /> : undefined} />)}
                 </ul>
               )}
@@ -247,6 +265,7 @@ export function ConnectionsWorkspace() {
               {obsComputers.length === 0 ? <p className="text-muted-foreground">No OBS Companion computer is paired. OBS streaming and scene switching remain its own online production.</p> : (
                 <ul aria-label="Paired OBS companion computers">
                   {obsComputers.map(({ device, hash, name, seen }) => <Row key={hash} title={device?.name ?? name ?? "OBS computer"} detail="OBS Companion · reads cameras for this computer only" state={hostDeviceState(host, seen, now)} tone={seen?.connected ? "ok" : "off"}
+                    stage={device ? { kind: "desk", stage: deviceStage({ paired: true, assigned: true, reporting: !!seen?.connected }) } : undefined}
                     action={isHost && device ? <RevokeAction label={device.name} what={`${device.name} stops reading the cameras now and must pair again. OBS and the room screens are not switched.`} onRevoke={() => void useSettingsStore.getState().revokeRemoteDevice(device.hash)} /> : undefined} />)}
                 </ul>
               )}
