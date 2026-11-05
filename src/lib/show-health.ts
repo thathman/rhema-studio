@@ -153,10 +153,18 @@ export function feedSummary(h: FeedHealth | null | undefined, on: boolean): { te
   return { text: h.current ? `${n} showing the latest` : `${n} · updating…`, tone: "ok" }
 }
 
-/** The TVs a feed was sent to, with this one first; the same address is one TV (at most 8 kept). */
+/**
+ * The TVs a feed was sent to, with this one first; the same address is one TV. A TV with its own key
+ * is never dropped (#411: dropping it withdrew its key and cut it off the feed without a word); only
+ * TVs without one are limited, to 8 in all.
+ */
 export function rememberTv(tvs: ReceiverTv[] | undefined, tv: ReceiverTv): ReceiverTv[] {
   const address = tv.address.trim()
-  return [{ ...tv, address }, ...(tvs ?? []).filter((t) => t.address !== address)].slice(0, 8)
+  const all = [{ ...tv, address }, ...(tvs ?? []).filter((t) => t.address !== address)]
+  // The TV just sent is always kept, keyed or not.
+  const keyed = all.filter((t, i) => i > 0 && t.token).length
+  let unkeyedRoom = Math.max(0, 7 - keyed)
+  return all.filter((t, i) => i === 0 || !!t.token || unkeyedRoom-- > 0)
 }
 
 /** What a TV said to Check TV, in words: whether it shows this feed. */
