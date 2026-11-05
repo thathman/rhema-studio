@@ -400,7 +400,9 @@ function parseServiceRunSummary(value: unknown): ServiceRunSummary | null {
 export function restoreJournal(kept: KeptJournal | null | undefined, now = Date.now(), nowMono = monotonicNow(), unclean = true): boolean {
   const j = useJournalStore.getState()
   const durableRun = kept?.v === 2 && !!kept.runContext
-  if (!kept || (kept.v !== 1 && kept.v !== 2) || !kept.entries?.length || (!durableRun && now - kept.at >= FRESH_MS) || now < kept.at || j.entries.some((e) => e.kind === "recovery")) return false
+  // Only a recent run comes back into this run's log (#411): an older unfinished one, even with a durable
+  // checkpoint, is offered in History (recovery banner), never joined to whatever goes live next.
+  if (!kept || (kept.v !== 1 && kept.v !== 2) || !kept.entries?.length || now - kept.at >= FRESH_MS || now < kept.at || j.entries.some((e) => e.kind === "recovery")) return false
   const base = now - nowMono
   const last = kept.entries.at(-1)!
   const shift = kept.v === 2 && typeof kept.checkpointMono === "number"
