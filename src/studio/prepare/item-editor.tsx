@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { presentActions } from "@/studio/present-actions"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useEffect, useRef, useState } from "react"
 import { useBibleStore, useQueueStore } from "@/stores"
 import { drawStage } from "@/lib/stage-canvas"
@@ -41,7 +42,8 @@ const KIND: Record<string, [string, React.ReactNode]> = {
 export function ItemEditor() {
   const sel = useSelectedItem()
   // What this item will look like, shown here only (#447): Live's Preview is never written from Prepare.
-  const source = usePrepareSource(sel?.item ?? null)
+  const focusSlideIndex = useRundownSelection((s) => s.focusSlideIndex)
+  const source = usePrepareSource(sel?.item ?? null, focusSlideIndex)
   const songs = useSongStore((s) => s.songs)
   if (!sel) {
     return (

@@ -20,6 +20,7 @@ vi.mock("@/studio/prepare/item-editor-parts", async (importOriginal) => {
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import type { AudioQueueItem } from "@/types"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useBibleStore } from "@/stores/bible-store"
 import { useMediaStore } from "@/stores/media-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -41,6 +42,7 @@ beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   useQueueStore.setState({ items: [audio], headers: [], activeIndex: null })
   useBibleStore.setState({ selectedVerse: null, selectedSlide: { item: audio, index: 0 }, selectedQueueItemId: audio.id })
+  useRundownSelection.setState({ focusId: audio.id, focusSlideIndex: 0 })
   useMediaStore.setState({ assets: [], urls: {}, loaded: true, loading: false, error: null })
   root = createRoot(document.body.appendChild(document.createElement("div")))
 })

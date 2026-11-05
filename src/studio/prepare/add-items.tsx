@@ -1,6 +1,8 @@
+import { useEffect } from "react"
 import { PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
+import { useLibraryPreview } from "@/stores/library-preview-store"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { QuickFind } from "@/studio/present/quick-find"
@@ -18,6 +20,8 @@ import { useQueueStore } from "@/stores"
  */
 export function AddItems({ className, onSelectAddedItem }: { className?: string; onSelectAddedItem?: (id: string) => void }) {
   const open = useAddDialog((s) => s.open)
+  // Picks in the dialog are its own (#447): none carries over into Library's preview.
+  useEffect(() => { if (!open) useLibraryPreview.getState().clear() }, [open])
   const target = useQueueStore((s) => s.headers.find((h) => h.id === s.addTarget)?.name ?? null)
   const added = (id: string) => {
     const item = useQueueStore.getState().items.find((candidate) => candidate.id === id)

@@ -479,6 +479,9 @@ function ChangedSinceApproval({ songId }: { songId: string }) {
 
 
 export function SlideList({ item, index, mode }: { item: SongQueueItem; index: number; mode: "prepare" | "present" }) {
+  const prepareFocusId = useRundownSelection((s) => s.focusId)
+  const prepareFocusIndex = useRundownSelection((s) => s.focusSlideIndex)
+  const prepareFocus = { id: prepareFocusId, index: prepareFocusIndex }
   // The approved service's words of the song when it has them (#193), else the library's.
   const song = useServiceSong(item.song.song_id)
   const library = useSongStore((s) => s.songs[item.song.song_id])
@@ -509,13 +512,16 @@ export function SlideList({ item, index, mode }: { item: SongQueueItem; index: n
       {slides.map((slide) => {
         const section = shownSong.sections.find((s) => s.id === slide.sectionId)
         const live = highlightLive && isLive && liveSlide?.itemId === item.id && liveSlide.index === slide.index
-        const sel = selectedSlide?.item.id === item.id && selectedSlide.index === slide.index
+        const sel = mode === "prepare"
+          ? prepareFocus.id === item.id && prepareFocus.index === slide.index
+          : selectedSlide?.item.id === item.id && selectedSlide.index === slide.index
         return (
           <li key={slide.index}>
             <button
               type="button"
               aria-current={sel ? "true" : undefined}
-              onClick={() => presentActions.previewSlide(shownItem, slide.index, liveSnapshot?.song)}
+              // Prepare (#447): shows that slide in Prepare's own preview; Live's Preview is untouched.
+              onClick={() => mode === "prepare" ? useRundownSelection.getState().focus(item.id, slide.index) : presentActions.previewSlide(shownItem, slide.index, liveSnapshot?.song)}
               onDoubleClick={mode === "present" ? () => void presentQueueItem(index, slide.index, songAs) : undefined}
               className={cn(
                 // Present's slides are touch targets (44 px); Prepare keeps them compact.

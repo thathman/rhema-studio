@@ -18,7 +18,9 @@ interface RundownSelectionState {
    * never changes Live's Preview or Program; Send to Live Preview is a separate, deliberate action.
    */
   focusId: string | null
-  focus: (id: string | null) => void
+  /** The slide of the focused song Prepare's preview shows. */
+  focusSlideIndex: number
+  focus: (id: string | null, slideIndex?: number) => void
 }
 
 export const useRundownSelection = create<RundownSelectionState>((set, get) => ({
@@ -40,7 +42,8 @@ export const useRundownSelection = create<RundownSelectionState>((set, get) => (
   set: (ids) => set({ ids }),
   clear: () => set({ ids: [], anchor: null }),
   focusId: null,
-  focus: (focusId) => set({ focusId }),
+  focusSlideIndex: 0,
+  focus: (focusId, focusSlideIndex = 0) => set({ focusId, focusSlideIndex }),
 }))
 
 /** The picked items in rundown order (ids no longer in the rundown left out). */

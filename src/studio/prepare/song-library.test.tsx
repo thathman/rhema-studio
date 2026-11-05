@@ -270,6 +270,7 @@ describe("Add item workflow (#386)", () => {
     }
     useQueueStore.setState({ items: [opening], headers: [], activeIndex: null, addTarget: null })
     useBibleStore.setState({ selectedVerse: verse, selectedSlide: null, selectedQueueItemId: opening.id })
+    useRundownSelection.getState().focus(opening.id)
     useAddDialog.setState({ open: false })
 
     await act(async () => root!.render(<><AddItems /><ItemEditor /></>))
