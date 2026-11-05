@@ -1,6 +1,8 @@
 import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, MonitorIcon, MusicIcon, PaletteIcon, PencilRulerIcon, PlayIcon, PlusIcon, PresentationIcon, SearchIcon, SettingsIcon, ArchiveIcon, MonitorCogIcon, UsersIcon, ShieldCheckIcon } from "lucide-react"
 import { useState } from "react"
+import { defaultFilter } from "cmdk"
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useQueueStore } from "@/stores"
 import { useShellStore, type DesignTab, type LibrarySection, type Workspace } from "@/studio/shell-store"
 import { openSettings, type SettingsSection } from "@/lib/settings-dialog"
@@ -65,12 +67,18 @@ function itemIcon(it: QueueItem) {
 
 /**
  * Find anything (Cmd/Ctrl+K): places, design and settings sections, this
- * service's items (previewed in Live, never shown live), and scripture,
+ * service's items (opened in Prepare; from Live, cued in Live's Preview, never shown live), and scripture,
  * hymns and songs through Live's Quick find (#407: it says so, and that
  * results there are previews: nothing goes on screen until Take).
  */
+/** Letters without their accents, so "Yoruba" finds "Yorùbá" and "Jesu" finds "Jésù" (#407). */
+const plain = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "")
+const accentFreeFilter = (value: string, search: string, keywords?: string[]) =>
+  defaultFilter(plain(value), plain(search), keywords?.map(plain))
+
 export function GlobalSearch() {
   const open = useShellStore((s) => s.searchOpen)
+  const inLive = useShellStore((s) => s.workspace === "present")
   const items = useQueueStore((s) => s.items)
   const [query, setQuery] = useState("")
   const close = () => {
@@ -84,7 +92,7 @@ export function GlobalSearch() {
   return (
     <CommandDialog open={open} onOpenChange={(o) => (o ? useShellStore.getState().setSearchOpen(true) : close())} title="Find anything" description="Places, settings and this service here; scripture, hymns and songs open in Live’s Quick find as previews" className="sm:max-w-xl">
       {/* cmdk needs its root around the input and list (this dialog does not add one). */}
-      <Command>
+      <Command filter={accentFreeFilter}>
       <CommandInput placeholder="Find a place, a setting, an item, a verse or a song…" value={query} onValueChange={setQuery} />
       <CommandList>
         <CommandEmpty>Nothing here by that name. Type two letters or more to look in scripture, hymns and songs in Live.</CommandEmpty>
@@ -98,11 +106,16 @@ export function GlobalSearch() {
           </CommandGroup>
         )}
         {items.length > 0 && (
-          <CommandGroup heading="This service">
+          <CommandGroup heading={inLive ? "This service (to Live's Preview)" : "This service (opens in Prepare)"}>
             {items.map((it, i) => (
-              <CommandItem key={it.id} value={`${i + 1} ${it.reference} item`} onSelect={() => run(() => { presentActions.previewItem(it); useShellStore.getState().goTo("present") })}>
+              // In Live it cues Preview (Live's own action); anywhere else it opens in Prepare and Live is untouched (#447).
+              <CommandItem key={it.id} value={`${i + 1} ${it.reference} item`} onSelect={() => run(() => {
+                if (inLive) return presentActions.previewItem(it)
+                useRundownSelection.getState().focus(it.id)
+                useShellStore.getState().goTo("prepare")
+              })}>
                 {itemIcon(it)} <span className="truncate">{it.reference}</span>
-                <span className="ml-auto text-xs text-muted-foreground">preview</span>
+                <span className="ml-auto text-xs text-muted-foreground">{inLive ? "Live preview" : "open in Prepare"}</span>
               </CommandItem>
             ))}
           </CommandGroup>
