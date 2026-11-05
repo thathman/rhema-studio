@@ -5,6 +5,8 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
+import { useJournalStore } from "@/stores/journal-store"
+import { currentActor } from "@/stores/broadcast-store"
 import { recorderOutputLeftMessage, useRecorderAlertStore } from "@/stores/recorder-alert-store"
 import { Button } from "@/components/ui/button"
 import { TriangleAlertIcon } from "lucide-react"
@@ -129,6 +131,15 @@ function engineStateLabel(
 }
 
 /** Main-desk controls for the host's independent Rhema-native recorder. */
+/**
+ * A start the operator asked for that did not happen (no recorder state changes, so the shell's
+ * recording log in recorder-status-indicator does not see it): the service log says so.
+ */
+function logRecording(label: string): void {
+  const by = currentActor()
+  useJournalStore.getState().add({ kind: "recording", label: `${label}${by ? ` · by ${by}` : ""}`, ...(by ? { by } : {}) })
+}
+
 export function RecorderDock() {
   const outputs = useBroadcastStore((state) => state.outputs)
   const rehearsal = useBroadcastStore((state) => state.rehearsal)
@@ -365,6 +376,7 @@ export function RecorderDock() {
       setPreflightKey(null)
     } catch (error) {
       setActionError(`Recording did not start: ${errorMessage(error)}`)
+      logRecording(`Recording did not start: ${errorMessage(error)}`)
     } finally {
       setPendingAction(null)
     }

@@ -36,6 +36,7 @@ const JOURNAL_KINDS = [
   "shown",
   "take",
   "approval",
+  "recording",
 ] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -64,7 +65,7 @@ export function isServiceRunJournalEntry(
       typeof value[key] !== "string"
     )
       return false
-  for (const key of ["source", "by", "outputId", "sceneId", "programId"] as const)
+  for (const key of ["source", "by", "outputId", "sceneId", "programId", "recording"] as const)
     if (value[key] !== undefined && typeof value[key] !== "string") return false
   for (const key of ["revision", "afterMs"] as const)
     if (value[key] !== undefined && !finite(value[key])) return false

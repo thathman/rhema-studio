@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useJournalStore } from "@/stores/journal-store"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const native = vi.hoisted(() => ({
@@ -175,6 +176,7 @@ beforeEach(() => {
     return null
   })
   useRecorderAlertStore.getState().reset()
+  useJournalStore.setState({ entries: [], runContext: null })
   useBroadcastStore.setState({
     outputs: [main, overflow, stage, browser],
     rehearsal: false,
@@ -220,6 +222,8 @@ describe("Live's Rhema recording dock", () => {
       host.querySelector<HTMLButtonElement>('button[aria-label="Start Rhema recording"]')!.click()
     )
     expect(useRecorderAlertStore.getState().alerts.action).toBe("Recording did not start: encoder unavailable")
+    // The service log says so too (#411, #447 History).
+    expect(useJournalStore.getState().entries.at(-1)).toMatchObject({ kind: "recording", label: "Recording did not start: encoder unavailable" })
 
     await act(async () => {
       host.querySelector<HTMLButtonElement>("button")!.click()

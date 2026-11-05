@@ -69,7 +69,8 @@ export const useJournalStore = create<JournalState>((set, get) => ({
   // Rehearsal is a sandbox (ADR 0001): only its start and end are part of the service's history.
   add: (entry) => {
     // "Present anyway" (#409) is the decision to leave rehearsal or go live, so it is kept even then.
-    if (entry.kind !== "rehearsal" && entry.kind !== "approval" && useBroadcastStore.getState().rehearsal) return
+    // The recording is real in rehearsal too (#411): its start, stop or failure is kept.
+    if (entry.kind !== "rehearsal" && entry.kind !== "approval" && entry.kind !== "recording" && useBroadcastStore.getState().rehearsal) return
     const current = get()
     const service = useServiceStore.getState().current
     const startsRun = entry.kind === "live" || (entry.kind === "event" && Boolean(entry.eventId || entry.itemId))
@@ -100,7 +101,13 @@ export const useJournalStore = create<JournalState>((set, get) => ({
     // fetched first): its decision goes into the new run instead of being dropped with the old log.
     // ponytail: "moments" is 60 s; a run id on the decision if a let-through ever takes longer.
     const now = monotonicNow()
-    const carried = (s: JournalState) => (startsNewRun ? s.entries.filter((e) => e.kind === "approval" && e.programId === service?.id && now - e.mono < 60_000) : s.entries)
+    // A recording still running when the run starts (it usually starts before the first item goes
+    // live) is part of the new run: its "started" entry comes along.
+    const recordingNow = (entries: JournalEntry[]) => {
+      const last = [...entries].reverse().find((e) => e.kind === "recording" && e.recording)
+      return last?.recording === "started" ? [last] : []
+    }
+    const carried = (s: JournalState) => (startsNewRun ? [...recordingNow(s.entries), ...s.entries.filter((e) => e.kind === "approval" && e.programId === service?.id && now - e.mono < 60_000)].sort((a, b) => a.mono - b.mono) : s.entries)
     set((s) => ({
       ...runChange,
       entries: capJournal([...carried(s), { ...entry, at: Date.now(), mono: now }]),

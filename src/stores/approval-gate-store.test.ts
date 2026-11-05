@@ -85,6 +85,18 @@ describe("approval before go-live (CL-002, opt-in)", () => {
     expect(useJournalStore.getState().entries.some((e) => e.kind === "approval")).toBe(false)
   })
 
+  it("a recording running before the first go-live belongs to the run it starts, and is logged in rehearsal (#411)", () => {
+    useServiceStore.setState({ current: program({ approved_revision: 3 }) })
+    useJournalStore.setState({ entries: [], runContext: null })
+    useJournalStore.getState().add({ kind: "recording", label: "Recording started: Overflow", recording: "started" })
+    useJournalStore.getState().add({ kind: "live", label: "Welcome", itemId: "w" })
+    expect(useJournalStore.getState().entries.map((e) => e.kind)).toEqual(["recording", "live"])
+    useBroadcastStore.setState({ rehearsal: true })
+    useJournalStore.getState().add({ kind: "recording", label: "Recording stopped after 5 s", recording: "stopped" })
+    useBroadcastStore.setState({ rehearsal: false })
+    expect(useJournalStore.getState().entries.filter((e) => e.kind === "recording").map((e) => e.recording)).toEqual(["started", "stopped"])
+  })
+
   it("logs nothing for Not now", () => {
     useJournalStore.setState({ entries: [], runContext: null })
     expect(approvalHolds(() => {})).toBe(true)
