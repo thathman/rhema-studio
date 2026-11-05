@@ -8,6 +8,8 @@ export interface NdiMeasure {
   rate: number | null
   receivers: number | null
   fps: number
+  /** How long no frame has been sent (ms); 0 while frames come. */
+  stalledMs: number
 }
 
 /** How often Show health asks while it is open. */
@@ -23,7 +25,7 @@ export function useMachineHealth(intervalMs = HEALTH_REFRESH_MS): { health: Mach
   const [ndi, setNdi] = useState<Record<string, NdiMeasure>>({})
   useEffect(() => {
     let live = true
-    const last = new Map<string, { frames: number; at: number }>()
+    const last = new Map<string, { frames: number; at: number; changedAt: number }>()
     const tick = async () => {
       try {
         const h = await invoke<MachineHealth>("machine_health")
@@ -45,8 +47,10 @@ export function useMachineHealth(intervalMs = HEALTH_REFRESH_MS): { health: Mach
         if (!st?.active) continue
         const at = Date.now()
         const frames = typeof st.framesSent === "number" ? st.framesSent : null
-        next[o.id] = { rate: frames === null ? null : ndiRate(last.get(o.id), frames, at), receivers: typeof st.receivers === "number" ? st.receivers : null, fps: st.fps }
-        if (frames !== null) last.set(o.id, { frames, at })
+        const prev = last.get(o.id)
+        const changedAt = frames !== null && prev && frames === prev.frames ? prev.changedAt : at
+        next[o.id] = { rate: frames === null ? null : ndiRate(prev, frames, at), receivers: typeof st.receivers === "number" ? st.receivers : null, fps: st.fps, stalledMs: at - changedAt }
+        if (frames !== null) last.set(o.id, { frames, at, changedAt })
       }
       if (live) setNdi(next)
     }

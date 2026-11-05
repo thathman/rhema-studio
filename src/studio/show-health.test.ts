@@ -162,6 +162,9 @@ describe("computer health", () => {
     expect(ndiRate({ frames: 900, at: 1000 }, 10, 4000)).toBeNull()
     expect(ndiRateWords(29.6, 30, 1)).toEqual({ text: "30 of 30 frames a second sent · 1 receiver watching", tone: "ok" })
     expect(ndiRateWords(0.4, 30, 0).text).toBe("0 of 30 frames a second sent · no receiver watching")
+    // A still picture's keepalive is no stall; none for 10 s is (#411).
+    expect(ndiRateWords(0, 30, 1, 4_000).tone).toBe("ok")
+    expect(ndiRateWords(0, 30, 1, 12_000)).toEqual({ text: "No frame sent for 12 s: the sender has stopped. Turn this output off and on.", tone: "warn" })
     expect(ndiRateWords(null, 30, null)).toEqual({ text: "Measuring…", tone: "off" })
   })
 
