@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useJournalStore } from "@/stores/journal-store"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const native = vi.hoisted(() => ({
@@ -175,6 +176,7 @@ beforeEach(() => {
     return null
   })
   useRecorderAlertStore.getState().reset()
+  useJournalStore.setState({ entries: [], runContext: null })
   useBroadcastStore.setState({
     outputs: [main, overflow, stage, browser],
     rehearsal: false,
@@ -220,6 +222,8 @@ describe("Live's Rhema recording dock", () => {
       host.querySelector<HTMLButtonElement>('button[aria-label="Start Rhema recording"]')!.click()
     )
     expect(useRecorderAlertStore.getState().alerts.action).toBe("Recording did not start: encoder unavailable")
+    // The service log says so too (#411, #447 History).
+    expect(useJournalStore.getState().entries.at(-1)).toMatchObject({ kind: "recording", label: "Recording did not start: encoder unavailable" })
 
     await act(async () => {
       host.querySelector<HTMLButtonElement>("button")!.click()
@@ -395,6 +399,7 @@ describe("Live's Rhema recording dock", () => {
     expect(start.disabled).toBe(false)
     await act(async () => start.click())
 
+    expect(useJournalStore.getState().entries.at(-1)?.label).toMatch(/^Recording started: /)
     expect(native.invoke).toHaveBeenCalledWith("recorder_start", {
       request: checkedRequest,
     })
@@ -646,6 +651,15 @@ describe("Live's Rhema recording dock", () => {
       isLive: true,
       liveVerse: { reference: "Program item" },
     })
+  })
+
+  it("logs a recording the recorder ended by itself, once, however often its status arrives (#411)", async () => {
+    await renderDock()
+    const failed = { ...recordingStatus, state: "failed", sessionId: "session-failed-1", problem: { code: "disk_full", message: "The disk is full." } }
+    await act(async () => native.eventHandlers.get("recorder:status")?.({ payload: failed }))
+    await act(async () => native.eventHandlers.get("recorder:status")?.({ payload: { ...failed } }))
+    const logged = useJournalStore.getState().entries.filter((e) => e.kind === "recording")
+    expect(logged).toEqual([expect.objectContaining({ label: "Recording failed: The disk is full." })])
   })
 
   it("shows backend automatic-stop alerts in Live and keeps them for the shell after navigation", async () => {

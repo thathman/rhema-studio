@@ -9,7 +9,7 @@ export interface JournalEntry {
   /** Monotonic ms, for durations (immune to clock changes). */
   mono: number
   /** "event": a run-of-show event started (the event clock, ADR 0001); the others are what the screens and desk did. */
-  kind: "live" | "clear" | "restore" | "quick" | "message" | "rehearsal" | "remote" | "obs" | "sound" | "timing" | "event" | "moment" | "source" | "recovery" | "scene" | "shown" | "take" | "approval"
+  kind: "live" | "clear" | "restore" | "quick" | "message" | "rehearsal" | "remote" | "obs" | "sound" | "timing" | "event" | "moment" | "source" | "recovery" | "scene" | "shown" | "take" | "approval" | "recording"
   /** Reference, title or message text. */
   label: string
   itemId?: string | null
@@ -45,7 +45,7 @@ export function actualDurations(entries: JournalEntry[], nowMono: number): Actua
     .filter((e) => e.kind === "live" || e.kind === "quick" || e.kind === "restore")
     .map((e) => {
       const i = entries.indexOf(e)
-      const next = entries.slice(i + 1).find((n) => n.kind === "recovery" || (n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote" && n.kind !== "obs" && n.kind !== "sound" && n.kind !== "timing" && n.kind !== "event" && n.kind !== "moment" && n.kind !== "source" && n.kind !== "scene" && n.kind !== "shown" && n.kind !== "take" && n.kind !== "approval"))
+      const next = entries.slice(i + 1).find((n) => n.kind === "recovery" || (n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote" && n.kind !== "obs" && n.kind !== "sound" && n.kind !== "timing" && n.kind !== "event" && n.kind !== "moment" && n.kind !== "source" && n.kind !== "scene" && n.kind !== "shown" && n.kind !== "take" && n.kind !== "approval" && n.kind !== "recording"))
       return { entry: e, itemId: e.itemId ?? null, label: e.label, ms: Math.max(0, (next?.mono ?? nowMono) - e.mono) }
     })
 }
@@ -130,7 +130,7 @@ export function formatJournal(title: string, entries: JournalEntry[], nowMono: n
   const durations = actualDurations(entries, nowMono)
   for (const e of entries) {
     const d = durations.find((x) => x.entry === e)
-    const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote", obs: "OBS", sound: "sound", timing: "timer", event: "EVENT", moment: "MOMENT", source: "source", recovery: "RECOVERED", scene: "SCENE", shown: "shown", take: "TAKE", approval: "UNAPPROVED" }[e.kind]
+    const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote", obs: "OBS", sound: "sound", timing: "timer", event: "EVENT", moment: "MOMENT", source: "source", recovery: "RECOVERED", scene: "SCENE", shown: "shown", take: "TAKE", approval: "UNAPPROVED", recording: "RECORDING" }[e.kind]
     const dur = d && (e.kind === "live" || e.kind === "quick" || e.kind === "restore") ? `  (${mmss(d.ms)})` : ""
     // One entry, one line: typed words (a notice, a hold reason, a scene name) never start a line of their own.
     lines.push(`${hhmm(e.at, timeZone)}  ${verb.padEnd(13)} ${oneLine(e.label)}${dur}${e.source && e.kind !== "source" ? `  · ${oneLine(e.source)}` : ""}`)

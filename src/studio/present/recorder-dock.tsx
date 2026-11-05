@@ -5,6 +5,8 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
+import { useJournalStore } from "@/stores/journal-store"
+import { currentActor } from "@/stores/broadcast-store"
 import { recorderOutputLeftMessage, useRecorderAlertStore } from "@/stores/recorder-alert-store"
 import { Button } from "@/components/ui/button"
 import { TriangleAlertIcon } from "lucide-react"
@@ -129,6 +131,19 @@ function engineStateLabel(
 }
 
 /** Main-desk controls for the host's independent Rhema-native recorder. */
+/**
+ * The service log says when the recording started, stopped or failed (#411, #447 History), and
+ * who did it, beside what was on screen: a later review can tell which part of the service the
+ * file holds.
+ */
+/** Recordings whose failure is already in the log (by session), for this run of the app. */
+const loggedFailures = new Set<string>()
+
+function logRecording(label: string): void {
+  const by = currentActor()
+  useJournalStore.getState().add({ kind: "recording", label: `${label}${by ? ` · by ${by}` : ""}`, ...(by ? { by } : {}) })
+}
+
 export function RecorderDock() {
   const outputs = useBroadcastStore((state) => state.outputs)
   const rehearsal = useBroadcastStore((state) => state.rehearsal)
@@ -227,6 +242,16 @@ export function RecorderDock() {
     if (actionError) alerts.report("action", actionError)
     else alerts.clear("action")
   }, [actionError])
+
+  // The recorder failing by itself (a full disk, a lost output) goes in the service log too, once
+  // per recording, however often Live is opened again.
+  useEffect(() => {
+    if (status?.state !== "failed") return
+    const key = status.sessionId ?? status.startedAt ?? "unknown"
+    if (loggedFailures.has(key)) return
+    loggedFailures.add(key)
+    logRecording(`Recording failed: ${status.problem?.message ?? "the recorder stopped"}`)
+  }, [status?.state, status?.sessionId, status?.startedAt, status?.problem?.message])
 
   useEffect(() => {
     let cancelled = false
@@ -359,12 +384,14 @@ export function RecorderDock() {
       const started = await invoke<RecorderStatus>("recorder_start", {
         request,
       })
+      logRecording(`Recording started: ${output?.name ?? "output"}`)
       setStatus(started)
       setStatusError(null)
       setPreflight(null)
       setPreflightKey(null)
     } catch (error) {
       setActionError(`Recording did not start: ${errorMessage(error)}`)
+      logRecording(`Recording did not start: ${errorMessage(error)}`)
     } finally {
       setPendingAction(null)
     }
@@ -377,10 +404,12 @@ export function RecorderDock() {
     setConfirmStop(false)
     try {
       const stopped = await invoke<RecorderStatus>("recorder_stop")
+      logRecording(`Recording stopped after ${Math.round((stopped.elapsedMs ?? 0) / 1000)} s${stopped.video?.framesDropped ? ` · ${stopped.video.framesDropped} frames dropped` : ""}`)
       setStatus(stopped)
       setStatusError(null)
     } catch (error) {
       setActionError(`Recording could not be finalized: ${errorMessage(error)}`)
+      logRecording(`Recording could not be finalized: ${errorMessage(error)}`)
     } finally {
       setPendingAction(null)
     }
