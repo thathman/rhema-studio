@@ -15,7 +15,27 @@ describe("approval before go-live (CL-002, opt-in)", () => {
     useApprovalGateStore.setState({ held: null, retry: null, acknowledged: [] })
     useBroadcastStore.setState({ rehearsal: false, isLive: false, liveVerse: null })
     useSettingsStore.setState({ requireApproval: true })
-    useServiceStore.setState({ current: program() })
+    useServiceStore.setState({ current: program(), dirty: false })
+  })
+
+  it("holds unsaved edits to an approved service, as a saved change would be held (#409)", () => {
+    useServiceStore.setState({ current: program({ approved_revision: 3 }), dirty: true })
+    const retry = vi.fn()
+    expect(approvalHolds(retry)).toBe(true)
+    expect(useApprovalGateStore.getState().held?.id).toBe("p1")
+    expect(retry).not.toHaveBeenCalled()
+  })
+
+  it("drops a held question when another service opens; Present anyway then acts on nothing (#409)", () => {
+    const retry = vi.fn()
+    expect(approvalHolds(retry)).toBe(true)
+    useServiceStore.setState({ current: program({ id: "p2", approved_revision: 3 }) })
+    expect(useApprovalGateStore.getState().held).toBeNull()
+    useJournalStore.setState({ entries: [], runContext: null })
+    useApprovalGateStore.getState().presentAnyway()
+    expect(retry).not.toHaveBeenCalled()
+    expect(useApprovalGateStore.getState().acknowledged).not.toContain("p1")
+    expect(useJournalStore.getState().entries).toEqual([])
   })
 
   it("never holds in rehearsal, with no service open, or when approved; a service that started unheld is never held later", () => {

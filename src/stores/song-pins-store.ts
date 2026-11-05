@@ -36,6 +36,9 @@ export async function loadSongPins(program: Pick<Program, "id" | "approved_revis
     useSongPins.setState({ programId: program?.id ?? null, pins: {}, latest: [] })
     return
   }
+  // Another service's pins never stand in for this one's while these load (#409): until they arrive
+  // its songs use the library's words, never the last service's approved ones.
+  if (useSongPins.getState().programId !== program.id) useSongPins.setState({ programId: program.id, pins: {}, latest: [] })
   let songs: SongWithSections[] = []
   try {
     songs = (await invoke<SongWithSections[] | null>("content_approved_songs", { programId: program.id })) ?? []
