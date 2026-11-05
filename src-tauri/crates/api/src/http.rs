@@ -7080,7 +7080,7 @@ mod tests {
             assert_eq!(published_reservation[&part].as_u64(), live.revision(&part));
         }
         assert_eq!(
-            press(port, "group", accepted).await.0,
+            press(port, "group", accepted.clone()).await.0,
             200,
             "a retry gets the accepted result without dispatching again"
         );
@@ -7094,6 +7094,12 @@ mod tests {
             assert_eq!(published_reservation[&part].as_u64(), live.revision(&part));
         }
         assert_eq!(sink.command_count(), 1);
+        // #411: once the host's Live State moved on after it (here rehearsal began), an exact retry is
+        // still "already done", not refused as if it were a new request.
+        live.publish(rehearsal.to_string());
+        let (status, body) = press(port, "group", accepted.clone()).await;
+        assert_eq!(status, 200, "an exact retry after the Live State moved on: {body}");
+        assert_eq!(sink.command_count(), 1, "not dispatched again");
         let payload: serde_json::Value =
             serde_json::from_str(&sink.group_take.lock().unwrap().clone().unwrap()).unwrap();
         assert_eq!(
