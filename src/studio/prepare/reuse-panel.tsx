@@ -40,6 +40,8 @@ export function ReusePanel({ onAdded }: { onAdded?: (id: string) => void } = {})
         if (cancelled) return
         const bible = useBibleStore.getState()
         const mediaKinds = data ? await loadMediaKinds(data) : new Map()
+        // Another service picked while its pictures were checked: that one is shown, not this (#444).
+        if (cancelled) return
         setItems(data ? toQueueItems(data, bible.activeTranslationId, bible.translations, mediaKinds).items : [])
         setChosen(new Set())
       } catch (e) {

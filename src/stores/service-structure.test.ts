@@ -59,6 +59,26 @@ describe("a service's phases and groups", () => {
     expect((payload.run_of_show_event as Record<string, unknown>).cues).toEqual(cues)
   })
 
+  it("an event whose role or owner was typed blank or pasted with a tab still reopens as an event (#444)", () => {
+    const source = program([
+      row("prayer", "group", "Opening Prayer", JSON.stringify({ run_of_show_event: { schema_version: 1 } })),
+      row("moment", "verse", "John 3:16"),
+    ])
+    const { items, headers } = toQueueItems(source, 1, [])
+    const edited = headers.map((h) => (h.event ? { ...h, event: { ...h.event, role: " ", ownership: "Lead\tPastor" } } : h))
+    const saved = toItemInputs(items, undefined, undefined, edited)
+    const reopened = toQueueItems(program(saved.map((input, i) => row(input.id ?? `r${i}`, input.kind ?? "verse", input.reference, input.payload ?? null))), 1, [])
+    expect(reopened.headers[0].event).toBeTruthy()
+    expect(reopened.headers[0].event?.role).toBeUndefined()
+    expect(reopened.headers[0].event?.ownership).toBe("Lead Pastor")
+  })
+
+  it("an event whose role is 60 characters with emoji still reopens as an event", () => {
+    const role = "a" + "😀".repeat(59)
+    const source = program([row("prayer", "group", "Opening Prayer", JSON.stringify({ run_of_show_event: { schema_version: 1, role } }))])
+    expect(toQueueItems(source, 1, []).headers[0].event?.role).toBe(role)
+  })
+
   it("a plain service has no headers and saves as before", () => {
     const { headers } = toQueueItems(program([row("a", "verse", "John 3:16")]), 1, [])
     expect(headers).toEqual([])
