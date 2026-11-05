@@ -161,6 +161,7 @@ pub fn remote_set_keys(
         // A missing switch means a key is required (#412): open access is only ever chosen explicitly.
         k.require_auth = require_auth.unwrap_or(true) || n > 0;
         k.entries = entries;
+        rhema_api::peer::reset_refused();
     }
     let current = remote.keys.read().map_err(|e| e.to_string())?.entries.clone();
     // The recorder grant is its own authority (doc 42): every change to it is logged.
@@ -202,6 +203,9 @@ pub fn remote_set_keys(
 pub struct RemoteAuthStatus {
     pub required: bool,
     pub credential_count: usize,
+    /// Remote requests refused for their key since the keys last changed (#412), and when the last was (Unix ms, 0 = never).
+    pub refused: u64,
+    pub last_refused_ms: u64,
 }
 
 fn remote_auth_status(keys: &KeySet) -> Result<RemoteAuthStatus, String> {
@@ -209,6 +213,8 @@ fn remote_auth_status(keys: &KeySet) -> Result<RemoteAuthStatus, String> {
     Ok(RemoteAuthStatus {
         required: keys.require_auth,
         credential_count: keys.entries.len(),
+        refused: rhema_api::peer::refused().0,
+        last_refused_ms: rhema_api::peer::refused().1,
     })
 }
 

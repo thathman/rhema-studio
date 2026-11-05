@@ -4,6 +4,32 @@ use std::net::IpAddr;
 
 use crate::keys::{check_key, KeyEntry, KeySet};
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static REFUSED: AtomicU64 = AtomicU64::new(0);
+static LAST_REFUSED_MS: AtomicU64 = AtomicU64::new(0);
+
+/// Count one remote request refused for its key (missing, wrong or revoked, or key-less from outside
+/// the local network or through a proxy), for Show Health (#412): an old controller that sends no key
+/// shows up there, not only in the log. Show Health shows it only while recent.
+pub fn note_refused() {
+    REFUSED.fetch_add(1, Ordering::Relaxed);
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+    LAST_REFUSED_MS.store(now, Ordering::Relaxed);
+}
+
+/// Requests refused for their key since the keys last changed, and when the last one was (Unix ms, 0 = never).
+#[must_use]
+pub fn refused() -> (u64, u64) {
+    (REFUSED.load(Ordering::Relaxed), LAST_REFUSED_MS.load(Ordering::Relaxed))
+}
+
+/// New keys or a new setting: earlier refusals no longer say anything about the controllers now.
+pub fn reset_refused() {
+    REFUSED.store(0, Ordering::Relaxed);
+    LAST_REFUSED_MS.store(0, Ordering::Relaxed);
+}
+
 /// Open remote commands are permitted only from the host's local/private networks.
 pub const OPEN_REMOTE_OUTSIDE_LOCAL_NETWORK: &str =
     "unauthenticated remote commands are limited to the local network";
