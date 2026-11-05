@@ -7,6 +7,8 @@ import { parseOpenLyrics, toOpenLyrics } from "@/lib/openlyrics"
 import { songToMarkdown } from "@/lib/lyrics"
 import { useSettingsStore } from "@/stores/settings-store"
 import { installationForBackup } from "@/lib/installation-export"
+import { fold } from "@/lib/fuzzy"
+import type { SongInput } from "@/types"
 
 export interface ImportOutcome {
   /** Files that were read. */
@@ -58,9 +60,28 @@ function isSongExport(x: unknown): x is SongExport {
   return typeof x === "object" && x !== null && (x as SongExport).version === 1 && Array.isArray((x as SongExport).songs)
 }
 
+/** First non-empty line of a song's first section, folded (for matching an import to the library). */
+function firstLineOf(input: SongInput): string {
+  const texts = input.sections?.[0]?.texts ?? {}
+  const text = (input.primary_language && texts[input.primary_language]) || Object.values(texts)[0] || ""
+  return fold(text.split("\n").map((l) => l.trim()).find(Boolean) ?? "")
+}
+
+/**
+ * The library song an OpenLyrics file is (#411): the same title, and the same first line or one of
+ * the same hymn numbers ("SSS 245"). Accents and case do not matter. Null when it is new.
+ */
+export function existingSongFor(input: SongInput, library: SongSummary[], codeOf: (hymnbookId: string) => string | undefined): SongSummary | null {
+  const title = fold(input.title.trim())
+  const line = firstLineOf(input)
+  const numbers = new Set((input.numbers ?? []).map((n) => `${codeOf(n.hymnbook_id) ?? ""} ${n.number}`.trim().toLowerCase()))
+  return library.find((s) => fold(s.title.trim()) === title && ((!!line && fold(s.first_line.trim()) === line) || s.numbers.some((n) => numbers.has(n.toLowerCase())))) ?? null
+}
+
 /**
  * Pick one or more files: `rhema-songs-v1.json` (whole library, with `mode`)
- * or OpenLyrics `.xml` (one song each, always added). Nothing is written
+ * or OpenLyrics `.xml` (one song each, matched to the library: a song already here is kept, in any mode
+ * but Duplicate, which adds it again). Nothing is written
  * until a file parses; a JSON import is one transaction in the database.
  */
 export async function importSongsFromFiles(mode: ImportMode, hymnbooks: Hymnbook[]): Promise<ImportOutcome | null> {
@@ -72,6 +93,10 @@ export async function importSongsFromFiles(mode: ImportMode, hymnbooks: Hymnbook
   const paths = Array.isArray(selected) ? selected : [selected]
   const outcome: ImportOutcome = { files: 0, added: 0, replaced: 0, skipped: 0, hymnbooks_added: 0, notes: [] }
   const bookIds: Record<string, string> = {}
+  const codeOf = (id: string) => hymnbooks.find((b) => b.id === id)?.code
+  // The library as it is, to tell a song already here from a new one (#411); kept current as files import.
+  let library: SongSummary[] | null = null
+  let keptForReplace = 0
   for (const b of hymnbooks) {
     bookIds[b.code] = b.id
     bookIds[b.code.toUpperCase()] = b.id
@@ -99,8 +124,20 @@ export async function importSongsFromFiles(mode: ImportMode, hymnbooks: Hymnbook
         if (r.numbers_skipped) outcome.notes.push(`${name}: ${r.numbers_skipped} hymn number${r.numbers_skipped === 1 ? " was" : "s were"} left off (another song here already has ${r.numbers_skipped === 1 ? "it" : "them"})`)
       } else {
         const { input, report } = parseOpenLyrics(text, bookIds)
-        await invoke<SongWithSections>("content_create_song", { input })
-        outcome.added += 1
+        library ??= (await invoke<SongSummary[] | null>("content_list_songs", { limit: 5000 })) ?? []
+        const existing: SongSummary | null = mode === "duplicate" ? null : existingSongFor(input, library, codeOf)
+        // A song already here is kept, in Replace too: an OpenLyrics file lacks its tags (the CAC
+        // hymn book's), notes, other books' numbers and the arrangement ids services choose, so
+        // writing it over the song would lose them. Edit the song in the Library instead.
+        if (existing) {
+          outcome.skipped += 1
+          if (mode === "replace") keptForReplace += 1
+        } else {
+          const saved = await invoke<SongWithSections>("content_create_song", { input })
+          // The file just added is matched by the next one too (two copies in one folder).
+          library.push({ id: saved.song.id, title: input.title, numbers: (input.numbers ?? []).map((n) => `${codeOf(n.hymnbook_id) ?? ""} ${n.number}`.trim()), first_line: Object.values(input.sections?.[0]?.texts ?? {})[0]?.split("\n")[0] ?? "", revision: saved.song.revision } as unknown as SongSummary)
+          outcome.added += 1
+        }
         for (const i of report.ignored) outcome.notes.push(`${name}: ${i} ignored`)
       }
     } catch (e) {
@@ -108,6 +145,7 @@ export async function importSongsFromFiles(mode: ImportMode, hymnbooks: Hymnbook
       outcome.notes.push(`${name}: ${message}`)
     }
   }
+  if (keptForReplace) outcome.notes.push(`${keptForReplace} OpenLyrics song${keptForReplace === 1 ? " is" : "s are"} already here and ${keptForReplace === 1 ? "was" : "were"} kept as ${keptForReplace === 1 ? "it is" : "they are"}: a file does not replace a song (it lacks its tags, notes and arrangements). Edit it in the Library.`)
   return outcome
 }
 
