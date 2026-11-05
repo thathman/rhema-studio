@@ -75,6 +75,11 @@ describe("Find anything (Cmd/Ctrl+K) and scripture, hymns and songs (#407)", () 
     type("hymn book")
     act(() => ([...document.querySelectorAll("[cmdk-item]")].find((el) => el.textContent?.includes("Hymn book")) as HTMLElement).click())
     expect(useShellStore.getState().librarySection).toBe("hymns")
+    useShellStore.setState({ searchOpen: true })
+    act(() => root.render(<GlobalSearch />))
+    type("sounds")
+    act(() => ([...document.querySelectorAll("[cmdk-item]")].find((el) => el.textContent?.includes("Sounds")) as HTMLElement).click())
+    expect(useShellStore.getState().librarySection).toBe("audio")
   })
 
   it("offers no handoff for a single letter", () => {
