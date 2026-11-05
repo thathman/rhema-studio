@@ -62,6 +62,21 @@ describe("Find anything (Cmd/Ctrl+K) and scripture, hymns and songs (#407)", () 
     expect(useBroadcastStore.getState().liveItemId).toBe(liveBefore)
   })
 
+  it("goes straight to a Library section by the words people use (#402)", () => {
+    act(() => root.render(<GlobalSearch />))
+    type("announcement")
+    const row = [...document.querySelectorAll("[cmdk-item]")].find((el) => el.textContent?.includes("Slides & announcements")) as HTMLElement
+    expect(row).toBeTruthy()
+    act(() => row.click())
+    // goTo, so leaving Design still asks about an unsaved draft (app-shell's go()).
+    expect(useShellStore.getState()).toMatchObject({ goRequest: "library", librarySection: "slides", searchOpen: false })
+    useShellStore.setState({ searchOpen: true })
+    act(() => root.render(<GlobalSearch />))
+    type("hymn book")
+    act(() => ([...document.querySelectorAll("[cmdk-item]")].find((el) => el.textContent?.includes("Hymn book")) as HTMLElement).click())
+    expect(useShellStore.getState().librarySection).toBe("hymns")
+  })
+
   it("offers no handoff for a single letter", () => {
     act(() => root.render(<GlobalSearch />))
     type("a")
