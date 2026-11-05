@@ -17,9 +17,11 @@ vi.mock("@tauri-apps/plugin-store", () => ({
     save: () => mockStoreSave(),
   }),
 }))
-vi.mock("@/studio/prepare/song-library", () => ({ SongLibrary: () => null }))
-vi.mock("@/studio/prepare/hymn-book", () => ({ HymnBook: () => null }))
-vi.mock("@/studio/prepare/media-library", () => ({ MediaLibrary: () => null }))
+// What Library hands its browsers (#447: privatePreview, so browsing never reaches Live).
+const childProps = vi.hoisted(() => ({ song: null as unknown, hymn: null as unknown, media: null as unknown }))
+vi.mock("@/studio/prepare/song-library", () => ({ SongLibrary: (p: unknown) => { childProps.song = p; return null } }))
+vi.mock("@/studio/prepare/hymn-book", () => ({ HymnBook: (p: unknown) => { childProps.hymn = p; return null } }))
+vi.mock("@/studio/prepare/media-library", () => ({ MediaLibrary: (p: unknown) => { childProps.media = p; return null } }))
 vi.mock("@/studio/library/library-blocks", () => ({ SongFiles: () => null }))
 vi.mock("@/studio/library/slide-library", () => ({ SlideLibrary: () => null }))
 vi.mock("@chenglou/pretext", () => ({ clearCache: vi.fn() }))
@@ -305,6 +307,27 @@ describe("Library workspace", () => {
       reference: "Psalm 23:1",
       segments: [{ text: "Existing program content" }],
     })
+  })
+
+  it("browses songs, hymns, pictures and sounds privately, and a section switch closes the Library preview (#447)", async () => {
+    const { useLibraryPreview } = await import("@/stores/library-preview-store")
+    await act(async () => {
+      root!.render(<LibraryWorkspace />)
+    })
+    const open = async (label: string) => {
+      const tab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent === label)!
+      await act(async () => tab.click())
+    }
+    await open("Songs & ministrations")
+    expect(childProps.song).toMatchObject({ privatePreview: true })
+    await open("Hymn book")
+    expect(childProps.hymn).toMatchObject({ privatePreview: true })
+    await open("Pictures & videos")
+    expect(childProps.media).toMatchObject({ privatePreview: true, kinds: "visual" })
+    useLibraryPreview.getState().inspect({ item: { kind: "image" } as never, title: "Welcome.png", detail: "" })
+    await open("Sounds")
+    expect(childProps.media).toMatchObject({ privatePreview: true, kinds: "audio" })
+    expect(useLibraryPreview.getState().inspected).toBeNull()
   })
 
   it("offers saved Bible passages as a first-class Library section", async () => {

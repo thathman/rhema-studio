@@ -1,4 +1,6 @@
-import { useState } from "react"
+import { LibraryPreviewPane } from "@/studio/library/library-preview-pane"
+import { useLibraryPreview } from "@/stores/library-preview-store"
+import { useEffect, useState } from "react"
 import { PlusIcon, UploadIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -116,6 +118,8 @@ function sameDestinationContext(
  */
 export function LibraryWorkspace() {
   const section = useShellStore((s) => s.librarySection)
+  // A section switch closes Library's preview (it was of the last section's item); nothing else moves.
+  useEffect(() => () => useLibraryPreview.getState().clear(), [section])
   const setSection = useShellStore((s) => s.setLibrarySection)
   const prepareReturn = useShellStore((s) => s.prepareLibraryReturn)
   const currentService = useServiceStore((s) => s.current)
@@ -273,6 +277,8 @@ export function LibraryWorkspace() {
     }
     addItemAtTarget(item, invocation, target, context, true)
   }
+  // The same handler, named for what it does (the Library preview's Add to service).
+  const addToService = useItem
 
   const useDesignVersion = (scene: Scene, version: DesignVersion, pageId?: string) => {
     const context = designInvocation?.prepareReturn
@@ -436,7 +442,7 @@ export function LibraryWorkspace() {
       </div>
       <div role="tabpanel" aria-label={SECTIONS.find(([id]) => id === section)?.[1]} className="mx-[29px] mb-6 flex min-h-0 flex-1 flex-col max-[1200px]:mx-5">
         {section === "bible" && <BibleLibrary onUseItem={useItem} />}
-        {section === "songs" && <SongLibrary layout="cards" newRequest={newSong} onUseItem={useItem} />}
+        {section === "songs" && <SongLibrary layout="cards" newRequest={newSong} onUseItem={useItem} privatePreview />}
         {section === "designs" && <div className="min-h-0 flex-1 overflow-y-auto">
           {designInvocation ? (
             <section className="rounded-lg border border-border bg-card p-4" aria-label="Use a design in the current moment">
@@ -461,13 +467,14 @@ export function LibraryWorkspace() {
         </div>}
         {section !== "songs" && section !== "bible" && section !== "designs" && (
           <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-card p-4">
-            {section === "hymns" && <HymnBook onUseItem={useItem} />}
+            {section === "hymns" && <HymnBook onUseItem={useItem} privatePreview />}
             {section === "slides" && <SlideLibrary key={newSlide} onUseItem={useItem} />}
-            {section === "media" && <MediaLibrary kinds="visual" onUseItem={useItem} />}
-            {section === "audio" && <MediaLibrary kinds="audio" onUseItem={useItem} />}
+            {section === "media" && <MediaLibrary kinds="visual" onUseItem={useItem} privatePreview />}
+            {section === "audio" && <MediaLibrary kinds="audio" onUseItem={useItem} privatePreview />}
             {section === "files" && <div className="h-full max-w-2xl overflow-y-auto"><SongFiles /></div>}
           </div>
         )}
+        <LibraryPreviewPane onAdd={(item) => addToService(item, captureLibraryUseInvocation())} />
       </div>
 
       <Dialog

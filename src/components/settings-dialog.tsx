@@ -3,6 +3,7 @@ import { CAPACITY_KINDS, NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, defaultLimits, 
 import { autoModeOf, useBroadcastStore, type AutoMode } from "@/stores/broadcast-store"
 import { AssistantsSection } from "@/components/settings/assistants-section"
 import { ChurchProfileSection } from "@/components/settings/church-profile-section"
+import { AppearanceSection } from "@/components/settings/appearance-section"
 import { ObsSettingsBlock } from "@/components/settings/obs-settings-block"
 import { RemoteAuthSetting } from "@/components/settings/remote-auth-setting"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
@@ -48,7 +49,7 @@ import { useSettingsDialogStore, type SettingsSection } from "@/lib/settings-dia
 import { markSearchHits, searchElsewhere, searchSettings, searchWords, type ElsewhereId } from "@/lib/settings-search"
 import { openConnectionsHub } from "@/studio/connections/navigation"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
-import { ArrowUpRightIcon, ChurchIcon, EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SearchIcon, SparklesIcon } from "lucide-react"
+import { ArrowUpRightIcon, ChurchIcon, SunMoonIcon, EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SearchIcon, SparklesIcon } from "lucide-react"
 import { useShellStore } from "@/studio/shell-store"
 import type { DeviceInfo } from "@/types/audio"
 import { certificateWords } from "@/lib/host-certificate"
@@ -62,6 +63,7 @@ type NavSection = SettingsSection
 
 const navItems: { name: string; id: NavSection; icon: React.ReactNode }[] = [
   { name: "Church and profile", id: "church", icon: <ChurchIcon strokeWidth={2} /> },
+  { name: "Appearance", id: "appearance", icon: <SunMoonIcon strokeWidth={2} /> },
   { name: "Outputs", id: "screens", icon: <MonitorIcon strokeWidth={2} /> },
   {
     name: "Audio",
@@ -588,6 +590,7 @@ function DisplayModeSection() {
 
 const sectionTitles: Record<NavSection, string> = {
   church: "Church and profile",
+  appearance: "Appearance",
   assistants: "AI assistants (MCP)",
   data: "Data & Sync",
   screens: "Screens and NDI",
@@ -1131,6 +1134,7 @@ function StatusDot({ running }: { running: boolean }) {
 
 const sectionComponents: Record<NavSection, React.FC> = {
   church: ChurchProfileSection,
+  appearance: AppearanceSection,
   assistants: AssistantsSection,
   data: DataSyncSection,
   screens: ScreensSection,
@@ -1157,7 +1161,7 @@ const GROUPS: Array<{ title: string; ids: NavSection[] }> = [
   { title: "Connections", ids: ["remote", "screens"] },
   { title: "AI and MCP", ids: ["assistants"] },
   { title: "Data and sync", ids: ["data"] },
-  { title: "Preferences", ids: ["display"] },
+  { title: "Preferences", ids: ["appearance", "display"] },
   { title: "Diagnostics and about", ids: ["diagnostics", "help"] },
 ]
 
@@ -1166,7 +1170,6 @@ const SEARCHABLE = navItems.map((n) => ({ id: n.id, name: n.name, title: section
 /** Where a search hit outside Settings takes you. */
 const ELSEWHERE: Record<ElsewhereId, () => void> = {
   church: () => useShellStore.getState().openDesign("brand"),
-  appearance: () => useShellStore.getState().openDeskMenu(),
   cameras: openConnectionsHub,
   hosting: openConnectionsHub,
   permissions: () => { useSettingsDialogStore.getState().closeSettings(); useShellStore.getState().goTo("permissions") },
@@ -1232,7 +1235,7 @@ export function SettingsPage() {
             <span id="settings-search-hint" className="sr-only">Enter opens the first match. Escape clears the search.</span>
           </div>
           <p role="status" className={searching ? "px-3 pt-1 pb-2 text-xs text-muted-foreground" : "sr-only"}>
-            {!searching ? "" : hits.length === 0 && elsewhere.length === 0 ? "Nothing in Settings matches. Light and dark are under Appearance in the Desk menu, at the foot of the sidebar." : hits.length === 0 ? "Not in Settings: it has its own page, below. Enter opens the first." : `${hits.length} ${hits.length === 1 ? "section matches" : "sections match"}${elsewhere.length ? `, and ${elsewhere.length} elsewhere in Rhema` : ""}. Enter opens the first.`}
+            {!searching ? "" : hits.length === 0 && elsewhere.length === 0 ? "Nothing in Settings matches." : hits.length === 0 ? "Not in Settings: it has its own page, below. Enter opens the first." : `${hits.length} ${hits.length === 1 ? "section matches" : "sections match"}${elsewhere.length ? `, and ${elsewhere.length} elsewhere in Rhema` : ""}. Enter opens the first.`}
           </p>
           {!searching && <p className="px-4 pt-2.5 pb-2 text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Preferences</p>}
           {groups.map((g) => (
