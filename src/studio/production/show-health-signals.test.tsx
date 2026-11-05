@@ -135,20 +135,31 @@ describe("Show health: cameras and Google TVs (#213)", () => {
     expect(card.textContent).not.toContain("Unauthenticated LAN control is enabled")
   })
 
-  it("says how many remote requests were refused for their key, and nothing when none were (#412)", async () => {
+  it("says when remote requests were last refused and why, only while recent (#412)", async () => {
     answers.get_http_status = { running: true, lan: true, port: 8080 }
     answers.get_osc_status = { running: true, lan: true, port: 8000 }
-    answers.get_remote_auth_status = { required: true, credential_count: 1, refused: 3 }
+    answers.get_remote_auth_status = { required: true, credential_count: 1, refused: 3, last_refused_ms: Date.now() - 60_000 }
     useSettingsStore.setState({ remoteAuthRequired: true, remoteSecret: "key" })
     let el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
     let card = el.querySelector('[aria-label="Remote control access"]')!
-    expect(card.textContent).toContain("3 remote requests were refused for a missing or wrong key")
+    expect(card.textContent).toContain("Remote requests were refused, most recently at")
+    expect(card.textContent).toContain("a missing or wrong key")
     expect(card.textContent).toContain("may need the key")
 
-    answers.get_remote_auth_status = { required: true, credential_count: 1, refused: 0 }
+    // An old refusal (a fixed controller) says nothing any more.
+    answers.get_remote_auth_status = { required: true, credential_count: 1, refused: 3, last_refused_ms: Date.now() - 11 * 60_000 }
     el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
     card = el.querySelector('[aria-label="Remote control access"]')!
-    expect(card.textContent).not.toContain("refused for a missing or wrong key")
+    expect(card.textContent).not.toContain("were refused")
+
+    // With no key required, refusals are about where the request came from, not a key.
+    answers.get_remote_auth_status = { required: false, credential_count: 0, refused: 1, last_refused_ms: Date.now() }
+    useSettingsStore.setState({ remoteAuthRequired: false, remoteSecret: "" })
+    el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
+    card = el.querySelector('[aria-label="Remote control access"]')!
+    expect(card.textContent).toContain("A remote request was refused")
+    expect(card.textContent).toContain("outside this network or through a proxy")
+    expect(card.textContent).not.toContain("a missing or wrong key")
   })
 
   it("uses the backend's effective auth state when legacy settings still say off", async () => {

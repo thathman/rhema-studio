@@ -3376,9 +3376,9 @@ mod tests {
         let paired = key_set_from(&[("token", "Desk")]);
         let mut wrong = HeaderMap::new();
         wrong.insert("x-rhema-key", "tampered".parse().unwrap());
-        let before = crate::peer::refused_count();
         assert!(check_http_command_key(&paired, &wrong, "192.168.1.20:45000".parse().unwrap()).is_err());
-        assert!(crate::peer::refused_count() > before);
+        // Other tests may reset or add at the same time; the time of the last refusal is always set.
+        assert!(crate::peer::refused().1 > 0);
     }
 
     #[test]

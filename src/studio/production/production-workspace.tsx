@@ -468,14 +468,20 @@ interface RemoteListenerStatus {
 interface RemoteAuthStatus {
   required: boolean
   credential_count: number
-  /** Requests refused for their key since Rhema Studio started (#412). */
+  /** Requests refused for their key since the keys last changed (#412), and when the last was (Unix ms). */
   refused?: number
+  last_refused_ms?: number
 }
+
+/** Show Health mentions refusals only while recent (#412): a fixed controller stops the note. */
+const REFUSED_RECENT_MS = 10 * 60_000
 
 interface RemoteListenerSnapshot {
   http: RemoteListenerStatus | null
   osc: RemoteListenerStatus | null
   auth: RemoteAuthStatus | null
+  /** A refusal within the last REFUSED_RECENT_MS, worked out when read. */
+  refusedRecently: boolean
 }
 
 /** Shows whether the running command listeners can be reached from the LAN and whether auth is required. */
@@ -490,7 +496,8 @@ function RemoteControlHealth() {
         invoke<RemoteListenerStatus>("get_osc_status").catch(() => null),
         invoke<RemoteAuthStatus>("get_remote_auth_status").catch(() => null),
       ])
-      if (!cancelled) setSnapshot({ http, osc, auth })
+      const refusedRecently = !!auth?.refused && !!auth.last_refused_ms && Date.now() - auth.last_refused_ms < REFUSED_RECENT_MS
+      if (!cancelled) setSnapshot({ http, osc, auth, refusedRecently })
     }
     void poll()
     const interval = setInterval(() => void poll(), 3000)
@@ -530,9 +537,12 @@ function RemoteControlHealth() {
       ) : (
         <p className="text-xs text-muted-foreground">No LAN listener is accepting remote commands{allStopped ? "; no remote command listener is running." : "."}</p>
       )}
-      {!!snapshot?.auth?.refused && (
+      {snapshot?.refusedRecently && snapshot.auth?.last_refused_ms && (
         <p role="status" className="text-xs font-semibold text-confidence-mid">
-          {snapshot.auth.refused === 1 ? "1 remote request was" : `${snapshot.auth.refused} remote requests were`} refused for a missing or wrong key since Rhema Studio started. An older controller (Stream Deck, Companion, an OSC script) may need the key: see Remote settings.
+          {snapshot.auth.refused === 1 ? "A remote request was" : "Remote requests were"} refused, most recently at {new Date(snapshot.auth.last_refused_ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+          {snapshot.auth.required
+            ? ": a missing or wrong key. An older controller (Stream Deck, Companion, an OSC script) may need the key: see Remote settings."
+            : ": they came from outside this network or through a proxy, which always need a key."}
         </p>
       )}
       {snapshot && (
