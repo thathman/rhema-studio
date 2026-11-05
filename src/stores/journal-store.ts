@@ -357,6 +357,10 @@ export async function interruptCurrentServiceRun(): Promise<void> {
 
 /** Start a distinct log only after the previous run has been checkpointed. */
 export async function startNewJournal(): Promise<void> {
+  // A Live language choice is for one service (#446): it ends with it, logged in the run that is ending.
+  // Through setLanguageOverride, so each screen is resent and rehearsal (a frozen log) is respected.
+  const broadcast = useBroadcastStore.getState()
+  for (const outputId of Object.keys(broadcast.languageOverrides)) broadcast.setLanguageOverride(outputId, null)
   const state = useJournalStore.getState()
   if (state.runStatus === "finished" && !state.finalizedLogId) await finalizeServiceRun()
   else await interruptCurrentServiceRun()

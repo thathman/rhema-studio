@@ -520,6 +520,32 @@ describe("queue position follows successful Takes", () => {
     expect(mockInvoke).not.toHaveBeenCalled()
   })
 
+  it("does not replay a held Take after Live chose another language for an output this session (#446)", async () => {
+    const heldItem = { ...queueItemFor(genesisOneOne), translation: "KJV", secondary_translation: "OYCB" }
+    useQueueStore.setState({ items: [heldItem], activeIndex: null })
+    useServiceStore.setState({ current: { id: "sunday", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+    useBibleStore.setState({
+      selectedVerse: genesisOneOne,
+      translations: [
+        ...useBibleStore.getState().translations,
+        { ...useBibleStore.getState().translations[0]!, id: 2, abbreviation: "OYCB", title: "Yoruba Bible", language: "yo" },
+      ],
+    })
+    const output = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({ outputs: [{ ...output, language: "both" }], languageOverrides: {} })
+
+    await remoteActions.sendToLive()
+    expect(useApprovalGateStore.getState().held?.id).toBe("sunday")
+
+    // The saved language is unchanged; only this session's choice is.
+    useBroadcastStore.setState({ languageOverrides: { [output.id]: { language: "second" } } })
+    useApprovalGateStore.getState().presentAnyway()
+    await vi.waitFor(() => expect(useTakeAttemptStore.getState().attempts.at(-1)?.status).toBe("superseded"))
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    useBroadcastStore.setState({ languageOverrides: {} })
+  })
+
   it.each([
     ["active translation", () => useBibleStore.setState({ activeTranslationId: 2 })],
     ["secondary translation", () => useBibleStore.setState({ secondaryTranslationId: null })],

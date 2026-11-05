@@ -1,4 +1,5 @@
 import { cancelPendingPresents, presentAudioCue, presentCustomSlide, presentImage, presentSlide, presentVerse, type PresentOutcome } from "@/hooks/use-broadcast"
+import { liveLanguage } from "@/lib/output-language"
 import { fetchChapter, stepVerse } from "@/hooks/use-bible"
 import { resolveTranslations, isMissing } from "@/lib/translation-policy"
 import { useBibleStore } from "@/stores/bible-store"
@@ -104,8 +105,10 @@ function matchesVerse(item: QueueItem, verse: Pick<Verse, "book_number" | "chapt
 /** Language choices shape what each public output will display for a held Take. */
 function liveLanguagePolicySnapshot() {
   const bible = useBibleStore.getState()
+  // What each output will show, Live's choice for this session included (#446): a change while held supersedes the Take.
+  const overrides = useBroadcastStore.getState().languageOverrides
   const outputLanguages = useBroadcastStore.getState().outputs
-    .map(({ id, language }) => ({ id, language: language ?? "both" }))
+    .map((o) => ({ id: o.id, language: liveLanguage(o, overrides) }))
     .sort((left, right) => left.id.localeCompare(right.id))
   const translations = bible.translations
     .map(({ id, abbreviation, language, is_downloaded }) => ({ id, abbreviation, language, is_downloaded }))
