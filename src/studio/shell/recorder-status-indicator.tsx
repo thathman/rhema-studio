@@ -6,13 +6,13 @@ import { Button } from "@/components/ui/button"
 import { recorderOutputLeftMessage, useRecorderAlertStore } from "@/stores/recorder-alert-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useShellStore, type Workspace } from "@/studio/shell-store"
+import { useJournalStore } from "@/stores/journal-store"
+import { recordingLogEntry, type RecorderLogStatus } from "@/lib/recording-log"
 
-type RecorderSummary = {
-  state: "idle" | "preparing" | "recording" | "finalizing" | "saved" | "recoverable" | "failed"
-  sessionActive: boolean
-  outputId: string | null
-  problem: { message: string } | null
-}
+/** Recordings whose failure is already in the service log (by session), for this run of the app. */
+const loggedFailures = new Set<string>()
+
+type RecorderSummary = RecorderLogStatus & { sessionActive: boolean }
 
 function visibleOutsideLive(status: RecorderSummary | null, alert: string | null): boolean {
   return Boolean(alert || (status && (status.sessionActive || status.state === "recoverable" || status.state === "failed")))
@@ -76,6 +76,16 @@ export function RecorderStatusIndicator({ workspace }: { workspace: Workspace })
       void outputLeftListening
     }
   }, [])
+
+  // The service log follows the recorder (#411): this indicator is always mounted, so a start from
+  // a paired desk or a failure while Live is closed is logged when it happens.
+  const previous = useRef<RecorderSummary | null>(null)
+  useEffect(() => {
+    if (!status) return
+    const entry = recordingLogEntry(previous.current, status, (id) => useBroadcastStore.getState().outputs.find((o) => o.id === id)?.name ?? id, loggedFailures)
+    previous.current = status
+    if (entry) useJournalStore.getState().add({ kind: "recording", label: entry.label, recording: entry.phase, ...(status.outputId ? { outputId: status.outputId } : {}) })
+  }, [status])
 
   useEffect(() => {
     if (eventsConnected) return

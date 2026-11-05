@@ -399,7 +399,6 @@ describe("Live's Rhema recording dock", () => {
     expect(start.disabled).toBe(false)
     await act(async () => start.click())
 
-    expect(useJournalStore.getState().entries.at(-1)?.label).toMatch(/^Recording started: /)
     expect(native.invoke).toHaveBeenCalledWith("recorder_start", {
       request: checkedRequest,
     })
@@ -651,15 +650,6 @@ describe("Live's Rhema recording dock", () => {
       isLive: true,
       liveVerse: { reference: "Program item" },
     })
-  })
-
-  it("logs a recording the recorder ended by itself, once, however often its status arrives (#411)", async () => {
-    await renderDock()
-    const failed = { ...recordingStatus, state: "failed", sessionId: "session-failed-1", problem: { code: "disk_full", message: "The disk is full." } }
-    await act(async () => native.eventHandlers.get("recorder:status")?.({ payload: failed }))
-    await act(async () => native.eventHandlers.get("recorder:status")?.({ payload: { ...failed } }))
-    const logged = useJournalStore.getState().entries.filter((e) => e.kind === "recording")
-    expect(logged).toEqual([expect.objectContaining({ label: "Recording failed: The disk is full." })])
   })
 
   it("shows backend automatic-stop alerts in Live and keeps them for the shell after navigation", async () => {

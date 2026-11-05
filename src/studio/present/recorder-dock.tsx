@@ -132,13 +132,9 @@ function engineStateLabel(
 
 /** Main-desk controls for the host's independent Rhema-native recorder. */
 /**
- * The service log says when the recording started, stopped or failed (#411, #447 History), and
- * who did it, beside what was on screen: a later review can tell which part of the service the
- * file holds.
+ * A start the operator asked for that did not happen (no recorder state changes, so the shell's
+ * recording log in recorder-status-indicator does not see it): the service log says so.
  */
-/** Recordings whose failure is already in the log (by session), for this run of the app. */
-const loggedFailures = new Set<string>()
-
 function logRecording(label: string): void {
   const by = currentActor()
   useJournalStore.getState().add({ kind: "recording", label: `${label}${by ? ` · by ${by}` : ""}`, ...(by ? { by } : {}) })
@@ -242,16 +238,6 @@ export function RecorderDock() {
     if (actionError) alerts.report("action", actionError)
     else alerts.clear("action")
   }, [actionError])
-
-  // The recorder failing by itself (a full disk, a lost output) goes in the service log too, once
-  // per recording, however often Live is opened again.
-  useEffect(() => {
-    if (status?.state !== "failed") return
-    const key = status.sessionId ?? status.startedAt ?? "unknown"
-    if (loggedFailures.has(key)) return
-    loggedFailures.add(key)
-    logRecording(`Recording failed: ${status.problem?.message ?? "the recorder stopped"}`)
-  }, [status?.state, status?.sessionId, status?.startedAt, status?.problem?.message])
 
   useEffect(() => {
     let cancelled = false
@@ -384,7 +370,6 @@ export function RecorderDock() {
       const started = await invoke<RecorderStatus>("recorder_start", {
         request,
       })
-      logRecording(`Recording started: ${output?.name ?? "output"}`)
       setStatus(started)
       setStatusError(null)
       setPreflight(null)
@@ -404,12 +389,10 @@ export function RecorderDock() {
     setConfirmStop(false)
     try {
       const stopped = await invoke<RecorderStatus>("recorder_stop")
-      logRecording(`Recording stopped after ${Math.round((stopped.elapsedMs ?? 0) / 1000)} s${stopped.video?.framesDropped ? ` · ${stopped.video.framesDropped} frames dropped` : ""}`)
       setStatus(stopped)
       setStatusError(null)
     } catch (error) {
       setActionError(`Recording could not be finalized: ${errorMessage(error)}`)
-      logRecording(`Recording could not be finalized: ${errorMessage(error)}`)
     } finally {
       setPendingAction(null)
     }

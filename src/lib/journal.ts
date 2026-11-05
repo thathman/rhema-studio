@@ -28,6 +28,8 @@ export interface JournalEntry {
   sceneId?: string
   /** An "approval" entry (#409): the service that was let through unapproved. */
   programId?: string
+  /** A "recording" entry (#411): what the recorder did. */
+  recording?: "started" | "stopped" | "failed"
 }
 
 export interface ActualDuration {
