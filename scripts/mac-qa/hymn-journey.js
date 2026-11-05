@@ -144,7 +144,7 @@ await waitFor(() => [...document.querySelectorAll("button")].some((b) => normal(
 stage = "select hymn"
 const result = await waitFor(
   () => [...document.querySelectorAll('[role="dialog"][data-state="open"] button')].find((button) =>
-    (button.title === "Select to preview and view details" || button.title === "Click to preview")
+    (button.title.startsWith("Select to view details") || button.title === "Select to preview and view details")
       && normal(button.innerText).includes("QA Journey Hymn")),
   "hymn preview row",
 )
