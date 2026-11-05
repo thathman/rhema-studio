@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { useQueueStore } from "@/stores/queue-store"
-import { useBibleStore } from "@/stores/bible-store"
 import { useMediaStore } from "@/stores/media-store"
 import { useSlideStore } from "@/stores/slide-store"
 import { useShellStore } from "@/studio/shell-store"
@@ -27,7 +26,8 @@ export function SlideLibrary({ onUseItem }: { onUseItem?: LibraryItemUseHandler 
   const pendingSourceId = useSlideStore((s) => s.pendingSourceId)
   const media = useMediaStore((s) => s.assets)
   const queueItems = useQueueStore((s) => s.items)
-  const selectedQueueItemId = useBibleStore((s) => s.selectedQueueItemId)
+  // The slide Prepare has selected (#447), not what Live has cued.
+  const selectedQueueItemId = useRundownSelection((s) => s.focusId)
   const [query, setQuery] = useState("")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [form, setForm] = useState<ReusableSlideInput>(empty)

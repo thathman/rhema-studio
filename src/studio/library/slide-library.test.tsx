@@ -110,7 +110,7 @@ describe("reusable slide library workflow (#395)", () => {
 
   it("imports the selected service slide as a reusable source and prevents removing an in-use source", async () => {
     useQueueStore.setState({ items: [{ id: "service-slide", kind: "slide", slide: { title: "Giving", body: "This week" }, reference: "Giving", confidence: 1, source: "manual", added_at: 0 }] })
-    useBibleStore.setState({ selectedQueueItemId: "service-slide" })
+    useRundownSelection.getState().focus("service-slide")
     await render()
     await act(async () => button("Save selected service slide to library").click())
     expect(rows.get("source-1")).toMatchObject({ title: "Giving", body: "This week" })

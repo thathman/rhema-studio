@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { presentActions } from "@/studio/present-actions"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useEffect, useRef, useState } from "react"
-import { useBibleStore, useQueueStore } from "@/stores"
+import { useQueueStore } from "@/stores"
 import { drawStage } from "@/lib/stage-canvas"
 import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type StagePayload } from "@/types"
 import { SlideList } from "@/studio/present/rundown-list"
@@ -142,7 +142,8 @@ function AiSuggestion({ item }: { item: QueueItem }) {
 export function StagePreview({ item, index }: { item: QueueItem; index: number }) {
   const next = useQueueStore((s) => nextVisibleItem(s.items, s.headers, index)?.label ?? null)
   const songId = isSongItem(item) ? item.song.song_id : null
-  const selectedSlide = useBibleStore((s) => s.selectedSlide)
+  // Prepare's chosen slide (#447), not Live's Preview.
+  const focus = useRundownSelection((s) => (s.focusId === item.id ? s.focusSlideIndex : null))
   const serviceSong = useServiceSong(songId)
   const songMissing = useSongStore((s) => songId ? s.missing.includes(songId) : false)
   const live = useBroadcastStore((s) => s.isLive && s.liveItemId === item.id)
@@ -196,7 +197,7 @@ export function StagePreview({ item, index }: { item: QueueItem; index: number }
         languages: liveSlide.languages ?? item.song.languages,
       } : item.song
       const slides = songSlides(song, liveRef)
-      const selectedIndex = liveSlide?.index ?? (selectedSlide?.item.id === item.id ? selectedSlide.index : 0)
+      const selectedIndex = liveSlide?.index ?? (focus ?? 0)
       const slide = slides[Math.min(Math.max(selectedIndex, 0), slides.length - 1)]
       if (!slide) {
         current = null

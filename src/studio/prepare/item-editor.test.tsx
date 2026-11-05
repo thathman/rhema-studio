@@ -15,6 +15,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import type { AudioQueueItem, ImageQueueItem, MediaAssetStatus, SongQueueItem, SongWithSections } from "@/types"
 import { useBibleStore } from "@/stores/bible-store"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useQueueStore } from "@/stores/queue-store"
 import { useSongPins } from "@/stores/song-pins-store"
 import { useSongStore } from "@/stores/song-store"
@@ -59,6 +60,8 @@ beforeEach(() => {
   const selected = { ...item }
   useQueueStore.setState({ items: [selected, { ...selected, id: "next", reference: "Opening prayer" }], headers: [], activeIndex: 0 })
   useBibleStore.setState({ selectedSlide: { item: selected, index: 3 }, selectedVerse: null })
+  // Prepare picked slide 4 of this song (#447): Stage follows Prepare, not Live's Preview.
+  useRundownSelection.setState({ focusId: selected.id, focusSlideIndex: 3 })
   useSongStore.setState({ songs: { "song-1": hymn(2, "New library title", "New library verse", "New library chorus") }, missing: [] })
   useSongPins.setState({ programId: "service-1", pins: { "song-1": hymn(1, "Approved hymn", "Approved verse", "Approved Yoruba chorus") }, latest: [] })
   useBroadcastStore.setState({ isLive: false, liveItemId: null, liveSlide: null, stageMessage: "" })
@@ -108,7 +111,7 @@ describe("Prepare confidence preview (#389)", () => {
   })
 
   it("shows the currently selected section from the service arrangement", async () => {
-    useBibleStore.setState({ selectedSlide: { item, index: 0 } })
+    useRundownSelection.setState({ focusId: item.id, focusSlideIndex: 0 })
     await act(async () => root!.render(<StagePreview item={item} index={0} />))
 
     expect(lastPayload().current).toMatchObject({ title: "CAC 245 · Approved hymn · Verse 1", lines: ["Verse Yoruba", "Approved verse"] })
@@ -116,7 +119,7 @@ describe("Prepare confidence preview (#389)", () => {
 
   it("uses the song snapshot and slide that are already on air", async () => {
     const liveSong = hymn(3, "Live snapshot", "Live snapshot verse", "Live snapshot chorus")
-    useBibleStore.setState({ selectedSlide: { item, index: 0 } })
+    useRundownSelection.setState({ focusId: item.id, focusSlideIndex: 0 })
     useBroadcastStore.setState({
       isLive: true,
       liveItemId: item.id,
@@ -139,7 +142,7 @@ describe("Prepare confidence preview (#389)", () => {
     const longEnglish = Array.from({ length: 12 }, (_, n) => `A long English lyric line ${n + 1}`).join("\n")
     const longSong = hymn(1, "Hymn", longEnglish, "Long Yoruba chorus")
     useSongPins.setState({ pins: { "song-1": longSong } })
-    useBibleStore.setState({ selectedSlide: { item, index: 0 } })
+    useRundownSelection.setState({ focusId: item.id, focusSlideIndex: 0 })
     await act(async () => root!.render(<StagePreview item={item} index={0} />))
 
     expect(lastPayload().current?.lines).toHaveLength(13)
