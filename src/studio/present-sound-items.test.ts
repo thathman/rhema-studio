@@ -171,6 +171,24 @@ describe("sound items in the service (MD-002)", () => {
     expect(useQueueStore.getState().activeIndex).toBe(0)
   })
 
+  it("Previous over a sound never lands on a hidden item or one in a skipped phase (#411)", async () => {
+    // A skipped Pre-service phase (Announcements), then Walk-in music, then Call to worship, live.
+    useQueueStore.setState({
+      items: [slide("s0", "Announcements"), sound("a1", "walkin", "Walk-in"), slide("s1", "Call to worship")],
+      headers: [
+        { id: "pre", type: "phase", name: "Pre-service", at: 0, rule: "manual", role: "pre", disabled: true },
+        { id: "main", type: "phase", name: "Main", at: 1, rule: "manual", role: "main" },
+      ],
+      activeIndex: 2,
+    })
+    presentActions.prev()
+    await flush()
+    // Nothing visible before the sound: it stays put, the hidden Announcements never go up.
+    expect(useQueueStore.getState().activeIndex).toBe(2)
+    expect(useBroadcastStore.getState().liveVerse?.reference ?? null).not.toBe("Announcements")
+    expect(played).toEqual([])
+  })
+
   it("does not let late audio playback move the rundown back after a later visual Take", async () => {
     let startPlayback!: () => void
     useSoundStore.setState({

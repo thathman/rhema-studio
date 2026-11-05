@@ -70,6 +70,20 @@ describe("continue the reading (verse next/prev on the live output)", () => {
     expect(useBroadcastStore.getState().liveVerse?.reference).toContain("3:2")
   })
 
+  it("a Clear pressed while the next verse loads wins: the screens stay off (#411)", async () => {
+    await presentVerse(verse(1, 43, 3, 2), { goLive: true })
+    const chapter = mockInvoke.getMockImplementation()!
+    let release!: () => void
+    mockInvoke.mockImplementation((cmd: string, a: Record<string, number>) => (cmd === "get_chapter" ? new Promise((r) => { release = () => r(chapter(cmd, a)) }) : chapter(cmd, a)))
+    const step = stepLiveVerse(1)
+    await flush()
+    useBroadcastStore.getState().setLive(false) // Esc, Clear
+    release()
+    await step
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useBroadcastStore.getState().liveVerse?.reference).toContain("3:2")
+  })
+
   it("with nothing live it steps the preview instead", async () => {
     useBibleStore.setState({ selectedVerse: verse(1, 43, 3, 1), currentChapter: [verse(1, 43, 3, 1), verse(1, 43, 3, 2), verse(1, 43, 3, 3)] })
     await stepLiveVerse(1)
