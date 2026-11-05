@@ -859,6 +859,15 @@ fn backup_path(path: &Path, version: &str) -> PathBuf {
 /// the main file; if another program (the AI connection, #252) still has it open and that cannot
 /// finish, the restore is refused before anything changes, rather than losing recent work.
 fn snapshot_whole(path: &Path, dest: &Path) -> Result<()> {
+    let result = snapshot_whole_inner(path, dest);
+    // Never leave a partial safety copy behind: on any failure the restore is refused and nothing changed.
+    if result.is_err() {
+        let _ = std::fs::remove_file(dest);
+    }
+    result
+}
+
+fn snapshot_whole_inner(path: &Path, dest: &Path) -> Result<()> {
     let snap_err = |e: rusqlite::Error| ContentError::Invalid(format!("could not snapshot the current database: {e}"));
     let conn = Connection::open(path).map_err(snap_err)?;
     {
@@ -870,7 +879,6 @@ fn snapshot_whole(path: &Path, dest: &Path) -> Result<()> {
         .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))
         .map_err(snap_err)?;
     if busy != 0 {
-        let _ = std::fs::remove_file(dest);
         return Err(ContentError::Invalid(
             "another program still has the service database open (the AI assistant connection?). Close it, then restore again; nothing was changed".into(),
         ));
