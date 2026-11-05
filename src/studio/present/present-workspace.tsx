@@ -29,7 +29,7 @@ import { LiveActivityStrip } from "@/studio/present/live-activity-strip"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
 import { useProductionTab } from "@/studio/production/production-tab"
 import { usePreviewLabel } from "@/hooks/use-preview-label"
-import { nextVisibleItem, plannedTimes, runOfShowClockRows } from "@/lib/run-of-show"
+import { nextVisibleItem, orderCounts, plannedTimes, runOfShowClockRows } from "@/lib/run-of-show"
 import type { EventTiming } from "@/lib/timing-engine"
 import { useServiceTiming } from "@/studio/use-service-timing"
 
@@ -304,6 +304,9 @@ function LiveConsoleSurface({
   const isLive = useBroadcastStore((s) => s.isLive)
   const count = useQueueStore((s) => s.items.length)
   const headers = useQueueStore((s) => s.headers)
+  const items = useQueueStore((s) => s.items)
+  // Event-first, as in Prepare (#404): "3 events · 2 items".
+  const orderLabel = orderCounts(items, headers).label
   const hasTimedItems = useQueueStore((s) => s.items.some((i) => i.auto_advance))
   const held = useBroadcastStore((s) => s.heldLive !== null)
   const quickOnAir = useBroadcastStore((s) => s.liveVerse?.quickScreen ?? null)
@@ -335,7 +338,7 @@ function LiveConsoleSurface({
             <h2 className="text-sm font-semibold tracking-tight">Running order</h2>
             <p className="truncate text-xs text-muted-foreground">{service ? `${service.title}${service.service_date ? ` · ${service.service_date}` : ""}` : "What is next in your service"}</p>
           </div>
-          <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{count} {count === 1 ? "item" : "items"}</span>
+          <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{orderLabel}</span>
         </div>
         <LiveActivityStrip />
         {hasTimedItems && (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { clockInstant, clockText, dwellSeconds, nextInPhase, phaseRange, planTimeline, plannedTimes, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, newRunOfShowEvent, parseRunOfShowEvent, projectRunOfShowEvents, runOfShowClockRows, sectionSummaries, type OutlineHeader } from "./run-of-show"
+import { clockInstant, clockText, dwellSeconds, nextInPhase, phaseRange, planTimeline, plannedTimes, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, newRunOfShowEvent, parseRunOfShowEvent, orderCounts, projectRunOfShowEvents, runOfShowClockRows, sectionSummaries, type OutlineHeader } from "./run-of-show"
 
 const h = (id: string, at: number, type: OutlineHeader["type"] = "phase"): OutlineHeader => ({ id, type, name: id, at })
 const read = (items: string[], headers: OutlineHeader[]) => interleave(items, headers).map((r) => ("header" in r ? `[${r.header.id}]` : r.item)).join(" ")
@@ -118,6 +118,24 @@ describe("section summaries", () => {
       ["closing", "Closing hymn", 5, ["closing"]],
     ])
     expect(projected.headers.find((header) => header.id === "main")?.at).toBe(0)
+  })
+
+  it("counts a run of show by its events, then the items outside them (#404)", () => {
+    const items = [
+      { id: "a", reference: "Welcome", planned_minutes: 2 },
+      { id: "b", reference: "Prayer", planned_minutes: 3 },
+      { id: "c", reference: "Notices", planned_minutes: 1 },
+    ]
+    const event = (id: string, at: number): OutlineHeader => ({ id, type: "group", name: id, at, event: { schema_version: 1 } })
+    expect(orderCounts(items, [])).toMatchObject({ events: 0, items: 3, label: "3 items" })
+    expect(orderCounts(items.slice(0, 1), []).label).toBe("1 item")
+    expect(orderCounts(items, [event("Opening", 0)])).toMatchObject({ events: 1, loose: 0, label: "1 event" })
+    expect(orderCounts(items, [event("Opening", 0), { id: "p", type: "phase", name: "After", at: 2 }]).label).toBe("1 event · 1 item")
+    expect(orderCounts(items, [event("Opening", 0), event("Word", 1), { id: "p", type: "phase", name: "After", at: 2 }]).label).toBe("2 events · 1 item")
+    expect(orderCounts([], []).label).toBe("0 items")
+    // An event with no moments yet is still an event; a hidden item still belongs to the service.
+    expect(orderCounts([], [event("Welcome", 0)]).label).toBe("1 event")
+    expect(orderCounts([{ ...items[0], hidden: true }, items[1]], []).label).toBe("2 items")
   })
 
   it("creates versioned event plans and treats legacy approval as non-authoritative", () => {
