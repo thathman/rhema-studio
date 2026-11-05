@@ -309,6 +309,9 @@ export function networkWords(h: MachineHealth): HealthLine[] {
   return lines
 }
 
+/** No NDI frame for this long is a stalled sender: the keepalive sends one at least every 4 s. */
+export const NDI_STALL_MS = 10_000
+
 /** Frames a second from two readings of an NDI sender's frame count; null until there are two. */
 export function ndiRate(prev: { frames: number; at: number } | undefined, frames: number, at: number): number | null {
   if (!prev || at <= prev.at || frames < prev.frames) return null
@@ -319,8 +322,11 @@ export function ndiRate(prev: { frames: number; at: number } | undefined, frames
  * An NDI sender's measured frames a second against what it is set to (#246 C15: what is really
  * sent, apart from who is connected). A still picture sends a frame only when it changes.
  */
-export function ndiRateWords(rate: number | null, setFps: number, receivers: number | null): HealthLine {
+export function ndiRateWords(rate: number | null, setFps: number, receivers: number | null, stalledMs = 0): HealthLine {
   const watched = receivers === null ? "" : ` · ${receivers === 0 ? "no receiver watching" : `${receivers} ${receivers === 1 ? "receiver" : "receivers"} watching`}`
+  // Even a still picture sends a frame every few seconds (the keepalive): none for this long and the
+  // sender has stopped without saying so (#411).
+  if (stalledMs >= NDI_STALL_MS) return { text: `No frame sent for ${Math.round(stalledMs / 1000)} s: the sender has stopped. Turn this output off and on.`, tone: "warn" }
   if (rate === null) return { text: `Measuring…${watched}`, tone: "off" }
   const r = Math.round(rate)
   return { text: `${r} of ${setFps} frames a second sent${watched}`, tone: "ok" }

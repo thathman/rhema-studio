@@ -631,7 +631,7 @@ function NdiHealth({ ndi }: { ndi: Record<string, NdiMeasure> }) {
         <ul aria-label="NDI signals" className="flex flex-col divide-y divide-border">
           {on.map((o) => {
             const m = ndi[o.id]
-            const line = ndiRateWords(m?.rate ?? null, m?.fps ?? 0, m?.receivers ?? null)
+            const line = ndiRateWords(m?.rate ?? null, m?.fps ?? 0, m?.receivers ?? null, m?.stalledMs ?? 0)
             return (
               <li key={o.id} aria-label={o.name} className="flex items-start gap-3 py-2.5 text-xs">
                 <RadioIcon aria-hidden className="mt-px size-4 shrink-0 text-muted-foreground" />
