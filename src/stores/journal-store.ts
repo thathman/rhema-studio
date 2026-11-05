@@ -357,6 +357,8 @@ export async function interruptCurrentServiceRun(): Promise<void> {
 
 /** Start a distinct log only after the previous run has been checkpointed. */
 export async function startNewJournal(): Promise<void> {
+  // A Live language choice is for one service (#446): it ends with it, logged in the run that is ending.
+  if (Object.keys(useBroadcastStore.getState().languageOverrides).length > 0) useBroadcastStore.setState({ languageOverrides: {} })
   const state = useJournalStore.getState()
   if (state.runStatus === "finished" && !state.finalizedLogId) await finalizeServiceRun()
   else await interruptCurrentServiceRun()

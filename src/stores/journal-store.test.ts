@@ -4,7 +4,7 @@ const mockInvoke = vi.fn<(...args: unknown[]) => Promise<unknown>>(async (comman
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}) }))
 
-import { flushServiceRunCheckpoint, useJournalStore } from "./journal-store"
+import { flushServiceRunCheckpoint, startNewJournal, useJournalStore } from "./journal-store"
 import { useBroadcastStore } from "./broadcast-store"
 import { useQueueStore } from "./queue-store"
 import type { VerseRenderData } from "@/types"
@@ -148,3 +148,16 @@ describe("service log entries (AR-001)", () => {
   })
 })
 
+describe("a Live language choice is for one service (#446)", () => {
+  it("ends when the next service's log starts, and the ending run says so", async () => {
+    const output = useBroadcastStore.getState().outputs[0]!
+    useJournalStore.setState({ entries: [], runContext: null })
+    useBroadcastStore.setState({ outputs: [{ ...output, language: "both" }], languageOverrides: { [output.id]: { language: "first" } } })
+    const logged: string[] = []
+    const off = useJournalStore.subscribe((st) => { const last = st.entries.at(-1); if (last) logged.push(last.label) })
+    await startNewJournal()
+    off()
+    expect(useBroadcastStore.getState().languageOverrides).toEqual({})
+    expect(logged.some((label) => label.includes("back to its saved language"))).toBe(true)
+  })
+})
