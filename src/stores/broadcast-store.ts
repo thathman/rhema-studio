@@ -1376,7 +1376,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   setStageMessage: (stageMessage) => {
     // The stage message as a live source: up, or cleared with the one it was kept for Restore.
     const was = get().stageMessage
-    set({ stageMessage, ...(stageMessage === was ? {} : { stageMessagesByOutput: {}, ...(stageMessage ? sourceMark("stage", true, { message: stageMessage }) : sourceMark("stage", false, { message: was })) }) })
+    // Clearing clears every stage display, the messages a Stage desk sent to one display included,
+    // even when no shared message was up (#411: the host can always clear a stale cue).
+    const privateUp = Object.keys(get().stageMessagesByOutput).length > 0
+    set({ stageMessage, ...(stageMessage === was ? (!stageMessage && privateUp ? { stageMessagesByOutput: {} } : {}) : { stageMessagesByOutput: {}, ...(stageMessage ? sourceMark("stage", true, { message: stageMessage }) : sourceMark("stage", false, { message: was })) }) })
     for (const o of get().outputs) if (o.role === "stage") get().syncBroadcastOutputFor(o.id)
   },
   setOutputStageMessage: (outputId, message) => {
@@ -1433,7 +1436,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       } else if (id === "lowerThird") {
         if (s.lowerThird) get().setLowerThird(null)
       } else if (id === "stage") {
-        if (s.stageMessage) get().setStageMessage("")
+        if (s.stageMessage || Object.keys(s.stageMessagesByOutput).length > 0) get().setStageMessage("")
       } else if (id === "timer") {
         if (useTimerStore.getState().timer.startedAt !== null) useTimerStore.getState().pause()
       } else if (s.stateSources[id]?.on !== false) {
