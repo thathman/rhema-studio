@@ -40,6 +40,12 @@ describe("a desk's refused Hold reaches the main desk (#411)", () => {
     await act(async () => handlers.get(REMOTE_EVENTS.hold)!({ payload: JSON.stringify({ reason: "Waiting for pastor", by: "Timekeeper" }) }))
     expect(useHold.getState().hold).toBeNull()
     expect(toast.warning).toHaveBeenCalledWith("Hold not made", { description: expect.stringContaining("Timekeeper: Not in rehearsal") })
+    // A second Hold while already held is done as asked: no warning.
+    useBroadcastStore.setState({ rehearsal: false })
+    useHold.getState().start("Waiting")
+    toast.warning.mockClear()
+    await act(async () => handlers.get(REMOTE_EVENTS.hold)!({ payload: JSON.stringify({ reason: "Again", by: "Phone" }) }))
+    expect(toast.warning).not.toHaveBeenCalled()
     await act(async () => root.unmount())
   })
 })
