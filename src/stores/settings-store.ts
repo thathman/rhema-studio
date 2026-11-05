@@ -270,6 +270,14 @@ export interface SettingsState {
   /** The talk channel's headset on this computer (Rhema Comms): microphone and where the crew is heard, by device id; "" = the system's. */
   talkInputId: string
   talkOutputId: string
+  /**
+   * Library → Sounds' Listen (#447, owner decision 5 Nov 2026): a private output the operator
+   * chose and confirmed is not patched into the PA. Never the system default; "" is none chosen.
+   */
+  auditionOutputId: string
+  auditionOutputLabel: string
+  auditionConfirmed: boolean
+  setAuditionOutput: (patch: { auditionOutputId?: string; auditionOutputLabel?: string; auditionConfirmed?: boolean }) => void
   setTalkDevices: (patch: { talkInputId?: string; talkOutputId?: string }) => void
   /** Who may use each talk channel, and how quiet priority makes the others (the church's rules). */
   talkRules: TalkRules
@@ -402,6 +410,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setJoin: (patch) => set(patch),
   talkInputId: "",
   talkOutputId: "",
+  auditionOutputId: "",
+  auditionOutputLabel: "",
+  auditionConfirmed: false,
+  // A new output is never confirmed by the old one's tick: choosing another clears it.
+  setAuditionOutput: (patch) => set((s) => ({ ...patch, ...(patch.auditionOutputId !== undefined && patch.auditionOutputId !== s.auditionOutputId && patch.auditionConfirmed === undefined ? { auditionConfirmed: false } : {}) })),
   setTalkDevices: (patch) => set(patch),
   talkRules: DEFAULT_TALK_RULES,
   setTalkRules: (patch) => set((s) => ({ talkRules: { ...s.talkRules, ...patch, duck: Math.min(0.8, Math.max(0.05, patch.duck ?? s.talkRules.duck)) } })),
@@ -642,6 +655,8 @@ function acceptable(key: string, value: unknown): boolean {
     case "joinToken":
     case "talkInputId":
     case "talkOutputId":
+    case "auditionOutputId":
+    case "auditionOutputLabel":
     case "churchFolder":
     case "cloudSpeechConsentAt":
     case "hostLookSeen":
@@ -667,6 +682,7 @@ function acceptable(key: string, value: unknown): boolean {
     case "requireApproval":
     case "autoMode":
     case "onboardingComplete":
+    case "auditionConfirmed":
       return typeof value === "boolean"
     case "gain":
     case "confidenceThreshold":
@@ -735,6 +751,9 @@ export const SETTINGS_SECTIONS = {
     "hostLookSeen",
     "talkInputId",
     "talkOutputId",
+    "auditionOutputId",
+    "auditionOutputLabel",
+    "auditionConfirmed",
     "remoteDevices",
     "remoteAuthRequired",
     "remoteListeners",
