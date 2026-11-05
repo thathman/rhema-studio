@@ -32,6 +32,8 @@ interface TimerStoreState {
   start: () => void
   pause: () => void
   reset: () => void
+  /** Put back a timer kept aside (leaving rehearsal), its ticker running again if it runs (#411). */
+  restore: (timer: TimerState) => void
   setDurationMinutes: (minutes: number) => void
   /** Manual correction (FR-07); the caller records it in the service log (this store must not import the journal: import cycle). */
   adjustMinutes: (minutes: number, by?: string | null) => void
@@ -60,6 +62,10 @@ export const useTimerStore = create<TimerStoreState>((set, get) => ({
   reset: () => {
     set({ timer: reset(get().timer) })
     ensureTicker(false)
+  },
+  restore: (timer) => {
+    set({ timer })
+    ensureTicker(timer.startedAt !== null)
   },
   setDurationMinutes: (minutes) => set({ timer: setDuration(get().timer, minutes * 60_000) }),
   adjustMinutes: (minutes, by) => {

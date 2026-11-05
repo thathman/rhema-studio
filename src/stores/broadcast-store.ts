@@ -1301,7 +1301,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       // The lower third, ticker, stage message, timer and each screen's scene always come back
       // (a scene deleted meanwhile leaves its screen on its own feed); the program too unless the
       // operator chose Show this live.
-      useTimerStore.setState({ timer })
+      // The real timer back, counting again if it was (a Reset or Pause in rehearsal stopped its ticker).
+      useTimerStore.getState().restore(timer)
       if (!opts.keepRehearsed) useQueueStore.setState({ activeIndex })
       // A designed moment is in no library: its screen holds the snapshot.
       const kept = Object.fromEntries(Object.entries(outputScenes).filter(([outputId, id]) => s.scenes.some((x) => x.id === id) || outputSceneSnapshots[outputId]?.design))

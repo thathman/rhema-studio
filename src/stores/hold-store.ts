@@ -27,7 +27,8 @@ interface HoldState {
   past: HoldSpan[]
   /** `by`: the joined desk asking (its name goes in the log line). Refused once the service has finished: the reason, else null. */
   start: (reason: string, by?: string) => string | null
-  resume: (by?: string) => void
+  /** Null when resumed; else why not (nothing held, or rehearsal). */
+  resume: (by?: string) => string | null
 }
 
 /** Every hold of this service so far, the one on now last (`until` null). */
@@ -43,6 +44,8 @@ export const useHold = create<HoldState>((set, get) => ({
   past: [],
   start: (raw, by) => {
     if (get().hold) return "Already on hold."
+    // Rehearsal is a sandbox (#411): holding the real service from it would stay after it ends.
+    if (useBroadcastStore.getState().rehearsal) return "Not in rehearsal: the service is not held from a rehearsal."
     // The run state (#196 R3.7): a finished service has nothing to hold.
     const finished = serviceFinishedAt(useJournalStore.getState().entries) !== null
     const move = transition(runState({ begun: true, held: false, untrusted: false, finished }), "hold")
@@ -58,11 +61,14 @@ export const useHold = create<HoldState>((set, get) => ({
   },
   resume: (by) => {
     const h = get().hold
-    if (!h) return
+    if (!h) return "Nothing is on hold."
+    // A real hold is resumed for real, outside rehearsal (its stage message would come back after it).
+    if (useBroadcastStore.getState().rehearsal) return "Not in rehearsal: leave rehearsal to resume the service."
     if (heldMessage !== null && useBroadcastStore.getState().stageMessage === heldMessage) actingAs(by, () => useBroadcastStore.getState().setStageMessage(""))
     heldMessage = null
     useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}resumed after ${formatMs(Date.now() - h.since)}` })
     set((s) => ({ hold: null, past: [...s.past, { since: h.since, until: Date.now() }].slice(-50) }))
+    return null
   },
 }))
 
