@@ -153,9 +153,11 @@ function headerInput(h: OutlineHeader): ItemInput {
     ...(h.event ? { run_of_show_event: {
       ...(h.event.payload_extra ?? {}),
       schema_version: 1,
-      ...(h.event.role ? { role: h.event.role } : {}),
+      // Saved as the reader accepts them (#444): a blank or tab-pasted role or owner would make
+      // parseRunOfShowEvent reject the whole event, which then reopens as a plain group.
+      ...(cleanName(h.event.role) ? { role: cleanName(h.event.role) } : {}),
       ...(h.event.duration_minutes !== undefined ? { duration_minutes: h.event.duration_minutes } : {}),
-      ...(h.event.ownership ? { ownership: h.event.ownership } : {}),
+      ...(cleanName(h.event.ownership) ? { ownership: cleanName(h.event.ownership) } : {}),
       ...(h.event.cues !== undefined ? { cues: h.event.cues } : {}),
     } } : {}),
   }
