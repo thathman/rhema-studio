@@ -63,6 +63,23 @@ describe("a projector unplugged mid-service (#411 hot-plug)", () => {
     expect(disable).not.toHaveBeenCalled()
   })
 
+  it("a reopen refused because the screen went again keeps it waiting", async () => {
+    monitors = [{ name: "Built-in" }, { name: "EPSON PJ" }]
+    await check()
+    monitors = [{ name: "Built-in" }]
+    await check()
+    await Promise.resolve()
+    useBroadcastStore.setState({ outputStatus: { main: { previewOpen: false, ndiActive: false } } as never })
+    enable.mockResolvedValueOnce(false)
+    monitors = [{ name: "Built-in" }, { name: "EPSON PJ" }]
+    await check()
+    monitors = [{ name: "Built-in" }]
+    await check()
+    monitors = [{ name: "Built-in" }, { name: "EPSON PJ" }]
+    await check()
+    expect(enable).toHaveBeenCalledTimes(2)
+  })
+
   it("a movable window is the operator's to place: left alone", async () => {
     useBroadcastStore.setState({ outputs: [{ ...projector, windowed: true } as never] })
     monitors = [{ name: "Built-in" }, { name: "EPSON PJ" }]

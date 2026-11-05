@@ -65,7 +65,9 @@ export async function check(): Promise<void> {
     if (!o || o.type !== "display" || b.outputStatus[id]?.previewOpen) { waitingForScreen.delete(id); continue }
     if (resolveMonitorIndex(o, names, screens) === null) continue
     waitingForScreen.delete(id)
-    if (!(await enableOutput(o))) continue
+    // Refused (the screen went again in between) or the window did not open: still waiting, unless
+    // the operator turned it on meanwhile.
+    if (!(await enableOutput(o))) { if (!useBroadcastStore.getState().outputStatus[id]?.previewOpen) waitingForScreen.add(id); continue }
     // Its screen may have gone again while it opened (a cable flapping): never left on another screen.
     const now = useMonitorStore.getState().names
     if (resolveMonitorIndex(o, now, screens) === null) { void offUntilScreen(o); continue }
