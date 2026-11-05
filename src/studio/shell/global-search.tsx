@@ -116,7 +116,11 @@ export function GlobalSearch() {
         </CommandGroup>
         <CommandGroup heading="Library">
           {LIBRARY.map(([section, label, words]) => (
-            <CommandItem key={section} value={`library ${label} ${words}`} onSelect={() => run(() => useShellStore.getState().openLibrarySection(section))}><LibraryBigIcon /> {label}</CommandItem>
+            <CommandItem key={section} value={`library ${label} ${words}`} onSelect={() => run(() => {
+              // Through goTo, as every place here: leaving Design asks first about an unsaved draft.
+              useShellStore.getState().setLibrarySection(section)
+              useShellStore.getState().goTo("library")
+            })}><LibraryBigIcon /> {label}</CommandItem>
           ))}
         </CommandGroup>
         <CommandGroup heading="Design">

@@ -68,7 +68,8 @@ describe("Find anything (Cmd/Ctrl+K) and scripture, hymns and songs (#407)", () 
     const row = [...document.querySelectorAll("[cmdk-item]")].find((el) => el.textContent?.includes("Slides & announcements")) as HTMLElement
     expect(row).toBeTruthy()
     act(() => row.click())
-    expect(useShellStore.getState()).toMatchObject({ workspace: "library", librarySection: "slides", searchOpen: false })
+    // goTo, so leaving Design still asks about an unsaved draft (app-shell's go()).
+    expect(useShellStore.getState()).toMatchObject({ goRequest: "library", librarySection: "slides", searchOpen: false })
     useShellStore.setState({ searchOpen: true })
     act(() => root.render(<GlobalSearch />))
     type("hymn book")
