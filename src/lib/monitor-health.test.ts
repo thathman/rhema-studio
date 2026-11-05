@@ -51,6 +51,11 @@ describe("an output edit that only changes its look never reopens its screen (#4
     expect(outputTransportChanged(existing, { ...edited, monitorIndex: 0, monitorName: "Built-in" }, names, [existing])).toBe(true)
   })
 
+  it("an editor opened before the screens were listed keeps the saved index: still no move", () => {
+    const existing = screen("main", 2, "EPSON PJ")
+    expect(outputTransportChanged(existing, { ...existing, themeId: "other" }, ["Built-in", "EPSON PJ"], [existing])).toBe(false)
+  })
+
   it("two screens of one model stay told apart", () => {
     const a = screen("a", 1, "LG TV")
     const b = screen("b", 2, "LG TV")

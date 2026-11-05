@@ -67,11 +67,11 @@ export function outputTransportChanged(
   names: (string | null)[],
   outputs: BroadcastOutput[],
 ): boolean {
-  const wasAt = existing.type === "display"
-    ? resolveMonitorIndex(existing, names, outputs.filter((o) => o.type === "display" && o.id !== existing.id)) ?? existing.monitorIndex
-    : existing.monitorIndex
+  // Both against the same list: the editor may have opened before the screens were listed.
+  const others = outputs.filter((o) => o.type === "display" && o.id !== existing.id)
+  const at = (o: BroadcastOutput) => (o.type === "display" ? resolveMonitorIndex(o, names, others) ?? o.monitorIndex : o.monitorIndex)
   return existing.type !== next.type ||
-    wasAt !== next.monitorIndex ||
+    at(existing) !== at(next) ||
     (existing.windowed === true) !== (next.windowed === true) ||
     existing.monitorName !== next.monitorName ||
     existing.ndi.sourceName !== next.ndi.sourceName ||
