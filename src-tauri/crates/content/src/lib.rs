@@ -780,7 +780,7 @@ pub fn restore_from(path: &Path, source: &Path) -> Result<(ContentDb, Option<Pat
         .map_or(0, |d| d.as_secs());
     let snapshot = if path.exists() {
         let dest = backup_path(path, &format!("restore-{stamp}"));
-        std::fs::copy(path, &dest).map_err(|e| ContentError::Invalid(format!("could not snapshot the current database: {e}")))?;
+        snapshot_whole(path, &dest)?;
         Some(dest)
     } else {
         None
@@ -838,11 +838,44 @@ fn is_valid_id(id: &str) -> bool {
         && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+/// Where a safety copy goes. Never over an earlier one (an upgrade's copy, or a restore a second
+/// ago): a later copy of the same name gets a number.
 fn backup_path(path: &Path, version: &str) -> PathBuf {
     let name = path
         .file_name()
         .map_or_else(|| "studio.db".to_string(), |n| n.to_string_lossy().into_owned());
-    path.with_file_name(format!("{name}.before-{version}.bak"))
+    let first = path.with_file_name(format!("{name}.before-{version}.bak"));
+    if !first.exists() {
+        return first;
+    }
+    (2..10_000)
+        .map(|n| path.with_file_name(format!("{name}.before-{version}-{n}.bak")))
+        .find(|p| !p.exists())
+        .unwrap_or(first)
+}
+
+/// The current database, whole, as the safety copy before a restore: SQLite's own backup reads
+/// what is still in its `-wal` file, which a plain file copy misses. Then those changes are put into
+/// the main file; if another program (the AI connection, #252) still has it open and that cannot
+/// finish, the restore is refused before anything changes, rather than losing recent work.
+fn snapshot_whole(path: &Path, dest: &Path) -> Result<()> {
+    let snap_err = |e: rusqlite::Error| ContentError::Invalid(format!("could not snapshot the current database: {e}"));
+    let conn = Connection::open(path).map_err(snap_err)?;
+    {
+        let mut out = Connection::open(dest).map_err(snap_err)?;
+        let backup = rusqlite::backup::Backup::new(&conn, &mut out).map_err(snap_err)?;
+        backup.run_to_completion(256, std::time::Duration::from_millis(5), None).map_err(snap_err)?;
+    }
+    let busy: i64 = conn
+        .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))
+        .map_err(snap_err)?;
+    if busy != 0 {
+        let _ = std::fs::remove_file(dest);
+        return Err(ContentError::Invalid(
+            "another program still has the service database open (the AI assistant connection?). Close it, then restore again; nothing was changed".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn load_program(conn: &Connection, id: &str) -> Result<Option<Program>> {
@@ -2183,6 +2216,46 @@ lines"}"#.to_string(), false),
         assert!(matches!(restore_from(&tmp.db(), &plain), Err(ContentError::Invalid(_))));
         let db = ContentDb::open(&tmp.db()).unwrap();
         assert_eq!(db.list_programs().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_restore_keeps_recent_work_another_program_still_reads_or_refuses() {
+        // #252: the AI connection keeps a reader on the database, so closing the app's handle
+        // cannot fold the -wal file in; a plain file copy as the safety copy missed recent work.
+        let tmp = TempDir::new();
+        let backup = tmp.0.join("backup.db");
+        {
+            let db = ContentDb::open(&tmp.db()).unwrap();
+            db.create_program("In the backup", None).unwrap();
+            db.backup_to(&backup).unwrap();
+        }
+        let reader = Connection::open(tmp.db()).unwrap();
+        reader.query_row("SELECT COUNT(*) FROM programs", [], |r| r.get::<_, i64>(0)).unwrap();
+        {
+            let db = ContentDb::open(&tmp.db()).unwrap();
+            db.create_program("Edited just now", None).unwrap();
+        }
+        // A reader mid-read: the changes cannot be folded in, so nothing is replaced.
+        reader.execute_batch("BEGIN; SELECT COUNT(*) FROM programs;").unwrap();
+        assert!(matches!(restore_from(&tmp.db(), &backup), Err(ContentError::Invalid(_))));
+        reader.execute_batch("COMMIT").unwrap();
+        assert_eq!(ContentDb::open(&tmp.db()).unwrap().list_programs().unwrap().len(), 2, "refused: nothing changed");
+        // An idle reader: the restore goes ahead, and its safety copy has the work done just now.
+        let (db, snapshot) = restore_from(&tmp.db(), &backup).unwrap();
+        assert_eq!(db.list_programs().unwrap().len(), 1);
+        let snap = ContentDb::open(&snapshot.unwrap()).unwrap();
+        assert!(snap.list_programs().unwrap().iter().any(|p| p.title == "Edited just now"), "the safety copy keeps the latest edit");
+        drop(reader);
+    }
+
+    #[test]
+    fn a_safety_copy_never_replaces_an_earlier_one() {
+        let tmp = TempDir::new();
+        let first = backup_path(&tmp.db(), "0016_service_runs");
+        std::fs::write(&first, b"the upgrade's copy").unwrap();
+        let second = backup_path(&tmp.db(), "0016_service_runs");
+        assert_ne!(first, second);
+        assert_eq!(std::fs::read(&first).unwrap(), b"the upgrade's copy");
     }
 
     #[test]
