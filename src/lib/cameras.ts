@@ -108,6 +108,60 @@ export function cameraPageUrl(host: string, tlsPort: number, cam: CameraSource):
   return `https://${host}:${tlsPort}/camera?name=${encodeURIComponent(cam.name)}&k=${cam.token}&label=${encodeURIComponent(cam.label)}`
 }
 
+function onThisRouter(url: string, status: RouterStatus | null): boolean {
+  try {
+    const u = new URL(url)
+    return !!status && u.port === String(status.ports.webrtc) && /^\/[^/]+\/whep\/?$/.test(u.pathname) && (u.hostname === status.lanAddress || u.hostname === "127.0.0.1" || u.hostname === "localhost")
+  } catch {
+    return false
+  }
+}
+
+// The addresses this computer's router has had (newest first, at most 8), kept across restarts.
+const ADDRESSES_KEY = "rhema.routerAddresses"
+let lastRouterPort = ""
+let addresses: string[] | null = null
+function routerAddresses(): string[] {
+  if (addresses) return addresses
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(ADDRESSES_KEY) ?? "[]")
+    addresses = Array.isArray(v) ? v.filter((a): a is string => typeof a === "string").slice(0, 8) : []
+  } catch {
+    addresses = []
+  }
+  return addresses
+}
+function rememberRouterAddress(address: string, port: string): void {
+  lastRouterPort = port
+  if (routerAddresses()[0] === address) return
+  addresses = [address, ...routerAddresses().filter((a) => a !== address)].slice(0, 8)
+  try { localStorage.setItem(ADDRESSES_KEY, JSON.stringify(addresses)) } catch { /* kept for this run only */ }
+}
+
+/**
+ * A scene's address for one of Rhema's cameras, at this computer's address now. A scene keeps the
+ * address it was built with; after the computer's address changes (DHCP, Wi-Fi to cable) the old
+ * one plays nothing, while the router still says the camera is sending.
+ */
+export function routerCameraUrl(url: string, health: { status: RouterStatus | null }, known: readonly { name: string }[]): string {
+  const status = health.status
+  if (status?.lanAddress) rememberRouterAddress(status.lanAddress, String(status.ports.webrtc))
+  // A status poll that failed keeps the last address known, so players do not flip back and forth.
+  const here = status?.lanAddress ?? routerAddresses()[0]
+  const port = status ? String(status.ports.webrtc) : lastRouterPort
+  if (!here || !port) return url
+  try {
+    const u = new URL(url)
+    const name = /^\/([^/]+)\/whep\/?$/.exec(u.pathname)?.[1]
+    // Only an address this computer had: another relay's camera of the same name is not this one.
+    if (!name || u.port !== port || !known.some((c) => c.name === name) || u.hostname === here || !routerAddresses().includes(u.hostname)) return url
+    u.hostname = here
+    return u.toString()
+  } catch {
+    return url
+  }
+}
+
 /** What a scene's camera layer (and a TV) plays: the router's WHEP address. */
 export function whepUrl(host: string, ports: RouterPorts, name: string): string {
   return `http://${host}:${ports.webrtc}/${name}/whep`
@@ -199,8 +253,12 @@ export function cameraSending(health: { status: RouterStatus | null; checked: bo
  * nothing arriving) or the router is off. Undefined while sending, before the first answer, or for
  * a camera that is not one of Rhema's (`known`: the cameras in Live → Production tools → Cameras).
  */
-export function cameraDownState(health: { status: RouterStatus | null; checked: boolean }, name: string, known: readonly { name: string }[]): "not-sending" | "frozen" | "router-off" | undefined {
-  if (!health.checked || !known.some((c) => c.name === name)) return undefined
+export function cameraDownState(health: { status: RouterStatus | null; checked: boolean }, name: string, known: readonly { name: string }[], url?: string): "not-sending" | "frozen" | "router-off" | undefined {
+  if (!health.checked) return undefined
+  // A camera removed from Rhema while a scene still plays it from this router: nothing will come, so
+  // it is down and the output's fallback camera can step in. Any other address is not Rhema's to judge.
+  // (A name the router has live is sending, listed or not.)
+  if (!known.some((c) => c.name === name)) return url && onThisRouter(url, health.status) && health.status?.running && !health.status.paths.some((p) => p.name === name && p.live) ? "not-sending" : undefined
   if (!health.status?.running) return "router-off"
   const p = health.status.paths.find((x) => x.name === name)
   if (!p?.live) return "not-sending"

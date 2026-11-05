@@ -35,7 +35,7 @@ import { feedLost, overscanPct } from "@/lib/feed-receivers"
 import { cameraSourceId, feedFrame, followsLowerThird, followsOnlyOverlays, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
 import { captureSceneAppearance, normalizeScene, presetFromScene, sceneClock, sceneForOutput, sceneFrame, sceneHasLanguageFallback, sceneOwns } from "@/lib/scenes"
 import { hasPendingRemotePolicyUpdate, useSettingsStore } from "@/stores/settings-store"
-import { cameraDownState, cameraLabelOf, useRouterHealth } from "@/lib/cameras"
+import { cameraDownState, cameraLabelOf, routerCameraUrl, useRouterHealth } from "@/lib/cameras"
 import type { Scene, SceneAppearanceSnapshot, SceneFrame, SceneLayerKind } from "@/types"
 import type { ApprovedSceneTake } from "@/lib/scene-take"
 import type { CountdownTargets } from "@/lib/countdown"
@@ -1053,7 +1053,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       const sceneOutput = draft
         ? { ...output, sceneAppearanceSnapshot: { themes: { ...(output.sceneAppearanceSnapshot?.themes ?? {}), [draft.id]: draft }, logoUrl: output.sceneAppearanceSnapshot ? output.sceneAppearanceSnapshot.logoUrl : useSettingsStore.getState().brandKit.logoUrl } }
         : output
-      const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()), ticker: liveTicker, overlay: liveOverlay, logoUrl: useSettingsStore.getState().brandKit.logoUrl, cameraLabel: (url) => cameraLabelOf(url, useSettingsStore.getState().cameras), cameraBackup, cameraDown }, sceneOutput, scene)
+      const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()), ticker: liveTicker, overlay: liveOverlay, logoUrl: useSettingsStore.getState().brandKit.logoUrl, cameraLabel: (url) => cameraLabelOf(url, useSettingsStore.getState().cameras), cameraBackup, cameraDown, cameraAt: (url) => routerCameraUrl(url, useRouterHealth.getState(), useSettingsStore.getState().cameras) }, sceneOutput, scene)
       const overlay = followsLowerThird(output) && !owns.lowerThird ? liveOverlay : null
       const ticker = followsTicker(output) && !owns.ticker ? liveTicker : null
       recordFrame(outputId, { theme, verse: null, overlay, ticker, scene: frame, languageFallback: sceneHasLanguageFallback(s, output, scene, liveOverlay, shown, !!overlay) })
@@ -2148,8 +2148,8 @@ function cameraBackup(name: string): string | undefined {
 }
 
 /** What the router last said of a camera that cannot be shown (#213). */
-function cameraDown(name: string) {
-  return cameraDownState(useRouterHealth.getState(), name, useSettingsStore.getState().cameras)
+function cameraDown(name: string, url?: string) {
+  return cameraDownState(useRouterHealth.getState(), name, useSettingsStore.getState().cameras, url)
 }
 
 /** The church's time zone when a build sets one (Setup), else "" (this computer's clock). */
@@ -2222,7 +2222,8 @@ let lastCameraKey = ""
 function syncCameraScenes(): void {
   const b = useBroadcastStore.getState()
   const cams = useSettingsStore.getState().cameras
-  const key = cams.map((c) => `${c.name}>${c.backup ?? ""}:${cameraDown(c.name) ?? "ok"}`).join(",")
+  // The computer's address too: a scene's cameras play at the address it has now.
+  const key = `${useRouterHealth.getState().status?.lanAddress ?? ""}|` + cams.map((c) => `${c.name}>${c.backup ?? ""}:${cameraDown(c.name) ?? "ok"}`).join(",")
   if (key === lastCameraKey) return
   lastCameraKey = key
   for (const o of b.outputs) if (showsSceneWith(o, "camera")) b.syncBroadcastOutputFor(o.id)

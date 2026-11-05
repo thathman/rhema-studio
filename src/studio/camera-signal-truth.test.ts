@@ -7,7 +7,7 @@ vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen:
 const { syncCameras, playerKey } = await import("@/lib/whep")
 const { newLayer, newScene, sceneFrame, cameraPlay, SCENE_PRESETS } = await import("@/lib/scenes")
 const { withCameraPath, cameraSourceId } = await import("@/lib/live-sources")
-const { cameraDownState, cameraSending } = await import("@/lib/cameras")
+const { cameraDownState, cameraSending, routerCameraUrl } = await import("@/lib/cameras")
 const { attention, cameraHealth, cameraStateWords } = await import("@/lib/show-health")
 const { screenPlayback, playbackWords, playbackTrouble, measuredFps } = await import("@/lib/camera-playback")
 const { cameraControlled } = await import("@/stores/broadcast-store")
@@ -166,5 +166,36 @@ describe("Camera follows OBS (#208): information from OBS's own inputs", () => {
     }) as never
     expect(await programCameras(request, "Sermon")).toEqual(["pulpit"])
     expect(await programCameras(request, null)).toEqual([])
+  })
+})
+
+describe("scene cameras after the computer's address changes, and removed cameras (#411)", () => {
+  it("plays Rhema's camera at the computer's address now, never the one the scene was built with", () => {
+    // The scene was built while the computer was at .20 (the router said so), then it moved to .30.
+    expect(routerCameraUrl(URL_P, { status: routerOf([{ name: "pulpit", live: true }]) }, cameras)).toBe(URL_P)
+    const health = { checked: true, status: { ...routerOf([{ name: "pulpit", live: true }]), lanAddress: "192.168.1.30" } }
+    expect(routerCameraUrl(URL_P, health, cameras)).toBe("http://192.168.1.30:8889/pulpit/whep")
+    // Another relay's camera with the same name as one of ours: never redirected here.
+    expect(routerCameraUrl("http://10.0.0.9:8889/pulpit/whep", health, cameras)).toBe("http://10.0.0.9:8889/pulpit/whep")
+    // A failed status poll keeps the address last known, so players do not flip back.
+    expect(routerCameraUrl(URL_P, { status: null }, cameras)).toBe("http://192.168.1.30:8889/pulpit/whep")
+    // An address typed by hand, another port or a camera that is not Rhema's: untouched.
+    expect(routerCameraUrl("http://10.0.0.9:8889/lobby/whep", health, cameras)).toBe("http://10.0.0.9:8889/lobby/whep")
+    expect(routerCameraUrl("http://192.168.1.20:9000/pulpit/whep", health, cameras)).toBe("http://192.168.1.20:9000/pulpit/whep")
+    const frame = cameraPlay({ cameraAt: (u) => routerCameraUrl(u, health, cameras) }, { cameraFallback: undefined }, { cameraUrl: URL_P })
+    expect(frame.url).toBe("http://192.168.1.30:8889/pulpit/whep")
+  })
+
+  it("a camera removed from Rhema while a scene plays it from this router is down, so the fallback steps in", () => {
+    const health = { checked: true, status: routerOf([{ name: "choir", live: true }]) }
+    const removed = "http://192.168.1.20:8889/gone/whep"
+    expect(cameraDownState(health, "gone", cameras, removed)).toBe("not-sending")
+    // A name the router has live is sending, listed in Cameras or not.
+    expect(cameraDownState({ checked: true, status: routerOf([{ name: "guest", live: true }]) }, "guest", cameras, "http://192.168.1.20:8889/guest/whep")).toBeUndefined()
+    // Another computer's camera is not Rhema's to judge.
+    expect(cameraDownState(health, "lobby", cameras, "http://10.0.0.9:8889/lobby/whep")).toBeUndefined()
+    const other = { cameraFallback: { mode: "camera" as const, camera: "choir" } }
+    const play = cameraPlay({ cameraDown: (n, u) => cameraDownState(health, n, cameras, u) }, other, { cameraUrl: removed })
+    expect(play.url).toBe("http://192.168.1.20:8889/choir/whep")
   })
 })
