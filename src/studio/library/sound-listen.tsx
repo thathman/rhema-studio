@@ -71,6 +71,10 @@ export function SoundListen({ assetId, name }: { assetId: string; name: string }
       // A later press, or Stop, came while this one waited: this player never takes over.
       if (mineTicket !== currentListenTicket()) return controls.stop()
       controls.element.addEventListener("ended", () => { if (useListening.getState().controls === controls) stopListening() })
+      // A Pause or volume chosen while it was starting applies now: the controls say what plays.
+      const chosen = useListening.getState()
+      controls.setVolume(chosen.volume)
+      if (chosen.paused) controls.pause()
       useListening.setState({ controls })
     } catch (e) {
       if (mineTicket === currentListenTicket()) useListening.setState({ id: null, controls: null, error: `Not played: ${e instanceof Error ? e.message : String(e)}` })
