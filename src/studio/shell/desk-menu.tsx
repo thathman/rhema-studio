@@ -249,7 +249,7 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
                 </button>
               ))}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Present stays dark, so the live console is calm in a dim room.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Live stays dark, so the console is calm in a dim room.</p>
           </div>
 
           <div className="-mx-1 flex flex-col border-t border-border pt-2">
