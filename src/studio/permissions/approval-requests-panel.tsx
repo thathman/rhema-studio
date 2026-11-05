@@ -1,3 +1,4 @@
+import { withLanguageOverride } from "@/lib/output-language"
 import { useEffect, useState, type CSSProperties } from "react"
 import { CheckIcon, CircleAlertIcon, HistoryIcon, RefreshCwIcon, ShieldCheckIcon, XIcon } from "lucide-react"
 import { gradientCss, gradientFallback, normalizeGradient } from "@/lib/scene-gradient"
@@ -133,7 +134,9 @@ function SceneRequestReview({
   planReferences: string[]
   cameraLabelForUrl: (url: string) => string | undefined
 }) {
-  const outputReviewRows = sceneOutputReviewRows(model.beforeScene, model.requestedScene, assignedOutputs)
+  // Reviewed as the outputs show now: a language chosen in Live for this session included (#446).
+  const languageOverrides = useBroadcastStore((s) => s.languageOverrides)
+  const outputReviewRows = sceneOutputReviewRows(model.beforeScene, model.requestedScene, assignedOutputs.map((output) => withLanguageOverride(output, languageOverrides)))
   return (
     <section aria-label="Scene change review" className="mt-3 rounded-md border border-border bg-muted/20 p-3">
       <div className="flex flex-wrap items-center gap-2">

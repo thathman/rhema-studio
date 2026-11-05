@@ -7,6 +7,7 @@ import type {
   SongWithSections,
   BroadcastOutput,
   DesignedMomentRestore,
+  BroadcastOutputLanguage,
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
@@ -24,7 +25,7 @@ import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import type { TimerState } from "@/lib/timer"
 import { useSongStore } from "@/stores/song-store"
 import { nextVisibleItem, type OutlineHeader } from "@/lib/run-of-show"
-import { forOutputLanguage, isOutputLanguageFallback, OUTPUT_LANGUAGE_FALLBACK_NOTICE } from "@/lib/output-language"
+import { forOutputLanguage, isOutputLanguageFallback, OUTPUT_LANGUAGE_FALLBACK_NOTICE, liveLanguage, withLanguageOverride, type LanguageOverride } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
@@ -148,6 +149,8 @@ interface BroadcastState {
   outputs: BroadcastOutput[]
   /** Runtime on-air state per output id. Not persisted. */
   outputStatus: Record<string, BroadcastOutputStatus>
+  /** Languages chosen in Live for this session, by output id (#446). Never saved; journaled. */
+  languageOverrides: Record<string, LanguageOverride>
   isLive: boolean
   liveVerse: VerseRenderData | null
   // The Verse the live output was presented from, kept so it can be
@@ -369,6 +372,8 @@ interface BroadcastState {
   // Output management
   addOutput: (output: BroadcastOutput) => void
   updateOutput: (id: string, patch: Partial<Omit<BroadcastOutput, "id">>) => void
+  /** Show another language on one output for this session only (null: back to its saved language). */
+  setLanguageOverride: (outputId: string, language: BroadcastOutputLanguage | null) => void
   removeOutput: (id: string) => void
   duplicateOutput: (id: string) => void
   renameOutput: (id: string, name: string) => void
@@ -808,6 +813,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   activeThemeId: BUILTIN_THEMES[0].id,
   outputs: [defaultMainOutput()],
   outputStatus: {},
+  languageOverrides: {},
   isLive: false,
   liveVerse: null,
   liveSourceVerse: null,
@@ -988,8 +994,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     })),
   syncBroadcastOutputFor: (outputId: string) => {
     const s = get()
-    const output = s.outputs.find((o) => o.id === outputId)
-    if (!output) return
+    const savedOutput = s.outputs.find((o) => o.id === outputId)
+    if (!savedOutput) return
+    // Its language as Live has it now: saved, or this session's override (#446).
+    const output = withLanguageOverride(savedOutput, s.languageOverrides)
     // The look for what is on air: this output's theme for that kind of content, else its main theme.
     const shown = feedFrame(s, output.shows)
     const scene = sceneForOutput(output, s.scenes)
@@ -1114,7 +1122,21 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         ? s.outputs
         : [...s.outputs, withSceneSnapshot(output, s.scenes)],
     })),
+  setLanguageOverride: (outputId, language) => {
+    const output = get().outputs.find((o) => o.id === outputId)
+    // Rehearsal freezes the outputs and the service log: a choice made then would reach the
+    // congregation afterwards unrecorded, so it waits until rehearsal is over.
+    if (!output || get().rehearsal) return
+    const rest = { ...get().languageOverrides }
+    delete rest[outputId]
+    // Back to the saved language is no override at all.
+    const by = currentActor()
+    const next = language === null || language === (output.language ?? "both") ? rest : { ...rest, [outputId]: { language, ...(by ? { by } : {}) } }
+    set({ languageOverrides: next })
+    get().syncBroadcastOutputFor(outputId)
+  },
   updateOutput: (id, patch) => {
+    const before = get().outputs.find((o) => o.id === id)
     set((s) => ({
       outputs: s.outputs.map((o) => {
         if (o.id !== id) return o
@@ -1132,6 +1154,14 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         : {}),
     }))
     if ("role" in patch && patch.role !== "signage") forgetSignage(id)
+    // A new saved language replaces this session's choice for that output (and the log says so).
+    // Only a real change (Edit output always sends the language), and not in rehearsal, whose
+    // log is frozen: there the session's choice stays, as recorded.
+    if ("language" in patch && (patch.language ?? "both") !== (before?.language ?? "both") && get().languageOverrides[id] && !get().rehearsal) {
+      const languageOverrides = { ...get().languageOverrides }
+      delete languageOverrides[id]
+      set({ languageOverrides })
+    }
     if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch || "shows" in patch || "sceneId" in patch || "stageLayout" in patch || "stageOrientation" in patch || "stageNight" in patch) get().syncBroadcastOutputFor(id)
     // A feed's rule for a lost host or its overscan (#198): its screens get the last frame again with it.
     else if ("hostLost" in patch || "overscan" in patch) resendLast(id)
@@ -1156,9 +1186,13 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       const outputStatus = Object.fromEntries(
         Object.entries(s.outputStatus).filter(([statusId]) => statusId !== id)
       )
+      // Its language for this session goes with it, in the same change (the log names it removed).
+      const languageOverrides = { ...s.languageOverrides }
+      delete languageOverrides[id]
       return {
         outputs: s.outputs.filter((o) => o.id !== id),
         outputStatus,
+        ...(s.languageOverrides[id] ? { languageOverrides } : {}),
       }
     })
   },
@@ -1540,7 +1574,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       const sameThemeRevisions = JSON.stringify(Object.entries(themeRevisions).sort()) === JSON.stringify(Object.entries(expected.themeRevisions ?? {}).sort())
       const outputTheme = s.themes.find((theme) => theme.id === output.themeId) ?? s.themes[0]
       if ((output.sceneId ?? null) !== expected.sceneId || (s.sceneTakes[output.id]?.revision ?? null) !== expected.sceneRevision) return false
-      if ((output.language ?? "both") !== expected.language || output.themeId !== expected.themeId || !sameThemeFor || !sameThemeNames || !sameThemeRevisions) return false
+      if (liveLanguage(output, s.languageOverrides) !== expected.language || output.themeId !== expected.themeId || !sameThemeFor || !sameThemeNames || !sameThemeRevisions) return false
       if ((output.shows ?? []).join("\u001f") !== (expected.shows ?? []).join("\u001f") || expected.aspectRatio !== aspectRatioLabel(outputTheme?.resolution)) return false
     }
     // An approved service puts up its pinned scene and each output's pinned look (#410), as the host

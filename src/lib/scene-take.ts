@@ -11,6 +11,7 @@
  * Preview stays private: reading revisions changes nothing, and nothing is taken until
  * `takeSceneOnOutput` is called. Source Take (what content is live) is a different thing.
  */
+import { liveLanguage } from "@/lib/output-language"
 import { invoke } from "@tauri-apps/api/core"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { publishLiveState } from "@/lib/live-state"
@@ -80,7 +81,8 @@ function localProgramSnapshot(outputId: string): { values: readonly unknown[]; o
       state.liveItemId,
       output.type,
       output.role,
-      output.language,
+      // The language it shows now, a session's choice in Live included (#446).
+      liveLanguage(output, state.languageOverrides),
       output.sceneId,
       output.sceneSnapshot,
       output.sceneAppearanceSnapshot,

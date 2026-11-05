@@ -229,6 +229,22 @@ describe("Preview translation refresh", () => {
     expect(useBroadcastStore.getState().isLive).toBe(true)
   })
 
+  it("previews in the language chosen in Live for this session, as Take will show it (#446)", async () => {
+    const baseOutput = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({ outputs: [{ ...baseOutput, id: "yoruba-output", name: "Yoruba screen", role: "congregation", language: "second" }], languageOverrides: { "yoruba-output": { language: "first" } } })
+    useBibleStore.setState({ secondaryTranslationId: 2 })
+    const yoruba = { ...verse, id: 2, translation_id: 2, text: "Nítorí Ọlọ́run fẹ́ aráyé" }
+    vi.spyOn(bibleActions, "fetchVerse").mockImplementation(async (_book, _chapter, _verse, translationId) => translationId === 2 ? yoruba : verse)
+
+    await act(async () => root!.render(<PreviewPanel outputLanguageId="yoruba-output" onOutputLanguageIdChange={() => {}} />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+
+    expect(canvasVerses.at(-1)).toMatchObject({ segments: [{ verseNumber: 16, text: verse.text }] })
+    const outputPicker = document.body.querySelector<HTMLSelectElement>('[aria-label="Named congregation output for Preview language and scene Take"]')!
+    expect([...outputPicker.options].map((option) => option.textContent)).toEqual(["Yoruba screen · First language (this session)"])
+    useBroadcastStore.setState({ languageOverrides: {} })
+  })
+
   it("can keep the output-specific Preview language while selection lives in the Live command bar", async () => {
     const baseOutput = useBroadcastStore.getState().outputs[0]!
     useBroadcastStore.setState({ outputs: [{ ...baseOutput, id: "yoruba-output", name: "Yoruba screen", role: "congregation", language: "second" }] })

@@ -21,7 +21,7 @@ import { useObsProgramCameras, useRememberSixty, useScreenPlayback } from "@/stu
 import { playbackWords } from "@/lib/camera-playback"
 import { cameraPathOf } from "@/lib/live-sources"
 import { sceneForOutput } from "@/lib/scenes"
-import { OUTPUT_LANGUAGE_FALLBACK_NOTICE } from "@/lib/output-language"
+import { liveLanguage, OUTPUT_LANGUAGE_FALLBACK_NOTICE } from "@/lib/output-language"
 import { attention, cameraHealth, cameraStateWords, cameraWords, capacityAttention, cpuWords, feedSummary, heatWords, memoryWords, ndiRateWords, networkWords, showing, tvCheckWords, useFeedHealthStore, type Attention, type CameraHealth, type HealthLine } from "@/lib/show-health"
 import { CAPACITY_KINDS, NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, capacityLimits, capacityUse, physicalCores, suits60fps, useMachineInfo } from "@/lib/capacity"
 import { useMachineHealth, type NdiMeasure } from "@/studio/production/use-machine-health"
@@ -359,6 +359,8 @@ const SAMPLE_VERSE = { reference: "John 3:16", segments: [{ text: "For God so lo
 
 
 function OutputInspector({ output: o, status: st, frame, scenes, themes }: { output: BroadcastOutput; status: BroadcastOutputStatus | undefined; frame: OutputFrame | undefined; scenes: Scene[]; themes: BroadcastTheme[] }) {
+  // The language it shows now: this session's choice in Live, else its saved one (#446).
+  const languageOverrides = useBroadcastStore((s) => s.languageOverrides)
   const on = outputOnAir(o, st)
   const feed = useFeedHealth(o.id, o.type === "browser" && on)
   const role = o.role ?? "congregation"
@@ -384,7 +386,7 @@ function OutputInspector({ output: o, status: st, frame, scenes, themes }: { out
         {row("Goes to", <span className="break-words">{outputDestination(o)}</span>)}
         {row("Follows", outputFollows(o, theme))}
         {row("Presentation", outputPresentation(o, scenes, theme))}
-        {role === "congregation" && row("Language", <span>{LANGUAGE_NAMES[o.language ?? "both"]}{frame?.languageFallback && <span className="mt-1 block font-semibold text-confidence-mid" role="status">{OUTPUT_LANGUAGE_FALLBACK_NOTICE}</span>}</span>)}
+        {role === "congregation" && row("Language", <span>{LANGUAGE_NAMES[liveLanguage(o, languageOverrides)]}{languageOverrides[o.id] ? " · this session (not saved)" : ""}{frame?.languageFallback && <span className="mt-1 block font-semibold text-confidence-mid" role="status">{OUTPUT_LANGUAGE_FALLBACK_NOTICE}</span>}</span>)}
         {role !== "stage" && row("Look", (
           <span className="flex items-center gap-2">
             {theme && (

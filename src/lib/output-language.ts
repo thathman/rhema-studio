@@ -1,4 +1,35 @@
-import type { BroadcastOutputLanguage, VerseRenderData } from "@/types"
+import type { BroadcastOutput, BroadcastOutputLanguage, VerseRenderData } from "@/types"
+
+/**
+ * A language chosen in Live for one output, for this session only (#446): it is never saved to
+ * the output, and goes when Rhema Studio restarts or the operator sets it back.
+ */
+export type LanguageOverride = { language: BroadcastOutputLanguage; by?: string }
+
+/** The output as Live renders it now: its saved language, or the session's override of it. */
+export function withLanguageOverride<T extends Pick<BroadcastOutput, "id" | "language">>(output: T, overrides: Record<string, LanguageOverride>): T {
+  const o = overrides[output.id]
+  return o && o.language !== (output.language ?? "both") ? { ...output, language: o.language } : output
+}
+
+/** The language an output shows now: this session's choice, else its saved language. */
+export function liveLanguage(output: Pick<BroadcastOutput, "id" | "language">, overrides: Record<string, LanguageOverride>): BroadcastOutputLanguage {
+  return overrides[output.id]?.language ?? output.language ?? "both"
+}
+
+/** The short names output pickers use ("Yoruba screen · Second language"). */
+export const LANGUAGE_SHORT_NAMES: Record<BroadcastOutputLanguage, string> = {
+  both: "Both languages",
+  first: "First language",
+  second: "Second language",
+}
+
+/** How a language is named on screen. */
+export const LANGUAGE_NAMES: Record<BroadcastOutputLanguage, string> = {
+  both: "Both languages",
+  first: "First language only",
+  second: "Second language only",
+}
 
 export const OUTPUT_LANGUAGE_FALLBACK_NOTICE = "Second language unavailable; showing available text."
 
