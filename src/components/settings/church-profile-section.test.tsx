@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { ChurchProfileSection } from "./church-profile-section"
@@ -36,8 +36,8 @@ function type(input: HTMLInputElement, text: string) {
 describe("Settings → Church and profile (#447)", () => {
   it("edits the church's name (as Home reads it) and the operator's, in the same fields as setup", () => {
     act(() => root.render(<ChurchProfileSection />))
-    const church = element.querySelector<HTMLInputElement>("#setup-church-name")!
-    const operator = element.querySelector<HTMLInputElement>("#setup-operator-name")!
+    const church = element.querySelector<HTMLInputElement>("#settings-church-name")!
+    const operator = element.querySelector<HTMLInputElement>("#settings-operator-name")!
     expect(church.value).toBe("Christ Apostolic Church")
     expect(operator.value).toBe("Tolu")
 
@@ -48,6 +48,19 @@ describe("Settings → Church and profile (#447)", () => {
     // Home's heading, previewed as setup does, with the accents kept.
     expect(element.textContent).toContain("Christ Apostolic Church, Òkè-Ìgbàlà workspace")
     expect(element.textContent).toContain("Nothing here changes what is on the screens")
+    // Its own ids: setup can open over Settings without doubling the wizard's fields.
+    expect(element.querySelector("#setup-church-name")).toBeNull()
+  })
+
+  it("leaving after a rename does not rebuild the brand looks (that is Design → Brand kit's)", async () => {
+    const { useBroadcastStore } = await import("@/stores/broadcast-store")
+    const apply = vi.spyOn(useBroadcastStore.getState(), "applyBrandKit")
+    useBroadcastStore.setState({ themes: useBroadcastStore.getState().themes.map((t, i) => (i === 0 ? { ...t, brandManaged: true } : t)) })
+    act(() => root.render(<ChurchProfileSection />))
+    type(element.querySelector<HTMLInputElement>("#settings-church-name")!, "New name")
+    act(() => root.render(<div />))
+    expect(apply).not.toHaveBeenCalled()
+    apply.mockRestore()
   })
 
   it("joining another computer goes to Connections and closes Settings", () => {
