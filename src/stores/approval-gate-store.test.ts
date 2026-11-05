@@ -53,22 +53,34 @@ describe("approval before go-live (CL-002, opt-in)", () => {
     expect(useApprovalGateStore.getState().held).toBeNull()
   })
 
-  it("Present anyway is in the service log: who let which unapproved version through, once (#409)", () => {
+  it("Present anyway is in the service log with its go-live: who let which unapproved version through, once (#409)", async () => {
     useSettingsStore.setState({ operatorName: "Femi" })
-    useJournalStore.setState({ entries: [] })
-    // The go-live it lets through starts the run's log: the override must survive that.
-    expect(approvalHolds(() => useJournalStore.getState().add({ kind: "live", label: "Welcome", itemId: "w" }))).toBe(true)
+    useJournalStore.setState({ entries: [], runContext: null })
+    // As in use: the go-live it lets through comes later (a verse is fetched first), and starts the run's log.
+    expect(approvalHolds(() => { void Promise.resolve().then(() => useJournalStore.getState().add({ kind: "live", label: "Welcome", itemId: "w" })) })).toBe(true)
     useApprovalGateStore.getState().presentAnyway()
+    expect(useJournalStore.getState().entries.filter((e) => e.kind === "approval")).toHaveLength(0) // not on air yet
+    await Promise.resolve()
     expect(useJournalStore.getState().entries.map((e) => e.kind)).toEqual(["live", "approval"])
-    const overrides = useJournalStore.getState().entries.filter((e) => e.kind === "approval")
-    expect(overrides).toHaveLength(1)
-    expect(overrides[0]).toMatchObject({ by: "Femi", label: 'Presented without approval: "Sunday" v3 · by Femi' })
-    // Not asked again this session, so not logged again; Not now logs nothing.
-    expect(approvalHolds(() => {})).toBe(false)
-    useServiceStore.setState({ current: program({ id: "p2" }) })
-    approvalHolds(() => {})
-    useApprovalGateStore.getState().dismiss()
+    expect(useJournalStore.getState().entries[1]).toMatchObject({ by: "Femi", label: 'Presented without approval: "Sunday" v3 · by Femi' })
+    // Not asked again this session, so not logged again; later go-lives add nothing.
+    useJournalStore.getState().add({ kind: "live", label: "Psalm 23", itemId: "p" })
     expect(useJournalStore.getState().entries.filter((e) => e.kind === "approval")).toHaveLength(1)
+  })
+
+  it("logs nothing for Not now, or for a let-through that went stale before going live", () => {
+    useJournalStore.setState({ entries: [], runContext: null })
+    expect(approvalHolds(() => {})).toBe(true)
+    useApprovalGateStore.getState().dismiss()
+    useJournalStore.getState().add({ kind: "live", label: "Welcome", itemId: "w" })
+    expect(useJournalStore.getState().entries.some((e) => e.kind === "approval")).toBe(false)
+
+    useServiceStore.setState({ current: program({ id: "p2" }) })
+    expect(approvalHolds(() => {})).toBe(true)
+    useApprovalGateStore.getState().presentAnyway()
+    useApprovalGateStore.getState().revokeAcknowledgment("p2") // the service changed: Take again
+    useJournalStore.getState().add({ kind: "live", label: "Other", itemId: "o" })
+    expect(useJournalStore.getState().entries.some((e) => e.kind === "approval")).toBe(false)
   })
 
   it("letting rehearsed content through unapproved is logged, though rehearsal was on when it was asked", () => {

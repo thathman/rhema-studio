@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { approvalState } from "@/lib/approval"
 import { currentActor, useBroadcastStore } from "@/stores/broadcast-store"
-import { useJournalStore } from "@/stores/journal-store"
+import { noteApprovalOverride } from "@/stores/journal-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
 
@@ -32,20 +32,26 @@ export const useApprovalGateStore = create<ApprovalGateState>((set, get) => ({
   held: null,
   retry: null,
   acknowledged: [],
-  revokeAcknowledgment: (serviceId) => set((state) => ({
-    acknowledged: state.acknowledged.filter((id) => id !== serviceId),
-  })),
+  revokeAcknowledgment: (serviceId) => {
+    // The let-through did not go live (the service changed meanwhile): nothing to log for it.
+    noteApprovalOverride(null)
+    set((state) => ({ acknowledged: state.acknowledged.filter((id) => id !== serviceId) }))
+  },
   presentAnyway: () => {
     const { held, retry, acknowledged } = get()
     if (!held) return
+    // Going live with a version nobody approved is part of the service's record (#409, #447): who,
+    // which service and version. Logged with the go-live itself, which may come later (a verse
+    // being fetched) and starts the run's log; a retry that never goes live logs nothing.
+    const by = currentActor()
+    noteApprovalOverride({ serviceId: held.id, label: `Presented without approval: "${held.title}" v${held.revision}${by ? ` · by ${by}` : ""}`, ...(by ? { by } : {}) })
     set({ acknowledged: [...acknowledged, held.id], held: null, retry: null })
     retry?.()
-    // Going live with a version nobody approved is part of the service's record (#409, #447): who,
-    // which service and version. After the go-live, which may start the run's log afresh.
-    const by = currentActor()
-    useJournalStore.getState().add({ kind: "approval", label: `Presented without approval: "${held.title}" v${held.revision}${by ? ` · by ${by}` : ""}`, ...(by ? { by } : {}) })
   },
-  dismiss: () => set({ held: null, retry: null }),
+  dismiss: () => {
+    noteApprovalOverride(null)
+    set({ held: null, retry: null })
+  },
 }))
 
 /**

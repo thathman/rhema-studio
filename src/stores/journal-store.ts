@@ -98,9 +98,24 @@ export const useJournalStore = create<JournalState>((set, get) => ({
       entries: capJournal([...(startsNewRun ? [] : s.entries), { ...entry, at: Date.now(), mono: monotonicNow() }]),
       added: (startsNewRun ? 0 : s.added) + 1,
     }))
+    // An unapproved service let through (#409) is logged with its go-live, once it has really gone
+    // on air: after the run's log starts, and never for a let-through that did not go live.
+    if (entry.kind === "live" && approvalOverride && approvalOverride.serviceId === service?.id) {
+      const { label, by } = approvalOverride
+      approvalOverride = null
+      get().add({ kind: "approval", label, ...(by ? { by } : {}) })
+    }
   },
   clear: () => set((s) => ({ entries: [], startItemIds: null, keptAt: s.added, runContext: null, runStatus: "none", checkpointStatus: "idle", checkpointError: null, finalizedLogId: null })),
 }))
+
+/** "Present anyway" on an unapproved service, waiting for that service's go-live to be logged. */
+let approvalOverride: { serviceId: string; label: string; by?: string } | null = null
+
+/** Note a let-through (approval-gate-store), or forget it (Not now, or a retry that went stale). */
+export function noteApprovalOverride(override: { serviceId: string; label: string; by?: string } | null): void {
+  approvalOverride = override
+}
 
 /** The most entries the log keeps in this run. */
 export const JOURNAL_MAX = 2000
