@@ -129,8 +129,18 @@ export function useRemoteControl() {
           useJournalStore.getState().add({ kind: "timing", label: `${byOf(p)}timer corrected by ${m > 0 ? "+" : "−"}${Math.abs(m)} min` })
         }],
         // A hold from a joined desk (#196 R3): as the main desk's Hold, with who in the log line.
-        [REMOTE_EVENTS.hold, (p) => useHold.getState().start(typeof p?.reason === "string" ? p.reason : "", senderOf(p ?? null))],
-        [REMOTE_EVENTS.resume, (p) => useHold.getState().resume(senderOf(p ?? null))],
+        // Refused (already held, rehearsal, a finished service): the main desk is told who asked and why.
+        // (Already held, or nothing held to resume: done as asked, nothing to tell.)
+        [REMOTE_EVENTS.hold, (p) => {
+          const held = useHold.getState().hold !== null
+          const why = useHold.getState().start(typeof p?.reason === "string" ? p.reason : "", senderOf(p ?? null))
+          if (why && !held) toast.warning("Hold not made", { description: `${byOf(p)}${why}` })
+        }],
+        [REMOTE_EVENTS.resume, (p) => {
+          const held = useHold.getState().hold !== null
+          const why = useHold.getState().resume(senderOf(p ?? null))
+          if (why && held) toast.warning("Not resumed", { description: `${byOf(p)}${why}` })
+        }],
         // An extra timer from a joined desk (#196 R2.5): the host's server checked the timer's owner first.
         [REMOTE_EVENTS.aux_timer, (p) => { if (typeof p?.id === "string" && typeof p?.action === "string") useAuxTimers.getState().remote(p.id, p.action, typeof p.by === "string" ? p.by : undefined) }],
       ] as const satisfies ReadonlyArray<readonly [string, (p: Record<string, unknown> | null | undefined) => void]>) {
