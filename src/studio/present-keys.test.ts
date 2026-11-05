@@ -87,6 +87,9 @@ describe("the presenter clicker (#411, owner decision 5 Nov)", () => {
     expect(shouldIgnoreKeyboard(inPopover, "PageDown")).toBe(false)
     expect(shouldIgnoreKeyboard(option, "PageDown")).toBe(true)
     expect(shouldIgnoreKeyboard(inPopover, "ArrowRight")).toBe(true)
+    // A text field in a popover (the stage message, a timer's name) wins over the clicker.
+    const field = popover.appendChild(document.createElement("input"))
+    expect(shouldIgnoreKeyboard(field, "PageDown")).toBe(true)
     popover.remove()
   })
 })

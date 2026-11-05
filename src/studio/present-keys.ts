@@ -35,12 +35,14 @@ export function shouldIgnoreKeyboard(target: EventTarget | null, key?: string): 
   if (typeof document !== "undefined" && document.querySelector?.(OPEN_MODAL)) return true
   if (!target || typeof (target as HTMLElement).tagName !== "string") return false
   const el = target as HTMLElement
-  if (el.closest?.(OVERLAY)) return !(key !== undefined && CLICKER_KEYS.has(key)) || !!el.closest?.(OWN_PAGING)
+  // Typing and editing always win (#411), in a popover too: checked before the clicker is let through one.
   const tag = el.tagName.toLowerCase()
   if (tag === "input" || tag === "textarea" || tag === "select") return true
   if (el.isContentEditable) return true
   const role = el.getAttribute?.("role")
-  return role === "combobox" || role === "textbox"
+  if (role === "combobox" || role === "textbox" || role === "slider" || role === "spinbutton") return true
+  if (el.closest?.(OVERLAY)) return !(key !== undefined && CLICKER_KEYS.has(key)) || !!el.closest?.(OWN_PAGING)
+  return false
 }
 
 export function keyToPresentAction(e: KeyLike): PresentKeyAction | null {
