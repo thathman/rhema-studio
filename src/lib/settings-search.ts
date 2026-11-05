@@ -6,6 +6,10 @@ import type { SettingsSection } from "@/lib/settings-dialog"
  * with the section when its wording changes.
  */
 export const SETTINGS_SEARCH_INDEX: Record<SettingsSection, { labels: string[]; keywords: string[] }> = {
+  church: {
+    labels: ["Church name", "Campus or ministry (optional)", "Service languages (optional)", "Time zone (optional)", "Your name", "This computer's name (optional)"],
+    keywords: ["church", "church name", "profile", "general", "campus", "ministry", "time zone", "timezone", "operator", "operator name", "your name", "computer name", "desk name"],
+  },
   bible: {
     labels: ["Primary Translation", "Secondary Translation", "English", "Other Languages"],
     keywords: ["bible", "version", "edition", "language", "yoruba", "bilingual", "second language", "kjv", "scripture"],
@@ -111,12 +115,12 @@ export interface ElsewhereEntry {
 }
 
 export const SETTINGS_ELSEWHERE: readonly ElsewhereEntry[] = [
-  { id: "church", name: "Church name, logo and colours", where: "Design → Brand kit", keywords: ["church", "church name", "identity", "logo", "brand", "brand kit", "colours", "colors", "fonts", "general"] },
+  { id: "church", name: "Logo, colours and fonts", where: "Design → Brand kit", keywords: ["identity", "logo", "brand", "brand kit", "colours", "colors", "fonts"] },
   { id: "appearance", name: "Light, dark or system", where: "Desk menu, at the foot of the sidebar", keywords: ["appearance", "light", "dark", "dark mode", "light mode", "system", "theme", "night"] },
   { id: "cameras", name: "Cameras and the camera router", where: "Connections", keywords: ["camera", "cameras", "camera router", "mediamtx", "whep", "video", "pulpit", "phone camera"] },
   { id: "hosting", name: "Host or join and the talk channel", where: "Connections", keywords: ["host", "join", "hosting", "talk channel", "operators", "volunteers", "desks", "another computer", "crew"] },
   { id: "permissions", name: "Paired device access and scene requests", where: "Permissions", keywords: ["paired device", "paired devices", "roles", "role", "access", "permissions", "scene request", "scene changes"] },
-  { id: "service-defaults", name: "Approvals before a service goes live", where: "Team → Approvals", keywords: ["service defaults", "approval", "approvals", "approve", "unapproved", "ask before", "defaults", "operator name", "your name"] },
+  { id: "service-defaults", name: "Approvals before a service goes live", where: "Team → Approvals", keywords: ["service defaults", "approval", "approvals", "approve", "unapproved", "ask before", "defaults"] },
 ]
 
 /** The pages elsewhere that a search finds (none for an empty search: those are not Settings). */

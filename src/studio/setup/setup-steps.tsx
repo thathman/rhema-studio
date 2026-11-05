@@ -41,7 +41,12 @@ function Field({ id, label, hint, error, children }: { id: string; label: string
 const invalidAmber = "aria-invalid:border-confidence-mid aria-invalid:ring-confidence-mid/20 dark:aria-invalid:border-confidence-mid/60 dark:aria-invalid:ring-confidence-mid/30"
 
 /** Step 1: the church's name (the only required identity), campus and service languages. */
-export function ChurchStep({ error }: { error: string | null }) {
+/**
+ * `idPrefix`: the fields' ids (Settings → Church and profile uses its own, so the setup wizard's
+ * fields are never doubled when setup opens over Settings). `applyBrandOnLeave`: setup renames
+ * the brand looks with the church; Settings does not touch the looks (Design → Brand kit does).
+ */
+export function ChurchStep({ error, idPrefix: p = "setup", applyBrandOnLeave = true }: { error: string | null; idPrefix?: string; applyBrandOnLeave?: boolean }) {
   const name = useSettingsStore((s) => s.brandKit.churchName)
   const campus = useSettingsStore((s) => s.setup.campus)
   const languages = useSettingsStore((s) => s.setup.serviceLanguages)
@@ -49,7 +54,9 @@ export function ChurchStep({ error }: { error: string | null }) {
   const missing = !!error && !name.trim()
   // Brand themes carry the church's name: a renamed church renames them when this step closes.
   const startName = useRef(name)
+  const applyOnLeave = useRef(applyBrandOnLeave)
   useEffect(() => () => {
+    if (!applyOnLeave.current) return
     const kit = useSettingsStore.getState().brandKit
     if (kit.churchName === startName.current) return
     startName.current = kit.churchName
@@ -58,14 +65,14 @@ export function ChurchStep({ error }: { error: string | null }) {
   const shown = name.trim()
   return (
     <div className="flex max-w-xl flex-col gap-5">
-      <Field id="setup-church-name" label="Church name" hint="Shared with computers that join this one. Long names and accents (Yorùbá, Igbo, French) are fine." error={missing ? error : null}>
+      <Field id={`${p}-church-name`} label="Church name" hint="Shared with computers that join this one. Long names and accents (Yorùbá, Igbo, French) are fine." error={missing ? error : null}>
         <Input
-          id="setup-church-name"
+          id={`${p}-church-name`}
           value={name}
           autoComplete="organization"
           placeholder="e.g. Christ Apostolic Church, Oke-Ado"
           aria-invalid={missing || undefined}
-          aria-describedby={missing ? "setup-church-name-hint setup-church-name-error" : "setup-church-name-hint"}
+          aria-describedby={missing ? `${p}-church-name-hint ${p}-church-name-error` : `${p}-church-name-hint`}
           className={invalidAmber}
           onChange={(e) => useSettingsStore.getState().setBrandKit({ ...useSettingsStore.getState().brandKit, churchName: e.target.value })}
         />
@@ -74,26 +81,26 @@ export function ChurchStep({ error }: { error: string | null }) {
         <p className="text-[0.6875rem] font-semibold text-muted-foreground">Home will read</p>
         <p className="mt-1 truncate text-[0.6875rem] font-extrabold tracking-[0.16em] uppercase" title={shown ? `${shown} workspace` : "Set up your church"}>{shown ? `${shown} workspace` : "Set up your church"}</p>
       </div>
-      <Field id="setup-campus" label="Campus or ministry (optional)" hint="Only on this computer.">
-        <Input id="setup-campus" value={campus} placeholder="e.g. Ikeja campus, Youth church" onChange={(e) => setSetup({ campus: e.target.value })} aria-describedby="setup-campus-hint" />
+      <Field id={`${p}-campus`} label="Campus or ministry (optional)" hint="Only on this computer.">
+        <Input id={`${p}-campus`} value={campus} placeholder="e.g. Ikeja campus, Youth church" onChange={(e) => setSetup({ campus: e.target.value })} aria-describedby={`${p}-campus-hint`} />
       </Field>
-      <Field id="setup-languages" label="Service languages (optional)" hint="As you would say them. Bible and hymn languages are chosen in a later step.">
-        <Input id="setup-languages" value={languages} placeholder="e.g. English, Yorùbá" onChange={(e) => setSetup({ serviceLanguages: e.target.value })} aria-describedby="setup-languages-hint" />
+      <Field id={`${p}-languages`} label="Service languages (optional)" hint="As you would say them. Bible and hymn languages are chosen in a later step.">
+        <Input id={`${p}-languages`} value={languages} placeholder="e.g. English, Yorùbá" onChange={(e) => setSetup({ serviceLanguages: e.target.value })} aria-describedby={`${p}-languages-hint`} />
       </Field>
-      <TimeZoneField />
+      <TimeZoneField idPrefix={p} />
     </div>
   )
 }
 
 /** Optional time zone (#298 S1.3): "this computer's" unless the church chooses one. Nothing is guessed from an account. */
-function TimeZoneField() {
+function TimeZoneField({ idPrefix: p }: { idPrefix: string }) {
   const timeZone = useSettingsStore((s) => s.setup.timeZone)
   const system = systemTimeZone()
   const [zones] = useState(() => timeZones(timeZone))
   return (
-    <Field id="setup-time-zone" label="Time zone (optional)" hint="For service times. Leave it on this computer's unless the church keeps another.">
+    <Field id={`${p}-time-zone`} label="Time zone (optional)" hint="For service times. Leave it on this computer's unless the church keeps another.">
       <Select value={timeZone || "system"} onValueChange={(v) => useSettingsStore.getState().setSetup({ timeZone: v === "system" ? "" : v })}>
-        <SelectTrigger id="setup-time-zone" aria-describedby="setup-time-zone-hint"><SelectValue /></SelectTrigger>
+        <SelectTrigger id={`${p}-time-zone`} aria-describedby={`${p}-time-zone-hint`}><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="system">This computer's{system ? ` (${system.replace(/_/g, " ")})` : ""}</SelectItem>
           {zones.filter((z) => z !== system || z === timeZone).map((z) => <SelectItem key={z} value={z}>{z.replace(/_/g, " ")}</SelectItem>)}
@@ -104,26 +111,26 @@ function TimeZoneField() {
 }
 
 /** Step 2: the operator's display name, this computer's name, and Solo main desk. */
-export function OperatorStep({ error, onJoin }: { error: string | null; onJoin: () => void }) {
+export function OperatorStep({ error, onJoin, idPrefix: p = "setup" }: { error: string | null; onJoin: () => void; idPrefix?: string }) {
   const operatorName = useSettingsStore((s) => s.operatorName)
   const deviceName = useSettingsStore((s) => s.setup.deviceName)
   const missing = !!error && !operatorName.trim()
   return (
     <div className="flex max-w-xl flex-col gap-5">
-      <Field id="setup-operator-name" label="Your name" hint="Shown on the service log and in history as who did what. You can change it later; no account or password." error={missing ? error : null}>
+      <Field id={`${p}-operator-name`} label="Your name" hint="Shown on the service log and in history as who did what. You can change it later; no account or password." error={missing ? error : null}>
         <Input
-          id="setup-operator-name"
+          id={`${p}-operator-name`}
           value={operatorName}
           autoComplete="name"
           placeholder="e.g. Tolu Adeyemi"
           aria-invalid={missing || undefined}
-          aria-describedby={missing ? "setup-operator-name-hint setup-operator-name-error" : "setup-operator-name-hint"}
+          aria-describedby={missing ? `${p}-operator-name-hint ${p}-operator-name-error` : `${p}-operator-name-hint`}
           className={invalidAmber}
           onChange={(e) => useSettingsStore.getState().setOperatorName(e.target.value)}
         />
       </Field>
-      <Field id="setup-device-name" label="This computer's name (optional)" hint="Helps tell desks apart when others join. Only on this computer.">
-        <Input id="setup-device-name" value={deviceName} placeholder="e.g. Sanctuary desk" onChange={(e) => useSettingsStore.getState().setSetup({ deviceName: e.target.value })} aria-describedby="setup-device-name-hint" />
+      <Field id={`${p}-device-name`} label="This computer's name (optional)" hint="Helps tell desks apart when others join. Only on this computer.">
+        <Input id={`${p}-device-name`} value={deviceName} placeholder="e.g. Sanctuary desk" onChange={(e) => useSettingsStore.getState().setSetup({ deviceName: e.target.value })} aria-describedby={`${p}-device-name-hint`} />
       </Field>
       <div className="rounded-lg border border-border bg-card p-4">
         <p className="text-sm font-semibold">Main desk, on its own</p>

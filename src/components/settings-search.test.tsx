@@ -42,9 +42,12 @@ describe("searchSettings", () => {
 })
 
 describe("searchElsewhere", () => {
-  it("points to the pages that hold what Settings does not (#215): church, appearance, cameras, host/join, permissions and service defaults", () => {
+  it("points to the pages that hold what Settings does not (#215): brand, appearance, cameras, host/join, permissions and service defaults", () => {
     const where = (q: string) => searchElsewhere(q).map((e) => e.id)
-    expect(where("church name")).toEqual(["church"])
+    // The church's name and the operator's are in Settings now (Church and profile, #447); its logo is in Design.
+    expect(where("church name")).toEqual([])
+    expect(where("your name")).toEqual([])
+    expect(where("logo")).toEqual(["church"])
     expect(where("dark mode")).toEqual(["appearance"])
     expect(where("camera router")).toEqual(["cameras"])
     expect(where("join")).toEqual(["hosting"])
@@ -88,10 +91,17 @@ describe("Settings page search", () => {
     host.remove()
   })
 
-  it("lists every section under the five headings until something is typed", () => {
-    expect(sections()).toEqual(["Bible", "Outputs", "Heard verses", "Audio", "Speech Recognition", "Remote Control", "AI assistants", "Data & Sync", "Diagnostics", "Help"])
-    expect(host.textContent).toContain("Display and output")
-    expect(host.textContent).toContain("Data and diagnostics")
+  it("lists every section under the owner's seven headings, in order, until something is typed (#447)", () => {
+    expect(sections()).toEqual(["Church and profile", "Bible", "Audio", "Speech Recognition", "Remote Control", "Outputs", "AI assistants", "Data & Sync", "Heard verses", "Diagnostics", "Help"])
+    const headings = [...host.querySelectorAll('nav[aria-label="Settings sections"] > div > p')].map((p) => p.textContent)
+    expect(headings).toEqual(["Church and profile", "Audio and speech", "Connections", "AI and MCP", "Data and sync", "Preferences", "Diagnostics and about"])
+  })
+
+  it("finds the church's name and the operator's in Church and profile", async () => {
+    await type("church name")
+    expect(sections()).toEqual(["Church and profile"])
+    await type("your name")
+    expect(sections()).toContain("Church and profile")
   })
 
   it("opens backups and the church folder under Data & Sync", async () => {
@@ -126,7 +136,7 @@ describe("Settings page search", () => {
     await press("Enter")
     expect(useShellStore.getState().goRequest).toBe("connections")
 
-    await type("church name")
+    await type("logo")
     await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Elsewhere in Rhema Studio"] button')!.click())
     expect(useShellStore.getState().designRequest).toBe("brand")
 
@@ -145,7 +155,7 @@ describe("Settings page search", () => {
     expect(host.textContent).toContain("Nothing in Settings matches")
     await press("Escape")
     expect(search().value).toBe("")
-    expect(sections()).toHaveLength(10)
+    expect(sections()).toHaveLength(11)
   })
 
   it("routes paired-device access searches to Permissions", async () => {
