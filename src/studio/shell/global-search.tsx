@@ -2,7 +2,7 @@ import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, Mon
 import { useState } from "react"
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { useQueueStore } from "@/stores"
-import { useShellStore, type DesignTab, type Workspace } from "@/studio/shell-store"
+import { useShellStore, type DesignTab, type LibrarySection, type Workspace } from "@/studio/shell-store"
 import { openSettings, type SettingsSection } from "@/lib/settings-dialog"
 import { presentActions } from "@/studio/present-actions"
 import { isImageItem, isSongItem, type QueueItem } from "@/types"
@@ -29,6 +29,17 @@ const DESIGN: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["countdown", "Countdown display", "countdown timer red amber time up wrap up confidence monitor back of hall big clock"],
   ["brand", "Brand kit", "logo colours fonts church"],
   ["used-on", "Used on…", "which outputs show each look theme screen output looks"],
+]
+
+/** Library's sections (#402, #447), each by the words people use for it. */
+const LIBRARY: ReadonlyArray<readonly [LibrarySection, string, string]> = [
+  ["bible", "Bible", "scripture translations versions saved passages verses yoruba"],
+  ["songs", "Songs & ministrations", "songs worship choir ministrations lyrics"],
+  ["hymns", "Hymn book", "hymns hymn book cac numbers sss"],
+  ["slides", "Slides & announcements", "slides announcements notices reusable welcome"],
+  ["designs", "Visual designs", "designs saved versions pinned"],
+  ["media", "Pictures & videos", "pictures images photos videos media sounds audio"],
+  ["files", "Import & export", "import export files backup songs openlyrics"],
 ]
 
 const SETTINGS: ReadonlyArray<readonly [SettingsSection, string, string]> = [
@@ -102,6 +113,11 @@ export function GlobalSearch() {
           {/* Services are built in Prepare only (#299): a new one starts there too. */}
           <CommandItem value="new service create sunday plan prepare" onSelect={() => run(() => { useShellStore.getState().setNewServiceOpen(true); useShellStore.getState().goTo("prepare") })}><PlusIcon /> New service</CommandItem>
           <CommandItem value="outputs screens projector ndi stage signage monitor" onSelect={() => run(() => useShellStore.getState().openOutputs())}><MonitorIcon /> Outputs</CommandItem>
+        </CommandGroup>
+        <CommandGroup heading="Library">
+          {LIBRARY.map(([section, label, words]) => (
+            <CommandItem key={section} value={`library ${label} ${words}`} onSelect={() => run(() => useShellStore.getState().openLibrarySection(section))}><LibraryBigIcon /> {label}</CommandItem>
+          ))}
         </CommandGroup>
         <CommandGroup heading="Design">
           {DESIGN.map(([tab, label, words]) => (
