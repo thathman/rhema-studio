@@ -54,3 +54,13 @@ describe("signage loop", () => {
     expect(allSignageIds(undefined)).toEqual([])
   })
 })
+
+describe("the signage schedule follows the church's clock (#411)", () => {
+  it("is on during its window in Lagos, whatever this computer's own clock says", () => {
+    // Sunday 8 Nov 2026, 07:30 in Lagos = 06:30 UTC (and 15:30 in Tokyo).
+    const at = new Date(Date.UTC(2026, 10, 8, 6, 30))
+    const sundayMorning = { from: "07:00", to: "09:00", days: [0] }
+    expect(signageActive(sundayMorning, at, "Africa/Lagos")).toBe(true)
+    expect(signageActive(sundayMorning, at, "Asia/Tokyo")).toBe(false)
+  })
+})

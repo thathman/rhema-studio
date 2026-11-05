@@ -30,8 +30,8 @@ describe("today's service", () => {
 })
 
 describe("today on the church's clock (#411)", () => {
-  it("is Sunday in Lagos at 06:00 there, whatever this computer's own clock says", () => {
-    // 05:00 UTC on Sunday 9 Nov 2026 is 06:00 in Lagos (and still Saturday in New York).
+  it("is the date in Lagos at 06:00 there, whatever this computer's own clock says", () => {
+    // 05:00 UTC on Monday 9 Nov 2026 is 06:00 in Lagos (midnight in New York; at 03:00 UTC it is still the 8th there).
     const at = new Date(Date.UTC(2026, 10, 9, 5, 0))
     expect(localDate(at, "Africa/Lagos")).toBe("2026-11-09")
     expect(localDate(at, "America/New_York")).toBe("2026-11-09")

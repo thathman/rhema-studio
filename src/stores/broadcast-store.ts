@@ -456,7 +456,7 @@ function forgetSignage(id: string): void {
 }
 
 async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Promise<void> {
-  const playlist = activePlaylist(output.signage, new Date())
+  const playlist = activePlaylist(output.signage, new Date(), churchZone())
   const listKey = playlist ? (output.signage?.playlists?.indexOf(playlist) ?? -1) : -2
   const ids = playlist?.mediaIds ?? []
   const seconds = playlist?.seconds ?? 10
@@ -508,7 +508,7 @@ function ensureSignageTicker(): void {
       return
     }
     for (const o of signage) {
-      const playlist = activePlaylist(o.signage, new Date())
+      const playlist = activePlaylist(o.signage, new Date(), churchZone())
       const listKey = playlist ? (o.signage?.playlists?.indexOf(playlist) ?? -1) : -2
       const ids = playlist?.mediaIds ?? []
       const next = playlist ? signageIndex(ids.length, signageStarted.get(o.id) ?? monotonicNow(), monotonicNow(), playlist.seconds) : -1

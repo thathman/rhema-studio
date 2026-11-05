@@ -274,7 +274,7 @@ describe("preflight: timers, the countdown display and TV overscan (#213)", () =
 
 describe("a service starts soon on the church's clock (#411)", () => {
   it("uses the church's time zone for the start, not this computer's", () => {
-    // Tokyo is far from any clock this runs on: Sunday 9 Nov 2026, 10:00 there = 01:00 UTC.
+    // Tokyo is far from any clock this runs on: Monday 9 Nov 2026, 10:00 there = 01:00 UTC.
     const start = Date.UTC(2026, 10, 9, 1, 0)
     const soon = (now: number) => serviceStartsSoon({ serviceDate: "2026-11-09", startsAt: "10:00", running: false, now, zone: "Asia/Tokyo" })
     expect(soon(start - 60 * 60 * 1000)).toBe(true)
