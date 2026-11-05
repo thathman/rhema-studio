@@ -315,22 +315,24 @@ function RecentServiceRuns({ programId }: { programId: string | null }) {
 }
 
 /** The recordings filed under this run (#447 History): where its picture and sound are kept. */
-function RunRecordings({ runId }: { runId: string }) {
-  const [recordings, setRecordings] = useState<Array<{ sessionId: string; outputName: string; startedAt: string; durationMs?: number | null; state: string; serviceRunId?: string | null }> | null>(null)
+function RunRecordings({ runId, timeZone }: { runId: string; timeZone: string | null }) {
+  const [recordings, setRecordings] = useState<Array<{ sessionId: string; outputName: string; startedAt: string; durationMs?: number | null; state: string; serviceRunId?: string | null }> | "error" | null>(null)
   useEffect(() => {
     let cancelled = false
     invoke<Array<{ sessionId: string; outputName: string; startedAt: string; durationMs?: number | null; state: string; serviceRunId?: string | null }>>("recorder_list", { rehearsal: false })
       .then((list) => { if (!cancelled) setRecordings(list.filter((r) => r.serviceRunId === runId)) })
-      .catch(() => { if (!cancelled) setRecordings([]) })
+      .catch(() => { if (!cancelled) setRecordings("error") })
     return () => { cancelled = true }
   }, [runId])
   if (!recordings) return null
   return (
     <div className="mt-2" aria-label="Recordings of this run">
       <p className="mb-1 text-muted-foreground">Recordings</p>
-      {recordings.length === 0
+      {recordings === "error"
+        ? <p role="status" className="text-muted-foreground">Recordings could not be read on this computer.</p>
+        : recordings.length === 0
         ? <p className="text-muted-foreground">No Rhema recording was made during this run.</p>
-        : <ul>{recordings.map((r) => <li key={r.sessionId}>{r.outputName} · {new Date(r.startedAt).toLocaleTimeString()}{typeof r.durationMs === "number" ? ` · ${Math.round(r.durationMs / 60_000)} min` : ""} · {r.state} — open it in History → Recordings</li>)}</ul>}
+        : <ul>{recordings.map((r) => <li key={r.sessionId}>{r.outputName} · {new Date(r.startedAt).toLocaleTimeString(undefined, timeZone ? { timeZone } : {})}{typeof r.durationMs === "number" ? ` · ${Math.round(r.durationMs / 60_000)} min` : ""} · {r.state} — open it in History → Recordings</li>)}</ul>}
     </div>
   )
 }
@@ -350,7 +352,7 @@ function RunCheckpoint({ run }: { run: ServiceRun }) {
       <p className="mb-1 text-muted-foreground">Captured run activity · {run.status === "finished" ? "finished; review only, nothing was sent to a screen" : "time after the last confirmed checkpoint is unknown; review only, nothing was sent to a screen"}</p>
       {operator && <p className="mb-1 text-muted-foreground">Operator: {operator}</p>}
       <RunJournal entries={entries} timeZone={run.time_zone} />
-      <RunRecordings runId={run.run_id} />
+      <RunRecordings runId={run.run_id} timeZone={run.time_zone} />
       <ServiceRunReview checkpoint={checkpoint} status={run.status} />
       {orderedPlan.length > 0 && <div className="mt-2">
         <p className="mb-1 text-muted-foreground">Captured plan</p>

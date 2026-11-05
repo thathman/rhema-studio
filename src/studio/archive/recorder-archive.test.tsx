@@ -89,7 +89,7 @@ describe("History's native recording archive", () => {
     await renderArchive()
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
     const labels = [...host!.querySelectorAll("[data-recording-run]")].map((p) => p.textContent)
-    expect(labels).toEqual(["Service run: Sunday Worship · 2026-11-08", "Not linked to a service run (none was running when it started)"])
+    expect(labels).toEqual(["Service run: Sunday Worship · 2026-11-08", "Not linked to a service run"])
   })
 
   it("keeps service and rehearsal recordings in separate lists and reports recovery honestly", async () => {
