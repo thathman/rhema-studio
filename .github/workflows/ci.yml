@@ -142,6 +142,8 @@ jobs:
         with:
           path: ~/.cache/ort.pyke.io
           key: ort-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          # Its folders are named by the archive's verified SHA-256, so an older cache is safe to start from.
+          restore-keys: ort-${{ runner.os }}-
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
