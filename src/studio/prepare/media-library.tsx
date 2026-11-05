@@ -1,3 +1,4 @@
+import { useLibraryPreview } from "@/stores/library-preview-store"
 import { useEffect } from "react"
 import { toast } from "sonner"
 import { ImageIcon, MusicIcon, PlayIcon, PlusIcon, UploadIcon } from "lucide-react"
@@ -23,7 +24,8 @@ import { imageQueueItem, mediaQueueItem } from "@/lib/media-items"
  * `kinds`: everything (Prepare's Add picker), pictures and videos only, or sounds only (Library's
  * own sections, #447: "Library owns reusable… Images/Videos/Audio").
  */
-export function MediaLibrary({ onAdded, onUseItem, kinds = "all" }: { onAdded?: (id: string) => void; onUseItem?: LibraryItemUseHandler; kinds?: "all" | "visual" | "audio" } = {}) {
+export function MediaLibrary({ onAdded, onUseItem, kinds = "all", privatePreview = false }: { onAdded?: (id: string) => void; onUseItem?: LibraryItemUseHandler; kinds?: "all" | "visual" | "audio"; privatePreview?: boolean } = {}) {
+  const inspectedId = useLibraryPreview((s) => s.inspected?.item.id ?? null)
   const assets = useMediaStore((s) => s.assets)
   const urls = useMediaStore((s) => s.urls)
   const loading = useMediaStore((s) => s.loading)
@@ -93,13 +95,18 @@ export function MediaLibrary({ onAdded, onUseItem, kinds = "all" }: { onAdded?: 
           <li className="col-span-full px-2 py-6 text-center text-xs text-muted-foreground">No pictures yet. Import a welcome slide, a sermon title or an announcement graphic.</li>
         )}
         {pictures.map((a) => {
-          const sel = selectedSlide?.item.kind === "image" && selectedSlide.item.image.media_id === a.id
+          const sel = privatePreview ? inspectedId === `library-${a.id}` : selectedSlide?.item.kind === "image" && selectedSlide.item.image.media_id === a.id
           const url = urls[a.id]
           return (
             <li key={a.id} className={cn("flex flex-col overflow-hidden rounded-lg border bg-card", sel ? "border-primary/50" : "border-border")}>
               <button
                 type="button"
-                onClick={() => useBibleStore.getState().selectSlide({ item: imageQueueItem(a, `library-${a.id}`), index: 0 })}
+                onClick={() => {
+                  const item = imageQueueItem(a, `library-${a.id}`)
+                  // Library (#447): its own preview; Live's Preview is never changed by browsing.
+                  if (privatePreview) useLibraryPreview.getState().inspect({ item, title: a.name, detail: [a.kind === "video" ? "Video" : "Picture", a.width && a.height ? `${a.width}×${a.height}` : ""].filter(Boolean).join(" · "), mediaId: a.id })
+                  else useBibleStore.getState().selectSlide({ item, index: 0 })
+                }}
                 className="flex aspect-video items-center justify-center overflow-hidden bg-black outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 aria-label={a.present ? `Preview ${a.name}` : `${a.name}: the file is missing from the media folder`}
                 aria-pressed={sel}
