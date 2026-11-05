@@ -464,10 +464,7 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
         if (section.type !== "phase" && !section.event) return state
         // To a phase (#444): at phase level, before its first event (a group owns the items up to the
         // next header, so it never goes ahead of the phase's loose items), never into an event.
-        const sectionEnd = remaining.findIndex((row, index) => index > sectionStart && row.kind === "header" && (
-          section.type === "phase" ? row.header.type === "phase" || !!row.header.event
-            : row.header.type === "phase" || !!row.header.event
-        ))
+        const sectionEnd = remaining.findIndex((row, index) => index > sectionStart && row.kind === "header" && (row.header.type === "phase" || !!row.header.event))
         insertion = sectionEnd === -1 ? remaining.length : sectionEnd
       } else if (target.kind === "group") {
         const groupStart = remaining.findIndex((row) => row.kind === "header" && row.header.id === target.groupId && row.header.type === "group" && !row.header.event)
