@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { monitorProblems, resolveMonitorIndex } from "./monitor-health"
+import { monitorProblems, outputTransportChanged, resolveMonitorIndex } from "./monitor-health"
+import { defaultNdiSettings, type BroadcastOutput } from "@/types"
 
 describe("monitor health", () => {
   it("finds outputs whose monitor is gone and outputs sharing a monitor; NDI never counts", () => {
@@ -36,3 +37,24 @@ describe("monitor health", () => {
   })
 })
 
+describe("an output edit that only changes its look never reopens its screen (#411)", () => {
+  const screen = (id: string, monitorIndex: number, monitorName: string, extra: Partial<BroadcastOutput> = {}) =>
+    ({ id, name: id, type: "display", themeId: "t", monitorIndex, monitorName, ndi: defaultNdiSettings(id), ...extra }) as BroadcastOutput
+
+  it("the OS renumbering screens is no move", () => {
+    // Saved on screen 2; the stage TV was off at start, so the projector is screen 1 now. The editor shows 1.
+    const existing = screen("main", 2, "EPSON PJ")
+    const names = ["Built-in", "EPSON PJ"]
+    const edited = { ...existing, monitorIndex: 1, themeId: "other" }
+    expect(outputTransportChanged(existing, edited, names, [existing])).toBe(false)
+    // Choosing another screen is a move.
+    expect(outputTransportChanged(existing, { ...edited, monitorIndex: 0, monitorName: "Built-in" }, names, [existing])).toBe(true)
+  })
+
+  it("two screens of one model stay told apart", () => {
+    const a = screen("a", 1, "LG TV")
+    const b = screen("b", 2, "LG TV")
+    const names = ["Built-in", "LG TV", "LG TV"]
+    expect(outputTransportChanged(b, { ...b, themeId: "other" }, names, [a, b])).toBe(false)
+  })
+})

@@ -1,5 +1,5 @@
 import { outputOnAir } from "@/lib/output-on-air"
-import { resolveMonitorIndex } from "@/lib/monitor-health"
+import { outputTransportChanged, resolveMonitorIndex } from "@/lib/monitor-health"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { PlusIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -179,15 +179,7 @@ export function BroadcastOutputsDialog({
 
     const status = store.outputStatus[next.id]
     const wasOnAir = outputOnAir(existing, status)
-    const transportChanged =
-      existing.type !== next.type ||
-      existing.monitorIndex !== next.monitorIndex ||
-      (existing.windowed === true) !== (next.windowed === true) ||
-      existing.monitorName !== next.monitorName ||
-      existing.ndi.sourceName !== next.ndi.sourceName ||
-      existing.ndi.resolution !== next.ndi.resolution ||
-      existing.ndi.frameRate !== next.ndi.frameRate ||
-      existing.ndi.alphaMode !== next.ndi.alphaMode
+    const transportChanged = outputTransportChanged(existing, next, monitors.map((m) => m.name ?? null), store.outputs)
 
     void withBusy(next.id, async () => {
       if (wasOnAir && transportChanged) await disableOutput(existing)

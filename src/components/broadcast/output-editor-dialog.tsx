@@ -114,7 +114,8 @@ export function OutputEditorDialog({
   const isEditing = Boolean(output)
 
   // The monitor shown is where the output's screen is now (the OS may have renumbered since).
-  const withResolved = (o: BroadcastOutput): BroadcastOutput => ({ ...o, monitorIndex: resolveMonitorIndex(o, monitors.map((m) => m.name ?? null)) ?? o.monitorIndex })
+  // With the other screen outputs: two screens of one model are told apart (#411).
+  const withResolved = (o: BroadcastOutput): BroadcastOutput => ({ ...o, monitorIndex: resolveMonitorIndex(o, monitors.map((m) => m.name ?? null), outputs.filter((x) => x.type === "display" && x.id !== o.id)) ?? o.monitorIndex })
   const [form, setForm] = useState<BroadcastOutput>(() => withResolved(output ?? draft))
   const machine = useMachineInfo()
   const [error, setError] = useState<string | null>(null)
