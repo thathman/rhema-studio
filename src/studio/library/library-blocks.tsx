@@ -1,3 +1,4 @@
+import { RunJournal } from "@/studio/library/run-journal"
 import { retentionWords, transcriptSection } from "@/lib/journal-transcript"
 import { parseServiceRunCheckpoint } from "@/lib/service-run-checkpoint"
 import { useTranscriptStore } from "@/stores/transcript-store"
@@ -327,13 +328,7 @@ function RunCheckpoint({ run }: { run: ServiceRun }) {
     <div className="mt-2 rounded border border-border bg-muted/30 p-2">
       <p className="mb-1 text-muted-foreground">Captured run activity · {run.status === "finished" ? "finished; review only, nothing was sent to a screen" : "time after the last confirmed checkpoint is unknown; review only, nothing was sent to a screen"}</p>
       {operator && <p className="mb-1 text-muted-foreground">Operator: {operator}</p>}
-      {entries.length === 0
-        ? <p className="text-muted-foreground">No journal entries were captured.</p>
-        : <ol className="max-h-44 list-inside list-decimal overflow-y-auto">
-          {entries.slice(-100).map((entry, index) => <li key={`${entry.at}:${index}`} className="truncate">
-            <span className="text-muted-foreground">{new Date(entry.at).toLocaleTimeString(undefined, run.time_zone ? { timeZone: run.time_zone } : {})}</span> · {entry.kind.toUpperCase()} {entry.label}{entry.outputId ? ` · output ${entry.outputId}` : ""}{entry.by && !entry.label.includes(entry.by) ? ` · by ${entry.by}` : ""}
-          </li>)}
-        </ol>}
+      <RunJournal entries={entries} timeZone={run.time_zone} />
       <ServiceRunReview checkpoint={checkpoint} status={run.status} />
       {orderedPlan.length > 0 && <div className="mt-2">
         <p className="mb-1 text-muted-foreground">Captured plan</p>
