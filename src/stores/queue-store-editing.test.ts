@@ -166,6 +166,24 @@ describe("several items at once (#193)", () => {
     q().undo(); q().undo(); q().undo()
     expect(ids()).toEqual(["a", "b", "c", "d"])
   })
+
+  it("a group moved to a phase stays at phase level, before its first event, never inside one (#444)", () => {
+    useQueueStore.setState({
+      headers: [
+        phase("pre", 0),
+        { id: "G", type: "group", name: "Readings", at: 0 },
+        phase("main", 2),
+        { id: "W", type: "group", name: "Worship", at: 2, event: { schema_version: 1 } },
+        { id: "S", type: "group", name: "Sermon", at: 3, event: { schema_version: 1 } },
+      ],
+      activeIndex: null,
+    })
+    q().moveGroupToTarget("G", { kind: "section", headerId: "main" })
+    const rows = interleave(q().items, q().headers).map((r) => ("header" in r ? `#${r.header.id}` : r.item.id))
+    expect(rows).toEqual(["#pre", "#main", "#G", "a", "b", "#W", "c", "#S", "d"])
+    const events = projectRunOfShowEvents(q().items, q().headers)
+    expect(events.find((e) => e.id === "S")?.moments.map((m) => m.id)).toEqual(["d"])
+  })
   it("moves selected items before a stable item id across phases in one undoable edit", () => {
     useQueueStore.setState({
       items: [...q().items, slide("e"), slide("f")],
