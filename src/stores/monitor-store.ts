@@ -3,7 +3,7 @@ import { availableMonitors, primaryMonitor } from "@tauri-apps/api/window"
 import { toast } from "sonner"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { resolveMonitorIndex } from "@/lib/monitor-health"
-import { reconcileOutputStatus } from "@/lib/broadcast-output-control"
+import { disableOutput, enableOutput, reconcileOutputStatus } from "@/lib/broadcast-output-control"
 
 interface MonitorState {
   /** Monitors connected now; null until the first check (or outside Tauri). */
@@ -31,7 +31,7 @@ const POLL_MS = 5000
  * display output uses goes away, say so at once (the window cannot show
  * anything there); readiness keeps the warning until it is back or changed.
  */
-async function check(): Promise<void> {
+export async function check(): Promise<void> {
   // An output window closed from the OS (Alt+F4) or an NDI sender that stopped: the status
   // everyone reads (Present, Home readiness) catches up here, not only while Outputs is open.
   const b0 = useBroadcastStore.getState()
@@ -56,11 +56,31 @@ async function check(): Promise<void> {
   const was = useMonitorStore.getState()
   if (prev === count && was.names.join("\u0000") === names.join("\u0000") && was.primary === primary && JSON.stringify(was.sizes) === JSON.stringify(sizes)) return
   useMonitorStore.setState({ count, names, sizes, primary })
-  if (prev === null || count >= prev) return
+  if (prev === null) return
   const b = useBroadcastStore.getState()
-  const lost = b.outputs.filter((o) => o.type === "display" && resolveMonitorIndex(o, names, b.outputs.filter((x) => x.type === "display")) === null && b.outputStatus[o.id]?.previewOpen)
-  for (const o of lost) toast.error(`${o.name}: its monitor was disconnected`, { description: "Check the cable or choose another monitor in Outputs." })
+  const screens = b.outputs.filter((x) => x.type === "display")
+  // Its screen came back: put it on air there again, as it was (#411 hot-plug).
+  for (const id of [...waitingForScreen]) {
+    const o = b.outputs.find((x) => x.id === id)
+    if (!o || o.type !== "display" || b.outputStatus[id]?.previewOpen) { waitingForScreen.delete(id); continue }
+    if (resolveMonitorIndex(o, names, screens) === null) continue
+    waitingForScreen.delete(id)
+    if (await enableOutput(o)) toast.success(`${o.name} is back on its screen`)
+  }
+  if (count >= prev) return
+  // A screen an on-air output used went away. The OS would move its window onto a screen that is
+  // left (the operator's), showing the congregation's picture there; it is closed instead and comes
+  // back when its screen does. A movable window (windowed) is the operator's to place: left alone.
+  const lost = screens.filter((o) => o.windowed !== true && resolveMonitorIndex(o, names, screens) === null && b.outputStatus[o.id]?.previewOpen)
+  for (const o of lost) {
+    waitingForScreen.add(o.id)
+    void disableOutput(o)
+    toast.error(`${o.name}: its screen was disconnected`, { description: "It is off until that screen is back, then it comes back on by itself. Check the cable, or choose another screen in Outputs." })
+  }
 }
+
+/** Outputs turned off because their screen went away, to put back on air when it returns. */
+const waitingForScreen = new Set<string>()
 
 if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
   void check()
