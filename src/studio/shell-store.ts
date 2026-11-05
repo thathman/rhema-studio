@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 
 export type Workspace = "home" | "prepare" | "present" | "production" | "library" | "design" | "permissions" | "connections" | "team" | "archive" | "settings" | "more"
 /** `production` is a saved-route/deep-link alias; Live is the single canonical workspace. */
@@ -134,6 +135,9 @@ interface ShellState extends ShellPrefs {
   clearPrepareMomentFocus: (expected: PrepareMomentFocusRequest) => void
   prepareMomentSelection: PrepareMomentSelection | null
   setPrepareMomentSelection: (selection: PrepareMomentSelection | null) => void
+  /** Open one service item in Prepare's editor (#447: planning only, Live is untouched); `n` makes each ask new. */
+  prepareItemRequest: { id: string; n: number } | null
+  openInPrepare: (itemId: string) => void
   /** Prepare's New service form, also opened from Home. */
   newServiceOpen: boolean
   setNewServiceOpen: (open: boolean) => void
@@ -213,6 +217,11 @@ export const useShellStore = create<ShellState>((set) => ({
   clearPrepareMomentFocus: (expected) => set((state) => state.prepareMomentFocus === expected ? { prepareMomentFocus: null } : state),
   prepareMomentSelection: null,
   setPrepareMomentSelection: (prepareMomentSelection) => set({ prepareMomentSelection }),
+  prepareItemRequest: null,
+  openInPrepare: (id) => {
+    useRundownSelection.getState().focus(id)
+    set((s) => ({ prepareMomentSelection: null, prepareItemRequest: { id, n: (s.prepareItemRequest?.n ?? 0) + 1 }, goRequest: "prepare" }))
+  },
   newServiceOpen: false,
   setNewServiceOpen: (newServiceOpen) => set({ newServiceOpen }),
   searchOpen: false,

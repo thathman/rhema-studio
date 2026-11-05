@@ -841,6 +841,24 @@ describe("Prepare never takes anything live (#299)", () => {
     useAddDialog.getState().close()
   })
 
+  it("Find anything's open in Prepare closes an open event editor and shows that item (#447)", async () => {
+    useQueueStore.setState({
+      items: [slide("Camera and speaker"), slide("John 3:16"), slide("Closing cue")],
+      headers: [{ id: "prayer", type: "group", name: "Opening Prayer", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+    })
+    useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null })
+    const el = await renderPrepare()
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Opening Prayer"]')!.click())
+    expect(el.querySelector('[aria-label="Event content"]')).not.toBeNull()
+
+    await act(async () => useShellStore.getState().openInPrepare("Closing cue"))
+    expect(useRundownSelection.getState().focusId).toBe("Closing cue")
+    expect(el.querySelector('[aria-label="Event content"]')).toBeNull()
+    expect([...el.querySelectorAll("h2")].some((heading) => heading.textContent === "Closing cue")).toBe(true)
+    expect(useBibleStore.getState().selectedSlide).toBeNull()
+  })
+
   it("opens the event's Add item flow with that event as the insertion target", async () => {
     useQueueStore.setState({
       items: [slide("Welcome"), slide("Sermon"), slide("Closing")],

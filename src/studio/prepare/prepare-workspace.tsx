@@ -189,6 +189,11 @@ export function PrepareWorkspace() {
       })
     }
   }
+  // Find anything's "open in Prepare" while Prepare is already open (#447): close an open event
+  // editor and expand its sections, as after Add, so the editor shows that item.
+  useEffect(() => useShellStore.subscribe((s, prev) => {
+    if (s.prepareItemRequest && s.prepareItemRequest !== prev.prepareItemRequest) selectAddedItem(s.prepareItemRequest.id)
+  }))
   const toggleCollapsedSection = (id: string) => setCollapsedSections((current) => {
     const next = new Set(current)
     if (next.has(id)) next.delete(id)

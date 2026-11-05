@@ -5,6 +5,10 @@ import { createRoot, type Root } from "react-dom/client"
 import { GlobalSearch } from "./global-search"
 import { useShellStore } from "@/studio/shell-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useBibleStore } from "@/stores/bible-store"
+import { useQueueStore } from "@/stores/queue-store"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
+import type { SlideQueueItem } from "@/types"
 
 /**
  * #407: Find anything hands scripture, hymn and song searches to Live's Quick find. It must say
@@ -86,5 +90,42 @@ describe("Find anything (Cmd/Ctrl+K) and scripture, hymns and songs (#407)", () 
     act(() => root.render(<GlobalSearch />))
     type("a")
     expect(handoff()).toBeUndefined()
+  })
+
+  const welcome: SlideQueueItem = { id: "item-yo", kind: "slide", slide: { title: "Ẹ káàbọ̀", body: "" }, reference: "Ìjọsìn Yorùbá", confidence: 1, source: "manual", added_at: 0 }
+  const serviceRow = () => [...document.querySelectorAll("[cmdk-item]")].find((el) => el.textContent?.includes("Ìjọsìn Yorùbá")) as HTMLElement | undefined
+
+  it("finds Yorùbá words typed without their accents", () => {
+    useQueueStore.setState({ items: [welcome], headers: [] })
+    act(() => root.render(<GlobalSearch />))
+    type("ijosin yoruba")
+    expect(serviceRow()).toBeTruthy()
+  })
+
+  it("opens a service item in Prepare from anywhere but Live, leaving Live's Preview alone (#447)", () => {
+    useQueueStore.setState({ items: [welcome], headers: [] })
+    useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null })
+    useRundownSelection.setState({ focusId: null })
+    useShellStore.setState({ workspace: "home" })
+    act(() => root.render(<GlobalSearch />))
+    type("ijosin")
+    expect(serviceRow()?.textContent).toContain("open in Prepare")
+    act(() => serviceRow()!.click())
+    expect(useRundownSelection.getState().focusId).toBe(welcome.id)
+    expect(useShellStore.getState().goRequest).toBe("prepare")
+    expect(useBibleStore.getState().selectedSlide).toBeNull()
+  })
+
+  it("cues a service item in Live's Preview when chosen in Live, and never Program", () => {
+    useQueueStore.setState({ items: [welcome], headers: [] })
+    useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null })
+    useShellStore.setState({ workspace: "present" })
+    const liveBefore = useBroadcastStore.getState().liveItemId
+    act(() => root.render(<GlobalSearch />))
+    type("ijosin")
+    expect(serviceRow()?.textContent).toContain("Live preview")
+    act(() => serviceRow()!.click())
+    expect(useBibleStore.getState().selectedQueueItemId).toBe(welcome.id)
+    expect(useBroadcastStore.getState().liveItemId).toBe(liveBefore)
   })
 })
