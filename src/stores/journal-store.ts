@@ -68,7 +68,8 @@ export const useJournalStore = create<JournalState>((set, get) => ({
   finalizedLogId: null,
   // Rehearsal is a sandbox (ADR 0001): only its start and end are part of the service's history.
   add: (entry) => {
-    if (entry.kind !== "rehearsal" && useBroadcastStore.getState().rehearsal) return
+    // "Present anyway" (#409) is the decision to leave rehearsal or go live, so it is kept even then.
+    if (entry.kind !== "rehearsal" && entry.kind !== "approval" && useBroadcastStore.getState().rehearsal) return
     const current = get()
     const service = useServiceStore.getState().current
     const startsRun = entry.kind === "live" || (entry.kind === "event" && Boolean(entry.eventId || entry.itemId))
@@ -93,29 +94,19 @@ export const useJournalStore = create<JournalState>((set, get) => ({
       checkpointError: null,
       finalizedLogId: null,
     } : {}
+    // The go-live a "Present anyway" lets through starts the run, often moments later (a verse is
+    // fetched first): its decision goes into the new run instead of being dropped with the old log.
+    // ponytail: "moments" is 60 s; a run id on the decision if a let-through ever takes longer.
+    const now = monotonicNow()
+    const carried = (s: JournalState) => (startsNewRun ? s.entries.filter((e) => e.kind === "approval" && now - e.mono < 60_000) : s.entries)
     set((s) => ({
       ...runChange,
-      entries: capJournal([...(startsNewRun ? [] : s.entries), { ...entry, at: Date.now(), mono: monotonicNow() }]),
+      entries: capJournal([...carried(s), { ...entry, at: Date.now(), mono: now }]),
       added: (startsNewRun ? 0 : s.added) + 1,
     }))
-    // An unapproved service let through (#409) is logged with its go-live, once it has really gone
-    // on air: after the run's log starts, and never for a let-through that did not go live.
-    if (entry.kind === "live" && approvalOverride && approvalOverride.serviceId === service?.id) {
-      const { label, by } = approvalOverride
-      approvalOverride = null
-      get().add({ kind: "approval", label, ...(by ? { by } : {}) })
-    }
   },
   clear: () => set((s) => ({ entries: [], startItemIds: null, keptAt: s.added, runContext: null, runStatus: "none", checkpointStatus: "idle", checkpointError: null, finalizedLogId: null })),
 }))
-
-/** "Present anyway" on an unapproved service, waiting for that service's go-live to be logged. */
-let approvalOverride: { serviceId: string; label: string; by?: string } | null = null
-
-/** Note a let-through (approval-gate-store), or forget it (Not now, or a retry that went stale). */
-export function noteApprovalOverride(override: { serviceId: string; label: string; by?: string } | null): void {
-  approvalOverride = override
-}
 
 /** The most entries the log keeps in this run. */
 export const JOURNAL_MAX = 2000

@@ -53,33 +53,26 @@ describe("approval before go-live (CL-002, opt-in)", () => {
     expect(useApprovalGateStore.getState().held).toBeNull()
   })
 
-  it("Present anyway is in the service log with its go-live: who let which unapproved version through, once (#409)", async () => {
+  it("Present anyway is in the service log: who let which unapproved version through, kept when its go-live starts the run (#409)", async () => {
     useSettingsStore.setState({ operatorName: "Femi" })
     useJournalStore.setState({ entries: [], runContext: null })
     // As in use: the go-live it lets through comes later (a verse is fetched first), and starts the run's log.
     expect(approvalHolds(() => { void Promise.resolve().then(() => useJournalStore.getState().add({ kind: "live", label: "Welcome", itemId: "w" })) })).toBe(true)
     useApprovalGateStore.getState().presentAnyway()
-    expect(useJournalStore.getState().entries.filter((e) => e.kind === "approval")).toHaveLength(0) // not on air yet
     await Promise.resolve()
-    expect(useJournalStore.getState().entries.map((e) => e.kind)).toEqual(["live", "approval"])
-    expect(useJournalStore.getState().entries[1]).toMatchObject({ by: "Femi", label: 'Presented without approval: "Sunday" v3 · by Femi' })
-    // Not asked again this session, so not logged again; later go-lives add nothing.
+    const entries = useJournalStore.getState().entries
+    expect(entries.map((e) => e.kind)).toEqual(["approval", "live"])
+    expect(entries[0]).toMatchObject({ by: "Femi", label: 'Present anyway: "Sunday" v3 was not approved · by Femi' })
+    // Not asked again this session, so not logged again.
     useJournalStore.getState().add({ kind: "live", label: "Psalm 23", itemId: "p" })
     expect(useJournalStore.getState().entries.filter((e) => e.kind === "approval")).toHaveLength(1)
   })
 
-  it("logs nothing for Not now, or for a let-through that went stale before going live", () => {
+  it("logs nothing for Not now", () => {
     useJournalStore.setState({ entries: [], runContext: null })
     expect(approvalHolds(() => {})).toBe(true)
     useApprovalGateStore.getState().dismiss()
     useJournalStore.getState().add({ kind: "live", label: "Welcome", itemId: "w" })
-    expect(useJournalStore.getState().entries.some((e) => e.kind === "approval")).toBe(false)
-
-    useServiceStore.setState({ current: program({ id: "p2" }) })
-    expect(approvalHolds(() => {})).toBe(true)
-    useApprovalGateStore.getState().presentAnyway()
-    useApprovalGateStore.getState().revokeAcknowledgment("p2") // the service changed: Take again
-    useJournalStore.getState().add({ kind: "live", label: "Other", itemId: "o" })
     expect(useJournalStore.getState().entries.some((e) => e.kind === "approval")).toBe(false)
   })
 
