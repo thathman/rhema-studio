@@ -258,7 +258,7 @@ export function AppShell() {
         toast("Save or close the song you are editing first.")
         return
       }
-      if (unsaved.designEditor !== null) {
+      if (unsaved.designEditor !== null || unsaved.specialistDraft !== null) {
         toast("Save or discard the design you are editing first.")
         return
       }
