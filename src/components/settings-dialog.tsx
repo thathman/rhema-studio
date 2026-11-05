@@ -1235,7 +1235,7 @@ export function SettingsPage() {
             <span id="settings-search-hint" className="sr-only">Enter opens the first match. Escape clears the search.</span>
           </div>
           <p role="status" className={searching ? "px-3 pt-1 pb-2 text-xs text-muted-foreground" : "sr-only"}>
-            {!searching ? "" : hits.length === 0 && elsewhere.length === 0 ? "Nothing in Settings matches. Light and dark are under Appearance in the Desk menu, at the foot of the sidebar." : hits.length === 0 ? "Not in Settings: it has its own page, below. Enter opens the first." : `${hits.length} ${hits.length === 1 ? "section matches" : "sections match"}${elsewhere.length ? `, and ${elsewhere.length} elsewhere in Rhema` : ""}. Enter opens the first.`}
+            {!searching ? "" : hits.length === 0 && elsewhere.length === 0 ? "Nothing in Settings matches." : hits.length === 0 ? "Not in Settings: it has its own page, below. Enter opens the first." : `${hits.length} ${hits.length === 1 ? "section matches" : "sections match"}${elsewhere.length ? `, and ${elsewhere.length} elsewhere in Rhema` : ""}. Enter opens the first.`}
           </p>
           {!searching && <p className="px-4 pt-2.5 pb-2 text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Preferences</p>}
           {groups.map((g) => (
