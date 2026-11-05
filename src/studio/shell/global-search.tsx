@@ -44,6 +44,7 @@ const LIBRARY: ReadonlyArray<readonly [LibrarySection, string, string]> = [
 ]
 
 const SETTINGS: ReadonlyArray<readonly [SettingsSection, string, string]> = [
+  ["appearance", "Appearance", "light dark mode system theme night preferences"],
   ["church", "Church and profile", "church name campus ministry time zone your name operator computer name profile"],
   ["bible", "Bible and languages", "translations second language yoruba"],
   ["audio", "Audio", "microphone input level"],

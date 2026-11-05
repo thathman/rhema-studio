@@ -6,6 +6,10 @@ import type { SettingsSection } from "@/lib/settings-dialog"
  * with the section when its wording changes.
  */
 export const SETTINGS_SEARCH_INDEX: Record<SettingsSection, { labels: string[]; keywords: string[] }> = {
+  appearance: {
+    labels: ["Light, dark or system", "Light", "Dark", "System"],
+    keywords: ["appearance", "light", "dark", "dark mode", "light mode", "system", "theme", "night", "preferences"],
+  },
   church: {
     labels: ["Church name", "Campus or ministry (optional)", "Service languages (optional)", "Time zone (optional)", "Your name", "This computer's name (optional)"],
     keywords: ["church", "church name", "profile", "general", "campus", "ministry", "time zone", "timezone", "operator", "operator name", "your name", "computer name", "desk name"],
@@ -103,7 +107,7 @@ export function searchSettings(
 }
 
 /** Things people look for in Settings that live on their own page (#215): Settings search points there. */
-export type ElsewhereId = "church" | "appearance" | "cameras" | "hosting" | "permissions" | "service-defaults"
+export type ElsewhereId = "church" | "cameras" | "hosting" | "permissions" | "service-defaults"
 
 export interface ElsewhereEntry {
   id: ElsewhereId
@@ -116,7 +120,6 @@ export interface ElsewhereEntry {
 
 export const SETTINGS_ELSEWHERE: readonly ElsewhereEntry[] = [
   { id: "church", name: "Logo, colours and fonts", where: "Design → Brand kit", keywords: ["identity", "logo", "brand", "brand kit", "colours", "colors", "fonts"] },
-  { id: "appearance", name: "Light, dark or system", where: "Desk menu, at the foot of the sidebar", keywords: ["appearance", "light", "dark", "dark mode", "light mode", "system", "theme", "night"] },
   { id: "cameras", name: "Cameras and the camera router", where: "Connections", keywords: ["camera", "cameras", "camera router", "mediamtx", "whep", "video", "pulpit", "phone camera"] },
   { id: "hosting", name: "Host or join and the talk channel", where: "Connections", keywords: ["host", "join", "hosting", "talk channel", "operators", "volunteers", "desks", "another computer", "crew"] },
   { id: "permissions", name: "Paired device access and scene requests", where: "Permissions", keywords: ["paired device", "paired devices", "roles", "role", "access", "permissions", "scene request", "scene changes"] },
