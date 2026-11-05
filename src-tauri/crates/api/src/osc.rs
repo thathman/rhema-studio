@@ -198,6 +198,7 @@ fn handle_message_from_live(msg: &OscMessage, sink: &dyn CommandSink, keys: &Key
         Ok(Some(e)) => (&msg.args[1..], Some(e)),
         Err(reason) => {
             log::warn!("OSC message refused for {}: {reason}", msg.addr);
+            crate::peer::note_refused();
             return;
         }
     };

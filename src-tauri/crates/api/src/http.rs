@@ -2821,14 +2821,17 @@ fn check_http_command_key(
         // Open (no key needed) is for devices on this network only, never one behind a proxy.
         Ok(None) if forwarded(headers) => {
             log::warn!("HTTP command refused: unauthenticated request through a proxy from {}", peer.ip());
+            crate::peer::note_refused();
             Err((StatusCode::FORBIDDEN, OPEN_REMOTE_OUTSIDE_LOCAL_NETWORK))
         }
         Err(reason) if reason == OPEN_REMOTE_OUTSIDE_LOCAL_NETWORK => {
             log::warn!("HTTP command refused: unauthenticated request from {}", peer.ip());
+            crate::peer::note_refused();
             Err((StatusCode::FORBIDDEN, reason))
         }
         Err(reason) => {
             log::warn!("HTTP command refused: {reason}");
+            crate::peer::note_refused();
             Err((StatusCode::UNAUTHORIZED, reason))
         }
         Ok(entry) => Ok(entry),
@@ -3365,6 +3368,17 @@ mod tests {
         let revoked = new_key_set();
         revoked.write().unwrap().require_auth = true;
         assert_eq!(check_http_command_key(&revoked, &valid_key, public_peer).unwrap_err().0, StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn a_refused_key_is_counted_for_show_health() {
+        // #412: shared across tests running at once, so only "went up by at least one" is exact.
+        let paired = key_set_from(&[("token", "Desk")]);
+        let mut wrong = HeaderMap::new();
+        wrong.insert("x-rhema-key", "tampered".parse().unwrap());
+        let before = crate::peer::refused_count();
+        assert!(check_http_command_key(&paired, &wrong, "192.168.1.20:45000".parse().unwrap()).is_err());
+        assert!(crate::peer::refused_count() > before);
     }
 
     #[test]

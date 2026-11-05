@@ -4,6 +4,21 @@ use std::net::IpAddr;
 
 use crate::keys::{check_key, KeyEntry, KeySet};
 
+static REFUSED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Count one remote request refused for its key (missing, wrong or revoked, or key-less from outside
+/// the local network or through a proxy), for Show Health (#412): an old controller that sends no key
+/// shows up there, not only in the log.
+pub fn note_refused() {
+    REFUSED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Requests refused for their key since this app started.
+#[must_use]
+pub fn refused_count() -> u64 {
+    REFUSED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Open remote commands are permitted only from the host's local/private networks.
 pub const OPEN_REMOTE_OUTSIDE_LOCAL_NETWORK: &str =
     "unauthenticated remote commands are limited to the local network";

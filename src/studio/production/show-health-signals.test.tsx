@@ -135,6 +135,22 @@ describe("Show health: cameras and Google TVs (#213)", () => {
     expect(card.textContent).not.toContain("Unauthenticated LAN control is enabled")
   })
 
+  it("says how many remote requests were refused for their key, and nothing when none were (#412)", async () => {
+    answers.get_http_status = { running: true, lan: true, port: 8080 }
+    answers.get_osc_status = { running: true, lan: true, port: 8000 }
+    answers.get_remote_auth_status = { required: true, credential_count: 1, refused: 3 }
+    useSettingsStore.setState({ remoteAuthRequired: true, remoteSecret: "key" })
+    let el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
+    let card = el.querySelector('[aria-label="Remote control access"]')!
+    expect(card.textContent).toContain("3 remote requests were refused for a missing or wrong key")
+    expect(card.textContent).toContain("may need the key")
+
+    answers.get_remote_auth_status = { required: true, credential_count: 1, refused: 0 }
+    el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
+    card = el.querySelector('[aria-label="Remote control access"]')!
+    expect(card.textContent).not.toContain("refused for a missing or wrong key")
+  })
+
   it("uses the backend's effective auth state when legacy settings still say off", async () => {
     answers.get_http_status = { running: true, lan: true, port: 8080 }
     answers.get_remote_auth_status = { required: true, credential_count: 1 }

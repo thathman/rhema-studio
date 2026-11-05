@@ -202,6 +202,8 @@ pub fn remote_set_keys(
 pub struct RemoteAuthStatus {
     pub required: bool,
     pub credential_count: usize,
+    /// Remote requests refused for their key since the app started (#412).
+    pub refused: u64,
 }
 
 fn remote_auth_status(keys: &KeySet) -> Result<RemoteAuthStatus, String> {
@@ -209,6 +211,7 @@ fn remote_auth_status(keys: &KeySet) -> Result<RemoteAuthStatus, String> {
     Ok(RemoteAuthStatus {
         required: keys.require_auth,
         credential_count: keys.entries.len(),
+        refused: rhema_api::peer::refused_count(),
     })
 }
 

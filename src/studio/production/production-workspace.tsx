@@ -468,6 +468,8 @@ interface RemoteListenerStatus {
 interface RemoteAuthStatus {
   required: boolean
   credential_count: number
+  /** Requests refused for their key since Rhema Studio started (#412). */
+  refused?: number
 }
 
 interface RemoteListenerSnapshot {
@@ -527,6 +529,11 @@ function RemoteControlHealth() {
         <p className="text-xs">A key or paired device is required for remote commands.{commandsRefused && " No key or paired device is configured, so remote commands are currently refused."}</p>
       ) : (
         <p className="text-xs text-muted-foreground">No LAN listener is accepting remote commands{allStopped ? "; no remote command listener is running." : "."}</p>
+      )}
+      {!!snapshot?.auth?.refused && (
+        <p role="status" className="text-xs font-semibold text-confidence-mid">
+          {snapshot.auth.refused === 1 ? "1 remote request was" : `${snapshot.auth.refused} remote requests were`} refused for a missing or wrong key since Rhema Studio started. An older controller (Stream Deck, Companion, an OSC script) may need the key: see Remote settings.
+        </p>
       )}
       {snapshot && (
         <ul className="flex flex-col gap-1 text-xs text-muted-foreground" aria-label="Remote listener status">
