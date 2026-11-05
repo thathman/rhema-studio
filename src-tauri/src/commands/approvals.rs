@@ -104,6 +104,11 @@ pub fn approvals_apply(app: AppHandle, window: WebviewWindow, state: State<'_, C
         if !stage_display_now(live.as_deref(), &request.target_id) {
             return Err(ContentCommandError::Refused { message: "That stage display is no longer on the host.".into(), code: "gone" });
         }
+        // Rehearsal shows nothing on the real stage screens: refuse before it is recorded as applied,
+        // so the approved request can still be sent once rehearsal ends (#411).
+        if rhema_api::in_rehearsal(live.as_deref()) {
+            return Err(ContentCommandError::Refused { message: "Rehearsal is on: send this stage message after rehearsal ends.".into(), code: "rehearsal" });
+        }
     }
     let applied = with_db(&state, |db| db.apply_approval_request(&id, &main_desk(), current_revision))?;
     if applied.kind == "stage_send" {

@@ -1880,7 +1880,8 @@ impl CommandResponse {
 }
 
 /// Whether the host is in rehearsal, from its Live State (false before it has said).
-fn in_rehearsal(live: Option<&str>) -> bool {
+#[must_use]
+pub fn in_rehearsal(live: Option<&str>) -> bool {
     live.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()).and_then(|v| v.get("program")?.get("rehearsal")?.as_bool()) == Some(true)
 }
 
@@ -2880,6 +2881,14 @@ async fn command_handler<S: CommandSink + 'static>(
             if entry.paused {
                 return (StatusCode::LOCKED, CommandResponse::refused(crate::keys::PAUSED_MESSAGE));
             }
+            // A desk still on another service never asks about this one (#246 C16), as for any command.
+            if let (Some(sent), Some(host)) = (request.service.as_deref(), state.live.service()) {
+                if sent != host {
+                    return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(OTHER_SERVICE_MESSAGE.into()), code: Some("other-service"), note: None, ..Default::default() }));
+                }
+            }
+            // One at a time, so two retries arriving together ask once, not twice.
+            let _turn = state.gate.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             // A retry of the same request asks once, not twice.
             let fingerprint = command_fingerprint(&request.command, &entry.name, Some(entry.hash.as_str()), request.service.as_deref(), request.seen.as_ref(), request.why.as_deref());
             if let Some(id) = request.id.as_deref() {
@@ -2964,6 +2973,15 @@ async fn command_handler<S: CommandSink + 'static>(
         ),
     };
     let (by, by_id, role) = by;
+    // An exact retry of a press already carried out says so before any live check (#411): the state it
+    // changed (a song removed from the order) would otherwise turn "already done" into "stale".
+    if let Some(id) = request.id.as_deref().filter(|id| !id.trim().is_empty() && id.len() <= 128) {
+        let fingerprint = command_fingerprint(&request.command, &by, by_id.as_deref(), request.service.as_deref(), request.seen.as_ref(), request.why.as_deref());
+        if matches!(state.recent.status(id, &fingerprint), RecentIdStatus::Replay) {
+            log::info!("HTTP command {:?} already carried out (an exact retry); not repeated", request.command);
+            return (StatusCode::OK, Json(CommandResponse { success: true, ..Default::default() }));
+        }
+    }
     let mut command = request.command;
     // A View only desk may send words, not ask anyone to run something from them.
     if role == crate::keys::Role::Viewer {
@@ -4253,6 +4271,14 @@ mod tests {
         assert_eq!(asked.len(), 1, "one request for the unassigned display, nothing delivered to it");
         assert_eq!((asked[0]["target"].as_str(), asked[0]["by"].as_str(), asked[0]["text"].as_str()), (Some("choir"), Some("stg"), Some("Two minutes")));
 
+        // #411: a desk still on another service does not ask about this one.
+        live.publish(r#"{"v":1,"service":{"id":"svc-11"},"outputs":[{"id":"pulpit","name":"Pulpit confidence","role":"stage"},{"id":"choir","name":"Choir monitor","role":"stage"}]}"#.into());
+        let mut other = send("choir");
+        other["id"] = "ask-choir-2".into();
+        other["service"] = "svc-9".into();
+        assert_eq!(press(port, "stg", other).await.0, 409, "a request from a desk on another service");
+        assert_eq!(sink.0.lock().unwrap().iter().filter(|(e, _)| e == "remote:stage_send_request").count(), 1, "not asked");
+
         live.publish(r#"{"v":1,"program":{"rehearsal":true},"outputs":[{"id":"pulpit","name":"Pulpit confidence","role":"stage"}]}"#.into());
         assert_eq!(press(port, "pres", send("pulpit")).await.0, 409, "rehearsal keeps stage displays frozen");
         assert_eq!(
@@ -4413,13 +4439,24 @@ mod tests {
         let (status, body) = press(port, "wor", change(serde_json::json!({ "op": "skip", "item": "b" }), &seen)).await;
         assert!(status == 409 && body.contains(r#""code":"stale""#), "{status} {body}");
         let fresh = read_revisions(port, "wor").await;
+        // #411: an exact retry of a change already made is "already done", not "stale" against the
+        // order that change produced.
+        let mut skip_b = change(serde_json::json!({ "op": "skip", "item": "b" }), &fresh);
+        skip_b["id"] = "skip-b-1".into();
+        assert_eq!(press(port, "wor", skip_b.clone()).await.0, 200);
+        live.publish(order(&["c", "a"]));
+        let (status, body) = press(port, "wor", skip_b).await;
+        assert_eq!(status, 200, "an exact retry: {body}");
+        assert_eq!(sink.0.lock().unwrap().iter().filter(|(e, _)| e == "remote:worship_set").count(), 2, "not sent again");
+        live.publish(order(&["c", "a", "b"]));
+        let fresh = read_revisions(port, "wor").await;
         assert_eq!(press(port, "wor", change(serde_json::json!({ "op": "insert", "item": "b", "before": "b", "song": "Amazing Grace" }), &fresh)).await.0, 200);
         live.publish(r#"{"v":1,"service":{"id":"s1"},"worshipSet":[{"id":"a","title":"Alpha"},{"id":"b","title":"Beta","live":true},{"id":"c","title":"Gamma"}]}"#.into());
         let playing = read_revisions(port, "wor").await;
         let (status, body) = press(port, "wor", change(serde_json::json!({ "op": "skip", "item": "b" }), &playing)).await;
         assert!(status == 409 && body.contains("cannot be skipped") && body.contains(r#""code":"stale""#), "{status} {body}");
         let events = sink.0.lock().unwrap().clone();
-        assert_eq!(events.iter().filter(|(event, _)| event == "remote:worship_set").count(), 2, "a Live song cannot be removed from the temporary order");
+        assert_eq!(events.iter().filter(|(event, _)| event == "remote:worship_set").count(), 3, "a Live song cannot be removed from the temporary order");
         let mut handle = result.handle;
         handle.stop();
     }
