@@ -3,8 +3,8 @@ import { HeadphonesIcon, PauseIcon, PlayIcon, SquareIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useMediaStore } from "@/stores/media-store"
-import { canChooseListenOutput, listenReadiness, startListening } from "@/lib/audition"
-import { stopListening, useListening } from "@/stores/listening-store"
+import { canChooseListenOutput, LISTEN_START_VOLUME, listenReadiness, startListening } from "@/lib/audition"
+import { currentListenTicket, nextListenTicket, stopListening, useListening } from "@/stores/listening-store"
 import { openSettings } from "@/lib/settings-dialog"
 
 /** Whether Listen can play now, from the saved output and the outputs connected now. */
@@ -25,12 +25,24 @@ function useReadiness() {
   return { ready: listenReadiness({ supported: canChooseListenOutput(), deviceId, label, confirmed, present: !!deviceId && present }), deviceId }
 }
 
-/** Stops a listen when the Sounds list goes away or the chosen output changes. Mount once per list. */
+/**
+ * Stops a listen when the Sounds list goes away, the chosen output changes, or that output is
+ * unplugged: a lost output can fall back to the system default, which may be the PA. Mount once.
+ */
 export function ListenStopper() {
   const deviceId = useSettingsStore((s) => s.auditionOutputId)
   const confirmed = useSettingsStore((s) => s.auditionConfirmed)
   useEffect(() => () => stopListening(), [])
   useEffect(() => { stopListening() }, [deviceId, confirmed])
+  useEffect(() => {
+    const md = navigator.mediaDevices
+    if (!md?.enumerateDevices) return
+    const check = () => void md.enumerateDevices().then((list) => {
+      if (!list.some((d) => d.kind === "audiooutput" && d.deviceId === deviceId)) stopListening()
+    }).catch(() => stopListening())
+    md.addEventListener?.("devicechange", check)
+    return () => md.removeEventListener?.("devicechange", check)
+  }, [deviceId])
   return null
 }
 
@@ -48,16 +60,20 @@ export function SoundListen({ assetId, name }: { assetId: string; name: string }
   const listen = async () => {
     if (!ready.ok) return
     stopListening()
-    useListening.setState({ id: assetId, paused: false, error: null })
+    const mineTicket = nextListenTicket()
+    // Every listen starts quietly, whatever the last one was raised to.
+    useListening.setState({ id: assetId, paused: false, error: null, volume: LISTEN_START_VOLUME })
     try {
       const url = await useMediaStore.getState().fileUrl(assetId)
       if (!url) throw new Error(`${name} is missing from the media folder.`)
-      const controls = await startListening(url, deviceId, useListening.getState().volume)
-      if (useListening.getState().id !== assetId) return controls.stop()
+      if (mineTicket !== currentListenTicket()) return
+      const controls = await startListening(url, deviceId, LISTEN_START_VOLUME)
+      // A later press, or Stop, came while this one waited: this player never takes over.
+      if (mineTicket !== currentListenTicket()) return controls.stop()
       controls.element.addEventListener("ended", () => { if (useListening.getState().controls === controls) stopListening() })
       useListening.setState({ controls })
     } catch (e) {
-      useListening.setState({ id: null, controls: null, error: `Not played: ${e instanceof Error ? e.message : String(e)}` })
+      if (mineTicket === currentListenTicket()) useListening.setState({ id: null, controls: null, error: `Not played: ${e instanceof Error ? e.message : String(e)}` })
     }
   }
   if (!ready.ok) {

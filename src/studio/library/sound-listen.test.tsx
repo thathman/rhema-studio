@@ -18,6 +18,8 @@ import type { MediaAssetStatus } from "@/types/content"
 let element: HTMLDivElement
 let root: Root
 const calls: string[] = []
+let devices: Array<{ kind: string; deviceId: string; label: string }> = []
+const deviceListeners: Array<() => void> = []
 const sound = { id: "a1", kind: "audio", name: "Walk-in.mp3", file: "a1.mp3", hash: "a1", size: 1, mime: "audio/mpeg", width: null, height: null, duration_ms: null, source: "import", source_ref: "", path: "/m/a1", present: true } as MediaAssetStatus
 
 beforeEach(() => {
@@ -28,7 +30,9 @@ beforeEach(() => {
   vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(async function (this: HTMLMediaElement) { calls.push(`play:${this.getAttribute("src") ?? this.src}`) })
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => { calls.push("pause") })
   vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {})
-  Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { enumerateDevices: vi.fn(async () => [{ kind: "audiooutput", deviceId: "hp", label: "Desk headphones" }, { kind: "audiooutput", deviceId: "default", label: "Default" }]), addEventListener() {}, removeEventListener() {} } })
+  devices = [{ kind: "audiooutput", deviceId: "hp", label: "Desk headphones" }, { kind: "audiooutput", deviceId: "default", label: "Default" }]
+  deviceListeners.length = 0
+  Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { enumerateDevices: vi.fn(async () => devices), addEventListener: (_: string, fn: () => void) => deviceListeners.push(fn), removeEventListener() {} } })
   useMediaStore.setState({ assets: [sound], urls: {}, loaded: true, loading: false, error: null, list: vi.fn(async () => [sound]), dataUrl: vi.fn(async () => null), fileUrl: vi.fn(async () => "asset://a1.mp3") } as never)
   useSettingsStore.setState({ auditionOutputId: "", auditionOutputLabel: "", auditionConfirmed: false })
   useListening.setState({ id: null, paused: false, controls: null, error: null })
@@ -102,5 +106,42 @@ describe("Library → Sounds: Listen on a private output only (#447)", () => {
     expect(useListening.getState().id).toBe("a1")
     act(() => root.render(<div />))
     expect(useListening.getState().id).toBeNull()
+  })
+
+  it("unplugging the private output mid-listen stops it (a lost output can fall back to the PA)", async () => {
+    useSettingsStore.setState({ auditionOutputId: "hp", auditionOutputLabel: "Desk headphones", auditionConfirmed: true })
+    await act(async () => root.render(<MediaLibrary kinds="audio" />))
+    await settle()
+    await act(async () => listenButton().click())
+    await settle()
+    expect(useListening.getState().id).toBe("a1")
+    devices = [{ kind: "audiooutput", deviceId: "default", label: "Default" }]
+    await act(async () => { for (const fn of deviceListeners) fn() })
+    await settle()
+    expect(useListening.getState()).toMatchObject({ id: null, controls: null })
+  })
+
+  it("a quick Listen, Stop, Listen leaves one player, and every listen starts quietly", async () => {
+    useSettingsStore.setState({ auditionOutputId: "hp", auditionOutputLabel: "Desk headphones", auditionConfirmed: true })
+    await act(async () => root.render(<MediaLibrary kinds="audio" />))
+    await settle()
+    const pauses = () => calls.filter((c) => c === "pause").length
+    await act(async () => {
+      listenButton().click()
+      useListening.getState().controls?.stop()
+      useListening.setState({ id: null, controls: null })
+    })
+    await act(async () => listenButton().click())
+    await settle()
+    // Two plays started, the superseded one was stopped at once: one player is left, and it is the one shown.
+    expect(calls.filter((c) => c.startsWith("play:")).length).toBe(2)
+    expect(pauses()).toBe(1)
+    expect(useListening.getState().id).toBe("a1")
+    useListening.getState().controls?.setVolume(0.9)
+    useListening.setState({ volume: 0.9 })
+    await act(async () => element.querySelector<HTMLButtonElement>('button[aria-label="Stop Walk-in.mp3"]')!.click())
+    await act(async () => listenButton().click())
+    await settle()
+    expect(useListening.getState().volume).toBe(0.3)
   })
 })
