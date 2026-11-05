@@ -269,6 +269,14 @@ pub fn new_key_set() -> KeySet {
     Arc::new(RwLock::new(Keys::default()))
 }
 
+/// The app's key set before the operator's settings arrive (#412): a key required and none
+/// accepted, so every remote command is refused until `remote_set_keys` says otherwise. A failed
+/// push therefore leaves the listeners closed, never open.
+#[must_use]
+pub fn new_closed_key_set() -> KeySet {
+    Arc::new(RwLock::new(Keys { require_auth: true, entries: Vec::new() }))
+}
+
 #[must_use]
 pub fn hash_key(key: &str) -> String {
     format!("{:x}", Sha256::digest(key.as_bytes()))
@@ -435,6 +443,14 @@ fn unique_name(asked: &str, entries: &[KeyEntry]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_app_key_set_refuses_every_command_until_the_operator_settings_arrive() {
+        // #412: RemoteKeys starts with this; before remote_set_keys runs (or if it fails), nothing is open.
+        let keys = new_closed_key_set();
+        assert_eq!(check_key(&keys, None), Err("missing key"));
+        assert_eq!(check_key(&keys, Some("anything")), Err("wrong key"));
+    }
 
     #[test]
     fn paired_names_are_unique_and_never_the_main_desk() {

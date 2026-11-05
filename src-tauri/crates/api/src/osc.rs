@@ -479,6 +479,40 @@ mod tests {
     }
 
     #[test]
+    fn osc_from_a_lan_sender_refuses_wrong_revoked_and_paused_keys() {
+        // #412: the OSC negative cases, from a sender on the church network (not loopback).
+        let rate = crate::rate::RateLimiter::new(1000.0, 1000.0);
+        let lan: std::net::IpAddr = "192.168.1.30".parse().unwrap();
+        let next = |key: &str| OscMessage { addr: "/rhema/next".into(), args: vec![rosc::OscType::String(key.into())] };
+        let desk = |paused: bool| KeyEntry {
+            hash: crate::keys::hash_key("desk-token"),
+            name: "Desk".into(),
+            role: crate::keys::Role::Present,
+            paused,
+            output_scope: Vec::new(),
+            group_take_scope: Vec::new(),
+            record: false,
+        };
+        let keys = new_key_set();
+        keys.write().unwrap().require_auth = true;
+        keys.write().unwrap().entries.push(desk(false));
+
+        let sink = MockSink::new();
+        handle_message_from_live(&next("tampered"), &sink, &keys, None, Some((&rate, lan)));
+        assert_eq!(sink.command_count(), 0, "a wrong key is refused");
+        handle_message_from_live(&next("desk-token"), &sink, &keys, None, Some((&rate, lan)));
+        assert_eq!(sink.command_count(), 1, "the paired key works");
+
+        keys.write().unwrap().entries = vec![desk(true)];
+        handle_message_from_live(&next("desk-token"), &sink, &keys, None, Some((&rate, lan)));
+        assert_eq!(sink.command_count(), 1, "a paused desk is refused");
+
+        keys.write().unwrap().entries.clear();
+        handle_message_from_live(&next("desk-token"), &sink, &keys, None, Some((&rate, lan)));
+        assert_eq!(sink.command_count(), 1, "a revoked key is refused, and an empty list never reopens OSC");
+    }
+
+    #[test]
     fn screens_osc_commands_obey_output_scope_and_protected_destination_rules() {
         let sink = MockSink::new();
         let keys = new_key_set();

@@ -1960,7 +1960,7 @@ fn live_reader<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers: &
             state.presence.saw(&entry, peer.ip());
             Ok(entry)
         }
-        Ok(None) if peer.ip().is_loopback() => Ok(crate::keys::KeyEntry {
+        Ok(None) if peer.ip().is_loopback() && !forwarded(headers) => Ok(crate::keys::KeyEntry {
             hash: String::new(),
             name: "This computer".into(),
             role: crate::keys::Role::Configure,
@@ -2800,12 +2800,25 @@ fn presented_key(headers: &HeaderMap) -> Option<&str> {
         .map(str::trim)
 }
 
+/// Whether a request came through a proxy or tunnel (#412): its peer address is then the proxy's
+/// (often 127.0.0.1), not the sender's, so it must never count as this computer or the local network.
+fn forwarded(headers: &HeaderMap) -> bool {
+    ["forwarded", "x-forwarded-for", "x-real-ip", "cf-connecting-ip", "true-client-ip"]
+        .iter()
+        .any(|name| headers.contains_key(*name))
+}
+
 fn check_http_command_key(
     keys: &KeySet,
     headers: &HeaderMap,
     peer: SocketAddr,
 ) -> Result<Option<crate::keys::KeyEntry>, (StatusCode, &'static str)> {
     match check_remote_key(keys, presented_key(headers), peer.ip()) {
+        // Open (no key needed) is for devices on this network only, never one behind a proxy.
+        Ok(None) if forwarded(headers) => {
+            log::warn!("HTTP command refused: unauthenticated request through a proxy from {}", peer.ip());
+            Err((StatusCode::FORBIDDEN, OPEN_REMOTE_OUTSIDE_LOCAL_NETWORK))
+        }
         Err(reason) if reason == OPEN_REMOTE_OUTSIDE_LOCAL_NETWORK => {
             log::warn!("HTTP command refused: unauthenticated request from {}", peer.ip());
             Err((StatusCode::FORBIDDEN, reason))
@@ -3348,6 +3361,25 @@ mod tests {
         let revoked = new_key_set();
         revoked.write().unwrap().require_auth = true;
         assert_eq!(check_http_command_key(&revoked, &valid_key, public_peer).unwrap_err().0, StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn open_access_never_passes_through_a_proxy_or_tunnel() {
+        // #412: a tunnel on this computer arrives from 127.0.0.1; its forwarding header gives it away.
+        let open = new_key_set();
+        let loopback = "127.0.0.1:45000".parse().unwrap();
+        assert!(check_http_command_key(&open, &HeaderMap::new(), loopback).unwrap().is_none());
+        for header in ["forwarded", "x-forwarded-for", "x-real-ip", "cf-connecting-ip", "true-client-ip"] {
+            let mut proxied = HeaderMap::new();
+            proxied.insert(header, "203.0.113.9".parse().unwrap());
+            assert_eq!(check_http_command_key(&open, &proxied, loopback).unwrap_err().0, StatusCode::FORBIDDEN, "{header}");
+        }
+        // A real key still works through a proxy: only key-less open access is refused.
+        let paired = key_set_from(&[("token", "Desk")]);
+        let mut keyed = HeaderMap::new();
+        keyed.insert("x-forwarded-for", "203.0.113.9".parse().unwrap());
+        keyed.insert("x-rhema-key", "token".parse().unwrap());
+        assert_eq!(check_http_command_key(&paired, &keyed, loopback).unwrap().unwrap().name, "Desk");
     }
 
     struct MockSink {

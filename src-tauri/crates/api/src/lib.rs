@@ -34,4 +34,4 @@ pub use feed_video::{CameraPlayback, PageVideo};
 pub use http::{reserve_revision_floor, set_app_version, start_http_server, FeedHub, FeedKeys, FeedStatus, SceneTakeRefusal, SceneTakeRevisions, TvWatching, HttpConfig, HttpHandle, HttpStartResult, LiveHub, SharedFeeds, SharedLive, SharedStatus, SharedVoice, StatusSnapshot, TlsLeaves, TlsListener, VoiceHub, new_feed_hub, new_live_hub, new_voice_hub, new_shared_status};
 pub use presence::{new_presence, DeskPresence, Presence, SharedPresence};
 pub use osc::{start_osc_listener, OscConfig, OscHandle, OscStartResult};
-pub use keys::{check_key, close_pairing, hash_key, key_set_from, new_key_set, new_pairing_window, open_pairing, role_asked, try_pair, try_pair_as, KeyEntry, KeySet, PairOutcome, PairingWindow, Role};
+pub use keys::{check_key, close_pairing, hash_key, key_set_from, new_closed_key_set, new_key_set, new_pairing_window, open_pairing, role_asked, try_pair, try_pair_as, KeyEntry, KeySet, PairOutcome, PairingWindow, Role};

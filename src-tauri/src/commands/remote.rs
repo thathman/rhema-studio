@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use rhema_api::{
-    close_pairing, hash_key, new_key_set, new_pairing_window, open_pairing, CommandError, CommandSink, HttpConfig, HttpHandle, KeyEntry, KeySet, Role,
+    close_pairing, hash_key, new_closed_key_set, new_key_set, new_pairing_window, open_pairing, CommandError, CommandSink, HttpConfig, HttpHandle, KeyEntry, KeySet, Role,
     OscConfig, OscHandle, PairingWindow, SceneTakeRefusal, SceneTakeRevisions, SharedFeeds, SharedVoice, new_voice_hub, SharedLive, SharedStatus, new_feed_hub, new_live_hub, new_shared_status, start_http_server, start_osc_listener,
 };
 
@@ -17,7 +17,7 @@ pub struct RemoteKeys {
 impl RemoteKeys {
     #[must_use]
     pub fn new() -> Self {
-        Self { keys: new_key_set(), pairing: new_pairing_window() }
+        Self { keys: new_closed_key_set(), pairing: new_pairing_window() }
     }
 }
 
@@ -158,7 +158,8 @@ pub fn remote_set_keys(
     let previous = remote.keys.read().map_err(|e| e.to_string())?.entries.clone();
     {
         let mut k = remote.keys.write().map_err(|e| e.to_string())?;
-        k.require_auth = require_auth.unwrap_or(false) || n > 0;
+        // A missing switch means a key is required (#412): open access is only ever chosen explicitly.
+        k.require_auth = require_auth.unwrap_or(true) || n > 0;
         k.entries = entries;
     }
     let current = remote.keys.read().map_err(|e| e.to_string())?.entries.clone();
