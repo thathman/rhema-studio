@@ -47,17 +47,17 @@ export function followTranslationOnAir(byVoice: boolean, before?: { activeTransl
     const now = resolveTranslations(item, bible)
     return isMissing(was) || isMissing(now) || was.primary !== now.primary || was.secondary !== now.secondary
   }
-  // A verse sent to the Bible feeds alone (Auto "Bible feeds only"), other than Program's: it follows
-  // too, after Program, so the feeds keep showing it and not Program's verse (#446).
+  // A verse sent to the Bible feeds alone (Auto "Bible feeds only"): it follows too, after Program, so
+  // the feeds keep showing it and not Program's verse (#446). Program taking the feeds drops `verse`.
   const feed = sources.bible?.on && sources.bible.verse ? sources.bible : null
-  const sameVerse = (a: { book_number: number; chapter: number; verse: number }, b: typeof a | null) => !!b && a.book_number === b.book_number && a.chapter === b.chapter && a.verse === b.verse
-  const feedApart = feed && !sameVerse(feed.verse!, liveSourceVerse) && changesFor(feed.item ?? null) ? feed : null
+  const feedApart = feed && changesFor(feed.item ?? null) ? feed : null
   const program = liveSourceVerse && changesFor(liveItem) ? liveSourceVerse : null
   if (!program && !feedApart) return
   const background = liveItemId ? (useQueueStore.getState().items.find((i) => i.id === liveItemId)?.background ?? null) : null
   // One after the other: each present supersedes one still loading.
   void (async () => {
     if (program) await presentVerse(program, { item: liveItem, itemId: liveItemId, background, follow: true })
-    if (feedApart) await presentVerse(feedApart.verse!, { item: feedApart.item ?? null, itemId: feedApart.itemId, sourceOnly: true })
+    // A follow: it never cancels a present the operator makes meanwhile, and gives way to a newer feed verse.
+    if (feedApart) await presentVerse(feedApart.verse!, { item: feedApart.item ?? null, itemId: feedApart.itemId, sourceOnly: true, follow: true })
   })()
 }

@@ -216,7 +216,8 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
   if (ticket !== presentSeq || !targetIsCurrent(opts)) return "superseded"
   if (opts.follow) {
     // A newer follow, or a different verse reached the screen meanwhile: that wins.
-    const live = useBroadcastStore.getState().liveSourceVerse
+    // A follow of the Bible feeds alone checks the feeds' own verse, not Program's (#446).
+    const live = opts.sourceOnly ? (useBroadcastStore.getState().sources.bible?.verse ?? null) : useBroadcastStore.getState().liveSourceVerse
     const sameVerse = live !== null && live.book_number === verse.book_number && live.chapter === verse.chapter && live.verse === verse.verse
     if (followTicket !== followSeq || !sameVerse) return "superseded"
   }

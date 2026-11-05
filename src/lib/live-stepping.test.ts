@@ -83,10 +83,10 @@ describe("live stepping and following (audit fixes)", () => {
     await vi.waitFor(() => expect(presentVerse).toHaveBeenCalledTimes(2))
     const calls = presentVerse.mock.calls as unknown as [Verse, { follow?: boolean; sourceOnly?: boolean }][]
     expect([calls[0][0].book_number, calls[0][1].follow]).toEqual([43, true])
-    expect([calls[1][0].book_number, calls[1][1].sourceOnly]).toEqual([45, true])
-    // The Bible feeds showing Program's own verse: one present, as before.
+    expect([calls[1][0].book_number, calls[1][1].sourceOnly, calls[1][1].follow]).toEqual([45, true, true])
+    // The Bible feeds showing Program's own verse (Program took them: no verse kept): one present, as before.
     presentVerse.mockClear()
-    useBroadcastStore.setState({ sources: { bible: { value: { kind: "verse", reference: "John 3:16", segments: [] } as never, itemId: null, revision: 10, activatedAt: 0, on: true, verse, item: null } } })
+    useBroadcastStore.setState({ sources: { bible: { value: { kind: "verse", reference: "John 3:16", segments: [] } as never, itemId: null, revision: 10, activatedAt: 0, on: true } } })
     followTranslationOnAir(false)
     await new Promise((r) => setTimeout(r, 0))
     expect(presentVerse).toHaveBeenCalledTimes(1)
