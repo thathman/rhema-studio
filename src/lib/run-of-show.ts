@@ -288,6 +288,15 @@ function sortHeaders(headers: OutlineHeader[]): OutlineHeader[] {
   return [...headers].map((h, order) => ({ h, order })).sort((a, b) => a.h.at - b.h.at || a.order - b.order).map((x) => x.h)
 }
 
+/** A new header placed above every header already at its item (#444): a new phase holds the event that starts there, never takes its moments. */
+export function withHeaderAbove(headers: OutlineHeader[], header: OutlineHeader): OutlineHeader[] {
+  const next = [...headers]
+  const first = next.findIndex((h) => h.at === header.at)
+  if (first >= 0) next.splice(first, 0, header)
+  else next.push(header)
+  return next
+}
+
 /** The item at `index` was removed: its section's header stays put, before the next item. */
 export function headersAfterRemove(headers: OutlineHeader[], index: number): OutlineHeader[] {
   return shift(headers, index, -1)

@@ -310,3 +310,52 @@ describe("stable movement boundaries", () => {
     expect(q().future).toHaveLength(1)
   })
 })
+
+describe("adding at the end with no section chosen (#444)", () => {
+  it("does not drop the item into an empty section waiting at the very end", () => {
+    const slide = (id: string) => ({ id, kind: "slide", slide: { title: id, body: "" }, reference: id, confidence: 1, source: "manual", added_at: 0 }) as QueueItem
+    useQueueStore.setState({
+      items: [slide("a"), slide("b")],
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+        { id: "post", type: "phase", name: "Post-service", at: 2, rule: "loop", role: "post" },
+      ] as OutlineHeader[],
+      activeIndex: null,
+      addTarget: null,
+    })
+    useQueueStore.getState().addItem(slide("new"), "end")
+    const rows = interleave(useQueueStore.getState().items, useQueueStore.getState().headers)
+    const order = rows.map((r) => ("header" in r ? `#${r.header.id}` : r.item.id))
+    expect(order).toEqual(["#main", "a", "b", "new", "#post"])
+  })
+
+  it("an empty running order with the default phases still puts the first item in a phase", () => {
+    const slide = (id: string) => ({ id, kind: "slide", slide: { title: id, body: "" }, reference: id, confidence: 1, source: "manual", added_at: 0 }) as QueueItem
+    useQueueStore.setState({
+      items: [],
+      headers: [
+        { id: "pre", type: "phase", name: "Pre-service", at: 0, rule: "loop", role: "pre" },
+        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+        { id: "post", type: "phase", name: "Post-service", at: 0, rule: "loop", role: "post" },
+      ] as OutlineHeader[],
+      activeIndex: null,
+      addTarget: null,
+    })
+    useQueueStore.getState().addItem(slide("first"), "end")
+    const rows = interleave(useQueueStore.getState().items, useQueueStore.getState().headers)
+    expect(rows[0] && "header" in rows[0] ? rows[0].header.id : "item").toBe("pre")
+  })
+
+  it("an empty event just made at the end still takes the next item", () => {
+    const slide = (id: string) => ({ id, kind: "slide", slide: { title: id, body: "" }, reference: id, confidence: 1, source: "manual", added_at: 0 }) as QueueItem
+    useQueueStore.setState({
+      items: [slide("a")],
+      headers: [{ id: "e", type: "group", name: "Closing", at: 1, event: { schema_version: 1 } }] as OutlineHeader[],
+      activeIndex: null,
+      addTarget: null,
+    })
+    useQueueStore.getState().addItem(slide("new"), "end")
+    const rows = interleave(useQueueStore.getState().items, useQueueStore.getState().headers)
+    expect(rows.map((r) => ("header" in r ? `#${r.header.id}` : r.item.id))).toEqual(["a", "#e", "new"])
+  })
+})
