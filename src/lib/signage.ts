@@ -22,7 +22,7 @@ const minutes = (hhmm: string): number | null => {
 }
 
 /**
- * Is the loop on at `now` (local time)? No schedule, or an unreadable one,
+ * Is the loop on at `now` on the church's clock (`zone`; this computer's when "")? No schedule, or an unreadable one,
  * means always on, so a typo never blanks a foyer screen. A window whose end
  * is earlier than its start crosses midnight (22:00–02:00); the day check
  * applies to the day the window started.
