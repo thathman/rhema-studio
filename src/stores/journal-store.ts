@@ -368,7 +368,8 @@ useBroadcastStore.subscribe((s, prev) => {
     if (a?.language === b?.language) continue
     const saved = LANGUAGE_NAMES[output.language ?? "both"]
     const by = b?.by ?? (a ? useSettingsStore.getState().operatorName.trim() || undefined : undefined)
-    const label = b ? `${output.name}: ${LANGUAGE_NAMES[b.language]} for this session (saved: ${saved})` : `${output.name}: back to its saved language (${saved})`
+    const removed = !s.outputs.some((o) => o.id === output.id)
+    const label = b ? `${output.name}: ${LANGUAGE_NAMES[b.language]} for this session (saved: ${saved})` : removed ? `${output.name} removed: its language for this session ends` : `${output.name}: back to its saved language (${saved})`
     add({ kind: "source", source: "Language", label: `${label}${by ? ` · by ${by}` : ""}`, ...(by ? { by } : {}) })
   }
 })

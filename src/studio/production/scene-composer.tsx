@@ -1,3 +1,4 @@
+import { liveLanguage } from "@/lib/output-language"
 import { useTimerStore, monotonicNow } from "@/stores/timer-store"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ArrowDownIcon, ArrowUpIcon, BookmarkPlusIcon, CopyIcon, EyeIcon, EyeOffIcon, PencilIcon, PinIcon, PinOffIcon, PlusIcon, SaveIcon } from "lucide-react"
@@ -501,6 +502,7 @@ function Num({ label, value, onChange, min = 0, max = 100 }: { label: string; va
 }
 
 function Inspector({ layer, onChange, onRemove, onOpenDesign, hasPinnedDesign, target }: { layer: SceneLayer; onChange: (p: Partial<SceneLayer>) => void; onRemove: () => void; onOpenDesign: () => void; hasPinnedDesign: boolean; target: BroadcastOutput | undefined }) {
+  const languageOverrides = useBroadcastStore((s) => s.languageOverrides)
   const themes = useBroadcastStore((s) => s.themes)
   const assets = useMediaStore((s) => s.assets)
   const crop = layer.crop ?? { l: 0, t: 0, r: 0, b: 0 }
@@ -537,7 +539,7 @@ function Inspector({ layer, onChange, onRemove, onOpenDesign, hasPinnedDesign, t
           <label className="flex flex-col gap-0.5">
             <span className="text-xs text-muted-foreground">Language</span>
             <select aria-label="Layer language" value={layer.language ?? ""} onChange={(e) => onChange({ language: (e.target.value || undefined) as BroadcastOutputLanguage | undefined })} className="h-8 rounded-md border border-input bg-card px-1.5">
-              <option value="">{target ? `As ${target.name} is set (${LANGUAGE_NAMES[target.language ?? "both"].toLowerCase()})` : "As the output is set"}</option>
+              <option value="">{target ? `As ${target.name} is set (${LANGUAGE_NAMES[liveLanguage(target, languageOverrides)].toLowerCase()}${languageOverrides[target.id] ? ", this session" : ""})` : "As the output is set"}</option>
               {(Object.keys(LANGUAGE_NAMES) as BroadcastOutputLanguage[]).map((k) => <option key={k} value={k}>{LANGUAGE_NAMES[k]}</option>)}
             </select>
             <span className="text-muted-foreground">For a verse or song in two languages: this box can show both, or one of them, whatever the screen shows elsewhere.</span>

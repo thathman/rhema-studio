@@ -1041,16 +1041,25 @@ describe("updateDraftNested deep paths", () => {
     useBroadcastStore.getState().setLanguageOverride("overflow", "second")
     expect(buildLiveState().outputs.find((o) => o.id === "overflow")).toMatchObject({ impact: { language: "second" } })
 
-    // Saving a language for the output replaces the session's choice, and the log says so.
+    // Edit output always sends the language: a rename keeps the session's choice.
+    useBroadcastStore.getState().updateOutput("overflow", { name: "Overflow", language: undefined })
+    expect(useBroadcastStore.getState().languageOverrides.overflow?.language).toBe("second")
+    // In rehearsal the log is frozen, so a new saved language leaves the recorded choice in place.
+    useBroadcastStore.setState({ rehearsal: true })
     useBroadcastStore.getState().updateOutput("overflow", { language: "first" })
+    expect(useBroadcastStore.getState().languageOverrides.overflow?.language).toBe("second")
+    useBroadcastStore.setState({ rehearsal: false })
+
+    // Saving another language for the output replaces the session's choice, and the log says so.
+    useBroadcastStore.getState().updateOutput("overflow", { language: undefined })
     expect(useBroadcastStore.getState().languageOverrides).toEqual({})
-    expect(useJournalStore.getState().entries.at(-1)?.label).toContain("Overflow: back to its saved language (First language only)")
+    expect(useJournalStore.getState().entries.at(-1)?.label).toContain("Overflow: back to its saved language (Both languages)")
 
     // Removing the output ends its choice too, logged under its name.
-    useBroadcastStore.getState().setLanguageOverride("overflow", "both")
+    useBroadcastStore.getState().setLanguageOverride("overflow", "second")
     useBroadcastStore.getState().removeOutput("overflow")
     expect(useBroadcastStore.getState().languageOverrides).toEqual({})
-    expect(useJournalStore.getState().entries.at(-1)?.label).toContain("Overflow: back to its saved language")
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Overflow removed: its language for this session ends")
   })
 
   it("applies a stage output's selected language to lyrics and Scripture", async () => {

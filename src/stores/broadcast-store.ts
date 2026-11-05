@@ -1136,6 +1136,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     get().syncBroadcastOutputFor(outputId)
   },
   updateOutput: (id, patch) => {
+    const before = get().outputs.find((o) => o.id === id)
     set((s) => ({
       outputs: s.outputs.map((o) => {
         if (o.id !== id) return o
@@ -1154,7 +1155,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     }))
     if ("role" in patch && patch.role !== "signage") forgetSignage(id)
     // A new saved language replaces this session's choice for that output (and the log says so).
-    if ("language" in patch && get().languageOverrides[id]) {
+    // Only a real change (Edit output always sends the language), and not in rehearsal, whose
+    // log is frozen: there the session's choice stays, as recorded.
+    if ("language" in patch && (patch.language ?? "both") !== (before?.language ?? "both") && get().languageOverrides[id] && !get().rehearsal) {
       const languageOverrides = { ...get().languageOverrides }
       delete languageOverrides[id]
       set({ languageOverrides })
@@ -1165,11 +1168,6 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   },
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
-    if (get().languageOverrides[id]) {
-      const languageOverrides = { ...get().languageOverrides }
-      delete languageOverrides[id]
-      set({ languageOverrides })
-    }
     forgetSignage(id)
     lastProgram.delete(id)
     if (get().outputTests[id]) {
@@ -1188,9 +1186,13 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       const outputStatus = Object.fromEntries(
         Object.entries(s.outputStatus).filter(([statusId]) => statusId !== id)
       )
+      // Its language for this session goes with it, in the same change (the log names it removed).
+      const languageOverrides = { ...s.languageOverrides }
+      delete languageOverrides[id]
       return {
         outputs: s.outputs.filter((o) => o.id !== id),
         outputStatus,
+        ...(s.languageOverrides[id] ? { languageOverrides } : {}),
       }
     })
   },
