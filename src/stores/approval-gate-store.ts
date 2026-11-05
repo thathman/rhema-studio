@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { approvalState } from "@/lib/approval"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { currentActor, useBroadcastStore } from "@/stores/broadcast-store"
+import { useJournalStore } from "@/stores/journal-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
 
@@ -39,6 +40,10 @@ export const useApprovalGateStore = create<ApprovalGateState>((set, get) => ({
     if (!held) return
     set({ acknowledged: [...acknowledged, held.id], held: null, retry: null })
     retry?.()
+    // Going live with a version nobody approved is part of the service's record (#409, #447): who,
+    // which service and version. After the go-live, which may start the run's log afresh.
+    const by = currentActor()
+    useJournalStore.getState().add({ kind: "approval", label: `Presented without approval: "${held.title}" v${held.revision}${by ? ` · by ${by}` : ""}`, ...(by ? { by } : {}) })
   },
   dismiss: () => set({ held: null, retry: null }),
 }))

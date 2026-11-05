@@ -3,6 +3,7 @@ import { approvalHolds, leaveRehearsal, showRehearsalLive, useApprovalGateStore 
 import { useBroadcastStore } from "./broadcast-store"
 import { useServiceStore } from "./service-store"
 import { useSettingsStore } from "./settings-store"
+import { useJournalStore } from "./journal-store"
 import type { Program } from "@/types/content"
 import type { VerseRenderData } from "@/types"
 
@@ -50,6 +51,32 @@ describe("approval before go-live (CL-002, opt-in)", () => {
     expect(approvalHolds(() => {})).toBe(true)
     useApprovalGateStore.getState().dismiss()
     expect(useApprovalGateStore.getState().held).toBeNull()
+  })
+
+  it("Present anyway is in the service log: who let which unapproved version through, once (#409)", () => {
+    useSettingsStore.setState({ operatorName: "Femi" })
+    useJournalStore.setState({ entries: [] })
+    // The go-live it lets through starts the run's log: the override must survive that.
+    expect(approvalHolds(() => useJournalStore.getState().add({ kind: "live", label: "Welcome", itemId: "w" }))).toBe(true)
+    useApprovalGateStore.getState().presentAnyway()
+    expect(useJournalStore.getState().entries.map((e) => e.kind)).toEqual(["live", "approval"])
+    const overrides = useJournalStore.getState().entries.filter((e) => e.kind === "approval")
+    expect(overrides).toHaveLength(1)
+    expect(overrides[0]).toMatchObject({ by: "Femi", label: 'Presented without approval: "Sunday" v3 · by Femi' })
+    // Not asked again this session, so not logged again; Not now logs nothing.
+    expect(approvalHolds(() => {})).toBe(false)
+    useServiceStore.setState({ current: program({ id: "p2" }) })
+    approvalHolds(() => {})
+    useApprovalGateStore.getState().dismiss()
+    expect(useJournalStore.getState().entries.filter((e) => e.kind === "approval")).toHaveLength(1)
+  })
+
+  it("letting rehearsed content through unapproved is logged, though rehearsal was on when it was asked", () => {
+    useJournalStore.setState({ entries: [] })
+    useBroadcastStore.setState({ rehearsal: true, isLive: true, liveVerse: slide, rehearsalReturn: null })
+    showRehearsalLive()
+    useApprovalGateStore.getState().presentAnyway()
+    expect(useJournalStore.getState().entries.some((e) => e.kind === "approval")).toBe(true)
   })
 
   it("showing rehearsed service content live asks first; plain leaving shows nothing new, so it does not", () => {

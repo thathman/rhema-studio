@@ -41,6 +41,11 @@ describe("saved service run checkpoints", () => {
     })
   })
 
+  it("keeps an unapproved go-live in a saved run (#409)", () => {
+    const entry = { at: 1_800_000_000_000, mono: 11_000, kind: "approval", label: 'Presented without approval: "Sunday" v3 · by Femi', itemId: null, by: "Femi" }
+    expect(parseServiceRunCheckpoint({ ...checkpoint, entries: [entry, ...checkpoint.entries] })?.entries[0]).toMatchObject({ kind: "approval", by: "Femi" })
+  })
+
   it("keeps unknown event versions out of the typed History projection", () => {
     const parsed = parseServiceRunCheckpoint({
       ...checkpoint,

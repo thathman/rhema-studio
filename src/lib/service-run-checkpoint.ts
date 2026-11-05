@@ -35,6 +35,7 @@ const JOURNAL_KINDS = [
   "scene",
   "shown",
   "take",
+  "approval",
 ] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
