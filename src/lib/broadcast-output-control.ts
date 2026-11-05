@@ -168,13 +168,25 @@ export async function enableOutput(output: BroadcastOutput): Promise<boolean> {
     if (output.type === "display") {
       // The same screen as chosen, even if the OS renumbered monitors since.
       let monitorIndex = output.monitorIndex
+      let names: (string | null)[] | null = null
       try {
-        const names = (await availableMonitors()).map((m) => m.name ?? null)
-        monitorIndex = resolveMonitorIndex(output, names, store.outputs.filter((o) => o.type === "display")) ?? output.monitorIndex
-        // Outputs set up before names were kept learn their monitor's name now.
-        if (!output.monitorName && names[monitorIndex]) store.updateOutput(output.id, { monitorName: names[monitorIndex] })
+        names = (await availableMonitors()).map((m) => m.name ?? null)
       } catch {
         // not under Tauri: the saved index
+      }
+      // No screens listed at all says nothing about which is which: the saved index, as before.
+      if (names && names.length > 0) {
+        const found = resolveMonitorIndex(output, names, store.outputs.filter((o) => o.type === "display"))
+        // Its screen is not connected now: never open on whatever screen took its number (#411: the
+        // congregation output must not cover the stage TV because the projector was off at start-up).
+        if (found === null) {
+          toast.error(`${output.name} not turned on`, { description: `${output.monitorName ? `“${output.monitorName}”` : `Screen ${output.monitorIndex + 1}`} is not connected. Turn it on, or choose its screen in Outputs.` })
+          store.setOutputStatus(output.id, { previewOpen: false, ndiActive: false })
+          return false
+        }
+        monitorIndex = found
+        // Outputs set up before names were kept learn their monitor's name now.
+        if (!output.monitorName && names[monitorIndex]) store.updateOutput(output.id, { monitorName: names[monitorIndex] })
       }
       await invoke("open_broadcast_window", {
         outputId: output.id,
