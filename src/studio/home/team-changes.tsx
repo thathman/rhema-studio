@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { validTimeZone } from "@/lib/church-time"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
 import { BadgeCheckIcon, ChevronRightIcon, MessageSquareIcon, SaveIcon } from "lucide-react"
@@ -30,7 +31,8 @@ export function TeamChanges() {
   const seen = useMemo(() => new Set(seenList), [seenList])
   const me = useSettingsStore((s) => s.operatorName)
   // The open service, else today's (or the next approved) one Home suggests opening.
-  const service = current ?? todaysService(programs, localDate())?.program ?? null
+  const zone = validTimeZone(useSettingsStore((s) => s.setup.timeZone))
+  const service = current ?? todaysService(programs, localDate(new Date(), zone))?.program ?? null
   const [revisions, setRevisions] = useState<RevisionSummary[]>([])
   const id = service?.id
   const revision = service?.revision

@@ -58,7 +58,8 @@ export function useReadiness() {
   const overrideTranslations = useBibleStore((s) => s.overrideServiceTranslations)
   const unsupportedItems = useServiceStore((s) => s.unsupportedItems)
   const corruptItems = useServiceStore((s) => s.corruptItems)
-  const suggested = todaysService(programs, localDate())
+  const churchZone = validTimeZone(useSettingsStore((s) => s.setup.timeZone))
+  const suggested = todaysService(programs, localDate(new Date(), churchZone))
   const monitorCount = useMonitorStore((s) => s.count)
   const monitorNames = useMonitorStore((s) => s.names)
   const monitorSizes = useMonitorStore((s) => s.sizes)
@@ -219,6 +220,7 @@ export function useReadiness() {
       startsAt: (headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at,
       running: isLive || eventId !== null,
       now,
+      zone,
     }),
     obs: { enabled: obsSettings.enabled, status: obsStatus, error: obsError, label: obsLabel, stream: obsStream, record: obsRecord, rehearsal },
     internet: { cloudSpeech },

@@ -1,5 +1,6 @@
 import type { Program } from "@/types"
 import { approvalState } from "@/lib/approval"
+import { wallParts } from "@/lib/church-time"
 
 /**
  * The service to open when the laptop is switched on at church: dated today
@@ -17,7 +18,12 @@ export function todaysService(programs: Program[], today: string): { program: Pr
   return upcoming[0] ? { program: upcoming[0], why: "next approved" } : null
 }
 
-/** Local calendar date as "YYYY-MM-DD" (the format service_date uses). */
-export function localDate(d = new Date()): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+/**
+ * The calendar date as "YYYY-MM-DD" (the format service_date uses), on the church's clock when its
+ * time zone is set (#411: a laptop on another zone still opens Sunday's service on Sunday), else
+ * this computer's.
+ */
+export function localDate(d = new Date(), zone = ""): string {
+  const p = wallParts(d.getTime(), zone)
+  return `${p.year}-${String(p.month + 1).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`
 }

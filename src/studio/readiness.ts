@@ -1,5 +1,5 @@
 import { serviceTiming } from "@/lib/timing-engine"
-import { clockAt } from "@/lib/church-time"
+import { clockAt, wallParts, zonedInstant } from "@/lib/church-time"
 import { clockMinutes, type OutlineHeader } from "@/lib/run-of-show"
 import type { QueueItem } from "@/types"
 import { recordWords, streamWords, type ObsOutputStatus } from "@/lib/obs-status"
@@ -176,16 +176,17 @@ export const SOON_MS = 2 * 60 * 60 * 1000
  * started) is soon. Otherwise from its date and the main service's start time: within two hours
  * before the start until six after; a date with no time is soon all that day. No date: not known.
  */
-export function serviceStartsSoon(i: { serviceDate: string | null | undefined; startsAt?: string | null; running: boolean; now: number }): boolean | null {
+export function serviceStartsSoon(i: { serviceDate: string | null | undefined; startsAt?: string | null; running: boolean; now: number; zone?: string }): boolean | null {
   if (i.running) return true
   if (!i.serviceDate || !/^\d{4}-\d{2}-\d{2}$/.test(i.serviceDate)) return null
   const [y, m, d] = i.serviceDate.split("-").map(Number)
   const minutes = clockMinutes(i.startsAt)
+  // The church's clock when its time zone is set (#411), else this computer's.
   if (minutes === null) {
-    const today = new Date(i.now)
-    return today.getFullYear() === y && today.getMonth() === m - 1 && today.getDate() === d
+    const today = wallParts(i.now, i.zone)
+    return today.year === y && today.month === m - 1 && today.day === d
   }
-  const start = new Date(y, m - 1, d, Math.floor(minutes / 60), minutes % 60).getTime()
+  const start = zonedInstant({ year: y, month: m - 1, day: d, hour: Math.floor(minutes / 60), minute: minutes % 60 }, i.zone)
   return i.now >= start - SOON_MS && i.now <= start + 3 * SOON_MS
 }
 
