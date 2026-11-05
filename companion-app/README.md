@@ -3,7 +3,7 @@
 A small app for a second computer that runs **OBS only**. It finds the church's Rhema on the
 network, pairs with it, lists the church's phone cameras, and adds the ones you pick to this
 computer's OBS as Media Sources. OBS then cuts between them on its own; the screens in church are
-never changed from here. Rhema shows, in Production → Cameras, which cameras this OBS has on
+never changed from here. Rhema shows, in Live → Production tools → Cameras, which cameras this OBS has on
 program and preview.
 
 Version 1.1.0.0 (the build tools take three parts, so files say 1.1.0).
@@ -26,7 +26,7 @@ On the main Rhema computer:
 1. Settings → Remote control: **Accept commands from other devices on this network**, and
    **Secure page for phones (https)** on, then start (or stop and start) the HTTP listener. The
    companion uses the next port after it (8081 for 8080) and refuses to pair without it.
-2. Production → Cameras: the camera router on, with the cameras added.
+2. Live → Production tools → Cameras: the camera router on, with the cameras added.
 3. Settings → Remote control → **Pair a device** when the companion asks for the code. The host's
    certificate is shown next to "Secure page for phones" there: the companion shows the same four-
    character groups before you press Join. If they differ, do not join.
@@ -97,7 +97,13 @@ separate.
 Xcode Command Line Tools, Rust stable and Bun, then `bun install` and `bun run companion:build`.
 The app is `companion-app/src-tauri/target/release/bundle/macos/Rhema Studio Companion.app` (ad-hoc
 signed; the first open needs right-click → Open). On an Intel Mac building for Intel:
-`bun run companion:build -- --target x86_64-apple-darwin`.
+`bun run companion:build -- --target x86_64-apple-darwin`, which puts it under the target's own
+folder: `companion-app/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Rhema Studio Companion.app`.
+
+CI builds this Intel Mac bundle on every pull request ("Companion package (macOS Intel)" in
+`.github/workflows/ci.yml`), so a change that breaks packaging fails there. Windows packaging is not
+in CI (the owner paused Windows installer builds): the Windows steps above need a manual check on a
+Windows computer.
 
 ## Tests
 
