@@ -11,7 +11,7 @@ import { useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
 import { presentActions } from "@/studio/present-actions"
-import { keyToPresentAction, shouldIgnoreKeyboard } from "@/studio/present-keys"
+import { keyToPresentAction, shouldIgnoreKeyboard, isClickerKey } from "@/studio/present-keys"
 import { BigButton } from "@/studio/ui/big-button"
 import { StatusChip } from "@/studio/ui/status-chip"
 import { TimedMoves } from "@/studio/present/timed-moves"
@@ -123,10 +123,11 @@ export function PresentWorkspace() {
   }
 
   // Register one keyboard map for the whole Live console. shouldIgnoreKeyboard
-  // suppresses it while the tools drawer or another modal is open.
+  // suppresses it while typing or under a modal; with Live tools open only the
+  // presenter clicker (PageUp/PageDown) acts (#411), the panel keeps its arrows.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (useProductionTab.getState().open || e.defaultPrevented || shouldIgnoreKeyboard(e.target, e.key)) return
+      if ((useProductionTab.getState().open && !isClickerKey(e)) || e.defaultPrevented || shouldIgnoreKeyboard(e.target, e.key)) return
       const action = keyToPresentAction(e)
       if (!action) return
       e.preventDefault()
