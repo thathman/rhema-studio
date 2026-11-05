@@ -798,6 +798,43 @@ describe("live recovery", () => {
     stop()
   })
 
+  it("a week-old unfinished run is not joined to this launch's log, and is marked interrupted (#411)", async () => {
+    const at = Date.now() - 7 * 24 * 60 * 60 * 1000
+    kept.set("journal", {
+      v: 2,
+      at,
+      checkpointMono: 0,
+      entries: [{ at, mono: 0, kind: "event", label: "Opening", itemId: "opening" }],
+      startItemIds: ["opening"],
+      runStatus: "active",
+      finalizedLogId: null,
+      runContext: {
+        runId: "last-week-run",
+        programId: "service-1",
+        programRevision: 4,
+        title: "Sunday service",
+        serviceDate: "2026-10-29",
+        timeZone: "Africa/Lagos",
+        startedAt: new Date(at).toISOString(),
+        operator: null,
+        plan: [{ id: "opening", label: "Opening" }],
+        plannedMs: {},
+        headers: [],
+        startItemIds: ["opening"],
+      },
+    })
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "last_exit_unclean") return false
+      if (command === "content_list_service_runs") return []
+      return null
+    })
+    const stop = await startLiveRecovery()
+    expect(useJournalStore.getState().entries).toEqual([])
+    expect(useJournalStore.getState().runContext?.runId).not.toBe("last-week-run")
+    await vi.waitFor(() => expect(vi.mocked(invoke)).toHaveBeenCalledWith("content_interrupt_service_run", { runId: "last-week-run" }))
+    stop()
+  })
+
   it("reconciles a locally active checkpoint with a finished SQLite run before interrupting", async () => {
     const at = Date.now() - 60_000
     kept.set("journal", {
