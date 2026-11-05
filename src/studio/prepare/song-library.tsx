@@ -1,3 +1,4 @@
+import { useLibraryPreview } from "@/stores/library-preview-store"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { MusicIcon, PencilIcon, PlusIcon, SearchIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -20,7 +21,17 @@ const LICENCE_BADGE: Record<string, string> = { public_domain: "PD", ccli: "CCLI
  * to the service, or open it in the editor. "New song" opens the paste-first
  * editor.
  */
-export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseItem }: { layout?: "list" | "cards"; newRequest?: number; onAdded?: (id: string) => void; onUseItem?: LibraryItemUseHandler } = {}) {
+/**
+ * `privatePreview` (Library, #447): clicking a song shows it in Library's own preview, never in
+ * Live's Preview. Elsewhere (Prepare's Add picker) a click previews as before.
+ */
+export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseItem, privatePreview = false }: { layout?: "list" | "cards"; newRequest?: number; onAdded?: (id: string) => void; onUseItem?: LibraryItemUseHandler; privatePreview?: boolean } = {}) {
+  const inspectedId = useLibraryPreview((s) => s.inspected?.item.id ?? null)
+  const preview = (song: SongSummary) => {
+    const item = songQueueItem(song, `library-${song.id}`)
+    if (!privatePreview) return presentActions.previewSlide(item, 0)
+    useLibraryPreview.getState().inspect({ item, title: song.title, detail: [song.numbers.length ? `Hymn ${song.numbers.join(", ")}` : isChoir(song.tags) ? "Choir ministration" : "Song", song.languages.map((l) => l.toUpperCase()).join(" / "), song.first_line].filter(Boolean).join(" · ") })
+  }
   const [query, setQuery] = useState("")
   const results = useSongStore((s) => s.results)
   const searching = useSongStore((s) => s.searching)
@@ -107,13 +118,13 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseIte
           </li>
         )}
         {shown.map((song) => {
-          const isSel = !!selectedSlide && isSongItem(selectedSlide.item) && selectedSlide.item.song.song_id === song.id
-          if (cards) return <SongCard key={song.id} song={song} selected={isSel} onEdit={() => setEditing({ open: true, id: song.id })} onAdd={() => add(song)} />
+          const isSel = privatePreview ? inspectedId === `library-${song.id}` : !!selectedSlide && isSongItem(selectedSlide.item) && selectedSlide.item.song.song_id === song.id
+          if (cards) return <SongCard key={song.id} song={song} selected={isSel} onPreview={() => preview(song)} onEdit={() => setEditing({ open: true, id: song.id })} onAdd={() => add(song)} />
           return (
             <li key={song.id} className="flex items-stretch gap-1">
               <button
                 type="button"
-                onClick={() => presentActions.previewSlide(songQueueItem(song, `library-${song.id}`), 0)}
+                onClick={() => preview(song)}
                 className={cn(
                   "flex min-w-0 flex-1 flex-col rounded-md px-2.5 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                   isSel ? "bg-primary/10" : "hover:bg-muted/50"
@@ -161,7 +172,7 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseIte
 }
 
 /** A song as a card (the Library's approved design): a flat cover in the kind's colour, what it is, Edit and Add to service. */
-function SongCard({ song, selected, onEdit, onAdd }: { song: SongSummary; selected: boolean; onEdit: () => void; onAdd: () => void }) {
+function SongCard({ song, selected, onPreview, onEdit, onAdd }: { song: SongSummary; selected: boolean; onPreview: () => void; onEdit: () => void; onAdd: () => void }) {
   const choir = isChoir(song.tags)
   const hymn = song.numbers.length > 0
   const meta = [choir ? "Choir ministration" : hymn ? `Hymn ${song.numbers.join(", ")}` : "Song", song.languages.map((l) => l.toUpperCase()).join(" / "), song.authors].filter(Boolean).join(" · ")
@@ -169,7 +180,7 @@ function SongCard({ song, selected, onEdit, onAdd }: { song: SongSummary; select
     <li className={cn("flex min-w-0 flex-col overflow-hidden rounded-[15px] border bg-card transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_15px_32px_#26314914] motion-reduce:transition-none", selected ? "border-primary" : "border-border")}>
       <button
         type="button"
-        onClick={() => presentActions.previewSlide(songQueueItem(song, `library-${song.id}`), 0)}
+        onClick={onPreview}
         title="Click to preview"
         className={cn(
           "flex aspect-[1.7] items-center justify-center px-6 text-center text-[1.4375rem] leading-tight font-medium text-white outline-none focus-visible:ring-3 focus-visible:ring-ring/50",

@@ -56,7 +56,8 @@ function hymnItem(song: SongSummary, first: "en" | "yo", id?: string) {
  * the service. The book is imported once from its file and stays on this
  * computer.
  */
-export function HymnBook({ onAdded, onUseItem }: { onAdded?: (id: string) => void; onUseItem?: LibraryItemUseHandler } = {}) {
+/** `privatePreview` (Library, #447): choosing a hymn shows it in the detail pane only, never in Live's Preview. */
+export function HymnBook({ onAdded, onUseItem, privatePreview = false }: { onAdded?: (id: string) => void; onUseItem?: LibraryItemUseHandler; privatePreview?: boolean } = {}) {
   const [hymns, setHymns] = useState<Hymn[] | null>(null)
   const [part, setPart] = useState<CacPart>(1)
   const [query, setQuery] = useState("")
@@ -161,7 +162,7 @@ export function HymnBook({ onAdded, onUseItem }: { onAdded?: (id: string) => voi
     setSelectedHymnId(hymn.song.id)
     setDetailLoading(true)
     setDetailError(null)
-    useBibleStore.getState().selectSlide({ item, index: 0 })
+    if (!privatePreview) useBibleStore.getState().selectSlide({ item, index: 0 })
     void useSongStore.getState().load(hymn.song.id).then((loaded) => {
       if (ticket !== detailSeq.current) return
       if (!loaded) setDetailError("This hymn is no longer in the library.")
