@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { clockInstant, clockText, dwellSeconds, nextInPhase, phaseRange, planTimeline, plannedTimes, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, newRunOfShowEvent, parseRunOfShowEvent, orderCounts, projectRunOfShowEvents, runOfShowClockRows, savedServiceCount as savedCount, sectionSummaries, type OutlineHeader } from "./run-of-show"
+import type { QueueItem } from "@/types"
+import { clockInstant, clockText, dwellSeconds, nextInPhase, phaseRange, planTimeline, plannedTimes, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, newRunOfShowEvent, parseRunOfShowEvent, orderCounts, projectRunOfShowEvents, runOfShowClockRows, savedServiceCount as savedCount, sectionSummaries, withHeaderAbove, type OutlineHeader } from "./run-of-show"
 
 const h = (id: string, at: number, type: OutlineHeader["type"] = "phase"): OutlineHeader => ({ id, type, name: id, at })
 const read = (items: string[], headers: OutlineHeader[]) => interleave(items, headers).map((r) => ("header" in r ? `[${r.header.id}]` : r.item)).join(" ")
@@ -274,5 +275,16 @@ describe("saved services in a list are counted event-first (#404)", () => {
     expect(savedCount({ item_count: 1, event_count: 1 })).toBe("1 event · 1 item in all")
     expect(savedCount({ item_count: 5, event_count: 0 })).toBe("5 items")
     expect(savedCount({ item_count: 1 })).toBe("1 item")
+  })
+})
+
+describe("a new phase at an event's first moment (#444)", () => {
+  it("goes above the event, which keeps its moments", () => {
+    const event: OutlineHeader = { id: "e", type: "group", name: "Worship", at: 2, event: { schema_version: 1 } }
+    const headers = withHeaderAbove([{ id: "p1", type: "phase", name: "Pre", at: 0 }, event], { id: "p2", type: "phase", name: "Main", at: 2 })
+    expect(headers.map((h) => h.id)).toEqual(["p1", "p2", "e"])
+    const items = [0, 1, 2, 3].map((i) => ({ id: `m${i}`, kind: "slide", slide: { title: "", body: "" }, reference: `m${i}`, confidence: 1, source: "manual", added_at: 0 })) as QueueItem[]
+    const events = projectRunOfShowEvents(items, headers)
+    expect(events.find((e) => e.id === "e")?.moments.map((m) => m.id)).toEqual(["m2", "m3"])
   })
 })

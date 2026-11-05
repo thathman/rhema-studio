@@ -310,3 +310,22 @@ describe("stable movement boundaries", () => {
     expect(q().future).toHaveLength(1)
   })
 })
+
+describe("adding at the end with no section chosen (#444)", () => {
+  it("does not drop the item into an empty section waiting at the very end", () => {
+    const slide = (id: string) => ({ id, kind: "slide", slide: { title: id, body: "" }, reference: id, confidence: 1, source: "manual", added_at: 0 }) as QueueItem
+    useQueueStore.setState({
+      items: [slide("a"), slide("b")],
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+        { id: "post", type: "phase", name: "Post-service", at: 2, rule: "loop", role: "post" },
+      ] as OutlineHeader[],
+      activeIndex: null,
+      addTarget: null,
+    })
+    useQueueStore.getState().addItem(slide("new"), "end")
+    const rows = interleave(useQueueStore.getState().items, useQueueStore.getState().headers)
+    const order = rows.map((r) => ("header" in r ? `#${r.header.id}` : r.item.id))
+    expect(order).toEqual(["#main", "a", "b", "new", "#post"])
+  })
+})

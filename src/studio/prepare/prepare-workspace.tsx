@@ -18,7 +18,7 @@ import { AddItems } from "@/studio/prepare/add-items"
 import { AiDrafts } from "@/studio/prepare/ai-drafts"
 import { TimingPanel } from "@/studio/prepare/timing-panel"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
-import { RULE_LABEL, interleave, newPhase, organiseHeadersIntoDefaultPhases, orderCounts, projectRunOfShowEvents, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
+import { RULE_LABEL, interleave, newPhase, organiseHeadersIntoDefaultPhases, orderCounts, projectRunOfShowEvents, sectionSummaries, timedItems, type PhaseRole, withHeaderAbove } from "@/lib/run-of-show"
 import { CalendarDaysIcon, ClockIcon, EllipsisIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
 import { RundownTools } from "@/studio/prepare/bulk-bar"
 import { isSlideItem, type CueQueueItem } from "@/types"
@@ -429,7 +429,8 @@ function RundownFooter() {
   // A church-named phase (#193): before the selected item, else at the end; rename it from its menu.
   const addPhase = () => {
     const at = sel?.index ?? count
-    useQueueStore.getState().setHeaders([...useQueueStore.getState().headers, newPhase(at)])
+    // Above every header already at that item: it holds the event that starts there (#444).
+    useQueueStore.getState().setHeaders(withHeaderAbove(useQueueStore.getState().headers, newPhase(at)))
   }
   // A cue-only moment (#193): shows nothing; it fires its cues (an OBS marker to begin with) when taken.
   const addCue = () => {
