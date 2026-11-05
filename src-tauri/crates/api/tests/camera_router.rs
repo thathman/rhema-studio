@@ -28,12 +28,27 @@ fn router_program() -> Option<PathBuf> {
     std::env::var_os("RHEMA_MEDIAMTX").map(PathBuf::from).or(home).filter(|p| p.is_file())
 }
 
+/// A port no other call in this test run was given. Each listener is closed before the router
+/// takes its port, so the system may hand the same free port out twice: two routers in one test
+/// would then race for it, and one would not start (main CI run 41946516907, 5 Nov 2026).
+fn unused(port: impl Fn() -> u16) -> u16 {
+    static GIVEN: std::sync::Mutex<Vec<u16>> = std::sync::Mutex::new(Vec::new());
+    let mut given = GIVEN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    loop {
+        let p = port();
+        if !given.contains(&p) {
+            given.push(p);
+            return p;
+        }
+    }
+}
+
 fn free_tcp() -> u16 {
-    TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
+    unused(|| TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port())
 }
 
 fn free_udp() -> u16 {
-    UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
+    unused(|| UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port())
 }
 
 /// The router, killed when the test ends however it ends.
