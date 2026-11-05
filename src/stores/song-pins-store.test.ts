@@ -33,4 +33,18 @@ describe("the approved service's songs (#193)", () => {
     await loadSongPins({ id: "q", approved_revision: null })
     expect(useSongPins.getState().pins).toEqual({})
   })
+
+  it("while another approved service's pins load, the last service's approved words never stand in (#409)", async () => {
+    await loadSongPins({ id: "a", approved_revision: 3 })
+    expect(pinnedSong("s1")?.sections[0].texts.en).toBe("Approved words")
+    let release: (songs: SongWithSections[]) => void = () => {}
+    invoke.mockImplementationOnce(() => new Promise((resolve) => { release = resolve as never }))
+    const loading = loadSongPins({ id: "b", approved_revision: 5 })
+    // B's pins are not here yet: A's must not be used for B's songs.
+    expect(useSongPins.getState().programId).toBe("b")
+    expect(pinnedSong("s1")).toBeUndefined()
+    release([song(9, "B approved words")])
+    await loading
+    expect(pinnedSong("s1")?.sections[0].texts.en).toBe("B approved words")
+  })
 })

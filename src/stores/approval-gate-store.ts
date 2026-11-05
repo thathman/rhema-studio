@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { approvalState } from "@/lib/approval"
+import { eventPlanApprovalState } from "@/lib/approval"
 import { currentActor, useBroadcastStore } from "@/stores/broadcast-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useServiceStore } from "@/stores/service-store"
@@ -38,16 +38,30 @@ export const useApprovalGateStore = create<ApprovalGateState>((set, get) => ({
   presentAnyway: () => {
     const { held, retry, acknowledged } = get()
     if (!held) return
+    // A question about a service that is no longer open answers nothing: drop it, act on nothing.
+    if (held.id !== useServiceStore.getState().current?.id) {
+      set({ held: null, retry: null })
+      return
+    }
     // The decision to go live with a version nobody approved is part of the service's record (#409,
     // #447): who, which service and version. Logged as the decision it is (the go-live, or a
     // refusal of it, is its own entry after); kept when that go-live starts the run's log.
     const by = currentActor()
-    useJournalStore.getState().add({ kind: "approval", label: `Present anyway: "${held.title}" v${held.revision} was not approved${by ? ` · by ${by}` : ""}`, programId: held.id, ...(by ? { by } : {}) })
+    // The version that goes live now (saved since the hold, perhaps), not the one held.
+    const version = useServiceStore.getState().current?.revision ?? held.revision
+    useJournalStore.getState().add({ kind: "approval", label: `Present anyway: "${held.title}" v${version} was not approved${by ? ` · by ${by}` : ""}`, programId: held.id, ...(by ? { by } : {}) })
     set({ acknowledged: [...acknowledged, held.id], held: null, retry: null })
     retry?.()
   },
   dismiss: () => set({ held: null, retry: null }),
 }))
+
+// A held go-live belongs to the service it asked about (#409): once another service is open (or
+// none), the question and its retry are dropped, so neither can act on the wrong service.
+useServiceStore.subscribe((s) => {
+  const { held } = useApprovalGateStore.getState()
+  if (held && held.id !== s.current?.id) useApprovalGateStore.setState({ held: null, retry: null })
+})
 
 /**
  * True when a go-live must wait for the operator (and records what was held).
@@ -64,7 +78,9 @@ export function approvalWouldHold(opts: { leavingRehearsal?: boolean } = {}): bo
   if (gate.held) return true
   if (gate.acknowledged.includes(current.id)) return false
   if (useBroadcastStore.getState().rehearsal && !opts.leavingRehearsal) return false
-  return useSettingsStore.getState().requireApproval && approvalState(current) !== "approved"
+  // Unsaved edits to an approved service are not what was approved either: hold them as a saved
+  // change would be held (readiness already calls them "changed since approval").
+  return useSettingsStore.getState().requireApproval && eventPlanApprovalState(current, useServiceStore.getState().dirty) !== "approved"
 }
 
 export function approvalHolds(retry: () => void, opts: { leavingRehearsal?: boolean } = {}): boolean {
