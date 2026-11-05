@@ -309,10 +309,10 @@ export function networkWords(h: MachineHealth): HealthLine[] {
   return lines
 }
 
-/** Frames a second from two readings of an NDI sender's frame count; null until there are two. */
 /** No NDI frame for this long is a stalled sender: the keepalive sends one at least every 4 s. */
 export const NDI_STALL_MS = 10_000
 
+/** Frames a second from two readings of an NDI sender's frame count; null until there are two. */
 export function ndiRate(prev: { frames: number; at: number } | undefined, frames: number, at: number): number | null {
   if (!prev || at <= prev.at || frames < prev.frames) return null
   return ((frames - prev.frames) * 1000) / (at - prev.at)
