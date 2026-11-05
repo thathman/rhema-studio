@@ -19,7 +19,11 @@ import { imageQueueItem, mediaQueueItem } from "@/lib/media-items"
  * app's media folder (named by content hash, so the same picture is never
  * stored twice); click to preview, Add to put it in the service.
  */
-export function MediaLibrary({ onAdded, onUseItem }: { onAdded?: (id: string) => void; onUseItem?: LibraryItemUseHandler } = {}) {
+/**
+ * `kinds`: everything (Prepare's Add picker), pictures and videos only, or sounds only (Library's
+ * own sections, #447: "Library owns reusable… Images/Videos/Audio").
+ */
+export function MediaLibrary({ onAdded, onUseItem, kinds = "all" }: { onAdded?: (id: string) => void; onUseItem?: LibraryItemUseHandler; kinds?: "all" | "visual" | "audio" } = {}) {
   const assets = useMediaStore((s) => s.assets)
   const urls = useMediaStore((s) => s.urls)
   const loading = useMediaStore((s) => s.loading)
@@ -34,7 +38,11 @@ export function MediaLibrary({ onAdded, onUseItem }: { onAdded?: (id: string) =>
 
   const doImport = async () => {
     try {
-      const results = await useMediaStore.getState().importFiles([{ name: "Pictures, videos and sounds", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "mp4", "m4v", "mov", "webm", "mp3", "m4a", "aac", "wav", "ogg"] }])
+      const visual = ["png", "jpg", "jpeg", "webp", "gif", "bmp", "mp4", "m4v", "mov", "webm"]
+      const audio = ["mp3", "m4a", "aac", "wav", "ogg"]
+      const results = await useMediaStore.getState().importFiles([
+        kinds === "audio" ? { name: "Sounds", extensions: audio } : kinds === "visual" ? { name: "Pictures and videos", extensions: visual } : { name: "Pictures, videos and sounds", extensions: [...visual, ...audio] },
+      ])
       if (!results) return
       const ok = results.filter((r) => r.status === "imported").length
       const dup = results.filter((r) => r.status === "imported" && r.duplicate).length
@@ -76,11 +84,11 @@ export function MediaLibrary({ onAdded, onUseItem }: { onAdded?: (id: string) =>
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="flex items-center gap-2">
-        <Button size="sm" onClick={() => void doImport()}><UploadIcon /> Import pictures, videos or sounds…</Button>
+        <Button size="sm" onClick={() => void doImport()}><UploadIcon /> {kinds === "audio" ? "Import sounds…" : kinds === "visual" ? "Import pictures or videos…" : "Import pictures, videos or sounds…"}</Button>
         <span className="text-xs text-muted-foreground">Copied into the app's media folder; the originals are not needed afterwards.</span>
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
-      <ul className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-2 overflow-y-auto" aria-label="Pictures">
+      {kinds !== "audio" && <ul className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-2 overflow-y-auto" aria-label="Pictures">
         {!loading && pictures.length === 0 && (
           <li className="col-span-full px-2 py-6 text-center text-xs text-muted-foreground">No pictures yet. Import a welcome slide, a sermon title or an announcement graphic.</li>
         )}
@@ -114,11 +122,14 @@ export function MediaLibrary({ onAdded, onUseItem }: { onAdded?: (id: string) =>
             </li>
           )
         })}
-      </ul>
-      {sounds.length > 0 && (
-        <div className="flex flex-col gap-1 border-t border-border pt-2">
+      </ul>}
+      {kinds === "audio" && !loading && sounds.length === 0 && (
+        <p className="px-2 py-6 text-center text-xs text-muted-foreground">No sounds yet. Import walk-in music, a countdown sting or a backing track (MP3, M4A, WAV, OGG).</p>
+      )}
+      {kinds !== "visual" && sounds.length > 0 && (
+        <div className={cn("flex flex-col gap-1", kinds === "audio" ? "min-h-0 flex-1" : "border-t border-border pt-2")}>
           <p className="text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">Sounds <span className="normal-case tracking-normal">· add one to the service to play it when reached, or play it any time from ♪ in Live</span></p>
-          <ul className="max-h-32 overflow-y-auto" aria-label="Sounds">
+          <ul className={cn("overflow-y-auto", kinds === "audio" ? "min-h-0 flex-1" : "max-h-32")} aria-label="Sounds">
             {sounds.map((a) => (
               <li key={a.id} className="flex items-center gap-2 px-1 py-0.5 text-xs">
                 <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" />
