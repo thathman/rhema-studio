@@ -1574,7 +1574,8 @@ async fn health_handler<S: CommandSink + 'static>(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> axum::response::Response {
-    if !is_local_network_ip(peer.ip()) {
+    // Local network only (#412): a proxied request is never local, whatever its peer address.
+    if !is_local_network_ip(peer.ip()) || forwarded(&headers) {
         return StatusCode::FORBIDDEN.into_response();
     }
     Json(HealthResponse {
@@ -1730,7 +1731,8 @@ async fn status_handler<S: CommandSink + 'static>(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> axum::response::Response {
-    if !is_local_network_ip(peer.ip()) {
+    // Local network only (#412): a proxied request is never local, whatever its peer address.
+    if !is_local_network_ip(peer.ip()) || forwarded(&headers) {
         return StatusCode::FORBIDDEN.into_response();
     }
     if !state.rate.allow(peer.ip()) {
@@ -1918,9 +1920,11 @@ struct PairResponse {
 async fn pair_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(req): Json<PairRequest>,
 ) -> impl IntoResponse {
-    if !is_local_network_ip(peer.ip()) {
+    // Local network only (#412): a proxied request is never local, whatever its peer address.
+    if !is_local_network_ip(peer.ip()) || forwarded(&headers) {
         return (StatusCode::FORBIDDEN, Json(PairResponse { success: false, token: None, name: None, error: Some("pairing is available only on the local network".into()) }));
     }
     if !state.rate.allow(peer.ip()) {
@@ -3476,11 +3480,35 @@ mod tests {
         let pair = pair_handler(
             AxumState(state),
             ConnectInfo(public_peer),
+            HeaderMap::new(),
             Json(PairRequest { code: "unused".into(), name: "Desk".into(), role: None }),
         )
         .await
         .into_response();
         assert_eq!(pair.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn a_proxy_on_this_computer_cannot_read_status_health_or_open_pairing() {
+        // #412: a tunnel arrives from 127.0.0.1; its forwarding header shows it is not this network.
+        let state = app_state_for_network_tests();
+        let loopback: SocketAddr = "127.0.0.1:45000".parse().unwrap();
+        let mut proxied = HeaderMap::new();
+        proxied.insert("x-forwarded-for", "203.0.113.9".parse().unwrap());
+
+        assert_eq!(health_handler(AxumState(state.clone()), ConnectInfo(loopback), proxied.clone()).await.status(), StatusCode::FORBIDDEN);
+        assert_eq!(status_handler(AxumState(state.clone()), ConnectInfo(loopback), proxied.clone()).await.status(), StatusCode::FORBIDDEN);
+        let pair = pair_handler(
+            AxumState(state.clone()),
+            ConnectInfo(loopback),
+            proxied,
+            Json(PairRequest { code: "unused".into(), name: "Desk".into(), role: None }),
+        )
+        .await
+        .into_response();
+        assert_eq!(pair.status(), StatusCode::FORBIDDEN);
+        // This computer itself, unproxied, still gets its health answer.
+        assert_ne!(health_handler(AxumState(state), ConnectInfo(loopback), HeaderMap::new()).await.status(), StatusCode::FORBIDDEN);
     }
 
     impl CommandSink for MockSink {
