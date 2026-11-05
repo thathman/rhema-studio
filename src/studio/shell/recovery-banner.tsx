@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { acceptPartialRecovery, dismissDurableRunNotice, dismissRecovery, dismissRecoveryDamage, putBack, useRecovery } from "@/lib/live-recovery"
 import { useShellStore } from "@/studio/shell-store"
+import { dismissDraft, restoreDraft, useDraftRecovery } from "@/lib/draft-recovery"
 
 /** After Rhema closed unexpectedly: offer to put back what was on the screens (never on its own). "Not now" leaves it in the Desk menu. */
 export function RecoveryBanner() {
@@ -12,6 +13,20 @@ export function RecoveryBanner() {
   const durableRuns = useRecovery((s) => s.durableRuns)
   const durableRunsDismissed = useRecovery((s) => s.durableRunsDismissed)
   const [busy, setBusy] = useState(false)
+  const draft = useDraftRecovery((s) => s.offer)
+  const draftError = useDraftRecovery((s) => s.error)
+  // Unsaved Prepare edits from before Rhema Studio closed (#411): planning only, nothing goes Live.
+  const draftNotice = draft ? (
+    <div role="status" aria-label="Unsaved changes from before Rhema Studio closed" className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/40 px-4 py-2 text-sm">
+      <p className="min-w-0 flex-1">
+        <span className="font-semibold">Unsaved changes to “{draft.title}” were kept from {new Date(draft.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.</span>{" "}
+        <span className="text-muted-foreground">Put them back in Prepare to review and save them. Nothing goes Live.</span>
+        {draftError && <span className="block font-medium text-destructive">{draftError}</span>}
+      </p>
+      <Button size="sm" disabled={busy} onClick={() => { setBusy(true); void restoreDraft().then((ok) => { if (ok) useShellStore.getState().goTo("prepare") }).finally(() => setBusy(false)) }}>Put back in Prepare</Button>
+      <Button size="sm" variant="ghost" onClick={dismissDraft}>Discard</Button>
+    </div>
+  ) : null
   const durableNotice = durableRuns.length > 0 && !durableRunsDismissed ? (
     <div role="status" className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/40 px-4 py-2 text-sm">
       <p className="min-w-0 flex-1">
@@ -32,15 +47,17 @@ export function RecoveryBanner() {
           <Button size="sm" variant="ghost" onClick={dismissRecoveryDamage}>Dismiss</Button>
         </div>
         {durableNotice}
+        {draftNotice}
       </>
     )
   }
-  if (!offer || dismissed) return durableNotice
+  if (!offer || dismissed) return <>{durableNotice}{draftNotice}</>
   const at = new Date(offer.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   const what = [offer.isLive && offer.liveVerse ? offer.liveVerse.reference || "a slide" : null, offer.outputsOn.length ? `${offer.outputsOn.length} output${offer.outputsOn.length === 1 ? "" : "s"} on` : null].filter(Boolean).join(" · ")
   return (
     <>
       {durableNotice}
+      {draftNotice}
       <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-on-air/40 bg-on-air/10 px-4 py-2 text-sm">
         <p className="min-w-0 flex-1">
           <span className="font-semibold">Rhema Studio closed unexpectedly at {at}{offer.service ? ` during ${offer.service.title}` : ""}.</span>{" "}
