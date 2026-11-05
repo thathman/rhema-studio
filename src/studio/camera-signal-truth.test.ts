@@ -171,13 +171,17 @@ describe("Camera follows OBS (#208): information from OBS's own inputs", () => {
 
 describe("scene cameras after the computer's address changes, and removed cameras (#411)", () => {
   it("plays Rhema's camera at the computer's address now, never the one the scene was built with", () => {
+    // The scene was built while the computer was at .20 (the router said so), then it moved to .30.
+    expect(routerCameraUrl(URL_P, { status: routerOf([{ name: "pulpit", live: true }]) }, cameras)).toBe(URL_P)
     const health = { checked: true, status: { ...routerOf([{ name: "pulpit", live: true }]), lanAddress: "192.168.1.30" } }
     expect(routerCameraUrl(URL_P, health, cameras)).toBe("http://192.168.1.30:8889/pulpit/whep")
+    // Another relay's camera with the same name as one of ours: never redirected here.
+    expect(routerCameraUrl("http://10.0.0.9:8889/pulpit/whep", health, cameras)).toBe("http://10.0.0.9:8889/pulpit/whep")
+    // A failed status poll keeps the address last known, so players do not flip back.
+    expect(routerCameraUrl(URL_P, { status: null }, cameras)).toBe("http://192.168.1.30:8889/pulpit/whep")
     // An address typed by hand, another port or a camera that is not Rhema's: untouched.
     expect(routerCameraUrl("http://10.0.0.9:8889/lobby/whep", health, cameras)).toBe("http://10.0.0.9:8889/lobby/whep")
     expect(routerCameraUrl("http://192.168.1.20:9000/pulpit/whep", health, cameras)).toBe("http://192.168.1.20:9000/pulpit/whep")
-    // Router off or no address: as built.
-    expect(routerCameraUrl(URL_P, { status: { ...health.status, lanAddress: null } }, cameras)).toBe(URL_P)
     const frame = cameraPlay({ cameraAt: (u) => routerCameraUrl(u, health, cameras) }, { cameraFallback: undefined }, { cameraUrl: URL_P })
     expect(frame.url).toBe("http://192.168.1.30:8889/pulpit/whep")
   })
@@ -186,6 +190,8 @@ describe("scene cameras after the computer's address changes, and removed camera
     const health = { checked: true, status: routerOf([{ name: "choir", live: true }]) }
     const removed = "http://192.168.1.20:8889/gone/whep"
     expect(cameraDownState(health, "gone", cameras, removed)).toBe("not-sending")
+    // A name the router has live is sending, listed in Cameras or not.
+    expect(cameraDownState({ checked: true, status: routerOf([{ name: "guest", live: true }]) }, "guest", cameras, "http://192.168.1.20:8889/guest/whep")).toBeUndefined()
     // Another computer's camera is not Rhema's to judge.
     expect(cameraDownState(health, "lobby", cameras, "http://10.0.0.9:8889/lobby/whep")).toBeUndefined()
     const other = { cameraFallback: { mode: "camera" as const, camera: "choir" } }

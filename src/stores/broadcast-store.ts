@@ -2222,7 +2222,8 @@ let lastCameraKey = ""
 function syncCameraScenes(): void {
   const b = useBroadcastStore.getState()
   const cams = useSettingsStore.getState().cameras
-  const key = cams.map((c) => `${c.name}>${c.backup ?? ""}:${cameraDown(c.name) ?? "ok"}`).join(",")
+  // The computer's address too: a scene's cameras play at the address it has now.
+  const key = `${useRouterHealth.getState().status?.lanAddress ?? ""}|` + cams.map((c) => `${c.name}>${c.backup ?? ""}:${cameraDown(c.name) ?? "ok"}`).join(",")
   if (key === lastCameraKey) return
   lastCameraKey = key
   for (const o of b.outputs) if (showsSceneWith(o, "camera")) b.syncBroadcastOutputFor(o.id)
