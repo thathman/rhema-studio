@@ -1,5 +1,6 @@
 import { keepFocusInList } from "@/lib/keep-focus"
 import { useEffect, useRef, useState } from "react"
+import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { DragDropProvider } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
 import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, MessageSquareIcon, MusicIcon, PresentationIcon, StickyNoteIcon, XIcon, BellRingIcon, TimerIcon, EyeIcon, EyeOffIcon, ZapIcon } from "lucide-react"
@@ -45,6 +46,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
   const selected = useBibleStore((s) => s.selectedVerse)
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
   const selectedQueueItemId = useBibleStore((s) => s.selectedQueueItemId)
+  const prepareFocusId = useSelectedItem()?.item.id ?? null
   const songs = useSongStore((s) => s.songs)
   const isLive = useBroadcastStore((s) => s.isLive)
   const liveRef = useBroadcastStore((s) => s.liveVerse?.reference ?? null)
@@ -69,7 +71,8 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
     const range = e.shiftKey
     const toggle = e.metaKey || e.ctrlKey
     useRundownSelection.getState().click(item.id, items.map((i) => i.id), { range, toggle })
-    if (!range && !toggle) preview(item)
+    // Prepare focuses for editing only (#447): Live's Preview changes only by Send to Live Preview.
+    if (!range && !toggle) useRundownSelection.getState().focus(item.id)
   }
   // Present runs past these: the next item shown after the active one.
   const nextShown = activeIndex === null ? -1 : nextVisibleItem(items, headers, activeIndex)?.index ?? -1
@@ -96,7 +99,9 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
         const cue = isCueItem(item)
         const skipped = isSkipped(items, headers, index)
         const inPick = mode === "prepare" && picked.length > 1 && picked.includes(item.id)
-        const isSelected = selectedQueueItemId
+        const isSelected = mode === "prepare"
+          ? prepareFocusId === item.id
+          : selectedQueueItemId
           ? selectedQueueItemId === item.id
           : song || custom || picture || audio || cue
             ? selectedSlide?.item.id === item.id
@@ -129,7 +134,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
                 aria-selected={mode === "prepare" && picked.length > 1 ? inPick : undefined}
                 onClick={(e) => (mode === "prepare" ? pick(item, e) : preview(item))}
                 onDoubleClick={mode === "present" ? () => present(item, index) : undefined}
-                title={mode === "present" ? (audio ? "Click to preview, double-click to play audio on this computer; screens stay unchanged" : cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to preview"}
+                title={mode === "present" ? (audio ? "Click to preview, double-click to play audio on this computer; screens stay unchanged" : cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to open it in the editor; Live's Preview stays as it is"}
               >
                 <span className="w-5 shrink-0 text-right text-xs text-muted-foreground">{index + 1}</span>
                 {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={songLabel.startsWith("Hymn") ? "Hymn" : "Song"} />}
@@ -474,6 +479,9 @@ function ChangedSinceApproval({ songId }: { songId: string }) {
 
 
 export function SlideList({ item, index, mode }: { item: SongQueueItem; index: number; mode: "prepare" | "present" }) {
+  const prepareFocusId = useRundownSelection((s) => s.focusId)
+  const prepareFocusIndex = useRundownSelection((s) => s.focusSlideIndex)
+  const prepareFocus = { id: prepareFocusId, index: prepareFocusIndex }
   // The approved service's words of the song when it has them (#193), else the library's.
   const song = useServiceSong(item.song.song_id)
   const library = useSongStore((s) => s.songs[item.song.song_id])
@@ -504,13 +512,16 @@ export function SlideList({ item, index, mode }: { item: SongQueueItem; index: n
       {slides.map((slide) => {
         const section = shownSong.sections.find((s) => s.id === slide.sectionId)
         const live = highlightLive && isLive && liveSlide?.itemId === item.id && liveSlide.index === slide.index
-        const sel = selectedSlide?.item.id === item.id && selectedSlide.index === slide.index
+        const sel = mode === "prepare"
+          ? prepareFocus.id === item.id && prepareFocus.index === slide.index
+          : selectedSlide?.item.id === item.id && selectedSlide.index === slide.index
         return (
           <li key={slide.index}>
             <button
               type="button"
               aria-current={sel ? "true" : undefined}
-              onClick={() => presentActions.previewSlide(shownItem, slide.index, liveSnapshot?.song)}
+              // Prepare (#447): shows that slide in Prepare's own preview; Live's Preview is untouched.
+              onClick={() => mode === "prepare" ? useRundownSelection.getState().focus(item.id, slide.index) : presentActions.previewSlide(shownItem, slide.index, liveSnapshot?.song)}
               onDoubleClick={mode === "present" ? () => void presentQueueItem(index, slide.index, songAs) : undefined}
               className={cn(
                 // Present's slides are touch targets (44 px); Prepare keeps them compact.

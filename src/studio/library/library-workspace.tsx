@@ -1,5 +1,6 @@
 import { LibraryPreviewPane } from "@/studio/library/library-preview-pane"
 import { useLibraryPreview } from "@/stores/library-preview-store"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useEffect, useState } from "react"
 import { PlusIcon, UploadIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -20,7 +21,6 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import type { OutlineHeader } from "@/lib/run-of-show"
 import { useQueueStore } from "@/stores"
 import { useServiceStore } from "@/stores/service-store"
-import { presentActions } from "@/studio/present-actions"
 import { SongLibrary } from "@/studio/prepare/song-library"
 import { HymnBook } from "@/studio/prepare/hymn-book"
 import { MediaLibrary } from "@/studio/prepare/media-library"
@@ -227,13 +227,14 @@ export function LibraryWorkspace() {
     } else {
       useShellStore.getState().clearPrepareLibraryReturn()
     }
-    presentActions.previewItem(added)
+    // Planning only (#447): focus it in Prepare; Live's Preview and Program stay as they are.
+    useRundownSelection.getState().focus(added.id)
     useShellStore.getState().setWorkspace("prepare")
     if (rememberTarget) {
       useLibraryTargetStore.getState().remember(libraryTargetOwner(invocation), target.key)
     }
     toast.success(`Added ${item.reference} to ${invocation.serviceTitle}`, {
-      description: "It is selected in private Preview. Nothing has been sent to Program.",
+      description: "It is open in Prepare. Live's Preview and Program are unchanged.",
     })
     return true
   }
@@ -485,7 +486,7 @@ export function LibraryWorkspace() {
           <DialogHeader>
             <DialogTitle>{targetRequest?.item ? "Choose where to add this item" : "Choose a Library destination"}</DialogTitle>
             <DialogDescription>
-              For <strong>{targetRequest?.invocation.serviceTitle ?? currentService?.title ?? "Local draft"}</strong>. Add places the item at the end of the selected event, phase or group. It opens in private Preview; Program is unchanged.
+              For <strong>{targetRequest?.invocation.serviceTitle ?? currentService?.title ?? "Local draft"}</strong>. Add places the item at the end of the selected event, phase or group. It opens in Prepare; Live's Preview and Program are unchanged.
             </DialogDescription>
           </DialogHeader>
           {targetRequest && !isCurrentLibraryUseInvocation(targetRequest.invocation) && (

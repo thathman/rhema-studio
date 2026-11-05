@@ -6,7 +6,8 @@ import { useMediaStore } from "@/stores/media-store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { useBibleStore, useQueueStore } from "@/stores"
+import { useQueueStore } from "@/stores"
+import { PreviewPanel, type PreviewSource } from "@/components/panels/preview-panel"
 import type { SlideQueueItem } from "@/types"
 import { announcementBody } from "@/lib/announcement"
 import { safeLink } from "@/lib/qr-bulletin"
@@ -54,15 +55,13 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
     source: "manual",
     added_at: 0,
   })
-  const preview = (t = title, b = body, w = when, p = where, m = mode, l = link) => {
-    const full = m === "announcement" ? announcementBody(w, p, b) : m === "reading" ? (readingPages(b)[0] ?? "") : b
-    const safe = m === "qr" ? safeLink(l) : null
-    if (!t.trim() && !full.trim() && !safe) {
-      useBibleStore.getState().clearSlidePreview(DRAFT_SLIDE_ID)
-      return
-    }
-    useBibleStore.getState().selectSlide({ item: { ...draft(), slide: { title: t, body: full, ...(safe ? { link: safe } : {}) } }, index: 0 })
-  }
+  // Its own preview (#447): the draft is shown here only, never written to Live's Preview.
+  const previewBody = mode === "announcement" ? composedBody : mode === "reading" ? (readingPages(body)[0] ?? "") : body
+  const previewLink = mode === "qr" ? safeLink(link) : null
+  const draftSource: PreviewSource | null = !title.trim() && !previewBody.trim() && !previewLink ? null : (() => {
+    const item = { ...draft(), slide: { title, body: previewBody, ...(previewLink ? { link: previewLink } : {}) } }
+    return { item, slide: { item, index: 0 }, verse: null, queueItemId: null }
+  })()
   // A responsive reading is always one slide per exchange (leader, then people).
   const pages = mode === "qr" ? [] : mode === "reading" ? readingPages(body) : slidePages(composedBody)
   const appendToService = (item: SlideQueueItem) => {
@@ -70,9 +69,6 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
     return queue.addItem(item, "end")
   }
   const reset = () => {
-    // AddItems may already have selected the saved slide. Clear only our
-    // temporary draft so resetting cannot erase that or a newer selection.
-    useBibleStore.getState().clearSlidePreview(DRAFT_SLIDE_ID)
     setTitle("")
     setBody("")
     setWhen("")
@@ -117,6 +113,11 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      {draftSource && (
+        <div className="h-40 shrink-0 overflow-hidden rounded-lg [&>div]:h-full" aria-label="Slide draft preview (not in Live's Preview)">
+          <PreviewPanel itemLook source={draftSource} />
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">This slide is for the open service.</p>
         <Button size="xs" variant="outline" onClick={browseReusableSlides}><BookOpenIcon /> Browse reusable slides</Button>
@@ -127,7 +128,7 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
             key={m}
             type="button"
             aria-pressed={mode === m}
-            onClick={() => { setMode(m); preview(title, body, when, where, m) }}
+            onClick={() => { setMode(m) }}
             className={`h-7 rounded px-2.5 text-xs font-medium ${mode === m ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           >
             {m === "free" ? "Any text" : m === "announcement" ? "Announcement" : m === "qr" ? "QR link" : "Responsive reading"}
@@ -136,7 +137,7 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
       </div>
       {mode === "qr" && (
         <div className="flex flex-col gap-1">
-          <Input aria-label="Link" placeholder="https://… (giving, sign-up, bulletin)" value={link} onChange={(e) => { setLink(e.target.value); preview(title, body, when, where, "qr", e.target.value) }} className="h-9" />
+          <Input aria-label="Link" placeholder="https://… (giving, sign-up, bulletin)" value={link} onChange={(e) => { setLink(e.target.value) }} className="h-9" />
           <p className="text-xs text-muted-foreground">{link.trim() && !safeLink(link) ? "Only a full http(s) address can be shown as a code." : "The code and the address are shown together on a white panel, so people see where it goes. Works offline; nothing is tracked. The preview shows the words; the code itself appears on the output. A background picture is not used on this slide."}</p>
         </div>
       )}
@@ -147,8 +148,8 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
       )}
       {mode === "announcement" && (
         <div className="grid grid-cols-2 gap-2">
-          <Input aria-label="When" placeholder="When (Friday 6 pm)" value={when} onChange={(e) => { setWhen(e.target.value); preview(title, body, e.target.value, where) }} className="h-9" />
-          <Input aria-label="Where" placeholder="Where (main hall)" value={where} onChange={(e) => { setWhere(e.target.value); preview(title, body, when, e.target.value) }} className="h-9" />
+          <Input aria-label="When" placeholder="When (Friday 6 pm)" value={when} onChange={(e) => { setWhen(e.target.value) }} className="h-9" />
+          <Input aria-label="Where" placeholder="Where (main hall)" value={where} onChange={(e) => { setWhere(e.target.value) }} className="h-9" />
         </div>
       )}
       <Input
@@ -156,14 +157,14 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
         placeholder="Title (optional)"
         value={title}
         maxLength={200}
-        onChange={(e) => { setTitle(e.target.value); preview(e.target.value, body) }}
+        onChange={(e) => { setTitle(e.target.value) }}
         className="h-10"
       />
       <Textarea
         aria-label="Slide text"
         placeholder={mode === "announcement" ? "Details, one line per line (what to bring, who to ask…)" : mode === "reading" ? "L: Give thanks to the Lord, for he is good.\nP: His love endures for ever.\n(L: / Leader:  and  P: / People: / All: / C:)" : "What goes on screen. One line per line.\nPress Add when it looks right in the preview."}
         value={body}
-        onChange={(e) => { setBody(e.target.value); preview(title, e.target.value) }}
+        onChange={(e) => { setBody(e.target.value) }}
         rows={6}
         className="text-sm"
       />
@@ -183,7 +184,7 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
           <li key={ex.title || ex.body}>
             <button
               type="button"
-              onClick={() => { setTitle(ex.title); setBody(ex.body); preview(ex.title, ex.body) }}
+              onClick={() => { setTitle(ex.title); setBody(ex.body) }}
               className="h-7 rounded-full border border-border bg-card px-2.5 text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 outline-none"
             >
               {ex.title || ex.body}

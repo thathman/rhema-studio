@@ -43,6 +43,7 @@ import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import {
   LIBRARY_END_OF_RUN_TARGET,
   libraryHeaderTarget,
@@ -83,6 +84,7 @@ beforeEach(() => {
   mockStoreSave.mockReset()
   useShellStore.setState({ workspace: "library", librarySection: "songs", prepareLibraryReturn: null, prepareDesignReturn: null })
   useLibraryTargetStore.getState().clearAll()
+  useRundownSelection.setState({ focusId: null })
   useBibleStore.setState({
     translations: [
       {
@@ -467,7 +469,10 @@ describe("Library workspace", () => {
       translation: "KJV",
       secondary_translation: null,
     })
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(queue.items[2].id)
+    // Focused in Prepare (#447); Live's Preview is not changed by Add to service.
+    expect(useRundownSelection.getState().focusId).toBe(queue.items[2].id)
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
+    expect(useBibleStore.getState().selectedVerse).toBeNull()
     expect(useLibraryTargetStore.getState().byServiceId["service-a"]).toBe(libraryHeaderTarget("event-opening"))
     expect(useShellStore.getState().prepareLibraryReturn).toMatchObject({
       serviceId: "service-a",

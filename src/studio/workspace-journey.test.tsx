@@ -165,6 +165,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { useSlideStore } from "@/stores/slide-store"
 import { useJoin } from "@/stores/join-store"
 import { useAddDialog } from "@/studio/prepare/add-target"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { resetApprovalRequests, useApprovalRequestsStore, type ApprovalRequest } from "@/studio/permissions/approval-requests-store"
 import { useSceneApprovalsStore } from "@/stores/scene-approvals-store"
 import { Sidebar } from "@/studio/shell/sidebar"
@@ -210,6 +211,13 @@ function WorkspaceJourney() {
 let host: HTMLDivElement
 let root: Root
 
+/** Prepare's one deliberate way to Live's Preview (#447): never Program. */
+async function sendToLivePreview() {
+  const send = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Send to Live Preview")!
+  expect(send).toBeTruthy()
+  await act(async () => send.click())
+}
+
 const navButton = (name: string) => [...host.querySelectorAll<HTMLButtonElement>("nav button")].find((button) => button.textContent?.trim().startsWith(name))!
 
 beforeEach(() => {
@@ -229,6 +237,7 @@ beforeEach(() => {
   useSettingsStore.setState({ operatorName: "Main desk", remoteDevices: [] })
   useSlideStore.setState({ slides: [], loading: false, error: null, query: "", pendingSourceId: null })
   useAddDialog.getState().close()
+  useRundownSelection.setState({ focusId: null })
   useJoin.setState({ status: "off", me: null, live: null })
   resetApprovalRequests()
   useApprovalRequestsStore.setState({ requests: [{ ...state.request } as ApprovalRequest], hydrated: true, loading: false, error: null })
@@ -258,7 +267,12 @@ describe("Prepare → Permissions → Live journey", () => {
 
     const programBefore = useBroadcastStore.getState().liveVerse
     const moment = host.querySelector<HTMLElement>('[data-rundown-item-id="moment-1"]')!
-    await act(async () => moment.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    await act(async () => moment.querySelector<HTMLButtonElement>('button[title^="Click to open it in the editor"]')!.click())
+    // Opening it in Prepare is planning only (#447); Send to Live Preview arms Live's Preview.
+    expect(useRundownSelection.getState().focusId).toBe("moment-1")
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
+    expect(useBibleStore.getState().selectedVerse).toBeNull()
+    await sendToLivePreview()
     expect(useBibleStore.getState().selectedVerse).toMatchObject({ book_number: 43, chapter: 3, verse: 16 })
     expect(useBibleStore.getState().selectedQueueItemId).toBe("moment-1")
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
@@ -317,7 +331,10 @@ describe("Prepare → Permissions → Live journey", () => {
     state.requests = [request]
     await act(async () => useApprovalRequestsStore.setState({ requests: [request as ApprovalRequest], hydrated: true, loading: false, error: null }))
     const slideRow = host.querySelector<HTMLElement>('[data-rundown-item-id="welcome-slide"]')!
-    await act(async () => slideRow.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    await act(async () => slideRow.querySelector<HTMLButtonElement>('button[title^="Click to open it in the editor"]')!.click())
+    expect(useRundownSelection.getState().focusId).toBe("welcome-slide")
+    expect(useBibleStore.getState().selectedSlide).toBeNull()
+    await sendToLivePreview()
     expect(useBibleStore.getState().selectedSlide?.item.id).toBe("welcome-slide")
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
@@ -428,6 +445,8 @@ describe("Prepare → Permissions → Live journey", () => {
     const focusedMoment = host.querySelector<HTMLElement>(`#event-content-moment-${added.id}`)!
     expect(focusedMoment.className).toContain("ring-2")
     expect(document.activeElement).toBe(focusedMoment)
+    expect(useRundownSelection.getState().focusId).toBe(added.id)
+    expect(useBibleStore.getState()).toMatchObject({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null })
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
     const save = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save")!
@@ -452,7 +471,10 @@ describe("Prepare → Permissions → Live journey", () => {
     state.requests = [request]
     await act(async () => useApprovalRequestsStore.setState({ requests: [request as ApprovalRequest], hydrated: true, loading: false, error: null }))
     const slideRow = host.querySelector<HTMLElement>(`[data-rundown-item-id="${added.id}"]`)!
-    await act(async () => slideRow.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    await act(async () => slideRow.querySelector<HTMLButtonElement>('button[title^="Click to open it in the editor"]')!.click())
+    expect(useRundownSelection.getState().focusId).toBe(added.id)
+    expect(useBibleStore.getState().selectedSlide?.item.id).not.toBe(added.id)
+    await sendToLivePreview()
     expect(useBibleStore.getState().selectedSlide?.item.id).toBe(added.id)
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 

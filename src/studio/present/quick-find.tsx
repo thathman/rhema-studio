@@ -120,7 +120,10 @@ export function QuickFind({ mode, autoFocus, scope = "all", onAdded }: { mode: "
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one subscription per Quick find
   }, [mode])
 
+  const [picked, setPicked] = useState<string | null>(null)
   const preview = (hit: Hit) => {
+    // Prepare's Add dialog (#447): picking a result only marks it here; Live's Preview is untouched.
+    if (mode === "prepare") return setPicked(hitKey(hit))
     if (hit.kind === "verse") {
       bibleActions.selectVerse(hit.verse)
       bibleActions.navigateToVerse(hit.verse.book_number, hit.verse.chapter, hit.verse.verse)
@@ -202,9 +205,9 @@ export function QuickFind({ mode, autoFocus, scope = "all", onAdded }: { mode: "
           <li className="px-2 py-1 text-xs text-muted-foreground">{bibleOnly ? "No matching verses." : "No matching verses or songs."}</li>
         )}
         {results.map((hit) => {
-          const key = hit.kind === "verse" ? `v-${hit.verse.book_number}-${hit.verse.chapter}-${hit.verse.verse}` : `s-${hit.song.id}`
+          const key = hitKey(hit)
           const hymn = hit.kind === "song" && isHymnSong({ hymn_numbers: hit.song.numbers }, hit.song.tags)
-          const isSel =
+          const isSel = mode === "prepare" ? picked === key :
             hit.kind === "verse"
               ? !selectedSlide && !!selected && selected.book_number === hit.verse.book_number && selected.chapter === hit.verse.chapter && selected.verse === hit.verse.verse
               : !!selectedSlide && isSongItem(selectedSlide.item) && selectedSlide.item.song.song_id === hit.song.id
@@ -300,3 +303,6 @@ function BibleVersions() {
   )
 }
 
+function hitKey(hit: Hit): string {
+  return hit.kind === "verse" ? `v-${hit.verse.book_number}-${hit.verse.chapter}-${hit.verse.verse}` : `s-${hit.song.id}`
+}

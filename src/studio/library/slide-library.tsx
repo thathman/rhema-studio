@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { PlusIcon, SearchIcon, UploadIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -7,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { useQueueStore } from "@/stores/queue-store"
-import { useBibleStore } from "@/stores/bible-store"
 import { useMediaStore } from "@/stores/media-store"
 import { useSlideStore } from "@/stores/slide-store"
 import { useShellStore } from "@/studio/shell-store"
@@ -26,7 +26,8 @@ export function SlideLibrary({ onUseItem }: { onUseItem?: LibraryItemUseHandler 
   const pendingSourceId = useSlideStore((s) => s.pendingSourceId)
   const media = useMediaStore((s) => s.assets)
   const queueItems = useQueueStore((s) => s.items)
-  const selectedQueueItemId = useBibleStore((s) => s.selectedQueueItemId)
+  // The slide Prepare has selected (#447), not what Live has cued.
+  const selectedQueueItemId = useRundownSelection((s) => s.focusId)
   const [query, setQuery] = useState("")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [form, setForm] = useState<ReusableSlideInput>(empty)
@@ -120,9 +121,7 @@ export function SlideLibrary({ onUseItem }: { onUseItem?: LibraryItemUseHandler 
     const id = queue.addItem(item, "end")
     if (prepareReturn) useQueueStore.getState().setAddTarget(null)
     if (!id) return
-    const index = useQueueStore.getState().items.findIndex((candidate) => candidate.id === id)
-    useBibleStore.getState().selectSlide({ item, index })
-    useBibleStore.getState().setSelectedQueueItemId(id)
+    useRundownSelection.getState().focus(id)
     if (prepareReturn) {
       useShellStore.getState().setPrepareLibraryReturn({ ...prepareReturn, momentId: id, momentTitle: item.reference })
     }

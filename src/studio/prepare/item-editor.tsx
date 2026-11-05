@@ -1,9 +1,11 @@
-import { BookOpenIcon, ImageIcon, MusicIcon, PresentationIcon, ZapIcon } from "lucide-react"
+import { BookOpenIcon, EyeIcon, ImageIcon, MusicIcon, PresentationIcon, ZapIcon } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { presentActions } from "@/studio/present-actions"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useEffect, useRef, useState } from "react"
-import { useBibleStore, useQueueStore } from "@/stores"
+import { useQueueStore } from "@/stores"
 import { drawStage } from "@/lib/stage-canvas"
 import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type StagePayload } from "@/types"
 import { SlideList } from "@/studio/present/rundown-list"
@@ -20,6 +22,7 @@ import { nextVisibleItem } from "@/lib/run-of-show"
 import { warnMs } from "@/lib/item-timing"
 import { elapsedMs, formatMs, remainingMs, timerTone } from "@/lib/timer"
 import { PreviewPanel } from "@/components/panels/preview-panel"
+import { usePrepareSource } from "@/studio/prepare/prepare-preview-source"
 import { VerseTranslationControls } from "@/studio/prepare/verse-translation-controls"
 import { TimingRules } from "@/studio/prepare/timing-rules"
 import { EngageItemEditor } from "@/studio/engage/quiz-editor"
@@ -38,12 +41,15 @@ const KIND: Record<string, [string, React.ReactNode]> = {
 /** The selected item's settings, in three tabs: what it shows, notes and team, timing. */
 export function ItemEditor() {
   const sel = useSelectedItem()
+  // What this item will look like, shown here only (#447): Live's Preview is never written from Prepare.
+  const focusSlideIndex = useRundownSelection((s) => s.focusSlideIndex)
+  const source = usePrepareSource(sel?.item ?? null, focusSlideIndex)
   const songs = useSongStore((s) => s.songs)
   if (!sel) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
         <p className="text-sm font-semibold">Choose an item</p>
-        <p className="max-w-xs text-xs text-muted-foreground">Select an item in the order of service to edit what it shows, its notes and its timing. Selecting only previews it: nothing goes live from Prepare.</p>
+        <p className="max-w-xs text-xs text-muted-foreground">Select an item in the order of service to edit what it shows, its notes and its timing. Selecting only opens it here: Live's Preview and the screens stay as they are.</p>
       </div>
     )
   }
@@ -59,6 +65,10 @@ export function ItemEditor() {
         <div className="mt-1 flex items-center gap-2">
           <h2 className="truncate text-lg font-bold tracking-[-0.03em]">{item.reference}</h2>
           <Badge variant="accent" className="gap-1">{KIND[kind][1]}{badgeLabel}</Badge>
+          {/* The one deliberate way from Prepare to Live (#447): Preview only; Take, and its approval, stay Live's. */}
+          <Button size="sm" variant="outline" className="ml-auto shrink-0" onClick={() => presentActions.previewItem(item)} title="Shows it in Live's Preview only: nothing goes on screen until Take">
+            <EyeIcon /> Send to Live Preview
+          </Button>
         </div>
         {item.ai_suggestion && <AiSuggestion item={item} />}
       </div>
@@ -76,7 +86,7 @@ export function ItemEditor() {
         <TabsContent value="content" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
           {/* The congregation's view of this item, as in the approved design's Slides tab. */}
           <div className="mx-2 mt-3 mb-1 h-56 overflow-hidden rounded-lg [&>div]:h-full">
-            <PreviewPanel itemLook />
+            <PreviewPanel itemLook source={source} />
           </div>
           {isSongItem(item) && (
             <>
@@ -132,7 +142,8 @@ function AiSuggestion({ item }: { item: QueueItem }) {
 export function StagePreview({ item, index }: { item: QueueItem; index: number }) {
   const next = useQueueStore((s) => nextVisibleItem(s.items, s.headers, index)?.label ?? null)
   const songId = isSongItem(item) ? item.song.song_id : null
-  const selectedSlide = useBibleStore((s) => s.selectedSlide)
+  // Prepare's chosen slide (#447), not Live's Preview.
+  const focus = useRundownSelection((s) => (s.focusId === item.id ? s.focusSlideIndex : null))
   const serviceSong = useServiceSong(songId)
   const songMissing = useSongStore((s) => songId ? s.missing.includes(songId) : false)
   const live = useBroadcastStore((s) => s.isLive && s.liveItemId === item.id)
@@ -186,7 +197,7 @@ export function StagePreview({ item, index }: { item: QueueItem; index: number }
         languages: liveSlide.languages ?? item.song.languages,
       } : item.song
       const slides = songSlides(song, liveRef)
-      const selectedIndex = liveSlide?.index ?? (selectedSlide?.item.id === item.id ? selectedSlide.index : 0)
+      const selectedIndex = liveSlide?.index ?? (focus ?? 0)
       const slide = slides[Math.min(Math.max(selectedIndex, 0), slides.length - 1)]
       if (!slide) {
         current = null

@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+vi.hoisted(() => {
+  globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
+})
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -20,6 +23,7 @@ beforeEach(() => {
   useQueueStore.setState({ items: [], headers: [], activeIndex: null, addTarget: null })
   useShellStore.setState({ workspace: "prepare", librarySection: "songs" })
   useAddDialog.setState({ open: false, opener: null, focusItemId: null })
+  addedIds = []
   root = createRoot(document.body.appendChild(document.createElement("div")))
 })
 
@@ -41,13 +45,9 @@ async function setValue(field: HTMLInputElement | HTMLTextAreaElement, value: st
   })
 }
 
-function selectAddedItem(id: string) {
-  const item = useQueueStore.getState().items.find((candidate) => candidate.id === id)
-  if (item && (item.kind === "slide" || item.kind === "image")) {
-    useBibleStore.getState().selectSlide({ item, index: 0 })
-    useBibleStore.getState().setSelectedQueueItemId(id)
-  }
-}
+let addedIds: string[] = []
+const selectAddedItem = (id: string) => { addedIds.push(id) }
+const draftPreview = () => document.querySelector('[aria-label^="Slide draft preview"]')
 
 const modes = [
   { name: "Any text", field: "Slide text", value: "Welcome" },
@@ -146,7 +146,7 @@ describe("Prepare slide composer preview (#391)", () => {
     })
   })
 
-  it.each(modes)("clears the $name draft preview when its form becomes empty", async ({ name, field, value }) => {
+  it.each(modes)("shows the $name draft in its own preview, never Live's, and clears it when empty (#447)", async ({ name, field, value }) => {
     await render()
     if (name !== "Any text") {
       const modeButton = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === name)!
@@ -154,18 +154,18 @@ describe("Prepare slide composer preview (#391)", () => {
     }
     const input = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[aria-label="${field}"]`)!
     await setValue(input, value)
-    expect(useBibleStore.getState().selectedSlide?.item.id).toBe("draft-slide")
+    expect(draftPreview()).not.toBeNull()
+    expect(useBibleStore.getState().selectedSlide).toBeNull()
 
     await setValue(input, "")
 
+    expect(draftPreview()).toBeNull()
     expect(useBibleStore.getState().selectedSlide).toBeNull()
   })
 
-  it("does not clear a different queued slide selected while the draft was open", async () => {
+  it("leaves a slide in Live's Preview untouched while drafting and clearing (#447)", async () => {
     await render()
     const textarea = document.querySelector<HTMLTextAreaElement>('[aria-label="Slide text"]')!
-    await setValue(textarea, "Draft words")
-    expect(useBibleStore.getState().selectedSlide?.item.id).toBe("draft-slide")
 
     const queued: SlideQueueItem = {
       id: "queued-slide",
@@ -180,13 +180,15 @@ describe("Prepare slide composer preview (#391)", () => {
     useBibleStore.getState().selectSlide({ item: queued, index: 0 })
     useBibleStore.getState().setSelectedQueueItemId(queued.id)
 
+    await setValue(textarea, "Draft words")
+    expect(useBibleStore.getState().selectedSlide?.item.id).toBe(queued.id)
     await setValue(textarea, "")
 
     expect(useBibleStore.getState().selectedSlide?.item.id).toBe(queued.id)
     expect(useBibleStore.getState().selectedQueueItemId).toBe(queued.id)
   })
 
-  it("keeps the newly inserted saved slide selected after the composer resets", async () => {
+  it("hands the inserted slide to Prepare and leaves Live's Preview empty (#447)", async () => {
     await render(selectAddedItem)
     await setValue(document.querySelector<HTMLTextAreaElement>('[aria-label="Slide text"]')!, "Welcome to service")
     const add = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Add to service"))!
@@ -194,11 +196,12 @@ describe("Prepare slide composer preview (#391)", () => {
 
     const inserted = useQueueStore.getState().items[0]
     expect(inserted.kind).toBe("slide")
-    expect(useBibleStore.getState().selectedSlide?.item.id).toBe(inserted.id)
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(addedIds).toEqual([inserted.id])
+    expect(useBibleStore.getState().selectedSlide).toBeNull()
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
   })
 
-  it("selects the last inserted page after adding a multi-page reading", async () => {
+  it("hands the last inserted page of a multi-page reading to Prepare", async () => {
     await render(selectAddedItem)
     const reading = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Responsive reading")!
     await act(async () => reading.click())
@@ -208,8 +211,8 @@ describe("Prepare slide composer preview (#391)", () => {
 
     const items = useQueueStore.getState().items as QueueItem[]
     expect(items).toHaveLength(2)
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(items[1].id)
-    expect(useBibleStore.getState().selectedSlide?.item.id).toBe(items[1].id)
+    expect(addedIds).toEqual([items[1].id])
+    expect(useBibleStore.getState().selectedSlide).toBeNull()
   })
 
   it("keeps Program unchanged while previewing, resetting, and adding a slide", async () => {
@@ -217,7 +220,8 @@ describe("Prepare slide composer preview (#391)", () => {
     const before = useBroadcastStore.getState()
     await render(selectAddedItem)
     await setValue(document.querySelector<HTMLTextAreaElement>('[aria-label="Slide text"]')!, "Private Preview")
-    expect(useBibleStore.getState().selectedSlide?.item.id).toBe("draft-slide")
+    expect(draftPreview()).not.toBeNull()
+    expect(useBibleStore.getState().selectedSlide).toBeNull()
 
     const add = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Add to service"))!
     await act(async () => add.click())

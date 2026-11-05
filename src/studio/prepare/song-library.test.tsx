@@ -122,6 +122,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { useBibleStore } from "@/stores/bible-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useAddDialog } from "@/studio/prepare/add-target"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useServiceStore } from "@/stores/service-store"
 import type { QueueItem } from "@/types"
 import { SongLibrary } from "./song-library"
@@ -157,6 +158,7 @@ beforeEach(() => {
     activeIndex: null,
     addTarget: "later",
   })
+  useRundownSelection.setState({ focusId: null })
   const element = document.createElement("div")
   document.body.appendChild(element)
   root = createRoot(element)
@@ -208,7 +210,8 @@ describe("Add item workflow (#386)", () => {
 
     const inserted = useQueueStore.getState().items[0]
     expect(inserted).toMatchObject({ kind: "song", song: { song_id: song.id } })
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(useRundownSelection.getState().focusId).toBe(inserted.id)
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     await vi.waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 1000 })
   })
@@ -229,7 +232,8 @@ describe("Add item workflow (#386)", () => {
 
     const inserted = useQueueStore.getState().items[0]
     expect(inserted).toMatchObject({ verse: { book_number: verse.book_number, chapter: verse.chapter, verse: verse.verse } })
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(useRundownSelection.getState().focusId).toBe(inserted.id)
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     await vi.waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 1000 })
   })
@@ -249,7 +253,8 @@ describe("Add item workflow (#386)", () => {
 
     const inserted = useQueueStore.getState().items[0]
     expect(inserted).toMatchObject({ kind: "song", song: { song_id: hymn.id } })
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(useRundownSelection.getState().focusId).toBe(inserted.id)
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 
@@ -265,6 +270,7 @@ describe("Add item workflow (#386)", () => {
     }
     useQueueStore.setState({ items: [opening], headers: [], activeIndex: null, addTarget: null })
     useBibleStore.setState({ selectedVerse: verse, selectedSlide: null, selectedQueueItemId: opening.id })
+    useRundownSelection.getState().focus(opening.id)
     useAddDialog.setState({ open: false })
 
     await act(async () => root!.render(<><AddItems /><ItemEditor /></>))
@@ -275,7 +281,7 @@ describe("Add item workflow (#386)", () => {
     const hymnsTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent?.trim() === "Hymn book")!
     await act(async () => { hymnsTab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); hymnsTab.click() })
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
-    const hymnRow = document.querySelector<HTMLButtonElement>('[aria-label="Hymns"] button[title="Select to preview and view details"]')!
+    const hymnRow = document.querySelector<HTMLButtonElement>('[aria-label="Hymns"] button[title^="Select to view details"]')!
     await act(async () => hymnRow.click())
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
     const addFromDetails = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add to service")!
@@ -283,7 +289,10 @@ describe("Add item workflow (#386)", () => {
 
     const inserted = useQueueStore.getState().items.at(-1)!
     expect(inserted).toMatchObject({ kind: "song", song: { song_id: hymn.id } })
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(useRundownSelection.getState().focusId).toBe(inserted.id)
+    // Live Preview keeps the reading it had (#447).
+    expect(useBibleStore.getState().selectedQueueItemId).toBe(opening.id)
+    expect(useBibleStore.getState().selectedVerse).toBe(verse)
     expect(document.body.textContent).toContain("Event editor · 2")
     expect([...document.querySelectorAll("h2")].some((heading) => heading.textContent === inserted.reference)).toBe(true)
   })
@@ -304,7 +313,8 @@ describe("Add item workflow (#386)", () => {
 
     const inserted = useQueueStore.getState().items[0]
     expect(inserted).toMatchObject({ kind: "slide", slide: { title: "Welcome" } })
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(useRundownSelection.getState().focusId).toBe(inserted.id)
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 
@@ -323,7 +333,8 @@ describe("Add item workflow (#386)", () => {
 
     const inserted = useQueueStore.getState().items[0]
     expect(inserted).toMatchObject({ kind: "audio", audio: { media_id: audioAsset.id } })
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(useRundownSelection.getState().focusId).toBe(inserted.id)
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 
@@ -348,7 +359,8 @@ describe("Add item workflow (#386)", () => {
     const inserted = useQueueStore.getState().items[0]
     expect(inserted).toMatchObject({ kind: "slide", slide: { title: "Welcome" } })
     expect(inserted.id).not.toBe("old-slide")
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(useRundownSelection.getState().focusId).toBe(inserted.id)
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 
@@ -380,7 +392,8 @@ describe("Add item workflow (#386)", () => {
     expect(items[0].id).not.toBe(items[1].id)
     expect(items[0]).toMatchObject({ verse: { book_number: verse.book_number, chapter: verse.chapter, verse: verse.verse } })
     const inserted = items.find((item) => item.id !== "existing-verse")!
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(useRundownSelection.getState().focusId).toBe(inserted.id)
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 })

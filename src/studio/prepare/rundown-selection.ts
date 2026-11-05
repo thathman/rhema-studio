@@ -13,6 +13,14 @@ interface RundownSelectionState {
   click: (id: string, order: string[], how: { range?: boolean; toggle?: boolean }) => void
   set: (ids: string[]) => void
   clear: () => void
+  /**
+   * The item Prepare's editor shows (#447, owner decision 5 Nov 2026): planning state only. It
+   * never changes Live's Preview or Program; Send to Live Preview is a separate, deliberate action.
+   */
+  focusId: string | null
+  /** The slide of the focused song Prepare's preview shows. */
+  focusSlideIndex: number
+  focus: (id: string | null, slideIndex?: number) => void
 }
 
 export const useRundownSelection = create<RundownSelectionState>((set, get) => ({
@@ -33,6 +41,9 @@ export const useRundownSelection = create<RundownSelectionState>((set, get) => (
   },
   set: (ids) => set({ ids }),
   clear: () => set({ ids: [], anchor: null }),
+  focusId: null,
+  focusSlideIndex: 0,
+  focus: (focusId, focusSlideIndex = 0) => set({ focusId, focusSlideIndex }),
 }))
 
 /** The picked items in rundown order (ids no longer in the rundown left out). */

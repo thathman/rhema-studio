@@ -11,7 +11,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { useServiceStore } from "@/stores/service-store"
 import { cleanIntentId } from "@/lib/item-intent"
 import { sceneReleaseApprovalBlockReason } from "@/studio/present/scene-take-policy"
-import { useSelectedItem } from "@/studio/prepare/use-selected-item"
+import { usePreviewItem } from "@/studio/prepare/use-selected-item"
 import { SceneSheetButton } from "@/studio/present/scene-sheet"
 import type { SceneTakeSelection } from "@/studio/present/live-scene-take-action"
 import type { BroadcastOutput, Scene, SceneAppearanceSnapshot } from "@/types"
@@ -81,7 +81,7 @@ export function ScenesStrip({ className, outputId, onTakeSelectionChange }: {
 
 /** The scene the previewed rundown item is planned with (its `scene_id`, #243 RS.3), when it is a saved one. */
 function usePlannedScene(scenes: Scene[]): Scene | null {
-  const id = cleanIntentId(useSelectedItem()?.item.scene_id)
+  const id = cleanIntentId(usePreviewItem()?.item.scene_id)
   return (id && scenes.find((s) => s.id === id)) || null
 }
 

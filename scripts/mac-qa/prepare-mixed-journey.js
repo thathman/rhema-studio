@@ -271,7 +271,7 @@ async function runScenario() {
     await setInput('input[aria-label="Find a hymn"]', songTitle)
     const hymnResult = await waitFor(
       () => [...document.querySelectorAll('[role="dialog"] button')]
-        .find((button) => button.title === "Select to preview and view details" && normal(button.innerText).includes(songTitle)),
+        .find((button) => button.title.startsWith("Select to view details") && normal(button.innerText).includes(songTitle)),
       "public-domain hymn in the library picker",
     )
     await activateButton(hymnResult)
@@ -283,7 +283,7 @@ async function runScenario() {
 
     stage = "edit the Slide moment in Prepare"
     const slideRow = await waitFor(() => document.querySelector(`[data-rundown-item-id="${slide.id}"]`), "Slide row")
-    await activateButton(slideRow.querySelector('button[title="Click to preview"]'))
+    await activateButton(slideRow.querySelector('button[title^="Click to open it in the editor"]'))
     await setInput('[aria-label="Slide title"]', "QA Edited Preview Slide")
     await setInput('[aria-label="Slide text"]', "Edited synthetic moment; still private until Take.")
     await waitFor(() => {
@@ -293,7 +293,7 @@ async function runScenario() {
 
     stage = "reorder the Hymn above the edited Slide using the row control"
     const hymnRow = await waitFor(() => document.querySelector(`[data-rundown-item-id="${hymn.id}"]`), "Hymn row")
-    await activateButton(hymnRow.querySelector('button[title="Click to preview"]'))
+    await activateButton(hymnRow.querySelector('button[title^="Click to open it in the editor"]'))
     hymnRow.focus()
     const moveUp = await waitFor(() => {
       const row = document.querySelector(`[data-rundown-item-id="${hymn.id}"]`)
@@ -340,7 +340,7 @@ async function runScenario() {
     const currentSlide = qa.queue.getState().items.find((item) => item.id === slide.id)
     if (!currentSlide || currentSlide.kind !== "slide") throw new Error("The edited Slide is missing before scene setup")
     const currentSlideRow = await waitFor(() => document.querySelector(`[data-rundown-item-id="${slide.id}"]`), "edited Slide row for scene setup")
-    await activateButton(currentSlideRow.querySelector('button[title="Click to preview"]'))
+    await activateButton(currentSlideRow.querySelector('button[title^="Click to open it in the editor"]'))
     await setNativeSelect(`select[aria-label="Scene for ${currentSlide.reference}"]`, qaScene.id)
     await setNativeSelect(`select[aria-label="Camera for ${currentSlide.reference}"]`, "qa-synthetic-camera")
     await clickTab("Signals")
@@ -380,7 +380,7 @@ async function runScenario() {
 
     // The selected Hymn row places this first event immediately before Sermon.
     const hymnForPrayerRow = await waitFor(() => document.querySelector(`[data-rundown-item-id="${hymn.id}"]`), "Hymn row before adding Prayer")
-    await activateButton(hymnForPrayerRow.querySelector('button[title="Click to preview"]'))
+    await activateButton(hymnForPrayerRow.querySelector('button[title^="Click to open it in the editor"]'))
     const prayerEvent = await addEvent("Prayer", "Opening Prayer", 6)
     // Put the opening event before the unchanged Program baseline so the baseline
     // is a pre-service moment inside the first event. This is a planned structure edit.
@@ -389,7 +389,7 @@ async function runScenario() {
       id: crypto.randomUUID(), kind: "cue", reference: "Start prayer timer", confidence: 1, source: "manual", added_at: Date.now(),
     })
     const timerRow = await waitFor(() => document.querySelector(`[data-rundown-item-id="${timerCue.id}"]`), "timer cue row")
-    await activateButton(timerRow.querySelector('button[title="Click to preview"]'))
+    await activateButton(timerRow.querySelector('button[title^="Click to open it in the editor"]'))
     await clickTab("Timing")
     await setInput('[aria-label="Planned time for Start prayer timer"]', "6")
     document.querySelector('[aria-label="Planned time for Start prayer timer"]')?.blur()
@@ -408,7 +408,7 @@ async function runScenario() {
       }, reference: `${songTitle} (QA alternate arrangement)`, confidence: 1, source: "manual", added_at: Date.now(),
     })
     const arrangementRow = await waitFor(() => document.querySelector(`[data-rundown-item-id="${arrangementMoment.id}"]`), "song arrangement moment row")
-    await activateButton(arrangementRow.querySelector('button[title="Click to preview"]'))
+    await activateButton(arrangementRow.querySelector('button[title^="Click to open it in the editor"]'))
     await clickTab("Slides")
     await clickButton("Order")
     await chooseOption(alternateArrangement.name)
@@ -523,7 +523,8 @@ async function runScenario() {
       const queue = qa.queue.getState()
       return JSON.stringify({ items: queue.items, headers: queue.headers, activeIndex: queue.activeIndex })
     }
-    const selectedMomentId = () => qa.bible.getState().selectedQueueItemId
+    // Prepare's own selection and Live's Preview (#447): neither may move.
+    const selectedMomentId = () => `${qa.prepare.getState().focusId}|${qa.bible.getState().selectedQueueItemId}`
     const flatPlanBeforePhases = planSnapshot()
     const selectionBeforePhases = selectedMomentId()
     const programBeforePhases = JSON.stringify(programSnapshot(qa))
@@ -699,7 +700,10 @@ async function runScenario() {
 
     stage = "preview the reopened Hymn without changing Program"
     const reopenedHymnRow = await waitFor(() => document.querySelector(`[data-rundown-item-id="${hymn.id}"]`), "reopened Hymn row")
-    await activateButton(reopenedHymnRow.querySelector('button[title="Click to preview"]'))
+    await activateButton(reopenedHymnRow.querySelector('button[title^="Click to open it in the editor"]'))
+    // #447: selecting in Prepare only focuses it; Send to Live Preview is the deliberate step.
+    await waitFor(() => qa.prepare.getState().focusId === hymn.id, "reopened Hymn focused in Prepare")
+    await clickButton("Send to Live Preview")
     await waitFor(() => {
       const preview = qa.bible.getState()
       return preview.selectedQueueItemId === hymn.id && preview.selectedSlide?.item.id === hymn.id
@@ -711,7 +715,9 @@ async function runScenario() {
 
     stage = "preview bilingual Scripture from the reopened service"
     const reopenedBibleRow = await waitFor(() => document.querySelector(`[data-rundown-item-id="${bibleMoment.id}"]`), "reopened bilingual Scripture row")
-    await activateButton(reopenedBibleRow.querySelector('button[title="Click to preview"]'))
+    await activateButton(reopenedBibleRow.querySelector('button[title^="Click to open it in the editor"]'))
+    await waitFor(() => qa.prepare.getState().focusId === bibleMoment.id, "reopened Scripture focused in Prepare")
+    await clickButton("Send to Live Preview")
     await waitFor(() => {
       const preview = qa.bible.getState()
       return preview.selectedQueueItemId === bibleMoment.id && preview.selectedVerse?.book_number === 43 && preview.selectedVerse.chapter === 3 && preview.selectedVerse.verse === 16

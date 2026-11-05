@@ -11,6 +11,7 @@ import { useServiceStore } from "@/stores/service-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { CustomSlideEditor } from "@/studio/prepare/item-editor-parts"
 import { isCurrentPrepareLibraryReturn } from "@/studio/prepare/library-return"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { SlideLibrary } from "./slide-library"
 
 const mockInvoke = vi.fn()
@@ -50,6 +51,7 @@ beforeEach(() => {
   useSlideStore.setState({ slides: [], loading: false, error: null, query: "", pendingSourceId: null })
   useQueueStore.setState({ items: [], headers: [], activeIndex: null, addTarget: null })
   useBibleStore.setState({ selectedSlide: null, selectedQueueItemId: null })
+  useRundownSelection.setState({ focusId: null })
   useMediaStore.setState({ assets: [], loaded: true, loading: false, error: null })
   useServiceStore.setState({ current: null, dirty: false, saving: false })
   useBroadcastStore.setState({ isLive: false, liveVerse: null, liveSlide: null, liveItemId: null })
@@ -93,7 +95,10 @@ describe("reusable slide library workflow (#395)", () => {
     await act(async () => button("Add to service").click())
     const occurrence = useQueueStore.getState().items[0]
     expect(occurrence).toMatchObject({ kind: "slide", slide: { title: "Welcome", body: "Library wording", source_asset_id: "source-1", source_revision: 1 } })
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(occurrence.id)
+    // Focused in Prepare (#447); Live's Preview is not changed by Add to service.
+    expect(useRundownSelection.getState().focusId).toBe(occurrence.id)
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
+    expect(useBibleStore.getState().selectedSlide).toBeNull()
     expect(useShellStore.getState().workspace).toBe("prepare")
 
     await setValue("Reusable slide title", "Welcome renamed")
@@ -105,7 +110,7 @@ describe("reusable slide library workflow (#395)", () => {
 
   it("imports the selected service slide as a reusable source and prevents removing an in-use source", async () => {
     useQueueStore.setState({ items: [{ id: "service-slide", kind: "slide", slide: { title: "Giving", body: "This week" }, reference: "Giving", confidence: 1, source: "manual", added_at: 0 }] })
-    useBibleStore.setState({ selectedQueueItemId: "service-slide" })
+    useRundownSelection.getState().focus("service-slide")
     await render()
     await act(async () => button("Save selected service slide to library").click())
     expect(rows.get("source-1")).toMatchObject({ title: "Giving", body: "This week" })
