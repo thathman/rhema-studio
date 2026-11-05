@@ -140,25 +140,36 @@ describe("presentVerse", () => {
     })
   })
 
+  // The passed verse stands in for a failed lookup only when it is already in the chosen translation (#446).
+  const inActive: Verse = { ...sampleVerse, translation_id: 2 }
+
   it("falls back to the passed verse when the lookup returns null", async () => {
     mockInvoke.mockResolvedValue(null)
 
-    await presentVerse(sampleVerse)
+    await presentVerse(inActive)
 
-    expect(useBibleStore.getState().selectedVerse).toEqual(sampleVerse)
+    expect(useBibleStore.getState().selectedVerse).toEqual(inActive)
     expect(useBroadcastStore.getState().liveVerse?.segments[0].text).toBe(
-      sampleVerse.text
+      inActive.text
     )
+  })
+
+  it("never shows another edition's words under the chosen one's name when its lookup fails (#446)", async () => {
+    mockInvoke.mockResolvedValue(null)
+    // sampleVerse is translation 1 (KJV); the active translation is 2 (NKJV).
+    await expect(presentVerse(sampleVerse, { goLive: true })).resolves.toBe("empty")
+    expect(useBroadcastStore.getState().liveVerse).toBeNull()
+    expect(useBroadcastStore.getState().presentWarning).toContain("no text in")
   })
 
   it("falls back to the passed verse when the lookup rejects", async () => {
     mockInvoke.mockRejectedValue(new Error("db unavailable"))
 
-    await expect(presentVerse(sampleVerse)).resolves.toBe("presented")
+    await expect(presentVerse(inActive)).resolves.toBe("presented")
 
-    expect(useBibleStore.getState().selectedVerse).toEqual(sampleVerse)
+    expect(useBibleStore.getState().selectedVerse).toEqual(inActive)
     expect(useBroadcastStore.getState().liveVerse?.segments[0].text).toBe(
-      sampleVerse.text
+      inActive.text
     )
   })
 
@@ -265,16 +276,16 @@ describe("presentVerse", () => {
   })
 
   it("ignores a stale refetch that resolves after a newer present call", async () => {
-    const older: Verse = { ...sampleVerse, verse: 1, text: "In the beginning" }
+    const older: Verse = { ...sampleVerse, translation_id: 2, verse: 1, text: "In the beginning" }
     let resolveOlder: (v: Verse) => void = () => {}
     mockInvoke
       .mockImplementationOnce(
         () => new Promise<Verse>((resolve) => (resolveOlder = resolve))
       )
-      .mockResolvedValueOnce(sampleVerse)
+      .mockResolvedValueOnce({ ...sampleVerse, translation_id: 2 })
 
     const first = presentVerse(older)
-    await presentVerse(sampleVerse)
+    await presentVerse({ ...sampleVerse, translation_id: 2 })
     resolveOlder(older)
     await first
 
@@ -313,6 +324,21 @@ describe("presentVerse translation policy", () => {
     byTranslation({ 1: "English", 7: "Yorùbá" })
     await presentVerse(sampleVerse, { item: { translation: "OYCB", secondary_translation: "KJV" } })
     expect(useBroadcastStore.getState().liveVerse?.translationLines).toEqual(["Yorùbá", "English"])
+  })
+
+  it("a second translation with no text for the verse is said, not silently dropped (#446)", async () => {
+    byTranslation({ 1: "English" })
+    expect(await presentVerse(sampleVerse, { item: { translation: "KJV", secondary_translation: "OYCB" }, goLive: true })).toBe("presented")
+    expect(useBroadcastStore.getState().liveVerse?.segments[0].text).toBe("English")
+    expect(useBroadcastStore.getState().presentWarning).toContain("no text in OYCB")
+  })
+
+  it("a saved translation listed but not downloaded is reported missing, never used (#446)", async () => {
+    useBibleStore.setState({ translations: [kjv, { ...kjv, id: 2, abbreviation: "NKJV" }, { ...yoruba, is_downloaded: false }] })
+    byTranslation({ 1: "English", 7: "Yorùbá" })
+    await presentVerse(sampleVerse, { item: { translation: "KJV", secondary_translation: "OYCB" }, goLive: true })
+    expect(mockInvoke).not.toHaveBeenCalledWith("get_verse", expect.objectContaining({ translationId: 7 }))
+    expect(useBroadcastStore.getState().presentWarning).toContain("OYCB")
   })
 
   it("a spontaneous verse (no item) follows the active translations", async () => {
