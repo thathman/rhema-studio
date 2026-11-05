@@ -772,6 +772,12 @@ export async function startLiveRecovery(): Promise<() => void> {
       useJournalStore.setState({ checkpointStatus: "error", checkpointError: `Recovered service run could not be saved: ${String(error)}` })
     })
   }
+  // A run too old to come back into this run's log is still not running: mark it interrupted (#411),
+  // so History does not show it as Active and a recording started before the next service never
+  // files itself under it. It stays offered in History.
+  if (!restored && pendingRun && localJournal && localJournal.runStatus !== "finished") {
+    void invoke("content_interrupt_service_run", { runId: localJournal.runContext!.runId }).catch(() => { /* Retried at the next launch. */ })
+  }
   if (unclean && !restored && !useJournalStore.getState().entries.some((entry) => entry.kind === "recovery")) {
     try {
       const rawRuns = await invoke<unknown>("content_list_service_runs", { programId: null, limit: 20 })
