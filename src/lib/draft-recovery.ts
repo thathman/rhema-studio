@@ -42,8 +42,10 @@ function itemLooksWhole(raw: unknown): boolean {
   if (!raw || typeof raw !== "object") return false
   const i = raw as Record<string, unknown>
   const has = (key: string) => !!i[key] && typeof i[key] === "object"
-  if (typeof i.id !== "string" || !i.id || typeof i.kind !== "string" || typeof i.reference !== "string") return false
-  switch (i.kind) {
+  // A verse item's kind is optional (search, detection and queue requests leave it out).
+  const kind = i.kind === undefined ? "verse" : i.kind
+  if (typeof i.id !== "string" || !i.id || typeof kind !== "string" || typeof i.reference !== "string") return false
+  switch (kind) {
     case "verse": {
       const v = i.verse as Record<string, unknown> | undefined
       return has("verse") && Number.isInteger(v?.book_number) && Number.isInteger(v?.chapter) && Number.isInteger(v?.verse)
@@ -59,6 +61,8 @@ function itemLooksWhole(raw: unknown): boolean {
 
 /** The copy being offered lives under its own key: ordinary keeping never overwrites or drops it. */
 const OFFERED = "offered"
+/** An offer nobody answered for a week says nothing useful any more. */
+const OFFER_FOR_MS = 7 * 24 * 60 * 60 * 1000
 
 function keep() {
   timer = null
@@ -79,8 +83,12 @@ export async function startDraftRecovery(unclean: boolean): Promise<() => void> 
   try {
     store = await load("draft-recovery.json", { autoSave: false, defaults: {} })
     // An offer not yet answered (a second crash) comes back first; then this crash's copy.
+    // The newer of the two wins: edits kept after a first crash are never lost to its older offer.
     const pending = parseKeptDraft(await store.get<unknown>(OFFERED))
-    const offer = pending ?? (unclean ? parseKeptDraft(await store.get<unknown>("draft")) : null)
+    const latest = unclean ? parseKeptDraft(await store.get<unknown>("draft")) : null
+    const newest = pending && latest ? (latest.at >= pending.at ? latest : pending) : pending ?? latest
+    const offer = newest && Date.now() - newest.at < OFFER_FOR_MS ? newest : null
+    if (!offer) await store.delete(OFFERED)
     if (offer) {
       useDraftRecovery.setState({ offer })
       await store.set(OFFERED, offer)

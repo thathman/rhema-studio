@@ -84,6 +84,25 @@ describe("unsaved Prepare edits survive a crash (#411)", () => {
     expect(kept.has("offered")).toBe(false)
   })
 
+  it("keeps a verse item whose kind is left out (search and detection add them that way)", () => {
+    const verse = { id: "v", reference: "John 3:16", verse: { book_number: 43, chapter: 3, verse: 16, translation_id: 1 }, confidence: 1, source: "search", added_at: 0 }
+    expect(parseKeptDraft({ ...draft(), items: [verse] })?.items).toHaveLength(1)
+  })
+
+  it("after a second crash offers the newer edits, and drops an offer a week old", async () => {
+    kept.set("offered", draft({ at: Date.now() - 60_000, items: [slide("older")] }))
+    kept.set("draft", draft({ at: Date.now(), items: [slide("newer")] }))
+    stop = await startDraftRecovery(true)
+    expect(useDraftRecovery.getState().offer?.items.map((i) => i.id)).toEqual(["newer"])
+    stop()
+    kept.clear()
+    kept.set("offered", draft({ at: Date.now() - 8 * 24 * 60 * 60 * 1000 }))
+    useDraftRecovery.setState({ offer: null })
+    stop = await startDraftRecovery(false)
+    expect(useDraftRecovery.getState().offer).toBeNull()
+    expect(kept.has("offered")).toBe(false)
+  })
+
   it("rejects an item missing what its kind needs", () => {
     expect(parseKeptDraft({ ...draft(), items: [{ id: "v", kind: "verse", reference: "John 3:16" }] })).toBeNull()
     expect(parseKeptDraft({ ...draft(), items: [{ id: "x", kind: "unknown", reference: "x" }] })).toBeNull()
