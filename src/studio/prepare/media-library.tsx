@@ -1,3 +1,4 @@
+import { ListenError, ListenStopper, SoundListen } from "@/studio/library/sound-listen"
 import { useLibraryPreview } from "@/stores/library-preview-store"
 import { useEffect } from "react"
 import { toast } from "sonner"
@@ -130,6 +131,9 @@ export function MediaLibrary({ onAdded, onUseItem, kinds = "all", privatePreview
           )
         })}
       </ul>}
+      {/* Library → Sounds: a listen stops when this list goes or the private output changes (#447). */}
+      {kinds === "audio" && <ListenStopper />}
+      {kinds === "audio" && <ListenError />}
       {kinds === "audio" && !loading && sounds.length === 0 && (
         <p className="px-2 py-6 text-center text-xs text-muted-foreground">No sounds yet. Import walk-in music, a countdown sting or a backing track (MP3, M4A, WAV, OGG).</p>
       )}
@@ -143,6 +147,7 @@ export function MediaLibrary({ onAdded, onUseItem, kinds = "all", privatePreview
                 <span className="min-w-0 flex-1 truncate" title={a.name}>{a.name}</span>
                 {soundType(a.mime) && <span className="shrink-0 rounded border border-border px-1 text-[0.6875rem] text-muted-foreground">{soundType(a.mime)}</span>}
                 {!a.present && <span className="text-[0.6875rem] text-destructive">missing</span>}
+                {kinds === "audio" && a.present && <SoundListen assetId={a.id} name={a.name} />}
                 <ConfirmDelete label={`Remove ${a.name}`} verb="Remove" onConfirm={() => void remove(a)} />
                 <Button variant="outline" size="xs" disabled={!a.present} onClick={() => add(a)} title="Add to the service: it plays when reached, and the screens keep what they show"><PlusIcon /> Add</Button>
               </li>

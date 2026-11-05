@@ -2,6 +2,7 @@ import { AboutNotices } from "@/components/about-notices"
 import { CAPACITY_KINDS, NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, defaultLimits, physicalCores, suits60fps, useMachineInfo } from "@/lib/capacity"
 import { autoModeOf, useBroadcastStore, type AutoMode } from "@/stores/broadcast-store"
 import { AssistantsSection } from "@/components/settings/assistants-section"
+import { ListenOutputSettings } from "@/components/settings/listen-output-settings"
 import { ChurchProfileSection } from "@/components/settings/church-profile-section"
 import { AppearanceSection } from "@/components/settings/appearance-section"
 import { ObsSettingsBlock } from "@/components/settings/obs-settings-block"
@@ -249,6 +250,17 @@ function AudioSection() {
         <TalkDevices />
         <p className="text-xs text-muted-foreground">
           The microphone you talk to the crew with and where you hear them, on this computer only. It never feeds listening, the outputs, OBS or the sound player.
+        </p>
+      </div>
+
+      {/* Library → Sounds' Listen (#447): a private output, never the default, confirmed off the PA. */}
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Private listening (Library → Sounds)
+        </label>
+        <ListenOutputSettings />
+        <p className="text-xs text-muted-foreground">
+          For hearing a sound before the service. It never plays on this computer's default output, starts no cue, and changes no screen, feed, recording or the congregation's sound.
         </p>
       </div>
 
