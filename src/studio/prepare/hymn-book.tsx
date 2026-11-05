@@ -1,3 +1,4 @@
+import { useLibraryPreview } from "@/stores/library-preview-store"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { BookOpenIcon, PencilIcon, PlusIcon, SearchIcon, UploadIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -73,7 +74,9 @@ export function HymnBook({ onAdded, onUseItem, privatePreview = false }: { onAdd
   const wordSeq = useRef(0)
   const first = useSettingsStore((s) => s.hymnFirstLanguage)
   const selectedSong = useSongStore((s) => selectedHymnId ? s.songs[selectedHymnId] ?? null : null)
-  const selectedId = useBibleStore((s) => (s.selectedSlide && isSongItem(s.selectedSlide.item) ? s.selectedSlide.item.song.song_id : null))
+  // In Library the hymn chosen here is highlighted, not whatever is in Live's Preview (#447).
+  const previewId = useBibleStore((s) => (s.selectedSlide && isSongItem(s.selectedSlide.item) ? s.selectedSlide.item.song.song_id : null))
+  const selectedId = privatePreview ? selectedHymnId : previewId
   const file = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -163,6 +166,8 @@ export function HymnBook({ onAdded, onUseItem, privatePreview = false }: { onAdd
     setDetailLoading(true)
     setDetailError(null)
     if (!privatePreview) useBibleStore.getState().selectSlide({ item, index: 0 })
+    // Library: its own preview too, for Add to service and the deliberate Send to Live Preview.
+    else useLibraryPreview.getState().inspect({ item, title: hymn.song.title, detail: [`Hymn ${shownNumber(hymn)}`, hymn.song.languages.map((l) => l.toUpperCase()).join(" / ")].filter(Boolean).join(" · ") })
     void useSongStore.getState().load(hymn.song.id).then((loaded) => {
       if (ticket !== detailSeq.current) return
       if (!loaded) setDetailError("This hymn is no longer in the library.")
@@ -289,7 +294,7 @@ export function HymnBook({ onAdded, onUseItem, privatePreview = false }: { onAdd
                 type="button"
                 onClick={() => selectHymn(h)}
                 className={cn("flex min-w-0 flex-1 items-start gap-2.5 rounded-md px-2 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50", isSel ? "bg-primary/10" : "hover:bg-muted/50")}
-                title="Select to preview and view details"
+                title={privatePreview ? "Select to view details (Live's Preview is not changed)" : "Select to preview and view details"}
               >
                 <span className="mt-0.5 w-10 shrink-0 text-right text-xs font-semibold tabular-nums text-muted-foreground">{shownNumber(h)}</span>
                 <span className="flex min-w-0 flex-col">

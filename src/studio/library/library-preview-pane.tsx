@@ -36,7 +36,8 @@ export function LibraryPreviewPane({ onAdd }: { onAdd: (item: QueueItem) => void
         <p className="truncate text-sm font-semibold">{inspected.title}</p>
         {inspected.detail && <p className="truncate text-xs text-muted-foreground">{inspected.detail}</p>}
       </div>
-      <Button size="sm" onClick={() => onAdd(inspected.item)}><PlusIcon /> Add to service</Button>
+      {/* A new id each time: the browse item's id is fixed, and two Adds are two moments. */}
+      <Button size="sm" onClick={() => onAdd({ ...inspected.item, id: crypto.randomUUID() })}><PlusIcon /> Add to service</Button>
       <Button size="sm" variant="outline" onClick={sendToLivePreview} title="Shows it in Live's Preview only: nothing goes on screen until Take"><EyeIcon /> Send to Live Preview</Button>
       <Button size="icon-sm" variant="ghost" aria-label="Close Library preview" onClick={() => useLibraryPreview.getState().clear()}><XIcon /></Button>
     </section>

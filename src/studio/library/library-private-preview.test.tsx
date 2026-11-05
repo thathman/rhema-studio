@@ -96,6 +96,20 @@ describe("Library browsing is isolated from Live (#447)", () => {
     expect(hymn).toBeTruthy()
     await act(async () => hymn.click())
     expect(live()).toEqual(before)
+    // Chosen here, highlighted here, and in Library's own preview for its deliberate buttons.
+    expect(hymn.className).toContain("bg-primary/10")
+    expect(useLibraryPreview.getState().inspected).toMatchObject({ title: "Ọlọ́run Ọba", detail: expect.stringContaining("Hymn 12") })
+  })
+
+  it("a song's Send to Live Preview goes through Live's own song preview", async () => {
+    const { presentActions } = await import("@/studio/present-actions")
+    const previewSlide = vi.spyOn(presentActions, "previewSlide").mockImplementation(() => {})
+    await act(async () => root.render(<><SongLibrary layout="cards" privatePreview /><LibraryPreviewPane onAdd={() => {}} /></>))
+    act(() => element.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    expect(previewSlide).not.toHaveBeenCalled()
+    act(() => [...element.querySelectorAll('[aria-label="Library preview"] button')].find((b) => b.textContent?.includes("Send to Live Preview"))!.dispatchEvent(new MouseEvent("click", { bubbles: true })))
+    expect(previewSlide).toHaveBeenCalledWith(expect.objectContaining({ kind: "song" }), 0)
+    previewSlide.mockRestore()
   })
 
   it("outside Library (Prepare's Add picker) a click previews as before", async () => {
@@ -114,7 +128,12 @@ describe("Library browsing is isolated from Live (#447)", () => {
     const button = (text: string) => [...pane.querySelectorAll("button")].find((b) => b.textContent?.includes(text))!
 
     act(() => button("Add to service").click())
+    act(() => button("Add to service").click())
     expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ kind: "image" }))
+    // Two Adds are two moments, each with its own id, never the browse item's.
+    const [first, second] = onAdd.mock.calls.map(([item]) => (item as { id: string }).id)
+    expect(first).not.toBe(second)
+    expect([first, second]).not.toContain("library-p1")
 
     const program = useBroadcastStore.getState().liveVerse
     act(() => button("Send to Live Preview").click())
