@@ -2,6 +2,7 @@ import { AboutNotices } from "@/components/about-notices"
 import { CAPACITY_KINDS, NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, defaultLimits, physicalCores, suits60fps, useMachineInfo } from "@/lib/capacity"
 import { autoModeOf, useBroadcastStore, type AutoMode } from "@/stores/broadcast-store"
 import { AssistantsSection } from "@/components/settings/assistants-section"
+import { ChurchProfileSection } from "@/components/settings/church-profile-section"
 import { ObsSettingsBlock } from "@/components/settings/obs-settings-block"
 import { RemoteAuthSetting } from "@/components/settings/remote-auth-setting"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
@@ -47,7 +48,7 @@ import { useSettingsDialogStore, type SettingsSection } from "@/lib/settings-dia
 import { markSearchHits, searchElsewhere, searchSettings, searchWords, type ElsewhereId } from "@/lib/settings-search"
 import { openConnectionsHub } from "@/studio/connections/navigation"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
-import { ArrowUpRightIcon, EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SearchIcon, SparklesIcon } from "lucide-react"
+import { ArrowUpRightIcon, ChurchIcon, EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SearchIcon, SparklesIcon } from "lucide-react"
 import { useShellStore } from "@/studio/shell-store"
 import type { DeviceInfo } from "@/types/audio"
 import { certificateWords } from "@/lib/host-certificate"
@@ -60,6 +61,7 @@ import { ChurchFolderBlock, DatabaseBlock } from "@/studio/settings/data-sync-bl
 type NavSection = SettingsSection
 
 const navItems: { name: string; id: NavSection; icon: React.ReactNode }[] = [
+  { name: "Church and profile", id: "church", icon: <ChurchIcon strokeWidth={2} /> },
   { name: "Outputs", id: "screens", icon: <MonitorIcon strokeWidth={2} /> },
   {
     name: "Audio",
@@ -585,6 +587,7 @@ function DisplayModeSection() {
 /* -------------------------------------------------------------------------- */
 
 const sectionTitles: Record<NavSection, string> = {
+  church: "Church and profile",
   assistants: "AI assistants (MCP)",
   data: "Data & Sync",
   screens: "Screens and NDI",
@@ -1127,6 +1130,7 @@ function StatusDot({ running }: { running: boolean }) {
 }
 
 const sectionComponents: Record<NavSection, React.FC> = {
+  church: ChurchProfileSection,
   assistants: AssistantsSection,
   data: DataSyncSection,
   screens: ScreensSection,
@@ -1143,13 +1147,18 @@ const sectionComponents: Record<NavSection, React.FC> = {
 /*  Settings page                                                             */
 /* -------------------------------------------------------------------------- */
 
-/** The sections under five headings (ids unchanged, so openSettings("remote") still lands right). */
+/**
+ * The owner's seven sections (#447), in order. Ids are unchanged, so openSettings("remote") and
+ * every older link still land right.
+ */
 const GROUPS: Array<{ title: string; ids: NavSection[] }> = [
-  { title: "Bible and languages", ids: ["bible"] },
-  { title: "Display and output", ids: ["screens", "display"] },
-  { title: "Microphone and speech", ids: ["audio", "speech"] },
-  { title: "Connections", ids: ["remote", "assistants"] },
-  { title: "Data and diagnostics", ids: ["data", "diagnostics", "help"] },
+  { title: "Church and profile", ids: ["church", "bible"] },
+  { title: "Audio and speech", ids: ["audio", "speech"] },
+  { title: "Connections", ids: ["remote", "screens"] },
+  { title: "AI and MCP", ids: ["assistants"] },
+  { title: "Data and sync", ids: ["data"] },
+  { title: "Preferences", ids: ["display"] },
+  { title: "Diagnostics and about", ids: ["diagnostics", "help"] },
 ]
 
 const SEARCHABLE = navItems.map((n) => ({ id: n.id, name: n.name, title: sectionTitles[n.id] }))

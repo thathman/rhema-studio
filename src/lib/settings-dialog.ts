@@ -1,6 +1,7 @@
 import { create } from "zustand"
 
 type SettingsSection =
+  | "church"
   | "screens"
   | "audio"
   | "speech"
