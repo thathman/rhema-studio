@@ -134,6 +134,16 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: ./src-tauri
+      # ort-sys downloads ONNX Runtime from cdn.pyke.io when the Rust cache misses, and that CDN has
+      # dropped mid-download (run 41948222979, 5 Nov). Its download folder is kept between runs,
+      # keyed on Cargo.lock (a new ort version gets a new cache); ort-sys names what it keeps there
+      # by the archive's hash, so nothing different is reused. Nothing is skipped or loosened.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ort.pyke.io
+          key: ort-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          # Its folders are named by the archive's verified SHA-256, so an older cache is safe to start from.
+          restore-keys: ort-${{ runner.os }}-
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
