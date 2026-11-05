@@ -54,7 +54,7 @@ describe("a saved run's log in History (#447)", () => {
   })
 
   it("filters by a person, an output or a kind, and keeps each entry's place in the run", () => {
-    const entries = [entry(1, { by: "Femi", label: "Psalm 23" }), entry(2, { kind: "scene", label: "Sermon scene", outputId: "overflow" }), entry(3, { kind: "approval", label: 'Presented without approval: "Sunday" v3 · by Tolu', by: "Tolu" })]
+    const entries = [entry(1, { by: "Femi", label: "Psalm 23" }), entry(2, { kind: "scene", label: "Sermon scene", outputId: "overflow" }), entry(3, { kind: "take", label: "Take failed: Psalm 91 v3 · by Tolu", by: "Tolu" })]
     act(() => root.render(<RunJournal entries={entries} />))
     filter("femi")
     expect(rows()).toEqual([expect.stringContaining("Psalm 23")])
@@ -62,7 +62,7 @@ describe("a saved run's log in History (#447)", () => {
     filter("overflow")
     expect(rows()).toEqual([expect.stringContaining("Sermon scene")])
     expect(element.querySelector('[aria-label="This run\'s log"] li')!.getAttribute("value")).toBe("2")
-    filter("approval")
+    filter("take")
     expect(rows()).toEqual([expect.stringContaining("v3")])
     filter("zzz")
     expect(element.textContent).toContain("Nothing in this run's log matches")
