@@ -74,7 +74,7 @@ function RevokeAction({ label, what, onRevoke }: { label: string; what: string; 
     <span className="flex basis-full flex-wrap items-center justify-end gap-1">
       <span role="status" className="mr-auto text-muted-foreground">{what}</span>
       <Button size="sm" variant="destructive" onClick={() => { setConfirm(false); onRevoke() }} aria-label={`Confirm revoke ${label}`}>Revoke now</Button>
-      <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>Keep</Button>
+      <Button size="sm" variant="ghost" onClick={() => setConfirm(false)} aria-label={`Keep ${label}`}>Keep</Button>
     </span>
   ) : (
     <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirm(true)} aria-label={`Revoke ${label}`} title={what}>Revoke</Button>
