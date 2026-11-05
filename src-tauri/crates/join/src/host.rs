@@ -28,7 +28,10 @@ const STREAM_SILENCE: Duration = Duration::from_secs(if cfg!(test) { 1 } else { 
 pub fn client(timeout: Option<Duration>) -> Result<reqwest::Client, String> {
     // Paired-desk credentials use a custom header, which reqwest does not strip on every redirect.
     // Never forward a key to a different host after the operator paired with this one.
+    // Straight to the host on this network, never through a system proxy: a proxied request is
+    // refused by the host's local-only routes (#412), and a key must not pass through a proxy.
     let b = reqwest::Client::builder()
+        .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(5));
     match timeout {
