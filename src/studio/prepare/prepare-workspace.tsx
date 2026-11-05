@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { timeText } from "@/lib/church-time"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { churchTimeZone } from "@/stores/timing-input"
 import { Trash2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -20,11 +21,9 @@ import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { RULE_LABEL, interleave, newPhase, organiseHeadersIntoDefaultPhases, orderCounts, projectRunOfShowEvents, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
 import { CalendarDaysIcon, ClockIcon, EllipsisIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
 import { RundownTools } from "@/studio/prepare/bulk-bar"
-import { useBibleStore } from "@/stores"
 import { isSlideItem, type CueQueueItem } from "@/types"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceTiming } from "@/studio/use-service-timing"
-import { presentActions } from "@/studio/present-actions"
 import { cn } from "@/lib/utils"
 import { AddEventPalette, type EventInsertionTarget } from "@/studio/prepare/add-event-palette"
 import { toast } from "sonner"
@@ -143,11 +142,10 @@ export function PrepareWorkspace() {
     if (event) {
       useShellStore.getState().setPrepareMomentSelection({ ...prepareMomentFocus, eventId: event.id })
     } else {
-      // Standalone service items have no event editor, so select the pinned item in the private Preview.
-      // This only changes the operator's selection; Program and output scenes remain untouched.
+      // Standalone service items have no event editor, so focus the item in Prepare (#447): Live's
+      // Preview, Program and output scenes remain untouched.
       useShellStore.getState().setPrepareMomentSelection(null)
-      useBibleStore.getState().selectSlide({ item, index: itemIndex })
-      useBibleStore.getState().setSelectedQueueItemId(item.id)
+      useRundownSelection.getState().focus(item.id)
       useShellStore.getState().clearPrepareMomentFocus(prepareMomentFocus)
     }
   }, [prepareMomentFocus, serviceLoading, service?.id, items, headers])
@@ -357,7 +355,7 @@ export function PrepareWorkspace() {
                 useShellStore.getState().setPrepareMomentSelection(null)
                 setSelectedEventId(null)
                 setReturnMomentId(null)
-                presentActions.previewItem(item)
+                useRundownSelection.getState().focus(item.id)
               }}
             />
           ) : <ItemEditor />}
@@ -432,7 +430,7 @@ function RundownFooter() {
   const addCue = () => {
     const item: CueQueueItem = { id: crypto.randomUUID(), kind: "cue", reference: "New cue", confidence: 1, source: "manual", added_at: Date.now(), cues: [{ on: "live", do: "obs.mark" }] }
     useQueueStore.getState().addItem(item)
-    useBibleStore.getState().selectSlide({ item, index: 0 })
+    useRundownSelection.getState().focus(item.id)
   }
   return (
     <div className="flex flex-wrap gap-2 border-t border-border p-2.5">

@@ -1,11 +1,11 @@
 import { useServiceOffset } from "@/stores/service-offset-store"
 import { clockAt, minutesOfDay } from "@/lib/church-time"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { churchTimeZone } from "@/stores/timing-input"
 import { useSettingsStore } from "@/stores/settings-store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useQueueStore } from "@/stores"
-import { presentActions } from "@/studio/present-actions"
 import { formatMinutes } from "@/lib/service-timing"
 import { clockMinutes, phaseRange, planTimeline, runOfShowClockRows } from "@/lib/run-of-show"
 import type { EventTiming } from "@/lib/timing-engine"
@@ -108,7 +108,7 @@ export function TimingPanel() {
                     <button
                       type="button"
                       disabled={r.index === undefined || !clockItems[r.index]?.moments[0]}
-                      onClick={() => r.index !== undefined && clockItems[r.index]?.moments[0] && presentActions.previewItem(clockItems[r.index].moments[0])}
+                      onClick={() => r.index !== undefined && clockItems[r.index]?.moments[0] && useRundownSelection.getState().focus(clockItems[r.index].moments[0].id)}
                       className="flex w-full items-start gap-2.5 rounded-md px-1 py-1 text-left outline-none enabled:hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/50"
                     >
                       <span className="flex w-11 shrink-0 items-center gap-0.5 text-xs text-muted-foreground tabular-nums">{r.fixed && <PinIcon className="size-3" aria-label="Fixed start" />}{r.time}</span>

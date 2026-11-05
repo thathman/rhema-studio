@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { PlusIcon, SearchIcon, UploadIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -120,9 +121,7 @@ export function SlideLibrary({ onUseItem }: { onUseItem?: LibraryItemUseHandler 
     const id = queue.addItem(item, "end")
     if (prepareReturn) useQueueStore.getState().setAddTarget(null)
     if (!id) return
-    const index = useQueueStore.getState().items.findIndex((candidate) => candidate.id === id)
-    useBibleStore.getState().selectSlide({ item, index })
-    useBibleStore.getState().setSelectedQueueItemId(id)
+    useRundownSelection.getState().focus(id)
     if (prepareReturn) {
       useShellStore.getState().setPrepareLibraryReturn({ ...prepareReturn, momentId: id, momentTitle: item.reference })
     }

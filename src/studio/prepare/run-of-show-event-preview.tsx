@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { drawScene } from "@/lib/scene-renderer"
 import { cameraLabelOf } from "@/lib/cameras"
 import { feedFrame } from "@/lib/live-sources"
@@ -12,8 +12,8 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { designStore } from "@/design-engine/design-store"
 import { resolveDesignedMoment, type DesignIssue } from "@/design-engine/rhema-scene"
 import { hydrateDesignSceneMedia } from "@/lib/design-media"
-import { presentActions } from "@/studio/present-actions"
 import { PreviewPanel } from "@/components/panels/preview-panel"
+import { usePrepareSource } from "@/studio/prepare/prepare-preview-source"
 import type { BroadcastOutput, QueueItem, Scene } from "@/types"
 
 /** A read-only event preview: the planned scene and audience, plus the selected moment's content. */
@@ -57,19 +57,8 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
   const scene = designKey
     ? currentDesignResolution?.scene ?? undefined
     : scenes.find((candidate) => candidate.id === sceneIdForOutput)
-  const lastPreviewedMoment = useRef<QueueItem | null>(null)
-
-  const previewMoment = useCallback((item: QueueItem) => {
-    if (lastPreviewedMoment.current === item) return
-    lastPreviewedMoment.current = item
-    presentActions.previewItem(item)
-  }, [])
-
-  // Set the operator's private Preview before the first paint; changing moments does this in the
-  // select handler below so the content card never flashes the previous item.
-  useLayoutEffect(() => {
-    if (moment) previewMoment(moment)
-  }, [moment, previewMoment])
+  // The moment's content, shown here only (#447): Live's Preview is never written from Prepare.
+  const momentSource = usePrepareSource(moment ?? null)
 
   useEffect(() => {
     if (!designKey || !designRefId || designVersion === undefined || designTitle === undefined) return
@@ -121,7 +110,6 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
               value={moment?.id ?? ""}
               onChange={(event) => {
                 const next = moments.find((item) => item.id === event.currentTarget.value)
-                if (next) previewMoment(next)
                 setMomentId(event.currentTarget.value)
                 const nextSteps = next ? plannedSceneSteps(next) : []
                 if (!nextSteps.some((step) => step.outputId === null)) {
@@ -196,7 +184,7 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
       <section className="space-y-2" aria-label="Selected moment content preview">
         <p className="text-xs font-semibold">Moment content · {moment?.reference}</p>
         <div className="h-56 overflow-hidden rounded-lg [&>div]:h-full">
-          <PreviewPanel itemLook />
+          <PreviewPanel itemLook source={momentSource} />
         </div>
       </section>
     </div>

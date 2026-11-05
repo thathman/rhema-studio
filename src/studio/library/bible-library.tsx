@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 import { TrashIcon } from "lucide-react"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { Button } from "@/components/ui/button"
 import { bibleActions } from "@/hooks/use-bible"
 import { parseTypedReference } from "@/lib/quick-search"
 import { useBibleStore, useQueueStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
-import { presentActions } from "@/studio/present-actions"
 import { captureLibraryUseInvocation, type LibraryItemUseHandler } from "@/studio/library/library-target-store"
 import { toast } from "sonner"
 import type { Book } from "@/types"
@@ -293,7 +293,7 @@ export function BibleLibrary({ onUseItem }: { onUseItem?: LibraryItemUseHandler 
         )
         return
       }
-      presentActions.previewItem(added)
+      useRundownSelection.getState().focus(added.id)
       useShellStore.getState().setWorkspace("prepare")
       toast.success(`Added ${passage.reference} to Prepare`, {
         description:

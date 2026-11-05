@@ -880,12 +880,17 @@ const activeTranslations = (): ActiveTranslations => {
  */
 async function idHolders() {
   // Imported when needed: these modules import this one.
-  const [{ remapJournalItemIds }, { useApprovalGateStore }, { cancelPendingPresents }] = await Promise.all([
+  const [{ remapJournalItemIds }, { useApprovalGateStore }, { cancelPendingPresents }, { useRundownSelection }] = await Promise.all([
     import("@/stores/journal-store"),
     import("@/stores/approval-gate-store"),
     import("@/hooks/use-broadcast"),
+    import("@/studio/prepare/rundown-selection"),
   ])
-  return { remapJournalItemIds, useApprovalGateStore, cancelPendingPresents }
+  const remapPrepareFocus = (re: (id: string | null) => string | null) => {
+    const { focusId, focus } = useRundownSelection.getState()
+    if (focusId) focus(re(focusId))
+  }
+  return { remapJournalItemIds, useApprovalGateStore, cancelPendingPresents, remapPrepareFocus }
 }
 
 /** Synchronous (after `idHolders`), so no save or edit can see half the ids renewed. */
@@ -911,6 +916,7 @@ function renewItemIds(h: Awaited<ReturnType<typeof idHolders>>): void {
   })
   const sel = useBibleStore.getState().selectedSlide
   if (sel) useBibleStore.setState({ selectedSlide: { ...sel, item: { ...sel.item, id: ids.get(sel.item.id) ?? sel.item.id } } })
+  h.remapPrepareFocus(re)
   h.remapJournalItemIds(re)
   h.useApprovalGateStore.setState({ held: null, retry: null })
   h.cancelPendingPresents()

@@ -118,6 +118,7 @@ describe("Run of Show event preview", () => {
       liveVerse: useBroadcastStore.getState().liveVerse,
       outputs: structuredClone(useBroadcastStore.getState().outputs),
     }
+    useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null })
     const takeScene = vi.spyOn(useBroadcastStore.getState(), "takeScene")
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D)
 
@@ -148,7 +149,8 @@ describe("Run of Show event preview", () => {
     })
     expect(outputSelect.value).toBe("overflow")
     expect(vi.mocked(drawScene).mock.calls.at(-1)?.[3]).toMatchObject({ sceneId: "overflow-scene" })
-    expect(useBibleStore.getState().selectedVerse).toMatchObject({ book_number: 45, chapter: 8, verse: 1 })
+    // The event preview shows the moment itself (#447): Live's Preview is never written from here.
+    expect(useBibleStore.getState()).toMatchObject({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null })
     expect(el.querySelector('[aria-label="Selected moment content preview"]')?.textContent).toContain("Romans 8:1")
     expect([...el.querySelectorAll<HTMLCanvasElement>('canvas[role="img"]')].at(-1)?.getAttribute("aria-label")).toContain("Romans 8:1")
 

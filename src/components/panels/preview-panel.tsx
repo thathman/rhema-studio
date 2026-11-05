@@ -11,7 +11,7 @@ import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
 import { songSlides, toLyricRenderData } from "@/lib/lyrics"
 import { useServiceSong } from "@/stores/song-pins-store"
-import { useSelectedItem } from "@/studio/prepare/use-selected-item"
+import { usePreviewItem } from "@/studio/prepare/use-selected-item"
 import { ItemPlan } from "@/studio/prepare/item-plan"
 import { planLines } from "@/lib/item-intent"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -19,7 +19,7 @@ import { usePreviewLabel } from "@/hooks/use-preview-label"
 import { useServiceStore } from "@/stores/service-store"
 import { forOutputLanguage, isOutputLanguageFallback, LANGUAGE_SHORT_NAMES, liveLanguage, OUTPUT_LANGUAGE_FALLBACK_NOTICE } from "@/lib/output-language"
 import { isMissing, resolveTranslations } from "@/lib/translation-policy"
-import type { Verse } from "@/types"
+import type { QueueItem, Verse } from "@/types"
 
 /**
  * What Show live will present, only for the operator. Under it, the previewed rundown item's plan
@@ -28,7 +28,12 @@ import type { Verse } from "@/types"
  * `compact` (Present below 1200 px wide, where the full panel has no room): one line, a small
  * picture with what it is in words, so the operator still sees Preview before Take live.
  */
-export function PreviewPanel({ itemLook = false, compact = false, hideOutputPicker = false, outputLanguageId, onOutputLanguageIdChange, onEmptyPreviewAction }: {
+/** What a panel shows instead of Live's Preview: Prepare's own item (#447), never written to Live. */
+export type PreviewSource = { item: QueueItem | null; slide: { item: QueueItem; index: number } | null; verse: Verse | null; queueItemId: string | null }
+
+export function PreviewPanel({ itemLook = false, compact = false, hideOutputPicker = false, outputLanguageId, onOutputLanguageIdChange, onEmptyPreviewAction, source }: {
+  /** Show this (Prepare's focused item) instead of Live's Preview; the panel then never writes Live's Preview. */
+  source?: PreviewSource
   itemLook?: boolean
   compact?: boolean
   hideOutputPicker?: boolean
@@ -36,9 +41,13 @@ export function PreviewPanel({ itemLook = false, compact = false, hideOutputPick
   onOutputLanguageIdChange?: (outputId: string) => void
   onEmptyPreviewAction?: () => void
 } = {}) {
-  const selectedVerse = useBibleStore((s) => s.selectedVerse)
-  const selectedSlide = useBibleStore((s) => s.selectedSlide)
-  const selectedQueueItemId = useBibleStore((s) => s.selectedQueueItemId)
+  const liveVerse = useBibleStore((s) => s.selectedVerse)
+  const liveSlide = useBibleStore((s) => s.selectedSlide)
+  const liveQueueItemId = useBibleStore((s) => s.selectedQueueItemId)
+  const selectedVerse = source ? source.verse : liveVerse
+  const selectedSlide = (source ? source.slide : liveSlide) as typeof liveSlide
+  const selectedQueueItemId = source ? source.queueItemId : liveQueueItemId
+  const hasSource = !!source
   const isSamplePreview = useBibleStore((s) => s.samplePreview)
   const currentService = useServiceStore((s) => s.current)
   const previewSongId = selectedSlide && isSongItem(selectedSlide.item) ? selectedSlide.item.song.song_id : null
@@ -79,6 +88,8 @@ export function PreviewPanel({ itemLook = false, compact = false, hideOutputPick
   useEffect(() => {
     const was = prevActive.current
     prevActive.current = activeTranslationId
+    // Prepare's own source picks its translation itself; never write Live's Preview from here.
+    if (hasSource) return
     const selection = useBibleStore.getState()
     const verse = selection.selectedVerse
     const followsPendingRefresh =
@@ -113,11 +124,12 @@ export function PreviewPanel({ itemLook = false, compact = false, hideOutputPick
         })
         .catch(() => {})
     }
-  }, [activeTranslationId])
+  }, [activeTranslationId, hasSource])
   const themes = useBroadcastStore((s) => s.themes)
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
 
-  const previewed = useSelectedItem()?.item ?? null
+  const livePreviewed = usePreviewItem()?.item ?? null
+  const previewed = source ? source.item : livePreviewed
   const label = usePreviewLabel()
   const hasPreviewContent = !!previewed || !!selectedVerse || !!selectedSlide
   const showLiveEmptyState = !compact && !hasPreviewContent && !!onEmptyPreviewAction

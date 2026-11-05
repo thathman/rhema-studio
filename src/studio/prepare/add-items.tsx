@@ -1,5 +1,6 @@
 import { PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { QuickFind } from "@/studio/present/quick-find"
@@ -11,7 +12,6 @@ import { ReusePanel } from "@/studio/prepare/reuse-panel"
 import { EngageAddPanel } from "@/studio/engage/quiz-editor"
 import { useAddDialog } from "@/studio/prepare/add-target"
 import { useQueueStore } from "@/stores"
-import { presentActions } from "@/studio/present-actions"
 
 /**
  * Add one item to the service; successful insertion selects it in Prepare.
@@ -24,7 +24,7 @@ export function AddItems({ className, onSelectAddedItem }: { className?: string;
     if (!item) return
     onSelectAddedItem?.(id)
     useAddDialog.getState().focusAddedItem(id)
-    presentActions.previewItem(item)
+    useRundownSelection.getState().focus(id)
     useAddDialog.getState().close()
   }
   return (
@@ -65,10 +65,10 @@ export function AddItems({ className, onSelectAddedItem }: { className?: string;
             <QuickFind mode="prepare" scope="bible" autoFocus onAdded={added} />
           </TabsContent>
           <TabsContent value="songs" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
-            <SongLibrary onAdded={added} />
+            <SongLibrary onAdded={added} privatePreview />
           </TabsContent>
           <TabsContent value="hymns" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
-            <HymnBook onAdded={added} />
+            <HymnBook onAdded={added} privatePreview />
           </TabsContent>
           <TabsContent value="quiz" className="min-h-0 flex-1 overflow-y-auto pt-3">
             <EngageAddPanel onAdded={added} />
@@ -77,7 +77,7 @@ export function AddItems({ className, onSelectAddedItem }: { className?: string;
             <SlideComposer onAdded={added} />
           </TabsContent>
           <TabsContent value="media" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
-            <MediaLibrary onAdded={added} />
+            <MediaLibrary onAdded={added} privatePreview />
           </TabsContent>
           <TabsContent value="reuse" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
             <ReusePanel onAdded={added} />

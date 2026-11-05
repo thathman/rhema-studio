@@ -4,6 +4,7 @@
  * window. Normal runs never set `__RHEMA_QA__`, so this returns nothing.
  */
 import { useVoice, hostTalk, TalkClient, setVoiceVolume, setHostChannels } from "@/lib/voice"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -35,5 +36,6 @@ window.__rhemaQa = () =>
         present: presentActions, remote: remoteActions, eventClock: useEventClock, voice: { useVoice, hostTalk, TalkClient, setVoiceVolume, setHostChannels },
         timer: useTimerStore,
         offset: useServiceOffset,
+        prepare: useRundownSelection,
       }
     : undefined

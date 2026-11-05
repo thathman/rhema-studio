@@ -185,14 +185,16 @@ yorubaFirst.click()
 await waitFor(() => yorubaFirst.getAttribute("aria-pressed") === "true", "Yorùbá-first preference")
 
 stage = "add hymn to service"
+// #447: Add focuses the hymn in Prepare only; Live's Preview must stay as it was.
+const previewBeforeAdd = JSON.stringify((({ selectedVerse, selectedSlide, selectedQueueItemId }) => ({ selectedVerse, selectedSlide, selectedQueueItemId }))(qaStores.bible.getState()))
 await clickButton("Add to service")
 await waitFor(
   () => ![...document.querySelectorAll('[role="dialog"][data-state="open"]')].some((dialog) => normal(dialog.innerText).includes("Added items go to the end of QA Phase Two")),
   "phase-targeted hymn picker to close after Add",
 )
 const queue = qaStores.queue.getState()
-const selectedQueueItemId = qaStores.bible.getState().selectedQueueItemId
-const addedItem = queue.items.find((item) => item.id === selectedQueueItemId)
+const focusedId = qaStores.prepare.getState().focusId
+const addedItem = queue.items.find((item) => item.id === focusedId)
 if (queue.items.length !== 4 || !addedItem || addedItem.kind !== "song") throw new Error(`Add did not insert and select one hymn: ${JSON.stringify(queue.items)}`)
 if (queue.items.map((item) => item.reference).join("|") !== expectedOrder.join("|")) {
   throw new Error(`Adding to the later phase changed unrelated items or order: ${queue.items.map((item) => item.reference).join("|")}`)
@@ -201,7 +203,10 @@ if (queue.headers.map(({ id, at }) => `${id}:${at}`).join("|") !== "qa-phase-one
   throw new Error(`Adding to the later phase changed phase positions: ${JSON.stringify(queue.headers)}`)
 }
 if (queue.addTarget !== null) throw new Error(`Successful Add did not clear its phase target: ${queue.addTarget}`)
-if (qaStores.bible.getState().selectedQueueItemId !== addedItem.id) throw new Error("Add did not select the inserted hymn in Prepare")
+if (qaStores.prepare.getState().focusId !== addedItem.id) throw new Error("Add did not select the inserted hymn in Prepare")
+if (JSON.stringify((({ selectedVerse, selectedSlide, selectedQueueItemId }) => ({ selectedVerse, selectedSlide, selectedQueueItemId }))(qaStores.bible.getState())) !== previewBeforeAdd) {
+  throw new Error("Add to service changed Live's Preview (#447)")
+}
 if (addedItem.song.title !== "QA Journey Hymn Edited" || JSON.stringify(addedItem.song.languages) !== '["yo","en"]') {
   throw new Error(`Added hymn has the wrong saved title or language order: ${JSON.stringify(addedItem.song)}`)
 }
@@ -239,11 +244,14 @@ if (reopenedQueue.headers.map(({ id, at }) => `${id}:${at}`).join("|") !== "qa-p
 
 stage = "preview reopened hymn"
 const rundownRow = await waitFor(
-  () => buttons().find((button) => button.title === "Click to preview" && normal(button.innerText).includes("QA Journey Hymn Edited")),
+  () => buttons().find((button) => button.title.startsWith("Click to open it in the editor") && normal(button.innerText).includes("QA Journey Hymn Edited")),
   "reopened hymn in the rundown",
 )
 qaStores.bible.getState().selectSlide(null)
 rundownRow.click()
+await waitFor(() => qaStores.prepare.getState().focusId === addedItem.id, "reopened hymn focused in Prepare")
+if (qaStores.bible.getState().selectedSlide !== null) throw new Error("Selecting in Prepare changed Live's Preview (#447)")
+await clickButton("Send to Live Preview")
 await waitFor(() => {
   const selected = qaStores.bible.getState()
   return selected.selectedQueueItemId === addedItem.id && selected.selectedSlide?.item.id === addedItem.id

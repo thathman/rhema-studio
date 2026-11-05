@@ -119,6 +119,7 @@ afterEach(() => {
   try { window.localStorage.removeItem("rhema.prepare.rundown-view.v1") } catch { /* unavailable in the Node test runner */ }
   useAddDialog.getState().close()
   useRundownSelection.getState().clear()
+  useRundownSelection.setState({ focusId: null })
   mockService.program = null
   mockService.items = []
   document.body.replaceChildren()
@@ -201,12 +202,15 @@ describe("Prepare never takes anything live (#299)", () => {
     useBroadcastStore.setState({ isLive: true, liveItemId: "program-live", liveVerse, outputs: [output] })
     const before = useBroadcastStore.getState()
     const liveBefore = { isLive: before.isLive, liveItemId: before.liveItemId, liveVerse: before.liveVerse, outputs: before.outputs }
+    useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null })
     useShellStore.getState().setPrepareMomentFocus({ programId: "program-sunday", itemId: moment.id, designId: "design-opening", version: 2 })
 
     await renderPrepare()
 
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(moment.id)
-    expect(useBibleStore.getState().selectedSlide?.item.id).toBe(moment.id)
+    // Focused in Prepare only (#447): Live's Preview stays empty.
+    expect(useRundownSelection.getState().focusId).toBe(moment.id)
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
+    expect(useBibleStore.getState().selectedSlide).toBeNull()
     expect(useShellStore.getState().prepareMomentFocus).toBeNull()
     const after = useBroadcastStore.getState()
     expect({ isLive: after.isLive, liveItemId: after.liveItemId, liveVerse: after.liveVerse, outputs: after.outputs }).toEqual(liveBefore)
@@ -222,7 +226,7 @@ describe("Prepare never takes anything live (#299)", () => {
     const goLive = (["showLive", "presentItem", "next", "prev", "quickScreen", "verseNext", "versePrev"] as const).map((k) => vi.spyOn(presentActions, k))
 
     const el = await renderPrepare()
-    const rows = [...el.querySelectorAll<HTMLButtonElement>('ol[aria-label="Service rundown"] button[title="Click to preview"]')]
+    const rows = [...el.querySelectorAll<HTMLButtonElement>('ol[aria-label="Service rundown"] button[title^="Click to open it in the editor"]')]
     expect(rows).toHaveLength(3)
     for (const row of rows) {
       await act(async () => {
@@ -266,7 +270,7 @@ describe("Prepare never takes anything live (#299)", () => {
     useQueueStore.setState({ items: [slide("Sermon outline")], headers: [], activeIndex: null })
     useBroadcastStore.setState({ isLive: false, liveVerse: null, liveSlide: null, liveItemId: null })
     const el = await renderPrepare()
-    const preview = el.querySelector<HTMLButtonElement>('ol[aria-label="Service rundown"] button[title="Click to preview"]')!
+    const preview = el.querySelector<HTMLButtonElement>('ol[aria-label="Service rundown"] button[title^="Click to open it in the editor"]')!
     await act(async () => preview.click())
     const eventButton = el.querySelector<HTMLButtonElement>('button[aria-label="Add event"]')!
     await act(async () => eventButton.click())
@@ -385,8 +389,10 @@ describe("Prepare never takes anything live (#299)", () => {
     const inserted = useQueueStore.getState().items.find((item) => item.reference === "Sermon title")!
     expect(useQueueStore.getState().addTarget).toBeNull()
     expect(useAddDialog.getState().open).toBe(false)
-    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
-    expect(useBibleStore.getState().selectedSlide?.item.id).toBe(inserted.id)
+    // Focused in Prepare's editor (#447); Live's Preview is untouched by Add.
+    expect(useRundownSelection.getState().focusId).toBe(inserted.id)
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
+    expect(useBibleStore.getState().selectedSlide).toBeNull()
     expect(el.querySelector('button[aria-label="Event plan"]')).toBeNull()
     expect(el.textContent).toContain("Confidence")
     await vi.waitFor(
@@ -405,9 +411,14 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(reopened.items.map((item) => item.id)).toContain(inserted.id)
     expect(reopened.headers.find((header) => header.id === eventId)?.event).toMatchObject({ schema_version: 1 })
     expect(projectRunOfShowEvents(reopened.items, reopened.headers).find((event) => event.id === eventId)?.moments.map((item) => item.id)).toContain(inserted.id)
-    act(() => useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null }))
+    act(() => useRundownSelection.setState({ focusId: null }))
     const itemRow = document.querySelector<HTMLElement>(`[data-rundown-item-id="${inserted.id}"]`)!
-    await act(async () => itemRow.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    await act(async () => itemRow.querySelector<HTMLButtonElement>('button[title^="Click to open it in the editor"]')!.click())
+    expect(useRundownSelection.getState().focusId).toBe(inserted.id)
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
+    // Only the deliberate Send to Live Preview arms Live's Preview, and never Program.
+    const send = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Send to Live Preview")!
+    await act(async () => send.click())
     expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
     expect(useBroadcastStore.getState()).toMatchObject(liveBefore)
   }, 30_000)
@@ -478,7 +489,7 @@ describe("Prepare never takes anything live (#299)", () => {
     const psalm = await addBibleMoment("psalm 23 1", "Psalms 23:1")
     expect(psalm).toHaveProperty("verse")
     const psalmRow = () => el.querySelector<HTMLElement>(`[data-rundown-item-id="${psalm.id}"]`)
-    await act(async () => psalmRow()!.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    await act(async () => psalmRow()!.querySelector<HTMLButtonElement>('button[title^="Click to open it in the editor"]')!.click())
     const primaryTranslation = el.querySelector<HTMLSelectElement>('select[aria-label="Primary translation"]')!
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(primaryTranslation, "OYCB")
@@ -516,7 +527,7 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveItemId: "currently-on-air", liveVerse: alreadyLive })
 
     const slideRow = () => el.querySelector<HTMLElement>(`[data-rundown-item-id="${slideMoment.id}"]`)
-    await act(async () => slideRow()!.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    await act(async () => slideRow()!.querySelector<HTMLButtonElement>('button[title^="Click to open it in the editor"]')!.click())
     const editorTitle = el.querySelector<HTMLInputElement>('[aria-label="Slide title"]')!
     const editorText = el.querySelector<HTMLTextAreaElement>('[aria-label="Slide text"]')!
     await act(async () => { setValue(editorTitle, "Edited sermon title"); setValue(editorText, "Revised words for Sunday") })
@@ -527,7 +538,7 @@ describe("Prepare never takes anything live (#299)", () => {
 
     useRundownSelection.getState().clear()
     const clickWithControl = async (id: string) => act(async () => {
-      const rowButton = el.querySelector<HTMLElement>(`[data-rundown-item-id="${id}"] button[title="Click to preview"]`)!
+      const rowButton = el.querySelector<HTMLElement>(`[data-rundown-item-id="${id}"] button[title^="Click to open it in the editor"]`)!
       rowButton.dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true }))
     })
     await clickWithControl(psalm.id)
@@ -560,13 +571,21 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveItemId: "currently-on-air", liveVerse: alreadyLive })
 
     const reopenedSlideRow = el.querySelector<HTMLElement>(`[data-rundown-item-id="${slideMoment.id}"]`)!
-    await act(async () => reopenedSlideRow.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    await act(async () => reopenedSlideRow.querySelector<HTMLButtonElement>('button[title^="Click to open it in the editor"]')!.click())
     const previewCanvas = el.querySelector<HTMLCanvasElement>('[data-slot="preview-panel"] canvas[role="img"]')!
     expect(previewCanvas.getAttribute("aria-label")).toContain("Edited sermon title")
     expect(previewCanvas.getAttribute("aria-label")).toContain("Revised words for Sunday")
     expect(liveCanvas()?.getAttribute("aria-label")).toBe(liveAtStart)
     expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveItemId: "currently-on-air", liveVerse: alreadyLive })
 
+    // Opening it in Prepare left Live's Preview alone (#447); Send to Live Preview arms it, still not Program.
+    expect(useBibleStore.getState().selectedQueueItemId).not.toBe(slideMoment.id)
+    expect(el.querySelector('button[aria-label="Take Edited sermon title live"]')).toBeNull()
+    const send = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Send to Live Preview")!
+    await act(async () => send.click())
+    expect(useBibleStore.getState().selectedQueueItemId).toBe(slideMoment.id)
+    expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveItemId: "currently-on-air", liveVerse: alreadyLive })
+    expect(liveCanvas()?.getAttribute("aria-label")).toBe(liveAtStart)
     await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Take Edited sermon title live"]')!.click())
     expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveItemId: slideMoment.id, liveVerse: { reference: "Edited sermon title", lines: ["Revised words for Sunday"] } })
     expect(liveCanvas()?.getAttribute("aria-label")).toContain("Edited sermon title")
@@ -798,6 +817,7 @@ describe("Prepare never takes anything live (#299)", () => {
       activeIndex: null,
     })
     useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item" })
+    useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null })
     const before = useBroadcastStore.getState()
     const el = await renderPrepare()
     await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Opening Prayer"]')!.click())
@@ -810,7 +830,11 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useQueueStore.getState().addTarget).toBeNull()
 
     await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Open moment 2: John 3:16 in editor"]')!.click())
-    expect(useBibleStore.getState().selectedSlide?.item.id).toBe("John 3:16")
+    // Opened in Prepare's editor only (#447): Live's Preview is not changed.
+    expect(useRundownSelection.getState().focusId).toBe("John 3:16")
+    expect([...el.querySelectorAll("h2")].some((heading) => heading.textContent === "John 3:16")).toBe(true)
+    expect(useBibleStore.getState().selectedSlide).toBeNull()
+    expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
     expect(el.querySelector('[aria-label="Event content"]')).toBeNull()
     expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
     expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
@@ -848,7 +872,7 @@ describe("Prepare never takes anything live (#299)", () => {
       return "created"
     })
     const el = await renderPrepare()
-    const selectedRow = [...el.querySelectorAll<HTMLButtonElement>('ol[aria-label="Service rundown"] button[title="Click to preview"]')]
+    const selectedRow = [...el.querySelectorAll<HTMLButtonElement>('ol[aria-label="Service rundown"] button[title^="Click to open it in the editor"]')]
       .find((button) => button.textContent?.includes("Sermon outline"))!
     await act(async () => selectedRow.click())
 
@@ -895,7 +919,7 @@ describe("Prepare never takes anything live (#299)", () => {
     const liveBefore = useBroadcastStore.getState()
     const el = await renderPrepare()
 
-    const momentRow = [...el.querySelectorAll<HTMLButtonElement>('ol[aria-label="Service rundown"] button[title="Click to preview"]')]
+    const momentRow = [...el.querySelectorAll<HTMLButtonElement>('ol[aria-label="Service rundown"] button[title^="Click to open it in the editor"]')]
       .find((button) => button.textContent?.includes("original-moment-id"))!
     await act(async () => momentRow.click())
     await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Add event"]')!.click())
@@ -1187,16 +1211,16 @@ describe("Prepare never takes anything live (#299)", () => {
     const grouped = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Grouped by phase")!
 
     await act(async () => collapse.click())
-    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(0)
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title^="Click to open it in the editor"]')).toHaveLength(0)
 
     await act(async () => simple.click())
     expect(el.querySelector('[aria-label="Phase: Main service"]')).toBeNull()
     expect(el.querySelector('[aria-label="Event: Sermon"]')).not.toBeNull()
-    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(2)
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title^="Click to open it in the editor"]')).toHaveLength(2)
 
     await act(async () => grouped.click())
     expect(el.querySelector('[aria-label="Phase: Main service"]')).not.toBeNull()
-    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(0)
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title^="Click to open it in the editor"]')).toHaveLength(0)
   })
 
   it("keeps phase and group controls accessible without exposing disabled drag semantics", async () => {
@@ -1289,7 +1313,7 @@ describe("Prepare never takes anything live (#299)", () => {
     await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Hide Scripture moments"]')!.click())
     await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Hide Sermon"]')!.click())
     await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Hide Main service"]')!.click())
-    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(0)
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title^="Click to open it in the editor"]')).toHaveLength(0)
 
     await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Add to Main service"]')!.click())
     const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
@@ -1384,13 +1408,13 @@ describe("Prepare never takes anything live (#299)", () => {
       activeIndex: null,
     })
     const el = await renderPrepare()
-    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(3)
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title^="Click to open it in the editor"]')).toHaveLength(3)
     const collapse = el.querySelector<HTMLButtonElement>('button[aria-label="Hide Sermon"]')!
     await act(async () => collapse.click())
     expect(el.querySelector('[aria-label="Event: Sermon"]')).not.toBeNull()
     expect(el.querySelector('[aria-label="Group: Scripture moments"]')).toBeNull()
     expect(el.querySelector('[aria-label="Event: Closing prayer"]')).not.toBeNull()
-    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(1)
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title^="Click to open it in the editor"]')).toHaveLength(1)
   })
 
   it("distinguishes unreadable saved items from newer-version items and blocks unsafe service actions", async () => {
