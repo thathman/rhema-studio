@@ -35,6 +35,7 @@ import { remoteActions } from "@/lib/remote-actions"
 import { confidenceLevel } from "@/lib/confidence"
 import { useApprovalGateStore } from "@/stores/approval-gate-store"
 import { applySceneTake, sceneTakeApproval } from "@/lib/scene-take"
+import { sceneReleaseApprovalBlockReason, sceneTakeApprovalBlockReason } from "@/studio/present/scene-take-policy"
 
 /**
  * Listens for remote control events from the Rust backend (OSC / HTTP API)
@@ -42,6 +43,11 @@ import { applySceneTake, sceneTakeApproval } from "@/lib/scene-take"
  *
  * Mount this hook once at the app root level.
  */
+/** The main desk's scene approval rule, from the host's own state (never what a desk says about itself). */
+function hostSceneBlock(rule: (rehearsal: boolean, current: ReturnType<typeof useServiceStore.getState>["current"], requireApproval: boolean) => string | null): string | null {
+  return rule(useBroadcastStore.getState().rehearsal, useServiceStore.getState().current, useSettingsStore.getState().requireApproval)
+}
+
 export function useRemoteControl() {
   // Listeners left running start again with the app (after the keys are in place), so a phone
   // or Stream Deck keeps working after a restart, with the same ports and network choice.
@@ -221,6 +227,12 @@ export function useRemoteControl() {
         const output = b.outputs.find((o) => o.id === p.output && (o.role ?? "congregation") === "congregation")
         if (!output || typeof p.scene !== "string") return
         const sceneId = p.scene
+        // The host's own rule, as on the main desk (#410): a desk or the API never takes a scene the host would refuse.
+        const blocked = hostSceneBlock(sceneTakeApprovalBlockReason)
+        if (blocked) {
+          toast.warning(`${output.name}: scene not taken`, { description: `${byOf(p)}${blocked}` })
+          return
+        }
         // The host's approved-service rule (#410): an approved service's pinned scene and look, never the saved one.
         void sceneTakeApproval(sceneId, [output.id]).then((r) => {
           const why = !r.ok ? r.refusal.message : applySceneTake(output.id, sceneId, r.approved) ? null : "That output or scene changed; nothing changed on screen."
@@ -240,6 +252,11 @@ export function useRemoteControl() {
         const parts = [`scene:${scene}`, ...outputIds.map((id) => `output:${id}`)]
         if (parts.some((part) => !Number.isSafeInteger(seen[part]) || (seen[part] as number) < 0)) {
           useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds, scene, "A scene or output changed during review. Refresh before trying again.", by)
+          return
+        }
+        const blocked = hostSceneBlock(sceneTakeApprovalBlockReason)
+        if (blocked) {
+          useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds, scene, blocked, by)
           return
         }
         const revisions = Object.fromEntries(parts.map((part) => [part, seen[part] as number]))
@@ -279,7 +296,15 @@ export function useRemoteControl() {
           if (p && typeof p.id === "string" && typeof p.state === "string" && typeof p.by === "string") useNotices.getState().answer(p.id, p.by, p.state, typeof p.why === "string" ? p.why : undefined)
         }),
       )
-      await withPayload(REMOTE_EVENTS.release_scene, (p) => { if (typeof p.output === "string") useBroadcastStore.getState().releaseScene(p.output) })
+      await withPayload(REMOTE_EVENTS.release_scene, (p) => {
+        if (typeof p.output !== "string") return
+        const blocked = hostSceneBlock(sceneReleaseApprovalBlockReason)
+        if (blocked) {
+          toast.warning("Scene not released", { description: `${byOf(p)}${blocked}` })
+          return
+        }
+        useBroadcastStore.getState().releaseScene(p.output)
+      })
       // Scenes made and changed on a joined desk (#243 SC.16): checked by the host's server, then here.
       await withPayload(REMOTE_EVENTS.save_scene, (p) => receiveDeskScene(p))
       await withPayload(REMOTE_EVENTS.delete_scene, (p) => receiveDeskScene(p, true))
