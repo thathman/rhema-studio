@@ -293,7 +293,9 @@ interface LiveState {
   /** A camera's backup camera (Live → Production tools → Cameras), by the router's names (#213). */
   cameraBackup?: (name: string) => string | undefined
   /** What the router says of a camera that is down: not sending, frozen (connected, nothing arriving) or the router is off; undefined: sending, or not known. */
-  cameraDown?: (name: string) => CameraDown | undefined
+  cameraDown?: (name: string, url?: string) => CameraDown | undefined
+  /** A camera layer's address at this computer's address now (a scene keeps the one it was built with). */
+  cameraAt?: (url: string) => string
 }
 
 /** A camera the router says cannot be shown now (#213). */
@@ -482,8 +484,9 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
  * router says the camera it plays is connected but sending nothing (the screens then show the
  * fallback, not a frozen picture passed off as live).
  */
-export function cameraPlay(s: Pick<LiveState, "stateSources" | "cameraBackup" | "cameraDown" | "cameraLabel">, output: Pick<BroadcastOutput, "cameraFallback">, l: Pick<SceneLayer, "cameraUrl">): { url?: string; retry?: number; hold?: boolean; stale?: boolean; instead?: string } {
-  if (!l.cameraUrl) return {}
+export function cameraPlay(s: Pick<LiveState, "stateSources" | "cameraBackup" | "cameraDown" | "cameraLabel" | "cameraAt">, output: Pick<BroadcastOutput, "cameraFallback">, layer: Pick<SceneLayer, "cameraUrl">): { url?: string; retry?: number; hold?: boolean; stale?: boolean; instead?: string } {
+  if (!layer.cameraUrl) return {}
+  const l = { cameraUrl: s.cameraAt?.(layer.cameraUrl) ?? layer.cameraUrl }
   const name = cameraPathOf(l.cameraUrl)
   const ctl = (n: string | null) => (n ? s.stateSources?.[cameraSourceId(n)] : undefined)
   const own = ctl(name)
@@ -493,7 +496,7 @@ export function cameraPlay(s: Pick<LiveState, "stateSources" | "cameraBackup" | 
   let url: string | undefined = hidden ? undefined : backup ? withCameraPath(l.cameraUrl, backup) : l.cameraUrl
   let playing = hidden ? null : (backup ?? name)
   let instead = hidden ? "hidden from scenes" : backup ? `on its backup (${called(backup)})` : undefined
-  const down = playing ? s.cameraDown?.(playing) : undefined
+  const down = playing ? s.cameraDown?.(playing, url) : undefined
   // This output's other camera, while the one it would play is down and that one is not.
   const other = output.cameraFallback?.mode === "camera" ? output.cameraFallback.camera : undefined
   if (other && name && other !== playing && (hidden || down) && !s.cameraDown?.(other) && ctl(other)?.on !== false) {

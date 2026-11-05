@@ -108,6 +108,34 @@ export function cameraPageUrl(host: string, tlsPort: number, cam: CameraSource):
   return `https://${host}:${tlsPort}/camera?name=${encodeURIComponent(cam.name)}&k=${cam.token}&label=${encodeURIComponent(cam.label)}`
 }
 
+function onThisRouter(url: string, status: RouterStatus | null): boolean {
+  try {
+    const u = new URL(url)
+    return !!status && u.port === String(status.ports.webrtc) && /^\/[^/]+\/whep\/?$/.test(u.pathname) && (u.hostname === status.lanAddress || u.hostname === "127.0.0.1" || u.hostname === "localhost")
+  } catch {
+    return false
+  }
+}
+
+/**
+ * A scene's address for one of Rhema's cameras, at this computer's address now. A scene keeps the
+ * address it was built with; after the computer's address changes (DHCP, Wi-Fi to cable) the old
+ * one plays nothing, while the router still says the camera is sending.
+ */
+export function routerCameraUrl(url: string, health: { status: RouterStatus | null }, known: readonly { name: string }[]): string {
+  const status = health.status
+  if (!status?.running || !status.lanAddress) return url
+  try {
+    const u = new URL(url)
+    const name = /^\/([^/]+)\/whep\/?$/.exec(u.pathname)?.[1]
+    if (!name || u.port !== String(status.ports.webrtc) || !known.some((c) => c.name === name) || u.hostname === status.lanAddress) return url
+    u.hostname = status.lanAddress
+    return u.toString()
+  } catch {
+    return url
+  }
+}
+
 /** What a scene's camera layer (and a TV) plays: the router's WHEP address. */
 export function whepUrl(host: string, ports: RouterPorts, name: string): string {
   return `http://${host}:${ports.webrtc}/${name}/whep`
@@ -199,8 +227,11 @@ export function cameraSending(health: { status: RouterStatus | null; checked: bo
  * nothing arriving) or the router is off. Undefined while sending, before the first answer, or for
  * a camera that is not one of Rhema's (`known`: the cameras in Live → Production tools → Cameras).
  */
-export function cameraDownState(health: { status: RouterStatus | null; checked: boolean }, name: string, known: readonly { name: string }[]): "not-sending" | "frozen" | "router-off" | undefined {
-  if (!health.checked || !known.some((c) => c.name === name)) return undefined
+export function cameraDownState(health: { status: RouterStatus | null; checked: boolean }, name: string, known: readonly { name: string }[], url?: string): "not-sending" | "frozen" | "router-off" | undefined {
+  if (!health.checked) return undefined
+  // A camera removed from Rhema while a scene still plays it from this router: nothing will come, so
+  // it is down and the output's fallback camera can step in. Any other address is not Rhema's to judge.
+  if (!known.some((c) => c.name === name)) return url && onThisRouter(url, health.status) && health.status?.running ? "not-sending" : undefined
   if (!health.status?.running) return "router-off"
   const p = health.status.paths.find((x) => x.name === name)
   if (!p?.live) return "not-sending"
