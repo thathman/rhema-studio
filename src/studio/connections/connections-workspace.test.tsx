@@ -175,6 +175,35 @@ describe("Connections hub (#401)", () => {
     expect(useBroadcastStore.getState().isLive).toBe(false)
   })
 
+  it("names a frozen camera 'Signal frozen', not 'Checking' (#411)", async () => {
+    const phoneHash = "a".repeat(64)
+    const obsHash = "b".repeat(64)
+    useSettingsStore.setState({
+      cameras: [{ name: "pulpit", label: "Pulpit", token: "p".repeat(32) }],
+      remoteDevices: [
+        { hash: phoneHash, name: "Stage phone", paired_at: "2026-10-26T00:00:00Z", role: "stage" },
+        { hash: obsHash, name: "Stream computer", paired_at: "2026-10-26T00:00:00Z", role: "obs-companion" },
+      ],
+      obs: { ...useSettingsStore.getState().obs, enabled: true },
+    })
+    const feed = { ...originalOutputs[0], id: "hall-feed", name: "Hall feed", type: "browser" as const, feedToken: "safe-test-token", tvs: [{ name: "Sanctuary TV", address: "192.168.1.61:8095", sentAt: Date.now() }] }
+    useBroadcastStore.setState({ outputs: [...originalOutputs, feed] })
+    useObsStore.setState({ status: "connected" })
+    mockedInvoke.mockImplementation(async (command) => {
+      if (command === "host_status") return { running: true, lan: true, port: 8080, tlsPort: 8081, addresses: [], desks: [
+        { hash: phoneHash, name: "Stage phone", address: "192.168.1.71", connected: true, lastSeenMs: Date.now() },
+        { hash: obsHash, name: "Stream computer", address: "192.168.1.72", connected: true, lastSeenMs: Date.now() },
+      ] }
+      if (command === "camera_router_status") return { installed: true, running: true, wanted: true, lanAddress: "192.168.1.20", ports: {}, restarts: 0, error: null, paths: [{ name: "pulpit", live: true, source: "rtspSession", readers: 2, tracks: ["H264"], frozen: true }] }
+      if (command === "feed_status") return { watching: 1, seq: 1, acked: 1, tvs: [{ id: "192.168.1.61:8095", watching: 1 }] }
+      return null
+    })
+    await mount()
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(host.querySelector('[aria-label="Camera connections"]')?.textContent).toContain("Signal frozen")
+    expect(host.querySelector('[aria-label="Camera connections"]')?.textContent).not.toContain("Checking")
+  })
+
   it("revokes one TV or paired device from its row, only after confirming (#445)", async () => {
     const phoneHash = "a".repeat(64)
     useSettingsStore.setState({ remoteDevices: [{ hash: phoneHash, name: "Stage phone", paired_at: "2026-10-26T00:00:00Z", role: "stage" }] })

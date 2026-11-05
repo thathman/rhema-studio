@@ -239,7 +239,7 @@ export function ConnectionsWorkspace() {
                   {cameras.map((camera) => {
                     const path = router.status?.paths.find((p) => p.name === camera.name)
                     const sending = cameraSending(router, camera.name)
-                    const state = sending === "sending" ? path?.frozen ? "Signal frozen" : "Sending" : sending === "not-sending" ? "Not sending" : sending === "router-off" ? "Router off" : "Checking"
+                    const state = sending === "sending" ? path?.frozen ? "Signal frozen" : "Sending" : sending === "frozen" ? "Signal frozen" : sending === "not-sending" ? "Not sending" : sending === "router-off" ? "Router off" : "Checking"
                     return <Row key={camera.name} title={camera.label} detail={path?.live ? `${path.readers} receiver${path.readers === 1 ? "" : "s"}` : "Waiting for the phone or camera"} state={state} tone={state === "Sending" ? "ok" : state === "Checking" ? "off" : "warn"} stage={{ kind: "camera", stage: deviceStage({ paired: true, assigned: true, reporting: state === "Sending" }), unknown: state === "Checking" }} />
                   })}
                 </ul>
