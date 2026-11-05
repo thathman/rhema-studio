@@ -65,22 +65,41 @@ export async function check(): Promise<void> {
     if (!o || o.type !== "display" || b.outputStatus[id]?.previewOpen) { waitingForScreen.delete(id); continue }
     if (resolveMonitorIndex(o, names, screens) === null) continue
     waitingForScreen.delete(id)
-    if (await enableOutput(o)) toast.success(`${o.name} is back on its screen`)
+    if (!(await enableOutput(o))) continue
+    // Its screen may have gone again while it opened (a cable flapping): never left on another screen.
+    const now = useMonitorStore.getState().names
+    if (resolveMonitorIndex(o, now, screens) === null) { void offUntilScreen(o); continue }
+    toast.success(`${o.name} is back on its screen`)
   }
   if (count >= prev) return
   // A screen an on-air output used went away. The OS would move its window onto a screen that is
   // left (the operator's), showing the congregation's picture there; it is closed instead and comes
   // back when its screen does. A movable window (windowed) is the operator's to place: left alone.
   const lost = screens.filter((o) => o.windowed !== true && resolveMonitorIndex(o, names, screens) === null && b.outputStatus[o.id]?.previewOpen)
-  for (const o of lost) {
-    waitingForScreen.add(o.id)
-    void disableOutput(o)
+  // Screens of one name cannot be told apart once one goes: say so only, never turn off the wrong one.
+  const twins = (o: (typeof screens)[number]) => screens.some((x) => x.id !== o.id && x.monitorName && x.monitorName === o.monitorName)
+  for (const o of lost.filter(twins)) toast.error(`${o.name}: a screen was disconnected`, { description: "Check the cable or choose another screen in Outputs." })
+  for (const o of lost.filter((x) => !twins(x))) {
+    void offUntilScreen(o)
     toast.error(`${o.name}: its screen was disconnected`, { description: "It is off until that screen is back, then it comes back on by itself. Check the cable, or choose another screen in Outputs." })
   }
 }
 
 /** Outputs turned off because their screen went away, to put back on air when it returns. */
 const waitingForScreen = new Set<string>()
+/** Off now, waiting for its screen (only once it is off: while on, it would read as the operator's choice). */
+async function offUntilScreen(o: Parameters<typeof disableOutput>[0]): Promise<void> {
+  if (await disableOutput(o)) waitingForScreen.add(o.id)
+}
+// The operator's own choice wins: turned on (anywhere), removed or pointed at another screen, it is
+// no longer waiting, so it never comes back on air by itself after they decided.
+useBroadcastStore.subscribe((s, prev) => {
+  for (const id of [...waitingForScreen]) {
+    const o = s.outputs.find((x) => x.id === id)
+    const was = prev.outputs.find((x) => x.id === id)
+    if (!o || s.outputStatus[id]?.previewOpen || (was && (was.monitorName !== o.monitorName || was.monitorIndex !== o.monitorIndex))) waitingForScreen.delete(id)
+  }
+})
 
 if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
   void check()

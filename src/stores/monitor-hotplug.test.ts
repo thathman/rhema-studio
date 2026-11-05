@@ -29,6 +29,7 @@ describe("a projector unplugged mid-service (#411 hot-plug)", () => {
     monitors = [{ name: "Built-in" }]
     await check()
     expect(disable).toHaveBeenCalledTimes(1)
+    await Promise.resolve()
     useBroadcastStore.setState({ outputStatus: { main: { previewOpen: false, ndiActive: false } } as never })
     // Something else plugged in: not its screen, it stays off.
     monitors = [{ name: "Built-in" }, { name: "Stage TV" }]
@@ -37,6 +38,29 @@ describe("a projector unplugged mid-service (#411 hot-plug)", () => {
     monitors = [{ name: "Built-in" }, { name: "Stage TV" }, { name: "EPSON PJ" }]
     await check()
     expect(enable).toHaveBeenCalledTimes(1)
+  })
+
+  it("the operator's own choice wins: turned on elsewhere and off again, it never comes back by itself", async () => {
+    monitors = [{ name: "Built-in" }, { name: "EPSON PJ" }]
+    await check()
+    monitors = [{ name: "Built-in" }]
+    await check()
+    await Promise.resolve()
+    useBroadcastStore.setState({ outputStatus: { main: { previewOpen: true, ndiActive: false } } as never })
+    useBroadcastStore.setState({ outputStatus: { main: { previewOpen: false, ndiActive: false } } as never })
+    monitors = [{ name: "Built-in" }, { name: "EPSON PJ" }]
+    await check()
+    expect(enable).not.toHaveBeenCalled()
+  })
+
+  it("two screens of one name: says so, never turns the wrong one off", async () => {
+    const b = { ...projector, id: "b", name: "Side", monitorIndex: 2 }
+    useBroadcastStore.setState({ outputs: [projector as never, b as never], outputStatus: { main: { previewOpen: true, ndiActive: false }, b: { previewOpen: true, ndiActive: false } } as never })
+    monitors = [{ name: "Built-in" }, { name: "EPSON PJ" }, { name: "EPSON PJ" }]
+    await check()
+    monitors = [{ name: "Built-in" }, { name: "EPSON PJ" }]
+    await check()
+    expect(disable).not.toHaveBeenCalled()
   })
 
   it("a movable window is the operator's to place: left alone", async () => {
