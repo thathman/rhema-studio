@@ -188,7 +188,7 @@ interface BroadcastState {
    */
   cameraControl: (name: string, change: CameraChange) => void
   /** Activate a source without changing the program (a heard verse while a song is up, C11). `by`: who (default: see currentActor). */
-  activateSource: (value: VerseRenderData, itemId?: string | null, by?: string) => void
+  activateSource: (value: VerseRenderData, itemId?: string | null, by?: string, bible?: { verse: Verse; item: ItemTranslations | null }) => void
   /** Congregation scenes (ARCH-002). Saved. */
   scenes: Scene[]
   /** Add or replace a scene (by id); outputs showing it redraw. */
@@ -1688,11 +1688,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (n) set({ scenePresets: get().scenePresets.map((p) => (p.id === id ? { ...p, name: n, updatedAt: Date.now() } : p)) })
   },
   deleteScenePreset: (id) => set({ scenePresets: get().scenePresets.filter((p) => p.id !== id) }),
-  activateSource: (value, itemId = null, by = currentActor()) => {
+  activateSource: (value, itemId = null, by = currentActor(), bible) => {
     const s = get()
     if (s.rehearsal) return
     const id = sourceOf(value)
-    set({ sources: { ...s.sources, [id]: { value, itemId, revision: ++activations, activatedAt: Date.now(), ...(by ? { by } : {}), on: true } } })
+    set({ sources: { ...s.sources, [id]: { value, itemId, revision: ++activations, activatedAt: Date.now(), ...(by ? { by } : {}), on: true, ...(bible ? { verse: bible.verse, item: bible.item } : {}) } } })
     get().syncBroadcastOutput()
   },
 

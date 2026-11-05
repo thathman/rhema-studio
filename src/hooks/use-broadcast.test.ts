@@ -295,6 +295,50 @@ describe("presentVerse", () => {
   })
 })
 
+describe("following the Bible feeds alone (#446)", () => {
+  it("gives way when a newer verse reached the Bible feeds while it loaded", async () => {
+    const romans: Verse = { ...sampleVerse, translation_id: 2, book_number: 45, book_name: "Romans", chapter: 8, verse: 28 }
+    const acts: Verse = { ...romans, book_number: 44, book_name: "Acts", chapter: 2, verse: 1 }
+    useBroadcastStore.setState({ liveVerse: null, liveSourceVerse: null, isLive: false, sources: { bible: { value: { kind: "verse", reference: "Romans 8:28", segments: [] } as never, itemId: null, revision: 1, activatedAt: 0, on: true, verse: romans, item: null } } })
+    let release!: (v: Verse) => void
+    mockInvoke.mockImplementationOnce(() => new Promise<Verse>((r) => { release = r }))
+    const follow = presentVerse(romans, { sourceOnly: true, follow: true })
+    await Promise.resolve()
+    useBroadcastStore.setState({ sources: { bible: { ...useBroadcastStore.getState().sources.bible!, verse: acts } } })
+    release(romans)
+    await expect(follow).resolves.toBe("superseded")
+    expect(useBroadcastStore.getState().sources.bible?.verse).toEqual(acts)
+    useBroadcastStore.setState({ sources: {} })
+  })
+
+  it("never brings back a feed cleared while it loaded", async () => {
+    const romans: Verse = { ...sampleVerse, translation_id: 2, book_number: 45, book_name: "Romans", chapter: 8, verse: 28 }
+    useBroadcastStore.setState({ sources: { bible: { value: { kind: "verse", reference: "Romans 8:28", segments: [] } as never, itemId: null, revision: 1, activatedAt: 0, on: true, verse: romans, item: null } } })
+    let release!: (v: Verse) => void
+    mockInvoke.mockImplementationOnce(() => new Promise<Verse>((r) => { release = r }))
+    const follow = presentVerse(romans, { sourceOnly: true, follow: true })
+    await Promise.resolve()
+    useBroadcastStore.setState({ sources: { bible: { ...useBroadcastStore.getState().sources.bible!, on: false } } })
+    release(romans)
+    await expect(follow).resolves.toBe("superseded")
+    expect(useBroadcastStore.getState().sources.bible?.on).toBe(false)
+    useBroadcastStore.setState({ sources: {} })
+  })
+
+  it("does not supersede Program's follow (separate turns)", async () => {
+    const romans: Verse = { ...sampleVerse, translation_id: 2, book_number: 45, book_name: "Romans", chapter: 8, verse: 28 }
+    const john: Verse = { ...sampleVerse, translation_id: 2 }
+    useBroadcastStore.setState({ isLive: true, liveSourceVerse: john, liveVerse: { kind: "verse", reference: "Genesis 1:2", segments: [] } as never, sources: { bible: { value: { kind: "verse", reference: "Romans 8:28", segments: [] } as never, itemId: null, revision: 1, activatedAt: 0, on: true, verse: romans, item: null } } })
+    let releaseProgram!: (v: Verse) => void
+    mockInvoke.mockImplementationOnce(() => new Promise<Verse>((r) => { releaseProgram = r })).mockResolvedValue(romans)
+    const program = presentVerse(john, { follow: true })
+    await presentVerse(romans, { sourceOnly: true, follow: true })
+    releaseProgram(john)
+    await expect(program).resolves.toBe("presented")
+    useBroadcastStore.setState({ sources: {}, isLive: false, liveSourceVerse: null })
+  })
+})
+
 describe("presentVerse translation policy", () => {
   const yoruba = { id: 7, abbreviation: "OYCB", title: "", language: "yo", is_copyrighted: false, is_downloaded: true }
   const kjv = { id: 1, abbreviation: "KJV", title: "", language: "en", is_copyrighted: false, is_downloaded: true }

@@ -73,6 +73,26 @@ describe("live stepping and following (audit fixes)", () => {
     expect((presentVerse.mock.calls[0] as unknown as [unknown, { follow?: boolean }])[1].follow).toBe(true)
   })
 
+  it("a verse sent to the Bible feeds alone follows a translation change too, after Program's (#446)", async () => {
+    const romans: Verse = { ...verse, book_number: 45, book_name: "Romans", chapter: 8, verse: 28 }
+    useBroadcastStore.setState({
+      liveSourceVerse: verse, liveItem: null, liveItemId: null, autoLive: false,
+      sources: { bible: { value: { kind: "verse", reference: "Romans 8:28", segments: [] } as never, itemId: null, revision: 9, activatedAt: 0, on: true, verse: romans, item: null } },
+    })
+    followTranslationOnAir(false)
+    await vi.waitFor(() => expect(presentVerse).toHaveBeenCalledTimes(2))
+    const calls = presentVerse.mock.calls as unknown as [Verse, { follow?: boolean; sourceOnly?: boolean }][]
+    expect([calls[0][0].book_number, calls[0][1].follow]).toEqual([43, true])
+    expect([calls[1][0].book_number, calls[1][1].sourceOnly, calls[1][1].follow]).toEqual([45, true, true])
+    // The Bible feeds showing Program's own verse (Program took them: no verse kept): one present, as before.
+    presentVerse.mockClear()
+    useBroadcastStore.setState({ sources: { bible: { value: { kind: "verse", reference: "John 3:16", segments: [] } as never, itemId: null, revision: 10, activatedAt: 0, on: true } } })
+    followTranslationOnAir(false)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(presentVerse).toHaveBeenCalledTimes(1)
+    useBroadcastStore.setState({ sources: {} })
+  })
+
   it("after the live item is deleted, Next goes to the item after it and Previous to the one before", async () => {
     const v = (id: string, n: number) => ({ id, verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: n, text: "t" }, reference: `John 3:${n}`, confidence: 1, source: "manual", added_at: 0 }) as unknown as QueueItem
     useBroadcastStore.setState({ liveSlide: null, liveItemId: "c", liveVerse: { kind: "verse", reference: "John 3:3", segments: [] } as never })

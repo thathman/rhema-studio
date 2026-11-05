@@ -64,6 +64,8 @@ export function getTranslationLabel(
 let presentSeq = 0
 /** Follows (a translation change re-presenting what is on air) have their own count: the newest wins. */
 let followSeq = 0
+/** Follows of the Bible feeds alone have their own turn (#446): they never supersede Program's. */
+let feedFollowSeq = 0
 
 /** The translations a present resolves against; a change while it loads means resolving again. */
 function translationsKey(): string {
@@ -167,7 +169,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
   const ticket = presentSeq
   // Who, taken now: a remote command's sender is only known while its handler runs.
   const by = opts.by ?? currentActor()
-  const followTicket = opts.follow ? ++followSeq : 0
+  const followTicket = opts.follow ? (opts.sourceOnly ? ++feedFollowSeq : ++followSeq) : 0
   const startKey = translationsKey()
   const ref = `${verse.book_name} ${verse.chapter}:${verse.verse}`
   mark(`presentVerse start ${ref}`)
@@ -216,9 +218,12 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
   if (ticket !== presentSeq || !targetIsCurrent(opts)) return "superseded"
   if (opts.follow) {
     // A newer follow, or a different verse reached the screen meanwhile: that wins.
-    const live = useBroadcastStore.getState().liveSourceVerse
+    // A follow of the Bible feeds alone checks the feeds' own verse, not Program's, and never brings
+    // back a feed cleared meanwhile (#446).
+    const feed = useBroadcastStore.getState().sources.bible
+    const live = opts.sourceOnly ? (feed?.on ? feed.verse ?? null : null) : useBroadcastStore.getState().liveSourceVerse
     const sameVerse = live !== null && live.book_number === verse.book_number && live.chapter === verse.chapter && live.verse === verse.verse
-    if (followTicket !== followSeq || !sameVerse) return "superseded"
+    if (followTicket !== (opts.sourceOnly ? feedFollowSeq : followSeq) || !sameVerse) return "superseded"
   }
   // The translation was changed while this loaded: resolve again, so the screen shows the one now chosen.
   if (translationsKey() !== startKey) return presentVerse(verse, { ...opts, by })
@@ -256,7 +261,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
     ? toDualVerseRenderData(renderEntries)
     : toVerseRenderData(renderEntries[0]?.verse ?? verseToPresent, renderEntries[0]?.translation ?? "KJV")
   if (opts.sourceOnly) {
-    useBroadcastStore.getState().activateSource({ ...data, ...layer, content: "bible" }, opts.itemId ?? null, by)
+    useBroadcastStore.getState().activateSource({ ...data, ...layer, content: "bible" }, opts.itemId ?? null, by, { verse: verseToPresent, item: opts.item ?? null })
     mark(`presentVerse end ${ref} (Bible source only)`)
     return "presented"
   }

@@ -1,4 +1,6 @@
 import type { ContentType, FeedSourceKind, VerseRenderData } from "@/types/broadcast"
+import type { ItemTranslations } from "@/lib/translation-policy"
+import type { Verse } from "@/types"
 import type { LowerThird, Ticker } from "@/types/broadcast-output"
 import { elapsedMs, formatMs, remainingMs, type TimerState } from "@/lib/timer"
 
@@ -20,6 +22,9 @@ export interface LiveSource {
   by?: string
   /** Off: cleared, the value kept for Restore. */
   on: boolean
+  /** A Bible source sent to the Bible feeds alone: the verse and its saved translations, so a translation change follows it (#446). */
+  verse?: Verse
+  item?: ItemTranslations | null
 }
 
 export type LiveSources = Partial<Record<SourceId, LiveSource>>
