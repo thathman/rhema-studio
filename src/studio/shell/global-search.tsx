@@ -2,7 +2,6 @@ import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, Mon
 import { useState } from "react"
 import { defaultFilter } from "cmdk"
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useQueueStore } from "@/stores"
 import { useShellStore, type DesignTab, type LibrarySection, type Workspace } from "@/studio/shell-store"
 import { openSettings, type SettingsSection } from "@/lib/settings-dialog"
@@ -111,8 +110,7 @@ export function GlobalSearch() {
               // In Live it cues Preview (Live's own action); anywhere else it opens in Prepare and Live is untouched (#447).
               <CommandItem key={it.id} value={`${i + 1} ${it.reference} item`} onSelect={() => run(() => {
                 if (inLive) return presentActions.previewItem(it)
-                useRundownSelection.getState().focus(it.id)
-                useShellStore.getState().goTo("prepare")
+                useShellStore.getState().openInPrepare(it.id)
               })}>
                 {itemIcon(it)} <span className="truncate">{it.reference}</span>
                 <span className="ml-auto text-xs text-muted-foreground">{inLive ? "Live preview" : "open in Prepare"}</span>
