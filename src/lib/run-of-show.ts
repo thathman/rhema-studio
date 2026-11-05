@@ -235,6 +235,12 @@ export function orderCounts<T extends ClockItem>(items: T[], headers: OutlineHea
   return { events, loose, items: items.length, label }
 }
 
+/** A saved service in a list, event-first (#404): "2 events · 12 moments", or "12 items" with no events. */
+export function savedServiceCount(p: { item_count: number; event_count?: number }): string {
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`
+  return p.event_count ? `${n(p.event_count, "event", "events")} · ${n(p.item_count, "moment", "moments")}` : n(p.item_count, "item", "items")
+}
+
 const shift = (headers: OutlineHeader[], from: number, by: 1 | -1): OutlineHeader[] =>
   headers.map((h) => (h.at > from ? { ...h, at: h.at + by } : h))
 

@@ -146,6 +146,10 @@ pub struct Program {
     /// The operator name set on this computer when it was approved, if any.
     #[serde(default)]
     pub approved_by: Option<String>,
+    /// Run-of-show events in the service (#404): groups that are events, so lists can say
+    /// "3 events · 12 moments", not only an item count.
+    #[serde(default)]
+    pub event_count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -892,11 +896,21 @@ pub(crate) fn has_archive_column(conn: &Connection) -> bool {
         .unwrap_or(false)
 }
 
-/// Columns 7.. of a program row; an older schema (a backup being checked) reads as unset.
+/// Columns 7.. of a program row (approval, archive, then the event count); an older schema (a backup being checked) reads as unset.
 fn approval_cols(conn: &Connection) -> String {
     let approval = if has_approval_column(conn) { ", p.approved_revision, p.approved_at" } else { ", NULL, NULL" };
     let archive = if has_archive_column(conn) { ", p.archived_at, p.is_template, p.approved_by" } else { ", NULL, 0, NULL" };
-    format!("{approval}{archive}")
+    // Run-of-show events (#404): groups whose payload says they are events; none before payloads (0003).
+    let has_payload = conn
+        .prepare("SELECT 1 FROM pragma_table_info('program_items') WHERE name = 'payload'")
+        .and_then(|mut st| st.exists([]))
+        .unwrap_or(false);
+    let events = if has_payload {
+        ", (SELECT COUNT(*) FROM program_items e WHERE e.program_id = p.id AND e.kind = 'group' AND json_valid(e.payload) AND json_extract(e.payload, '$.run_of_show_event') IS NOT NULL)"
+    } else {
+        ", 0"
+    };
+    format!("{approval}{archive}{events}")
 }
 
 fn row_to_program(r: &rusqlite::Row<'_>) -> rusqlite::Result<Program> {
@@ -913,6 +927,7 @@ fn row_to_program(r: &rusqlite::Row<'_>) -> rusqlite::Result<Program> {
         archived_at: r.get(9)?,
         is_template: r.get::<_, i64>(10)? != 0,
         approved_by: r.get(11)?,
+        event_count: r.get(12)?,
     })
 }
 
@@ -1717,6 +1732,24 @@ mod tests {
         let many = format!(r#"{{"cues":[{}]}}"#, vec![r#"{"on":"live","do":"timer.pause"}"#; 13].join(","));
         assert!(matches!(bad(&many), ContentError::Invalid(_)));
         assert!(matches!(db.replace_items(&p.id, 2, &[header("phase", "x", Some(r#"{"disabled":1}"#))]).unwrap_err(), ContentError::Invalid(_)));
+    }
+
+    #[test]
+    fn saved_services_count_their_run_of_show_events() {
+        // #404: lists say "2 events", counted from the groups that are events (not plain groups).
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        let rows = [
+            header("group", "Worship", Some(r#"{"run_of_show_event":{"schema_version":1}}"#)),
+            verse("John 3:16", 43, 3, 16),
+            header("group", "Sermon", Some(r#"{"run_of_show_event":{"schema_version":1,"duration_minutes":30}}"#)),
+            header("group", "Readings", None),
+            verse("Psalms 23:1", 19, 23, 1),
+        ];
+        let saved = db.replace_items(&p.id, 1, &rows).unwrap();
+        assert_eq!((saved.program.event_count, saved.program.item_count), (2, 2));
+        assert_eq!(db.list_programs().unwrap()[0].event_count, 2);
+        assert_eq!(db.create_program("Empty", None).unwrap().event_count, 0);
     }
 
     #[test]

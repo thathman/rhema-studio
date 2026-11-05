@@ -1,4 +1,5 @@
 import { toast } from "sonner"
+import { savedServiceCount } from "@/lib/run-of-show"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useServiceStore } from "@/stores/service-store"
@@ -95,7 +96,7 @@ export function ArchiveWorkspace() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-bold">{p.title}</span>
-                    <span className="block text-xs text-muted-foreground">{[fullDate, `${p.item_count} item${p.item_count === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}</span>
+                    <span className="block text-xs text-muted-foreground">{[fullDate, savedServiceCount(p)].filter(Boolean).join(" · ")}</span>
                   </span>
                   {p.archived_at ? <Badge variant="neutral">Archived</Badge> : approvalState(p) === "approved" ? <Badge variant="green">Approved</Badge> : approvalState(p) === "changed" ? <Badge variant="amber">Changed since approval</Badge> : <Badge variant="neutral">Not approved</Badge>}
                   {current?.id === p.id ? <span className="text-xs text-muted-foreground">open</span> : <Button size="sm" variant="outline" disabled={dirty} onClick={() => open(p.id)}>Open</Button>}

@@ -14,7 +14,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
 import { type ReadinessCheck, type ReadinessFix } from "@/studio/readiness"
 import { isImageItem, isSongItem } from "@/types"
-import { isSkipped, nextVisibleItem, orderCounts, plannedTimes, projectRunOfShowEvents } from "@/lib/run-of-show"
+import { isSkipped, nextVisibleItem, orderCounts, plannedTimes, projectRunOfShowEvents, savedServiceCount } from "@/lib/run-of-show"
 import { formatMinutes } from "@/lib/service-timing"
 import { useReadiness } from "@/studio/use-readiness"
 import { ChurchFolderCard } from "@/studio/home/church-folder-card"
@@ -229,7 +229,7 @@ export function HomeWorkspace() {
                     <span className="min-w-0 flex-1 truncate text-sm">
                       {p.title}
                       <span className="ml-2 text-xs text-muted-foreground">
-                        {p.service_date ?? "undated"} · {p.item_count} item{p.item_count === 1 ? "" : "s"}{approvalState(p) === "approved" ? " · approved" : approvalState(p) === "changed" ? " · changed since approval" : ""}
+                        {p.service_date ?? "undated"} · {savedServiceCount(p)}{approvalState(p) === "approved" ? " · approved" : approvalState(p) === "changed" ? " · changed since approval" : ""}
                       </span>
                     </span>
                     {current?.id === p.id ? (
