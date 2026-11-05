@@ -7,7 +7,7 @@ import { recorderOutputLeftMessage, useRecorderAlertStore } from "@/stores/recor
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useShellStore, type Workspace } from "@/studio/shell-store"
 import { useJournalStore } from "@/stores/journal-store"
-import { recordingLogEntry, type RecorderLogStatus } from "@/lib/recording-log"
+import { recordingLogEntries, type RecorderLogStatus } from "@/lib/recording-log"
 
 /** Recordings whose failure is already in the service log (by session), for this run of the app. */
 const loggedFailures = new Set<string>()
@@ -82,9 +82,9 @@ export function RecorderStatusIndicator({ workspace }: { workspace: Workspace })
   const previous = useRef<RecorderSummary | null>(null)
   useEffect(() => {
     if (!status) return
-    const entry = recordingLogEntry(previous.current, status, (id) => useBroadcastStore.getState().outputs.find((o) => o.id === id)?.name ?? id, loggedFailures)
+    const entries = recordingLogEntries(previous.current, status, (id) => useBroadcastStore.getState().outputs.find((o) => o.id === id)?.name ?? id, loggedFailures)
     previous.current = status
-    if (entry) useJournalStore.getState().add({ kind: "recording", label: entry.label, recording: entry.phase, ...(status.outputId ? { outputId: status.outputId } : {}) })
+    for (const entry of entries) useJournalStore.getState().add({ kind: "recording", label: entry.label, recording: entry.phase, ...(status.outputId ? { outputId: status.outputId } : {}) })
   }, [status])
 
   useEffect(() => {

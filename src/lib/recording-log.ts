@@ -16,26 +16,35 @@ export type RecorderLogStatus = {
 
 export type RecordingPhase = "started" | "stopped" | "failed"
 
-export function recordingLogEntry(
+export function recordingLogEntries(
   prev: RecorderLogStatus | null,
   next: RecorderLogStatus,
   outputName: (id: string) => string,
   loggedFailures: Set<string>,
-): { phase: RecordingPhase; label: string } | null {
+): Array<{ phase: RecordingPhase; label: string }> {
   // The first status seen (the app opening) is not a change: nothing is claimed about it.
-  if (!prev || prev.state === next.state) return null
-  if (next.state === "recording" && prev.state !== "finalizing") {
-    return { phase: "started", label: `Recording started${next.outputId ? `: ${outputName(next.outputId)}` : ""}` }
+  if (!prev) return []
+  const started = { phase: "started" as const, label: `Recording started${next.outputId ? `: ${outputName(next.outputId)}` : ""}` }
+  // A stop and a new start inside one status poll: the recording changed, though the state did not.
+  const newSession = !!prev.sessionId && !!next.sessionId && prev.sessionId !== next.sessionId
+  if (prev.state === "recording" && next.state === "recording") {
+    return newSession ? [{ phase: "stopped", label: "Recording stopped" }, started] : []
   }
+  if (prev.state === next.state) return []
+  if (next.state === "recording" && prev.state !== "finalizing") return [started]
   if (next.state === "saved" && (prev.state === "recording" || prev.state === "finalizing")) {
     const dropped = next.video?.framesDropped ?? 0
-    return { phase: "stopped", label: `Recording stopped after ${Math.round((next.elapsedMs ?? 0) / 1000)} s${dropped ? ` · ${dropped} frames dropped` : ""}` }
+    return [{ phase: "stopped", label: `Recording stopped after ${Math.round((next.elapsedMs ?? 0) / 1000)} s${dropped ? ` · ${dropped} frames dropped` : ""}` }]
+  }
+  // The file did not close properly but has something in it: stopped, and History can recover it.
+  if (next.state === "recoverable" && (prev.state === "recording" || prev.state === "finalizing")) {
+    return [{ phase: "stopped", label: `Recording stopped; its file did not close properly and can be recovered in History${next.problem?.message ? ` (${next.problem.message})` : ""}` }]
   }
   if (next.state === "failed") {
     const key = next.sessionId ?? next.startedAt ?? `${prev.state}-${next.problem?.message ?? ""}`
-    if (loggedFailures.has(key)) return null
+    if (loggedFailures.has(key)) return []
     loggedFailures.add(key)
-    return { phase: "failed", label: `Recording failed: ${next.problem?.message ?? "the recorder stopped"}` }
+    return [{ phase: "failed", label: `Recording failed: ${next.problem?.message ?? "the recorder stopped"}` }]
   }
-  return null
+  return []
 }
