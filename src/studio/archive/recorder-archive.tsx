@@ -36,7 +36,7 @@ interface RecordingManifest {
 }
 
 /** Which service run a recording files under, as History names it. */
-export function runLabel(runId: string | null | undefined, runs: ServiceRunSummary[]): string {
+function runLabel(runId: string | null | undefined, runs: ServiceRunSummary[]): string {
   if (!runId) return "Not linked to a service run (none was running when it started)"
   const run = runs.find((r) => r.run_id === runId)
   if (!run) return "Service run no longer in recent History"
