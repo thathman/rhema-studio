@@ -52,6 +52,7 @@ const SECTIONS: ReadonlyArray<readonly [LibrarySection, string]> = [
   ["slides", "Slides & announcements"],
   ["designs", "Visual designs"],
   ["media", "Pictures & videos"],
+  ["audio", "Sounds"],
   ["files", "Import & export"],
 ]
 
@@ -462,7 +463,8 @@ export function LibraryWorkspace() {
           <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-card p-4">
             {section === "hymns" && <HymnBook onUseItem={useItem} />}
             {section === "slides" && <SlideLibrary key={newSlide} onUseItem={useItem} />}
-            {section === "media" && <MediaLibrary onUseItem={useItem} />}
+            {section === "media" && <MediaLibrary kinds="visual" onUseItem={useItem} />}
+            {section === "audio" && <MediaLibrary kinds="audio" onUseItem={useItem} />}
             {section === "files" && <div className="h-full max-w-2xl overflow-y-auto"><SongFiles /></div>}
           </div>
         )}
