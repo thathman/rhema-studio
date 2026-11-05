@@ -158,12 +158,16 @@ export function HoldControl() {
   const hold = useHold((s) => s.hold)
   const [reason, setReason] = useState("")
   // Refused by the run state (#196 R3.7): a finished service has nothing to hold.
-  const [refused, setRefused] = useState<string | null>(null)
+  // Kept with the hold it was about, so it goes once that hold ends or another begins.
+  const [refusal, setRefusal] = useState<{ why: string; at: number | null } | null>(null)
+  const refused = refusal && refusal.at === (hold?.since ?? null) ? refusal.why : null
+  const setRefused = (why: string | null) => setRefusal(why ? { why, at: useHold.getState().hold?.since ?? null } : null)
   if (hold) {
     return (
       <div className="mt-3 flex items-center gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2 py-1.5 text-xs" role="status">
         <span className="min-w-0 flex-1"><b>On hold</b> since {timeText(hold.since, churchTimeZone())}: {hold.reason}{hold.by ? ` · by ${hold.by}` : ""}</span>
-        <Button size="xs" onClick={() => useHold.getState().resume()}>Resume</Button>
+        <Button size="xs" onClick={() => setRefused(useHold.getState().resume())}>Resume</Button>
+        {refused && <span className="text-muted-foreground">{refused}</span>}
       </div>
     )
   }

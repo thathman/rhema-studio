@@ -45,6 +45,20 @@ describe("a hold in the service (issue #196)", () => {
     expect(useJournalStore.getState().entries.map((e) => e.label)).toEqual(expect.arrayContaining(["hold: waiting for the pastor", "resumed after 3:00"]))
   })
 
+  it("is neither started nor resumed from rehearsal, so nothing of it leaks past rehearsal (#411)", () => {
+    useBroadcastStore.setState({ rehearsal: true })
+    expect(useHold.getState().start("Waiting for pastor")).toContain("rehearsal")
+    expect(useHold.getState().hold).toBeNull()
+    useBroadcastStore.setState({ rehearsal: false })
+    expect(useHold.getState().start("Waiting for pastor")).toBeNull()
+    useBroadcastStore.setState({ rehearsal: true })
+    expect(useHold.getState().resume()).toContain("rehearsal")
+    expect(useHold.getState().hold?.reason).toBe("Waiting for pastor")
+    useBroadcastStore.setState({ rehearsal: false })
+    expect(useHold.getState().resume()).toBeNull()
+    expect(useHold.getState().hold).toBeNull()
+  })
+
   it("Resume leaves a stage message the operator changed meanwhile", () => {
     useHold.getState().start("tech issue")
     useBroadcastStore.getState().setStageMessage("Mic 2 is off")

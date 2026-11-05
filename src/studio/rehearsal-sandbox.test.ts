@@ -63,6 +63,24 @@ describe("rehearsal is a sandbox (ARCH-003)", () => {
     expect(useBroadcastStore.getState().ticker).toBe(real)
   })
 
+  it("a running timer keeps counting after a Reset in rehearsal is undone (#411)", () => {
+    vi.useFakeTimers()
+    try {
+      useTimerStore.getState().start()
+      useBroadcastStore.getState().setRehearsal(true)
+      // Reset stops the ticker that keeps the chips and the stage display counting.
+      useTimerStore.getState().reset()
+      leaveRehearsal()
+      expect(useTimerStore.getState().timer.startedAt).not.toBeNull()
+      const tick = useTimerStore.getState().tick
+      vi.advanceTimersByTime(1100)
+      expect(useTimerStore.getState().tick).toBeGreaterThan(tick)
+    } finally {
+      useTimerStore.getState().reset()
+      vi.useRealTimers()
+    }
+  })
+
   it("a timer reset in rehearsal touches neither the real timer nor the service log", () => {
     useTimerStore.getState().start()
     const real = useTimerStore.getState().timer
