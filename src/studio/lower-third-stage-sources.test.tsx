@@ -133,6 +133,21 @@ describe("the stage message as a live source", () => {
     expect(last("stage-west")?.stage?.message).toBe("Updated shared cue")
   })
 
+  it("the host clears a message a Stage desk sent to one display, with no shared message up (#411)", () => {
+    useBroadcastStore.setState({ outputs: [...useBroadcastStore.getState().outputs, out({ id: "stage-east", type: "display", role: "stage" })] })
+    expect(useBroadcastStore.getState().stageMessage).toBe("")
+    expect(useBroadcastStore.getState().setOutputStageMessage("stage-east", "Choir enters now")).toBe(true)
+    expect(last("stage-east")?.stage?.message).toBe("Choir enters now")
+    // Clear in Sources (and the "Clear the stage message" cue) reaches it.
+    useBroadcastStore.getState().clearSource("stage")
+    expect(useBroadcastStore.getState().stageMessagesByOutput).toEqual({})
+    expect(last("stage-east")?.stage?.message ?? "").toBe("")
+    // And so does the stage message box's Clear (setStageMessage("")).
+    useBroadcastStore.getState().setOutputStageMessage("stage-east", "Again")
+    useBroadcastStore.getState().setStageMessage("")
+    expect(useBroadcastStore.getState().stageMessagesByOutput).toEqual({})
+  })
+
   it("shares Stage display names with the host but not unrelated signage outputs", () => {
     useBroadcastStore.setState({ outputs: [
       ...useBroadcastStore.getState().outputs,

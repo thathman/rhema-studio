@@ -13,6 +13,8 @@ const QUICK = ["Wrap up", "2 minutes left", "One more time", "Softer, please", "
 export function StageMessage() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const message = useBroadcastStore((s) => s.stageMessage)
+  // Messages a Stage desk sent to one display: the host can clear them here too (#411).
+  const privateCount = useBroadcastStore((s) => Object.keys(s.stageMessagesByOutput).length)
   const draft = usePresentDraftsStore((s) => s.stageMessage)
   const setDraft = usePresentDraftsStore((s) => s.setStageMessage)
   const hasStage = outputs.some((o) => o.role === "stage")
@@ -63,8 +65,10 @@ export function StageMessage() {
         >
           <PaletteIcon /> Design stage display…
         </Button>
-        {message && (
+        {message ? (
           <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={() => send("")}><XIcon /> Clear "{message}"</Button>
+        ) : privateCount > 0 && (
+          <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={() => send("")}><XIcon /> Clear the message{privateCount === 1 ? "" : "s"} sent to {privateCount === 1 ? "a stage display" : `${privateCount} stage displays`}</Button>
         )}
       </PopoverContent>
     </Popover>
