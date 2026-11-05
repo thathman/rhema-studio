@@ -875,7 +875,10 @@ describe("Library workspace", () => {
       activeTranslationId: 4,
       books: [john],
     })
+    // A verse already in Live's Preview, in the active edition: it must stay exactly as it is.
+    useBibleStore.setState({ selectedVerse: { ...bibleVerse, text: "Preview verse in KJV" } as never })
     const previewBefore = useBibleStore.getState().selectedVerse
+    expect(previewBefore).not.toBeNull()
     await act(async () => {
       root!.render(<LibraryWorkspace />)
     })
