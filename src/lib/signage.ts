@@ -1,3 +1,4 @@
+import { wallParts } from "@/lib/church-time"
 import type { SignagePlaylist, SignageSchedule, SignageSettings, VerseRenderData } from "@/types"
 
 /** Which picture a signage loop shows now: `seconds` per picture, round-robin, from when the loop started. */
@@ -26,13 +27,15 @@ const minutes = (hhmm: string): number | null => {
  * is earlier than its start crosses midnight (22:00–02:00); the day check
  * applies to the day the window started.
  */
-export function signageActive(schedule: SignageSchedule | undefined, now: Date): boolean {
+export function signageActive(schedule: SignageSchedule | undefined, now: Date, zone = ""): boolean {
   if (!schedule) return true
   const from = minutes(schedule.from)
   const to = minutes(schedule.to)
   if (from === null || to === null) return true
-  const t = now.getHours() * 60 + now.getMinutes()
-  const day = now.getDay()
+  // The church's clock when its time zone is set (#411), else this computer's.
+  const wall = wallParts(now.getTime(), zone)
+  const t = wall.hour * 60 + wall.minute
+  const day = new Date(Date.UTC(wall.year, wall.month, wall.day)).getUTCDay()
   const dayOk = (d: number) => schedule.days.length === 0 || schedule.days.includes(d)
   // The same start and end (00:00–00:00): the whole of each ticked day.
   if (from === to) return dayOk(day)
@@ -48,10 +51,10 @@ export function signageActive(schedule: SignageSchedule | undefined, now: Date):
  * one whose window is open, else the first without a schedule, else none.
  * Settings without `playlists` are the single legacy loop.
  */
-export function activePlaylist(settings: SignageSettings | undefined, now: Date): SignagePlaylist | null {
+export function activePlaylist(settings: SignageSettings | undefined, now: Date, zone = ""): SignagePlaylist | null {
   if (!settings) return null
   const lists = settings.playlists?.length ? settings.playlists : [{ name: "Loop", mediaIds: settings.mediaIds, seconds: settings.seconds, schedule: settings.schedule }]
-  const scheduled = lists.find((p) => p.schedule && signageActive(p.schedule, now))
+  const scheduled = lists.find((p) => p.schedule && signageActive(p.schedule, now, zone))
   if (scheduled) return scheduled
   return lists.find((p) => !p.schedule) ?? null
 }
