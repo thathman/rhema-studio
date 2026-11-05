@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core"
+import { startDraftRecovery } from "@/lib/draft-recovery"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import { create } from "zustand"
 import { enableOutput } from "@/lib/broadcast-output-control"
@@ -793,6 +794,9 @@ export async function startLiveRecovery(): Promise<() => void> {
   if (unclean && store) {
     try { restoreNotices(await store.get<KeptNotices>("notices")) } catch { /* Keep startup available if notices are damaged. */ }
   }
+  // Unsaved Prepare edits from before the crash, offered on their own (#411).
+  let stopDraft: () => void = () => {}
+  try { stopDraft = await startDraftRecovery(unclean) } catch { /* Draft recovery is optional at start-up. */ }
   // No crash to put back: Program starts empty, so no screen should still hold a moment's design.
   if (!useRecovery.getState().offer && !useBroadcastStore.getState().isLive) restoreAfterDesignedMoment()
   const offs = [
@@ -817,6 +821,7 @@ export async function startLiveRecovery(): Promise<() => void> {
   ]
   return () => {
     offs.forEach((off) => off())
+    stopDraft()
     if (timer) clearTimeout(timer)
     if (journalTimer) clearTimeout(journalTimer)
     if (noticesTimer) clearTimeout(noticesTimer)

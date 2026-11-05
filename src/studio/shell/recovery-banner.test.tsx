@@ -16,6 +16,7 @@ vi.mock("@tauri-apps/plugin-store", () => ({
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { useRecovery } from "@/lib/live-recovery"
+import { useDraftRecovery } from "@/lib/draft-recovery"
 import { useShellStore } from "@/studio/shell-store"
 import { RecoveryBanner } from "./recovery-banner"
 
@@ -100,5 +101,18 @@ describe("recovery damage notice", () => {
     expect(host.textContent).not.toContain("Nothing goes back until you choose.")
     expect(host.textContent).toContain("Put back on the screens")
     expect(host.textContent).toContain("Continue with available state")
+  })
+
+  it("offers unsaved Prepare edits from before the crash, to put back in Prepare (never Live) or discard (#411)", async () => {
+    await act(async () => {
+      useRecovery.setState({ damaged: false })
+      useDraftRecovery.setState({ offer: { v: 1, at: Date.now(), programId: "svc", title: "Sunday service", revision: 3, items: [], headers: [] }, error: null })
+    })
+    const notice = host.querySelector('[aria-label="Unsaved changes from before Rhema Studio closed"]')!
+    expect(notice.textContent).toContain("Unsaved changes to “Sunday service” were kept")
+    expect(notice.textContent).toContain("Nothing goes Live")
+    expect(notice.textContent).toContain("Put back in Prepare")
+    await act(async () => [...notice.querySelectorAll("button")].find((b) => b.textContent === "Discard")!.click())
+    expect(useDraftRecovery.getState().offer).toBeNull()
   })
 })
