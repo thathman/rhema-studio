@@ -38,7 +38,8 @@ const LIBRARY: ReadonlyArray<readonly [LibrarySection, string, string]> = [
   ["hymns", "Hymn book", "hymns hymn book cac numbers sss"],
   ["slides", "Slides & announcements", "slides announcements notices reusable welcome"],
   ["designs", "Visual designs", "designs saved versions pinned"],
-  ["media", "Pictures & videos", "pictures images photos videos media sounds audio"],
+  ["media", "Pictures & videos", "pictures images photos videos media"],
+  ["audio", "Sounds", "sounds audio music mp3 walk-in backing track sting"],
   ["files", "Import & export", "import export files backup songs openlyrics"],
 ]
 
