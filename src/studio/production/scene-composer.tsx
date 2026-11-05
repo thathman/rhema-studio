@@ -425,7 +425,7 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
       },
       image: (url) => {
         const img = themeImageCache().get(url)
-        if (!img) void loadThemeImage(url).then(() => redraw((n) => n + 1))
+        if (!img) void loadThemeImage(url).then((ok) => { if (ok) redraw((n) => n + 1) })
         return img ?? null
       },
     })

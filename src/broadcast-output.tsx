@@ -206,7 +206,8 @@ function BroadcastCanvas() {
             lowerThirdVideo: backingPlayer?.element() ?? null,
             image: (url) => {
               const img = themeImageCache().get(url)
-              if (!img) void loadThemeImage(url).then(() => { redrawRef.current?.(); pushNdiBurstRef.current?.() })
+              // Only a picture that came: a missing file would redraw, ask again and redraw for ever (#411).
+              if (!img) void loadThemeImage(url).then((ok) => { if (ok) { redrawRef.current?.(); pushNdiBurstRef.current?.() } })
               return img ?? null
             },
           }), true)
@@ -268,7 +269,8 @@ function BroadcastCanvas() {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext("2d")
     const data = latestData.current
-    if (!canvas || !ctx || !data?.ticker || !baseValid || baseCanvas.width !== canvas.width) {
+    // Black is black: no ticker band copied back from the frame before it (#411).
+    if (!canvas || !ctx || !data?.ticker || data.verse?.screen === "black" || !baseValid || baseCanvas.width !== canvas.width) {
       draw()
       return null
     }
@@ -485,7 +487,7 @@ function BroadcastCanvas() {
     // On a screen (not NDI): the ticker moves on the display's refresh.
     const tickTicker = () => {
       if (!tickerRunning) return
-      if (!latestData.current?.ticker || latestData.current.ticker.pausedAt || stageRef.current || ndiConfigRef.current.active) {
+      if (!latestData.current?.ticker || latestData.current.ticker.pausedAt || latestData.current.verse?.screen === "black" || stageRef.current || ndiConfigRef.current.active) {
         tickerRunning = false
         draw()
         return
