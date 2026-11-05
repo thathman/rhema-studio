@@ -562,6 +562,23 @@ impl Recorder {
         true
     }
 
+    /// A recording started before the service went live has no run yet (#703): the run that starts
+    /// while it records becomes its run, so History files it under that service. Never changes a run
+    /// it already has, and never files a rehearsal under a real service. True when it was filed.
+    pub fn adopt_run(&self, run_id: &str, program_id: Option<String>) -> bool {
+        let mut guard = self.lock();
+        let Some(s) = guard.as_mut() else { return false };
+        if s.manifest.rehearsal || s.manifest.service_run_id.is_some() || run_id.trim().is_empty() {
+            return false;
+        }
+        s.manifest.service_run_id = Some(run_id.to_string());
+        s.manifest.program_id = program_id;
+        if let Err(e) = manifest::write(&s.dir, &s.manifest) {
+            log::warn!("[recorder] recording not filed under its service run: {e}");
+        }
+        true
+    }
+
     /// Mark a moment (a sermon start, a hymn). Kept in the manifest; never sent to OBS.
     pub fn marker(&self, label: &str, actor: &str, service_run_id: Option<String>, item_id: Option<String>) -> Result<RecorderMarker, RecorderProblem> {
         let mut guard = self.lock();
@@ -1564,6 +1581,27 @@ mod tests {
             release.join().unwrap();
         });
         assert_eq!(rec.start(&silent_request(), 1280, 720).unwrap_err().code, ProblemCode::NotAllowed);
+    }
+
+    #[test]
+    fn a_recording_started_before_the_service_files_itself_under_the_run_that_starts() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        assert!(!rec.adopt_run("run-1", None), "nothing recording");
+        *rec.lock() = Some(stub_session(t.path()));
+        assert!(rec.adopt_run("run-1", Some("service-1".into())));
+        let saved = manifest::read(t.path()).unwrap();
+        assert_eq!((saved.service_run_id.as_deref(), saved.program_id.as_deref()), (Some("run-1"), Some("service-1")));
+        // A run it already has stays; a rehearsal is never filed under a real service.
+        assert!(!rec.adopt_run("run-2", None));
+        assert_eq!(rec.lock().as_ref().unwrap().manifest.service_run_id.as_deref(), Some("run-1"));
+        {
+            let mut guard = rec.lock();
+            let m = &mut guard.as_mut().unwrap().manifest;
+            m.service_run_id = None;
+            m.rehearsal = true;
+        }
+        assert!(!rec.adopt_run("run-3", None));
     }
 
     #[test]

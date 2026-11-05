@@ -84,6 +84,7 @@ pub fn content_save_service_log(state: State<'_, ContentState>, program_id: Opti
 #[expect(clippy::too_many_arguments, reason = "Tauri exposes each stable service-run context field as a named IPC argument")]
 pub fn content_checkpoint_service_run(
     state: State<'_, ContentState>,
+    recorder: State<'_, super::recorder::RecorderHost>,
     run_id: String,
     program_id: Option<String>,
     program_revision: Option<i64>,
@@ -94,7 +95,14 @@ pub fn content_checkpoint_service_run(
     checkpoint: serde_json::Value,
 ) -> CmdResult<ServiceRun> {
     let input = ServiceRunCheckpoint { run_id, program_id, program_revision, service_date, title, time_zone, started_at, checkpoint };
-    with_db(&state, |db| db.checkpoint_service_run(&input))
+    let run = with_db(&state, |db| db.checkpoint_service_run(&input))?;
+    // A recording started before this service went live is filed under it (#703).
+    if run.status == "active" {
+        if let Some(rec) = recorder.0.get() {
+            rec.adopt_run(&run.run_id, run.program_id.clone());
+        }
+    }
+    Ok(run)
 }
 
 #[tauri::command]
