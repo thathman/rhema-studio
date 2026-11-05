@@ -14,7 +14,7 @@ import { themeDraftChanged } from "@/stores/broadcast-store"
 
 /** Work that is not saved yet (the same as the close question asks about). */
 function unsavedWork(): boolean {
-  return useServiceStore.getState().dirty || useUnsavedStore.getState().songEditor !== null || useUnsavedStore.getState().designEditor !== null || unsavedScratch(useQueueStore.getState().items, useServiceStore.getState().current) || themeDraftChanged()
+  return useServiceStore.getState().dirty || useUnsavedStore.getState().songEditor !== null || useUnsavedStore.getState().designEditor !== null || useUnsavedStore.getState().specialistDraft !== null || unsavedScratch(useQueueStore.getState().items, useServiceStore.getState().current) || themeDraftChanged()
 }
 
 /**

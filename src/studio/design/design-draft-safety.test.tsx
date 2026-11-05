@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@/components/ui/canvas-verse", () => ({ CanvasVerse: () => <div aria-label="Design preview" /> }))
 vi.mock("@/studio/prepare/slide-composer", () => ({ SlideBackground: () => <div /> }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), emit: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
+const ask = vi.hoisted(() => vi.fn(async () => false))
+vi.mock("@tauri-apps/plugin-dialog", () => ({ ask }))
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -18,6 +20,8 @@ import { DEFAULT_STAGE_STYLE } from "@/lib/stage-style"
 import { DEFAULT_COUNTDOWN_LOOK } from "@/lib/countdown-display"
 import { defaultBrandKit } from "@/lib/brand-kit"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useUnsavedStore } from "@/stores/unsaved-store"
+import { mayLeaveDesignDocumentDraft } from "@/lib/design-document-draft"
 
 let root: Root | null = null
 
@@ -71,6 +75,23 @@ function setValue(element: HTMLInputElement | HTMLSelectElement, value: string) 
 }
 
 describe("design editors keep edits in draft until applied (#442)", () => {
+  it("asks before an unsaved lower-third edit is left behind, and forgets it once saved or closed (#411)", async () => {
+    useUnsavedStore.setState({ specialistDraft: null, designEditor: null })
+    const element = await render(<LowerThirdDesigner />)
+    expect(await mayLeaveDesignDocumentDraft()).toBe(true)
+    await act(async () => setValue(element.querySelector<HTMLInputElement>('[aria-label="Style name"]')!, "Evening band"))
+    expect(useUnsavedStore.getState().specialistDraft).toBe("this lower third")
+    ask.mockResolvedValueOnce(false)
+    expect(await mayLeaveDesignDocumentDraft()).toBe(false)
+    expect(ask).toHaveBeenLastCalledWith(expect.stringContaining("this lower third"), expect.anything())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    expect(useUnsavedStore.getState().specialistDraft).toBeNull()
+    await act(async () => setValue(element.querySelector<HTMLInputElement>('[aria-label="Style name"]')!, "Again"))
+    act(() => root?.unmount())
+    root = null
+    expect(useUnsavedStore.getState().specialistDraft).toBeNull()
+  })
+
   it("does not change a lower third that is already on air while editing", async () => {
     const style = { ...DEFAULT_LOWER_THIRD_STYLE }
     useBroadcastStore.setState({

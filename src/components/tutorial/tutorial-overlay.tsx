@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useUnsavedStore } from "@/stores/unsaved-store"
+import { themeDraftChanged } from "@/stores/broadcast-store"
 import { ACTIONS, EVENTS, Joyride, STATUS, type EventData } from "react-joyride"
 import { toast } from "sonner"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -77,6 +79,13 @@ export function TutorialOverlay() {
   useEffect(() => {
     const shell = useShellStore.getState()
     if (isRunning) {
+      // The tour moves between workspaces without asking: never over unsaved work (#411).
+      const unsaved = useUnsavedStore.getState()
+      if (unsaved.songEditor || unsaved.designEditor || unsaved.specialistDraft || themeDraftChanged()) {
+        toast("Save or discard what you are editing, then start the tour.")
+        useTutorialStore.getState().stopTutorial()
+        return
+      }
       before.current ??= shell.workspace
       goTo(0)
     } else if (before.current) {

@@ -1,6 +1,9 @@
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { useUnsavedStore } from "@/stores/unsaved-store"
 import { designDraftId, type DesignDraft, type DesignDraftKind } from "@/lib/design-drafts"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+
+const DRAFT_LABEL: Record<DesignDraftKind, string> = { "lower-third": "this lower third", ticker: "the news ticker", stage: "the stage display", countdown: "the countdown" }
 
 export function useDesignDraft<T>(kind: DesignDraftKind, sourceId: string, published: T, normalize: (value: T) => T) {
   const id = designDraftId(kind, sourceId)
@@ -8,6 +11,11 @@ export function useDesignDraft<T>(kind: DesignDraftKind, sourceId: string, publi
   const [edited, setEdited] = useState<{ value: T } | null>(null)
   const value = edited?.value ?? (stored ? normalize(stored.value as T) : published)
   const dirty = edited !== null
+  // Unsaved look edits are asked about before Design closes or another tab opens (#411).
+  useEffect(() => {
+    useUnsavedStore.getState().setSpecialistDraft(dirty ? DRAFT_LABEL[kind] : null)
+  }, [dirty, kind])
+  useEffect(() => () => useUnsavedStore.getState().setSpecialistDraft(null), [])
 
   const update = useCallback((next: T) => {
     setEdited({ value: next })
