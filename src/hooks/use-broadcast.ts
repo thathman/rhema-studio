@@ -268,7 +268,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
       { goLive: opts.goLive, item: opts.item ?? null, itemId: opts.itemId ?? null, follow: opts.follow, by }
     )
   // A second language the screens should show but that has no text here: said, not silently dropped (#446).
-  if (translationIds.length > 1 && renderEntries.length < 2 && !opts.follow) {
+  if (translationIds.length > 1 && renderEntries.length < 2 && !opts.follow && useBroadcastStore.getState().isLive) {
     useBroadcastStore.getState().setPresentWarning(`${ref}: no text in ${getTranslationLabel(translationIds[1], "the second translation")}; shown in ${getTranslationLabel(translationIds[0], "the first")} only.`)
   }
   mark(`presentVerse end ${ref}`)
