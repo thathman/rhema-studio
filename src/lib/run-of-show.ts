@@ -235,6 +235,16 @@ export function orderCounts<T extends ClockItem>(items: T[], headers: OutlineHea
   return { events, loose, items: items.length, label }
 }
 
+/**
+ * A saved service in a list, event-first (#404): "2 events · 12 items in all", or "12 items" with no
+ * events. "in all" because the count includes items outside events, unlike an open service's
+ * orderCounts ("2 events · 3 items", the loose ones).
+ */
+export function savedServiceCount(p: { item_count: number; event_count?: number }): string {
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`
+  return p.event_count ? `${n(p.event_count, "event", "events")} · ${n(p.item_count, "item", "items")} in all` : n(p.item_count, "item", "items")
+}
+
 const shift = (headers: OutlineHeader[], from: number, by: 1 | -1): OutlineHeader[] =>
   headers.map((h) => (h.at > from ? { ...h, at: h.at + by } : h))
 

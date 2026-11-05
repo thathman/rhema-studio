@@ -8,6 +8,8 @@ export interface Program {
   created_at: string
   updated_at: string
   item_count: number
+  /** Run-of-show events in the saved service (#404); absent from an older host. */
+  event_count?: number
   /** The revision approved for the service, if any (`approve_program`). */
   approved_revision?: number | null
   approved_at?: string | null

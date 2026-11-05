@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { clockInstant, clockText, dwellSeconds, nextInPhase, phaseRange, planTimeline, plannedTimes, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, newRunOfShowEvent, parseRunOfShowEvent, orderCounts, projectRunOfShowEvents, runOfShowClockRows, sectionSummaries, type OutlineHeader } from "./run-of-show"
+import { clockInstant, clockText, dwellSeconds, nextInPhase, phaseRange, planTimeline, plannedTimes, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, newRunOfShowEvent, parseRunOfShowEvent, orderCounts, projectRunOfShowEvents, runOfShowClockRows, savedServiceCount as savedCount, sectionSummaries, type OutlineHeader } from "./run-of-show"
 
 const h = (id: string, at: number, type: OutlineHeader["type"] = "phase"): OutlineHeader => ({ id, type, name: id, at })
 const read = (items: string[], headers: OutlineHeader[]) => interleave(items, headers).map((r) => ("header" in r ? `[${r.header.id}]` : r.item)).join(" ")
@@ -265,5 +265,14 @@ describe("a clock time as an instant", () => {
     } finally {
       process.env.TZ = tz
     }
+  })
+})
+
+describe("saved services in a list are counted event-first (#404)", () => {
+  it("says events and every item, or items with no events (and from an older host)", () => {
+    expect(savedCount({ item_count: 12, event_count: 2 })).toBe("2 events · 12 items in all")
+    expect(savedCount({ item_count: 1, event_count: 1 })).toBe("1 event · 1 item in all")
+    expect(savedCount({ item_count: 5, event_count: 0 })).toBe("5 items")
+    expect(savedCount({ item_count: 1 })).toBe("1 item")
   })
 })
