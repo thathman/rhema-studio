@@ -42,13 +42,14 @@ describe("searchSettings", () => {
 })
 
 describe("searchElsewhere", () => {
-  it("points to the pages that hold what Settings does not (#215): brand, appearance, cameras, host/join, permissions and service defaults", () => {
+  it("points to the pages that hold what Settings does not (#215): brand, cameras, host/join, permissions and service defaults", () => {
     const where = (q: string) => searchElsewhere(q).map((e) => e.id)
     // The church's name and the operator's are in Settings now (Church and profile, #447); its logo is in Design.
     expect(where("church name")).toEqual([])
     expect(where("your name")).toEqual([])
     expect(where("logo")).toEqual(["church"])
-    expect(where("dark mode")).toEqual(["appearance"])
+    // Light, dark or system is in Settings now (Preferences → Appearance, #447).
+    expect(where("dark mode")).toEqual([])
     expect(where("camera router")).toEqual(["cameras"])
     expect(where("join")).toEqual(["hosting"])
     expect(where("roles")).toEqual(["permissions"])
@@ -92,7 +93,7 @@ describe("Settings page search", () => {
   })
 
   it("lists every section under the owner's seven headings, in order, until something is typed (#447)", () => {
-    expect(sections()).toEqual(["Church and profile", "Bible", "Audio", "Speech Recognition", "Remote Control", "Outputs", "AI assistants", "Data & Sync", "Heard verses", "Diagnostics", "Help"])
+    expect(sections()).toEqual(["Church and profile", "Bible", "Audio", "Speech Recognition", "Remote Control", "Outputs", "AI assistants", "Data & Sync", "Appearance", "Heard verses", "Diagnostics", "Help"])
     const headings = [...host.querySelectorAll('nav[aria-label="Settings sections"] > div > p')].map((p) => p.textContent)
     expect(headings).toEqual(["Church and profile", "Audio and speech", "Connections", "AI and MCP", "Data and sync", "Preferences", "Diagnostics and about"])
   })
@@ -140,10 +141,8 @@ describe("Settings page search", () => {
     await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Elsewhere in Rhema Studio"] button')!.click())
     expect(useShellStore.getState().designRequest).toBe("brand")
 
-    const before = useShellStore.getState().deskMenuRequest
     await type("dark")
-    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Elsewhere in Rhema Studio"] button')!.click())
-    expect(useShellStore.getState().deskMenuRequest).toBe(before + 1)
+    expect(sections()).toEqual(["Appearance"])
 
     await type("")
     expect(host.querySelector('[aria-label="Elsewhere in Rhema Studio"]')).toBeNull()
@@ -155,7 +154,7 @@ describe("Settings page search", () => {
     expect(host.textContent).toContain("Nothing in Settings matches")
     await press("Escape")
     expect(search().value).toBe("")
-    expect(sections()).toHaveLength(11)
+    expect(sections()).toHaveLength(12)
   })
 
   it("routes paired-device access searches to Permissions", async () => {
