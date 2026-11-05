@@ -116,9 +116,13 @@ function inserted(state: { items: QueueItem[]; headers: OutlineHeader[]; activeI
   const target = state.addTarget && state.headers.some((h) => h.id === state.addTarget) ? state.addTarget : null
   if (!target) {
     const at = placement === "end" ? state.items.length : 0
-    // At the end with no section chosen (#444): an empty section waiting at the very end (the
-    // Post-service loop) stays after the new item instead of taking it.
-    const headers = placement === "end" ? state.headers.map((h) => (h.at >= at ? { ...h, at: h.at + 1 } : h)) : headersAfterInsert(state.headers, at)
+    // At the end with no section chosen (#444): an empty loop phase waiting at the very end (the
+    // Post-service loop) stays after the new item instead of taking it, with any header after it.
+    // Only that: an empty event just made at the end still takes the next item, as before.
+    const loopAt = placement === "end" && at > 0 ? state.headers.findIndex((h) => h.at === at && h.type === "phase" && h.rule === "loop") : -1
+    const headers = loopAt === -1
+      ? headersAfterInsert(state.headers, at)
+      : state.headers.map((h, i) => (h.at > at || (h.at === at && i >= loopAt) ? { ...h, at: h.at + 1 } : h))
     return { ...withActiveKept(state, [...state.items.slice(0, at), item, ...state.items.slice(at)]), headers }
   }
   const at = sectionEnd(state.items.length, state.headers, target)
