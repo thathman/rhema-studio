@@ -31,11 +31,34 @@ let timer: ReturnType<typeof setTimeout> | null = null
 export function parseKeptDraft(raw: unknown): KeptDraft | null {
   if (!raw || typeof raw !== "object") return null
   const d = raw as Record<string, unknown>
-  const okItems = Array.isArray(d.items) && d.items.every((i) => !!i && typeof i === "object" && typeof (i as QueueItem).id === "string" && typeof (i as QueueItem).kind === "string")
+  const okItems = Array.isArray(d.items) && d.items.every(itemLooksWhole)
   const okHeaders = Array.isArray(d.headers) && d.headers.every((h) => !!h && typeof h === "object" && typeof (h as OutlineHeader).id === "string" && typeof (h as OutlineHeader).at === "number")
   if (d.v !== 1 || typeof d.at !== "number" || typeof d.programId !== "string" || !d.programId || typeof d.title !== "string" || !Number.isSafeInteger(d.revision) || !okItems || !okHeaders) return null
   return { v: 1, at: d.at, programId: d.programId, title: d.title, revision: d.revision as number, items: d.items as QueueItem[], headers: d.headers as OutlineHeader[] }
 }
+
+/** Each kind carries what Prepare and Live read from it; a damaged item is never put back. */
+function itemLooksWhole(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object") return false
+  const i = raw as Record<string, unknown>
+  const has = (key: string) => !!i[key] && typeof i[key] === "object"
+  if (typeof i.id !== "string" || !i.id || typeof i.kind !== "string" || typeof i.reference !== "string") return false
+  switch (i.kind) {
+    case "verse": {
+      const v = i.verse as Record<string, unknown> | undefined
+      return has("verse") && Number.isInteger(v?.book_number) && Number.isInteger(v?.chapter) && Number.isInteger(v?.verse)
+    }
+    case "song": return has("song") && typeof (i.song as Record<string, unknown>).song_id === "string"
+    case "slide": return has("slide")
+    case "image": return has("image") && typeof (i.image as Record<string, unknown>).media_id === "string"
+    case "audio": return has("audio")
+    case "cue": return Array.isArray(i.cues)
+    default: return false
+  }
+}
+
+/** The copy being offered lives under its own key: ordinary keeping never overwrites or drops it. */
+const OFFERED = "offered"
 
 function keep() {
   timer = null
@@ -55,10 +78,16 @@ export async function startDraftRecovery(unclean: boolean): Promise<() => void> 
   useDraftRecovery.setState({ offer: null, error: null })
   try {
     store = await load("draft-recovery.json", { autoSave: false, defaults: {} })
-    const offer = unclean ? parseKeptDraft(await store.get<unknown>("draft")) : null
-    if (offer) useDraftRecovery.setState({ offer })
-    // After a clean exit a kept copy says nothing any more (its edits were saved or discarded).
-    else await store.delete("draft").then(() => store?.save()).catch(() => {})
+    // An offer not yet answered (a second crash) comes back first; then this crash's copy.
+    const pending = parseKeptDraft(await store.get<unknown>(OFFERED))
+    const offer = pending ?? (unclean ? parseKeptDraft(await store.get<unknown>("draft")) : null)
+    if (offer) {
+      useDraftRecovery.setState({ offer })
+      await store.set(OFFERED, offer)
+    }
+    // The working copy starts afresh either way (its edits were saved, discarded or are now offered).
+    await store.delete("draft")
+    await store.save()
   } catch {
     store = null
   }
@@ -79,6 +108,11 @@ export async function restoreDraft(): Promise<boolean> {
   const offer = useDraftRecovery.getState().offer
   if (!offer) return false
   const service = useServiceStore.getState()
+  // Never replace unsaved changes made since start-up without asking.
+  if (service.dirty) {
+    useDraftRecovery.setState({ error: "Save or discard the changes open now first." })
+    return false
+  }
   if (service.current?.id !== offer.programId) {
     const opened = await service.openProgram(offer.programId)
     if (opened !== "ok") {
@@ -93,11 +127,12 @@ export async function restoreDraft(): Promise<boolean> {
   }
   useQueueStore.setState({ items: offer.items, headers: offer.headers, activeIndex: null })
   useDraftRecovery.setState({ offer: null, error: null })
+  void store?.delete(OFFERED).then(() => store?.save()).catch(() => {})
   return true
 }
 
 /** Discard the kept edits. */
 export function dismissDraft(): void {
   useDraftRecovery.setState({ offer: null, error: null })
-  if (!useServiceStore.getState().dirty) void store?.delete("draft").then(() => store?.save()).catch(() => {})
+  void store?.delete(OFFERED).then(() => store?.save()).catch(() => {})
 }

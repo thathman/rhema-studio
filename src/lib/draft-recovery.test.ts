@@ -64,7 +64,8 @@ describe("unsaved Prepare edits survive a crash (#411)", () => {
     expect(useDraftRecovery.getState().offer).toBeNull()
 
     useQueueStore.setState({ items: [slide("a")] })
-    useServiceStore.setState({ current: { ...program, revision: 4 } as Program })
+    // Restored edits are unsaved; start the next case from a clean, newer version.
+    useServiceStore.setState({ current: { ...program, revision: 4 } as Program, dirty: false })
     useDraftRecovery.setState({ offer: draft() })
     expect(await restoreDraft()).toBe(false)
     expect(useDraftRecovery.getState().error).toContain("saved again since these edits")
@@ -76,9 +77,39 @@ describe("unsaved Prepare edits survive a crash (#411)", () => {
     expect(parseKeptDraft({ ...draft(), items: [{ kind: "slide" }] })).toBeNull()
     kept.set("draft", draft())
     stop = await startDraftRecovery(true)
+    expect(kept.has("offered")).toBe(true)
     dismissDraft()
     await vi.advanceTimersByTimeAsync(0)
     expect(useDraftRecovery.getState().offer).toBeNull()
-    expect(kept.has("draft")).toBe(false)
+    expect(kept.has("offered")).toBe(false)
+  })
+
+  it("rejects an item missing what its kind needs", () => {
+    expect(parseKeptDraft({ ...draft(), items: [{ id: "v", kind: "verse", reference: "John 3:16" }] })).toBeNull()
+    expect(parseKeptDraft({ ...draft(), items: [{ id: "x", kind: "unknown", reference: "x" }] })).toBeNull()
+  })
+
+  it("keeps an offered copy while it waits for an answer, through the next start-up and another crash", async () => {
+    kept.set("draft", draft())
+    stop = await startDraftRecovery(true)
+    // Start-up reopens the last service (clean): the working copy goes, the offered one stays.
+    useServiceStore.setState({ current: { ...program } as Program, dirty: false })
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(parseKeptDraft(kept.get("offered"))?.items.map((i) => i.id)).toEqual(["a", "edited"])
+    stop()
+    // Crashed again before answering: the same edits are offered again.
+    useDraftRecovery.setState({ offer: null })
+    stop = await startDraftRecovery(true)
+    expect(useDraftRecovery.getState().offer?.items.map((i) => i.id)).toEqual(["a", "edited"])
+  })
+
+  it("never replaces unsaved changes made since start-up without asking", async () => {
+    kept.set("draft", draft())
+    stop = await startDraftRecovery(true)
+    useQueueStore.setState({ items: [slide("a"), slide("made-since")] })
+    useServiceStore.setState({ dirty: true })
+    expect(await restoreDraft()).toBe(false)
+    expect(useDraftRecovery.getState().error).toContain("Save or discard")
+    expect(useQueueStore.getState().items.map((i) => i.id)).toEqual(["a", "made-since"])
   })
 })
