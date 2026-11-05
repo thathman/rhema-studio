@@ -56,8 +56,10 @@ export function BulkBar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
             {sections.map((h) => (
+              // Where they go, said (#444): first in a phase (before its events), at the end of an event or group.
               <DropdownMenuItem key={h.id} onSelect={() => q().moveToSection(ids, h.id)} className={h.type === "group" ? "pl-5" : "font-semibold"}>
-                {h.name}
+                <span className="min-w-0 flex-1 truncate">{h.name}</span>
+                <span className="shrink-0 text-[0.6875rem] font-normal text-muted-foreground">{h.type === "phase" ? "first in it" : "at its end"}</span>
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>

@@ -418,13 +418,19 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
         const start = remaining.findIndex((row) => row.kind === "header" && row.header.id === target.headerId)
         if (start === -1) return state
         const header = (remaining[start] as Extract<RundownRow, { kind: "header" }>).header
-        // Keep same-index headers on their original side of the boundary, including
-        // the next phase's nested groups. Numeric offsets alone lose that order.
-        const end = remaining.findIndex((row, index) => index > start && row.kind === "header" && (
-          header.type === "phase" ? row.header.type === "phase"
-            : header.event ? row.header.type === "phase" || !!row.header.event : true
-        ))
-        insertion = end === -1 ? remaining.length : end
+        if (header.type === "phase") {
+          // Owner decision (#444, 5 Nov): Move to a phase puts the items first in that phase, right
+          // after its header and before its first event or group, as phase-level items: never into
+          // an event of it. Works the same with no events, and never reaches the next phase.
+          insertion = start + 1
+        } else {
+          // Keep same-index headers on their original side of the boundary, including
+          // the next phase's nested groups. Numeric offsets alone lose that order.
+          const end = remaining.findIndex((row, index) => index > start && row.kind === "header" && (
+            header.event ? row.header.type === "phase" || !!row.header.event : true
+          ))
+          insertion = end === -1 ? remaining.length : end
+        }
       } else {
         const index = remaining.findIndex((row) => row.kind === "item" && row.item.id === target.itemId)
         if (index === -1) return state
@@ -456,10 +462,9 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
         // A group can join a phase or become a moment group in an event. It
         // cannot become a child of another ordinary group (the model is one level deep).
         if (section.type !== "phase" && !section.event) return state
-        const sectionEnd = remaining.findIndex((row, index) => index > sectionStart && row.kind === "header" && (
-          section.type === "phase" ? row.header.type === "phase"
-            : row.header.type === "phase" || !!row.header.event
-        ))
+        // To a phase (#444): at phase level, before its first event (a group owns the items up to the
+        // next header, so it never goes ahead of the phase's loose items), never into an event.
+        const sectionEnd = remaining.findIndex((row, index) => index > sectionStart && row.kind === "header" && (row.header.type === "phase" || !!row.header.event))
         insertion = sectionEnd === -1 ? remaining.length : sectionEnd
       } else if (target.kind === "group") {
         const groupStart = remaining.findIndex((row) => row.kind === "header" && row.header.id === target.groupId && row.header.type === "group" && !row.header.event)
