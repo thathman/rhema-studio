@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { Button } from "@/components/ui/button"
+import type { ServiceRunSummary } from "@/types/content"
 
 type RecordingState =
   | "idle"
@@ -17,6 +18,8 @@ interface RecordingManifest {
   outputName: string
   profile: string
   rehearsal: boolean
+  /** The service run this recording files under (History), when one was running at its start. */
+  serviceRunId?: string | null
   startedAt: string
   durationMs?: number | null
   files: { mp4?: string | null; mov?: string | null }
@@ -30,6 +33,16 @@ interface RecordingManifest {
   framesWritten: number
   framesDropped: number
   problem?: { code: string; message: string } | null
+}
+
+/** Which service run a recording files under, as History names it. */
+function runLabel(runId: string | null | undefined, runs: ServiceRunSummary[] | "loading" | "error"): string {
+  if (!runId) return "Not linked to a service run"
+  if (runs === "loading") return "Checking its service run…"
+  if (runs === "error") return "Its service run could not be checked"
+  const run = runs.find((r) => r.run_id === runId)
+  if (!run) return "Its service run is not among the 50 most recent"
+  return `Service run: ${run.title}${run.service_date ? ` · ${run.service_date}` : ""}`
 }
 
 function durationLabel(milliseconds: number | null | undefined): string {
@@ -95,6 +108,18 @@ export function RecorderArchive() {
     message: string
     error: boolean
   } | null>(null)
+
+  // The runs recordings file under (#447 History), to name each recording's service.
+  const [runs, setRuns] = useState<ServiceRunSummary[] | "loading" | "error">("loading")
+  useEffect(() => {
+    let cancelled = false
+    void invoke<ServiceRunSummary[]>("content_list_service_runs", { programId: null, limit: 50 })
+      .then((list) => { if (!cancelled) setRuns(list) })
+      .catch(() => { if (!cancelled) setRuns("error") })
+    return () => {
+      cancelled = true
+    }
+  }, [refresh])
 
   useEffect(() => {
     let cancelled = false
@@ -243,7 +268,10 @@ export function RecorderArchive() {
                     </span>
                   )}
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground" data-recording-run>
+                  {runLabel(record.serviceRunId, runs)}
+                </p>
+                <p className="text-xs text-muted-foreground">
                   {startedAtLabel(record.startedAt)} ·{" "}
                   {durationLabel(record.durationMs)} ·{" "}
                   {profileLabel(record.profile)}
