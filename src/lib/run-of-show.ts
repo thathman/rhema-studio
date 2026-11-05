@@ -77,8 +77,8 @@ export function parseRunOfShowEvent(value: unknown): RunOfShowEventPlan | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null
   const raw = value as Record<string, unknown>
   if (raw.schema_version !== 1) return null
-  // eslint-disable-next-line no-control-regex
   // Counted in characters, as cleanName (and the content crate) cuts them: an emoji is one, not two.
+  // eslint-disable-next-line no-control-regex
   const text = (v: unknown) => typeof v === "string" && v.trim().length > 0 && [...v.trim()].length <= 60 && !/[\u0000-\u001f\u007f-\u009f]/.test(v) ? v.trim() : undefined
   const role = text(raw.role)
   const ownership = text(raw.ownership)
