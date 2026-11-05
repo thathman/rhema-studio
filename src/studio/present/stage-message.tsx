@@ -15,6 +15,8 @@ export function StageMessage() {
   const message = useBroadcastStore((s) => s.stageMessage)
   // Messages a Stage desk sent to one display: the host can clear them here too (#411).
   const privateCount = useBroadcastStore((s) => Object.keys(s.stageMessagesByOutput).length)
+  // Those are real, on the real stage screens: rehearsal never clears them.
+  const rehearsal = useBroadcastStore((s) => s.rehearsal)
   const draft = usePresentDraftsStore((s) => s.stageMessage)
   const setDraft = usePresentDraftsStore((s) => s.setStageMessage)
   const hasStage = outputs.some((o) => o.role === "stage")
@@ -67,7 +69,7 @@ export function StageMessage() {
         </Button>
         {message ? (
           <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={() => send("")}><XIcon /> Clear "{message}"</Button>
-        ) : privateCount > 0 && (
+        ) : privateCount > 0 && !rehearsal && (
           <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={() => send("")}><XIcon /> Clear the message{privateCount === 1 ? "" : "s"} sent to {privateCount === 1 ? "a stage display" : `${privateCount} stage displays`}</Button>
         )}
       </PopoverContent>

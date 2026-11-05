@@ -138,7 +138,7 @@ describe("the stage message as a live source", () => {
     expect(useBroadcastStore.getState().stageMessage).toBe("")
     expect(useBroadcastStore.getState().setOutputStageMessage("stage-east", "Choir enters now")).toBe(true)
     expect(last("stage-east")?.stage?.message).toBe("Choir enters now")
-    // Clear in Sources (and the "Clear the stage message" cue) reaches it.
+    // The "Clear the stage message" cue (clearSource) reaches it.
     useBroadcastStore.getState().clearSource("stage")
     expect(useBroadcastStore.getState().stageMessagesByOutput).toEqual({})
     expect(last("stage-east")?.stage?.message ?? "").toBe("")
