@@ -111,8 +111,14 @@ export function AppShell() {
   const designRequest = useShellStore((s) => s.designRequest)
   useEffect(() => {
     if (!designRequest) return
-    useShellStore.setState({ designRequest: null, designTab: designRequest })
-    void go("design")
+    useShellStore.setState({ designRequest: null })
+    void (async () => {
+      // Already in Design on another tab: ask about unsaved work there first (#411, Find anything).
+      const s = useShellStore.getState()
+      if (s.workspace === "design" && s.designTab !== designRequest && !(await mayLeaveDesignDocumentDraft())) return
+      useShellStore.setState({ designTab: designRequest })
+      void go("design")
+    })()
   }, [designRequest, go])
   // Host/Join: keep this computer's Live State current for the computers that join it.
   useEffect(() => startLiveStatePublisher(), [])

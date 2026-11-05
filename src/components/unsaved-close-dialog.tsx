@@ -12,7 +12,7 @@ import { finalizeServiceRun, interruptCurrentServiceRun, useJournalStore } from 
 import { flushJournalRecovery } from "@/lib/live-recovery"
 
 const anyUnsaved = () =>
-  useServiceStore.getState().dirty || useUnsavedStore.getState().songEditor !== null || useUnsavedStore.getState().designEditor !== null || unsavedScratch(useQueueStore.getState().items, useServiceStore.getState().current) || themeDraftChanged()
+  useServiceStore.getState().dirty || useUnsavedStore.getState().songEditor !== null || useUnsavedStore.getState().designEditor !== null || useUnsavedStore.getState().specialistDraft !== null || unsavedScratch(useQueueStore.getState().items, useServiceStore.getState().current) || themeDraftChanged()
 
 /**
  * Before the window goes: flush settings, themes, and the local recovery copy,
@@ -48,6 +48,7 @@ export function UnsavedCloseDialog() {
   const current = useServiceStore((s) => s.current)
   const songEditor = useUnsavedStore((s) => s.songEditor)
   const designEditor = useUnsavedStore((s) => s.designEditor)
+  const specialistDraft = useUnsavedStore((s) => s.specialistDraft)
   const scratch = useQueueStore((s) => unsavedScratch(s.items, current))
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -108,6 +109,7 @@ export function UnsavedCloseDialog() {
               scratch ? "The service on screen has not been saved (create a service in Prepare to keep it)." : null,
               songEditor ? `The song “${songEditor}” is open in the editor with changes that are not saved${dirty ? "; Save and close saves the service, not the song" : ""}.` : null,
               designEditor ? `The design “${designEditor}” is open in the editor with changes that are not saved${dirty ? "; Save and close saves the service, not the design" : ""}.` : null,
+              specialistDraft ? `Changes to ${specialistDraft} are not saved as a draft${dirty ? "; Save and close saves the service, not them" : ""}.` : null,
               themeDraft ? `The theme “${themeDraft}” has design changes that are not saved${dirty ? "; Save and close saves the service, not the theme" : ""}.` : null,
             ].filter(Boolean).join(" ")} Closing without saving loses them.
           </DialogDescription>
