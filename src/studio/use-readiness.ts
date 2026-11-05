@@ -58,7 +58,9 @@ export function useReadiness() {
   const overrideTranslations = useBibleStore((s) => s.overrideServiceTranslations)
   const unsupportedItems = useServiceStore((s) => s.unsupportedItems)
   const corruptItems = useServiceStore((s) => s.corruptItems)
-  const suggested = todaysService(programs, localDate())
+  // The church's clock (#411): today's service, "starts soon" and the overscan reminder's day.
+  const zone = validTimeZone(useSettingsStore((s) => s.setup.timeZone))
+  const suggested = todaysService(programs, localDate(new Date(), zone))
   const monitorCount = useMonitorStore((s) => s.count)
   const monitorNames = useMonitorStore((s) => s.names)
   const monitorSizes = useMonitorStore((s) => s.sizes)
@@ -83,7 +85,6 @@ export function useReadiness() {
   }, [])
   // Cameras and browser feeds as the signal watch last saw them (#213; Home, Present, Production).
   const cameras = useSettingsStore((s) => s.cameras)
-  const zone = validTimeZone(useSettingsStore((s) => s.setup.timeZone))
   const router = useRouterHealth()
   const feeds = useFeedHealthStore()
   const isLive = useBroadcastStore((s) => s.isLive)
@@ -219,6 +220,7 @@ export function useReadiness() {
       startsAt: (headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at,
       running: isLive || eventId !== null,
       now,
+      zone,
     }),
     obs: { enabled: obsSettings.enabled, status: obsStatus, error: obsError, label: obsLabel, stream: obsStream, record: obsRecord, rehearsal },
     internet: { cloudSpeech },
@@ -238,7 +240,7 @@ export function useReadiness() {
       return ownedTimers.filter((t) => !here.has(t.owner)).map((t) => ({ timer: t.label, role: roleLabel(t.owner) }))
     })(),
     // TVs zoom the picture (#213 overscan): a reminder for on-air browser feeds with no Overscan set, once per service.
-    overscan: overscanReminder(outputs.filter((o) => outputOnAir(o, outputStatus[o.id])), `overscan:${current?.id ?? localDate()}`, dismissed),
+    overscan: overscanReminder(outputs.filter((o) => outputOnAir(o, outputStatus[o.id])), `overscan:${current?.id ?? localDate(new Date(), zone)}`, dismissed),
     feedsUnwatched: outputs.filter((o) => o.type === "browser" && outputOnAir(o, outputStatus[o.id]) && feeds[o.id]?.watching === 0).map((o) => o.name),
     signage: outputs
       // A ticker feed (Rhema Ticker | Alpha) has no pictures on purpose.
