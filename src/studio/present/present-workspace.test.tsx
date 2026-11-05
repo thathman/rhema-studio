@@ -157,9 +157,14 @@ function pressArrowRight(target: EventTarget = window) {
   target.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }))
 }
 
+function pressKey(key: string, target: EventTarget = window) {
+  target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }))
+}
+
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   presentCalls.next.mockClear()
+  presentCalls.prev.mockClear()
   useShellStore.setState({ presentView: "production" })
   useProductionTab.setState({ requested: null, selected: "timekeeper", scene: null, open: false })
   useBibleStore.setState({ selectedVerse: verse, selectedSlide: null, selectedQueueItemId: "stable-item" })
@@ -646,6 +651,16 @@ describe("Present's unified Live console", () => {
     expect(document.querySelector('[data-slot="live-tools-panel"] [role="tab"][aria-selected="true"]')?.textContent).toContain("Find & cue")
     pressArrowRight(quickFind)
     expect(presentCalls.next).toHaveBeenCalledTimes(1)
+    // #411 (owner, 5 Nov): opening Live tools did nothing by itself; the presenter clicker still
+    // steps the service with it open, the arrows stay the panel's, and typing is never interrupted.
+    pressArrowRight()
+    expect(presentCalls.next).toHaveBeenCalledTimes(1)
+    pressKey("PageDown")
+    expect(presentCalls.next).toHaveBeenCalledTimes(2)
+    pressKey("PageUp")
+    expect(presentCalls.prev).toHaveBeenCalledTimes(1)
+    pressKey("PageDown", quickFind)
+    expect(presentCalls.next).toHaveBeenCalledTimes(2)
     expect(element.querySelector('[aria-label="Preview"]')?.textContent).toContain("stays private")
     expect(element.querySelector("[data-studio-live]")?.textContent).toContain("Program")
 
@@ -657,7 +672,7 @@ describe("Present's unified Live console", () => {
     expect(document.querySelector("[data-testid='transcript-panel']")).not.toBeNull()
     expect(document.querySelector("[data-testid='detections-panel']")).not.toBeNull()
     pressArrowRight()
-    expect(presentCalls.next).toHaveBeenCalledTimes(1)
+    expect(presentCalls.next).toHaveBeenCalledTimes(2)
 
     const close = document.querySelector<HTMLButtonElement>('[data-slot="live-tools-panel"] button[aria-label="Close Live tools"]')!
     await act(async () => close.click())

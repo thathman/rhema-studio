@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest"
-import { keyToPresentAction, shouldIgnoreKeyboard } from "./present-keys"
+import { keyToPresentAction, shouldIgnoreKeyboard, isClickerKey } from "./present-keys"
 
 const key = (key: string, mods: Partial<{ shiftKey: boolean; metaKey: boolean; ctrlKey: boolean; altKey: boolean }> = {}) => ({
   key,
@@ -71,3 +71,25 @@ describe("shouldIgnoreKeyboard", () => {
   })
 })
 
+describe("the presenter clicker (#411, owner decision 5 Nov)", () => {
+  it("is plain PageUp/PageDown, and passes a popover but not a list or menu, which page themselves", () => {
+    const plain = { shiftKey: false, metaKey: false, ctrlKey: false, altKey: false }
+    expect(isClickerKey({ key: "PageDown", ...plain })).toBe(true)
+    expect(isClickerKey({ key: "ArrowRight", ...plain })).toBe(false)
+    expect(isClickerKey({ key: "PageDown", ...plain, shiftKey: true })).toBe(false)
+    const popover = document.createElement("div")
+    popover.setAttribute("role", "dialog")
+    const inPopover = popover.appendChild(document.createElement("button"))
+    const list = popover.appendChild(document.createElement("div"))
+    list.setAttribute("role", "listbox")
+    const option = list.appendChild(document.createElement("div"))
+    document.body.appendChild(popover)
+    expect(shouldIgnoreKeyboard(inPopover, "PageDown")).toBe(false)
+    expect(shouldIgnoreKeyboard(option, "PageDown")).toBe(true)
+    expect(shouldIgnoreKeyboard(inPopover, "ArrowRight")).toBe(true)
+    // A text field in a popover (the stage message, a timer's name) wins over the clicker.
+    const field = popover.appendChild(document.createElement("input"))
+    expect(shouldIgnoreKeyboard(field, "PageDown")).toBe(true)
+    popover.remove()
+  })
+})
