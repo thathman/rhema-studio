@@ -109,6 +109,10 @@ describe("show health", () => {
     let plain = undefined as Parameters<typeof rememberTv>[0]
     for (let i = 1; i <= 9; i++) plain = rememberTv(plain, { name: `Old ${i}`, address: `192.168.2.${40 + i}`, sentAt: i })
     expect(plain).toHaveLength(8)
+    // The TV just sent is kept even without a key, when 8 or more others have one.
+    const after = rememberTv(tvs, { name: "New TV", address: "192.168.3.1", sentAt: 99 })
+    expect(after[0].name).toBe("New TV")
+    expect(after).toHaveLength(10)
   })
 
   it("remembers each TV a feed was sent to once, newest first, and reads what a TV says", () => {

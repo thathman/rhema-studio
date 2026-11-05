@@ -161,9 +161,10 @@ export function feedSummary(h: FeedHealth | null | undefined, on: boolean): { te
 export function rememberTv(tvs: ReceiverTv[] | undefined, tv: ReceiverTv): ReceiverTv[] {
   const address = tv.address.trim()
   const all = [{ ...tv, address }, ...(tvs ?? []).filter((t) => t.address !== address)]
-  const keyed = all.filter((t) => t.token).length
-  let unkeyedRoom = Math.max(0, 8 - keyed)
-  return all.filter((t) => !!t.token || unkeyedRoom-- > 0)
+  // The TV just sent is always kept, keyed or not.
+  const keyed = all.filter((t, i) => i > 0 && t.token).length
+  let unkeyedRoom = Math.max(0, 7 - keyed)
+  return all.filter((t, i) => i === 0 || !!t.token || unkeyedRoom-- > 0)
 }
 
 /** What a TV said to Check TV, in words: whether it shows this feed. */
