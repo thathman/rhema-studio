@@ -172,6 +172,43 @@ describe("Connections hub (#401)", () => {
     expect(useBroadcastStore.getState().isLive).toBe(false)
   })
 
+  it("revokes one TV or paired device from its row, only after confirming (#445)", async () => {
+    const phoneHash = "a".repeat(64)
+    useSettingsStore.setState({ remoteDevices: [{ hash: phoneHash, name: "Stage phone", paired_at: "2026-10-26T00:00:00Z", role: "stage" }] })
+    const revokeDevice = vi.spyOn(useSettingsStore.getState(), "revokeRemoteDevice").mockResolvedValue(undefined as never)
+    const feed = { ...originalOutputs[0], id: "hall-feed", name: "Hall feed", type: "browser" as const, feedToken: "safe-test-token", tvs: [
+      { name: "Sanctuary TV", address: "192.168.1.61:8095", sentAt: Date.now(), token: "own-key" },
+      { name: "Foyer TV", address: "192.168.1.62:8095", sentAt: Date.now(), token: "other-key" },
+      { name: "Old TV", address: "192.168.1.63:8095", sentAt: Date.now() },
+    ] }
+    useBroadcastStore.setState({ outputs: [...originalOutputs, feed] })
+    await mount()
+    const click = async (label: string) => act(async () => host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click())
+
+    // A TV on the feed's shared link has no key of its own to revoke here.
+    expect(host.querySelector('[aria-label="Revoke Old TV at 192.168.1.63:8095"]')).toBeNull()
+    await click("Revoke Sanctuary TV at 192.168.1.61:8095")
+    expect(host.textContent).toContain("Its link to Hall feed stops at once")
+    expect(useBroadcastStore.getState().outputs.find((o) => o.id === "hall-feed")?.tvs).toHaveLength(3) // nothing yet
+    await click("Confirm revoke Sanctuary TV at 192.168.1.61:8095")
+    expect(useBroadcastStore.getState().outputs.find((o) => o.id === "hall-feed")?.tvs?.map((t) => t.name)).toEqual(["Foyer TV", "Old TV"])
+
+    await click("Revoke Stage phone")
+    expect(revokeDevice).not.toHaveBeenCalled()
+    await click("Confirm revoke Stage phone")
+    expect(revokeDevice).toHaveBeenCalledWith(phoneHash)
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+  })
+
+  it("offers no Revoke on a computer joined to another host", async () => {
+    useSettingsStore.setState({ remoteDevices: [{ hash: "a".repeat(64), name: "Stage phone", paired_at: "2026-10-26T00:00:00Z", role: "stage" }] })
+    const { useJoin } = await import("@/stores/join-store")
+    useJoin.setState({ status: "connected" })
+    await mount()
+    expect(host.querySelector('[aria-label="Revoke Stage phone"]')).toBeNull()
+    useJoin.setState({ status: "off" })
+  })
+
   it("routes app entry points to the same Connections page", () => {
     openConnectionsHub()
     expect(useShellStore.getState().goRequest).toBe("connections")

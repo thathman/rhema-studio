@@ -7,7 +7,7 @@ import { cameraSending, useRouterHealth, watchRouter } from "@/lib/cameras"
 import { presenceRows, readHostStatus, seenWords, type HostStatus } from "@/lib/host-presence"
 import { roleLabel } from "@/lib/remote-roles"
 import { useFeedHealthStore } from "@/lib/show-health"
-import { watchFeed } from "@/lib/browser-feeds"
+import { revokeTv, watchFeed } from "@/lib/browser-feeds"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useObsStore } from "@/stores/obs-store"
@@ -65,6 +65,23 @@ function Row({ title, detail, state, tone = "off", action }: { title: string; de
 }
 
 /**
+ * Revoke from the hub (#445): two steps, so a stray click never cuts a screen or a desk mid-service.
+ * What it does is said first: the device's own key stops at once; everything else carries on.
+ */
+function RevokeAction({ label, what, onRevoke }: { label: string; what: string; onRevoke: () => void }) {
+  const [confirm, setConfirm] = useState(false)
+  return confirm ? (
+    <span className="flex basis-full flex-wrap items-center justify-end gap-1">
+      <span role="status" className="mr-auto text-muted-foreground">{what}</span>
+      <Button size="sm" variant="destructive" onClick={() => { setConfirm(false); onRevoke() }} aria-label={`Confirm revoke ${label}`}>Revoke now</Button>
+      <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>Keep</Button>
+    </span>
+  ) : (
+    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirm(true)} aria-label={`Revoke ${label}`} title={what}>Revoke</Button>
+  )
+}
+
+/**
  * One local-first front door for displays, cameras, volunteer devices and OBS computers.
  * Device identity and health come from the existing secured protocols; pairing and presentation
  * configuration continue in their specialized editors.
@@ -78,6 +95,8 @@ export function ConnectionsWorkspace() {
   const obsEnabled = useSettingsStore((s) => s.obs.enabled)
   const obsStatus = useObsStore((s) => s.status)
   const joinedStatus = useJoin((s) => s.status)
+  // Only the host revokes (a computer joined to another host sees its devices, never their keys).
+  const isHost = joinedStatus === "off"
   const joinedAddress = useSettingsStore((s) => s.joinAddress)
   const [host, setHost] = useState<HostStatus | null>(null)
   const [hostChecked, setHostChecked] = useState(false)
@@ -188,7 +207,8 @@ export function ConnectionsWorkspace() {
             <Card title="Screens and TVs" kicker="Congregation · stage · signage" icon={<TvIcon />} count={savedTvs.length}>
               {savedTvs.length === 0 ? <p className="text-muted-foreground">No Google TV Receiver has been sent a feed yet. Display and NDI outputs can still be used on this computer.</p> : (
                 <ul aria-label="Connected TVs">
-                  {savedTvs.map((tv) => <Row key={`${tv.outputId}-${tv.address}`} title={tv.name || "Google TV"} detail={`${tv.feedName} · ${tv.address}`} state={onAirTvs(tv.outputId, tv.address) ? "Showing now" : feedHealth[tv.outputId] ? "Not reporting now" : "Feed sent · status unknown"} tone={onAirTvs(tv.outputId, tv.address) ? "ok" : "off"} />)}
+                  {savedTvs.map((tv) => <Row key={`${tv.outputId}-${tv.address}`} title={tv.name || "Google TV"} detail={`${tv.feedName} · ${tv.address}`} state={onAirTvs(tv.outputId, tv.address) ? "Showing now" : feedHealth[tv.outputId] ? "Not reporting now" : "Feed sent · status unknown"} tone={onAirTvs(tv.outputId, tv.address) ? "ok" : "off"}
+                    action={isHost && tv.token ? <RevokeAction label={`${tv.name || "Google TV"} at ${tv.address}`} what={`Its link to ${tv.feedName} stops at once and the TV goes back to its code; other screens carry on.`} onRevoke={() => void revokeTv(tv.outputId, tv.address)} /> : undefined} />)}
                 </ul>
               )}
               <p className="text-muted-foreground">A TV is marked “Showing now” only while it reports watching its feed. “Feed sent” is saved pairing history, not proof that the TV is on.</p>
@@ -214,7 +234,8 @@ export function ConnectionsWorkspace() {
               {joinedStatus !== "off" && <Row title="This computer" detail={joinedAddress || "Host address not saved"} state={joinedStatus === "connected" ? "Connected to host" : joinedStatus === "reconnecting" ? "Reconnecting" : joinedStatus === "refused" ? "Host refused" : "Connecting"} tone={joinedStatus === "connected" ? "ok" : "warn"} />}
               {operators.length === 0 ? <p className="text-muted-foreground">No phone remotes or operator computers are paired. Pairing is optional; the main desk keeps full control.</p> : (
                 <ul aria-label="Paired phones and operators">
-                  {operators.map(({ device, hash, name, seen }) => <Row key={hash} title={device?.name ?? name ?? "Shared key device"} detail={device ? roleLabel(device.role ?? "viewer") : "Shared network key"} state={hostDeviceState(host, seen, now)} tone={seen?.connected ? "ok" : hostDeviceState(host, seen, now) === "Not connected" ? "warn" : "off"} />)}
+                  {operators.map(({ device, hash, name, seen }) => <Row key={hash} title={device?.name ?? name ?? "Shared key device"} detail={device ? roleLabel(device.role ?? "viewer") : "Shared network key"} state={hostDeviceState(host, seen, now)} tone={seen?.connected ? "ok" : hostDeviceState(host, seen, now) === "Not connected" ? "warn" : "off"}
+                    action={isHost && device ? <RevokeAction label={device.name} what={`${device.name}'s key is removed: it is disconnected now and must pair again. This computer keeps full control.`} onRevoke={() => void useSettingsStore.getState().revokeRemoteDevice(device.hash)} /> : undefined} />)}
                 </ul>
               )}
               <p className="text-muted-foreground">A role limits only the paired device. This computer can always operate the service and take control back.</p>
@@ -225,7 +246,8 @@ export function ConnectionsWorkspace() {
               <Row title="OBS on this computer" detail={obsEnabled ? "Local OBS connection" : "Optional; not configured"} state={!obsEnabled ? "Not set up" : obsStatus === "connected" ? "Connected" : obsStatus === "connecting" ? "Connecting" : "Not connected"} tone={obsEnabled && obsStatus === "connected" ? "ok" : obsEnabled ? "warn" : "off"} />
               {obsComputers.length === 0 ? <p className="text-muted-foreground">No OBS Companion computer is paired. OBS streaming and scene switching remain its own online production.</p> : (
                 <ul aria-label="Paired OBS companion computers">
-                  {obsComputers.map(({ device, hash, name, seen }) => <Row key={hash} title={device?.name ?? name ?? "OBS computer"} detail="OBS Companion · reads cameras for this computer only" state={hostDeviceState(host, seen, now)} tone={seen?.connected ? "ok" : "off"} />)}
+                  {obsComputers.map(({ device, hash, name, seen }) => <Row key={hash} title={device?.name ?? name ?? "OBS computer"} detail="OBS Companion · reads cameras for this computer only" state={hostDeviceState(host, seen, now)} tone={seen?.connected ? "ok" : "off"}
+                    action={isHost && device ? <RevokeAction label={device.name} what={`${device.name} stops reading the cameras now and must pair again. OBS and the room screens are not switched.`} onRevoke={() => void useSettingsStore.getState().revokeRemoteDevice(device.hash)} /> : undefined} />)}
                 </ul>
               )}
               <p className="text-muted-foreground">OBS changes never switch the congregation screens. The same named camera streams can be read by either production.</p>
