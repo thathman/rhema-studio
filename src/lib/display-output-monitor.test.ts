@@ -37,6 +37,12 @@ describe("a display output opens only on its own screen (#411)", () => {
     expect(calls.some((c) => c.cmd === "open_broadcast_window")).toBe(false)
   })
 
+  it("a movable window still opens with its screen missing (rehearsing without the projector)", async () => {
+    monitors.list = [{ name: "Built-in" }, { name: "DELL" }]
+    await enableOutput(congregation({ windowed: true }))
+    expect(calls.find((c) => c.cmd === "open_broadcast_window")?.args.monitorIndex).toBe(1)
+  })
+
   it("follows its named screen to its new number", async () => {
     monitors.list = [{ name: "Built-in" }, { name: "DELL" }, { name: "EPSON" }]
     await enableOutput(congregation())
