@@ -113,7 +113,10 @@ fn copy_whole(source: &Path, dir: &Path, file: &str, size: u64) -> std::io::Resu
         return Ok(());
     }
     std::fs::create_dir_all(dir)?;
-    let part = dir.join(format!("{file}.{}.part", std::process::id()));
+    // Unique per copy: two imports of one file at once (async commands) never share a .part.
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let part = dir.join(format!("{file}.{}.{n}.part", std::process::id()));
     let copied = std::fs::copy(source, &part).and_then(|n| {
         if n == size {
             std::fs::rename(&part, &dest)
@@ -144,7 +147,6 @@ fn import_one(state: &ContentState, dir: &Path, source: &Path) -> Result<(MediaA
         return Ok((existing, true));
     }
     let file = format!("{hash}.{}", ext.to_ascii_lowercase());
-    std::fs::create_dir_all(dir).map_err(|e| format!("could not create the media folder: {e}"))?;
     copy_whole(source, dir, &file, size).map_err(|e| format!("could not copy into the media folder: {e}"))?;
     let name = source.file_stem().and_then(|s| s.to_str()).unwrap_or("Picture").to_string();
     let input = MediaInput {
