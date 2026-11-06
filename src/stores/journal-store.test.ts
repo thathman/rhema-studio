@@ -4,7 +4,7 @@ const mockInvoke = vi.fn<(...args: unknown[]) => Promise<unknown>>(async (comman
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}) }))
 
-import { flushServiceRunCheckpoint, startNewJournal, useJournalStore } from "./journal-store"
+import { flushServiceRunCheckpoint, remapJournalItemIds, startNewJournal, useJournalStore } from "./journal-store"
 import { useBroadcastStore } from "./broadcast-store"
 import { useQueueStore } from "./queue-store"
 import type { VerseRenderData } from "@/types"
@@ -167,5 +167,23 @@ describe("a Live language choice is for one service (#446)", () => {
     await startNewJournal()
     expect(useBroadcastStore.getState().languageOverrides[output.id]?.language).toBe("first")
     useBroadcastStore.setState({ rehearsal: false, languageOverrides: {} })
+  })
+})
+
+describe("renewed item ids during a run (#411 services hunt)", () => {
+  it("the run's plan, planned lengths and starting items follow the entries to the new ids", () => {
+    useJournalStore.setState({
+      entries: [{ id: "e1", kind: "item", itemId: "a", at: 1 } as never],
+      startItemIds: ["a", "b"],
+      runContext: { runId: "r1", programId: "p1", programRevision: 1, title: "Sunday", serviceDate: null, timeZone: "UTC", startedAt: "", operator: null, plan: [{ id: "a", label: "A" }, { id: "b", label: "B" }], plannedMs: { a: 60_000, b: 120_000 }, headers: [], startItemIds: ["a", "b"] },
+    })
+    const map: Record<string, string> = { a: "a2", b: "b2" }
+    remapJournalItemIds((id) => (id ? map[id] ?? id : null))
+    const j = useJournalStore.getState()
+    expect(j.entries[0].itemId).toBe("a2")
+    expect(j.startItemIds).toEqual(["a2", "b2"])
+    expect(j.runContext?.plan.map((p) => p.id)).toEqual(["a2", "b2"])
+    expect(j.runContext?.plannedMs).toEqual({ a2: 60_000, b2: 120_000 })
+    expect(j.runContext?.startItemIds).toEqual(["a2", "b2"])
   })
 })
