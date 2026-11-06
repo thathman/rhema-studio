@@ -7,7 +7,8 @@ vi.mock("@tauri-apps/plugin-store", () => ({
   load: vi.fn(async () => ({ get: async () => undefined, set: async () => {}, save: async () => { if (failSave) throw new Error("disk full") } })),
 }))
 const toastError = vi.fn()
-vi.mock("sonner", () => ({ toast: { error: (...a: unknown[]) => toastError(...a), warning: vi.fn(), success: vi.fn(), dismiss: vi.fn() } }))
+const toastDismiss = vi.fn()
+vi.mock("sonner", () => ({ toast: { error: (...a: unknown[]) => toastError(...a), warning: vi.fn(), success: vi.fn(), dismiss: (...a: unknown[]) => toastDismiss(...a) } }))
 
 const { persistBroadcastThemes, useBroadcastStore } = await import("@/stores/broadcast-store")
 const { useSettingsStore } = await import("@/stores/settings-store")
@@ -21,5 +22,6 @@ describe("a failed save of outputs and themes says so (#411 settings hunt)", () 
     failSave = false
     await persistBroadcastThemes(useBroadcastStore.getState())
     expect(useSettingsStore.getState().themesSaveFailed).toBe(false)
+    expect(toastDismiss).toHaveBeenCalledWith("themes-save-failed")
   })
 })

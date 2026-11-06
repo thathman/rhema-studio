@@ -2127,7 +2127,10 @@ export async function persistBroadcastThemes(state: BroadcastState): Promise<voi
     await store.set("scenes", state.scenes)
     await store.set("scenePresets", state.scenePresets)
     await store.save()
-    if (useSettingsStore.getState().themesSaveFailed) useSettingsStore.setState({ themesSaveFailed: false })
+    if (useSettingsStore.getState().themesSaveFailed) {
+      useSettingsStore.setState({ themesSaveFailed: false })
+      toast.dismiss("themes-save-failed")
+    }
   } catch {
     console.warn("[broadcast] Failed to persist themes")
     // Said, not only logged (#411 settings hunt): edits to outputs, themes and scenes made after a
