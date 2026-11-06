@@ -50,7 +50,7 @@ interface ObsState {
   /** Note a moment (sermon start/end…): in the service log with the recording time, and as a recording chapter where OBS supports it. */
   mark: (label: string) => Promise<void>
   /** Studio Mode: put a scene in OBS's preview. Changes nothing on the stream. */
-  setPreview: (scene: string) => Promise<void>
+  setPreview: (scene: string) => Promise<boolean>
   /** Studio Mode: OBS's own transition, preview to program. */
   take: () => Promise<void>
   /** Outside Studio Mode: switch OBS's program straight to a scene. The panel asks first; this changes what the stream shows. */
@@ -419,7 +419,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
 
   // Scene changes happen only from these three, each a deliberate click; OBS's events then report the result.
   setPreview: async (scene) => {
-    if (!client || get().studioMode !== true || refusedInRehearsal()) return
+    if (!client || get().studioMode !== true || refusedInRehearsal()) return false
     const c = client
     // A Take that follows (an OBS desk sends both) waits for this and is refused if it failed (#411).
     const p = (async () => {
@@ -433,8 +433,9 @@ export const useObsStore = create<ObsState>((set, get) => ({
       }
     })()
     previewInFlight = p
-    await p
+    const ok = await p
     if (previewInFlight === p) previewInFlight = null
+    return ok
   },
 
   take: async () => {

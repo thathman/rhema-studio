@@ -216,6 +216,7 @@ impl CommandDispatcher {
             RemoteCommand::StageMessage(text) => sink.emit_event("remote:stage_message", &serde_json::json!({ "text": text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(120).collect::<String>() }).to_string()),
             RemoteCommand::ObsPreview(scene) => sink.emit_event("remote:obs_preview", &serde_json::json!({ "scene": scene.chars().take(200).collect::<String>() }).to_string()),
             RemoteCommand::ObsTake => sink.emit_event("remote:obs_take", "{}"),
+            RemoteCommand::ObsTakeScene(scene) => sink.emit_event("remote:obs_take", &serde_json::json!({ "scene": scene.chars().take(200).collect::<String>() }).to_string()),
             RemoteCommand::ObsProgram(scene) => sink.emit_event("remote:obs_program", &serde_json::json!({ "scene": scene.chars().take(200).collect::<String>() }).to_string()),
             RemoteCommand::Show => sink.invoke_backend("show_broadcast", "{}"),
             RemoteCommand::Hide => sink.invoke_backend("hide_broadcast", "{}"),
