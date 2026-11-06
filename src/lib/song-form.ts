@@ -157,17 +157,26 @@ export function relabel(sections: SectionForm[]): SectionForm[] {
   return sections.map((s, i) => (generic.test(s.label) || !s.label.trim() ? { ...s, label: defaultLabel(s.kind, i, sections) } : s))
 }
 
+/**
+ * New sections go at the end of the default order too (#411 songs hunt): a song saved once has a
+ * Default order, and a verse added later that was in no order never reached the screen, with no
+ * word. Other orders are the church's own and are left as they are.
+ */
+function withAtEndOfDefault(form: SongForm, added: SectionForm[]): SongForm["arrangements"] {
+  return form.arrangements.map((a) => (a.is_default && a.steps.length > 0 ? { ...a, steps: [...a.steps, ...added.map((x) => ({ uid: localId("step"), sectionId: x.id }))] } : a))
+}
+
 /** Append sections parsed from pasted text, in `language`. */
 export function applyPaste(form: SongForm, text: string, language: string): SongForm {
   const parsed = parsePastedLyrics(text, language)
   if (parsed.length === 0) return form
   const added: SectionForm[] = parsed.map((p) => ({ id: localId("new"), kind: p.kind, label: "", texts: p.texts }))
-  return { ...form, sections: relabel([...form.sections, ...added]) }
+  return { ...form, sections: relabel([...form.sections, ...added]), arrangements: withAtEndOfDefault(form, added) }
 }
 
 export function addSection(form: SongForm, kind: SectionKind = "verse"): SongForm {
   const section: SectionForm = { id: localId("new"), kind, label: "", texts: { [form.primary_language]: "" } }
-  return { ...form, sections: relabel([...form.sections, section]) }
+  return { ...form, sections: relabel([...form.sections, section]), arrangements: withAtEndOfDefault(form, [section]) }
 }
 
 export function removeSection(form: SongForm, sectionId: string): SongForm {
