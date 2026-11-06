@@ -39,14 +39,19 @@ function Studio() {
   useDetectionEvents()
   useLiveTranslationFollow()
   useTranscriptionEvents()
-  // A settings or themes file that could not be read was set aside at startup: say so once (RG-05).
+  // A settings, themes, approvals or design-packs file that could not be read was set aside at startup: say so once (RG-05).
   useEffect(() => {
     invoke<Array<[string, string, boolean]>>("damaged_store_files")
       .then((files) => {
         for (const [name, aside, recovered] of files ?? []) {
-          const what = name === "settings.json" ? "Settings (paired phones, remote key, cues, your name)" : "Custom themes and outputs"
+          const what = name === "settings.json" ? "Settings (paired phones, remote key, cues, your name)"
+            : name === "scene-approvals.json" ? "Scene approvals (requests, decisions and their history)"
+            : name === "rhema-design-packs.json" ? "Design packs"
+            : "Custom themes and outputs"
+          // Approvals from before the last start: one decided since may show as waiting again (#411).
+          const approvals = name === "scene-approvals.json" && recovered ? "Approvals or rejections made since then may be waiting again: check Approvals. " : ""
           toast.warning(recovered ? `${what} could not be read; they were put back as they were when Rhema Studio last started` : `${what} could not be read and were reset`, {
-            description: `${recovered ? "Changes made since then need making again. " : "Set them again, or send the damaged file to whoever supports you. "}The damaged file was kept as ${aside} in the app folder (Diagnostics shows where).`,
+            description: `${approvals}${recovered ? "Changes made since then need making again. " : "Set them again, or send the damaged file to whoever supports you. "}The damaged file was kept as ${aside} in the app folder (Diagnostics shows where).`,
             duration: 30_000,
           })
         }
