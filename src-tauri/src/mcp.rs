@@ -70,10 +70,11 @@ pub(crate) fn settings(dir: &Path) -> Value {
     std::fs::read_to_string(dir.join("settings.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null)
 }
 
-/// One setting from the settings file: in its part ("church", "machine" or "operator", #298), or at
-/// the top in a file from before the parts.
+/// One setting from the settings file. The top-level copy first, as the app reads it (an older Rhema
+/// reads and writes only that one, so after a rollback it is the newer), then the one in its part
+/// ("church", "machine" or "operator", #298).
 pub(crate) fn setting<'a>(s: &'a Value, part: &str, key: &str) -> Option<&'a Value> {
-    s.get(part).and_then(|p| p.get(key)).or_else(|| s.get(key))
+    s.get(key).filter(|v| !v.is_null()).or_else(|| s.get(part).and_then(|p| p.get(key)))
 }
 
 struct Server {
@@ -858,6 +859,9 @@ mod tests {
         assert_eq!(setting(&flat, "machine", "mcpEnabled"), Some(&json!(true)));
         assert_eq!(setting(&flat, "church", "brandKit").and_then(|k| k.get("churchName")), Some(&json!("Old Chapel")));
         assert_eq!(setting(&json!({}), "machine", "mcpEnabled"), None);
+        // Both copies: the top-level one wins, as in the app (an older build after a rollback writes only it).
+        let both = json!({ "mcpEnabled": false, "machine": { "mcpEnabled": true } });
+        assert_eq!(setting(&both, "machine", "mcpEnabled"), Some(&json!(false)));
     }
 
     #[test]
