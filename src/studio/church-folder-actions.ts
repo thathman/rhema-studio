@@ -1,6 +1,6 @@
 import { toast } from "sonner"
 import { openFromChurchFolder, type FolderEntry } from "@/lib/church-folder"
-import { useServiceStore } from "@/stores/service-store"
+import { unsavedOpenWords, useServiceStore } from "@/stores/service-store"
 import { useSongStore } from "@/stores/song-store"
 import { useMediaStore } from "@/stores/media-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -32,7 +32,7 @@ export async function openFolderEntry(folder: string, e: FolderEntry): Promise<b
       })
     }
     if (res === "ok") useShellStore.getState().setWorkspace("prepare")
-    else if (res === "unsaved") toast.info("Save or close the open service, then open the new one from Prepare.")
+    else if (res === "unsaved") toast.info(unsavedOpenWords().title, { description: unsavedOpenWords().description })
     return true
   } catch (err) {
     toast.error("Nothing was opened", { description: errText(err) })

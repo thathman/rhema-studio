@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useServiceStore } from "@/stores/service-store"
+import { unsavedOpenWords, useServiceStore } from "@/stores/service-store"
 import { useQueueStore } from "@/stores"
 import { isVerseItem } from "@/types"
 import { ServiceHistory } from "@/studio/prepare/service-history"
@@ -151,7 +151,7 @@ export function ServiceBar() {
 
   const open = async (id: string) => {
     const r = await useServiceStore.getState().openProgram(id)
-    if (r === "unsaved") toast.warning("Save or discard your changes first")
+    if (r === "unsaved") toast.warning(current ? "Save or discard your changes first" : "These items are not saved in a service", { description: current ? undefined : "Keep them with New service, or clear them, then open another." })
     else if (r !== "ok") fail("Could not open service")
   }
 
@@ -173,7 +173,7 @@ export function ServiceBar() {
       setTitle("")
       setDate("")
     } else if (r === "unsaved") {
-      toast.warning("Save or discard your changes first")
+      toast.warning(unsavedOpenWords().title, { description: unsavedOpenWords().description })
     } else {
       fail("Could not create service")
     }

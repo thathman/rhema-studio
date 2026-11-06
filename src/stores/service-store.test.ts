@@ -768,6 +768,34 @@ describe("unsaved-change protection lives in the store", () => {
 
     expect(useServiceStore.getState().closeProgram({ discard: true })).toBe("closed")
     expect(useServiceStore.getState().current).toBeNull()
+
+    // A rundown built with no service open is not replaced in silence either (#411 services hunt).
+    useQueueStore.getState().addItem(queueItem("John 3:16", 43, 3, 16))
+    const before = useQueueStore.getState().items.length
+    expect(await useServiceStore.getState().openProgram("p2")).toBe("unsaved")
+    expect(await useServiceStore.getState().newFromTemplate("p2", "From template", null)).toBe("unsaved")
+    expect(useQueueStore.getState().items).toHaveLength(before)
+  })
+
+  it("deleting the open service leaves its items as after Close, so the next open is not refused", async () => {
+    await openStored()
+    const id = useServiceStore.getState().current!.id
+    mockInvoke.mockImplementation(async (cmd: string) => (cmd === "content_get_program" ? stored : null))
+    expect(await useServiceStore.getState().deleteProgram(id, { discard: true })).toBe("deleted")
+    expect(await useServiceStore.getState().openProgram("p2")).not.toBe("unsaved")
+  })
+})
+
+describe("deleting checks the open service's own revision (#411 services hunt)", () => {
+  it("never deletes over a newer edit the list knew of but the open service did not, nor refuses a fresh reload", async () => {
+    await openStored()
+    const cur = useServiceStore.getState().current!
+    // The list says 5 (another desk saved and the list was reloaded); the open copy is the one shown.
+    useServiceStore.setState({ programs: [{ ...cur, revision: cur.revision + 1 }] })
+    mockInvoke.mockImplementation(async () => null)
+    await useServiceStore.getState().deleteProgram(cur.id, { discard: true })
+    const call = mockInvoke.mock.calls.find((c) => c[0] === "content_delete_program")
+    expect(call?.[1]).toMatchObject({ id: cur.id, expectedRevision: cur.revision })
   })
 })
 

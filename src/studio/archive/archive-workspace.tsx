@@ -46,7 +46,9 @@ export function ArchiveWorkspace() {
   const open = (id: string) =>
     void useServiceStore.getState().openProgram(id).then((r) => {
       if (r === "ok") useShellStore.getState().goTo("prepare")
-      else if (r !== "unsaved") toast.error("Could not open service", { description: useServiceStore.getState().error ?? undefined })
+      // Refused, said: an open service with changes, or items not in a service yet (#411).
+      else if (r === "unsaved") toast.warning("Save what is open in Prepare first", { description: "It has changes, or items not yet in a service." })
+      else toast.error("Could not open service", { description: useServiceStore.getState().error ?? undefined })
     })
   return (
     <div className="h-full overflow-y-auto">
