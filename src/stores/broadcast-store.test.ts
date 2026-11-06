@@ -1364,6 +1364,27 @@ describe("updateDraftNested deep paths", () => {
     }
   })
 
+  it("a video cleared and restored starts again from the beginning, never seeked on by the time away (#411)", async () => {
+    vi.useFakeTimers()
+    try {
+      const { useBroadcastStore } = await import("./broadcast-store")
+      vi.setSystemTime(100_000)
+      useBroadcastStore.setState({ isLive: true, cleared: false, rehearsal: false, heldLive: null, liveVerse: { kind: "image", reference: "", segments: [], content: "picture", video: { url: "u", fit: "cover", loop: false, sound: true, name: "Clip", token: 1, startedAt: 70_000 } } as never })
+      useBroadcastStore.getState().setLive(false)
+      vi.setSystemTime(280_000)
+      useBroadcastStore.getState().setLive(true)
+      expect(useBroadcastStore.getState().liveVerse?.video?.startedAt).toBe(280_000)
+      // In rehearsal the screens keep what they had: nothing restarts.
+      useBroadcastStore.setState({ rehearsal: true })
+      useBroadcastStore.getState().setLive(false)
+      vi.setSystemTime(300_000)
+      useBroadcastStore.getState().setLive(true)
+      expect(useBroadcastStore.getState().liveVerse?.video?.startedAt).toBe(280_000)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("video sound plays from the congregation output, whatever the main output's role", async () => {
     const { soundOutputId } = await import("./broadcast-store")
     const o = (id: string, role?: string) => ({ id, role }) as never

@@ -1251,7 +1251,19 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     }),
   setLive: (isLive) => {
     const s = get()
-    set({ isLive, cleared: isLive ? false : s.cleared || (s.isLive && s.liveVerse !== null) })
+    // A playing video put back after Clear starts again from the beginning (#411 audit: it came
+    // back seeked on by the whole time it was away, often to its last frame). Not in rehearsal,
+    // where the screens keep what they had; a paused one keeps its frame.
+    const v = s.liveVerse
+    const restart = isLive && !s.isLive && s.cleared && !s.rehearsal && !!v?.video?.startedAt && !v.video.paused
+    const back = restart ? { ...v!, video: { ...v!.video!, startedAt: Date.now() } } : v
+    const id = v ? sourceOf(v) : null
+    const cur = id ? s.sources[id] : undefined
+    set({
+      isLive,
+      cleared: isLive ? false : s.cleared || (s.isLive && s.liveVerse !== null),
+      ...(back !== v ? { liveVerse: back, ...(id && cur?.value === v ? { sources: { ...s.sources, [id]: { ...cur, value: back! } } } : {}) } : {}),
+    })
     noteSources()
     get().syncBroadcastOutput()
   },
