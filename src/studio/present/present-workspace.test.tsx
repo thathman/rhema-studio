@@ -203,6 +203,14 @@ afterEach(() => {
 })
 
 describe("Present's unified Live console", () => {
+  it("a held key (or a clicker repeating a held button) steps once, never races through the song (#411)", async () => {
+    await renderWorkspace()
+    const before = presentCalls.next.mock.calls.length
+    pressArrowRight()
+    for (let i = 0; i < 20; i++) window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", repeat: true, bubbles: true, cancelable: true }))
+    expect(presentCalls.next.mock.calls.length - before).toBe(1)
+  })
+
   it("keeps a running auxiliary timer visible as read-only status while management stays in Timekeeper", async () => {
     useAuxTimers.setState({ timers: [{ id: "communion-prep", label: "Communion prep", timer: { durationMs: 300_000, startedAt: performance.now(), accumulatedMs: 0 }, onStage: false, owner: "" }] })
     await renderWorkspace()
