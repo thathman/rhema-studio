@@ -113,7 +113,6 @@ impl DetectionMerger {
         results
     }
 
-    /// Update the minimum confidence threshold.
     /// What a partial transcript shows (#411 listening hunt): ranked and filtered as `merge`, never
     /// auto-queued, and the cooldown left for the final. A half-heard "Romans 8 verse 20" (the
     /// preacher still saying "twenty-eight") must not go on air, nor keep the final's verse out.
@@ -124,6 +123,7 @@ impl DetectionMerger {
         all.into_iter().map(|detection| MergedDetection { detection, auto_queued: false }).collect()
     }
 
+    /// Update the minimum confidence threshold.
     pub fn set_confidence_threshold(&mut self, threshold: f64) {
         self.confidence_threshold = threshold;
     }

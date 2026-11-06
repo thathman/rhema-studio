@@ -550,7 +550,9 @@ pub async fn start_transcription(
 
                         // Fire-and-forget: detection runs in background thread pool.
                         // Event consumer proceeds immediately to next transcript.
-                        match detect_tx.try_send((transcript.clone(), true)) {
+                        // A final waits for room (#411): it is the only way a heard verse reaches
+                        // Auto or the queue now (partials are preview only), so it is never dropped.
+                        match detect_tx.send((transcript.clone(), true)).await {
                             Ok(()) => {
                                 let n = detect_sent_evt.fetch_add(1, Ordering::Relaxed) + 1;
                                 if n % 25 == 0 {
@@ -620,7 +622,7 @@ fn run_direct_detection(app: &AppHandle, transcript: &str, is_final: bool) -> bo
             return false;
         }
     };
-    let direct_results = detector.detect(transcript);
+    let direct_results = if is_final { detector.detect(transcript) } else { detector.detect_preview(transcript) };
     drop(detector); // Release immediately
 
     if direct_results.is_empty() {
