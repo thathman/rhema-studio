@@ -1,3 +1,4 @@
+import { imageCacheVersion } from "@/lib/theme-image-cache"
 import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
 import { clockText } from "@/lib/scenes"
 import { drawTicker } from "@/lib/ticker-draw"
@@ -353,7 +354,8 @@ function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: n
       lc.width = tw
       lc.height = th
     }
-    const images = opts.imageCache?.size ?? 0
+    // A version, not the size: a cache that lets pictures go can stay the same size as one arrives.
+    const images = imageCacheVersion(opts.imageCache)
     const lctx = feedLayerFresh(lc, l, images, tw, th) ? null : lc.getContext("2d")
     if (lctx) {
       lctx.clearRect(0, 0, tw, th)

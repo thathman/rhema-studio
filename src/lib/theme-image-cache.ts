@@ -6,7 +6,67 @@
  * A cache per component meant each of those decoded its own copy of the same
  * multi-megabyte picture.
  */
-const cache = new Map<string, HTMLImageElement>()
+/** Past this many pictures, ones not drawn for a while are let go. */
+export const SOFT_IMAGE_LIMIT = 64
+/** A picture not drawn for this long may be let go. */
+export const IMAGE_IDLE_MS = 10 * 60_000
+
+/**
+ * A Map that lets go of pictures nobody has drawn for a while (#411 media hunt): it never shrank,
+ * so a long service of photos, or a signage loop, grew memory with every picture in every window
+ * (a 12 MP photo is about 48 MB decoded). Only past SOFT_IMAGE_LIMIT, and only pictures not drawn
+ * for IMAGE_IDLE_MS: anything a frame, a strip of cards or a grid draws now is never the one let
+ * go, so nothing reloads in a loop. `added` counts every picture put in (`version`).
+ */
+class RecentImages extends Map<string, HTMLImageElement> {
+  private used = new Map<string, number>()
+  added = 0
+
+  override get(key: string): HTMLImageElement | undefined {
+    const img = super.get(key)
+    if (img) this.used.set(key, performance.now())
+    return img
+  }
+
+  // Asking whether it is here (a preload before drawing) counts as use too: otherwise a picture a
+  // still slide held for over 10 minutes could go just as the next slide is about to draw it.
+  override has(key: string): boolean {
+    const here = super.has(key)
+    if (here) this.used.set(key, performance.now())
+    return here
+  }
+
+  override set(key: string, img: HTMLImageElement): this {
+    super.set(key, img)
+    this.used.set(key, performance.now())
+    this.added++
+    if (this.size > SOFT_IMAGE_LIMIT) {
+      const idle = performance.now() - IMAGE_IDLE_MS
+      for (const [k, at] of this.used) {
+        if (this.size <= SOFT_IMAGE_LIMIT) break
+        if (at < idle) this.delete(k)
+      }
+    }
+    return this
+  }
+
+  override delete(key: string): boolean {
+    this.used.delete(key)
+    return super.delete(key)
+  }
+
+  override clear(): void {
+    this.used.clear()
+    super.clear()
+  }
+}
+
+/** Changes whenever a picture is put in (even when the count stays the same): for "is it new?" checks. */
+export function imageCacheVersion(cache: Map<string, HTMLImageElement> | undefined): number {
+  return cache instanceof RecentImages ? cache.added : cache?.size ?? 0
+}
+
+const cache = new RecentImages()
 const inFlight = new Map<string, Promise<HTMLImageElement | null>>()
 
 /** The map handed to `renderVerse` via `RenderOptions.imageCache`. */
