@@ -76,6 +76,16 @@ fn format_request_error(error: &reqwest::Error) -> String {
     format!("OpenAI request failed: {error}")
 }
 
+/// How long to wait before the next request after `failures` failed ones in a row, or `None` to
+/// give up (#411 listening hunt): one timeout, rate limit or server error used to end listening for
+/// the rest of the service while the desk still said Listening.
+fn retry_delay(failures: u32) -> Option<Duration> {
+    (failures < MAX_FAILURES_IN_A_ROW).then(|| Duration::from_secs(u64::from(failures.min(5)) * 2))
+}
+
+/// Failed requests in a row before listening stops (and says so).
+const MAX_FAILURES_IN_A_ROW: u32 = 5;
+
 async fn cancellable<T>(
     cancel: &mut watch::Receiver<bool>,
     operation: impl Future<Output = T>,
@@ -276,6 +286,7 @@ impl SttProvider for OpenAiTranscribeProvider {
             .build()
             .map_err(|error| SttError::ConnectionFailed(format_request_error(&error)))?;
         let mut cancel_rx = self.cancel_tx.subscribe();
+        let mut failures = 0u32;
         loop {
             let Some(samples) = cancellable(&mut cancel_rx, chunk_rx.recv()).await else {
                 break;
@@ -290,6 +301,11 @@ impl SttProvider for OpenAiTranscribeProvider {
             };
             match result {
                 Ok(transcript) => {
+                    // Working again after a failure: the desk's error state clears.
+                    if failures > 0 {
+                        let _ = event_tx.send(TranscriptEvent::Connected).await;
+                    }
+                    failures = 0;
                     log::info!("[OpenAI Transcribe] Completed in {:?}", started.elapsed());
                     if !transcript.is_empty() {
                         let _ = event_tx
@@ -307,11 +323,19 @@ impl SttProvider for OpenAiTranscribeProvider {
                     let message = error.to_string();
                     log::error!("[OpenAI Transcribe] {message}");
                     let _ = event_tx.send(TranscriptEvent::Error(message)).await;
-                    break;
+                    // That chunk is lost; the next ones are tried after a pause, until too many fail.
+                    failures += 1;
+                    let Some(wait) = retry_delay(failures) else { break };
+                    if cancellable(&mut cancel_rx, tokio::time::sleep(wait)).await.is_none() {
+                        break;
+                    }
                 }
             }
         }
 
+        // The VAD worker stops only on cancel or when the audio closes: after giving up it would
+        // wait for ever, the Disconnected below never sent and the desk still saying Listening.
+        self.cancelled.store(true, Ordering::SeqCst);
         // Drop queued chunks before joining the VAD worker so a full bounded
         // channel cannot keep its blocking_send alive after Stop.
         drop(chunk_rx);
@@ -332,6 +356,13 @@ impl SttProvider for OpenAiTranscribeProvider {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_failed_request_is_retried_with_a_pause_until_too_many_fail() {
+        assert_eq!(super::retry_delay(1), Some(std::time::Duration::from_secs(2)));
+        assert_eq!(super::retry_delay(4), Some(std::time::Duration::from_secs(8)));
+        assert_eq!(super::retry_delay(super::MAX_FAILURES_IN_A_ROW), None);
+    }
+
     use super::{
         api_language_hint, cancellable, pcm_to_wav, OpenAiTranscribeProvider, MAX_BUFFER_SAMPLES,
         SAMPLE_RATE,
