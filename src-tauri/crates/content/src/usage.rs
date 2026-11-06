@@ -88,6 +88,8 @@ impl ContentDb {
                JOIN programs p ON p.id = i.program_id
                LEFT JOIN songs s ON s.id = json_extract(i.payload, '$.song_id')
               WHERE i.kind = 'song' AND p.service_date BETWEEN ?1 AND ?2 AND sid IS NOT NULL AND p.is_template = 0
+                -- A hidden item (a backup song kept in the service, skipped in Live) was not sung (#411).
+                AND COALESCE(json_extract(i.payload, '$.hidden'), 0) = 0
               GROUP BY sid
               ORDER BY COUNT(DISTINCT p.id) DESC, 2 COLLATE NOCASE",
         )?;
@@ -147,6 +149,18 @@ mod tests {
         assert!(!u[0].hymn);
         assert!(db.song_usage("2026-10-31", "2026-10-01").is_err());
         assert!(db.song_usage("Oct 1", "2026-10-31").is_err());
+    }
+
+    #[test]
+    fn a_hidden_backup_song_is_not_counted_as_sung() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let grace = song(&db, "Amazing Grace", Some("22025"));
+        let backup = song(&db, "Backup Song", Some("11111"));
+        let p = db.create_program("Service", Some("2026-10-18")).unwrap();
+        let item = |id: &str, hidden: bool| ItemInput { kind: "song".into(), reference: "x".into(), payload: Some(format!(r#"{{"song_id":"{id}","hidden":{hidden}}}"#)), ..ItemInput::default() };
+        db.replace_items(&p.id, p.revision, &[item(&grace, false), item(&backup, true)]).unwrap();
+        let titles: Vec<String> = db.song_usage("2026-10-01", "2026-10-31").unwrap().into_iter().map(|u| u.title).collect();
+        assert_eq!(titles, vec!["Amazing Grace".to_string()]);
     }
 
     #[test]
