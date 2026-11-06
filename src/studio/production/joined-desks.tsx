@@ -220,6 +220,14 @@ export function ObsDesk({ live }: { live: LiveStateV1 }) {
   const obs = live.obs
   const rehearsal = live.program.rehearsal
   const send = async (command: { command: string; value?: string | Record<string, unknown> }) => setResult(await useJoin.getState().send(command))
+  // The scene the button names is what goes to the stream (#411 OBS hunt): OBS's preview could have
+  // changed on the host since this desk last heard, and a bare Take sent whatever was there. It is
+  // put in OBS's preview first, then taken.
+  const takeShown = async (scene: string) => {
+    const set = await useJoin.getState().send({ command: "obs_preview", value: scene })
+    if (!set.ok) return setResult(set)
+    await send({ command: "obs_take" })
+  }
   return (
     <section aria-label="OBS desk" className={box}>
       <p className="font-semibold">OBS <span className="font-normal text-muted-foreground">· through the host's OBS connection</span></p>
@@ -241,7 +249,7 @@ export function ObsDesk({ live }: { live: LiveStateV1 }) {
               )
             })}
           </ul>
-          {obs.studioMode && <div><Button size="sm" disabled={!ok || rehearsal || !obs.preview || obs.preview === obs.program} onClick={() => void send({ command: "obs_take" })}>Take {obs.preview ?? "the preview"} to the stream</Button></div>}
+          {obs.studioMode && <div><Button size="sm" disabled={!ok || rehearsal || !obs.preview || obs.preview === obs.program} onClick={() => void takeShown(obs.preview!)}>Take {obs.preview ?? "the preview"} to the stream</Button></div>}
           {(obs.stream || obs.record) && (
             <dl aria-label="OBS health" className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
               {obs.stream && <><dt className="text-muted-foreground">Stream</dt><dd className={cn("font-medium", TONE[obs.stream.tone])}>{obs.stream.text}</dd></>}
