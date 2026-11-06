@@ -52,7 +52,8 @@ interface ObsState {
   /** Studio Mode: put a scene in OBS's preview. Changes nothing on the stream. */
   setPreview: (scene: string) => Promise<boolean>
   /** Studio Mode: OBS's own transition, preview to program. */
-  take: () => Promise<void>
+  /** `scene`: the scene just put in Preview and accepted by OBS (a named Take), before OBS's own event says so. */
+  take: (scene?: string) => Promise<void>
   /** Outside Studio Mode: switch OBS's program straight to a scene. The panel asks first; this changes what the stream shows. */
   switchProgram: (scene: string) => Promise<void>
   /** Choose OBS's transition (a deliberate click; not in rehearsal). Changes how OBS's next switch looks. */
@@ -438,7 +439,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
     return ok
   },
 
-  take: async () => {
+  take: async (scene) => {
     // A preview change still on its way is finished first; one that failed takes nothing (#411 OBS
     // hunt: a desk's Take after a refused preview sent whatever was there to the stream).
     const pending = previewInFlight
@@ -447,7 +448,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
       return
     }
     // The scene just set, as OBS's own preview event may not have come yet (the log names what went).
-    const preview = pending ? (previewSet ?? get().preview) : get().preview
+    const preview = scene ?? (pending ? (previewSet ?? get().preview) : get().preview)
     if (!client || get().studioMode !== true || !preview || refusedInRehearsal()) return
     try {
       await client.request("TriggerStudioModeTransition")

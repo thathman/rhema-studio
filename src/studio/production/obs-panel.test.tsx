@@ -325,6 +325,11 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     await studio.useObsStore.getState().take()
     await settle()
     expect(take()).toHaveLength(1)
+    // A named Take whose preview OBS has accepted but not yet reported: the log names that scene.
+    const { useJournalStore } = await import("@/stores/journal-store")
+    studio.useObsStore.setState({ preview: "Pulpit" })
+    await studio.useObsStore.getState().take("Choir")
+    expect(useJournalStore.getState().entries.at(-1)?.label).toContain("took Choir")
     studio.useObsStore.getState().disconnect()
   })
 
