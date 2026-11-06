@@ -49,7 +49,7 @@ export function useSetupStatus(): { church: ChurchSetup; equipment: { items: Equ
       operatorName: s.operatorName,
       // The list loads at startup; empty means not looked up yet (Home's service check reports a Bible that fails to load).
       translations: translations.length ? translations : null,
-      settingsSaveFailed: s.settingsSaveFailed,
+      settingsSaveFailed: s.settingsSaveFailed || s.themesSaveFailed,
       logoUrl: s.brandKit.logoUrl,
       brandApplied: themes.some((t) => t.brandManaged),
       churchFolder: s.churchFolder,
