@@ -19,7 +19,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { describeError } from "@/studio/library/content-actions"
 import { save } from "@tauri-apps/plugin-dialog"
 import { writeTextFile } from "@tauri-apps/plugin-fs"
-import type { ImportMode, ServiceLog, ServiceLogSummary, ServiceRun, ServiceRunSummary } from "@/types"
+import type { ImportMode, ServiceLog, ServiceLogSummary, ServiceRun, ServiceRunSummary, TranscriptSegment } from "@/types"
 import { ServiceRunReview } from "@/studio/library/service-run-review"
 
 const MODE_LABEL: Record<ImportMode, string> = {
@@ -111,6 +111,10 @@ export function JournalBlock() {
   const finalCount = segments.filter((s) => s.is_final && s.text.trim()).length
   // AR-004: the transcript goes into a log only when ticked for that log; never by default.
   const [withTranscript, setWithTranscript] = useState(false)
+  // A new log clears what was said (#411): passages not kept with a log are asked about first.
+  const [keptSegments, setKeptSegments] = useState<TranscriptSegment[] | null>(null)
+  const [confirmNewLog, setConfirmNewLog] = useState(false)
+  const unkeptTranscript = finalCount > 0 && keptSegments !== segments
   const provider = useSettingsStore((s) => {
     if (s.sttProvider === "deepgram") return "Deepgram (cloud)"
     if (s.sttProvider === "openai") return "OpenAI (cloud)"
@@ -120,7 +124,9 @@ export function JournalBlock() {
   const keepLog = async () => {
     setBusy(true)
     try {
-      await keepJournal(withTranscript ? transcriptSection(useTranscriptStore.getState().segments, provider) : "")
+      const said = useTranscriptStore.getState().segments
+      await keepJournal(withTranscript ? transcriptSection(said, provider) : "")
+      if (withTranscript) setKeptSegments(said)
       setArchived((n) => n + 1)
       toast.success("Log kept", { description: "Find it under Earlier logs, even after a restart." })
     } catch (e) {
@@ -142,6 +148,11 @@ export function JournalBlock() {
     }
   }
   const newLog = async () => {
+    if (unkeptTranscript && !confirmNewLog) {
+      setConfirmNewLog(true)
+      return
+    }
+    setConfirmNewLog(false)
     try {
       await startNewJournal()
     } catch (e) {
@@ -190,6 +201,13 @@ export function JournalBlock() {
         <Button size="sm" variant="outline" disabled={busy || entries.length === 0} onClick={() => void saveLog()}><DownloadIcon /> Save the log…</Button>
         <Button size="sm" variant="ghost" disabled={entries.length === 0 || busy} onClick={() => void newLog()}>Start a new log</Button>
       </div>
+      {confirmNewLog && (
+        <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-confidence-mid/40 p-2 text-xs">
+          <p className="min-w-0 flex-1">What was said ({finalCount} passage{finalCount === 1 ? "" : "s"}) is not kept with a log. A new log starts with an empty transcript, so it would be gone.</p>
+          <Button size="sm" variant="outline" onClick={() => setConfirmNewLog(false)}>Keep the log first</Button>
+          <Button size="sm" variant="destructive" onClick={() => void newLog()}>Clear and start</Button>
+        </div>
+      )}
       {programs.length > 0 && <label className="mt-3 flex items-center gap-2 text-xs">
         <span>History for</span>
         <Select value={filterProgramId} onValueChange={setFilterProgramId}>
