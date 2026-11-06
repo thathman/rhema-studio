@@ -20,7 +20,10 @@ fn is_store_object(bytes: &[u8]) -> bool {
     serde_json::from_slice::<serde_json::Value>(bytes).is_ok_and(|v| v.is_object())
 }
 
-pub const STORE_FILES: [&str; 2] = ["settings.json", "broadcast-themes.json"];
+/// Every store whose loss would cost the church work: an unreadable one is read as empty by the
+/// store plugin and then saved over (#411 settings hunt: every scene approval and its history, and
+/// the design packs, went with no word).
+pub const STORE_FILES: [&str; 4] = ["settings.json", "broadcast-themes.json", "scene-approvals.json", "rhema-design-packs.json"];
 
 /// Rename each damaged store file in `dir` to `<name>.damaged-<unix seconds>` and put the
 /// last good copy back when there is one; copy each good file to `<name>.last-good`.
@@ -80,6 +83,25 @@ mod tests {
         let moved = set_aside_damaged(&dir, 1_700_000_001);
         assert_eq!(moved, vec![("broadcast-themes.json".to_string(), "broadcast-themes.json.damaged-1700000001".to_string(), true)]);
         assert_eq!(std::fs::read(dir.join("broadcast-themes.json")).unwrap(), b"{}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn approvals_and_design_packs_cut_off_come_back_from_their_last_good_copy() {
+        let dir = std::env::temp_dir().join(format!("rhema-store-check-approvals-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["scene-approvals.json", "rhema-design-packs.json"] {
+            std::fs::write(dir.join(name), b"{\"kept\": true}").unwrap();
+        }
+        assert!(set_aside_damaged(&dir, 1).is_empty());
+        for name in ["scene-approvals.json", "rhema-design-packs.json"] {
+            std::fs::write(dir.join(name), b"{\"kept\": tr").unwrap(); // a crash mid-save
+        }
+        let moved = set_aside_damaged(&dir, 2);
+        assert_eq!(moved.len(), 2);
+        assert!(moved.iter().all(|(_, _, recovered)| *recovered));
+        assert_eq!(std::fs::read(dir.join("scene-approvals.json")).unwrap(), b"{\"kept\": true}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
