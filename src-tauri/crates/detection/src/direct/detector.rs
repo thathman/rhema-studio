@@ -956,13 +956,16 @@ impl DirectDetector {
 
     /// Check if text contains a "previous verse" / "last verse" command.
     fn check_previous_verse_command(&self, text: &str) -> Option<Detection> {
-        // Not a command (#411 listening hunt): a sentence that names a whole reference ("let's read
-        // the last verse, Revelation 22:21") means that one, and "the last verse" long after the
-        // previous one ("the last verse of the chapter") is not a step back to it.
-        if self.text_names_complete_reference(text) || self.recent_at.is_none_or(|at| at.elapsed() > PREVIOUS_VERSE_WINDOW) {
+        let lower = text.to_lowercase();
+        if !PREVIOUS_VERSE_PHRASES.iter().any(|p| lower.contains(p)) {
             return None;
         }
-        let lower = text.to_lowercase();
+        // Not a command (#411 listening hunt): a sentence that names a book ("let's read the last
+        // verse, Revelation 22:21", "the last verse of Psalm 23") means that one, and "the last
+        // verse" long after the previous one ("the last verse of the chapter") is not a step back.
+        if !self.matcher.find_books(text).is_empty() || self.recent_at.is_none_or(|at| at.elapsed() > PREVIOUS_VERSE_WINDOW) {
+            return None;
+        }
         for phrase in PREVIOUS_VERSE_PHRASES {
             if lower.contains(phrase) {
                 if let Some(prev_ref) = self.recent_detections.front() {
@@ -1382,6 +1385,13 @@ mod tests {
         assert!(!detector.detect("John 3:16").is_empty());
         let results = detector.detect("let's read the last verse, Revelation 22:21");
         assert_eq!(results.first().map(|d| (d.verse_ref.book_name.as_str(), d.verse_ref.chapter, d.verse_ref.verse_start)), Some(("Revelation", 22, 21)));
+    }
+
+    #[test]
+    fn the_last_verse_of_a_named_book_is_not_the_old_verse() {
+        let mut detector = DirectDetector::new();
+        assert!(!detector.detect("John 3:16").is_empty());
+        assert!(detector.detect("the last verse of Psalm 23").iter().all(|d| d.verse_ref.book_name != "John"));
     }
 
     #[test]
