@@ -215,6 +215,8 @@ export const useSoundStore = create<SoundState>((set, get) => ({
       cancelPendingAudio()
     }
     cancelFade(get().volume)
+    // Pause is silence: an earlier cue still fading out under this one stops too (#411 media hunt).
+    clearTransitionFades()
     audio?.pause()
     set({ playing: false, fading: false, fadeDirection: null })
   },

@@ -1338,6 +1338,12 @@ describe("updateDraftNested deep paths", () => {
     expect(soundOutputId([o("main", "stage"), o("b"), o("c")], { c: { previewOpen: true } })).toBe("c")
     expect(soundOutputId([o("main", "signage"), o("b")], {})).toBe("b")
     expect(soundOutputId([o("main", "stage")], {})).toBeNull()
+    // Never a TV feed (its page plays no video); an NDI sender that is on plays it (#411).
+    const t = (id: string, type: string) => ({ id, type }) as never
+    expect(soundOutputId([o("main", "stage"), t("tv", "browser"), t("ndi", "ndi")], { ndi: { ndiActive: true } })).toBe("ndi")
+    expect(soundOutputId([o("main", "stage"), t("tv", "browser")], {})).toBeNull()
+    // The main window closed (projector off) while another screen is on: that one plays it.
+    expect(soundOutputId([o("main"), o("b")], { b: { previewOpen: true } })).toBe("b")
   })
 
   it("when the sound output changes, every output is told (only one plays: no echo)", async () => {
