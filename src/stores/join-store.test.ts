@@ -171,3 +171,61 @@ describe("joined host state", () => {
     })
   })
 })
+
+describe("a first connect that fails is tried again (#411 Companion hunt)", () => {
+  afterEach(() => vi.useRealTimers())
+
+  it("keeps trying, backing off, and stops once connected", async () => {
+    vi.useFakeTimers()
+    let failures = 2
+    invokeMock.mockReset()
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "join_me") {
+        if (failures-- > 0) throw new Error("host not reachable")
+        return { name: "OBS PC", role: "obs" }
+      }
+      return null
+    })
+    useJoin.setState({ status: "off" })
+    await useJoin.getState().connect()
+    expect(useJoin.getState().status).toBe("reconnecting")
+    await vi.advanceTimersByTimeAsync(5_000) // first retry
+    expect(invokeMock.mock.calls.filter(([c]) => c === "join_me")).toHaveLength(2)
+    await vi.advanceTimersByTimeAsync(10_000) // second, after a longer wait
+    expect(invokeMock.mock.calls.filter(([c]) => c === "join_connect")).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(invokeMock.mock.calls.filter(([c]) => c === "join_me")).toHaveLength(3) // no more once connected
+  })
+
+  it("Leave while a retry is still waiting stops it for good", async () => {
+    vi.useFakeTimers()
+    let release: (e: Error) => void = () => {}
+    invokeMock.mockReset()
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "join_me") return new Promise((_, reject) => { release = reject })
+      return null
+    })
+    useJoin.setState({ status: "off" })
+    const pending = useJoin.getState().connect()
+    await vi.advanceTimersByTimeAsync(0)
+    await useJoin.getState().leave()
+    release(new Error("host not reachable")) // the old attempt fails after Leave
+    await pending
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(invokeMock.mock.calls.filter(([c]) => c === "join_me")).toHaveLength(1)
+    expect(useJoin.getState().status).not.toBe("reconnecting")
+  })
+
+  it("Leave while the host is answering: the late answer does not connect", async () => {
+    let answer: (v: unknown) => void = () => {}
+    invokeMock.mockReset()
+    invokeMock.mockImplementation(async (cmd: string) => (cmd === "join_me" ? new Promise((r) => { answer = r }) : null))
+    useJoin.setState({ status: "off" })
+    const pending = useJoin.getState().connect()
+    await new Promise((r) => setTimeout(r, 0))
+    await useJoin.getState().leave()
+    answer({ name: "OBS PC", role: "obs" })
+    await pending
+    expect(invokeMock.mock.calls.filter(([c]) => c === "join_connect")).toHaveLength(0)
+  })
+})

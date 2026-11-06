@@ -195,6 +195,12 @@ async function listenOnce() {
   })
 }
 
+/** The first-connect retry: its timer and its current wait (0 while not retrying). */
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+let connectRetry = 0
+/** Bumped by every connect and every Leave, so a connect overtaken by either does not act. */
+let connectRun = 0
+
 export const useJoin = create<JoinState>((set, get) => ({
   status: "off",
   error: null,
@@ -219,6 +225,7 @@ export const useJoin = create<JoinState>((set, get) => ({
   connect: async () => {
     const { joinAddress: address, joinToken: token, joinSecure } = useSettingsStore.getState()
     if (!address || !token) return
+    const run = ++connectRun
     await listenOnce()
     gaps = []
     set({ status: "connecting", error: null, clockSkewMs: null, secure: null })
@@ -226,21 +233,46 @@ export const useJoin = create<JoinState>((set, get) => ({
       // How this host is reached, as kept at pairing: https with its certificate authority, or http.
       await invoke("join_secure", { address, secure: joinSecure ? { port: joinSecure.port, fingerprint: joinSecure.fingerprint } : null })
       const me = await invoke<{ name: string; role: string; paused?: boolean; outputScope?: string[] | null; groupTakeScope?: string[] | null }>("join_me", { address, token })
+      // Left (or a newer connect began) while the host answered: this one goes no further.
+      if (run !== connectRun) return
       const outputScope = Array.isArray(me.outputScope) ? me.outputScope : undefined
       const groupTakeScope = Array.isArray(me.groupTakeScope) && outputScope ? me.groupTakeScope.filter((id) => outputScope.includes(id)) : undefined
       set({ me: { name: me.name, role: me.role, ...(outputScope ? { outputScope } : {}), ...(groupTakeScope ? { groupTakeScope } : {}) }, paused: me.paused === true })
       await invoke("join_connect", { address, token })
+      // A Leave that came while it connected: undone, not left following the host.
+      if (run !== connectRun) {
+        await invoke("join_disconnect").catch(() => {})
+        return
+      }
+      connectRetry = 0
     } catch (e) {
+      // Left (or connected again) meanwhile: this attempt's failure is old news.
+      if (run !== connectRun) return
       const message = String(e)
       if (message.includes("pair again")) {
         gaps = []
         set({ status: "refused", error: message, me: null, live: null, paused: false, note: null, receivedAt: 0, clockSkewMs: null })
       } else {
         set({ status: "reconnecting", error: message })
+        // Tried again (#411 Companion hunt): a host not yet started, or the network down for a
+        // moment at start, left it on "Reconnecting…" for good (the host's follow loop runs only
+        // once a connect has succeeded). Backs off to 30 s; stops once Left, refused or connected.
+        connectRetry = Math.min(30_000, connectRetry ? connectRetry * 2 : 5_000)
+        if (retryTimer) clearTimeout(retryTimer)
+        retryTimer = setTimeout(() => {
+          retryTimer = null
+          const { joinAddress, joinToken } = useSettingsStore.getState()
+          if (get().status === "reconnecting" && joinAddress && joinToken) void get().connect()
+        }, connectRetry)
       }
     }
   },
   leave: async (forget = false) => {
+    // A Leave ends any retry, and a connect still on its way when it was pressed changes nothing.
+    connectRun++
+    if (retryTimer) clearTimeout(retryTimer)
+    retryTimer = null
+    connectRetry = 0
     await invoke("join_disconnect").catch(() => {})
     gaps = []
     set({ status: "off", live: null, me: null, error: null, paused: false, note: null, clockSkewMs: null, secure: null })
