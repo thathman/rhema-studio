@@ -365,8 +365,10 @@ export const useObsStore = create<ObsState>((set, get) => ({
     set({ status: "off", error: null, recording: null, chapters: null, video: null, ...NO_SCENES, ...NO_STATUS })
   },
 
+  // Never in rehearsal (#411 OBS hunt): Start/Stop from the panel reached the live OBS, so a
+  // rehearsal could stop the service's recording; the remote already refused it.
   startRecording: async () => {
-    if (!client) return
+    if (!client || refusedInRehearsal()) return
     try {
       await client.request("StartRecord")
       await refresh()
@@ -376,7 +378,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
   },
 
   stopRecording: async () => {
-    if (!client) return
+    if (!client || refusedInRehearsal()) return
     try {
       await client.request("StopRecord")
       await refresh()
@@ -393,7 +395,8 @@ export const useObsStore = create<ObsState>((set, get) => ({
     // Only claim "not recording" when OBS said so; otherwise the state is unknown.
     const where = !client || !rec ? " (OBS recording state unknown)" : rec.active ? ` at ${rec.timecode ?? "?"} in the recording${rec.paused ? " (paused)" : ""}` : " (OBS was not recording)"
     useJournalStore.getState().add({ kind: "obs", label: `${name}${where}` })
-    if (!client || !rec?.active || get().chapters === false) return
+    // A rehearsed mark adds no chapter to the real recording.
+    if (!client || !rec?.active || get().chapters === false || useBroadcastStore.getState().rehearsal) return
     try {
       await client.request("CreateRecordChapter", { chapterName: name })
       set({ chapters: true })
