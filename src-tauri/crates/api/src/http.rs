@@ -1812,6 +1812,11 @@ impl RecentIds {
             })
     }
 
+    /// Drop an id noted before its command ran, when the command then failed (a recorder command).
+    fn forget(&self, id: &str) {
+        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).retain(|(saved, _, _)| saved != id);
+    }
+
     /// Remember a successfully dispatched id and its complete request identity.
     fn record(&self, id: &str, fingerprint: &str) {
         let mut seen = self
@@ -3271,7 +3276,13 @@ async fn command_handler<S: CommandSink + 'static>(
     // encoder is slow to close): not in every desk's turn (#411 remote hunt: a Stop at the end of
     // the service held every other desk's Next and Bible until the file closed). It changes no
     // output, scene or revision the turn protects, and the recorder serialises itself.
-    if matches!(command, RemoteCommand::Record(_)) {
+    // Its id is noted first, so a desk retrying a slow Stop hears "already carried out", not the
+    // recorder's "already closing"; forgotten again below if the recorder refuses.
+    let early = matches!(command, RemoteCommand::Record(_));
+    if early {
+        if let (Some(id), Some(fingerprint)) = (request.id.as_deref(), request_fingerprint.as_deref()) {
+            state.recent.record(id, fingerprint);
+        }
         drop(turn);
     }
     let done = match (&command, why) {
@@ -3297,7 +3308,14 @@ async fn command_handler<S: CommandSink + 'static>(
             };
             (StatusCode::OK, Json(CommandResponse { success: true, note, revision, ..Default::default() }))
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, CommandResponse::refused(e.to_string())),
+        Err(e) => {
+            if early {
+                if let Some(id) = request.id.as_deref() {
+                    state.recent.forget(id);
+                }
+            }
+            (StatusCode::INTERNAL_SERVER_ERROR, CommandResponse::refused(e.to_string()))
+        }
     }
 }
 
