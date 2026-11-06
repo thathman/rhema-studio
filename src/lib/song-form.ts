@@ -157,7 +157,6 @@ export function relabel(sections: SectionForm[]): SectionForm[] {
   return sections.map((s, i) => (generic.test(s.label) || !s.label.trim() ? { ...s, label: defaultLabel(s.kind, i, sections) } : s))
 }
 
-/** Append sections parsed from pasted text, in `language`. */
 /**
  * New sections go at the end of the default order too (#411 songs hunt): a song saved once has a
  * Default order, and a verse added later that was in no order never reached the screen, with no
