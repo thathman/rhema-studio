@@ -247,6 +247,13 @@ describe("an item's Take steps", () => {
     expect(obsSwitches()).toEqual([])
   })
 
+  it("just connected, scenes not listed yet: says so, not that OBS has no such scene (#411)", async () => {
+    useObsStore.setState({ status: "connected", scenes: [], studioMode: null })
+    await presentQueueItem(1)
+    await vi.waitFor(() => expect(toast.info).toHaveBeenCalledWith("OBS not switched", expect.objectContaining({ description: expect.stringContaining("has not listed its scenes yet") })))
+    expect(toast.warning).not.toHaveBeenCalledWith("OBS not switched", expect.anything())
+  })
+
   it("in OBS's Studio Mode the scene only waits in OBS's preview", async () => {
     studioMode = true
     await connectObs()
