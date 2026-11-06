@@ -7,6 +7,7 @@ import { useHold } from "@/stores/hold-store"
 import { useObsStore } from "@/stores/obs-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useTimerStore } from "@/stores/timer-store"
+import { isPuttingBack } from "@/stores/timing-trust-store"
 import type { CueTrigger, ItemCue, QueueItem } from "@/types"
 
 /**
@@ -62,7 +63,8 @@ function armFinish(item: QueueItem, now = Date.now()) {
 
 /** On the app's tick (and its own timer): fire a due "planned time is up" cue, unless on hold. */
 export function catchUpItemCues(now = Date.now()): void {
-  if (!finish || now < finish.at || useHold.getState().hold) return
+  // In rehearsal a due cue waits (it would be dropped: no cue runs in rehearsal) and fires as it ends.
+  if (!finish || now < finish.at || useHold.getState().hold || useBroadcastStore.getState().rehearsal) return
   const due = finish
   clearFinish()
   const item = itemById(due.id)
@@ -84,12 +86,20 @@ useEventClock.subscribe((s, prev) => {
   if (s.currentMomentId === prev.currentMomentId) return
   const before = itemById(prev.currentMomentId)
   clearFinish()
+  // Putting back after a crash: the moment's cues ran when it first started. Only its "time is up" is kept.
+  if (isPuttingBack()) {
+    const now = itemById(s.currentMomentId)
+    if (now && !useBroadcastStore.getState().rehearsal) armFinish(now)
+    return
+  }
   if (before) queue(() => runItemCues(before, "end"))
   const now = itemById(s.currentMomentId)
   if (!now || useBroadcastStore.getState().rehearsal) return
   queue(() => runItemCues(now, "live"))
   armFinish(now)
 })
+
+useBroadcastStore.subscribe((s, prev) => { if (prev.rehearsal && !s.rehearsal) catchUpItemCues() })
 
 // "When it is paused": a hold starting, or the service timer paused (not reset) during the item.
 // Just after the hold's own stage message, so the item's own one is what the stage shows.

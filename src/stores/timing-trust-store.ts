@@ -40,6 +40,10 @@ export const useTimingTrust = create<TrustState>((set, get) => ({
 
 // Putting the screens back starts the same event again; that is not the operator taking it again.
 let puttingBack = false
+/** Whether what changes now is Rhema putting back what was live before it closed (not the operator). */
+export function isPuttingBack(): boolean {
+  return puttingBack
+}
 export function whilePuttingBack(fn: () => void): void {
   puttingBack = true
   try {
