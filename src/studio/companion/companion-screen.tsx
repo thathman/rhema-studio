@@ -116,7 +116,7 @@ function HostCard({ secure }: { secure: boolean }) {
       {secure && <PinnedCertificate />}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" onClick={() => void useJoin.getState().leave(true)}>Leave this host</Button>
-        {status === "refused" && <Button size="sm" variant="ghost" onClick={() => void useJoin.getState().connect()}>Try again</Button>}
+        {(status === "refused" || status === "reconnecting") && <Button size="sm" variant="ghost" onClick={() => void useJoin.getState().connect()}>Try again</Button>}
       </div>
     </Card>
   )

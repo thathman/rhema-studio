@@ -30,6 +30,15 @@ pub fn show(app: &tauri::AppHandle) {
 #[tauri::command]
 fn remote_set_keys() {}
 
+/// How the host is reached is set by the studio app before it connects (#411 Companion hunt: this
+/// app did not have it, so every connect failed at once and stayed on "Reconnecting…"). The
+/// companion pins its host's certificate from its own pairing file (`host`), so nothing to set.
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+fn join_secure(address: String, secure: Option<serde_json::Value>) {
+    let _ = (address, secure);
+}
+
 /// Saved keys (the host's pairing key, the OBS password) in the system's credential store, under
 /// this app's own name.
 const KEYCHAIN_NAME: &str = "Rhema Studio Companion";
@@ -100,6 +109,7 @@ pub fn run() {
             secrets_get,
             secrets_set,
             remote_set_keys,
+            join_secure,
             companion_version,
         ])
         .build(tauri::generate_context!())

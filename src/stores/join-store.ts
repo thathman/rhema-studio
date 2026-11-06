@@ -195,6 +195,10 @@ async function listenOnce() {
   })
 }
 
+/** The first-connect retry: its timer and its current wait (0 while not retrying). */
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+let connectRetry = 0
+
 export const useJoin = create<JoinState>((set, get) => ({
   status: "off",
   error: null,
@@ -230,6 +234,7 @@ export const useJoin = create<JoinState>((set, get) => ({
       const groupTakeScope = Array.isArray(me.groupTakeScope) && outputScope ? me.groupTakeScope.filter((id) => outputScope.includes(id)) : undefined
       set({ me: { name: me.name, role: me.role, ...(outputScope ? { outputScope } : {}), ...(groupTakeScope ? { groupTakeScope } : {}) }, paused: me.paused === true })
       await invoke("join_connect", { address, token })
+      connectRetry = 0
     } catch (e) {
       const message = String(e)
       if (message.includes("pair again")) {
@@ -237,6 +242,16 @@ export const useJoin = create<JoinState>((set, get) => ({
         set({ status: "refused", error: message, me: null, live: null, paused: false, note: null, receivedAt: 0, clockSkewMs: null })
       } else {
         set({ status: "reconnecting", error: message })
+        // Tried again (#411 Companion hunt): a host not yet started, or the network down for a
+        // moment at start, left it on "Reconnecting…" for good (the host's follow loop runs only
+        // once a connect has succeeded). Backs off to 30 s; stops once Left, refused or connected.
+        connectRetry = Math.min(30_000, connectRetry ? connectRetry * 2 : 5_000)
+        if (retryTimer) clearTimeout(retryTimer)
+        retryTimer = setTimeout(() => {
+          retryTimer = null
+          const { joinAddress, joinToken } = useSettingsStore.getState()
+          if (get().status === "reconnecting" && joinAddress && joinToken) void get().connect()
+        }, connectRetry)
       }
     }
   },

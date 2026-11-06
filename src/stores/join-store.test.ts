@@ -171,3 +171,29 @@ describe("joined host state", () => {
     })
   })
 })
+
+describe("a first connect that fails is tried again (#411 Companion hunt)", () => {
+  afterEach(() => vi.useRealTimers())
+
+  it("keeps trying, backing off, and stops once connected", async () => {
+    vi.useFakeTimers()
+    let failures = 2
+    invokeMock.mockReset()
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "join_me") {
+        if (failures-- > 0) throw new Error("host not reachable")
+        return { name: "OBS PC", role: "obs" }
+      }
+      return null
+    })
+    useJoin.setState({ status: "off" })
+    await useJoin.getState().connect()
+    expect(useJoin.getState().status).toBe("reconnecting")
+    await vi.advanceTimersByTimeAsync(5_000) // first retry
+    expect(invokeMock.mock.calls.filter(([c]) => c === "join_me")).toHaveLength(2)
+    await vi.advanceTimersByTimeAsync(10_000) // second, after a longer wait
+    expect(invokeMock.mock.calls.filter(([c]) => c === "join_connect")).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(invokeMock.mock.calls.filter(([c]) => c === "join_me")).toHaveLength(3) // no more once connected
+  })
+})
