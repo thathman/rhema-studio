@@ -86,13 +86,10 @@ useEventClock.subscribe((s, prev) => {
   if (s.currentMomentId === prev.currentMomentId) return
   const before = itemById(prev.currentMomentId)
   clearFinish()
-  // Putting back after a crash: the moment's cues ran when it first started. Only its "time is up" is kept.
-  if (isPuttingBack()) {
-    const now = itemById(s.currentMomentId)
-    if (now && !useBroadcastStore.getState().rehearsal) armFinish(now)
-    return
-  }
   if (before) queue(() => runItemCues(before, "end"))
+  // Putting back after a crash: the moment's go-live cues ran when it first started. Its "time is up"
+  // is not armed again: when it started is not known (from now it would fire late, or a second time).
+  if (isPuttingBack()) return
   const now = itemById(s.currentMomentId)
   if (!now || useBroadcastStore.getState().rehearsal) return
   queue(() => runItemCues(now, "live"))
