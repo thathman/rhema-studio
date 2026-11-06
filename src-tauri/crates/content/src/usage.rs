@@ -56,6 +56,7 @@ impl ContentDb {
                        WHERE json_extract(si.payload, '$.song_id') = json_extract(i.payload, '$.song_id')
                          AND json_type(si.payload, '$.hymn_numbers') = 'array'
                          AND sp.service_date BETWEEN ?1 AND ?2 AND sp.is_template = 0
+                         AND COALESCE(json_extract(si.payload, '$.hidden'), 0) = 0
                     ) THEN COALESCE((SELECT group_concat(value, '; ') FROM (
                       SELECT DISTINCT j.value AS value
                         FROM program_items hi
@@ -64,6 +65,7 @@ impl ContentDb {
                        WHERE json_extract(hi.payload, '$.song_id') = json_extract(i.payload, '$.song_id')
                          AND COALESCE(json_type(hi.payload, '$.hymn'), '') != 'false'
                          AND hp.service_date BETWEEN ?1 AND ?2 AND hp.is_template = 0
+                         AND COALESCE(json_extract(hi.payload, '$.hidden'), 0) = 0
                          AND j.type = 'text' AND length(trim(j.value)) > 0
                        ORDER BY value COLLATE NOCASE
                     )), '')
@@ -72,11 +74,13 @@ impl ContentDb {
                        WHERE json_extract(fi.payload, '$.song_id') = json_extract(i.payload, '$.song_id')
                          AND json_type(fi.payload, '$.hymn') = 'false'
                          AND fp.service_date BETWEEN ?1 AND ?2 AND fp.is_template = 0
+                         AND COALESCE(json_extract(fi.payload, '$.hidden'), 0) = 0
                     ) AND NOT EXISTS (
                       SELECT 1 FROM program_items ti JOIN programs tp ON tp.id = ti.program_id
                        WHERE json_extract(ti.payload, '$.song_id') = json_extract(i.payload, '$.song_id')
                          AND json_type(ti.payload, '$.hymn') = 'true'
                          AND tp.service_date BETWEEN ?1 AND ?2 AND tp.is_template = 0
+                         AND COALESCE(json_extract(ti.payload, '$.hidden'), 0) = 0
                     ) THEN ''
                     ELSE COALESCE((SELECT group_concat(value, '; ') FROM (
                       SELECT DISTINCT h.code || ' ' || hn.number AS value
@@ -88,6 +92,8 @@ impl ContentDb {
                JOIN programs p ON p.id = i.program_id
                LEFT JOIN songs s ON s.id = json_extract(i.payload, '$.song_id')
               WHERE i.kind = 'song' AND p.service_date BETWEEN ?1 AND ?2 AND sid IS NOT NULL AND p.is_template = 0
+                -- A hidden item (a backup song kept in the service, skipped in Live) was not sung (#411).
+                AND COALESCE(json_extract(i.payload, '$.hidden'), 0) = 0
               GROUP BY sid
               ORDER BY COUNT(DISTINCT p.id) DESC, 2 COLLATE NOCASE",
         )?;
@@ -147,6 +153,18 @@ mod tests {
         assert!(!u[0].hymn);
         assert!(db.song_usage("2026-10-31", "2026-10-01").is_err());
         assert!(db.song_usage("Oct 1", "2026-10-31").is_err());
+    }
+
+    #[test]
+    fn a_hidden_backup_song_is_not_counted_as_sung() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let grace = song(&db, "Amazing Grace", Some("22025"));
+        let backup = song(&db, "Backup Song", Some("11111"));
+        let p = db.create_program("Service", Some("2026-10-18")).unwrap();
+        let item = |id: &str, hidden: bool| ItemInput { kind: "song".into(), reference: "x".into(), payload: Some(format!(r#"{{"song_id":"{id}","hidden":{hidden}}}"#)), ..ItemInput::default() };
+        db.replace_items(&p.id, p.revision, &[item(&grace, false), item(&backup, true)]).unwrap();
+        let titles: Vec<String> = db.song_usage("2026-10-01", "2026-10-31").unwrap().into_iter().map(|u| u.title).collect();
+        assert_eq!(titles, vec!["Amazing Grace".to_string()]);
     }
 
     #[test]
