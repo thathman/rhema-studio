@@ -50,9 +50,10 @@ interface ObsState {
   /** Note a moment (sermon start/end…): in the service log with the recording time, and as a recording chapter where OBS supports it. */
   mark: (label: string) => Promise<void>
   /** Studio Mode: put a scene in OBS's preview. Changes nothing on the stream. */
-  setPreview: (scene: string) => Promise<void>
+  setPreview: (scene: string) => Promise<boolean>
   /** Studio Mode: OBS's own transition, preview to program. */
-  take: () => Promise<void>
+  /** `scene`: the scene just put in Preview and accepted by OBS (a named Take), before OBS's own event says so. */
+  take: (scene?: string) => Promise<void>
   /** Outside Studio Mode: switch OBS's program straight to a scene. The panel asks first; this changes what the stream shows. */
   switchProgram: (scene: string) => Promise<void>
   /** Choose OBS's transition (a deliberate click; not in rehearsal). Changes how OBS's next switch looks. */
@@ -419,7 +420,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
 
   // Scene changes happen only from these three, each a deliberate click; OBS's events then report the result.
   setPreview: async (scene) => {
-    if (!client || get().studioMode !== true || refusedInRehearsal()) return
+    if (!client || get().studioMode !== true || refusedInRehearsal()) return false
     const c = client
     // A Take that follows (an OBS desk sends both) waits for this and is refused if it failed (#411).
     const p = (async () => {
@@ -433,11 +434,12 @@ export const useObsStore = create<ObsState>((set, get) => ({
       }
     })()
     previewInFlight = p
-    await p
+    const ok = await p
     if (previewInFlight === p) previewInFlight = null
+    return ok
   },
 
-  take: async () => {
+  take: async (scene) => {
     // A preview change still on its way is finished first; one that failed takes nothing (#411 OBS
     // hunt: a desk's Take after a refused preview sent whatever was there to the stream).
     const pending = previewInFlight
@@ -446,7 +448,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
       return
     }
     // The scene just set, as OBS's own preview event may not have come yet (the log names what went).
-    const preview = pending ? (previewSet ?? get().preview) : get().preview
+    const preview = scene ?? (pending ? (previewSet ?? get().preview) : get().preview)
     if (!client || get().studioMode !== true || !preview || refusedInRehearsal()) return
     try {
       await client.request("TriggerStudioModeTransition")

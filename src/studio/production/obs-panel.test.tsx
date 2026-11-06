@@ -310,7 +310,12 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     const studio = await setup({ studioMode: true })
     const take = () => studio.obs.requests.filter((r) => r.type === "TriggerStudioModeTransition")
     studio.obs.refusePreview = true
-    // As an OBS desk sends them: the preview it names, then Take, without waiting in between.
+    // setPreview says whether OBS took it, so a named Take goes only after a confirmed preview (#411).
+    expect(await studio.useObsStore.getState().setPreview("Choir")).toBe(false)
+    studio.obs.refusePreview = false
+    expect(await studio.useObsStore.getState().setPreview("Choir")).toBe(true)
+    studio.obs.refusePreview = true
+    // As an older desk sends them: the preview it names, then Take, without waiting in between.
     void studio.useObsStore.getState().setPreview("Choir")
     await studio.useObsStore.getState().take()
     await settle()
@@ -320,6 +325,11 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     await studio.useObsStore.getState().take()
     await settle()
     expect(take()).toHaveLength(1)
+    // A named Take whose preview OBS has accepted but not yet reported: the log names that scene.
+    const { useJournalStore } = await import("@/stores/journal-store")
+    studio.useObsStore.setState({ preview: "Pulpit" })
+    await studio.useObsStore.getState().take("Choir")
+    expect(useJournalStore.getState().entries.at(-1)?.label).toContain("took Choir")
     studio.useObsStore.getState().disconnect()
   })
 

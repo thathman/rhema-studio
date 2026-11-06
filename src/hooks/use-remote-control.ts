@@ -338,7 +338,14 @@ export function useRemoteControl() {
       // OBS from the OBS director's desk, on this computer's OBS connection; the OBS store refuses it in rehearsal.
       const obsScene = (p: Record<string, unknown>) => (typeof p.scene === "string" && useObsStore.getState().scenes.includes(p.scene) ? p.scene : null)
       await withPayload(REMOTE_EVENTS.obs_preview, (p) => { const scene = obsScene(p); if (scene) void useObsStore.getState().setPreview(scene) })
-      await withPayload(REMOTE_EVENTS.obs_take, () => void useObsStore.getState().take())
+      // A Take naming its scene (an OBS desk's "Take Sermon", #411): that scene, put in OBS's
+      // Preview and confirmed first, or nothing. A bare Take (an older desk) takes the Preview.
+      await withPayload(REMOTE_EVENTS.obs_take, (p) => {
+        if (p.scene === undefined) return void useObsStore.getState().take()
+        const scene = obsScene(p)
+        if (!scene) return void toast.warning("OBS desk's Take refused", { description: "OBS has no scene of that name now." })
+        void useObsStore.getState().setPreview(scene).then((ok) => { if (ok) void useObsStore.getState().take(scene) })
+      })
       await withPayload(REMOTE_EVENTS.obs_program, (p) => { const scene = obsScene(p); if (scene) void useObsStore.getState().switchProgram(scene) })
       // The transition and the recording from the OBS director's desk (#197); the host's server
       // refused them in rehearsal, and so does this computer (rehearsal records nothing).

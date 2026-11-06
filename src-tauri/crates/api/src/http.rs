@@ -3027,7 +3027,7 @@ async fn command_handler<S: CommandSink + 'static>(
     }
     // OBS is the online stream: never switched from a desk in rehearsal (the host refuses it too).
     // Nor its recording or transition (#197 Story I: rehearsal records nothing).
-    if matches!(command, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsRecord(_) | RemoteCommand::ObsTransition(_)) && in_rehearsal(state.live.current().as_deref()) {
+    if matches!(command, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsTakeScene(_) | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsRecord(_) | RemoteCommand::ObsTransition(_)) && in_rehearsal(state.live.current().as_deref()) {
         return (StatusCode::FORBIDDEN, CommandResponse::refused(OBS_REHEARSAL_MESSAGE));
     }
     // An extra timer belongs to a role (#196 R2.5): only the timekeeping desks and that role may run it.
@@ -3326,7 +3326,7 @@ fn refusal_for(role: crate::keys::Role, cmd: &RemoteCommand) -> &'static str {
         Role::ObsCompanion => "this computer is an OBS companion: it reads the church's cameras into its own OBS and sends no commands",
         Role::Editor => "this device prepares: it may put a verse or a song in the main desk's Preview, add to the queue and make or change scenes, never what is live",
         Role::Viewer => "this device is view only: it follows the service and may use Talk and notices, nothing else",
-        _ if matches!(cmd, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsTransition(_)) => "only a desk the main desk made OBS director may switch OBS",
+        _ if matches!(cmd, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsTakeScene(_) | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsTransition(_)) => "only a desk the main desk made OBS director may switch OBS",
         _ if matches!(cmd, RemoteCommand::ObsRecord(_)) => "only a desk the main desk made OBS director may start or stop OBS's recording",
         _ if matches!(cmd, RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_)) => "this device may present but not make or change scenes",
         _ => "this device may present but not change settings",

@@ -306,7 +306,7 @@ export function ObsPanel() {
                   {name === program && <Tag tone="program">Program</Tag>}
                   {studioMode && name === preview && <Tag tone="preview">Preview</Tag>}
                   {!joined && studioMode === true && (
-                    <ObsAction held={held} reasonId={reasonId} size="sm" variant="outline" disabled={busy || name === preview} onClick={() => void run(() => obs.setPreview(name))}>
+                    <ObsAction held={held} reasonId={reasonId} size="sm" variant="outline" disabled={busy || name === preview} onClick={() => void run(async () => { await obs.setPreview(name) })}>
                       <EyeIcon /> Set as OBS preview
                     </ObsAction>
                   )}

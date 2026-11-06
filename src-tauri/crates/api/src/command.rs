@@ -87,6 +87,9 @@ pub enum RemoteCommand {
     /// Take the Preview, or (without Studio Mode) switch OBS's program. Never in rehearsal.
     ObsPreview(String),
     ObsTake,
+    /// Take a named scene to the stream: it is put in OBS's Preview first, then taken, and nothing
+    /// goes if that fails (#411). What an OBS desk's "Take Sermon" means; `ObsTake` stays for older desks.
+    ObsTakeScene(String),
     ObsProgram(String),
     /// Rhema Comms (#251): a private production notice to everyone or a role, and its answer.
     /// The host stamps who sent it from the device's key; nothing here reaches a screen.
@@ -508,6 +511,7 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::StageSend(m) => write!(f, "stage_send({}: {})", m.target, m.text),
             RemoteCommand::ObsPreview(scene) => write!(f, "obs_preview({scene})"),
             RemoteCommand::ObsTake => write!(f, "obs_take"),
+            RemoteCommand::ObsTakeScene(scene) => write!(f, "obs_take_scene({scene})"),
             RemoteCommand::ObsProgram(scene) => write!(f, "obs_program({scene})"),
             RemoteCommand::NoticeSend(n) => write!(f, "notice_send(to {})", n.to.as_ref().map_or_else(|| "all".to_string(), ToString::to_string)),
             RemoteCommand::NoticeAck(a) => write!(f, "notice_ack({} {})", a.id, a.state),
@@ -813,6 +817,7 @@ mod tests {
             RemoteCommand::StageMessage("Wrap up".into()),
             RemoteCommand::ObsPreview("Sermon".into()),
             RemoteCommand::ObsTake,
+            RemoteCommand::ObsTakeScene("Sermon".into()),
             RemoteCommand::ObsProgram("Wide".into()),
             RemoteCommand::NoticeSend(NoticeIn { text: "Pulpit mic is ready".into(), to: None, priority: None, event: None, action: None }),
             RemoteCommand::NoticeAck(NoticeAckIn { id: "n1".into(), state: "seen".into() }),
@@ -868,6 +873,7 @@ mod tests {
                 | RemoteCommand::StageSend(_)
                 | RemoteCommand::ObsPreview(_)
                 | RemoteCommand::ObsTake
+                | RemoteCommand::ObsTakeScene(_)
                 | RemoteCommand::ObsProgram(_) => {}
                 RemoteCommand::NoticeSend(_)
                 | RemoteCommand::NoticeAck(_)
@@ -879,7 +885,7 @@ mod tests {
             }
         }
 
-        assert_eq!(cmds.len(), 49);
+        assert_eq!(cmds.len(), 50);
         assert_eq!(
             serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_adjust","value":1}"#)
                 .unwrap(),
@@ -958,6 +964,7 @@ mod tests {
         assert_eq!(del, RemoteCommand::DeleteScene(SceneDelete { id: "s1".into(), request: false, base_revision: None }));
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"stage_message","value":"Wrap up"}"#).unwrap(), RemoteCommand::StageMessage("Wrap up".into()));
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"obs_take"}"#).unwrap(), RemoteCommand::ObsTake);
+        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"obs_take_scene","value":"Sermon"}"#).unwrap(), RemoteCommand::ObsTakeScene("Sermon".into()));
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"obs_preview","value":"Sermon"}"#).unwrap(), RemoteCommand::ObsPreview("Sermon".into()));
         assert_eq!(RemoteCommand::ObsProgram("Wide".into()).to_string(), "obs_program(Wide)");
         assert!(serde_json::from_str::<RemoteCommand>(r#"{"command":"save_scene","value":{"name":"x"}}"#).is_err(), "a scene is needed");

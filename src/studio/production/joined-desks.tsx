@@ -223,11 +223,7 @@ export function ObsDesk({ live }: { live: LiveStateV1 }) {
   // The scene the button names is what goes to the stream (#411 OBS hunt): OBS's preview could have
   // changed on the host since this desk last heard, and a bare Take sent whatever was there. It is
   // put in OBS's preview first, then taken.
-  const takeShown = async (scene: string) => {
-    const set = await useJoin.getState().send({ command: "obs_preview", value: scene })
-    if (!set.ok) return setResult(set)
-    await send({ command: "obs_take" })
-  }
+  const takeShown = (scene: string) => send({ command: "obs_take_scene", value: scene })
   return (
     <section aria-label="OBS desk" className={box}>
       <p className="font-semibold">OBS <span className="font-normal text-muted-foreground">· through the host's OBS connection</span></p>
