@@ -1418,8 +1418,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const back = v.video?.startedAt && !v.video.paused && held.at ? { ...v, video: { ...v.video, startedAt: v.video.startedAt + Math.max(0, Date.now() - held.at) } } : v
     const id = sourceOf(v)
     const cur = get().sources[id]
-    if (back !== v && cur?.value === v) set({ sources: { ...get().sources, [id]: { ...cur, value: back } } })
     set({
+      ...(back !== v && cur?.value === v ? { sources: { ...get().sources, [id]: { ...cur, value: back } } } : {}),
       liveVerse: back,
       liveSourceVerse: held.liveSourceVerse,
       liveItem: held.liveItem,
