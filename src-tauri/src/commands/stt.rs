@@ -467,7 +467,7 @@ pub async fn start_transcription(
                     epoch_ms(),
                     transcript_log_summary("transcript", &transcript)
                 );
-                let direct_found = run_direct_detection(&app_clone, &transcript);
+                let direct_found = run_direct_detection(&app_clone, &transcript, is_final);
                 if !is_final {
                     return;
                 }
@@ -608,7 +608,7 @@ pub async fn start_transcription(
 /// never blocks on the semantic worker, and cooldown state persists across calls.
 /// Returns true if high-confidence results were found (>= 0.90).
 #[expect(clippy::similar_names, reason = "merger and merged are naturally named")]
-fn run_direct_detection(app: &AppHandle, transcript: &str) -> bool {
+fn run_direct_detection(app: &AppHandle, transcript: &str, is_final: bool) -> bool {
     use rhema_detection::{DirectDetector, DetectionMerger};
 
     let t0 = std::time::Instant::now();
@@ -640,7 +640,8 @@ fn run_direct_detection(app: &AppHandle, transcript: &str) -> bool {
             return false;
         }
     };
-    let merged = merger.merge(direct_results, vec![]);
+    // A partial is still being spoken: preview only (#411 listening hunt).
+    let merged = if is_final { merger.merge(direct_results, vec![]) } else { merger.preview(direct_results) };
     drop(merger);
     if merged.is_empty() {
         return false;
@@ -660,7 +661,7 @@ fn run_direct_detection(app: &AppHandle, transcript: &str) -> bool {
     };
     let mut results: Vec<super::detection::DetectionResult> = merged
         .iter()
-        .map(|m| super::detection::to_result(&app_state, m))
+        .map(|m| super::detection::DetectionResult { from_partial: !is_final, ..super::detection::to_result(&app_state, m) })
         .collect();
 
     // Backstop for issue #141: the detector validates against union-max verse
@@ -778,6 +779,8 @@ fn run_semantic_detection(app: &AppHandle, transcript: &str) {
                 auto_queued: false,
                 transcript_snippet: truncate_safe(transcript, 100).to_string(),
                 is_chapter_only: false,
+                // Semantic detection runs on finals only.
+                from_partial: false,
             })
         })
         .collect();

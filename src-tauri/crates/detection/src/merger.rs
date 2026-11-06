@@ -114,6 +114,16 @@ impl DetectionMerger {
     }
 
     /// Update the minimum confidence threshold.
+    /// What a partial transcript shows (#411 listening hunt): ranked and filtered as `merge`, never
+    /// auto-queued, and the cooldown left for the final. A half-heard "Romans 8 verse 20" (the
+    /// preacher still saying "twenty-eight") must not go on air, nor keep the final's verse out.
+    pub fn preview(&self, direct: Vec<Detection>) -> Vec<MergedDetection> {
+        let mut all = direct;
+        all.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        all.retain(|d| d.confidence >= self.confidence_threshold);
+        all.into_iter().map(|detection| MergedDetection { detection, auto_queued: false }).collect()
+    }
+
     pub fn set_confidence_threshold(&mut self, threshold: f64) {
         self.confidence_threshold = threshold;
     }
@@ -163,6 +173,16 @@ mod tests {
             detected_at: 0,
             is_chapter_only: false,
         }
+    }
+
+    #[test]
+    fn a_partial_is_never_auto_queued_and_leaves_the_cooldown_for_the_final() {
+        let mut merger = DetectionMerger::new();
+        let half = merger.preview(vec![make_detection(45, "Romans", 8, 20, 0.95, DetectionSource::DirectReference)]);
+        assert_eq!(half.len(), 1);
+        assert!(!half[0].auto_queued, "a half-heard reference never goes on air");
+        let whole = merger.merge(vec![make_detection(45, "Romans", 8, 28, 0.95, DetectionSource::DirectReference)], vec![]);
+        assert!(whole[0].auto_queued, "the final's verse is not kept out by the partial");
     }
 
     #[test]

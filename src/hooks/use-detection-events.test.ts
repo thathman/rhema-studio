@@ -52,6 +52,20 @@ describe("heard verses and the rundown", () => {
     useSettingsStore.setState({ confidenceThreshold: 0.8 })
   })
 
+  it("a half-heard verse (a partial transcript) stays in the preview: never on air, never queued (#411)", async () => {
+    const { useSettingsStore } = await import("@/stores/settings-store")
+    const { useBibleStore } = await import("@/stores/bible-store")
+    useServiceStore.setState({ current: null })
+    useSettingsStore.setState({ confidenceThreshold: 0.8 })
+    useBroadcastStore.setState({ autoLive: true, isLive: true, liveVerse: null, rehearsal: false })
+    handleVerseDetections([{ ...heard(20), from_partial: true }])
+    expect(useBibleStore.getState().selectedVerse?.verse).toBe(20) // preview only
+    await new Promise((r) => setTimeout(r, 20))
+    expect(useBroadcastStore.getState().liveVerse).toBeNull()
+    expect(useQueueStore.getState().items).toHaveLength(3)
+    useBroadcastStore.setState({ autoLive: false })
+  })
+
   it("a heard verse never raises the approval question: with the service waiting for approval it stays in the preview", async () => {
     const { useSettingsStore } = await import("@/stores/settings-store")
     const { useApprovalGateStore } = await import("@/stores/approval-gate-store")

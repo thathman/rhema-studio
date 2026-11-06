@@ -11,6 +11,8 @@ export interface DetectionResult {
   transcript_snippet: string
   /** True when detected from a chapter-only reference (verse defaults to 1, may be refined). */
   is_chapter_only: boolean
+  /** Heard in a partial transcript (still being spoken): preview only, never on air or queued. */
+  from_partial?: boolean
 }
 
 export interface ReadingAdvance {

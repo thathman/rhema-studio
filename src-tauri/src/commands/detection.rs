@@ -28,6 +28,8 @@ pub struct DetectionResult {
     pub transcript_snippet: String,
     /// True when detected from a chapter-only reference (verse defaults to 1, may be refined).
     pub is_chapter_only: bool,
+    /// Heard in a partial transcript (still being spoken): preview only, never on air or queued.
+    pub from_partial: bool,
 }
 
 fn source_to_string(source: &rhema_detection::DetectionSource) -> String {
@@ -86,6 +88,7 @@ pub fn to_result(state: &AppState, merged: &MergedDetection) -> DetectionResult 
         auto_queued: merged.auto_queued,
         transcript_snippet: merged.detection.transcript_snippet.clone(),
         is_chapter_only: merged.detection.is_chapter_only,
+        from_partial: false,
     }
 }
 

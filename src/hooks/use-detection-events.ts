@@ -110,7 +110,8 @@ export function handleVerseDetections(detections: DetectionResult[]): void {
     // Auto puts a heard verse on air only when it is confident enough (the remote
     // "confidence" setting); a weaker one waits in the preview like any other.
     // Never the approval question for a heard verse: if the service is waiting for approval it waits in the preview.
-    const auto = autoTarget(directHit.confidence)
+    // Half-heard (a partial: "Romans 8 verse 20" while "twenty-eight" is still being said): preview only (#411).
+    const auto = directHit.from_partial ? null : autoTarget(directHit.confidence)
     if (auto) {
       void presentVerse(detectedVerse, auto)
     } else {
@@ -129,6 +130,7 @@ export function handleVerseDetections(detections: DetectionResult[]): void {
   // list. Without a service the original detection queue works as before.
   const serviceOpen = useServiceStore.getState().current !== null
   for (const d of detections) {
+    if (d.from_partial) continue
     if (serviceOpen) {
       if (d.auto_queued && !d.is_chapter_only && d.source === "direct") {
         const idx = useQueueStore.getState().findDuplicate(d.book_number, d.chapter, d.verse)
