@@ -607,7 +607,9 @@ export async function putBack(value: unknown): Promise<boolean> {
       }
     }
   }
-  if (s.isLive && s.liveVerse && !liveAlreadyRestored) useBroadcastStore.getState().setLiveVerse(s.liveVerse, null, { goLive: true, itemId: s.liveItemId })
+  // Putting back, not going live: its go-live cues ran when it first did (#411: a timer.fresh cue
+  // started the sermon timer from zero and the saved 20 minutes were refused).
+  if (s.isLive && s.liveVerse && !liveAlreadyRestored) whilePuttingBack(() => useBroadcastStore.getState().setLiveVerse(s.liveVerse!, null, { goLive: true, itemId: s.liveItemId }))
   // The saved scenes may include a moment that Program or the approval no longer backs, with no Program move to catch it.
   settleDesignedMoments()
   for (const id of s.outputsOn) {
