@@ -375,7 +375,24 @@ let seenBeforeRehearsal: { isLive: boolean; liveVerse: Aired["liveVerse"]; liveI
 
 /** Rundown items got new ids (a new service from them): the log follows. */
 export function remapJournalItemIds(re: (id: string | null | undefined) => string | null): void {
-  useJournalStore.setState((j) => ({ entries: j.entries.map((e) => (e.itemId ? { ...e, itemId: re(e.itemId) } : e)) }))
+  // The run's plan follows too (#411 services hunt): a Duplicate or New service during a live run
+  // left its entries on the new ids and its plan on the old ones, so every aired item read as
+  // inserted, every planned one as skipped, and the planned lengths were lost.
+  const ids = (list: string[]) => list.map((id) => re(id) ?? id)
+  useJournalStore.setState((j) => ({
+    entries: j.entries.map((e) => (e.itemId ? { ...e, itemId: re(e.itemId) } : e)),
+    ...(j.startItemIds ? { startItemIds: ids(j.startItemIds) } : {}),
+    ...(j.runContext
+      ? {
+          runContext: {
+            ...j.runContext,
+            plan: j.runContext.plan.map((p) => ({ ...p, id: re(p.id) ?? p.id })),
+            plannedMs: Object.fromEntries(Object.entries(j.runContext.plannedMs).map(([id, ms]) => [re(id) ?? id, ms])),
+            startItemIds: ids(j.runContext.startItemIds),
+          },
+        }
+      : {}),
+  }))
   if (seenBeforeRehearsal) seenBeforeRehearsal = { ...seenBeforeRehearsal, liveItemId: re(seenBeforeRehearsal.liveItemId) }
 }
 
