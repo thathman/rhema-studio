@@ -124,7 +124,8 @@ export function useTranscriptionEvents(): void {
   })
   useTauriEvent<string>("stt_error", (msg) => {
     useTranscriptStore.getState().setConnectionStatus("error")
-    toast.error("Transcription error", { description: msg })
+    // One toast that updates: a provider retrying a few times must not stack them.
+    toast.error("Transcription error", { id: "stt-error", description: msg })
   })
 
   // Audio source lifecycle: when the OS device disappears (mic unplugged,

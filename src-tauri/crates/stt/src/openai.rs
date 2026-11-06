@@ -76,6 +76,22 @@ fn format_request_error(error: &reqwest::Error) -> String {
     format!("OpenAI request failed: {error}")
 }
 
+/// How long to wait before the next request after `failures` failed ones in a row, or `None` to
+/// give up (#411 listening hunt): one timeout, rate limit or server error used to end listening for
+/// the rest of the service while the desk still said Listening.
+fn retry_delay(failures: u32) -> Option<Duration> {
+    (failures < MAX_FAILURES_IN_A_ROW).then(|| Duration::from_secs(u64::from(failures.min(5)) * 2))
+}
+
+/// Worth trying again: a rate limit, a timeout or a server error. A bad or revoked key (401/403) or
+/// a refused request (400, 404) fails the same way every time, so listening stops at once.
+fn status_is_retryable(status: u16) -> bool {
+    status == 408 || status == 429 || status >= 500
+}
+
+/// Failed requests in a row before listening stops (and says so).
+const MAX_FAILURES_IN_A_ROW: u32 = 5;
+
 async fn cancellable<T>(
     cancel: &mut watch::Receiver<bool>,
     operation: impl Future<Output = T>,
@@ -118,7 +134,7 @@ impl OpenAiTranscribeProvider {
         &self,
         client: &reqwest::Client,
         samples: Vec<i16>,
-    ) -> Result<String, SttError> {
+    ) -> Result<String, (SttError, bool)> {
         // Build multipart directly so this provider does not need reqwest's
         // optional multipart feature (and its extra runtime dependencies).
         let boundary = "rhema-openai-transcribe-boundary";
@@ -150,21 +166,28 @@ impl OpenAiTranscribeProvider {
             .body(body)
             .send()
             .await
-            .map_err(|e| SttError::ConnectionFailed(format_request_error(&e)))?;
+            .map_err(|e| (SttError::ConnectionFailed(format_request_error(&e)), true))?;
 
         let status = response.status();
         if !status.is_success() {
-            return Err(SttError::ConnectionFailed(format!(
-                "OpenAI transcription API returned {status}"
-            )));
+            return Err((
+                SttError::ConnectionFailed(format!("OpenAI transcription API returned {status}")),
+                status_is_retryable(status.as_u16()),
+            ));
         }
-        let body = response
-            .text()
-            .await
-            .map_err(|e| SttError::ParseError(format!("failed to read OpenAI response: {e}")))?;
+        let body = response.text().await.map_err(|e| {
+            (
+                SttError::ParseError(format!("failed to read OpenAI response: {e}")),
+                true,
+            )
+        })?;
 
-        let json: serde_json::Value = serde_json::from_str(&body)
-            .map_err(|e| SttError::ParseError(format!("failed to parse OpenAI response: {e}")))?;
+        let json: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+            (
+                SttError::ParseError(format!("failed to parse OpenAI response: {e}")),
+                true,
+            )
+        })?;
         let transcript = json
             .get("text")
             .and_then(serde_json::Value::as_str)
@@ -196,7 +219,8 @@ impl SttProvider for OpenAiTranscribeProvider {
         }
 
         let _ = event_tx.send(TranscriptEvent::Connected).await;
-        let (chunk_tx, mut chunk_rx) = mpsc::channel::<Vec<i16>>(4);
+        // Each chunk with when its speech began: after a pause, speech from before it is dropped.
+        let (chunk_tx, mut chunk_rx) = mpsc::channel::<(std::time::Instant, Vec<i16>)>(4);
         let cancelled = self.cancelled.clone();
         let vad_event_tx = event_tx.clone();
         let vad_handle = tokio::task::spawn_blocking(move || {
@@ -210,10 +234,12 @@ impl SttProvider for OpenAiTranscribeProvider {
             };
             let mut vad = Vad::new(vad_config);
             let mut audio_buffer = Vec::new();
+            let mut buffer_started: Option<std::time::Instant> = None;
 
-            let flush = |buffer: &mut Vec<i16>| {
+            let flush = |buffer: &mut Vec<i16>, started: &mut Option<std::time::Instant>| {
+                let said_at = started.take().unwrap_or_else(std::time::Instant::now);
                 if buffer.len() >= MIN_BUFFER_SAMPLES {
-                    let _ = chunk_tx.blocking_send(std::mem::take(buffer));
+                    let _ = chunk_tx.blocking_send((said_at, std::mem::take(buffer)));
                 } else {
                     buffer.clear();
                 }
@@ -241,19 +267,24 @@ impl SttProvider for OpenAiTranscribeProvider {
                                     let _ =
                                         vad_event_tx.blocking_send(TranscriptEvent::SpeechStarted);
                                 }
-                                VadTransition::SpeechEnded => flush(&mut audio_buffer),
+                                VadTransition::SpeechEnded => {
+                                    flush(&mut audio_buffer, &mut buffer_started);
+                                }
                             }
                         }
                         for frame in result.frames {
                             let mut offset = 0;
                             while offset < frame.samples.len() {
+                                if audio_buffer.is_empty() {
+                                    buffer_started = Some(std::time::Instant::now());
+                                }
                                 let remaining = MAX_BUFFER_SAMPLES - audio_buffer.len();
                                 let take = remaining.min(frame.samples.len() - offset);
                                 audio_buffer
                                     .extend_from_slice(&frame.samples[offset..offset + take]);
                                 offset += take;
                                 if audio_buffer.len() == MAX_BUFFER_SAMPLES {
-                                    flush(&mut audio_buffer);
+                                    flush(&mut audio_buffer, &mut buffer_started);
                                 }
                             }
                         }
@@ -263,7 +294,7 @@ impl SttProvider for OpenAiTranscribeProvider {
                         if cancelled.load(Ordering::SeqCst) {
                             audio_buffer.clear();
                         } else {
-                            flush(&mut audio_buffer);
+                            flush(&mut audio_buffer, &mut buffer_started);
                         }
                         break;
                     }
@@ -276,13 +307,19 @@ impl SttProvider for OpenAiTranscribeProvider {
             .build()
             .map_err(|error| SttError::ConnectionFailed(format_request_error(&error)))?;
         let mut cancel_rx = self.cancel_tx.subscribe();
+        let mut failures = 0u32;
+        let mut resumed_at: Option<std::time::Instant> = None;
         loop {
             let Some(samples) = cancellable(&mut cancel_rx, chunk_rx.recv()).await else {
                 break;
             };
-            let Some(samples) = samples else {
+            let Some((said_at, samples)) = samples else {
                 break;
             };
+            // Said before a pause ended: old by now, never detected as if just said.
+            if resumed_at.is_some_and(|resumed| said_at < resumed) {
+                continue;
+            }
             let started = std::time::Instant::now();
             let Some(result) = cancellable(&mut cancel_rx, self.transcribe(&client, samples)).await
             else {
@@ -290,6 +327,11 @@ impl SttProvider for OpenAiTranscribeProvider {
             };
             match result {
                 Ok(transcript) => {
+                    // Working again after a failure: the desk's error state clears.
+                    if failures > 0 {
+                        let _ = event_tx.send(TranscriptEvent::Connected).await;
+                    }
+                    failures = 0;
                     log::info!("[OpenAI Transcribe] Completed in {:?}", started.elapsed());
                     if !transcript.is_empty() {
                         let _ = event_tx
@@ -303,15 +345,31 @@ impl SttProvider for OpenAiTranscribeProvider {
                     }
                     let _ = event_tx.send(TranscriptEvent::UtteranceEnd).await;
                 }
-                Err(error) => {
+                Err((error, retry)) => {
                     let message = error.to_string();
                     log::error!("[OpenAI Transcribe] {message}");
                     let _ = event_tx.send(TranscriptEvent::Error(message)).await;
-                    break;
+                    // That chunk is lost; the next ones are tried after a pause, until too many fail.
+                    failures += 1;
+                    let Some(wait) = retry_delay(failures).filter(|_| retry) else {
+                        break;
+                    };
+                    if cancellable(&mut cancel_rx, tokio::time::sleep(wait))
+                        .await
+                        .is_none()
+                    {
+                        break;
+                    }
+                    // Speech from before now is old: dropped as it comes (one the worker was still
+                    // holding included), so a verse said seconds ago is never detected as new.
+                    resumed_at = Some(std::time::Instant::now());
                 }
             }
         }
 
+        // The VAD worker stops only on cancel or when the audio closes: after giving up it would
+        // wait for ever, the Disconnected below never sent and the desk still saying Listening.
+        self.cancelled.store(true, Ordering::SeqCst);
         // Drop queued chunks before joining the VAD worker so a full bounded
         // channel cannot keep its blocking_send alive after Stop.
         drop(chunk_rx);
@@ -332,6 +390,29 @@ impl SttProvider for OpenAiTranscribeProvider {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_failed_request_is_retried_with_a_pause_until_too_many_fail() {
+        assert_eq!(
+            super::retry_delay(1),
+            Some(std::time::Duration::from_secs(2))
+        );
+        assert_eq!(
+            super::retry_delay(4),
+            Some(std::time::Duration::from_secs(8))
+        );
+        assert_eq!(super::retry_delay(super::MAX_FAILURES_IN_A_ROW), None);
+    }
+
+    #[test]
+    fn a_bad_key_or_refused_request_stops_at_once() {
+        for fatal in [400, 401, 403, 404] {
+            assert!(!super::status_is_retryable(fatal), "{fatal}");
+        }
+        for again in [408, 429, 500, 502, 503] {
+            assert!(super::status_is_retryable(again), "{again}");
+        }
+    }
+
     use super::{
         api_language_hint, cancellable, pcm_to_wav, OpenAiTranscribeProvider, MAX_BUFFER_SAMPLES,
         SAMPLE_RATE,
