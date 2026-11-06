@@ -34,9 +34,10 @@ describe("bible store persistence", () => {
     const { useBibleStore } = await import("./bible-store")
     mockInvoke.mockClear()
     useBibleStore.getState().setActiveTranslation(7)
-    expect(mockInvoke).toHaveBeenCalledWith("set_active_translation", { translationId: 7 })
+    await vi.waitFor(() => expect(mockInvoke).toHaveBeenCalledWith("set_active_translation", { translationId: 7 }))
     mockInvoke.mockClear()
     useBibleStore.getState().setSecondaryTranslation(3)
+    await new Promise((r) => setTimeout(r, 0))
     expect(mockInvoke).not.toHaveBeenCalledWith("set_active_translation", expect.anything())
   })
 

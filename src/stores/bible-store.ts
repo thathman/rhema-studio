@@ -253,7 +253,9 @@ export async function hydrateBibleStore(): Promise<void> {
 // edition's words under the new one's name, and Settings and the remote still showed the old one.
 useBibleStore.subscribe((s, prev) => {
   if (s.activeTranslationId === prev.activeTranslationId) return
-  void invoke("set_active_translation", { translationId: s.activeTranslationId }).catch((e: unknown) => console.warn("[bible] Rust did not take the new translation", e))
+  void Promise.resolve()
+    .then(() => invoke("set_active_translation", { translationId: s.activeTranslationId }))
+    .catch((e: unknown) => console.warn("[bible] Rust did not take the new translation", e))
 })
 
 /** Subscribe to translation selection changes and persist them with debounce. */
