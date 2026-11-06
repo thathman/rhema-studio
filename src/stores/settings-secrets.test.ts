@@ -7,6 +7,8 @@ let keychainLocked = false
 let keychainHangs = false
 const calls: string[] = []
 
+const toastWarning = vi.fn()
+vi.mock("sonner", () => ({ toast: { warning: (...a: unknown[]) => toastWarning(...a), error: vi.fn(), success: vi.fn(), dismiss: vi.fn() } }))
 vi.mock("@tauri-apps/plugin-store", () => ({
   load: async () => ({ get: async (k: string) => file.get(k) ?? null, set: async (k: string, v: unknown) => { file.set(k, v) }, delete: async (k: string) => file.delete(k), save: async () => {} }),
 }))
@@ -132,6 +134,8 @@ describe("secrets in the system keychain (RG-08)", () => {
     expect((file.get("machine") as Record<string, unknown>).deepgramApiKey).toBe("dg-1234567890")
     expect((file.get("machine") as Record<string, unknown>).openaiApiKey).toBe("sk-openai-test-789")
     expect(file.get("secretsInKeychain")).toBe(false)
+    // Said once, not on every save (#411).
+    expect(toastWarning.mock.calls.filter((c) => String(c[0]).includes("could not be put in the system keychain"))).toHaveLength(1)
   })
 
   it("leaves an unreadable (locked or hung) entry alone and keeps new keys in the file meanwhile", async () => {
