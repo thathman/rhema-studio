@@ -55,7 +55,11 @@ function reconsider() {
     move = null
     useTimedAdvance.setState({ dueAt: null })
     const b = useBroadcastStore.getState()
-    if (useTimedAdvance.getState().on && b.isLive && b.liveItemId === next.itemId) void presentQueueItem(next.index, 0, undefined, { automatic: true })
+    // Worked out again from the rundown as it is now (#411 services hunt): another service opened,
+    // or the items reordered, while the move waited put that service's item on air. Only the same
+    // live item, moving to the same next one, moves.
+    const now = timedNext()
+    if (useTimedAdvance.getState().on && b.isLive && b.liveItemId === next.itemId && now?.itemId === next.itemId) void presentQueueItem(now.index, 0, undefined, { automatic: true })
   }
   move = go
   timer = setTimeout(go, next.ms)

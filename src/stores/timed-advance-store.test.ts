@@ -60,6 +60,25 @@ describe("timed moves in the service", () => {
     expect(presented).toEqual([])
   })
 
+  it("another service opened while a move waits never puts its item on air (#411)", async () => {
+    useTimedAdvance.getState().setOn(true)
+    live("a")
+    await vi.advanceTimersByTimeAsync(60_000)
+    // Service B opened: a different rundown, the old item no longer in it.
+    useQueueStore.setState({ items: [item("x", 5), item("y", 5), item("z", 5)], headers: [] })
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    expect(presented).toEqual([])
+  })
+
+  it("items reordered while a move waits: it goes to the item that is next now", async () => {
+    useTimedAdvance.getState().setOn(true)
+    live("a")
+    await vi.advanceTimersByTimeAsync(60_000)
+    useQueueStore.setState({ items: [item("a", 2), item("c", 1), item("b", 3, false), item("p", 1)] })
+    await vi.advanceTimersByTimeAsync(61_000)
+    expect(presented).toEqual(["c"])
+  })
+
   it("never crosses into the next phase, and leaves a running phase alone", async () => {
     useTimedAdvance.getState().setOn(true)
     live("c")
