@@ -768,6 +768,11 @@ fn run_semantic_detection(app: &AppHandle, transcript: &str) {
                 })
                 .map(|v| v.text)
                 .unwrap_or_default();
+            // A verse the active edition lacks is not offered at all (#411 audit): it reached the
+            // detections list with no text, which can be neither shown nor queued.
+            if verse_text.trim().is_empty() && app_state.bible_db.is_some() {
+                return None;
+            }
 
             Some(super::detection::DetectionResult {
                 verse_ref: format!("{} {}:{}", hit.book_name, hit.chapter, hit.verse),

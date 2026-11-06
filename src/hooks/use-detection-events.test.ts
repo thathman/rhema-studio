@@ -66,12 +66,6 @@ describe("heard verses and the rundown", () => {
     useBroadcastStore.setState({ autoLive: false })
   })
 
-  it("a verse heard by meaning with no text in the active edition is never queued (#411)", () => {
-    useServiceStore.setState({ current: null })
-    handleVerseDetections([{ ...heard(30), source: "semantic", verse_text: "" }])
-    expect(useQueueStore.getState().items).toHaveLength(3)
-  })
-
   it("a heard verse never raises the approval question: with the service waiting for approval it stays in the preview", async () => {
     const { useSettingsStore } = await import("@/stores/settings-store")
     const { useApprovalGateStore } = await import("@/stores/approval-gate-store")

@@ -164,8 +164,6 @@ export function handleVerseDetections(detections: DetectionResult[]): void {
         if (!d.is_chapter_only) queue.setActive(dupIdx)
         continue
       }
-      // A verse heard by meaning that the active edition lacks comes with no text (#411): never an empty item.
-      if (d.source === "semantic" && !d.verse_text.trim()) continue
       queue.addItem({
         id: crypto.randomUUID(),
         verse: {
