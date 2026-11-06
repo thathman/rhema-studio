@@ -122,6 +122,8 @@ export interface HeldLive {
   wasLive: boolean
   /** It had been cleared (off air, kept for Restore) when the quick screen went up. */
   wasCleared?: boolean
+  /** When it was held (wall clock ms): a playing video waits where it was, as if paused. */
+  at?: number
 }
 
 /** The song slide on the output: which rundown item, song and step. */
@@ -1274,7 +1276,12 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const s = get()
     const v = s.liveVerse
     if (!v?.video || v.content !== "picture" || !!v.video.paused === paused) return
-    const liveVerse = { ...v, video: { ...v.video, paused } }
+    // The time paused moves its start on, so a window loading it later finds the right frame.
+    const now = Date.now()
+    const { heldAt, ...video } = v.video
+    const liveVerse = { ...v, video: paused
+      ? { ...video, paused, heldAt: now }
+      : { ...video, paused, ...(video.startedAt ? { startedAt: video.startedAt + (heldAt ? now - heldAt : 0) } : {}) } }
     // The same item, paused: its live source keeps its revision and who showed it (not a new activation).
     const id = sourceOf(v)
     const cur = s.sources[id]
@@ -1399,13 +1406,21 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   holdLive: () => {
     const s = get()
     if (s.heldLive || !s.liveVerse) return
-    set({ heldLive: { liveVerse: s.liveVerse, liveSourceVerse: s.liveSourceVerse, liveItem: s.liveItem, liveSlide: s.liveSlide, liveItemId: s.liveItemId, wasLive: s.isLive, wasCleared: s.cleared } })
+    set({ heldLive: { liveVerse: s.liveVerse, liveSourceVerse: s.liveSourceVerse, liveItem: s.liveItem, liveSlide: s.liveSlide, liveItemId: s.liveItemId, wasLive: s.isLive, wasCleared: s.cleared, at: Date.now() } })
   },
   releaseHeld: () => {
     const held = get().heldLive
     if (!held) return false
+    // Off screen under the quick screen (Black, the logo): a playing video carries on from where it
+    // was, as after Pause (#411), not jumped on by the time it was away. Its source entry follows, so
+    // coming back is not a new activation.
+    const v = held.liveVerse
+    const back = v.video?.startedAt && !v.video.paused && held.at ? { ...v, video: { ...v.video, startedAt: v.video.startedAt + Math.max(0, Date.now() - held.at) } } : v
+    const id = sourceOf(v)
+    const cur = get().sources[id]
     set({
-      liveVerse: held.liveVerse,
+      ...(back !== v && cur?.value === v ? { sources: { ...get().sources, [id]: { ...cur, value: back } } } : {}),
+      liveVerse: back,
       liveSourceVerse: held.liveSourceVerse,
       liveItem: held.liveItem,
       liveSlide: held.liveSlide,

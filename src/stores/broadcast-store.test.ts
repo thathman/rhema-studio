@@ -1331,6 +1331,39 @@ describe("updateDraftNested deep paths", () => {
     expect(JSON.stringify(sent?.[2])).not.toContain("base64")
   })
 
+  it("pausing records when; resuming moves the start on, so a late window finds the right frame", async () => {
+    vi.useFakeTimers()
+    try {
+      const { useBroadcastStore } = await import("./broadcast-store")
+      vi.setSystemTime(100_000)
+      useBroadcastStore.setState({ liveVerse: { kind: "image", reference: "", segments: [], content: "picture", video: { url: "u", fit: "cover", loop: false, sound: true, name: "Clip", token: 1, startedAt: 90_000 } } as never })
+      useBroadcastStore.getState().setVideoPaused(true)
+      expect(useBroadcastStore.getState().liveVerse?.video).toMatchObject({ paused: true, heldAt: 100_000, startedAt: 90_000 })
+      vi.setSystemTime(130_000)
+      useBroadcastStore.getState().setVideoPaused(false)
+      const v = useBroadcastStore.getState().liveVerse?.video
+      expect(v?.startedAt).toBe(120_000)
+      expect(v?.heldAt).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("a video under a quick screen (Black) carries on from where it was when it comes back (#411)", async () => {
+    vi.useFakeTimers()
+    try {
+      const { useBroadcastStore } = await import("./broadcast-store")
+      vi.setSystemTime(100_000)
+      useBroadcastStore.setState({ heldLive: null, liveVerse: { kind: "image", reference: "", segments: [], content: "picture", video: { url: "u", fit: "cover", loop: false, sound: true, name: "Clip", token: 1, startedAt: 90_000 } } as never })
+      useBroadcastStore.getState().holdLive()
+      vi.setSystemTime(130_000)
+      useBroadcastStore.getState().releaseHeld()
+      expect(useBroadcastStore.getState().liveVerse?.video?.startedAt).toBe(120_000)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("video sound plays from the congregation output, whatever the main output's role", async () => {
     const { soundOutputId } = await import("./broadcast-store")
     const o = (id: string, role?: string) => ({ id, role }) as never
@@ -1375,4 +1408,5 @@ describe("updateDraftNested deep paths", () => {
     useBroadcastStore.setState({ editingThemeId: null, draftTheme: null, liveDesign: false, isLive: false })
   })
 })
+
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { createVideoPlayer } from "./output-video"
+import { createVideoPlayer, videoPosition } from "./output-video"
 
 function fakeVideo() {
   const handlers: Record<string, () => void> = {}
@@ -122,5 +122,41 @@ describe("output window video player", () => {
     expect(onPaused).toHaveBeenCalledTimes(1)
     p.sync(spec)
     expect(fake.v.play).toHaveBeenCalledTimes(1)
+  })
+
+  it("a window loading a video late (Black then Back, a reopened window) carries on where it is, not from 0:00 (#411)", () => {
+    vi.setSystemTime(100_000)
+    const fake = fakeVideo()
+    const p = createVideoPlayer({ onFrame: vi.fn(), onEnded: vi.fn(), onError: vi.fn(), allowSound: true, fps: () => 30, create: () => fake.v as unknown as HTMLVideoElement })
+    // Started 42 s ago: the fresh window seeks there once it knows the length.
+    p.sync({ ...spec, startedAt: 58_000 })
+    Object.assign(fake.v, { duration: 120 })
+    fake.fire("loadedmetadata")
+    expect(fake.v.currentTime).toBeCloseTo(42)
+    // Looping, past its length: where it is in this round.
+    const loopFake = fakeVideo()
+    const q = createVideoPlayer({ onFrame: vi.fn(), onEnded: vi.fn(), onError: vi.fn(), allowSound: true, fps: () => 30, create: () => loopFake.v as unknown as HTMLVideoElement })
+    q.sync({ ...spec, token: 2, loop: true, startedAt: 100_000 - 130_000 })
+    Object.assign(loopFake.v, { duration: 60 })
+    loopFake.fire("loadedmetadata")
+    expect(loopFake.v.currentTime).toBeCloseTo(10)
+  })
+
+  it("a seek for an earlier present never moves a newer one sent before its length was known", () => {
+    vi.setSystemTime(100_000)
+    const fake = fakeVideo()
+    const p = createVideoPlayer({ onFrame: vi.fn(), onEnded: vi.fn(), onError: vi.fn(), allowSound: true, fps: () => 30, create: () => fake.v as unknown as HTMLVideoElement })
+    p.sync({ ...spec, startedAt: 58_000 })
+    p.sync({ ...spec, url: "asset://localhost/m/other.mp4", token: 9, startedAt: 100_000 })
+    fake.v.currentTime = 0
+    Object.assign(fake.v, { duration: 120 })
+    fake.fire("loadedmetadata")
+    expect(fake.v.currentTime).toBe(0)
+  })
+
+  it("where a video is: from its start, or the frame it was paused on; a fresh present starts at 0", () => {
+    expect(videoPosition({ startedAt: 1_000 }, 31_000)).toBe(30)
+    expect(videoPosition({ startedAt: 1_000, paused: true, heldAt: 11_000 }, 99_000)).toBe(10)
+    expect(videoPosition({}, 99_000)).toBe(0)
   })
 })

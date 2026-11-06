@@ -470,7 +470,9 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
       return "empty"
     }
     useBibleStore.getState().selectSlide({ item, index: 0 })
-    useBroadcastStore.getState().setLiveVerse({ ...toVideoRenderData(item, videoUrl, ticket), content: "picture" }, null, { goLive: opts.goLive, itemId: item.id, by })
+    const data = toVideoRenderData(item, videoUrl, ticket)
+    // When it starts: a window that loads it later carries on from there (#411 media hunt).
+    useBroadcastStore.getState().setLiveVerse({ ...data, video: { ...data.video!, startedAt: Date.now() }, content: "picture" }, null, { goLive: opts.goLive, itemId: item.id, by })
     return "presented"
   }
   let url: string | null = null
