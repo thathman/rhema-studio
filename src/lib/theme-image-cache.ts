@@ -28,6 +28,14 @@ class RecentImages extends Map<string, HTMLImageElement> {
     return img
   }
 
+  // Asking whether it is here (a preload before drawing) counts as use too: otherwise a picture a
+  // still slide held for over 10 minutes could go just as the next slide is about to draw it.
+  override has(key: string): boolean {
+    const here = super.has(key)
+    if (here) this.used.set(key, performance.now())
+    return here
+  }
+
   override set(key: string, img: HTMLImageElement): this {
     super.set(key, img)
     this.used.set(key, performance.now())

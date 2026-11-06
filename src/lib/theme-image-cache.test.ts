@@ -14,10 +14,12 @@ describe("pictures kept per window stay bounded (#411 media hunt)", () => {
     for (let i = 0; i < SOFT_IMAGE_LIMIT; i++) cache.set(`old-${i}`, img(i))
     now += IMAGE_IDLE_MS + 1
     cache.get("old-0") // still drawn
+    expect(cache.has("old-2")).toBe(true) // about to be drawn (a preload asks first)
     for (let i = 0; i < 10; i++) cache.set(`new-${i}`, img(100 + i))
     expect(cache.size).toBe(SOFT_IMAGE_LIMIT)
     expect(cache.has("old-0")).toBe(true)
     expect(cache.has("old-1")).toBe(false)
+    expect(cache.has("old-2")).toBe(true)
     expect(cache.has("new-9")).toBe(true)
   })
 
