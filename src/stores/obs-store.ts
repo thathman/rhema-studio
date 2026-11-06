@@ -214,6 +214,9 @@ async function loadScenes(): Promise<void> {
   } catch {
     // Unknown, not empty-and-sure: show nothing rather than a stale list.
     if (client === c) useObsStore.setState(NO_SCENES)
+    // Asked again shortly (#411 OBS hunt): one failed read left the scenes unlisted until something
+    // changed in OBS, and every Take said so.
+    setTimeout(() => { if (client === c) void loadScenes() }, 3000)
   }
 }
 

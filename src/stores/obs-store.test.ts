@@ -47,6 +47,27 @@ describe("OBS store", { timeout: 30_000 }, () => {
     expect(clients.map((c) => c.url)).toEqual(["ws://192.168.1.10:4455"])
   })
 
+  it("a scene list OBS failed to send is asked for again, so a Take is not told 'not listed yet' for good (#411)", async () => {
+    const { useSettingsStore } = await import("./settings-store")
+    useSettingsStore.setState({ obs: { enabled: true, host: "127.0.0.1", port: 4455, password: "" } })
+    let failScenes = true
+    respond = (type) => {
+      if (type === "GetSceneList") return failScenes ? Promise.reject(new Error("busy")) : { currentProgramSceneName: "Wide", scenes: [{ sceneName: "Wide", sceneIndex: 0 }] }
+      if (type === "GetStudioModeEnabled") return { studioModeEnabled: false }
+      return { outputActive: false }
+    }
+    const { useObsStore } = await import("./obs-store")
+    const pending = useObsStore.getState().connect()
+    clients.at(-1)!.open()
+    await pending
+    await vi.advanceTimersByTimeAsync(10)
+    expect(useObsStore.getState().scenes).toEqual([])
+    failScenes = false
+    await vi.advanceTimersByTimeAsync(3100)
+    expect(useObsStore.getState().scenes).toEqual(["Wide"])
+    useObsStore.getState().disconnect()
+  })
+
   it("a connect overtaken by a disconnect never starts polling", async () => {
     const { useSettingsStore } = await import("./settings-store")
     useSettingsStore.setState({ obs: { enabled: true, host: "127.0.0.1", port: 4455, password: "" } })

@@ -107,6 +107,11 @@ async function switchObs(scene: string, reference: string): Promise<void> {
     toast.info("OBS not switched", { description: `${reference} wants OBS on ${scene}, but OBS is not connected.` })
     return
   }
+  // Just connected, its scenes not listed yet (#411 OBS hunt): said as that, not as a missing scene.
+  if (obs.studioMode === null || obs.scenes.length === 0) {
+    toast.info("OBS not switched", { description: `OBS has not listed its scenes yet; switch it to ${scene} from the OBS panel if needed.` })
+    return
+  }
   if (!obs.scenes.includes(scene)) {
     toast.warning("OBS not switched", { description: `OBS has no scene called ${scene}.` })
     return
