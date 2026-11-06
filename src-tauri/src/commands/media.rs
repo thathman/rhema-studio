@@ -104,6 +104,29 @@ fn with_content<T>(state: &ContentState, f: impl FnOnce(&rhema_content::ContentD
     f(db)
 }
 
+/// Put `source` at `dir/file` whole, unless a file of that size is already there. Copied beside it and
+/// renamed into place: a copy that fails (or runs at the same time as another import of the same
+/// file) never leaves a half-written file under a registered asset's name.
+fn copy_whole(source: &Path, dir: &Path, file: &str, size: u64) -> std::io::Result<()> {
+    let dest = dir.join(file);
+    if dest.is_file() && std::fs::metadata(&dest).map(|m| m.len()).ok() == Some(size) {
+        return Ok(());
+    }
+    std::fs::create_dir_all(dir)?;
+    let part = dir.join(format!("{file}.{}.part", std::process::id()));
+    let copied = std::fs::copy(source, &part).and_then(|n| {
+        if n == size {
+            std::fs::rename(&part, &dest)
+        } else {
+            Err(std::io::Error::other(format!("copied {n} of {size} bytes")))
+        }
+    });
+    if copied.is_err() {
+        let _ = std::fs::remove_file(&part);
+    }
+    copied
+}
+
 // The database lock is held only for the quick lookups, never while a (possibly multi-GB,
 // possibly network) file is hashed or copied: the main-thread commands that need it would wait.
 fn import_one(state: &ContentState, dir: &Path, source: &Path) -> Result<(MediaAsset, bool), String> {
@@ -113,25 +136,16 @@ fn import_one(state: &ContentState, dir: &Path, source: &Path) -> Result<(MediaA
     let (hash, size) = hash_file(source)?;
     if let Some(existing) = with_content(state, |db| db.find_media_by_hash(&hash).map_err(|e| e.to_string()))? {
         // Same file already here; make sure it is on disk too.
-        if let Some(dest) = media_path(dir, &existing.file) {
-            if !dest.is_file() {
-                std::fs::copy(source, &dest).map_err(|e| format!("could not restore the media file: {e}"))?;
-            }
+        // The same whole-copy as a new file (#411 media hunt): a plain copy that failed part way left
+        // a cut-off file under the registered name, counted as present and never repaired.
+        if media_path(dir, &existing.file).is_some() {
+            copy_whole(source, dir, &existing.file, size).map_err(|e| format!("could not restore the media file: {e}"))?;
         }
         return Ok((existing, true));
     }
     let file = format!("{hash}.{}", ext.to_ascii_lowercase());
     std::fs::create_dir_all(dir).map_err(|e| format!("could not create the media folder: {e}"))?;
-    let dest = dir.join(&file);
-    // Copied beside it and renamed into place: a copy that fails (or runs at the same time as another
-    // import of the same file) never leaves a half-written file under a registered asset's name.
-    if !dest.is_file() || std::fs::metadata(&dest).map(|m| m.len()).ok() != Some(size) {
-        let part = dir.join(format!("{file}.{}.part", std::process::id()));
-        if let Err(e) = std::fs::copy(source, &part).and_then(|_| std::fs::rename(&part, &dest)) {
-            let _ = std::fs::remove_file(&part);
-            return Err(format!("could not copy into the media folder: {e}"));
-        }
-    }
+    copy_whole(source, dir, &file, size).map_err(|e| format!("could not copy into the media folder: {e}"))?;
     let name = source.file_stem().and_then(|s| s.to_str()).unwrap_or("Picture").to_string();
     let input = MediaInput {
         kind: kind.into(),
@@ -154,7 +168,7 @@ fn import_one(state: &ContentState, dir: &Path, source: &Path) -> Result<(MediaA
             if let Ok(Some(existing)) = with_content(state, |db| db.find_media_by_hash(&input.hash).map_err(|e| e.to_string())) {
                 return Ok((existing, true));
             }
-            let _ = std::fs::remove_file(&dest);
+            let _ = std::fs::remove_file(dir.join(&input.file));
             Err(e)
         }
     }
@@ -215,7 +229,27 @@ pub fn media_delete(state: State<'_, ContentState>, media: State<'_, MediaState>
 
 #[cfg(test)]
 mod tests {
-    use super::safe_file_name;
+    use super::{copy_whole, safe_file_name};
+
+    #[test]
+    fn a_cut_off_media_file_is_replaced_whole_and_a_failed_copy_leaves_nothing() {
+        let root = std::env::temp_dir().join(format!("rhema-media-copy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("clip.mp4");
+        std::fs::write(&source, vec![7u8; 4096]).unwrap();
+        let dir = root.join("media");
+        std::fs::create_dir_all(&dir).unwrap();
+        // A restore that failed part way before this change: a cut-off file under the registered name.
+        std::fs::write(dir.join("abc.mp4"), vec![7u8; 100]).unwrap();
+        copy_whole(&source, &dir, "abc.mp4", 4096).unwrap();
+        assert_eq!(std::fs::metadata(dir.join("abc.mp4")).unwrap().len(), 4096);
+        // A source that is shorter than said (a share that dropped): an error, nothing left under the name.
+        assert!(copy_whole(&source, &dir, "def.mp4", 9999).is_err());
+        assert!(!dir.join("def.mp4").exists());
+        assert_eq!(std::fs::read_dir(&dir).unwrap().filter_map(Result::ok).filter(|e| e.file_name().to_string_lossy().ends_with(".part")).count(), 0);
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn only_hash_names_reach_the_file_system() {
