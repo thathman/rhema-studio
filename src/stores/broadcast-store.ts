@@ -1,3 +1,4 @@
+import { toast } from "sonner"
 import { create } from "zustand"
 import { emitTo } from "@tauri-apps/api/event"
 import { invoke } from "@tauri-apps/api/core"
@@ -2105,7 +2106,7 @@ export function themeDraftChanged(): boolean {
   return JSON.stringify({ ...draftTheme, updatedAt: 0 }) !== JSON.stringify({ ...saved, updatedAt: 0 })
 }
 
-async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
+export async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
   try {
     const store = await getThemeStore()
     const customThemes = state.themes.filter((t) => !t.builtin)
@@ -2126,8 +2127,18 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     await store.set("scenes", state.scenes)
     await store.set("scenePresets", state.scenePresets)
     await store.save()
+    if (useSettingsStore.getState().themesSaveFailed) {
+      useSettingsStore.setState({ themesSaveFailed: false })
+      toast.dismiss("themes-save-failed")
+    }
   } catch {
     console.warn("[broadcast] Failed to persist themes")
+    // Said, not only logged (#411 settings hunt): edits to outputs, themes and scenes made after a
+    // failed save were all gone at the next start, and nobody knew.
+    if (!useSettingsStore.getState().themesSaveFailed) {
+      useSettingsStore.setState({ themesSaveFailed: true })
+      toast.error("Outputs and themes could not be saved", { id: "themes-save-failed", duration: Infinity, description: "Changes made now would be lost at the next start. Check there is room on this computer's disk, then change something to try again." })
+    }
   }
 }
 

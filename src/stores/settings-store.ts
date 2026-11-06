@@ -323,6 +323,8 @@ export interface SettingsState {
   setHostLookSeen: (revision: string) => void
   /** The last settings save failed (not saved itself): setup shows "Settings are saved" as needing attention. */
   settingsSaveFailed: boolean
+  /** The last save of outputs, themes and scenes failed (not saved itself): the same warning (#411). */
+  themesSaveFailed: boolean
   /** Cameras on the church network (#209), sent through the camera router shipped with Rhema. */
   cameras: CameraSource[]
   setCameras: (cameras: CameraSource[]) => void
@@ -446,6 +448,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   hostLookSeen: "",
   setHostLookSeen: (hostLookSeen) => set({ hostLookSeen }),
   settingsSaveFailed: false,
+  themesSaveFailed: false,
   cameras: [],
   setCameras: (cameras) => set({ cameras }),
   cameraRouterAuto: true,
@@ -792,7 +795,7 @@ type PersistedKey = (typeof SETTINGS_SECTIONS)[SettingsSection][number]
 const MAX_SERVICES_WITH_TIMERS = 200
 
 /** In the store but never saved: worked out while Rhema runs. */
-export const RUNTIME_ONLY_SETTINGS = ["settingsSaveFailed"] as const satisfies readonly (keyof SettingsState)[]
+export const RUNTIME_ONLY_SETTINGS = ["settingsSaveFailed", "themesSaveFailed"] as const satisfies readonly (keyof SettingsState)[]
 
 const PERSISTED_KEYS: readonly PersistedKey[] = SECTION_NAMES.flatMap((n) => SETTINGS_SECTIONS[n])
 
