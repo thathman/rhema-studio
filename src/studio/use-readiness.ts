@@ -15,6 +15,7 @@ import { useMonitorStore } from "@/stores/monitor-store"
 import { allSignageIds } from "@/lib/signage"
 import { tickerOnly } from "@/lib/feed-presets"
 import { useBibleStore, useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
+import { useAudioStore } from "@/stores/audio-store"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
 import { computeReadiness, overscanReminder, planCheck, serviceStartsSoon } from "@/studio/readiness"
@@ -51,6 +52,7 @@ export function useReadiness() {
   const headers = useQueueStore((s) => s.headers)
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const listening = useTranscriptStore((s) => s.isTranscribing)
+  const micLost = useAudioStore((s) => s.sourceLost)
   const programs = useServiceStore((s) => s.programs)
   const current = useServiceStore((s) => s.current)
   const dirty = useServiceStore((s) => s.dirty)
@@ -195,6 +197,7 @@ export function useReadiness() {
     })),
     rundownCount: items.length,
     listening,
+    micLost,
     unknownLicenceSongs,
     missingSongs,
     missingMedia: mediaLoaded || mediaIds.length === 0 ? missingMedia : 0,

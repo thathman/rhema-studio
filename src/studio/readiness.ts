@@ -39,6 +39,8 @@ export interface ReadinessInput {
   outputs?: OutputHealth[]
   rundownCount: number
   listening: boolean
+  /** Listening, but its microphone or sound input has gone (unplugged, the device lost). */
+  micLost?: boolean
   /** Songs in the rundown whose licence is still "unknown". */
   unknownLicenceSongs?: number
   /** Song items in the rundown whose song is no longer in the library. */
@@ -226,7 +228,9 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
     i.rundownCount > 0
       ? { id: "rundown", status: "ok", label: `${i.rundownCount} item${i.rundownCount === 1 ? "" : "s"} in the service` }
       : { id: "rundown", status: "info", label: "Nothing in the service yet", detail: "You can still find and show passages live.", fix: "prepare", fixLabel: "Prepare service" },
-    i.listening
+    i.listening && i.micLost
+      ? { id: "listening", status: "warn", label: "The microphone is disconnected", detail: "Nothing is being heard, so no verse is detected. Check its cable or choose another input in Settings; listening goes on by itself when it is back." }
+      : i.listening
       ? { id: "listening", status: "ok", label: "Listening for verse references" }
       : { id: "listening", status: "info", label: "Listening is off", detail: "Optional. Turn it on in Live tools to detect verses from the sermon." },
     ...(i.missingSongs

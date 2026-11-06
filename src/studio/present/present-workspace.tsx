@@ -13,6 +13,7 @@ import { useServiceStore } from "@/stores/service-store"
 import { presentActions } from "@/studio/present-actions"
 import { keyToPresentAction, shouldIgnoreKeyboard, isClickerKey } from "@/studio/present-keys"
 import { BigButton } from "@/studio/ui/big-button"
+import { useAudioStore } from "@/stores/audio-store"
 import { StatusChip } from "@/studio/ui/status-chip"
 import { TimedMoves } from "@/studio/present/timed-moves"
 import { PhaseStrip } from "@/studio/present/phase-strip"
@@ -88,6 +89,7 @@ export function PresentWorkspace() {
     : congregationOutputs[0]?.id ?? null
   const outputStatus = useBroadcastStore((s) => s.outputStatus)
   const listening = useTranscriptStore((s) => s.isTranscribing)
+  const micLost = useAudioStore((s) => s.sourceLost)
   const autoLive = useBroadcastStore((s) => s.autoLive)
   const cloudSpeechProvider = useCloudConsentStore((s) => s.runningProvider === "deepgram" || s.runningProvider === "openai" ? s.runningProvider : null)
   const service = useServiceStore((s) => s.current)
@@ -252,7 +254,8 @@ export function PresentWorkspace() {
           >
             <MonitorCogIcon /> Live tools
           </Button>
-          {listening && <StatusChip tone="ok" label={cloudSpeechProvider ? `Listening (${cloudSpeechProvider === "openai" ? "OpenAI" : "Deepgram"})` : "Listening"} title={cloudSpeechProvider ? `Microphone sound is being sent to ${cloudSpeechProvider === "openai" ? "OpenAI" : "Deepgram"}` : "Microphone listening is active"} />}
+          {listening && micLost && <StatusChip tone="warn" label="Microphone disconnected" title="Nothing is being heard: check the cable or choose another input in Settings. Listening goes on by itself when it is back." />}
+          {listening && !micLost && <StatusChip tone="ok" label={cloudSpeechProvider ? `Listening (${cloudSpeechProvider === "openai" ? "OpenAI" : "Deepgram"})` : "Listening"} title={cloudSpeechProvider ? `Microphone sound is being sent to ${cloudSpeechProvider === "openai" ? "OpenAI" : "Deepgram"}` : "Microphone listening is active"} />}
           {listening && autoLive && (
             <StatusChip
               tone="warn"

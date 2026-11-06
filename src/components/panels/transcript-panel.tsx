@@ -55,6 +55,7 @@ export function TranscriptPanel() {
     stopTranscription,
   } = useTranscription({ onMissingApiKey })
   const hasPartial = useTranscriptStore((s) => s.currentPartial.length > 0)
+  const micLost = useAudioStore((s) => s.sourceLost)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Latency debugging: surface main-thread stalls in the unified [LAT] log.
@@ -80,7 +81,9 @@ export function TranscriptPanel() {
               aria-hidden
               className={cn(
                 "size-1.5 rounded-full",
-                connectionStatus === "connected"
+                micLost
+                  ? "bg-confidence-low"
+                  : connectionStatus === "connected"
                   ? "bg-confidence-high"
                   : connectionStatus === "connecting"
                     ? "animate-pulse bg-confidence-mid"
@@ -118,7 +121,7 @@ export function TranscriptPanel() {
 
           {segments.length === 0 && !hasPartial && (
             <p className="text-sm text-muted-foreground">
-              {isTranscribing ? "Listening. What the preacher says appears here." : "Start listening to follow the sermon as text."}
+              {isTranscribing ? (micLost ? "The microphone is disconnected: nothing is being heard." : "Listening. What the preacher says appears here.") : "Start listening to follow the sermon as text."}
             </p>
           )}
 

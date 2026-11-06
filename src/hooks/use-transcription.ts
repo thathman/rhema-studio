@@ -44,6 +44,9 @@ export const transcriptionActions = {
     }
     const transcript = useTranscriptStore.getState()
     transcript.setConnectionStatus("connecting")
+    // A new session: an input lost in the last one says nothing about this one.
+    useAudioStore.getState().setSourceLost(false)
+    toast.dismiss("audio-source-status")
 
     try {
       await invoke("start_transcription", {
@@ -82,6 +85,9 @@ export const transcriptionActions = {
       }
     }
     transcript.setTranscribing(false)
+    // Not listening: nothing waits for the input any more.
+    useAudioStore.getState().setSourceLost(false)
+    toast.dismiss("audio-source-status")
     useCloudConsentStore.setState({ runningProvider: null })
     transcript.setPartial("")
     transcript.setConnectionStatus("disconnected")
@@ -134,9 +140,11 @@ export function useTranscriptionEvents(): void {
   // sees the device return. The STT provider stays alive across the gap.
   useTauriEvent("audio_source_lost", () => {
     useAudioStore.getState().setSourceLost(true)
-    toast.warning("Audio source disconnected", {
-      description: "Waiting for the device to come back…",
+    // Stays up until it is back: a toast that faded left a green Listening and nothing heard.
+    toast.warning("Microphone disconnected", {
+      description: "Nothing is being heard. Waiting for it to come back…",
       id: "audio-source-status",
+      duration: Infinity,
     })
   })
   useTauriEvent("audio_source_recovered", () => {
