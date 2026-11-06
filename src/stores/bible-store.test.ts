@@ -30,6 +30,16 @@ describe("bible store persistence", () => {
     vi.resetModules()
   })
 
+  it("any change of the active translation is passed to Rust, so heard verses come in it (#411)", async () => {
+    const { useBibleStore } = await import("./bible-store")
+    mockInvoke.mockClear()
+    useBibleStore.getState().setActiveTranslation(7)
+    expect(mockInvoke).toHaveBeenCalledWith("set_active_translation", { translationId: 7 })
+    mockInvoke.mockClear()
+    useBibleStore.getState().setSecondaryTranslation(3)
+    expect(mockInvoke).not.toHaveBeenCalledWith("set_active_translation", expect.anything())
+  })
+
   describe("hydrateBibleStore", () => {
     it("loads from bible.json and sets stored translation in Zustand", async () => {
       mockGet.mockImplementation((key: string) =>

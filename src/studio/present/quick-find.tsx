@@ -288,7 +288,7 @@ function BibleVersions() {
       <span className="text-muted-foreground">Bible</span>
       <Select value={String(active)} onValueChange={(v) => useBibleStore.getState().setActiveTranslation(Number(v))}>
         <SelectTrigger className="h-7 w-48 text-xs" aria-label="Bible version"><SelectValue /></SelectTrigger>
-        <SelectContent>{translations.map((t) => <SelectItem key={t.id} value={String(t.id)}>{name(t)}</SelectItem>)}</SelectContent>
+        <SelectContent>{translations.filter((t) => t.is_downloaded !== false).map((t) => <SelectItem key={t.id} value={String(t.id)}>{name(t)}</SelectItem>)}</SelectContent>
       </Select>
       <span className="text-muted-foreground">with</span>
       <Select value={secondary === null ? "__none" : String(secondary)} onValueChange={(v) => useBibleStore.getState().setSecondaryTranslation(v === "__none" ? null : Number(v))}>

@@ -248,6 +248,14 @@ export async function hydrateBibleStore(): Promise<void> {
   }
 }
 
+// Rust's own choice follows the desk's, whichever control changed it (#411 Bible hunt): the Live
+// Bible tab's picker set only this store, so heard verses (detection) came back in the old
+// edition's words under the new one's name, and Settings and the remote still showed the old one.
+useBibleStore.subscribe((s, prev) => {
+  if (s.activeTranslationId === prev.activeTranslationId) return
+  void invoke("set_active_translation", { translationId: s.activeTranslationId }).catch((e: unknown) => console.warn("[bible] Rust did not take the new translation", e))
+})
+
 /** Subscribe to translation selection changes and persist them with debounce. */
 export async function initBiblePersistence(): Promise<void> {
   try {

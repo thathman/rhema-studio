@@ -50,9 +50,14 @@ pub fn to_result(state: &AppState, merged: &MergedDetection) -> DetectionResult 
     let vid = merged.detection.verse_id;
 
     let resolved = state.bible_db.as_ref().and_then(|db| {
-        // Try verse_id first (vector-based semantic detections)
+        // A verse id (semantic detections) says which verse, not which edition (#411 Bible hunt: the
+        // index was built on one edition, so every heard-by-meaning verse came in its words). The
+        // verse in the active edition, falling back to the one the id names.
         if let Some(id) = vid {
             if let Ok(Some(v)) = db.get_verse_by_id(id) {
+                if let Ok(Some(active)) = db.get_verse(state.active_translation_id, v.book_number, v.chapter, v.verse) {
+                    return Some(active);
+                }
                 return Some(v);
             }
         }
