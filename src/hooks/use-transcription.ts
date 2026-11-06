@@ -44,6 +44,9 @@ export const transcriptionActions = {
     }
     const transcript = useTranscriptStore.getState()
     transcript.setConnectionStatus("connecting")
+    // A new session: an input lost in the last one says nothing about this one.
+    useAudioStore.getState().setSourceLost(false)
+    toast.dismiss("audio-source-status")
 
     try {
       await invoke("start_transcription", {
@@ -82,6 +85,9 @@ export const transcriptionActions = {
       }
     }
     transcript.setTranscribing(false)
+    // Not listening: nothing waits for the input any more.
+    useAudioStore.getState().setSourceLost(false)
+    toast.dismiss("audio-source-status")
     useCloudConsentStore.setState({ runningProvider: null })
     transcript.setPartial("")
     transcript.setConnectionStatus("disconnected")

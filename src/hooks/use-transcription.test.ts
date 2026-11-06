@@ -10,6 +10,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("sonner", () => ({
   toast: {
     error: (...args: unknown[]) => mockToastError(...args),
+    dismiss: vi.fn(),
   },
 }))
 
@@ -230,6 +231,15 @@ describe("use-transcription", () => {
       expect(state.currentPartial).toBe("")
       expect(state.connectionStatus).toBe("disconnected")
       expect(mockToastError).not.toHaveBeenCalled()
+    })
+
+    it("a microphone lost in the last session is not carried into the next (#411)", async () => {
+      mockInvoke.mockResolvedValue(undefined)
+      const { transcriptionActions } = await loadModules()
+      const { useAudioStore } = await import("@/stores/audio-store")
+      useAudioStore.setState({ sourceLost: true })
+      await transcriptionActions.stop()
+      expect(useAudioStore.getState().sourceLost).toBe(false)
     })
 
     it("silently swallows the exact 'Transcription is not running' error", async () => {
