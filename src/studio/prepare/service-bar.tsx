@@ -151,7 +151,7 @@ export function ServiceBar() {
 
   const open = async (id: string) => {
     const r = await useServiceStore.getState().openProgram(id)
-    if (r === "unsaved") toast.warning("Save or discard your changes first")
+    if (r === "unsaved") toast.warning(current ? "Save or discard your changes first" : "These items are not saved in a service", { description: current ? undefined : "Keep them with New service, or clear them, then open another." })
     else if (r !== "ok") fail("Could not open service")
   }
 

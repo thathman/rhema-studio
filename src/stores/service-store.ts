@@ -1102,7 +1102,8 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
   },
 
   newFromTemplate: async (templateId, title, serviceDate) => {
-    if (get().dirty) return "unsaved"
+    // A rundown built with no service open is unsaved work too (#411 services hunt): it was replaced in silence.
+    if (get().dirty || unsavedScratch(useQueueStore.getState().items, get().current)) return "unsaved"
     // The template is read, never opened: nothing on this path can save into it.
     let data: ProgramWithItems | null = null
     try {
@@ -1156,7 +1157,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
   },
 
   openProgram: async (id, opts) => {
-    if (get().dirty && !opts?.discard) return "unsaved"
+    if ((get().dirty || unsavedScratch(useQueueStore.getState().items, get().current)) && !opts?.discard) return "unsaved"
     const ticket = ++openGeneration
     set({ loading: true })
     try {
@@ -1289,7 +1290,9 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
   deleteProgram: async (id, opts) => {
     const s = get()
     if (s.current?.id === id && s.dirty && !opts?.discard) return "unsaved"
-    const target = s.programs.find((p) => p.id === id) ?? (s.current?.id === id ? s.current : null)
+    // The open service's own revision first (#411): the list can be newer (another desk saved, and a
+    // reload of the list followed) or older (a Reload or Restore updated only the open one).
+    const target = (s.current?.id === id ? s.current : null) ?? s.programs.find((p) => p.id === id)
     if (!target) return "failed"
     try {
       await invoke("content_delete_program", { id, expectedRevision: target.revision })
