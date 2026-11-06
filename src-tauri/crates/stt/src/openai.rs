@@ -83,6 +83,12 @@ fn retry_delay(failures: u32) -> Option<Duration> {
     (failures < MAX_FAILURES_IN_A_ROW).then(|| Duration::from_secs(u64::from(failures.min(5)) * 2))
 }
 
+/// Worth trying again: a rate limit, a timeout or a server error. A bad or revoked key (401/403) or
+/// a refused request (400, 404) fails the same way every time, so listening stops at once.
+fn status_is_retryable(status: u16) -> bool {
+    status == 408 || status == 429 || status >= 500
+}
+
 /// Failed requests in a row before listening stops (and says so).
 const MAX_FAILURES_IN_A_ROW: u32 = 5;
 
@@ -128,7 +134,7 @@ impl OpenAiTranscribeProvider {
         &self,
         client: &reqwest::Client,
         samples: Vec<i16>,
-    ) -> Result<String, SttError> {
+    ) -> Result<String, (SttError, bool)> {
         // Build multipart directly so this provider does not need reqwest's
         // optional multipart feature (and its extra runtime dependencies).
         let boundary = "rhema-openai-transcribe-boundary";
@@ -160,21 +166,22 @@ impl OpenAiTranscribeProvider {
             .body(body)
             .send()
             .await
-            .map_err(|e| SttError::ConnectionFailed(format_request_error(&e)))?;
+            .map_err(|e| (SttError::ConnectionFailed(format_request_error(&e)), true))?;
 
         let status = response.status();
         if !status.is_success() {
-            return Err(SttError::ConnectionFailed(format!(
-                "OpenAI transcription API returned {status}"
-            )));
+            return Err((
+                SttError::ConnectionFailed(format!("OpenAI transcription API returned {status}")),
+                status_is_retryable(status.as_u16()),
+            ));
         }
         let body = response
             .text()
             .await
-            .map_err(|e| SttError::ParseError(format!("failed to read OpenAI response: {e}")))?;
+            .map_err(|e| (SttError::ParseError(format!("failed to read OpenAI response: {e}")), true))?;
 
         let json: serde_json::Value = serde_json::from_str(&body)
-            .map_err(|e| SttError::ParseError(format!("failed to parse OpenAI response: {e}")))?;
+            .map_err(|e| (SttError::ParseError(format!("failed to parse OpenAI response: {e}")), true))?;
         let transcript = json
             .get("text")
             .and_then(serde_json::Value::as_str)
@@ -319,16 +326,19 @@ impl SttProvider for OpenAiTranscribeProvider {
                     }
                     let _ = event_tx.send(TranscriptEvent::UtteranceEnd).await;
                 }
-                Err(error) => {
+                Err((error, retry)) => {
                     let message = error.to_string();
                     log::error!("[OpenAI Transcribe] {message}");
                     let _ = event_tx.send(TranscriptEvent::Error(message)).await;
                     // That chunk is lost; the next ones are tried after a pause, until too many fail.
                     failures += 1;
-                    let Some(wait) = retry_delay(failures) else { break };
+                    let Some(wait) = retry_delay(failures).filter(|_| retry) else { break };
                     if cancellable(&mut cancel_rx, tokio::time::sleep(wait)).await.is_none() {
                         break;
                     }
+                    // Speech queued while it waited is old by now: dropped, so a verse said
+                    // seconds ago is never detected as if just said.
+                    while chunk_rx.try_recv().is_ok() {}
                 }
             }
         }
@@ -361,6 +371,16 @@ mod tests {
         assert_eq!(super::retry_delay(1), Some(std::time::Duration::from_secs(2)));
         assert_eq!(super::retry_delay(4), Some(std::time::Duration::from_secs(8)));
         assert_eq!(super::retry_delay(super::MAX_FAILURES_IN_A_ROW), None);
+    }
+
+    #[test]
+    fn a_bad_key_or_refused_request_stops_at_once() {
+        for fatal in [400, 401, 403, 404] {
+            assert!(!super::status_is_retryable(fatal), "{fatal}");
+        }
+        for again in [408, 429, 500, 502, 503] {
+            assert!(super::status_is_retryable(again), "{again}");
+        }
     }
 
     use super::{
