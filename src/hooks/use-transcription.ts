@@ -133,9 +133,11 @@ export function useTranscriptionEvents(): void {
   // sees the device return. The STT provider stays alive across the gap.
   useTauriEvent("audio_source_lost", () => {
     useAudioStore.getState().setSourceLost(true)
-    toast.warning("Audio source disconnected", {
-      description: "Waiting for the device to come back…",
+    // Stays up until it is back: a toast that faded left a green Listening and nothing heard.
+    toast.warning("Microphone disconnected", {
+      description: "Nothing is being heard. Waiting for it to come back…",
       id: "audio-source-status",
+      duration: Infinity,
     })
   })
   useTauriEvent("audio_source_recovered", () => {

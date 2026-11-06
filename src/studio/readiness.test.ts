@@ -67,6 +67,14 @@ describe("computeReadiness", () => {
     expect(computeReadiness(good).checks.find((x) => x.id === "licence")).toBeUndefined()
   })
 
+  it("listening with the microphone gone says so, not 'Listening' (#411)", () => {
+    const r = computeReadiness({ ...good, listening: true, micLost: true })
+    const c = r.checks.find((x) => x.id === "listening")
+    expect(c?.status).toBe("warn")
+    expect(c?.label).toBe("The microphone is disconnected")
+    expect(computeReadiness({ ...good, listening: true, micLost: false }).checks.find((x) => x.id === "listening")?.status).toBe("ok")
+  })
+
   it("empty rundown and listening off are info, not blockers", () => {
     const r = computeReadiness({ ...good, rundownCount: 0, listening: false })
     expect(r.ready).toBe(true)
