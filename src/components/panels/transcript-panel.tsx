@@ -41,6 +41,9 @@ function LivePartialLine({ scrollRef }: { scrollRef: RefObject<HTMLDivElement | 
   )
 }
 
+/** Passages drawn in the panel; the rest stay in the store (and a kept log). */
+const SHOWN_SEGMENTS = 200
+
 export function TranscriptPanel() {
   const [showKeyPrompt, setShowKeyPrompt] = useState(false)
   const onMissingApiKey = useCallback(() => setShowKeyPrompt(true), [])
@@ -120,8 +123,9 @@ export function TranscriptPanel() {
           )}
 
           {/* Final segments — recent ones brighter, older ones fade */}
-          {segments.map((seg, idx) => {
-            const distFromEnd = segments.length - 1 - idx
+          {/* Only the most recent passages are drawn: a long day's transcript slowed every new one (#411). */}
+          {segments.slice(-SHOWN_SEGMENTS).map((seg, idx, shown) => {
+            const distFromEnd = shown.length - 1 - idx
             const opacity =
               distFromEnd === 0
                 ? "text-foreground/80"

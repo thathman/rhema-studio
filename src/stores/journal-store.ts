@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { cameraChangeBetween, useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useTranscriptStore } from "@/stores/transcript-store"
 import { useServiceStore } from "@/stores/service-store"
 import { monotonicNow } from "@/stores/timer-store"
 import { invoke } from "@tauri-apps/api/core"
@@ -365,6 +366,8 @@ export async function startNewJournal(): Promise<void> {
   if (state.runStatus === "finished" && !state.finalizedLogId) await finalizeServiceRun()
   else await interruptCurrentServiceRun()
   useJournalStore.getState().clear()
+  // What was said belongs to the log that ended (#411): the next one's transcript starts empty.
+  useTranscriptStore.getState().clearTranscript()
 }
 
 /** What the congregation saw when rehearsal started: rehearsal ends by sending what is live now. */
