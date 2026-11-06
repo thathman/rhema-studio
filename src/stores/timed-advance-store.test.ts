@@ -79,6 +79,17 @@ describe("timed moves in the service", () => {
     expect(presented).toEqual(["c"])
   })
 
+  it("the live item made longer while its move waits moves at the new length, counted from when it went live", async () => {
+    useTimedAdvance.getState().setOn(true)
+    live("a") // 2 minutes
+    await vi.advanceTimersByTimeAsync(60_000)
+    useQueueStore.setState({ items: [item("a", 3), item("b", 3, false), item("c", 1), item("p", 1)] })
+    await vi.advanceTimersByTimeAsync(61_000) // the old 2 minutes are up
+    expect(presented).toEqual([])
+    await vi.advanceTimersByTimeAsync(60_000) // the new 3
+    expect(presented).toEqual(["b"])
+  })
+
   it("never crosses into the next phase, and leaves a running phase alone", async () => {
     useTimedAdvance.getState().setOn(true)
     live("c")

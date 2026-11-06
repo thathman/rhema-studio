@@ -46,8 +46,10 @@ function reconsider() {
   timer = null
   move = null
   const next = useTimedAdvance.getState().on ? timedNext() : null
-  useTimedAdvance.setState({ dueAt: next ? Date.now() + next.ms : null })
+  const armedAt = Date.now()
+  useTimedAdvance.setState({ dueAt: next ? armedAt + next.ms : null })
   if (!next) return
+  const itemId = next.itemId
   const go = () => {
     timer = null
     // On hold or in rehearsal: the move waits and is made at Resume or after rehearsal.
@@ -57,9 +59,19 @@ function reconsider() {
     const b = useBroadcastStore.getState()
     // Worked out again from the rundown as it is now (#411 services hunt): another service opened,
     // or the items reordered, while the move waited put that service's item on air. Only the same
-    // live item, moving to the same next one, moves.
+    // live item moves, to the item that is next now.
     const now = timedNext()
-    if (useTimedAdvance.getState().on && b.isLive && b.liveItemId === next.itemId && now?.itemId === next.itemId) void presentQueueItem(now.index, 0, undefined, { automatic: true })
+    if (!useTimedAdvance.getState().on || !b.isLive || b.liveItemId !== itemId || now?.itemId !== itemId) return
+    // Its planned minutes were changed while it waited: it moves at the new length, counted from
+    // when this item's timer started (not from now).
+    const left = armedAt + now.ms - Date.now()
+    if (left > 0) {
+      move = go
+      timer = setTimeout(go, left)
+      useTimedAdvance.setState({ dueAt: Date.now() + left })
+      return
+    }
+    void presentQueueItem(now.index, 0, undefined, { automatic: true })
   }
   move = go
   timer = setTimeout(go, next.ms)
