@@ -73,7 +73,7 @@ describe("slide splitting", () => {
     expect(slides[2].missing).toEqual(["en"])
   })
 
-  it("splits a bilingual section only when both exceed the limit, into the same number of parts", () => {
+  it("splits a long bilingual section into the same number of parts in both languages", () => {
     const long = (p: string, n: number) => Array.from({ length: n }, (_, i) => `${p}${i + 1}`).join("\n")
     const s = song({
       sections: [{ id: "v1", kind: "verse", label: "Verse 1", texts: { en: long("e", 8), yo: long("y", 9) } }],

@@ -134,8 +134,8 @@ export function splitEvenly(lines: string[], max: number): string[][] {
 /**
  * Build the slides of a song for one arrangement and language choice.
  * Two languages are aligned by section: a slide shows the whole section in
- * both, and is split only when both exceed `max` (then into the same number
- * of parts). A section with text in only one of the requested languages is
+ * both, and is split when either exceeds `max` and the other has a line for
+ * every part (then into the same number of parts, spread evenly). A section with text in only one of the requested languages is
  * shown in that one and names the other in `missing`; a section with no
  * text in any of them is skipped.
  */
