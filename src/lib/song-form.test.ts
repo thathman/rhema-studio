@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
-  addArrangement, addSection, applyPaste, appendStep, defaultLabel, defaultSteps, emptyForm, formFromSong, newSongInputFromForm, formLanguages,
+  addArrangement, addSection, applyPaste, defaultLabel, defaultSteps, emptyForm, formFromSong, newSongInputFromForm, formLanguages,
   inputFromForm, moveSection, moveStep, removeArrangement, removeSection, removeStep, updateArrangement, validateForm,
 } from "./song-form"
 import type { SongWithSections } from "@/types"
@@ -32,13 +32,24 @@ describe("song form", () => {
     expect(validateForm({ ...form, tempo: "900" })).toContain("Tempo is whole beats per minute, 20 to 300.")
     expect(validateForm({ ...form, tempo: "72.5" })).toContain("Tempo is whole beats per minute, 20 to 300.")
 
+    // A new section joins the default order by itself (#411), sent by index.
     const withNew = addSection(form, "bridge")
-    const bridgeId = withNew.sections[2].id
-    const arranged = updateArrangement(withNew, "a1", { steps: appendStep(withNew.arrangements[0].steps, bridgeId) })
-    const out = inputFromForm(arranged)
+    const out = inputFromForm(withNew)
     expect(out.sections[2].id).toBeUndefined()
     expect(out.arrangements?.[0].sequence).toEqual(["v1", "c", "c", "#2"])
     expect(out.sections[2].texts).toEqual({}) // empty text is dropped, validation catches it
+  })
+
+  it("a section added or pasted into a saved song goes at the end of its default order, so it is shown (#411)", () => {
+    const form = formFromSong(stored)
+    const added = addSection(form, "verse")
+    const verse2 = added.sections.at(-1)!.id
+    expect(added.arrangements[0].steps.map((x) => x.sectionId)).toEqual(["v1", "c", "c", verse2])
+    const pasted = applyPaste(form, "Verse 3\nPerfect submission", "en")
+    expect(pasted.arrangements[0].steps.at(-1)?.sectionId).toBe(pasted.sections.at(-1)!.id)
+    // An order the church made itself is left as it is.
+    const own = { ...form, arrangements: [...form.arrangements, { id: "a2", name: "Short", steps: [{ uid: "x", sectionId: "c" }], is_default: false }] }
+    expect(addSection(own, "verse").arrangements[1].steps.map((x) => x.sectionId)).toEqual(["c"])
   })
 
   it("labels sections by kind and renumbers after reorder or removal", () => {
