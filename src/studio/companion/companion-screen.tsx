@@ -27,6 +27,13 @@ const NEW_SCENE = "\u0000new"
  */
 export function CompanionScreen({ aside, secure = false, children }: { aside?: ReactNode; secure?: boolean; children?: ReactNode } = {}) {
   useEffect(() => startCompanion(), [])
+  // It joins its host again by itself on start (#411 Companion hunt): companion mode inside the
+  // studio app, after its restart or a reboot, showed the join form with everything saved, so OBS's
+  // camera addresses went stale and the host had no tally until someone clicked Join again.
+  useEffect(() => {
+    const { joinAddress, joinToken } = useSettingsStore.getState()
+    if (joinAddress && joinToken && useJoin.getState().status === "off") void useJoin.getState().connect()
+  }, [])
   const status = useJoin((s) => s.status)
   const obsEnabled = useSettingsStore((s) => s.obs.enabled)
   const obsStatus = useObsStore((s) => s.status)

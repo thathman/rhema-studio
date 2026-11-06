@@ -113,6 +113,13 @@ describe("OBS companion: following the host (#209)", () => {
     await look()
     expect(useCompanion.getState().hostError).toBe("The main desk has taken back control")
     expect(useCompanion.getState().srt).toBeNull()
+    // No old rows saying Sending under the error (#411): cameras read, then the host refuses.
+    hostRefusal = null
+    await look()
+    expect(useCompanion.getState().cameras.length).toBeGreaterThan(0)
+    hostRefusal = "paused: The main desk has taken back control"
+    await look()
+    expect(useCompanion.getState().cameras).toEqual([])
   })
 
   it("asks nothing of the host while it is not joined", async () => {
@@ -156,6 +163,15 @@ describe("OBS companion screen (#209)", () => {
     expect(add?.disabled).toBe(false)
   })
 
+  it("companion mode joins its saved host again by itself when it starts (#411)", async () => {
+    useSettingsStore.setState({ companionMode: true })
+    useJoin.setState({ status: "off" })
+    const connect = vi.spyOn(useJoin.getState(), "connect").mockResolvedValue()
+    await act(async () => root.render(<App />))
+    expect(connect).toHaveBeenCalledTimes(1)
+    connect.mockRestore()
+  })
+
   it("marks OBS unavailable when its saved connection is enabled but cannot connect", async () => {
     useSettingsStore.setState({ companionMode: true })
     useSettingsStore.setState((s) => ({ obs: { ...s.obs, enabled: true } }))
@@ -173,7 +189,8 @@ describe("OBS companion screen (#209)", () => {
   })
 
   it("offers the join form, pairing as an OBS companion, until it has joined", async () => {
-    useSettingsStore.setState({ companionMode: true })
+    // Not paired yet: nothing saved to join again by itself.
+    useSettingsStore.setState({ companionMode: true, joinAddress: null, joinToken: null } as never)
     useJoin.setState({ status: "off" })
     const pair = vi.spyOn(useJoin.getState(), "pair")
     await act(async () => root.render(<App />))
