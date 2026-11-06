@@ -173,6 +173,7 @@ pub fn run() {
             commands::broadcast::push_ndi_region,
             commands::recorder::recorder_preflight,
             commands::recorder::recorder_start,
+            commands::recorder::keep_awake,
             commands::recorder::recorder_stop,
             commands::recorder::recorder_marker,
             commands::recorder::recorder_status,

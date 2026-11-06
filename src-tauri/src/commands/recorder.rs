@@ -378,3 +378,32 @@ mod tests {
     }
 
 }
+
+/// The sender that keeps the awake thread waiting; dropping it ends the hold.
+static AWAKE: std::sync::Mutex<Option<std::sync::mpsc::Sender<()>>> = std::sync::Mutex::new(None);
+
+/// Keeps this computer and its screens awake while the service is live (#411 timing hunt): with no
+/// input during a long sermon the Mac idle-slept, and the service timer, the extra timers and the
+/// finished items' times all lost the time it slept (its clock stops then), so the pastor saw too
+/// much time left; a sleeping display also stops the output windows drawing. The same hold the
+/// recorder takes, on a thread of its own that waits until it is released.
+#[tauri::command]
+pub fn keep_awake(on: bool) {
+    let mut held = AWAKE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if !on {
+        *held = None;
+        return;
+    }
+    if held.is_some() {
+        return;
+    }
+    #[cfg(any(target_os = "macos", windows))]
+    {
+        let (tx, rx) = std::sync::mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            let _awake = rhema_recorder::backend::Awake::hold();
+            let _ = rx.recv();
+        });
+        *held = Some(tx);
+    }
+}
