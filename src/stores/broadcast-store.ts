@@ -1251,7 +1251,21 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     }),
   setLive: (isLive) => {
     const s = get()
-    set({ isLive, cleared: isLive ? false : s.cleared || (s.isLive && s.liveVerse !== null) })
+    // Time off air counts as paused for a playing video (#411: Clear then Restore brought it back
+    // jumped on by the whole time it was away, often to its last frame), as under a quick screen.
+    const v = s.liveVerse
+    const playing = !!v?.video?.startedAt && !v.video.paused
+    if (!isLive && s.isLive && playing) videoOffAt = Date.now()
+    let back = v
+    if (isLive && !s.isLive && playing && videoOffAt !== null) back = { ...v!, video: { ...v!.video!, startedAt: v!.video!.startedAt! + Math.max(0, Date.now() - videoOffAt) } }
+    if (isLive) videoOffAt = null
+    const id = v ? sourceOf(v) : null
+    const cur = id ? s.sources[id] : undefined
+    set({
+      isLive,
+      cleared: isLive ? false : s.cleared || (s.isLive && s.liveVerse !== null),
+      ...(back !== v ? { liveVerse: back, ...(id && cur?.value === v ? { sources: { ...s.sources, [id]: { ...cur, value: back! } } } : {}) } : {}),
+    })
     noteSources()
     get().syncBroadcastOutput()
   },
@@ -1261,6 +1275,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       set({ presentWarning: null })
       return
     }
+    if (opts.goLive) videoOffAt = null // something new on air: an earlier Clear's time is not its own
     set({
       liveVerse,
       liveSourceVerse: source,
@@ -2164,6 +2179,8 @@ export function soundOutputId(outputs: BroadcastOutput[], status: Record<string,
 // When the output that plays video sound changes (a role changed, a window opened or closed), every
 // output is told, so the old one stops and only one plays: no echo.
 let lastSoundOutput: string | null | undefined
+/** When a playing video went off air (Clear), so coming back carries on from where it was. */
+let videoOffAt: number | null = null
 useBroadcastStore.subscribe((s, prev) => {
   if (s.outputs === prev.outputs && s.outputStatus === prev.outputStatus) return
   const now = soundOutputId(s.outputs, s.outputStatus)

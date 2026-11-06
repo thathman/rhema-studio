@@ -1364,6 +1364,21 @@ describe("updateDraftNested deep paths", () => {
     }
   })
 
+  it("a video cleared and restored carries on from where it was, not jumped on by the time off air (#411)", async () => {
+    vi.useFakeTimers()
+    try {
+      const { useBroadcastStore } = await import("./broadcast-store")
+      vi.setSystemTime(100_000)
+      useBroadcastStore.setState({ isLive: true, cleared: false, heldLive: null, liveVerse: { kind: "image", reference: "", segments: [], content: "picture", video: { url: "u", fit: "cover", loop: false, sound: true, name: "Clip", token: 1, startedAt: 70_000 } } as never })
+      useBroadcastStore.getState().setLive(false)
+      vi.setSystemTime(280_000) // 3 minutes off air
+      useBroadcastStore.getState().setLive(true)
+      expect(useBroadcastStore.getState().liveVerse?.video?.startedAt).toBe(250_000) // still 30 s in
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("video sound plays from the congregation output, whatever the main output's role", async () => {
     const { soundOutputId } = await import("./broadcast-store")
     const o = (id: string, role?: string) => ({ id, role }) as never
