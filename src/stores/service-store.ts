@@ -858,6 +858,16 @@ export function unsavedScratch(items: QueueItem[], current: Program | null): boo
   const mine = operatorItems(items)
   return mine.length > 0 && rundownSignature(mine) !== closedBaseline // an empty rundown is nothing to lose
 }
+/**
+ * What to say when opening a service was refused ("unsaved"): the open service has changes, or the
+ * items on screen are in no service yet (#411 services hunt).
+ */
+export function unsavedOpenWords(): { title: string; description: string } {
+  return useServiceStore.getState().current
+    ? { title: "Save or discard your changes first", description: "The open service has changes that are not saved yet." }
+    : { title: "These items are not saved in a service", description: "Keep them with New service in Prepare, or clear them, then open another." }
+}
+
 // Monotonic save ticket so a slow, older save cannot overwrite a newer one.
 let saveGeneration = 0
 let approvalGeneration = 0
@@ -1296,6 +1306,9 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     if (!target) return "failed"
     try {
       await invoke("content_delete_program", { id, expectedRevision: target.revision })
+      // The open service deleted: its items stay on screen as after Close, not as unsaved new work
+      // (which would refuse every open until the rundown was cleared).
+      if (get().current?.id === id) closedBaseline = rundownSignature(operatorItems(useQueueStore.getState().items))
       set((st) => ({
         programs: st.programs.filter((p) => p.id !== id),
         ...(st.current?.id === id ? { current: null, dirty: false, conflict: null, unsupportedItems: [], corruptItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null } : {}),

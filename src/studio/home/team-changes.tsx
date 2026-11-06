@@ -7,7 +7,7 @@ import { commentAuthor } from "@/lib/comments"
 import { changeTime, teamChanges, type TeamChange } from "@/lib/team-changes"
 import { localDate, todaysService } from "@/lib/todays-service"
 import { useQueueStore } from "@/stores"
-import { useServiceStore } from "@/stores/service-store"
+import { unsavedOpenWords, unsavedScratch, useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { presentActions } from "@/studio/present-actions"
 import { useShellStore } from "@/studio/shell-store"
@@ -54,7 +54,7 @@ export function TeamChanges() {
   const openService = async () => {
     if (isOpen) return true
     const r = await useServiceStore.getState().openProgram(service.id)
-    if (r !== "ok") toast.error("Could not open service", { description: useServiceStore.getState().error ?? undefined })
+    if (r === "unsaved") toast.warning(unsavedOpenWords().title, { description: unsavedOpenWords().description }); else if (r !== "ok") toast.error("Could not open service", { description: useServiceStore.getState().error ?? undefined })
     return r === "ok"
   }
   const go = async (c: TeamChange) => {
@@ -66,7 +66,7 @@ export function TeamChanges() {
     }
     if (await openService()) useShellStore.getState().openHistory()
   }
-  const blocked = !isOpen && dirty
+  const blocked = !isOpen && (dirty || unsavedScratch(useQueueStore.getState().items, useServiceStore.getState().current))
 
   return (
     <section aria-labelledby="team-changes" className="rounded-lg border border-border bg-card p-4 shadow-panel">

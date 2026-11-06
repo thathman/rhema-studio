@@ -11,7 +11,7 @@ import { useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
 import { hymnNumbersFromLibrary, songKindLabel } from "@/lib/song-kind"
 import { useShellStore } from "@/studio/shell-store"
-import { useServiceStore } from "@/stores/service-store"
+import { unsavedOpenWords, useServiceStore } from "@/stores/service-store"
 import { type ReadinessCheck, type ReadinessFix } from "@/studio/readiness"
 import { isImageItem, isSongItem } from "@/types"
 import { isSkipped, nextVisibleItem, orderCounts, plannedTimes, projectRunOfShowEvents, savedServiceCount } from "@/lib/run-of-show"
@@ -215,7 +215,7 @@ export function HomeWorkspace() {
                   <span className="block truncate font-medium">{suggested.program.title}</span>
                   <span className="block text-xs text-muted-foreground">{suggested.why === "approved today" ? "Today's service, approved" : suggested.why === "today" ? (approvalState(suggested.program) === "changed" ? "Dated today, changed since approval" : "Dated today, not approved yet") : `Next approved service · ${suggested.program.service_date}`}</span>
                 </span>
-                <Button size="sm" disabled={dirty} onClick={() => void useServiceStore.getState().openProgram(suggested.program.id).then((r) => { if (r !== "ok") toast.error("Could not open service", { description: useServiceStore.getState().error ?? undefined }) })}>
+                <Button size="sm" disabled={dirty} onClick={() => void useServiceStore.getState().openProgram(suggested.program.id).then((r) => { if (r === "unsaved") toast.warning(unsavedOpenWords().title, { description: unsavedOpenWords().description }); else if (r !== "ok") toast.error("Could not open service", { description: useServiceStore.getState().error ?? undefined }) })}>
                   Open
                 </Button>
               </div>
@@ -236,7 +236,7 @@ export function HomeWorkspace() {
                       <span className="text-xs text-muted-foreground">open</span>
                     ) : (
                       <Button size="sm" variant="outline" disabled={dirty} title={dirty ? "Save or close the current service first" : undefined}
-                        onClick={() => void useServiceStore.getState().openProgram(p.id).then((r) => { if (r !== "ok") toast.error("Could not open service", { description: useServiceStore.getState().error ?? undefined }) })}>
+                        onClick={() => void useServiceStore.getState().openProgram(p.id).then((r) => { if (r === "unsaved") toast.warning(unsavedOpenWords().title, { description: unsavedOpenWords().description }); else if (r !== "ok") toast.error("Could not open service", { description: useServiceStore.getState().error ?? undefined }) })}>
                         Open
                       </Button>
                     )}

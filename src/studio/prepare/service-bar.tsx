@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useServiceStore } from "@/stores/service-store"
+import { unsavedOpenWords, useServiceStore } from "@/stores/service-store"
 import { useQueueStore } from "@/stores"
 import { isVerseItem } from "@/types"
 import { ServiceHistory } from "@/studio/prepare/service-history"
@@ -173,7 +173,7 @@ export function ServiceBar() {
       setTitle("")
       setDate("")
     } else if (r === "unsaved") {
-      toast.warning("Save or discard your changes first")
+      toast.warning(unsavedOpenWords().title, { description: unsavedOpenWords().description })
     } else {
       fail("Could not create service")
     }

@@ -776,6 +776,14 @@ describe("unsaved-change protection lives in the store", () => {
     expect(await useServiceStore.getState().newFromTemplate("p2", "From template", null)).toBe("unsaved")
     expect(useQueueStore.getState().items).toHaveLength(before)
   })
+
+  it("deleting the open service leaves its items as after Close, so the next open is not refused", async () => {
+    await openStored()
+    const id = useServiceStore.getState().current!.id
+    mockInvoke.mockImplementation(async (cmd: string) => (cmd === "content_get_program" ? stored : null))
+    expect(await useServiceStore.getState().deleteProgram(id, { discard: true })).toBe("deleted")
+    expect(await useServiceStore.getState().openProgram("p2")).not.toBe("unsaved")
+  })
 })
 
 describe("deleting checks the open service's own revision (#411 services hunt)", () => {
