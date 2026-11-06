@@ -44,6 +44,7 @@ import { SetupStatusDialog } from "@/studio/setup/setup-status"
 import { decideSetupLaunch } from "@/studio/setup/setup-launch"
 // Items' go-live messages and cues run from the operator's window only.
 import "@/stores/on-live-cues"
+import "@/stores/keep-awake"
 import "@/stores/stage-time-warnings"
 import "@/stores/stage-finish"
 import "@/lib/app-tick"
