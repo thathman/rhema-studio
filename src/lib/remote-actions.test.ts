@@ -490,7 +490,7 @@ describe("queue position follows successful Takes", () => {
 
     expect(useApprovalGateStore.getState().acknowledged).not.toContain("sunday")
     expect(useBroadcastStore.getState().isLive).toBe(false)
-    expect(mockInvoke).not.toHaveBeenCalled()
+    expect(mockInvoke.mock.calls.filter(([cmd]) => cmd !== "set_active_translation")).toEqual([]) // nothing fetched or shown (the edition change itself reaches Rust)
   })
 
   it("does not replay a held Take after an output's bilingual language policy changes", async () => {
@@ -517,7 +517,7 @@ describe("queue position follows successful Takes", () => {
 
     expect(useApprovalGateStore.getState().acknowledged).not.toContain("sunday")
     expect(useBroadcastStore.getState().isLive).toBe(false)
-    expect(mockInvoke).not.toHaveBeenCalled()
+    expect(mockInvoke.mock.calls.filter(([cmd]) => cmd !== "set_active_translation")).toEqual([]) // nothing fetched or shown (the edition change itself reaches Rust)
   })
 
   it("does not replay a held Take after Live chose another language for an output this session (#446)", async () => {
@@ -571,7 +571,7 @@ describe("queue position follows successful Takes", () => {
 
     expect(useApprovalGateStore.getState().acknowledged).not.toContain("sunday")
     expect(useBroadcastStore.getState().isLive).toBe(false)
-    expect(mockInvoke).not.toHaveBeenCalled()
+    expect(mockInvoke.mock.calls.filter(([cmd]) => cmd !== "set_active_translation")).toEqual([]) // nothing fetched or shown (the edition change itself reaches Rust)
   })
 
   it("does not replay a held Take after a Bible translation becomes unavailable", async () => {
@@ -600,7 +600,7 @@ describe("queue position follows successful Takes", () => {
 
     expect(useApprovalGateStore.getState().acknowledged).not.toContain("sunday")
     expect(useBroadcastStore.getState().isLive).toBe(false)
-    expect(mockInvoke).not.toHaveBeenCalled()
+    expect(mockInvoke.mock.calls.filter(([cmd]) => cmd !== "set_active_translation")).toEqual([]) // nothing fetched or shown (the edition change itself reaches Rust)
   })
 
   it("does not replay a held Take after its rundown item is removed", async () => {

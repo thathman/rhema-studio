@@ -50,10 +50,15 @@ pub fn to_result(state: &AppState, merged: &MergedDetection) -> DetectionResult 
     let vid = merged.detection.verse_id;
 
     let resolved = state.bible_db.as_ref().and_then(|db| {
-        // Try verse_id first (vector-based semantic detections)
+        // A verse id (semantic detections) says which verse, not which edition (#411 Bible hunt: the
+        // index was built on one edition, so every heard-by-meaning verse came in its words). Only
+        // the verse in the active edition: one it lacks comes with no text (never another edition's
+        // words under its name), and the no-text guards keep it off the screens.
         if let Some(id) = vid {
             if let Ok(Some(v)) = db.get_verse_by_id(id) {
-                return Some(v);
+                return db.get_verse(state.active_translation_id, v.book_number, v.chapter, v.verse).ok().flatten().or_else(|| {
+                    Some(rhema_bible::Verse { text: String::new(), ..v })
+                });
             }
         }
         // Fall back to book/chapter/verse lookup (direct + FTS5 detections)
