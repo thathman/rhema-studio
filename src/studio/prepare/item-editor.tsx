@@ -195,6 +195,7 @@ export function StagePreview({ item, index }: { item: QueueItem; index: number }
         ...item.song,
         arrangement_id: liveSlide.arrangementId ?? item.song.arrangement_id,
         languages: liveSlide.languages ?? item.song.languages,
+        title_slide: liveSlide.titleSlide ?? item.song.title_slide,
       } : item.song
       const slides = songSlides(song, liveRef)
       const selectedIndex = liveSlide?.index ?? (focus ?? 0)

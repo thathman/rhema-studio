@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { presentSlide } from "@/hooks/use-broadcast"
-import { buildSlides } from "@/lib/lyrics"
+import { songSlides } from "@/lib/lyrics"
 import { outputOnAir } from "@/lib/output-on-air"
 import { sceneForOutput } from "@/lib/scenes"
 import { networkMeasures, playbackTrouble, screenPlayback, useWindowPlayback } from "@/lib/camera-playback"
@@ -205,7 +205,9 @@ function liveSections(): { live: LiveSlide; song: SongWithSections; sections: Se
   if (cached?.live === live) return cached
   const song = live.song ?? useSongStore.getState().songs[live.songId]
   if (!song) return null
-  const slides = buildSlides(song, live.arrangementId ?? null, live.languages?.length ? live.languages : [song.song.primary_language])
+  // Counted as on the screens, with the title slide when it went live with one (#411): without it,
+  // Next section and Repeat chorus landed one slide early.
+  const slides = songSlides(song, { arrangement_id: live.arrangementId ?? null, languages: live.languages?.length ? live.languages : [song.song.primary_language], title_slide: live.titleSlide === true })
   cached = { live, song, sections: sectionsOf(slides, live.index) }
   return cached
 }
@@ -263,7 +265,7 @@ export async function stepLiveSection(step: 1 | -1 | "chorus"): Promise<string |
   const items = useQueueStore.getState().items
   const index = items.findIndex((i) => i.id === live.itemId)
   if (index !== -1 && isSongItem(items[index])) {
-    await presentQueueItem(index, target, { arrangement_id: live.arrangementId ?? null, languages, song: live.song })
+    await presentQueueItem(index, target, { arrangement_id: live.arrangementId ?? null, languages, song: live.song, title_slide: live.titleSlide })
     return null
   }
   // A song asked for on the spot (not in the run of show): the same item again, one section on.

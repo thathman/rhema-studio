@@ -202,7 +202,7 @@ function findLiveQueueIndex(): number | null {
  * first, "last" for stepping backwards into a song).
  * Next/Previous/double-click/OSC/HTTP all come here.
  */
-export async function presentQueueItem(index: number, slide: number | "last" = 0, songAs?: { arrangement_id: string | null; languages: string[]; song?: SongWithSections }, opts: { automatic?: boolean } = {}): Promise<void> {
+export async function presentQueueItem(index: number, slide: number | "last" = 0, songAs?: { arrangement_id: string | null; languages: string[]; song?: SongWithSections; title_slide?: boolean }, opts: { automatic?: boolean } = {}): Promise<void> {
   const item = useQueueStore.getState().items[index]
   if (!item) return
   // ponytail: a timed move yields to any Take still loading; if that Take then fails, the operator moves on by hand.
@@ -243,7 +243,8 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
     else if (isImageItem(item)) outcome = await presentImage(item, { goLive: true, isTargetCurrent })
     else if (isSongItem(item)) {
       // Stepping within the live song keeps the arrangement it went live with.
-      const songItem = songAs ? { ...item, song: { ...item.song, arrangement_id: songAs.arrangement_id, languages: songAs.languages } } : item
+      // And its title slide as it went live: unticking it meanwhile would move every slide by one.
+      const songItem = songAs ? { ...item, song: { ...item.song, arrangement_id: songAs.arrangement_id, languages: songAs.languages, ...(songAs.title_slide !== undefined ? { title_slide: songAs.title_slide } : {}) } } : item
       outcome = await presentSlide(songItem, slide, { goLive: true, song: songAs?.song, isTargetCurrent })
     } else {
       // Navigate the Bible panel to the presented verse, as detections do.
@@ -333,7 +334,7 @@ function stepQueue(offset: number): Promise<void> {
       const next = live.index + offset
       if (next >= 0 && next < live.total) {
         // An arrangement or language change made while the song is live applies the next time it is entered.
-        const songAs = live.arrangementId !== undefined ? { arrangement_id: live.arrangementId, languages: live.languages ?? item.song.languages, song: live.song } : undefined
+        const songAs = live.arrangementId !== undefined ? { arrangement_id: live.arrangementId, languages: live.languages ?? item.song.languages, song: live.song, title_slide: live.titleSlide } : undefined
         return presentQueueItem(current, next, songAs)
       }
     }

@@ -138,6 +138,8 @@ export interface LiveSlide {
   languages?: string[]
   /** The song as it went live: words saved in the editor meanwhile apply the next time it is entered. */
   song?: SongWithSections
+  /** Whether it went live with a title slide first: its slides are counted that way until it is entered again (#411). */
+  titleSlide?: boolean
 }
 
 type SelectedElement = "verse" | "reference" | null
