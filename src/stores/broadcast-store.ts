@@ -1274,7 +1274,12 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const s = get()
     const v = s.liveVerse
     if (!v?.video || v.content !== "picture" || !!v.video.paused === paused) return
-    const liveVerse = { ...v, video: { ...v.video, paused } }
+    // The time paused moves its start on, so a window loading it later finds the right frame.
+    const now = Date.now()
+    const { heldAt, ...video } = v.video
+    const liveVerse = { ...v, video: paused
+      ? { ...video, paused, heldAt: now }
+      : { ...video, paused, ...(video.startedAt ? { startedAt: video.startedAt + (heldAt ? now - heldAt : 0) } : {}) } }
     // The same item, paused: its live source keeps its revision and who showed it (not a new activation).
     const id = sourceOf(v)
     const cur = s.sources[id]

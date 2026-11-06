@@ -133,7 +133,8 @@ function parseVerseRenderData(value: unknown): VerseRenderData | null {
   if (value.video !== undefined) {
     const video = value.video
     if (!isRecord(video) || typeof video.url !== "string" || !isOneOf(video.fit, IMAGE_FITS) || typeof video.loop !== "boolean" || typeof video.sound !== "boolean" || typeof video.name !== "string" || !isFiniteNumber(video.token) || (video.paused !== undefined && typeof video.paused !== "boolean")) return null
-    result.video = { url: video.url, fit: video.fit, loop: video.loop, sound: video.sound, name: video.name, token: video.token, ...(video.paused === undefined ? {} : { paused: video.paused }) }
+    result.video = { url: video.url, fit: video.fit, loop: video.loop, sound: video.sound, name: video.name, token: video.token, ...(video.paused === undefined ? {} : { paused: video.paused }),
+      ...(isFiniteNumber(video.startedAt) ? { startedAt: video.startedAt } : {}), ...(isFiniteNumber(video.heldAt) ? { heldAt: video.heldAt } : {}) }
   }
   return result
 }

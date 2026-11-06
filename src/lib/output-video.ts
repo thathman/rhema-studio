@@ -16,6 +16,20 @@ export interface VideoSpec {
   token: number
   /** Paused by the operator (Present → Pause video): the frame stays up, the sound stops; Resume carries on. Absent = playing. */
   paused?: boolean
+  /**
+   * When it started playing (wall clock ms, moved on by any time paused), so a window that loads it
+   * late (Black then Back, a window reopened) carries on where the others are, not from 0:00 (#411).
+   */
+  startedAt?: number
+  /** While paused: when (wall clock ms), so it opens on the frame it was paused at. */
+  heldAt?: number
+}
+
+/** Where a video should be now, in seconds (0 when it is just starting, or not known). */
+export function videoPosition(spec: Pick<VideoSpec, "startedAt" | "heldAt" | "paused">, now = Date.now()): number {
+  if (!spec.startedAt) return 0
+  const at = spec.paused && spec.heldAt ? spec.heldAt : now
+  return Math.max(0, (at - spec.startedAt) / 1000)
 }
 
 /** loading: nothing to show yet (draw the background, never a label); ready: draw frames; failed: draw "▶ name". */
@@ -118,6 +132,16 @@ export function createVideoPlayer(h: VideoPlayerHooks): VideoPlayer {
         stopTimer()
         if (v.src === spec.url) v.currentTime = 0
         else v.src = spec.url
+        // Loaded late: where the others are (a fresh present is under a second in, so from the start).
+        const at = videoPosition(spec)
+        if (at > 1) {
+          const seek = () => {
+            const d = v.duration
+            if (Number.isFinite(d) && d > 0) v.currentTime = spec.loop ? at % d : Math.min(at, Math.max(0, d - 0.05))
+          }
+          if (v.readyState >= 1) seek()
+          else v.addEventListener("loadedmetadata", seek, { once: true })
+        }
         // Put back while paused: it waits on its first frame for Resume.
         if (!pause) void v.play().catch((e) => console.warn("[output-video] play() refused", e))
         return
