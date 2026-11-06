@@ -1374,6 +1374,16 @@ describe("updateDraftNested deep paths", () => {
       vi.setSystemTime(280_000) // 3 minutes off air
       useBroadcastStore.getState().setLive(true)
       expect(useBroadcastStore.getState().liveVerse?.video?.startedAt).toBe(250_000) // still 30 s in
+
+      // Cleared while a quick screen was up, back, then On air later: still where it was.
+      vi.setSystemTime(300_000) // 50 s in
+      useBroadcastStore.getState().holdLive()
+      useBroadcastStore.getState().setLive(false)
+      vi.setSystemTime(320_000)
+      useBroadcastStore.getState().releaseHeld() // back, off air
+      vi.setSystemTime(400_000)
+      useBroadcastStore.getState().setLive(true)
+      expect(400_000 - useBroadcastStore.getState().liveVerse!.video!.startedAt!).toBe(50_000)
     } finally {
       vi.useRealTimers()
     }

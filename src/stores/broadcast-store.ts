@@ -1253,12 +1253,16 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const s = get()
     // Time off air counts as paused for a playing video (#411: Clear then Restore brought it back
     // jumped on by the whole time it was away, often to its last frame), as under a quick screen.
+    // When it went off air is kept on the video itself, so it travels with it (a quick screen
+    // over it, rehearsal's snapshot) and never applies to another video.
     const v = s.liveVerse
     const playing = !!v?.video?.startedAt && !v.video.paused
-    if (!isLive && s.isLive && playing) videoOffAt = Date.now()
     let back = v
-    if (isLive && !s.isLive && playing && videoOffAt !== null) back = { ...v!, video: { ...v!.video!, startedAt: v!.video!.startedAt! + Math.max(0, Date.now() - videoOffAt) } }
-    if (isLive) videoOffAt = null
+    if (!isLive && s.isLive && playing) back = { ...v!, video: { ...v!.video!, offAt: Date.now() } }
+    if (isLive && !s.isLive && playing && v!.video!.offAt) {
+      const { offAt, ...video } = v!.video!
+      back = { ...v!, video: { ...video, startedAt: video.startedAt! + Math.max(0, Date.now() - offAt!) } }
+    }
     const id = v ? sourceOf(v) : null
     const cur = id ? s.sources[id] : undefined
     set({
@@ -1275,7 +1279,6 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       set({ presentWarning: null })
       return
     }
-    if (opts.goLive) videoOffAt = null // something new on air: an earlier Clear's time is not its own
     set({
       liveVerse,
       liveSourceVerse: source,
@@ -1433,7 +1436,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     // was, as after Pause (#411), not jumped on by the time it was away. Its source entry follows, so
     // coming back is not a new activation.
     const v = held.liveVerse
-    const back = v.video?.startedAt && !v.video.paused && held.at ? { ...v, video: { ...v.video, startedAt: v.video.startedAt + Math.max(0, Date.now() - held.at) } } : v
+    const shifted = v.video?.startedAt && !v.video.paused && held.at ? { ...v, video: { ...v.video, startedAt: v.video.startedAt + Math.max(0, Date.now() - held.at) } } : v
+    // Back off air (Cleared while the quick screen was up): its time off air starts now (#411).
+    const offAir = !(held.wasLive && get().isLive)
+    const back = offAir && shifted.video?.startedAt && !shifted.video.paused ? { ...shifted, video: { ...shifted.video, offAt: Date.now() } } : shifted
     const id = sourceOf(v)
     const cur = get().sources[id]
     set({
@@ -2179,8 +2185,6 @@ export function soundOutputId(outputs: BroadcastOutput[], status: Record<string,
 // When the output that plays video sound changes (a role changed, a window opened or closed), every
 // output is told, so the old one stops and only one plays: no echo.
 let lastSoundOutput: string | null | undefined
-/** When a playing video went off air (Clear), so coming back carries on from where it was. */
-let videoOffAt: number | null = null
 useBroadcastStore.subscribe((s, prev) => {
   if (s.outputs === prev.outputs && s.outputStatus === prev.outputStatus) return
   const now = soundOutputId(s.outputs, s.outputStatus)
