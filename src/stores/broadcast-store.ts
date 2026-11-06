@@ -1251,18 +1251,12 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     }),
   setLive: (isLive) => {
     const s = get()
-    // Time off air counts as paused for a playing video (#411: Clear then Restore brought it back
-    // jumped on by the whole time it was away, often to its last frame), as under a quick screen.
-    // When it went off air is kept on the video itself, so it travels with it (a quick screen
-    // over it, rehearsal's snapshot) and never applies to another video.
+    // A playing video put back after Clear starts again from the beginning (#411 audit: it came
+    // back seeked on by the whole time it was away, often to its last frame). Not in rehearsal,
+    // where the screens keep what they had; a paused one keeps its frame.
     const v = s.liveVerse
-    const playing = !!v?.video?.startedAt && !v.video.paused
-    let back = v
-    if (!isLive && s.isLive && playing) back = { ...v!, video: { ...v!.video!, offAt: Date.now() } }
-    if (isLive && !s.isLive && playing && v!.video!.offAt) {
-      const { offAt, ...video } = v!.video!
-      back = { ...v!, video: { ...video, startedAt: video.startedAt! + Math.max(0, Date.now() - offAt!) } }
-    }
+    const restart = isLive && !s.isLive && s.cleared && !s.rehearsal && !!v?.video?.startedAt && !v.video.paused
+    const back = restart ? { ...v!, video: { ...v!.video!, startedAt: Date.now() } } : v
     const id = v ? sourceOf(v) : null
     const cur = id ? s.sources[id] : undefined
     set({
@@ -1436,10 +1430,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     // was, as after Pause (#411), not jumped on by the time it was away. Its source entry follows, so
     // coming back is not a new activation.
     const v = held.liveVerse
-    const shifted = v.video?.startedAt && !v.video.paused && held.at ? { ...v, video: { ...v.video, startedAt: v.video.startedAt + Math.max(0, Date.now() - held.at) } } : v
-    // Back off air (Cleared while the quick screen was up): its time off air starts now (#411).
-    const offAir = !(held.wasLive && get().isLive)
-    const back = offAir && shifted.video?.startedAt && !shifted.video.paused ? { ...shifted, video: { ...shifted.video, offAt: Date.now() } } : shifted
+    const back = v.video?.startedAt && !v.video.paused && held.at ? { ...v, video: { ...v.video, startedAt: v.video.startedAt + Math.max(0, Date.now() - held.at) } } : v
     const id = sourceOf(v)
     const cur = get().sources[id]
     set({

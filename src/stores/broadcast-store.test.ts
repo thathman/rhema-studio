@@ -1364,26 +1364,22 @@ describe("updateDraftNested deep paths", () => {
     }
   })
 
-  it("a video cleared and restored carries on from where it was, not jumped on by the time off air (#411)", async () => {
+  it("a video cleared and restored starts again from the beginning, never seeked on by the time away (#411)", async () => {
     vi.useFakeTimers()
     try {
       const { useBroadcastStore } = await import("./broadcast-store")
       vi.setSystemTime(100_000)
-      useBroadcastStore.setState({ isLive: true, cleared: false, heldLive: null, liveVerse: { kind: "image", reference: "", segments: [], content: "picture", video: { url: "u", fit: "cover", loop: false, sound: true, name: "Clip", token: 1, startedAt: 70_000 } } as never })
+      useBroadcastStore.setState({ isLive: true, cleared: false, rehearsal: false, heldLive: null, liveVerse: { kind: "image", reference: "", segments: [], content: "picture", video: { url: "u", fit: "cover", loop: false, sound: true, name: "Clip", token: 1, startedAt: 70_000 } } as never })
       useBroadcastStore.getState().setLive(false)
-      vi.setSystemTime(280_000) // 3 minutes off air
+      vi.setSystemTime(280_000)
       useBroadcastStore.getState().setLive(true)
-      expect(useBroadcastStore.getState().liveVerse?.video?.startedAt).toBe(250_000) // still 30 s in
-
-      // Cleared while a quick screen was up, back, then On air later: still where it was.
-      vi.setSystemTime(300_000) // 50 s in
-      useBroadcastStore.getState().holdLive()
+      expect(useBroadcastStore.getState().liveVerse?.video?.startedAt).toBe(280_000)
+      // In rehearsal the screens keep what they had: nothing restarts.
+      useBroadcastStore.setState({ rehearsal: true })
       useBroadcastStore.getState().setLive(false)
-      vi.setSystemTime(320_000)
-      useBroadcastStore.getState().releaseHeld() // back, off air
-      vi.setSystemTime(400_000)
+      vi.setSystemTime(300_000)
       useBroadcastStore.getState().setLive(true)
-      expect(400_000 - useBroadcastStore.getState().liveVerse!.video!.startedAt!).toBe(50_000)
+      expect(useBroadcastStore.getState().liveVerse?.video?.startedAt).toBe(280_000)
     } finally {
       vi.useRealTimers()
     }
