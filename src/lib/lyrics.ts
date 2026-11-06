@@ -134,8 +134,8 @@ export function splitEvenly(lines: string[], max: number): string[][] {
 /**
  * Build the slides of a song for one arrangement and language choice.
  * Two languages are aligned by section: a slide shows the whole section in
- * both, and is split only when both exceed `max` (then into the same number
- * of parts). A section with text in only one of the requested languages is
+ * both, and is split when either exceeds `max` and the other has a line for
+ * every part (then into the same number of parts, spread evenly). A section with text in only one of the requested languages is
  * shown in that one and names the other in `missing`; a section with no
  * text in any of them is skipped.
  */
@@ -170,8 +170,11 @@ export function buildSlides(
         ? primary.map((p, i) => [p, secondary[i]])
         : [[primary.flat(), secondary.flat()]]
     for (const [p, s] of pairs) {
-      if (p.length > max && s.length > max) {
-        const parts = Math.max(Math.ceil(p.length / max), Math.ceil(s.length / max))
+      // Either language over the limit splits the pair, as long as each slide gets some of both
+      // (#411: 8 English lines with 6 Yorùbá made one slide of 14, shrunk to fit and clipped in a
+      // lower third). A short other side (fewer lines than slides) keeps the section whole, aligned.
+      const parts = Math.max(Math.ceil(p.length / max), Math.ceil(s.length / max))
+      if (parts > 1 && Math.min(p.length, s.length) >= parts) {
         const ps = splitInto(p, parts)
         const ss = splitInto(s, parts)
         for (let i = 0; i < parts; i++) {
@@ -201,10 +204,18 @@ export function songSlides(song: SongWithSections, ref: Pick<SongQueueItem["song
   return all.map((s, index) => ({ ...s, index, total: all.length }))
 }
 
+/** `lines` in `parts` slides as even as can be (sizes differ by at most one), so none is left empty
+ *  while there are lines to go round (#411: 7 lines in 5 parts gave the last slide none). */
 function splitInto(lines: string[], parts: number): string[][] {
-  const size = Math.ceil(lines.length / parts)
+  const base = Math.floor(lines.length / parts)
+  const extra = lines.length % parts
   const out: string[][] = []
-  for (let i = 0; i < parts; i++) out.push(lines.slice(i * size, (i + 1) * size))
+  let at = 0
+  for (let i = 0; i < parts; i++) {
+    const size = base + (i < extra ? 1 : 0)
+    out.push(lines.slice(at, at + size))
+    at += size
+  }
   return out
 }
 
