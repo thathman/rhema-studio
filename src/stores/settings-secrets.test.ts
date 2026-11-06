@@ -99,6 +99,29 @@ describe("secrets in the system keychain (RG-08)", () => {
     expect(again.useSettingsStore.getState().obsProfiles.map((p) => [p.label, p.password])).toEqual([["Main stream PC", "main-pass-1"], ["Backup laptop", ""]])
   })
 
+  it("a password typed while the keychain could not be read never loses the other saved OBS passwords (#411)", async () => {
+    keychain = JSON.stringify({ obsProfilePasswords: JSON.stringify({ "obs-a": "main-pass-1", "obs-b": "backup-pass-2" }) })
+    file.set("secretsInKeychain", true)
+    keychainHangs = true
+    const { hydrateSettings, retryKeychain, useSettingsStore } = await import("./settings-store")
+    const h = hydrateSettings()
+    await settle(5100)
+    await h
+    useSettingsStore.getState().setObsProfiles([
+      { id: "obs-a", label: "Main stream PC", host: "192.168.1.30", port: 4455, password: "" },
+      { id: "obs-b", label: "Backup laptop", host: "192.168.1.31", port: 4455, password: "" },
+      { id: "obs-c", label: "Hall PC", host: "192.168.1.32", port: 4455, password: "hall-pass-3" },
+    ])
+    await settle()
+    keychainHangs = false
+    const r = retryKeychain()
+    await settle()
+    await r
+    await settle()
+    expect(useSettingsStore.getState().obsProfiles.map((p) => p.password)).toEqual(["main-pass-1", "backup-pass-2", "hall-pass-3"])
+    expect(JSON.parse(JSON.parse(keychain!).obsProfilePasswords)).toEqual({ "obs-a": "main-pass-1", "obs-b": "backup-pass-2", "obs-c": "hall-pass-3" })
+  })
+
   it("keeps secrets in the file when the keychain is unavailable", async () => {
     keychainUp = false
     file.set("deepgramApiKey", "dg-1234567890")

@@ -904,6 +904,26 @@ function readSecret(s: SettingsState, name: SecretName): string {
   return (name === "obsPassword" ? s.obs.password : (s[name] as string | null)) ?? ""
 }
 
+/**
+ * A key from the keychain where this computer has none (a value already here wins). The saved OBS
+ * connections' passwords go profile by profile (#411 settings hunt): one typed while the keychain
+ * could not be read used to keep the keychain's whole set out, and the next save kept only that
+ * one, losing every other saved password for good.
+ */
+function fillSecret(s: Partial<SettingsState>, name: SecretName, value: string, base: SettingsState): Partial<SettingsState> {
+  if (name === "obsProfilePasswords") {
+    let map: Record<string, unknown> = {}
+    try {
+      map = JSON.parse(value) as Record<string, unknown>
+    } catch {
+      return s
+    }
+    const profiles = s.obsProfiles ?? base.obsProfiles ?? []
+    return { ...s, obsProfiles: profiles.map((p) => (!p.password && typeof map[p.id] === "string" ? { ...p, password: map[p.id] as string } : p)) }
+  }
+  return readSecret({ ...base, ...s } as SettingsState, name) ? s : withSecret(s, name, value, base)
+}
+
 function withSecret(s: Partial<SettingsState>, name: SecretName, value: string, base: SettingsState): Partial<SettingsState> {
   if (name === "obsPassword") return { ...s, obs: { ...(s.obs ?? base.obs), password: value } }
   if (name === "obsProfilePasswords") {
@@ -969,7 +989,7 @@ export async function retryKeychain(): Promise<boolean> {
     let patch: Partial<SettingsState> = {}
     for (const name of SECRET_NAMES) {
       const v = map[name]
-      if (typeof v === "string" && v && !readSecret(useSettingsStore.getState(), name)) patch = withSecret(patch, name, v, useSettingsStore.getState())
+      if (typeof v === "string" && v) patch = fillSecret(patch, name, v, useSettingsStore.getState())
     }
     storedJson = json ?? ""
     keychainOurs = true
@@ -1025,7 +1045,7 @@ export function hydrateSettings(): Promise<void> {
           const map = json ? (JSON.parse(json) as Record<string, unknown>) : {}
           for (const name of SECRET_NAMES) {
             const v = map[name]
-            if (typeof v === "string" && v && !readSecret(merged(), name)) Object.assign(patch, withSecret(patch, name, v, useSettingsStore.getState()))
+            if (typeof v === "string" && v) Object.assign(patch, fillSecret(patch, name, v, merged()))
           }
           storedJson = json ?? ""
           keychainOurs = true
