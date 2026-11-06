@@ -114,6 +114,15 @@ describe("sound player", () => {
     expect(useSoundStore.getState()).toMatchObject({ itemId: "cue-b", playing: true })
   })
 
+  it("Pause is silence: an earlier cue still fading out stops too (#411)", async () => {
+    await useSoundStore.getState().play({ id: "a", name: "Walk-in", itemId: "cue-a", volume: 0.8, fadeOutMs: 20_000 })
+    const previous = FakeAudio.made.at(-1)!
+    await useSoundStore.getState().play({ id: "b", name: "Offering", itemId: "cue-b", volume: 0.5 })
+    expect(previous.paused).toBe(false)
+    useSoundStore.getState().pause()
+    expect(previous.paused).toBe(true)
+  })
+
   it("keeps the current track and its journal when a replacement cannot start", async () => {
     await useSoundStore.getState().play({ id: "a", name: "Walk-in" })
     FakeAudio.playResult = async () => { throw new Error("NotAllowedError") }

@@ -2122,12 +2122,15 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
  * (It used to be the output with id "main" whatever its role, so a stage or signage main
  * output left every video silent.)
  */
-export function soundOutputId(outputs: BroadcastOutput[], status: Record<string, { previewOpen?: boolean } | undefined>): string | null {
-  // A ticker-only or lower-third-only feed never shows a video, so it never plays one's sound.
-  const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation" && !followsOnlyOverlays(o))
+export function soundOutputId(outputs: BroadcastOutput[], status: Record<string, { previewOpen?: boolean; ndiActive?: boolean } | undefined>): string | null {
+  // A ticker-only or lower-third-only feed never shows a video, so it never plays one's sound; nor
+  // does a TV feed (its page shows no video item): the room heard nothing (#411 media hunt).
+  const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation" && !followsOnlyOverlays(o) && o.type !== "browser")
+  // A window that is on plays it: the main output first, then any other; a closed main window
+  // (the projector off) would leave the video silent while another screen shows it.
+  const on = (o: BroadcastOutput) => !!(status[o.id]?.previewOpen || status[o.id]?.ndiActive)
   const main = congregation.find((o) => o.id === MAIN_OUTPUT_ID)
-  if (main) return main.id
-  return (congregation.find((o) => status[o.id]?.previewOpen) ?? congregation[0])?.id ?? null
+  return (main && on(main) ? main : congregation.find(on) ?? main ?? congregation[0])?.id ?? null
 }
 
 // When the output that plays video sound changes (a role changed, a window opened or closed), every
