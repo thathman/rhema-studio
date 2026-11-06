@@ -146,6 +146,7 @@ function PinnedCertificate() {
 
 function Cameras() {
   const cameras = useCompanion((s) => s.cameras)
+  const hostError = useCompanion((s) => s.hostError)
   const inputs = useCompanion((s) => s.inputs)
   const srt = useCompanion((s) => s.srt)
   const obsStatus = useObsStore((s) => s.status)
@@ -163,6 +164,9 @@ function Cameras() {
     <Card kicker="From the host's camera router" title="Cameras">
       {status !== "connected" ? (
         <p className="text-muted-foreground">Join the main Rhema Studio computer above to see its cameras.</p>
+      ) : cameras.length === 0 && hostError ? (
+        // Not "none": the host is not answering for them now (the error is above). OBS keeps what it has.
+        <p className="text-muted-foreground">The host's camera list cannot be read right now. Cameras already in OBS stay as they are.</p>
       ) : cameras.length === 0 ? (
         <p className="text-muted-foreground">No cameras on the host yet. They are added there: Live → Production tools → Cameras.</p>
       ) : (
