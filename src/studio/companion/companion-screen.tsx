@@ -27,6 +27,13 @@ const NEW_SCENE = "\u0000new"
  */
 export function CompanionScreen({ aside, secure = false, children }: { aside?: ReactNode; secure?: boolean; children?: ReactNode } = {}) {
   useEffect(() => startCompanion(), [])
+  // It joins its host again by itself on start (#411 Companion hunt): companion mode inside the
+  // studio app, after its restart or a reboot, showed the join form with everything saved, so OBS's
+  // camera addresses went stale and the host had no tally until someone clicked Join again.
+  useEffect(() => {
+    const { joinAddress, joinToken } = useSettingsStore.getState()
+    if (joinAddress && joinToken && useJoin.getState().status === "off") void useJoin.getState().connect()
+  }, [])
   const status = useJoin((s) => s.status)
   const obsEnabled = useSettingsStore((s) => s.obs.enabled)
   const obsStatus = useObsStore((s) => s.status)
@@ -139,6 +146,7 @@ function PinnedCertificate() {
 
 function Cameras() {
   const cameras = useCompanion((s) => s.cameras)
+  const hostError = useCompanion((s) => s.hostError)
   const inputs = useCompanion((s) => s.inputs)
   const srt = useCompanion((s) => s.srt)
   const obsStatus = useObsStore((s) => s.status)
@@ -156,6 +164,9 @@ function Cameras() {
     <Card kicker="From the host's camera router" title="Cameras">
       {status !== "connected" ? (
         <p className="text-muted-foreground">Join the main Rhema Studio computer above to see its cameras.</p>
+      ) : cameras.length === 0 && hostError ? (
+        // Not "none": the host is not answering for them now (the error is above). OBS keeps what it has.
+        <p className="text-muted-foreground">The host's camera list cannot be read right now. Cameras already in OBS stay as they are.</p>
       ) : cameras.length === 0 ? (
         <p className="text-muted-foreground">No cameras on the host yet. They are added there: Live → Production tools → Cameras.</p>
       ) : (

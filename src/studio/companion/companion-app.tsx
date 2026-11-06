@@ -2,8 +2,6 @@ import { useEffect, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { Toaster, toast } from "sonner"
 import { ErrorBoundary } from "@/components/error-boundary"
-import { useJoin } from "@/stores/join-store"
-import { useSettingsStore } from "@/stores/settings-store"
 import { CompanionScreen } from "@/studio/companion/companion-screen"
 import { trayName } from "@/lib/companion-app"
 
@@ -13,10 +11,7 @@ import { trayName } from "@/lib/companion-app"
  * itself when it starts, since it may start with the computer with nobody at it.
  */
 export function CompanionApp() {
-  useEffect(() => {
-    const { joinAddress, joinToken } = useSettingsStore.getState()
-    if (joinAddress && joinToken && useJoin.getState().status === "off") void useJoin.getState().connect()
-  }, [])
+  // Joining again on start is the companion screen's own (both apps use it).
   return (
     <>
       <ErrorBoundary name="Rhema Studio Companion">

@@ -115,7 +115,8 @@ async function askHost(): Promise<void> {
     useCompanion.setState({ cameras: view.cameras, router: view.router, srt: view.srt, hostError: null, heard: true })
   } catch (e) {
     const msg = String(e instanceof Error ? e.message : e)
-    useCompanion.setState({ hostError: msg.startsWith("paused:") ? msg.slice(7).trim() || "The main desk has taken back control" : msg, srt: null })
+    // Not current any more (#411): the old rows kept saying Sending, with old bitrates, under the error.
+    useCompanion.setState({ hostError: msg.startsWith("paused:") ? msg.slice(7).trim() || "The main desk has taken back control" : msg, srt: null, cameras: [] })
   }
 }
 
