@@ -6,7 +6,33 @@
  * A cache per component meant each of those decoded its own copy of the same
  * multi-megabyte picture.
  */
-const cache = new Map<string, HTMLImageElement>()
+/** Decoded pictures kept per window. A 12 MP photo is about 48 MB decoded, in every output window. */
+export const MAX_CACHED_IMAGES = 24
+
+/**
+ * A Map that keeps only the most recently used pictures (#411 media hunt): it never shrank, so a
+ * long service of photos, or a signage loop, grew memory with every picture in every window. A
+ * picture drawn is used again, so the one on screen is never the one let go.
+ */
+class RecentImages extends Map<string, HTMLImageElement> {
+  override get(key: string): HTMLImageElement | undefined {
+    const img = super.get(key)
+    if (img) {
+      super.delete(key)
+      super.set(key, img)
+    }
+    return img
+  }
+
+  override set(key: string, img: HTMLImageElement): this {
+    super.delete(key)
+    super.set(key, img)
+    while (this.size > MAX_CACHED_IMAGES) this.delete(this.keys().next().value!)
+    return this
+  }
+}
+
+const cache = new RecentImages()
 const inFlight = new Map<string, Promise<HTMLImageElement | null>>()
 
 /** The map handed to `renderVerse` via `RenderOptions.imageCache`. */
