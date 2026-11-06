@@ -6,30 +6,56 @@
  * A cache per component meant each of those decoded its own copy of the same
  * multi-megabyte picture.
  */
-/** Decoded pictures kept per window. A 12 MP photo is about 48 MB decoded, in every output window. */
-export const MAX_CACHED_IMAGES = 24
+/** Past this many pictures, ones not drawn for a while are let go. */
+export const SOFT_IMAGE_LIMIT = 64
+/** A picture not drawn for this long may be let go. */
+export const IMAGE_IDLE_MS = 10 * 60_000
 
 /**
- * A Map that keeps only the most recently used pictures (#411 media hunt): it never shrank, so a
- * long service of photos, or a signage loop, grew memory with every picture in every window. A
- * picture drawn is used again, so the one on screen is never the one let go.
+ * A Map that lets go of pictures nobody has drawn for a while (#411 media hunt): it never shrank,
+ * so a long service of photos, or a signage loop, grew memory with every picture in every window
+ * (a 12 MP photo is about 48 MB decoded). Only past SOFT_IMAGE_LIMIT, and only pictures not drawn
+ * for IMAGE_IDLE_MS: anything a frame, a strip of cards or a grid draws now is never the one let
+ * go, so nothing reloads in a loop. `added` counts every picture put in (`version`).
  */
 class RecentImages extends Map<string, HTMLImageElement> {
+  private used = new Map<string, number>()
+  added = 0
+
   override get(key: string): HTMLImageElement | undefined {
     const img = super.get(key)
-    if (img) {
-      super.delete(key)
-      super.set(key, img)
-    }
+    if (img) this.used.set(key, performance.now())
     return img
   }
 
   override set(key: string, img: HTMLImageElement): this {
-    super.delete(key)
     super.set(key, img)
-    while (this.size > MAX_CACHED_IMAGES) this.delete(this.keys().next().value!)
+    this.used.set(key, performance.now())
+    this.added++
+    if (this.size > SOFT_IMAGE_LIMIT) {
+      const idle = performance.now() - IMAGE_IDLE_MS
+      for (const [k, at] of this.used) {
+        if (this.size <= SOFT_IMAGE_LIMIT) break
+        if (at < idle) this.delete(k)
+      }
+    }
     return this
   }
+
+  override delete(key: string): boolean {
+    this.used.delete(key)
+    return super.delete(key)
+  }
+
+  override clear(): void {
+    this.used.clear()
+    super.clear()
+  }
+}
+
+/** Changes whenever a picture is put in (even when the count stays the same): for "is it new?" checks. */
+export function imageCacheVersion(cache: Map<string, HTMLImageElement> | undefined): number {
+  return cache instanceof RecentImages ? cache.added : cache?.size ?? 0
 }
 
 const cache = new RecentImages()
