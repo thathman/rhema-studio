@@ -498,8 +498,9 @@ export function SlideList({ item, index, mode }: { item: SongQueueItem; index: n
   // Clicks act on the list as shown: the live arrangement while it is live.
   // …and the words it went live with: what Next steps through (an edit saved meanwhile applies next time).
   const shownSong = liveSnapshot?.song ?? song
-  const songAs = liveSnapshot ? { arrangement_id: liveSnapshot.arrangementId ?? null, languages: liveSnapshot.languages ?? item.song.languages, song: liveSnapshot.song } : undefined
-  const shownItem: SongQueueItem = songAs ? { ...item, song: { ...item.song, arrangement_id: songAs.arrangement_id, languages: songAs.languages } } : item
+  // …and its title slide as it went live, so the live row is the slide on the screens (#411).
+  const songAs = liveSnapshot ? { arrangement_id: liveSnapshot.arrangementId ?? null, languages: liveSnapshot.languages ?? item.song.languages, song: liveSnapshot.song, title_slide: liveSnapshot.titleSlide ?? item.song.title_slide } : undefined
+  const shownItem: SongQueueItem = songAs ? { ...item, song: { ...item.song, arrangement_id: songAs.arrangement_id, languages: songAs.languages, title_slide: songAs.title_slide } } : item
   const slides = songSlides(shownSong, shownItem.song)
   const highlightLive = mode === "present" || !liveSlide || liveSlide.itemId !== item.id || (liveSlide.arrangementId === item.song.arrangement_id && (liveSlide.languages ?? []).join() === item.song.languages.join())
   if (slides.length === 0) {
