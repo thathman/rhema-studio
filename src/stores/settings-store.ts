@@ -1124,8 +1124,8 @@ async function persistAll(state: SettingsState): Promise<void> {
       if (ok) {
         storedJson = json
         keychainOurs = json !== ""
-      } else if (!keychainWriteWarned) {
-        // Said once (#411 settings hunt): the keys then stay in the settings file, readable by anyone
+      } else if (json !== "" && !keychainWriteWarned) {
+        // Said once (#411 settings hunt), when there are keys (a failed delete has none): they then stay in the settings file, readable by anyone
         // with this computer's account, and nothing said so.
         keychainWriteWarned = true
         toast.warning("Saved keys could not be put in the system keychain", {
