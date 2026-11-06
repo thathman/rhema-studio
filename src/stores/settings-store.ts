@@ -946,6 +946,9 @@ export function currentSecrets(): string[] {
   return [...SECRET_NAMES.filter((n) => n !== "obsProfilePasswords").map((n) => readSecret(s, n)), ...s.obsProfiles.map((p) => p.password)].filter(Boolean)
 }
 
+/** A failed keychain write was said once this session. */
+let keychainWriteWarned = false
+
 /** The keychain holds our entry but it could not be read this session: never overwrite it. */
 let keychainUnreadable = false
 /** Our entry exists (we wrote or read it); only then may an empty set delete it. */
@@ -1121,6 +1124,14 @@ async function persistAll(state: SettingsState): Promise<void> {
       if (ok) {
         storedJson = json
         keychainOurs = json !== ""
+      } else if (!keychainWriteWarned) {
+        // Said once (#411 settings hunt): the keys then stay in the settings file, readable by anyone
+        // with this computer's account, and nothing said so.
+        keychainWriteWarned = true
+        toast.warning("Saved keys could not be put in the system keychain", {
+          id: "keychain-write-failed",
+          description: "They are kept in Rhema Studio's settings file on this computer for now. Allow Rhema Studio when the system asks; the next change tries again.",
+        })
       }
     }
     let file: Partial<SettingsState> = {}
