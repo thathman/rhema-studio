@@ -63,6 +63,9 @@ const NO_SCENES = { scenes: [] as string[], program: null, preview: null, studio
 const NO_STATUS = { stream: null, recordOutput: null, stats: null, inputs: null, transitions: [] as string[], transition: null }
 
 let client: ObsClient | null = null
+/** A preview change on its way to OBS, and the last scene OBS accepted into its preview. */
+let previewInFlight: Promise<boolean> | null = null
+let previewSet: string | null = null
 let poll: ReturnType<typeof setInterval> | null = null
 let retry: ReturnType<typeof setTimeout> | null = null
 
@@ -414,15 +417,33 @@ export const useObsStore = create<ObsState>((set, get) => ({
   // Scene changes happen only from these three, each a deliberate click; OBS's events then report the result.
   setPreview: async (scene) => {
     if (!client || get().studioMode !== true || refusedInRehearsal()) return
-    try {
-      await client.request("SetCurrentPreviewScene", { sceneName: scene })
-    } catch (e) {
-      toast.error("OBS did not change its preview", { description: errText(e) })
-    }
+    const c = client
+    // A Take that follows (an OBS desk sends both) waits for this and is refused if it failed (#411).
+    const p = (async () => {
+      try {
+        await c.request("SetCurrentPreviewScene", { sceneName: scene })
+        previewSet = scene
+        return true
+      } catch (e) {
+        toast.error("OBS did not change its preview", { description: errText(e) })
+        return false
+      }
+    })()
+    previewInFlight = p
+    await p
+    if (previewInFlight === p) previewInFlight = null
   },
 
   take: async () => {
-    const preview = get().preview
+    // A preview change still on its way is finished first; one that failed takes nothing (#411 OBS
+    // hunt: a desk's Take after a refused preview sent whatever was there to the stream).
+    const pending = previewInFlight
+    if (pending && !(await pending)) {
+      toast.error("Not taken", { description: "OBS did not take the scene into its preview, so nothing went to the stream." })
+      return
+    }
+    // The scene just set, as OBS's own preview event may not have come yet (the log names what went).
+    const preview = pending ? (previewSet ?? get().preview) : get().preview
     if (!client || get().studioMode !== true || !preview || refusedInRehearsal()) return
     try {
       await client.request("TriggerStudioModeTransition")

@@ -246,6 +246,13 @@ describe("each specialist desk sees only its part", () => {
     expect(button(rehearsing, "Take Pulpit to the stream").disabled).toBe(true)
   })
 
+  it("Take sends the scene the button names to OBS's preview first, then takes it (#411)", async () => {
+    const el = await render("obs", { ...live, obs: { ...live.obs!, preview: "Pulpit" } })
+    sent.length = 0
+    await click(button(el, "Take Pulpit to the stream"))
+    expect(sent).toEqual([{ command: "obs_preview", value: "Pulpit" }, { command: "obs_take" }])
+  })
+
   it("shows camera health and withholds global availability changes without a scene impact map", async () => {
     const el = await render("camera")
     expect(el.querySelector('[aria-label="Pulpit camera status"]')?.textContent).toBe("sending")

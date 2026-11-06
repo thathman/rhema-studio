@@ -28,6 +28,8 @@ class FakeObs {
   program = "Wide"
   preview = "Pulpit"
   studioMode = false
+  /** OBS refuses the next preview change (a scene renamed or deleted in OBS). */
+  refusePreview = false
   /** OBS → Settings → Video: the output size and frame rate. */
   video = { baseWidth: 1920, baseHeight: 1080, outputWidth: 1920, outputHeight: 1080, fpsNumerator: 60, fpsDenominator: 1 }
   /** OBS's stream (Start Streaming in OBS), its inputs and its transitions. */
@@ -88,7 +90,7 @@ class FakeObs {
     else if (type === "GetStudioModeEnabled") responseData = { studioModeEnabled: this.studioMode }
     else if (type === "GetSceneList") responseData = { currentProgramSceneName: this.program, currentPreviewSceneName: this.studioMode ? this.preview : null, scenes: this.list() }
     else if (type === "SetCurrentPreviewScene") {
-      if (!this.studioMode) { ok = false; code = 506 } else { this.preview = String(data?.sceneName); after.push(() => this.event("CurrentPreviewSceneChanged", { sceneName: this.preview })) }
+      if (!this.studioMode || this.refusePreview) { ok = false; code = this.refusePreview ? 600 : 506 } else { this.preview = String(data?.sceneName); after.push(() => this.event("CurrentPreviewSceneChanged", { sceneName: this.preview })) }
     } else if (type === "SetCurrentProgramScene") {
       this.program = String(data?.sceneName)
       after.push(() => this.event("CurrentProgramSceneChanged", { sceneName: this.program }))
@@ -302,6 +304,23 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     expect(el.querySelector('[aria-label="OBS scene list"]')).toBeNull()
     expect(el.textContent).toContain("Not connected")
     expect(button("Try now")).toBeTruthy()
+  })
+
+  it("a Take right after a preview change waits for it, and takes nothing if OBS refused it (#411)", async () => {
+    const studio = await setup({ studioMode: true })
+    const take = () => studio.obs.requests.filter((r) => r.type === "TriggerStudioModeTransition")
+    studio.obs.refusePreview = true
+    // As an OBS desk sends them: the preview it names, then Take, without waiting in between.
+    void studio.useObsStore.getState().setPreview("Choir")
+    await studio.useObsStore.getState().take()
+    await settle()
+    expect(take()).toEqual([])
+    studio.obs.refusePreview = false
+    void studio.useObsStore.getState().setPreview("Choir")
+    await studio.useObsStore.getState().take()
+    await settle()
+    expect(take()).toHaveLength(1)
+    studio.useObsStore.getState().disconnect()
   })
 
   it("in rehearsal, nothing reaches OBS: the buttons stay focusable, say why, and the store refuses too", async () => {
