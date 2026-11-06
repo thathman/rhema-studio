@@ -1349,6 +1349,21 @@ describe("updateDraftNested deep paths", () => {
     }
   })
 
+  it("a video under a quick screen (Black) carries on from where it was when it comes back (#411)", async () => {
+    vi.useFakeTimers()
+    try {
+      const { useBroadcastStore } = await import("./broadcast-store")
+      vi.setSystemTime(100_000)
+      useBroadcastStore.setState({ heldLive: null, liveVerse: { kind: "image", reference: "", segments: [], content: "picture", video: { url: "u", fit: "cover", loop: false, sound: true, name: "Clip", token: 1, startedAt: 90_000 } } as never })
+      useBroadcastStore.getState().holdLive()
+      vi.setSystemTime(130_000)
+      useBroadcastStore.getState().releaseHeld()
+      expect(useBroadcastStore.getState().liveVerse?.video?.startedAt).toBe(120_000)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("video sound plays from the congregation output, whatever the main output's role", async () => {
     const { soundOutputId } = await import("./broadcast-store")
     const o = (id: string, role?: string) => ({ id, role }) as never

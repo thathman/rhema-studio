@@ -99,6 +99,8 @@ export function createVideoPlayer(h: VideoPlayerHooks): VideoPlayer {
     v.addEventListener("pause", stopTimer)
     // Opened paused (a paused video put back): its first frame, once it can be drawn.
     v.addEventListener("loadeddata", () => { if (v.paused && wantPaused) h.onPaused?.() })
+    // Opened paused and moved to its frame: draw that frame, not the first.
+    v.addEventListener("seeked", () => { if (v.paused && wantPaused) h.onPaused?.() })
     el = v
     return v
   }
@@ -135,7 +137,10 @@ export function createVideoPlayer(h: VideoPlayerHooks): VideoPlayer {
         // Loaded late: where the others are (a fresh present is under a second in, so from the start).
         const at = videoPosition(spec)
         if (at > 1) {
+          const forKey = next
           const seek = () => {
+            // Only for this present: a newer one sent before this one's length was known starts on its own.
+            if (key !== forKey) return
             const d = v.duration
             if (Number.isFinite(d) && d > 0) v.currentTime = spec.loop ? at % d : Math.min(at, Math.max(0, d - 0.05))
           }
