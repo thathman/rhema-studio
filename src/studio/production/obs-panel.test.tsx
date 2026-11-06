@@ -325,6 +325,11 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     await studio.useObsStore.getState().setPreview("Choir")
     await studio.useObsStore.getState().take()
     expect(sent()).toEqual([])
+    // Nor the recording (#411): a rehearsal never starts, stops or chapters the real one.
+    await studio.useObsStore.getState().startRecording()
+    await studio.useObsStore.getState().stopRecording()
+    await studio.useObsStore.getState().mark("Sermon")
+    expect(studio.obs.requests.filter((r) => r.type === "StartRecord" || r.type === "StopRecord" || r.type === "CreateRecordChapter")).toEqual([])
     await act(async () => root!.unmount())
     root = null
     studio.useObsStore.getState().disconnect()

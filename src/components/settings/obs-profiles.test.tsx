@@ -78,5 +78,8 @@ describe("saved OBS computers (#197)", () => {
 
     await act(async () => button("Use Backup laptop").click())
     expect(useSettingsStore.getState().obs).toMatchObject({ host: "192.168.1.31", port: 4456, password: "" })
+    // The boxes follow the computer chosen, so a password typed and saved now goes with its address (#411).
+    expect((el.querySelector('input[aria-label="OBS address"]') as HTMLInputElement).value).toBe("192.168.1.31")
+    expect((el.querySelector('input[aria-label="OBS port"]') as HTMLInputElement).value).toBe("4456")
   })
 })

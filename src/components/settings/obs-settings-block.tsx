@@ -97,6 +97,15 @@ export function ObsSettingsBlock() {
       savedPassword.current = obs.password
     }
   }, [obs.password])
+  // A saved OBS computer chosen with "Use" changes the address: the boxes follow it (#411 OBS hunt),
+  // or Save wrote the old address back with the new password and cues went to the old OBS.
+  const savedAt = useRef(`${obs.host}:${obs.port}`)
+  useEffect(() => {
+    const now = `${obs.host}:${obs.port}`
+    if (now === savedAt.current) return
+    savedAt.current = now
+    setDraft((d) => ({ ...d, host: obs.host, port: String(obs.port) }))
+  }, [obs.host, obs.port])
   const port = Number(draft.port)
   const portOk = Number.isInteger(port) && port > 0 && port < 65536
   const changed = draft.host !== obs.host || draft.port !== String(obs.port) || draft.password !== obs.password
