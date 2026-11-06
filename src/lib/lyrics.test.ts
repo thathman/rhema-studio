@@ -89,6 +89,18 @@ describe("slide splitting", () => {
     expect(buildSlides(uneven, null, ["en", "yo"], 6)).toHaveLength(1)
   })
 
+  it("one language over the limit splits too when the other has lines for every slide; none is left empty (#411)", () => {
+    const long = (p: string, n: number) => Array.from({ length: n }, (_, i) => `${p}${i + 1}`).join("\n")
+    const eight = song({ sections: [{ id: "v1", kind: "verse", label: "Verse 1", texts: { en: long("e", 8), yo: long("y", 6) } }], arrangements: [] })
+    const slides = buildSlides(eight, null, ["en", "yo"], 6)
+    expect(slides.map((x) => [x.lines.length, x.secondaryLines?.length])).toEqual([[4, 3], [4, 3]])
+    // 7 English with 25 Yorùbá: five slides, each with some English.
+    const many = song({ sections: [{ id: "v1", kind: "verse", label: "Verse 1", texts: { en: long("e", 7), yo: long("y", 25) } }], arrangements: [] })
+    const five = buildSlides(many, null, ["en", "yo"], 6)
+    expect(five).toHaveLength(5)
+    expect(five.every((x) => x.lines.length > 0)).toBe(true)
+  })
+
   it("falls back to the primary language and to authoring order", () => {
     const slides = buildSlides(song({ arrangements: [] }), "missing-arrangement", [])
     expect(slides.map((s) => s.sectionId)).toEqual(["v1", "c"])
