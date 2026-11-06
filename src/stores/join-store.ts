@@ -198,6 +198,8 @@ async function listenOnce() {
 /** The first-connect retry: its timer and its current wait (0 while not retrying). */
 let retryTimer: ReturnType<typeof setTimeout> | null = null
 let connectRetry = 0
+/** Bumped by every connect and every Leave, so a connect overtaken by either does not act. */
+let connectRun = 0
 
 export const useJoin = create<JoinState>((set, get) => ({
   status: "off",
@@ -223,6 +225,7 @@ export const useJoin = create<JoinState>((set, get) => ({
   connect: async () => {
     const { joinAddress: address, joinToken: token, joinSecure } = useSettingsStore.getState()
     if (!address || !token) return
+    const run = ++connectRun
     await listenOnce()
     gaps = []
     set({ status: "connecting", error: null, clockSkewMs: null, secure: null })
@@ -236,6 +239,8 @@ export const useJoin = create<JoinState>((set, get) => ({
       await invoke("join_connect", { address, token })
       connectRetry = 0
     } catch (e) {
+      // Left (or connected again) meanwhile: this attempt's failure is old news.
+      if (run !== connectRun) return
       const message = String(e)
       if (message.includes("pair again")) {
         gaps = []
@@ -256,6 +261,11 @@ export const useJoin = create<JoinState>((set, get) => ({
     }
   },
   leave: async (forget = false) => {
+    // A Leave ends any retry, and a connect still on its way when it was pressed changes nothing.
+    connectRun++
+    if (retryTimer) clearTimeout(retryTimer)
+    retryTimer = null
+    connectRetry = 0
     await invoke("join_disconnect").catch(() => {})
     gaps = []
     set({ status: "off", live: null, me: null, error: null, paused: false, note: null, clockSkewMs: null, secure: null })

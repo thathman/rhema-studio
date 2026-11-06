@@ -196,4 +196,23 @@ describe("a first connect that fails is tried again (#411 Companion hunt)", () =
     await vi.advanceTimersByTimeAsync(60_000)
     expect(invokeMock.mock.calls.filter(([c]) => c === "join_me")).toHaveLength(3) // no more once connected
   })
+
+  it("Leave while a retry is still waiting stops it for good", async () => {
+    vi.useFakeTimers()
+    let release: (e: Error) => void = () => {}
+    invokeMock.mockReset()
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "join_me") return new Promise((_, reject) => { release = reject })
+      return null
+    })
+    useJoin.setState({ status: "off" })
+    const pending = useJoin.getState().connect()
+    await vi.advanceTimersByTimeAsync(0)
+    await useJoin.getState().leave()
+    release(new Error("host not reachable")) // the old attempt fails after Leave
+    await pending
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(invokeMock.mock.calls.filter(([c]) => c === "join_me")).toHaveLength(1)
+    expect(useJoin.getState().status).not.toBe("reconnecting")
+  })
 })
