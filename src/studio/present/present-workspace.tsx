@@ -133,6 +133,9 @@ export function PresentWorkspace() {
       const action = keyToPresentAction(e)
       if (!action) return
       e.preventDefault()
+      // One press, one action (#411 input hunt): a held key or a clicker that repeats a held button
+      // raced through the song (about 30 a second) and on into the next items, firing their cues.
+      if (e.repeat) return
       presentActions[action]()
     }
     window.addEventListener("keydown", onKey)
@@ -172,7 +175,12 @@ export function PresentWorkspace() {
                   aria-describedby="live-output-target-scope"
                   data-testid="live-output-target"
                   value={outputId}
-                  onChange={(event) => useProductionTab.setState({ liveOutputId: event.currentTarget.value })}
+                  // Let go of focus once chosen: a focused select keeps the clicker's keys, so the next
+                  // PageDown did nothing until the operator clicked elsewhere (#411 input hunt).
+                  onChange={(event) => {
+                    useProductionTab.setState({ liveOutputId: event.currentTarget.value })
+                    event.currentTarget.blur()
+                  }}
                   className="max-w-48 min-w-0 bg-transparent text-xs font-semibold text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   {congregationOutputs.map((output) => (
