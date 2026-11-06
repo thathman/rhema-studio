@@ -215,4 +215,17 @@ describe("a first connect that fails is tried again (#411 Companion hunt)", () =
     expect(invokeMock.mock.calls.filter(([c]) => c === "join_me")).toHaveLength(1)
     expect(useJoin.getState().status).not.toBe("reconnecting")
   })
+
+  it("Leave while the host is answering: the late answer does not connect", async () => {
+    let answer: (v: unknown) => void = () => {}
+    invokeMock.mockReset()
+    invokeMock.mockImplementation(async (cmd: string) => (cmd === "join_me" ? new Promise((r) => { answer = r }) : null))
+    useJoin.setState({ status: "off" })
+    const pending = useJoin.getState().connect()
+    await new Promise((r) => setTimeout(r, 0))
+    await useJoin.getState().leave()
+    answer({ name: "OBS PC", role: "obs" })
+    await pending
+    expect(invokeMock.mock.calls.filter(([c]) => c === "join_connect")).toHaveLength(0)
+  })
 })
