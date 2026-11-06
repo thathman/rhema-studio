@@ -581,6 +581,17 @@ impl DirectDetector {
         })
     }
 
+    /// A partial transcript, still being spoken (#411 listening hunt): detected the same way, but
+    /// what the detector remembers (a reference waiting for its verse, the book and chapter in
+    /// context, the recent verses) is left as it was, so the final still finds them. Otherwise a
+    /// partial "22 and Moses said" used up "Acts 3" waiting, and the final found nothing.
+    pub fn detect_preview(&mut self, text: &str) -> Vec<Detection> {
+        let saved = (self.context.clone(), self.incomplete.clone(), self.recent_detections.clone(), self.recent_at);
+        let found = self.detect(text);
+        (self.context, self.incomplete, self.recent_detections, self.recent_at) = saved;
+        found
+    }
+
     pub fn detect(&mut self, text: &str) -> Vec<Detection> {
         // Step 0: Clean filler phrases from the transcript
         let cleaned = clean_transcript(text);
@@ -1377,6 +1388,24 @@ mod tests {
         assert_eq!(results[0].verse_ref.book_name, "John");
         assert_eq!(results[0].verse_ref.chapter, 3);
         assert_eq!(results[0].verse_ref.verse_start, 16);
+    }
+
+    #[test]
+    fn a_partial_leaves_a_waiting_reference_for_the_final() {
+        let mut detector = DirectDetector::new();
+        let _ = detector.detect("turn with me to Acts 3");
+        let _ = detector.detect_preview("22 and Moses said");
+        let finals = detector.detect("22 and Moses said");
+        assert!(finals.iter().any(|d| d.verse_ref.book_name == "Acts" && d.verse_ref.chapter == 3 && d.verse_ref.verse_start == 22), "{finals:?}");
+    }
+
+    #[test]
+    fn a_partial_does_not_restart_the_last_verse_window() {
+        let mut detector = DirectDetector::new();
+        assert!(!detector.detect("John 3:16").is_empty());
+        let before = detector.recent_at;
+        let _ = detector.detect_preview("Romans 8:28");
+        assert_eq!(detector.recent_at, before);
     }
 
     #[test]

@@ -467,7 +467,7 @@ pub async fn start_transcription(
                     epoch_ms(),
                     transcript_log_summary("transcript", &transcript)
                 );
-                let direct_found = run_direct_detection(&app_clone, &transcript);
+                let direct_found = run_direct_detection(&app_clone, &transcript, is_final);
                 if !is_final {
                     return;
                 }
@@ -550,7 +550,9 @@ pub async fn start_transcription(
 
                         // Fire-and-forget: detection runs in background thread pool.
                         // Event consumer proceeds immediately to next transcript.
-                        match detect_tx.try_send((transcript.clone(), true)) {
+                        // A final waits for room (#411): it is the only way a heard verse reaches
+                        // Auto or the queue now (partials are preview only), so it is never dropped.
+                        match detect_tx.send((transcript.clone(), true)).await {
                             Ok(()) => {
                                 let n = detect_sent_evt.fetch_add(1, Ordering::Relaxed) + 1;
                                 if n % 25 == 0 {
@@ -608,7 +610,7 @@ pub async fn start_transcription(
 /// never blocks on the semantic worker, and cooldown state persists across calls.
 /// Returns true if high-confidence results were found (>= 0.90).
 #[expect(clippy::similar_names, reason = "merger and merged are naturally named")]
-fn run_direct_detection(app: &AppHandle, transcript: &str) -> bool {
+fn run_direct_detection(app: &AppHandle, transcript: &str, is_final: bool) -> bool {
     use rhema_detection::{DirectDetector, DetectionMerger};
 
     let t0 = std::time::Instant::now();
@@ -620,7 +622,7 @@ fn run_direct_detection(app: &AppHandle, transcript: &str) -> bool {
             return false;
         }
     };
-    let direct_results = detector.detect(transcript);
+    let direct_results = if is_final { detector.detect(transcript) } else { detector.detect_preview(transcript) };
     drop(detector); // Release immediately
 
     if direct_results.is_empty() {
@@ -640,7 +642,8 @@ fn run_direct_detection(app: &AppHandle, transcript: &str) -> bool {
             return false;
         }
     };
-    let merged = merger.merge(direct_results, vec![]);
+    // A partial is still being spoken: preview only (#411 listening hunt).
+    let merged = if is_final { merger.merge(direct_results, vec![]) } else { merger.preview(direct_results) };
     drop(merger);
     if merged.is_empty() {
         return false;
@@ -660,7 +663,7 @@ fn run_direct_detection(app: &AppHandle, transcript: &str) -> bool {
     };
     let mut results: Vec<super::detection::DetectionResult> = merged
         .iter()
-        .map(|m| super::detection::to_result(&app_state, m))
+        .map(|m| super::detection::DetectionResult { from_partial: !is_final, ..super::detection::to_result(&app_state, m) })
         .collect();
 
     // Backstop for issue #141: the detector validates against union-max verse
@@ -778,6 +781,8 @@ fn run_semantic_detection(app: &AppHandle, transcript: &str) {
                 auto_queued: false,
                 transcript_snippet: truncate_safe(transcript, 100).to_string(),
                 is_chapter_only: false,
+                // Semantic detection runs on finals only.
+                from_partial: false,
             })
         })
         .collect();
