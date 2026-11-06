@@ -331,7 +331,7 @@ export async function presentSlide(
   useBroadcastStore.getState().setLiveVerse({ ...lyric, reference: `${referenceLabel}${lyric.reference}`, ...layer, content }, null, {
     goLive: opts.goLive,
     by,
-    slide: { itemId: item.id, songId: song.song.id, index: i, total: slides.length, arrangementId: item.song.arrangement_id, languages: item.song.languages, song },
+    slide: { itemId: item.id, songId: song.song.id, index: i, total: slides.length, arrangementId: item.song.arrangement_id, languages: item.song.languages, song, titleSlide: item.song.title_slide === true },
   })
   if (slide.missing.length > 0) {
     warn(`${slide.sectionLabel} has no ${slide.missing.join(" / ").toUpperCase()} text; showing what there is.`)

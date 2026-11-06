@@ -21,7 +21,7 @@ function useNextHint(): string {
   if (!item || !isSongItem(item)) return "→ / PgDn"
   // The arrangement the song went live with: the one Next steps through.
   const arrangement = liveSlide.arrangementId !== undefined ? liveSlide.arrangementId : item.song.arrangement_id
-  const next = songSlides(song, { arrangement_id: arrangement, languages: liveSlide.languages ?? item.song.languages, title_slide: item.song.title_slide })[liveSlide.index + 1]
+  const next = songSlides(song, { arrangement_id: arrangement, languages: liveSlide.languages ?? item.song.languages, title_slide: liveSlide.titleSlide ?? item.song.title_slide })[liveSlide.index + 1]
   return next ? `Next: ${next.sectionLabel}` : "→ / PgDn"
 }
 
