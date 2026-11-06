@@ -462,6 +462,9 @@ struct IncompleteRef {
 /// for a verse completion (e.g., "verse 16"). If no completion arrives,
 /// the chapter-only reference is emitted defaulting to verse 1.
 /// Phrases that indicate the user wants to go back to a previous verse.
+/// How long after a verse "the last verse" still means a step back to it.
+const PREVIOUS_VERSE_WINDOW: std::time::Duration = std::time::Duration::from_secs(90);
+
 const PREVIOUS_VERSE_PHRASES: &[&str] = &[
     "previous verse",
     "last verse",
@@ -479,6 +482,8 @@ pub struct DirectDetector {
     incomplete: Option<IncompleteRef>,
     /// Recently detected verses for "previous verse" navigation (most recent first).
     recent_detections: VecDeque<VerseRef>,
+    /// When the most recent one was heard: "the last verse" long after means something else.
+    recent_at: Option<Instant>,
 }
 
 impl DirectDetector {
@@ -488,6 +493,7 @@ impl DirectDetector {
             context: ReferenceContext::new(),
             incomplete: None,
             recent_detections: VecDeque::with_capacity(5),
+            recent_at: None,
         }
     }
 
@@ -580,9 +586,9 @@ impl DirectDetector {
     /// context, the recent verses) is left as it was, so the final still finds them. Otherwise a
     /// partial "22 and Moses said" used up "Acts 3" waiting, and the final found nothing.
     pub fn detect_preview(&mut self, text: &str) -> Vec<Detection> {
-        let saved = (self.context.clone(), self.incomplete.clone(), self.recent_detections.clone());
+        let saved = (self.context.clone(), self.incomplete.clone(), self.recent_detections.clone(), self.recent_at);
         let found = self.detect(text);
-        (self.context, self.incomplete, self.recent_detections) = saved;
+        (self.context, self.incomplete, self.recent_detections, self.recent_at) = saved;
         found
     }
 
@@ -962,6 +968,15 @@ impl DirectDetector {
     /// Check if text contains a "previous verse" / "last verse" command.
     fn check_previous_verse_command(&self, text: &str) -> Option<Detection> {
         let lower = text.to_lowercase();
+        if !PREVIOUS_VERSE_PHRASES.iter().any(|p| lower.contains(p)) {
+            return None;
+        }
+        // Not a command (#411 listening hunt): a sentence that names a book ("let's read the last
+        // verse, Revelation 22:21", "the last verse of Psalm 23") means that one, and "the last
+        // verse" long after the previous one ("the last verse of the chapter") is not a step back.
+        if !self.matcher.find_books(text).is_empty() || self.recent_at.is_none_or(|at| at.elapsed() > PREVIOUS_VERSE_WINDOW) {
+            return None;
+        }
         for phrase in PREVIOUS_VERSE_PHRASES {
             if lower.contains(phrase) {
                 if let Some(prev_ref) = self.recent_detections.front() {
@@ -990,6 +1005,7 @@ impl DirectDetector {
 
     /// Push a verse ref to the recent detections queue (max 5).
     fn push_recent(&mut self, verse_ref: &VerseRef) {
+        self.recent_at = Some(Instant::now());
         // Don't push duplicates of the most recent
         if let Some(front) = self.recent_detections.front() {
             if front.book_number == verse_ref.book_number
@@ -1381,6 +1397,39 @@ mod tests {
         let _ = detector.detect_preview("22 and Moses said");
         let finals = detector.detect("22 and Moses said");
         assert!(finals.iter().any(|d| d.verse_ref.book_name == "Acts" && d.verse_ref.chapter == 3 && d.verse_ref.verse_start == 22), "{finals:?}");
+    }
+
+    #[test]
+    fn a_partial_does_not_restart_the_last_verse_window() {
+        let mut detector = DirectDetector::new();
+        assert!(!detector.detect("John 3:16").is_empty());
+        let before = detector.recent_at;
+        let _ = detector.detect_preview("Romans 8:28");
+        assert_eq!(detector.recent_at, before);
+    }
+
+    #[test]
+    fn a_sentence_naming_a_reference_with_last_verse_means_that_reference() {
+        let mut detector = DirectDetector::new();
+        assert!(!detector.detect("John 3:16").is_empty());
+        let results = detector.detect("let's read the last verse, Revelation 22:21");
+        assert_eq!(results.first().map(|d| (d.verse_ref.book_name.as_str(), d.verse_ref.chapter, d.verse_ref.verse_start)), Some(("Revelation", 22, 21)));
+    }
+
+    #[test]
+    fn the_last_verse_of_a_named_book_is_not_the_old_verse() {
+        let mut detector = DirectDetector::new();
+        assert!(!detector.detect("John 3:16").is_empty());
+        assert!(detector.detect("the last verse of Psalm 23").iter().all(|d| d.verse_ref.book_name != "John"));
+    }
+
+    #[test]
+    fn the_last_verse_long_after_is_not_a_step_back() {
+        let mut detector = DirectDetector::new();
+        assert!(!detector.detect("John 3:16").is_empty());
+        let Some(long_ago) = Instant::now().checked_sub(PREVIOUS_VERSE_WINDOW + std::time::Duration::from_secs(1)) else { return };
+        detector.recent_at = Some(long_ago);
+        assert!(detector.detect("and the last verse of the chapter says").iter().all(|d| d.verse_ref.verse_start != 16));
     }
 
     #[test]
