@@ -637,6 +637,18 @@ describe("computeVerseLayoutMetrics — a song's footer line", () => {
   })
 })
 
+describe("computeVerseLayoutMetrics — a song's footer in a free layout (#411)", () => {
+  it("fits the words above the footer at the bottom of the verse box", () => {
+    const theme = BUILTIN_THEMES.find((t) => t.layout?.mode === "free")
+    expect(theme).toBeDefined()
+    const bottomAligned = { ...theme!, verseText: { ...theme!.verseText, verticalAlign: "bottom" as const } }
+    const plain = computeVerseLayoutMetrics(stubCtx(), bottomAligned, VERSE)
+    const withFooter = computeVerseLayoutMetrics(stubCtx(), bottomAligned, { ...VERSE, footer: "© Hymn writer · CCLI 22025" })
+    // The words end higher with a footer: the strip at the bottom is the footer's.
+    expect(withFooter.verseRect!.y + withFooter.verseRect!.height).toBeLessThan(plain.verseRect!.y + plain.verseRect!.height)
+  })
+})
+
 describe("renderVerse — a video behind words", () => {
   const video = { url: "asset://bg.mp4", fit: "cover" as const, loop: true, sound: false, name: "bg", token: 0 }
   const plain = { ...BUILTIN_THEMES[0], background: { ...BUILTIN_THEMES[0].background, type: "solid" as const } }

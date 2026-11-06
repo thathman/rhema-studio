@@ -1419,37 +1419,42 @@ export function computeVerseLayoutMetrics(
       : verseBoxRect
 
   if (freeMode && referenceBoxRect && verseBoxRect) {
+    // The copyright line sits at the bottom of the verse box: the words fit above it (#411 songs
+    // hunt: in a free layout a full or bottom-aligned slide had its last line under the footer).
+    const verseFitRect = verse?.footer
+      ? { ...verseContentRect!, height: Math.max(0, verseContentRect!.height - footerSpace(scaledTheme)) }
+      : verseContentRect!
     const fittedVerseFontSize = calculateScaledFontSize(
       ctx,
       scaledTheme,
       verse,
-      verseContentRect!.width,
-      verseContentRect!.height
+      verseFitRect.width,
+      verseFitRect.height
     )
     const verseMetrics = measureVerseHeight(
       ctx,
       scaledTheme,
       verse,
-      verseContentRect!.width,
+      verseFitRect.width,
       fittedVerseFontSize
     )
     const verseY = alignY(
       resolveVerticalAlign(scaledTheme.verseText.verticalAlign),
-      verseContentRect!.y,
-      verseContentRect!.height,
+      verseFitRect.y,
+      verseFitRect.height,
       verseMetrics.height
     )
     const verseRect = rectForAlignedText(
       verseAlign === "justify" ? "left" : verseAlign,
       alignX(
         verseAlign === "justify" ? "left" : verseAlign,
-        verseContentRect!.x,
-        verseContentRect!.width
+        verseFitRect.x,
+        verseFitRect.width
       ),
       verseY,
       verseMetrics.maxLineWidth,
       verseMetrics.height,
-      verseContentRect!
+      verseFitRect
     )
 
     const referenceWidth = measureReferenceWidth(referenceContentRect!.width)
