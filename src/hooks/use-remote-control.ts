@@ -406,19 +406,6 @@ export function useRemoteControl() {
       })
       keep(u3)
 
-      // remote:opacity — set broadcast output opacity
-      const u4 = await listen<string>(REMOTE_EVENTS.opacity, (event) => {
-        if (cancelled) return
-        const payload = parsePayload(event.payload)
-        const value = payload?.value as number | undefined
-        if (value === undefined) return
-        // Opacity is stored on the live verse rendering; for now broadcast
-        // store doesn't have a dedicated opacity field — this is a placeholder
-        // that can be wired when the broadcast store adds opacity support.
-        void value
-      })
-      keep(u4)
-
       // remote:on_air — toggle live broadcast state
       const u5 = await listen<string>(REMOTE_EVENTS.on_air, (event) => {
         if (cancelled) return

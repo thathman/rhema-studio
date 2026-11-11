@@ -1895,6 +1895,7 @@ fn lyrics_up(live: Option<&str>) -> bool {
     live.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()).is_some_and(|v| v.get("lyrics").is_some_and(|l| l.is_object()))
 }
 
+const OPACITY_MESSAGE: &str = "Opacity is not available in Rhema Studio yet: the screens do not change";
 const NO_LYRICS_MESSAGE: &str = "No song or hymn is on the screens";
 
 /// What an OBS director is told in rehearsal: OBS is the online stream (the host's own wording).
@@ -3060,6 +3061,10 @@ async fn command_handler<S: CommandSink + 'static>(
             log::info!("HTTP stage message from {by} refused: {why}");
             return (status, CommandResponse::refused(why));
         }
+    }
+    // Not available (#411): refused before the desk waits its turn, as "cannot do that", not a server fault.
+    if matches!(command, RemoteCommand::Opacity(_)) {
+        return (StatusCode::UNPROCESSABLE_ENTITY, CommandResponse::refused(OPACITY_MESSAGE));
     }
     if matches!(command, RemoteCommand::SongSection(_)) && !lyrics_up(state.live.current().as_deref()) {
         return (StatusCode::UNPROCESSABLE_ENTITY, CommandResponse::refused(NO_LYRICS_MESSAGE));
@@ -5404,6 +5409,20 @@ mod tests {
         let open = send("").await;
         assert!(open.contains("403"), "{open}");
         assert_eq!(sink.command_count(), 1);
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[tokio::test]
+    async fn opacity_is_refused_as_not_available_not_answered_as_done() {
+        let sink = Arc::new(MockSink::new());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let answer = raw_http_request(port, "POST", "/api/v1/command", Some(r#"{"command":"opacity","value":0.75}"#)).await;
+        assert!(answer.contains("422") && answer.contains("not available"), "{answer}");
+        assert_eq!(sink.command_count(), 0);
         let mut handle = result.handle;
         handle.stop();
     }

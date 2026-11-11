@@ -176,7 +176,7 @@ fn handle_message(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet) {
 ///
 /// The rate limit is spent only after the key check, so packets spoofed
 /// from a controller's address without the key cannot use up its
-/// allowance; fader values (confidence, opacity) are exempt, since a fader
+/// allowance; fader values (confidence) are exempt, since a fader
 /// sends dozens a second and the last one must land.
 #[cfg(test)]
 fn handle_message_from(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet, limit: Limit<'_>) {
@@ -223,8 +223,14 @@ fn handle_message_from_live(msg: &OscMessage, sink: &dyn CommandSink, keys: &Key
                     return;
                 }
             }
+            // Not available (the dispatcher refuses it): a fader sends dozens a second, so it is
+            // dropped quietly here rather than warned about each time.
+            if matches!(cmd, RemoteCommand::Opacity(_)) {
+                log::debug!("OSC opacity ignored: not available");
+                return;
+            }
             if let Some((rate, ip)) = limit {
-                let fader = matches!(cmd, RemoteCommand::Opacity(_) | RemoteCommand::Confidence(_));
+                let fader = matches!(cmd, RemoteCommand::Confidence(_));
                 if !fader && !rate.allow(ip) {
                     log::warn!("OSC command refused: too many from {ip}");
                     return;
