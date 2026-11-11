@@ -89,6 +89,54 @@ describe("Production control", () => {
     await act(async () => pauseAuxTimer.click())
     expect(useAuxTimers.getState().timers[0]?.timer.startedAt).toBeNull()
     expect([...el.querySelectorAll("button")].some((button) => /^(Start|Pause|Resume|Reset)$/.test(button.textContent?.trim() ?? ""))).toBe(false)
+    // #808 R9: Live's top bar shows the service clock, so the docked Timekeeper has no second readout.
+    expect(el.querySelector('[aria-label="Service timing"]')).not.toBeNull()
+    expect(el.querySelector('[aria-label="Service timing"] [role="timer"]')).toBeNull()
+    expect(el.textContent).toContain("Planned finish")
+  })
+
+  it("Live tools gives Production tools a tall panel off air, the strip on air or from a link, and Esc shrinks first (#812 F1)", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const { LiveToolsDrawer } = await import("@/studio/present/live-tools-drawer")
+    const originalLive = useBroadcastStore.getState().isLive
+    useBroadcastStore.setState({ isLive: false })
+    useProductionTab.setState({ expanded: {}, linked: false })
+    const onClose = vi.fn()
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    const root = createRoot(el)
+    roots.push(root)
+    await act(async () => root.render(<LiveToolsDrawer tab="production" onTabChange={() => {}} onClose={onClose} stripClassName="strip-row" />))
+    const frame = () => el.querySelector<HTMLElement>('[data-slot="live-tools-frame"]')!
+    // Off air: Production tools start tall, as a grown grid row (nothing is overlaid or made inert).
+    expect(frame().dataset.expanded).toBe("true")
+    expect(frame().className).toContain("strip-row")
+    expect(frame().className).not.toContain("absolute")
+    expect(el.querySelector("[inert]")).toBeNull()
+    expect(el.querySelector('[role="tabpanel"][data-expanded="true"]')).not.toBeNull()
+    // Esc shrinks to the strip first, then closes.
+    const esc = () => el.querySelector('[data-slot="live-tools-panel"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+    await act(async () => esc())
+    expect(frame().dataset.expanded).toBe("false")
+    expect(onClose).not.toHaveBeenCalled()
+    await act(async () => esc())
+    expect(onClose).toHaveBeenCalledTimes(1)
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Expand Live tools"]')!.click())
+    expect(frame().dataset.expanded).toBe("true")
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Shrink Live tools to the strip"]')!.click())
+    expect(useProductionTab.getState().expanded).toEqual({ production: false })
+    // On air, or opened from a link, the strip is the default.
+    useProductionTab.setState({ expanded: {} })
+    await act(async () => useBroadcastStore.setState({ isLive: true }))
+    expect(frame().dataset.expanded).toBe("false")
+    await act(async () => useBroadcastStore.setState({ isLive: false }))
+    expect(frame().dataset.expanded).toBe("true")
+    await act(async () => openProductionTab("obs"))
+    expect(frame().dataset.expanded).toBe("false")
+    await act(async () => useProductionTab.setState({ open: false }))
+    expect(useProductionTab.getState().linked).toBe(false)
+    useProductionTab.setState({ expanded: {}, linked: false })
+    useBroadcastStore.setState({ isLive: originalLive })
   })
 
   it("Scenes (once Programs) is a private editor; saved scenes go through the named Program Take", async () => {

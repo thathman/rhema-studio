@@ -85,6 +85,21 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
+  // #800 R1: Permissions is the one place to pause a desk (the Operators host card is status only).
+  it("takes back control from a desk and gives it back, without unpairing it", async () => {
+    useSettingsStore.setState({ remoteDevices: [{ hash: "b".repeat(64), name: "Desk C", paired_at: "2026-10-23T09:00:00Z", role: "screens" }] })
+    const el = await mount()
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Take back control from Desk C"]')!.click())
+    expect(useSettingsStore.getState().remoteDevices[0].paused).toBe(true)
+    expect(el.textContent).toContain("control paused")
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main desk took back control from Desk C")
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Give control back to Desk C"]')!.click())
+    expect(useSettingsStore.getState().remoteDevices).toHaveLength(1)
+    expect(useSettingsStore.getState().remoteDevices[0].paused).toBeUndefined()
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main desk gave control back to Desk C")
+    await act(async () => root.unmount())
+  })
+
   it("shows a joined desk the host's durable approval status and lets it withdraw only its own pending request", async () => {
     const pending = { id: "request-1", kind: "scene_save", targetId: "scene-1", baseRevision: 4, state: "submitted", reason: "Use this for Sunday", createdAt: "2026-11-02T10:00:00Z", expiresAt: "2026-11-03T10:00:00Z", decidedBy: null, decidedAt: null, decisionNote: null }
     useJoin.setState({ status: "connected", me: { name: "Stage desk", role: "stage" }, live: null, paused: false })
