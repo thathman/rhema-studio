@@ -99,7 +99,9 @@ final class Guard {
             return "https".equals(r.getScheme()) && r.getRawUserInfo() == null && s.getHost() != null
                     && s.getHost().equalsIgnoreCase(r.getHost()) && s.getPort() == r.getPort()
                     && id != null && !id.isEmpty() && key != null && !key.isEmpty()
-                    && sent != null && sent.indexOf('/') < 0 && id.equals(decode(sent)) && key.equals(query(r.getRawQuery(), "k"));
+                    && sent != null && sent.indexOf('/') < 0 && id.equals(decode(sent)) && key.equals(query(r.getRawQuery(), "k"))
+                    // A hidden page's acknowledgement (#844, feed-ack.ts): drawn, but not seen on a screen.
+                    && !hasParam(r.getRawQuery(), "hidden");
         } catch (Exception e) {
             return false;
         }
@@ -127,6 +129,16 @@ final class Guard {
             found = java.net.URLDecoder.decode(eq < 0 ? "" : part.substring(eq + 1), "UTF-8");
         }
         return found;
+    }
+
+    /** Whether the query names this parameter at all (with any value, or repeated). */
+    private static boolean hasParam(String raw, String name) throws java.io.UnsupportedEncodingException {
+        if (raw == null) return false;
+        for (String part : raw.split("&")) {
+            int eq = part.indexOf('=');
+            if (java.net.URLDecoder.decode(eq < 0 ? part : part.substring(0, eq), "UTF-8").equals(name)) return true;
+        }
+        return false;
     }
 
     /** A certificate fingerprint as Rhema writes it: SHA-256, 64 lowercase hex digits. */
