@@ -985,13 +985,23 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
-  it("shows the approval switch read-only on a joined desk", async () => {
+  it("shows a joined desk the host's approval rule from Live State, read-only, not its own local copy", async () => {
     useSettingsStore.setState({ requireApproval: true })
-    useJoin.setState({ status: "connected", me: { name: "Viewer desk", role: "viewer", outputScope: [], groupTakeScope: [] } })
+    useJoin.setState({ status: "connected", me: { name: "Viewer desk", role: "viewer", outputScope: [], groupTakeScope: [] }, live: { requireApproval: false } as never })
     const el = await mount()
     const box = [...el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) => input.closest("label")?.textContent?.includes("Ask before showing an unapproved service"))!
     expect(box.disabled).toBe(true)
-    expect(el.textContent).toContain("The main host’s setting applies")
+    expect(box.checked).toBe(false)
+    expect(el.textContent).toContain("Shown as the main host applies it (off)")
+
+    await act(async () => useJoin.setState({ live: { requireApproval: true } as never }))
+    expect(box.checked).toBe(true)
+    expect(el.textContent).toContain("Shown as the main host applies it (on)")
+
+    await act(async () => useJoin.setState({ live: null }))
+    expect(box.checked).toBe(false)
+    expect(el.textContent).toContain("The main host has not shared this setting yet.")
+    expect(useSettingsStore.getState().requireApproval).toBe(true)
     await act(async () => root.unmount())
   })
 

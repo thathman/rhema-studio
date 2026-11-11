@@ -11,6 +11,7 @@ const { TeamWorkspace } = await import("./team-workspace")
 const { useSettingsStore } = await import("@/stores/settings-store")
 const { useSettingsDialogStore } = await import("@/lib/settings-dialog")
 const { useShellStore } = await import("@/studio/shell-store")
+const { useJoin } = await import("@/stores/join-store")
 
 let root: Root
 let host: HTMLDivElement
@@ -22,6 +23,7 @@ beforeEach(async () => {
   useSettingsStore.setState({ operatorName: "Tolu", requireApproval: true })
   useSettingsDialogStore.setState({ isOpen: false, activeSection: "audio" })
   useShellStore.setState({ workspace: "team", goRequest: null })
+  useJoin.setState({ status: "off", me: null, live: null })
   host = document.createElement("div")
   document.body.append(host)
   root = createRoot(host)
@@ -50,6 +52,15 @@ describe("Team", () => {
     await act(async () => button("Change in Permissions").click())
     expect(useShellStore.getState().goRequest).toBe("permissions")
     expect(useSettingsStore.getState().requireApproval).toBe(true)
+  })
+
+  it("on a joined desk shows the host's approval rule from Live State, not this desk's own (#815)", async () => {
+    await act(async () => useJoin.setState({ status: "connected", me: { name: "Bible desk", role: "viewer", outputScope: [], groupTakeScope: [] }, live: { requireApproval: false } as never }))
+    expect(host.querySelector("#team-approval-policy")?.textContent).toContain("Ask before showing an unapproved service: off (the main host’s setting)")
+    await act(async () => useJoin.setState({ live: null }))
+    expect(host.querySelector("#team-approval-policy")?.textContent).toContain("not shared by the main host yet")
+    await act(async () => useJoin.setState({ status: "off", me: null, live: null }))
+    expect(host.querySelector("#team-approval-policy")?.textContent).toContain("Ask before showing an unapproved service: on")
   })
 
   it("shows the operator's name without editing it, and opens the Desk menu to change it (#802)", async () => {

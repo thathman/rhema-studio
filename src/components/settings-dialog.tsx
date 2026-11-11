@@ -1185,7 +1185,7 @@ const ELSEWHERE: Record<ElsewhereId, () => void> = {
   cameras: openConnectionsHub,
   hosting: openConnectionsHub,
   permissions: () => { useSettingsDialogStore.getState().closeSettings(); useShellStore.getState().goTo("permissions") },
-  "service-defaults": () => useShellStore.getState().goTo("team"),
+  "service-defaults": () => { useSettingsDialogStore.getState().closeSettings(); useShellStore.getState().goTo("permissions") },
 }
 
 /** Settings as a page: a search and the sections down the side, the chosen one beside them. */

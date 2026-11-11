@@ -5,6 +5,7 @@ import { commentDeleted } from "@/lib/comments"
 import { useQueueStore } from "@/stores"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useJoin } from "@/stores/join-store"
 import { openSettings } from "@/lib/settings-dialog"
 import { DeskNameSummary } from "@/studio/shell/desk-menu"
 import { openPermissions } from "@/studio/permissions/navigation"
@@ -30,7 +31,11 @@ const openChurchFolder = () => openSettings("data")
 
 /** Who is at the desk, approvals, the team's comments, and the ways a team works together. */
 export function TeamWorkspace() {
-  const requireApproval = useSettingsStore((s) => s.requireApproval)
+  const joined = useJoin((s) => s.status !== "off")
+  const localRequireApproval = useSettingsStore((s) => s.requireApproval)
+  const hostRequireApproval = useJoin((s) => s.live?.requireApproval)
+  // A joined desk shows the rule its host applies (Live State), not its own unused local copy.
+  const requireApproval = joined ? hostRequireApproval : localRequireApproval
   const current = useServiceStore((s) => s.current)
   const comments = useQueueStore((s) => s.items.reduce((n, i) => n + (i.comments?.filter((c) => !commentDeleted(c)).length ?? 0), 0))
   const state = current ? approvalState(current) : null
@@ -71,7 +76,7 @@ export function TeamWorkspace() {
             </p>
             {/* The switch itself lives in Permissions (#815); Team says how it is set and links there. */}
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <p id="team-approval-policy" className="text-sm">Ask before showing an unapproved service: <span className="font-semibold">{requireApproval ? "on" : "off"}</span></p>
+              <p id="team-approval-policy" className="text-sm">Ask before showing an unapproved service: <span className="font-semibold">{requireApproval === undefined ? "not shared by the main host yet" : requireApproval ? "on" : "off"}</span>{joined && requireApproval !== undefined ? <span className="text-muted-foreground"> (the main host’s setting)</span> : null}</p>
               <Button size="sm" variant="outline" aria-describedby="team-approval-policy" onClick={openPermissions}><ShieldCheckIcon /> Change in Permissions</Button>
             </div>
           </section>

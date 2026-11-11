@@ -168,6 +168,20 @@ describe("Settings page search", () => {
     expect(sections()).toHaveLength(12)
   })
 
+  it("sends an \"ask before\" search to Permissions, where the approval switch is, and closes Settings (#815)", async () => {
+    useSettingsDialogStore.setState({ isOpen: true })
+    useShellStore.setState({ goRequest: null })
+    await type("ask before")
+    const row = [...host.querySelectorAll<HTMLButtonElement>('[aria-label="Elsewhere in Rhema Studio"] button')].find((button) => button.textContent?.includes("Approvals before a service goes live"))!
+    expect(row.textContent).toContain("Permissions → Before a service goes live")
+    expect(host.textContent).not.toContain("Team → Approvals")
+
+    await act(async () => row.click())
+
+    expect(useShellStore.getState().goRequest).toBe("permissions")
+    expect(useSettingsDialogStore.getState().isOpen).toBe(false)
+  })
+
   it("routes paired-device access searches to Permissions", async () => {
     useSettingsDialogStore.setState({ isOpen: true })
     useShellStore.setState({ goRequest: null })

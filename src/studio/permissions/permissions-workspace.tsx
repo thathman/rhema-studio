@@ -24,7 +24,8 @@ export function PermissionsWorkspace() {
   const hydrated = useSceneApprovalsStore((s) => s.hydrated)
   const loadError = useSceneApprovalsStore((s) => s.error)
   const remoteDevices = useSettingsStore((s) => s.remoteDevices)
-  const requireApproval = useSettingsStore((s) => s.requireApproval)
+  const localRequireApproval = useSettingsStore((s) => s.requireApproval)
+  const hostRequireApproval = useJoin((s) => s.live?.requireApproval)
   const outputs = useBroadcastStore((s) => s.outputs)
   const congregationOutputs = outputs.filter((output) => (output.role ?? "congregation") === "congregation")
   const stageOutputs = outputs.filter((output) => output.role === "stage")
@@ -34,6 +35,8 @@ export function PermissionsWorkspace() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [recorderGrantErrors, setRecorderGrantErrors] = useState<Record<string, string>>({})
   const isHost = joinStatus === "off"
+  // A joined desk shows the rule its host applies (Live State), not its own unused local copy.
+  const requireApproval = isHost ? localRequireApproval : hostRequireApproval
   const pending = requests.filter((request) => request.status === "pending" || request.status === "needs-review")
   const ordered = [...requests].sort((a, b) => b.at - a.at)
 
@@ -139,13 +142,13 @@ export function PermissionsWorkspace() {
           </header>
           <div className="p-4">
             <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox" className="mt-1" aria-describedby="approval-policy-detail" disabled={!isHost} checked={requireApproval} onChange={(e) => useSettingsStore.getState().setRequireApproval(e.target.checked)} />
+              <input type="checkbox" className="mt-1" aria-describedby="approval-policy-detail" disabled={!isHost} checked={requireApproval === true} onChange={(e) => useSettingsStore.getState().setRequireApproval(e.target.checked)} />
               <span>
                 Ask before showing an unapproved service
                 <span id="approval-policy-detail" className="block text-xs text-muted-foreground">When the open service is not approved, or changed after approval, the first Take live asks first. Quick screens and rehearsal are never held. While this is on, a scene change from a joined desk also waits for the main desk to accept it.</span>
               </span>
             </label>
-            {!isHost && <p role="status" className="mt-2 text-xs text-muted-foreground">The main host’s setting applies while this desk is joined.</p>}
+            {!isHost && <p role="status" className="mt-2 text-xs text-muted-foreground">{requireApproval === undefined ? "The main host has not shared this setting yet." : `Shown as the main host applies it (${requireApproval ? "on" : "off"}). Only the main host can change it.`}</p>}
           </div>
         </section>
 
