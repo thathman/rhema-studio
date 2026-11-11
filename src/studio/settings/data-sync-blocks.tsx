@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useSettingsStore } from "@/stores/settings-store"
 import { backupDatabaseToFile, contentStatus, restoreDatabaseFromFile } from "@/lib/song-files"
-import { describeError, reloadAfterRestore } from "@/studio/library/content-actions"
+import { describeError, reloadAfterRestore, restoreFailedTitle } from "@/studio/library/content-actions"
 import type { ContentStatus } from "@/types"
 import { useServiceStore } from "@/stores/service-store"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 
 /** Back up the content database (services and songs) or restore it from a file. */
 export function DatabaseBlock() {
@@ -16,6 +17,8 @@ export function DatabaseBlock() {
   const [status, setStatus] = useState<ContentStatus | null>(null)
   const [confirmRestore, setConfirmRestore] = useState(false)
   const dirty = useServiceStore((s) => s.dirty)
+  // As at setup (#411 data hunt): a restore closes the open service and clears the queue, so never mid-service.
+  const onAir = useBroadcastStore((s) => s.isLive && !!s.liveVerse)
   useEffect(() => { contentStatus().then(setStatus).catch(() => setStatus(null)) }, [])
   const doBackup = async () => {
     setBusy("backup")
@@ -38,7 +41,7 @@ export function DatabaseBlock() {
       setStatus(await contentStatus())
       toast.success("Database restored", { description: result.snapshot ? `The previous database was kept at ${result.snapshot}` : undefined })
     } catch (error) {
-      toast.error("Nothing was changed", { description: describeError(error) })
+      toast.error(restoreFailedTitle(error), { description: describeError(error) })
     } finally {
       setBusy(null)
     }
@@ -59,7 +62,7 @@ export function DatabaseBlock() {
         <Button size="sm" variant="outline" disabled={busy !== null || !status?.available} onClick={() => void doBackup()}><DownloadIcon /> Back up now…</Button>
         <Popover open={confirmRestore} onOpenChange={setConfirmRestore}>
           <PopoverTrigger asChild>
-            <Button size="sm" variant="outline" disabled={busy !== null || !status?.available || dirty} title={dirty ? "Save or close the open service first" : undefined}>
+            <Button size="sm" variant="outline" disabled={busy !== null || !status?.available || dirty || onAir} title={onAir ? "Something is on air: clear the screens first" : dirty ? "Save or close the open service first" : undefined}>
               <RotateCcwIcon /> Restore from a backup…
             </Button>
           </PopoverTrigger>
