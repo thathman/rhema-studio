@@ -140,7 +140,23 @@ describe("Cameras panel (#209)", () => {
     const token = useSettingsStore.getState().cameras[0].token
     expect(token).toMatch(/^[0-9a-f]{32}$/)
     expect(token).not.toBe("a".repeat(32))
-    expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "pulpit", token }] })
+    expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "pulpit", token, label: "Pulpit" }] })
+    stop()
+  })
+
+  it("suggests a quality to the camera's Rhema Studio Cam, which the listener is told (#838)", async () => {
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "a".repeat(32) }] })
+    const stop = startCameras()
+    await flush()
+    const el = await mount()
+    const select = el.querySelector(`[aria-label="Quality suggested to Pulpit's Rhema Studio Cam"]`) as HTMLSelectElement
+    expect(select.value).toBe("phone")
+    await act(async () => {
+      select.value = "tv720"
+      select.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "pulpit", token: "a".repeat(32), label: "Pulpit", quality: "tv720" }] })
+    expect(el.textContent).toContain("At most 720p and 4 Mbit/s")
     stop()
   })
 
@@ -210,7 +226,7 @@ describe("cameras (#209)", () => {
     expect(calls.some((c) => c.cmd === "camera_router_start")).toBe(false)
     expect(calls.find((c) => c.cmd === "cameras_set")?.args).toEqual({ cameras: [] })
     useSettingsStore.setState({ cameras: [{ name: "wide", label: "Wide", token: "w".repeat(32) }] })
-    expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "wide", token: "w".repeat(32) }] })
+    expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "wide", token: "w".repeat(32), label: "Wide" }] })
     await flush()
     // The list reaches the router before it starts.
     const order = calls.map((c) => c.cmd).filter((c) => c === "cameras_set" || c === "camera_router_start")
