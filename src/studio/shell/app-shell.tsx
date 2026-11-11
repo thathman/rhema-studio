@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import "@/stores/journal-store"
 import "@/stores/monitor-store"
 import "@/stores/obs-store"
-import { useCallback, useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useRef } from "react"
 import { canonicalWorkspace, showsJoinedDesk, useShellStore, type Workspace } from "@/studio/shell-store"
 import { bibleActions } from "@/hooks/use-bible"
 import { rememberedServiceId, useServiceStore } from "@/stores/service-store"
@@ -99,6 +99,14 @@ export function AppShell() {
   useEffect(() => {
     if (joinStatus === "off") useShellStore.getState().setJoinedDeskView("desk")
   }, [joinStatus])
+  // Switching between the desk and the shell (or leaving mid-service) replaces the page: put focus
+  // on it so a keyboard or screen reader user is not left on a button that no longer exists.
+  const wasDeskPage = useRef(deskPage)
+  useEffect(() => {
+    if (wasDeskPage.current === deskPage) return
+    wasDeskPage.current = deskPage
+    queueMicrotask(() => document.getElementById("main")?.focus())
+  }, [deskPage])
 
   // Going anywhere from Design first settles an unsaved theme (keep editing, or discard it), as closing the designer did.
   const go = useCallback(async (next: Workspace) => {
@@ -291,7 +299,11 @@ export function AppShell() {
     return (
       <div className="dark present-surface fixed inset-0 flex flex-col bg-background text-foreground">
         <a href="#main" className="fixed top-3 left-3 z-50 -translate-y-24 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground focus:translate-y-0">Skip to the page</a>
+        {/* The same bar and watches as every page: Find, recorder status, Talk, and the camera/signal watch never stop. */}
+        <TopBar title="Your desk" workspace="present" />
         <RecoveryBanner />
+        <SignalWatch />
+        {paired && <ShareReadiness />}
         <main id="main" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 outline-none">
           <ErrorBoundary key="joined-desk" name="your desk">
             <JoinedDeskRoute church={church} onGo={(w) => void go(w)} />

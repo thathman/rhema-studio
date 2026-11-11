@@ -47,8 +47,9 @@ export function TopBar({ title, workspace }: { title: string; workspace: Workspa
 
 /** Back to this computer's joined desk (#813 F2) from its own Live console. */
 function OpenYourDesk({ workspace }: { workspace: Workspace }) {
-  const joined = useJoin((s) => s.status !== "off")
-  if (!joined || (workspace !== "present" && workspace !== "production")) return null
+  const joined = useJoin((s) => s.status === "connected" || s.status === "reconnecting")
+  const onDesk = useShellStore((s) => s.joinedDeskView === "desk")
+  if (!joined || onDesk || (workspace !== "present" && workspace !== "production")) return null
   return (
     <button
       type="button"

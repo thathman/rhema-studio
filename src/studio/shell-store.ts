@@ -190,9 +190,13 @@ interface ShellState extends ShellPrefs {
 
 export type JoinedDeskView = "desk" | "console"
 
-/** Whether the Live page shows this computer's joined desk instead of its own Live console. */
+/**
+ * Whether the Live page shows this computer's joined desk instead of its own Live console: only
+ * once the host has accepted it (connected, or reconnecting after that). Connecting or refused
+ * computers keep the normal shell, where Operators shows the join status.
+ */
 export function showsJoinedDesk(joinStatus: string, workspace: Workspace, view: JoinedDeskView): boolean {
-  return joinStatus !== "off" && canonicalWorkspace(workspace) === "present" && view === "desk"
+  return (joinStatus === "connected" || joinStatus === "reconnecting") && canonicalWorkspace(workspace) === "present" && view === "desk"
 }
 
 // ponytail: localStorage like ThemeProvider; per-machine UI convenience, not content.

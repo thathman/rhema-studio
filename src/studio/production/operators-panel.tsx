@@ -35,7 +35,7 @@ import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { openPermissions } from "@/studio/permissions/navigation"
 import { useShellStore } from "@/studio/shell-store"
 import { useProductionTab } from "@/studio/production/production-tab"
-import { CARD_ORDER, DESK_PAGES, type DeskBlock } from "@/studio/production/desk-pages"
+import { CARD_ORDER, deskPageFor, type DeskBlock } from "@/studio/production/desk-pages"
 import { validAspectRatioLabel } from "@/lib/group-take"
 import { EditorLibraryPreview } from "@/studio/production/editor-library-preview"
 import { deskSceneReleaseApprovalBlockReason, deskSceneTakeApprovalBlockReason } from "@/studio/present/scene-take-policy"
@@ -253,7 +253,7 @@ export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"
     }
     : live
   const fresh = useFreshness()
-  const page = DESK_PAGES[role] ?? DESK_PAGES.viewer!
+  const page = deskPageFor(role)
 
   const statusRow = (
     <>
