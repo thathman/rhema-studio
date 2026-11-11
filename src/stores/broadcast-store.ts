@@ -33,6 +33,7 @@ import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from 
 import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
 import { feedLost, overscanPct } from "@/lib/feed-receivers"
+import { feedsWithoutVideo, videoOnFeedsWarning } from "@/lib/video-on-feeds"
 import { cameraSourceId, feedFrame, followsLowerThird, followsOnlyOverlays, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
 import { captureSceneAppearance, normalizeScene, presetFromScene, sceneClock, sceneForOutput, sceneFrame, sceneHasLanguageFallback, sceneOwns } from "@/lib/scenes"
 import { hasPendingRemotePolicyUpdate, useSettingsStore } from "@/stores/settings-store"
@@ -2191,6 +2192,19 @@ useBroadcastStore.subscribe((s, prev) => {
   const now = soundOutputId(s.outputs, s.outputStatus)
   if (lastSoundOutput !== undefined && now !== lastSoundOutput) s.syncBroadcastOutput()
   lastSoundOutput = now
+})
+
+// A video item on air while a TV or browser feed follows Program: that screen shows only the
+// background. Said once per video, where the operator presents (#411, Onn TV).
+let lastVideoWarned: string | undefined
+useBroadcastStore.subscribe((s) => {
+  const v = s.isLive ? s.liveVerse?.video : undefined
+  const key = v ? `${v.url}#${v.token}` : undefined
+  if (key === lastVideoWarned) return
+  lastVideoWarned = key
+  if (!v) return
+  const warning = videoOnFeedsWarning(v.name, feedsWithoutVideo(s.outputs, s.outputStatus, s.scenes))
+  if (warning) s.setPresentWarning(warning)
 })
 
 /** A camera's backup camera, by the router's names (#213). */

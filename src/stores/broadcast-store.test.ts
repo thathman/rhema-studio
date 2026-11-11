@@ -1431,3 +1431,23 @@ describe("updateDraftNested deep paths", () => {
 })
 
 
+
+describe("a video item while a TV feed follows Program (#411, Onn TV)", () => {
+  it("tells the operator once per video that the TV shows only the background", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const main = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({
+      outputs: [main, { ...main, id: "tv", name: "Hall TV", type: "browser", sceneId: undefined, shows: undefined }],
+      outputStatus: { tv: { feedActive: true } } as never,
+      presentWarning: null,
+      isLive: true,
+    })
+    const video = { url: "asset://intro.mp4", fit: "contain" as const, loop: false, sound: false, name: "Intro", token: 7 }
+    useBroadcastStore.setState({ liveVerse: { reference: "", segments: [], kind: "image", video } as never })
+    expect(useBroadcastStore.getState().presentWarning).toMatch(/^Hall TV shows only the background while "Intro" plays/)
+    // The same video again (a re-render, a sync): not said twice.
+    useBroadcastStore.setState({ presentWarning: null })
+    useBroadcastStore.setState({ liveVerse: { reference: "", segments: [], kind: "image", video } as never })
+    expect(useBroadcastStore.getState().presentWarning).toBeNull()
+  })
+})
