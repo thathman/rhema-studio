@@ -300,6 +300,7 @@
   async function doRequest(n, mode, btn) {
     const a = n.action, live = lastLive || {}
     btn.disabled = true
+    sending.add(btn)
     let why = null
     if (mode === "queue") {
       // Into the run of show for later, nothing shown; acting on the run of show this phone saw.
@@ -313,7 +314,7 @@
     const what = "\u201c" + (mode === "preview" ? "Preview " + a.value : mode === "queue" ? "Queue " + a.value : actionName(a, live)) + "\u201d"
     failed[n.id] = why ? what + " was not done: " + why + ". Answered Unable." : ""
     await post("notice_ack", pressId(), { id: n.id, state: why ? "unable" : "ready" }, why ? { why: what + ": " + why } : undefined).catch(() => {})
-    btn.disabled = false
+    sending.delete(btn); btn.disabled = staleNow
     poll()
   }
   const QUEUE_ROLES = ["present", "configure", "editor"]
