@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.0.0.3 · 11 Nov 2026 · main `38314dce`**
+**Version 1.0.0.4 · 11 Nov 2026 · main `b390ef8b`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -57,8 +57,9 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | TV Wi-Fi loss and recovery | PHYSICAL TESTED | Onn, 11 Nov: with Wi-Fi off 200 s, the watcher count dropped to 0 within about 30 s and returned on reconnect. A real power cut is not tested. |
 | TV keeps an old page after a host update | MERGED | #790: the page reloads itself when the host serves another build (reviewed). Device check needs two host builds in a row. |
 | TV/Cam after the host's address changes (DHCP) | BLOCKED | The host makes a new certificate and key per address, and the devices pin the old one. Needs a pin-model design (stable key or local CA) before code. |
-| Phone camera → host → TV | PHYSICAL TESTED | Vsmart V340U, Rhema Cam → bundled router → Onn, 11 Nov 16:40, about 13 Mbit/s 1080p H.264. The Onn's WebRTC reader fell behind once (218 frames discarded). Measuring FPS and delay is still to do. |
-| Phone camera: start/stop, background, lock, network loss, tally, roles | NOT YET AUDITED | Blocked on 11 Nov: the phone's battery was dead. |
+| Phone camera → host → TV | PHYSICAL TESTED | Vsmart V340U (Android 10, Rhema Cam 1.3.0.0) → bundled router → "Phone camera" scene → Onn, real Wi-Fi, 11 Nov 19:03. The TV played 1920×1080 at 28.6 fps with 0.8% of frames dropped (30 s). The router warns 8–16 times a minute that the Onn's reader is too slow at about 13 Mbit/s, though the picture looks fine. Next: try a lower Rhema Cam bitrate or 720p. Camera-to-TV delay not measured. |
+| Phone camera: lock, background, network loss | PHYSICAL TESTED | Vsmart, 11 Nov. Locked (dozing) and in the background, the camera kept about 30 fps on the TV (foreground camera service). With the phone's Wi-Fi off 30 s, the router dropped it after 12 s while the TV held the last frame; the camera republished 29 s after Wi-Fi returned, and the TV played again 4 s later. |
+| Phone camera: Stop/Start button, tally, role restrictions, battery/heat warnings | NOT YET AUDITED | Needs the app's UI and a tally source on device. |
 | Two phone cameras | BLOCKED | Only one phone is available. |
 | Rhema Studio Companion on a separate OBS computer | BLOCKED | Needs the church's OBS machine. |
 
