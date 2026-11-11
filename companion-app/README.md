@@ -6,6 +6,14 @@ computer's OBS as Media Sources. OBS then cuts between them on its own; the scre
 never changed from here. Rhema shows, in Live → Production tools → Cameras, which cameras this OBS has on
 program and preview.
 
+It also puts Rhema's **overlays** (Bible, Lyrics, Name lower third, Ticker, Timer) into scenes
+this OBS already has, as Browser Sources opening the host's browser feeds (#848). On the host,
+add the ready-made feed (Outputs → Add a ready-made feed, as a browser feed), copy its link for
+OBS, and paste it in the Companion's Overlays card with the scene to add it to. An overlay's link
+and size can be changed there, and **Test in this scene** asks OBS for a picture of it (a hidden
+overlay is shown for a moment only in a scene that is not on air). The Companion never removes,
+reorders or hides the operator's own sources, never makes a scene, and never changes OBS's program.
+
 Version 1.1.0.0 (the build tools take three parts, so files say 1.1.0).
 
 ## App or mode?
