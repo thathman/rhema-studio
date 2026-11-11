@@ -968,6 +968,87 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
+  it("revokes a paired device only after a second, confirming click, as Connections does (#801)", async () => {
+    const original = useSettingsStore.getState().revokeRemoteDevice
+    const revoke = vi.fn(async () => true)
+    useSettingsStore.setState({ revokeRemoteDevice: revoke })
+    useSettingsStore.setState({ remoteDevices: [{ hash: "phone-hash", name: "Stage phone", paired_at: "2026-10-01T00:00:00Z", role: "viewer" as const }] })
+    const el = await mount()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Revoke Stage phone"]')!.click())
+    expect(revoke).not.toHaveBeenCalled()
+    expect(el.textContent).toContain("Stage phone's key is removed")
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Keep Stage phone"]')!.click())
+    expect(revoke).not.toHaveBeenCalled()
+    expect(el.querySelector('[aria-label="Confirm revoke Stage phone"]')).toBeNull()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Revoke Stage phone"]')!.click())
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Confirm revoke Stage phone"]')!.click())
+    expect(revoke).toHaveBeenCalledWith("phone-hash")
+    useSettingsStore.setState({ revokeRemoteDevice: original })
+    await act(async () => root.unmount())
+  })
+
+  it("holds the Ask before showing an unapproved service switch on the host (#815)", async () => {
+    useSettingsStore.setState({ requireApproval: false })
+    const el = await mount()
+    const box = [...el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) => input.closest("label")?.textContent?.includes("Ask before showing an unapproved service"))!
+    expect(box.checked).toBe(false)
+    expect(box.disabled).toBe(false)
+    await act(async () => box.click())
+    expect(useSettingsStore.getState().requireApproval).toBe(true)
+    await act(async () => root.unmount())
+  })
+
+  it("shows a joined desk the host's approval rule from Live State, read-only, not its own local copy", async () => {
+    useSettingsStore.setState({ requireApproval: true })
+    useJoin.setState({ status: "connected", me: { name: "Viewer desk", role: "viewer", outputScope: [], groupTakeScope: [] }, live: { requireApproval: false } as never })
+    const el = await mount()
+    const box = [...el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) => input.closest("label")?.textContent?.includes("Ask before showing an unapproved service"))!
+    expect(box.disabled).toBe(true)
+    expect(box.checked).toBe(false)
+    expect(el.textContent).toContain("Shown as the main host applies it (off)")
+
+    await act(async () => useJoin.setState({ live: { requireApproval: true } as never }))
+    expect(box.checked).toBe(true)
+    expect(el.textContent).toContain("Shown as the main host applies it (on)")
+
+    await act(async () => useJoin.setState({ live: null }))
+    expect(box.checked).toBe(false)
+    expect(el.textContent).toContain("The main host has not shared this setting yet.")
+    expect(useSettingsStore.getState().requireApproval).toBe(true)
+    await act(async () => root.unmount())
+  })
+
+  it("lists requests from older desks inside Approval Requests, one pending count, no separate legacy inbox (#855)", async () => {
+    await createSceneEditApproval({ scene: null, sceneId: "old-1", name: "Old banner", savedAt: 1, by: "Old desk", at: 10 })
+    const decided = await createSceneEditApproval({ scene: null, sceneId: "old-2", name: "Old title", savedAt: 1, by: "Old desk", at: 5 })
+    const { decideSceneEditApproval } = await import("@/stores/scene-approvals-store")
+    await decideSceneEditApproval(decided.id, "declined", "Main desk")
+    const el = await mount()
+
+    expect(el.textContent).not.toContain("Legacy local scene requests")
+    expect(el.querySelector("#scene-approvals-title")).toBeNull()
+    const panel = el.querySelector('section[aria-labelledby="host-approval-requests-title"]')!
+    expect(panel.textContent).toContain("1 pending")
+    const local = panel.querySelector('[aria-labelledby="local-requests-title"]')!
+    expect(local.textContent).toContain("Delete “Old banner”")
+    expect([...local.querySelectorAll("button")].some((button) => button.textContent?.includes("Accept"))).toBe(true)
+    // The decided one is kept, folded away rather than dropped.
+    const earlier = local.querySelector("details")!
+    expect(earlier.textContent).toContain("Decided earlier (1)")
+    expect(earlier.textContent).toContain("Delete “Old title”")
+    expect(el.textContent).not.toContain("No approval requests.")
+    await act(async () => root.unmount())
+  })
+
+  it("says there are no approval requests when neither list has any", async () => {
+    const el = await mount()
+    expect(el.textContent).toContain("No approval requests.")
+    expect(el.querySelector('[aria-labelledby="local-requests-title"]')).toBeNull()
+    await act(async () => root.unmount())
+  })
+
   it("keeps approvals and device roles read-only on a joined desk", async () => {
     await createSceneEditApproval({ scene: null, sceneId: "scene-1", name: "Scene", savedAt: 1, by: "Screens desk", at: 10 })
     useSettingsStore.setState({ remoteDevices: [{ hash: "device-hash", name: "Other operator phone", paired_at: "2026-10-01T00:00:00Z", role: "screens" as const, record: true }] })

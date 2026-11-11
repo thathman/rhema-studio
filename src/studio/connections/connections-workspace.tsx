@@ -17,6 +17,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { CamerasPanel } from "@/studio/production/cameras-panel"
 import { JoinForm } from "@/studio/production/join-form"
 import { PairDeviceDialog } from "./pair-device-dialog"
+import { RevokeAction } from "./revoke-action"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useNearbyConnection } from "./connections-store"
 import { cn } from "@/lib/utils"
@@ -81,22 +82,8 @@ function Row({ title, detail, state, tone = "off", action, stage }: { title: str
   )
 }
 
-/**
- * Revoke from the hub (#445): two steps, so a stray click never cuts a screen or a desk mid-service.
- * What it does is said first: the device's own key stops at once; everything else carries on.
- */
-function RevokeAction({ label, what, onRevoke }: { label: string; what: string; onRevoke: () => void }) {
-  const [confirm, setConfirm] = useState(false)
-  return confirm ? (
-    <span className="flex basis-full flex-wrap items-center justify-end gap-1">
-      <span role="status" className="mr-auto text-muted-foreground">{what}</span>
-      <Button size="sm" variant="destructive" onClick={() => { setConfirm(false); onRevoke() }} aria-label={`Confirm revoke ${label}`}>Revoke now</Button>
-      <Button size="sm" variant="ghost" onClick={() => setConfirm(false)} aria-label={`Keep ${label}`}>Keep</Button>
-    </span>
-  ) : (
-    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirm(true)} aria-label={`Revoke ${label}`} title={what}>Revoke</Button>
-  )
-}
+/** The one entry for pairing any device (#861): the explanation tiles all point to it. */
+const PAIR_ENTRY = "Pair a device"
 
 /**
  * One local-first front door for displays, cameras, volunteer devices and OBS computers.
@@ -185,7 +172,7 @@ export function ConnectionsWorkspace() {
             <h1 className="mt-1 text-2xl leading-tight font-bold tracking-[-0.035em]">Connections</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Connect screens, cameras, volunteer devices and OBS on the church network. This computer keeps every service control and works on its own; other devices are optional.</p>
           </div>
-          <div className="flex flex-wrap gap-2"><PairDeviceDialog label="Pair phone, controller or OBS computer" /><Button onClick={() => void findNearby()} disabled={scanning}><SearchIcon /> {scanning ? "Looking nearby…" : "Find nearby devices"}</Button></div>
+          <div className="flex flex-wrap gap-2"><PairDeviceDialog /><Button onClick={() => void findNearby()} disabled={scanning}><SearchIcon /> {scanning ? "Looking nearby…" : "Find nearby devices"}</Button></div>
         </header>
 
         <section aria-labelledby="connections-nearby" className="rounded-lg border border-border bg-card p-4 shadow-panel">
@@ -204,16 +191,15 @@ export function ConnectionsWorkspace() {
           <div className="mt-4 grid gap-3 border-t border-border pt-3 md:grid-cols-3">
             <div className="flex min-w-0 items-start gap-2 rounded-md border border-border bg-background p-3 text-xs leading-relaxed">
               <CameraIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1"><p className="font-semibold">Camera phones</p><p className="text-muted-foreground">Do not advertise for discovery. Add a camera to get its secure QR setup link.</p></div>
-              <Button size="xs" variant="ghost" className="shrink-0" onClick={() => setCamerasOpen(true)}>Set up</Button>
+              <div className="min-w-0 flex-1"><p className="font-semibold">Camera phones</p><p className="text-muted-foreground">Do not advertise for discovery. {PAIR_ENTRY} → Camera phone: the same three steps, ending with its secure QR setup link.</p></div>
             </div>
             <div className="flex min-w-0 items-start gap-2 rounded-md border border-border bg-background p-3 text-xs leading-relaxed">
               <SmartphoneIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1"><p className="font-semibold">Phone remotes</p><p className="text-muted-foreground">Use the shared short-lived code or QR above.</p></div>
+              <div className="min-w-0 flex-1"><p className="font-semibold">Phone remotes</p><p className="text-muted-foreground">{PAIR_ENTRY} → Phone remote: the same three steps, with this computer's short-lived code or QR.</p></div>
             </div>
             <div className="flex min-w-0 items-start gap-2 rounded-md border border-border bg-background p-3 text-xs leading-relaxed">
               <RadioIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1"><p className="font-semibold">OBS computers</p><p className="text-muted-foreground">Pair as a Companion with a host certificate check; use the same code above.</p></div>
+              <div className="min-w-0 flex-1"><p className="font-semibold">OBS computers</p><p className="text-muted-foreground">{PAIR_ENTRY} → OBS computer: the same three steps, as a Companion with a host certificate check.</p></div>
             </div>
           </div>
         </section>
@@ -230,7 +216,7 @@ export function ConnectionsWorkspace() {
                 </ul>
               )}
               <p className="text-muted-foreground">A TV is marked “Showing now” only while it reports watching its feed. “Feed sent” is saved pairing history, not proof that the TV is on.</p>
-              <Button size="sm" variant="outline" onClick={openScreens}><TvIcon /> Configure screens and feeds</Button>
+              <Button size="sm" variant="outline" onClick={openScreens}><TvIcon /> Open Outputs</Button>
             </Card>
 
             <Card title="Cameras" kicker="Phones and network cameras" icon={<CameraIcon />} count={cameras.length}>

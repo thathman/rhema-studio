@@ -11,7 +11,7 @@ export const SETTINGS_SEARCH_INDEX: Record<SettingsSection, { labels: string[]; 
     keywords: ["appearance", "light", "dark", "dark mode", "light mode", "system", "theme", "night", "preferences"],
   },
   church: {
-    labels: ["Church name", "Campus or ministry (optional)", "Service languages (optional)", "Time zone (optional)", "Your name", "This computer's name (optional)"],
+    labels: ["Church name", "Campus or ministry (optional)", "Service languages (optional)", "Time zone (optional)", "This computer's name (optional)"],
     keywords: ["church", "church name", "profile", "general", "campus", "ministry", "time zone", "timezone", "operator", "operator name", "your name", "computer name", "desk name"],
   },
   bible: {
@@ -123,7 +123,7 @@ export const SETTINGS_ELSEWHERE: readonly ElsewhereEntry[] = [
   { id: "cameras", name: "Cameras and the camera router", where: "Connections", keywords: ["camera", "cameras", "camera router", "mediamtx", "whep", "video", "pulpit", "phone camera"] },
   { id: "hosting", name: "Host or join and the talk channel", where: "Connections", keywords: ["host", "join", "hosting", "talk channel", "operators", "volunteers", "desks", "another computer", "crew"] },
   { id: "permissions", name: "Paired device access and scene requests", where: "Permissions", keywords: ["paired device", "paired devices", "roles", "role", "access", "permissions", "scene request", "scene changes"] },
-  { id: "service-defaults", name: "Approvals before a service goes live", where: "Team → Approvals", keywords: ["service defaults", "approval", "approvals", "approve", "unapproved", "ask before", "defaults"] },
+  { id: "service-defaults", name: "Approvals before a service goes live", where: "Permissions → Before a service goes live", keywords: ["service defaults", "approval", "approvals", "approve", "unapproved", "ask before", "defaults"] },
 ]
 
 /** The pages elsewhere that a search finds (none for an empty search: those are not Settings). */
