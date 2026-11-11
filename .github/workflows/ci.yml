@@ -94,7 +94,10 @@ jobs:
           APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true"
           APT_UPDATE_START_SECONDS=$(date +%s)
           echo "APT_UPDATE_STARTED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          sudo apt-get $APT update
+          # The mirror's name has stopped resolving for hours (11 Nov): go on with the image's own signed
+          # index and the kept packages. apt still checks each one against that index and fails the
+          # install if anything is missing, so nothing unchecked gets in.
+          sudo apt-get $APT update || echo "::warning::apt update failed; installing from the image's package index and kept packages"
           APT_UPDATE_ELAPSED_SECONDS=$(($(date +%s) - APT_UPDATE_START_SECONDS))
           echo "APT_UPDATE_FINISHED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ') elapsed_seconds=$APT_UPDATE_ELAPSED_SECONDS"
           # CI compiles/tests these apps but never runs their WebKit windows; skip
@@ -220,7 +223,10 @@ jobs:
           APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true"
           APT_UPDATE_START_SECONDS=$(date +%s)
           echo "APT_UPDATE_STARTED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          sudo apt-get $APT update
+          # The mirror's name has stopped resolving for hours (11 Nov): go on with the image's own signed
+          # index and the kept packages. apt still checks each one against that index and fails the
+          # install if anything is missing, so nothing unchecked gets in.
+          sudo apt-get $APT update || echo "::warning::apt update failed; installing from the image's package index and kept packages"
           APT_UPDATE_ELAPSED_SECONDS=$(($(date +%s) - APT_UPDATE_START_SECONDS))
           echo "APT_UPDATE_FINISHED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ') elapsed_seconds=$APT_UPDATE_ELAPSED_SECONDS"
           # CI compiles/tests the companion but never launches its WebKit window.
