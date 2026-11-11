@@ -325,10 +325,11 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
           {loading && <p className="px-2 py-3 text-xs text-muted-foreground">Loading saved designs…</p>}
           {!loading && documents.length === 0 && <p className="px-2 py-3 text-xs text-muted-foreground">No saved designs match this search. Create a blank design or start from a scene template.</p>}
           {documents.map((item) => renaming?.id === item.id ? (
-            <form key={item.id} className="mb-1 flex items-center gap-1 rounded-md border border-primary px-1.5 py-1.5" onSubmit={(event) => { event.preventDefault(); void renameDesign(item.id, renaming.title) }}>
+            <form key={item.id} className="mb-1 flex flex-wrap items-center gap-1 rounded-md border border-primary px-1.5 py-1.5" onSubmit={(event) => { event.preventDefault(); void renameDesign(item.id, renaming.title) }}>
               <Input autoFocus aria-label={`New name for ${item.title}`} value={renaming.title} maxLength={200} onChange={(event) => setRenaming({ id: item.id, title: event.currentTarget.value })} onKeyDown={(event) => { if (event.key === "Escape") setRenaming(null) }} className="h-7 min-w-0 flex-1 text-xs" />
               <Button type="submit" size="icon-xs" variant="ghost" aria-label={`Save name for ${item.title}`} disabled={!renaming.title.trim()}><CheckIcon /></Button>
               <Button type="button" size="icon-xs" variant="ghost" aria-label="Cancel rename" onClick={() => setRenaming(null)}><XIcon /></Button>
+              {sameTitle(documents, item.id, renaming.title) && <p role="status" className="basis-full px-1 text-[0.6875rem] text-amber-700">Another design is already called “{renaming.title.trim()}”. You can keep both, but a different name is easier to pick in Prepare.</p>}
             </form>
           ) : (
             <div key={item.id} className={cn("mb-1 flex items-start gap-1 rounded-md border", active?.id === item.id ? "border-primary bg-accent" : "border-transparent hover:bg-accent/60")}>
@@ -416,6 +417,12 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
       </main>
     </div>
   )
+}
+
+/** Another design already has this name (any case): allowed, but worth a warning. */
+function sameTitle(documents: DesignSummary[], id: string, title: string): boolean {
+  const wanted = title.trim().toLocaleLowerCase()
+  return !!wanted && documents.some((item) => item.id !== id && item.title.trim().toLocaleLowerCase() === wanted)
 }
 
 function summaryOf(document: DesignDocument): DesignSummary {

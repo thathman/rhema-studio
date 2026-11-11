@@ -12,6 +12,8 @@ export function DesignDraftActions({
   onApply,
   onApplied,
   detail,
+  staleWarning,
+  extra,
 }: {
   dirty: boolean
   saved: boolean
@@ -23,8 +25,13 @@ export function DesignDraftActions({
   onApplied: () => void
   /** Item detail beside the status, such as where this look is used. */
   detail?: ReactNode
+  /** The saved design changed since this draft began: shown in the dialog, and Apply needs a tick first. */
+  staleWarning?: string
+  /** More of what Apply changes, under the affected outputs (such as saved scenes). */
+  extra?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
+  const [overwrite, setOverwrite] = useState(false)
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const finishApply = async () => {
@@ -53,7 +60,7 @@ export function DesignDraftActions({
       </div>
       <Button type="button" size="sm" variant="outline" onClick={onSave} disabled={!dirty} title="Keep these changes privately. Outputs are unchanged.">Save draft</Button>
       {(dirty || saved) && <Button type="button" size="sm" variant="ghost" onClick={onDiscard}>Discard draft</Button>}
-      <Button type="button" size="sm" onClick={() => { setError(null); setOpen(true) }} disabled={!dirty && !saved} title="Shows the affected outputs before anything changes">Apply to outputs…</Button>
+      <Button type="button" size="sm" onClick={() => { setError(null); setOverwrite(false); setOpen(true) }} disabled={!dirty && !saved} title="Shows the affected outputs before anything changes">Apply to outputs…</Button>
       <Dialog open={open} onOpenChange={(next) => { if (!applying) setOpen(next) }}>
         <DialogContent>
           <DialogHeader>
@@ -72,10 +79,20 @@ export function DesignDraftActions({
               <p className="mt-1 text-muted-foreground">No connected output is using this source now. The design will be ready for its next use.</p>
             )}
           </div>
+          {extra}
+          {staleWarning && (
+            <div role="alert" className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+              <p>{staleWarning}</p>
+              <label className="mt-2 flex items-center gap-2 font-semibold">
+                <input type="checkbox" checked={overwrite} onChange={(event) => setOverwrite(event.currentTarget.checked)} aria-label="Apply this draft over the newer saved version" />
+                Apply this draft over the newer saved version
+              </label>
+            </div>
+          )}
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" disabled={applying} onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="button" disabled={applying} onClick={() => void finishApply()}>{applying ? "Applying…" : "Apply to outputs"}</Button>
+            <Button type="button" disabled={applying || (!!staleWarning && !overwrite)} onClick={() => void finishApply()}>{applying ? "Applying…" : "Apply to outputs"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -15,6 +15,8 @@ interface DesignDraftBase<K extends DesignDraftKind, V> {
   sourceId: string
   value: V
   updatedAt: number
+  /** What the saved design looked like when this draft began (a fingerprint), to spot a newer save before Apply. */
+  base?: string
 }
 
 export type DesignDraft =
@@ -48,7 +50,7 @@ export function normalizeDesignDraft(raw: unknown): DesignDraft | null {
     case "theme": {
       const value = draft.value as BroadcastTheme | undefined
       if (typeof value !== "object" || value === null || typeof value.name !== "string" || typeof value.layout !== "object" || value.layout === null) return null
-      return { id: draft.id, kind: draft.kind, sourceId: draft.sourceId, value: normalizeTheme({ ...value, id: draft.sourceId }), updatedAt }
+      return { id: draft.id, kind: draft.kind, sourceId: draft.sourceId, value: normalizeTheme({ ...value, id: draft.sourceId }), updatedAt, ...(typeof draft.base === "string" ? { base: draft.base } : {}) }
     }
     default:
       return null

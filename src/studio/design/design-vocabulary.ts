@@ -1,8 +1,3 @@
-import { themeIdsOf } from "@/lib/output-themes"
-import { sceneForOutput } from "@/lib/scenes"
-import type { BroadcastOutput } from "@/types"
-import type { Scene } from "@/types/scene"
-
 /**
  * One save vocabulary across Design (#818): **Save draft** keeps changes private, **Apply to
  * outputs…** changes the looks outputs use (after naming them), and **Create version** freezes a
@@ -21,7 +16,3 @@ export const TEMPLATE_LABELS = {
   useVersion: "Use in Prepare",
 } as const
 
-/** The outputs a theme reaches: assigned to it, or through a scene layer drawn with it. */
-export function outputsUsingTheme(themeId: string, state: { outputs: BroadcastOutput[]; scenes: Scene[] }): BroadcastOutput[] {
-  return state.outputs.filter((output) => themeIdsOf(output).includes(themeId) || !!sceneForOutput(output, state.scenes)?.layers.some((layer) => layer.themeId === themeId))
-}

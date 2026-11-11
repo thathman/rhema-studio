@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
 import { useBroadcastStore } from "@/stores"
-import { themeDraftChanged } from "@/stores/broadcast-store"
+import { themeApplyPlan, themeDraftChanged, themeDraftStale } from "@/stores/broadcast-store"
 import { designDraftId } from "@/lib/design-drafts"
 import { DesignDraftActions } from "@/studio/design/design-draft-actions"
-import { outputsUsingTheme, SAVE_VOCABULARY } from "@/studio/design/design-vocabulary"
+import { SAVE_VOCABULARY } from "@/studio/design/design-vocabulary"
 import { useShellStore, type DesignTab } from "@/studio/shell-store"
 import { ThemeLibrary } from "@/components/broadcast/theme-library"
 import { DesignCanvas } from "@/components/broadcast/design-canvas"
@@ -266,14 +266,17 @@ export function ThemeDraftActions() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const scenes = useBroadcastStore((s) => s.scenes)
   const saved = useBroadcastStore((s) => !!editingThemeId && s.designDrafts.some((draft) => draft.id === designDraftId("theme", editingThemeId)))
+  useBroadcastStore((s) => s.draftThemeBase) // the stale check below reads it
   const theme = themes.find((t) => t.id === editingThemeId)
   if (!editingThemeId || !draftTheme || !theme) {
     return <p role="status" className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">Choose a theme on the left to edit it. Edits stay in a private draft until you apply them to outputs.</p>
   }
-  const using = outputsUsingTheme(theme.id, { outputs, scenes })
-  const names = using.map((output) => output.name)
-  const scope = theme.builtin
-    ? `a new copy, “${theme.name} (Custom)”. Built-in themes are never changed, so every output now on “${theme.name}” switches to the copy`
+  // The dialog lists exactly what Apply changes: the same plan Apply carries out.
+  const plan = themeApplyPlan({ themes, outputs, scenes }, theme.id)
+  const names = plan.outputs.map((change) => change.when === "now" ? change.name : `${change.name} (after the next Take)`)
+  const stale = themeDraftStale()
+  const scope = plan.copy
+    ? `a new copy, “${theme.name} (Custom)”. Built-in themes are never changed, so every theme slot and saved scene layer now on “${theme.name}” switches to the copy`
     : `the theme “${theme.name}” and every output that uses it`
   return (
     <DesignDraftActions
@@ -283,8 +286,19 @@ export function ThemeDraftActions() {
       outputs={names}
       onSave={() => useBroadcastStore.getState().saveThemeDraft()}
       onDiscard={() => useBroadcastStore.getState().discardDraft()}
-      onApply={() => useBroadcastStore.getState().saveDraft()}
+      onApply={() => {
+        if (!useBroadcastStore.getState().saveDraft({ overwriteNewer: stale })) {
+          throw new Error(`“${theme.name}” was saved again while you were applying. Close this and apply again to review the change.`)
+        }
+      }}
       onApplied={() => {}}
+      staleWarning={stale ? `“${theme.name}” has been saved since this draft began. Applying replaces that newer version with this draft.` : undefined}
+      extra={plan.scenes.length ? (
+        <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+          <p className="font-semibold">Saved scenes switching to the copy</p>
+          <ul className="mt-1 list-inside list-disc text-muted-foreground">{plan.scenes.map((scene) => <li key={scene.id}>{scene.name}</li>)}</ul>
+        </div>
+      ) : undefined}
       detail={<span className="text-[0.6875rem] text-muted-foreground" aria-label={`“${theme.name}” is used on`}>Used on: {names.length ? names.join(", ") : "no output yet"}</span>}
     />
   )
