@@ -94,10 +94,17 @@ jobs:
           APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true"
           APT_UPDATE_START_SECONDS=$(date +%s)
           echo "APT_UPDATE_STARTED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          # The mirror's name has stopped resolving for hours (11 Nov): go on with the image's own signed
-          # index and the kept packages. apt still checks each one against that index and fails the
-          # install if anything is missing, so nothing unchecked gets in.
-          sudo apt-get $APT update || echo "::warning::apt update failed; installing from the image's package index and kept packages"
+          # Tried twice. When only the mirror's name will not resolve (for hours on 11 Nov), go on with the
+          # image's own signed index and the kept packages: apt still checks each one against that index
+          # and fails the install if anything is missing. Any other failure (a bad signature, an expired
+          # key) still fails here. Drop the fallback once the runners resolve the mirror again.
+          apt_update() { sudo apt-get $APT update >/tmp/apt-update.log 2>&1; s=$?; cat /tmp/apt-update.log; return $s; }
+          if ! apt_update && ! apt_update; then
+            if grep -qE "BADSIG|NO_PUBKEY|EXPKEYSIG|KEYEXPIRED|not signed" /tmp/apt-update.log || ! grep -q "Could not resolve" /tmp/apt-update.log; then
+              echo "::error::apt update failed (not just an unreachable mirror)"; exit 1
+            fi
+            echo "::warning::The package mirror could not be resolved; installing from the image's package index and kept packages"
+          fi
           APT_UPDATE_ELAPSED_SECONDS=$(($(date +%s) - APT_UPDATE_START_SECONDS))
           echo "APT_UPDATE_FINISHED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ') elapsed_seconds=$APT_UPDATE_ELAPSED_SECONDS"
           # CI compiles/tests these apps but never runs their WebKit windows; skip
@@ -223,10 +230,17 @@ jobs:
           APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true"
           APT_UPDATE_START_SECONDS=$(date +%s)
           echo "APT_UPDATE_STARTED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          # The mirror's name has stopped resolving for hours (11 Nov): go on with the image's own signed
-          # index and the kept packages. apt still checks each one against that index and fails the
-          # install if anything is missing, so nothing unchecked gets in.
-          sudo apt-get $APT update || echo "::warning::apt update failed; installing from the image's package index and kept packages"
+          # Tried twice. When only the mirror's name will not resolve (for hours on 11 Nov), go on with the
+          # image's own signed index and the kept packages: apt still checks each one against that index
+          # and fails the install if anything is missing. Any other failure (a bad signature, an expired
+          # key) still fails here. Drop the fallback once the runners resolve the mirror again.
+          apt_update() { sudo apt-get $APT update >/tmp/apt-update.log 2>&1; s=$?; cat /tmp/apt-update.log; return $s; }
+          if ! apt_update && ! apt_update; then
+            if grep -qE "BADSIG|NO_PUBKEY|EXPKEYSIG|KEYEXPIRED|not signed" /tmp/apt-update.log || ! grep -q "Could not resolve" /tmp/apt-update.log; then
+              echo "::error::apt update failed (not just an unreachable mirror)"; exit 1
+            fi
+            echo "::warning::The package mirror could not be resolved; installing from the image's package index and kept packages"
+          fi
           APT_UPDATE_ELAPSED_SECONDS=$(($(date +%s) - APT_UPDATE_START_SECONDS))
           echo "APT_UPDATE_FINISHED_AT_UTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ') elapsed_seconds=$APT_UPDATE_ELAPSED_SECONDS"
           # CI compiles/tests the companion but never launches its WebKit window.
