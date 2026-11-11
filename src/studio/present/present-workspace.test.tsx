@@ -702,6 +702,31 @@ describe("Present's unified Live console", () => {
     expect(useDetectionStore.getState().detections[0]?.verse_ref).toBe("John 3:16")
   })
 
+  it("keeps Program and Take/Clear visible and reachable while Live tools are expanded (#812 F1)", async () => {
+    useProductionTab.setState({ open: true, liveToolsTab: "production", expanded: { production: true } })
+    await renderWorkspace()
+    const frame = element.querySelector<HTMLElement>('[data-slot="live-tools-frame"]')!
+    expect(frame.dataset.expanded).toBe("true")
+    // The tall panel is a grown grid row: nothing is overlaid, so nothing is hidden or inert.
+    expect(frame.className).not.toContain("absolute")
+    expect(element.querySelector('[class*="grid-rows-[minmax(11rem,1fr)_auto_minmax(0,2fr)]"]')?.contains(frame)).toBe(true)
+    expect(element.querySelector("[inert]")).toBeNull()
+    const transport = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Presentation controls"]')!
+    expect(transport).not.toBeNull()
+    expect(transport.closest("[inert], [aria-hidden='true']")).toBeNull()
+    expect(frame.contains(transport)).toBe(false)
+    const take = transport.querySelector<HTMLButtonElement>("button")!
+    expect(take.textContent).toBe("Take source live")
+    take.focus()
+    expect(document.activeElement).toBe(take)
+    const program = element.querySelector<HTMLElement>("[data-studio-live]")!
+    expect(program.textContent).toContain("Program")
+    expect(frame.contains(program)).toBe(false)
+    // The presenter clicker still steps the service; Program stays in view while it does.
+    pressKey("PageDown")
+    expect(presentCalls.next).toHaveBeenCalledTimes(1)
+  })
+
   it("keeps the Live toolbar compact and opens secondary controls from the shared tools drawer", async () => {
     useServiceStore.setState({ current: emptyService })
     useTranscriptStore.setState({ isTranscribing: false })

@@ -13,6 +13,7 @@ import { activateBibleReference } from "@/lib/bible-activate"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useJoin, type JoinStatus } from "@/stores/join-store"
+import { useJournalStore } from "@/stores/journal-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
 import { OperatorsPanel } from "@/studio/production/operators-panel"
@@ -246,24 +247,27 @@ describe("the desks a joined computer gets", () => {
 })
 
 describe("the main desk's operator list", () => {
-  // #800 R1: the host card is status only; pause, roles and revoke are managed in Permissions.
-  it("shows each desk's status and a paused badge, and sends pause to Permissions", async () => {
+  it("takes back control from a desk and gives it back, without unpairing it", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     useJoin.setState({ status: "off", me: null, live: null, error: null, paused: false, note: null })
-    useShellStore.setState({ goRequest: null })
-    useSettingsStore.setState({ remoteDevices: [{ hash: "b".repeat(64), name: "Desk C", paired_at: "2026-10-23T09:00:00Z", role: "screens", paused: true }] })
+    useJournalStore.setState({ entries: [] })
+    useSettingsStore.setState({ remoteDevices: [{ hash: "b".repeat(64), name: "Desk C", paired_at: "2026-10-23T09:00:00Z", role: "screens" }] })
     const el = document.createElement("div")
-    const root = createRoot(el)
-    mountedRoots.push(root)
-    await act(async () => root.render(<OperatorsPanel />))
-    const row = el.querySelector('[aria-label="Paired operators"] li')!
-    expect(row.textContent).toContain("Desk C")
-    expect(row.textContent).toContain("Paused")
-    expect(el.querySelector('[aria-label="Take back control from Desk C"]')).toBeNull()
-    expect(el.querySelector('[aria-label="Give control back to Desk C"]')).toBeNull()
-    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Manage access, roles and pause in Permissions"]')!.click())
-    expect(useShellStore.getState().goRequest).toBe("permissions")
+    await act(async () => createRoot(el).render(<OperatorsPanel />))
+    const take = el.querySelector<HTMLButtonElement>('[aria-label="Take back control from Desk C"]')!
+    await act(async () => take.click())
     expect(useSettingsStore.getState().remoteDevices[0].paused).toBe(true)
+    expect(el.textContent).toContain("Paused")
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main desk took back control from Desk C")
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Give control back to Desk C"]')!.click())
+    expect(useSettingsStore.getState().remoteDevices).toHaveLength(1)
+    expect(useSettingsStore.getState().remoteDevices[0].paused).toBeUndefined()
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main desk gave control back to Desk C")
+    // #800 R1: the emergency pause stays here; roles, grants and revoke are managed in Permissions.
+    useShellStore.setState({ goRequest: null })
+    expect(el.querySelector('[aria-label="Revoke Desk C"]')).toBeNull()
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Manage access and roles in Permissions"]')!.click())
+    expect(useShellStore.getState().goRequest).toBe("permissions")
   })
 })
 

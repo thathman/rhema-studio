@@ -16,17 +16,26 @@ export const useProductionTab = create<{
   liveToolsTab: LiveToolsTab
   liveOutputId: string | null
   /**
-   * Which Live tools tabs fill the console as a full-height sheet instead of the strip under
-   * Program (#812 F1). Production tools (Scenes, OBS, Cameras, Show health, Operators) are whole
-   * workspaces, so they start expanded; Find & cue starts as the strip so Preview stays in view.
-   * The operator's choice per tab is kept for this session.
+   * Which Live tools tabs take the tall panel under Program instead of the strip (#812 F1). The
+   * panel grows into the Preview/Program row and never covers Program or Take/Clear, which shrink
+   * but stay in view. The operator's choice per tab is kept for this session.
    */
   expanded: Partial<Record<LiveToolsTab, boolean>>
-}>(() => ({ requested: null, selected: "timekeeper", scene: null, open: false, liveToolsTab: "bible", liveOutputId: null, expanded: {} }))
+  /** Live tools was opened by a link (openProductionTab), so it starts as the strip. */
+  linked: boolean
+}>(() => ({ requested: null, selected: "timekeeper", scene: null, open: false, liveToolsTab: "bible", liveOutputId: null, expanded: {}, linked: false }))
 
-/** Whether this Live tools tab shows as the full-height sheet (#812 F1). */
-export function liveToolsExpanded(expanded: Partial<Record<LiveToolsTab, boolean>>, tab: LiveToolsTab): boolean {
-  return expanded[tab] ?? tab === "production"
+/**
+ * Whether this Live tools tab is the tall panel (#812 F1). The operator's own choice wins. Without
+ * one, Production tools start tall only while nothing is live and it was not opened from a link;
+ * on air, the strip keeps Preview and Program at full size.
+ */
+export function liveToolsExpanded(
+  state: { expanded: Partial<Record<LiveToolsTab, boolean>>; linked: boolean },
+  tab: LiveToolsTab,
+  isLive: boolean,
+): boolean {
+  return state.expanded[tab] ?? (tab === "production" && !isLive && !state.linked)
 }
 
 /** Expand this Live tools tab to the full-height sheet, or restore it to the strip under Program. */
@@ -35,9 +44,14 @@ export function setLiveToolsExpanded(tab: LiveToolsTab, value: boolean): void {
 }
 
 export function openProductionTab(tab: ProductionTab, opts: { sceneId?: string } = {}): void {
-  useProductionTab.setState({ requested: tab, selected: tab, scene: opts.sceneId ?? null, open: true, liveToolsTab: "production" })
+  useProductionTab.setState({ requested: tab, selected: tab, scene: opts.sceneId ?? null, open: true, liveToolsTab: "production", linked: true })
   useShellStore.getState().goTo("present")
 }
+
+// Closing Live tools forgets that a link opened it.
+useProductionTab.subscribe((s, p) => {
+  if (p.open && !s.open && s.linked) useProductionTab.setState({ linked: false })
+})
 
 // Leaving Live dismisses any contextual tool request. The selected tool remains available next time.
 useShellStore.subscribe((s, p) => {

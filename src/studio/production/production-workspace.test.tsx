@@ -95,27 +95,48 @@ describe("Production control", () => {
     expect(el.textContent).toContain("Planned finish")
   })
 
-  it("Live tools gives Production tools a full-height sheet and lets the operator shrink it back (#812 F1)", async () => {
+  it("Live tools gives Production tools a tall panel off air, the strip on air or from a link, and Esc shrinks first (#812 F1)", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const { LiveToolsDrawer } = await import("@/studio/present/live-tools-drawer")
-    useProductionTab.setState({ expanded: {} })
+    const originalLive = useBroadcastStore.getState().isLive
+    useBroadcastStore.setState({ isLive: false })
+    useProductionTab.setState({ expanded: {}, linked: false })
+    const onClose = vi.fn()
     const el = document.createElement("div")
     document.body.appendChild(el)
     const root = createRoot(el)
     roots.push(root)
-    const render = () => root.render(<LiveToolsDrawer tab="production" onTabChange={() => {}} onClose={() => {}} stripClassName="strip-row" />)
-    await act(async () => render())
+    await act(async () => root.render(<LiveToolsDrawer tab="production" onTabChange={() => {}} onClose={onClose} stripClassName="strip-row" />))
     const frame = () => el.querySelector<HTMLElement>('[data-slot="live-tools-frame"]')!
+    // Off air: Production tools start tall, as a grown grid row (nothing is overlaid or made inert).
     expect(frame().dataset.expanded).toBe("true")
-    expect(frame().className).toContain("absolute inset-0")
+    expect(frame().className).toContain("strip-row")
+    expect(frame().className).not.toContain("absolute")
+    expect(el.querySelector("[inert]")).toBeNull()
     expect(el.querySelector('[role="tabpanel"][data-expanded="true"]')).not.toBeNull()
-    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Show Live tools under Program"]')!.click())
+    // Esc shrinks to the strip first, then closes.
+    const esc = () => el.querySelector('[data-slot="live-tools-panel"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+    await act(async () => esc())
     expect(frame().dataset.expanded).toBe("false")
-    expect(frame().className).toBe("strip-row")
-    expect(useProductionTab.getState().expanded).toEqual({ production: false })
-    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Expand Live tools to full height"]')!.click())
+    expect(onClose).not.toHaveBeenCalled()
+    await act(async () => esc())
+    expect(onClose).toHaveBeenCalledTimes(1)
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Expand Live tools"]')!.click())
     expect(frame().dataset.expanded).toBe("true")
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Shrink Live tools to the strip"]')!.click())
+    expect(useProductionTab.getState().expanded).toEqual({ production: false })
+    // On air, or opened from a link, the strip is the default.
     useProductionTab.setState({ expanded: {} })
+    await act(async () => useBroadcastStore.setState({ isLive: true }))
+    expect(frame().dataset.expanded).toBe("false")
+    await act(async () => useBroadcastStore.setState({ isLive: false }))
+    expect(frame().dataset.expanded).toBe("true")
+    await act(async () => openProductionTab("obs"))
+    expect(frame().dataset.expanded).toBe("false")
+    await act(async () => useProductionTab.setState({ open: false }))
+    expect(useProductionTab.getState().linked).toBe(false)
+    useProductionTab.setState({ expanded: {}, linked: false })
+    useBroadcastStore.setState({ isLive: originalLive })
   })
 
   it("Scenes (once Programs) is a private editor; saved scenes go through the named Program Take", async () => {

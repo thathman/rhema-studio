@@ -3,7 +3,7 @@ import { DetectionsPanel } from "@/components/panels/detections-panel"
 import { TranscriptPanel } from "@/components/panels/transcript-panel"
 import { Button } from "@/components/ui/button"
 import { EmbeddingWarningBanner } from "@/components/ui/embedding-warning-banner"
-import { useBibleStore } from "@/stores"
+import { useBibleStore, useBroadcastStore } from "@/stores"
 import { useServiceStore } from "@/stores/service-store"
 import { ProductionWorkspace } from "@/studio/production/production-workspace"
 import { CueMenu } from "@/studio/present/cue-menu"
@@ -14,6 +14,7 @@ import { QuickFind } from "@/studio/present/quick-find"
 import { EngageHostControl } from "@/studio/engage/host-control"
 import { liveToolsExpanded, setLiveToolsExpanded, useProductionTab, type LiveToolsTab } from "@/studio/production/production-tab"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "@/lib/utils"
 
 export type { LiveToolsTab } from "@/studio/production/production-tab"
 
@@ -50,10 +51,9 @@ function ServiceTranslationControl() {
 }
 
 /**
- * Live tools: the strip under Program, or a full-height sheet over the Live console (#812 F1) for
- * the tools that are whole workspaces (Scenes, OBS, Cameras, Show health, Operators). The sheet
- * covers the running order, Preview and Program in this window only; nothing on an output changes,
- * and Restore or Close brings the console straight back.
+ * Live tools: the strip under Program, or a tall panel (#812 F1) for the tools that are whole
+ * workspaces (Scenes, OBS, Cameras, Show health, Operators). The tall panel takes height from the
+ * Preview/Program row; it never covers Program or Take/Clear. Esc shrinks it, then closes it.
  */
 export function LiveToolsDrawer({
   tab,
@@ -64,12 +64,15 @@ export function LiveToolsDrawer({
   tab: LiveToolsTab
   onTabChange: (tab: LiveToolsTab) => void
   onClose: () => void
-  /** Where the strip sits in the Live console's grid; the sheet covers the whole grid instead. */
+  /** Where the drawer sits in the Live console's grid. */
   stripClassName?: string
 }) {
-  const expanded = useProductionTab((s) => liveToolsExpanded(s.expanded, tab))
+  const isLive = useBroadcastStore((s) => s.isLive)
+  const expanded = useProductionTab((s) => liveToolsExpanded(s, tab, isLive))
   return (
-    <div data-slot="live-tools-frame" data-expanded={expanded} className={expanded ? "absolute inset-0 z-30 flex min-h-0 flex-col bg-background" : stripClassName}>
+    // The tall panel is the same grid row grown (the console grid gives it the height): nothing is
+    // covered, so Program and Take/Clear stay visible and reachable.
+    <div data-slot="live-tools-frame" data-expanded={expanded} className={cn(stripClassName, expanded && "max-[1200px]:h-[28rem]")}>
       <section
         id="live-tools-panel"
         data-slot="live-tools-panel"
@@ -77,7 +80,9 @@ export function LiveToolsDrawer({
         onKeyDown={(event) => {
           if (event.key === "Escape" && !event.defaultPrevented) {
             event.preventDefault()
-            onClose()
+            // First back to the strip, then closed.
+            if (expanded) setLiveToolsExpanded(tab, false)
+            else onClose()
           }
         }}
         className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card"
@@ -101,8 +106,8 @@ export function LiveToolsDrawer({
               variant="ghost"
               size="icon-sm"
               aria-pressed={expanded}
-              aria-label={expanded ? "Show Live tools under Program" : "Expand Live tools to full height"}
-              title={expanded ? "Show the running order, Preview and Program again, with these tools under Program" : "Give these tools the whole Live console; Preview and Program come back when you shrink or close them"}
+              aria-label={expanded ? "Shrink Live tools to the strip" : "Expand Live tools"}
+              title={expanded ? "Give Preview and Program their full height again" : "Give these tools most of the console; Preview, Program and Take stay in view, smaller"}
               onClick={() => setLiveToolsExpanded(tab, !expanded)}
             >
               {expanded ? <Minimize2Icon /> : <Maximize2Icon />}

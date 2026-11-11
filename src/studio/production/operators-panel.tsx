@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { formatMs } from "@/lib/timer"
+import { setDeskControl } from "@/lib/desk-control"
 import { readHostReceivers, useCanSend, useJoin, type HostReceiverOutput, type SendResult } from "@/stores/join-store"
 import type { LiveStateV1 } from "@/lib/live-state"
 import { activatedLabel } from "@/lib/live-sources"
@@ -76,6 +77,15 @@ function useFreshness() {
     return () => clearInterval(id)
   }, [])
   return { ...deskFreshness({ status, receivedAt, now: Math.max(now, receivedAt), heartbeatMs, clockSkewMs }), now, receivedAt }
+}
+
+/** Take back control from a paired desk, or give it back (#243). Its pairing and role stay. */
+function DeskControlButton({ hash, name, paused }: { hash: string; name: string; paused: boolean }) {
+  return (
+    <Button size="xs" variant="outline" aria-pressed={paused} aria-label={paused ? `Give control back to ${name}` : `Take back control from ${name}`} onClick={() => setDeskControl(hash, !paused)}>
+      {paused ? "Give control back" : "Take back control"}
+    </Button>
+  )
 }
 
 /**
@@ -175,7 +185,7 @@ function HostCard() {
           )}
         </div>
       )}
-      {/* Status only (#800 R1): roles, grants, Take back control and revoke live in Permissions. */}
+      {/* #800 R1: status plus the emergency pause; roles, grants and revoke are managed in Permissions. */}
       <ul aria-label="Paired operators" className="flex flex-col divide-y divide-border rounded-md border border-border">
         {rows.length === 0 && <li className="px-2.5 py-2 text-muted-foreground">No one paired yet.</li>}
         {rows.map(({ device: d, hash, name, seen }) => (
@@ -186,13 +196,14 @@ function HostCard() {
               {hosting ? seenWords(seen, now, (ms) => hhmm(ms)) : "Not connected"}{seen && hosting ? ` · ${seen.address}` : ""}
             </span>
             {d?.paused === true && <span className="rounded-full bg-muted px-2 py-0.5 text-[0.625rem] font-bold text-muted-foreground uppercase">Paused</span>}
-            {d && <span className="text-muted-foreground">{roleLabel(d.role ?? "viewer")}</span>}
+            {d && <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === (d.role ?? "viewer"))?.may}>{roleLabel(d.role ?? "viewer")}</span>}
+            {d && <DeskControlButton hash={d.hash} name={d.name} paused={d.paused === true} />}
           </li>
         ))}
       </ul>
-      <p className="text-muted-foreground">Roles, Take back control (pause) and revoking a device are in Permissions, one place for who can do what.</p>
+      <p className="text-muted-foreground">Take back control stops a desk's commands at once without unpairing it; it still sees the service and stays on Talk. Roles, grants and revoking a device are in Permissions.</p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" aria-label="Manage access, roles and pause in Permissions" onClick={openPermissions}>Manage access and roles…</Button>
+        <Button size="sm" variant="outline" aria-label="Manage access and roles in Permissions" onClick={openPermissions}>Manage access and roles…</Button>
         {host?.running && !confirmStop && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirmStop(true)}>Stop hosting</Button>}
         {confirmStop && (
           <span role="group" aria-label="Stop hosting?" className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 px-2 py-1">
