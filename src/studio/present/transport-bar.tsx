@@ -148,8 +148,8 @@ export function TransportBar({ className, hasSelectedOutputSceneTake = false }: 
     : previewKind === "audio"
       ? `Play ${preview ?? "the selected"} audio cue. Screen Program stays unchanged.`
       : rehearsal
-        ? `Take ${preview ?? "the Preview item"} into private rehearsal. Public outputs keep their current Program.`
-        : `Take ${preview ?? "the Preview item"} as the active source. Every output subscribed to that source receives it. The named output selector sets Preview language and the scene Take target; it does not limit this source Take.`
+        ? `Take ${preview ?? "the Preview item"} into private rehearsal. Public outputs keep their current Program. (Enter)`
+        : `Take ${preview ?? "the Preview item"} as the active source. Every output subscribed to that source receives it. The named output selector sets Preview language and the scene Take target; it does not limit this source Take. (Enter)`
   const nextHint = useNextHint()
   const targetId = useId()
 
@@ -244,7 +244,7 @@ export function TransportBar({ className, hasSelectedOutputSceneTake = false }: 
           <TransportButton
             icon={<SquareIcon />}
             label="Clear"
-            title="Clear: take it off the screens; Restore brings it back (Esc)"
+            title="Clear: take it off the screens; Restore brings it back (Esc twice)"
             reason={isLive ? null : hasLiveItem ? "Already cleared: Restore brings it back" : "Nothing is on the screens"}
             onClick={() => presentActions.clear()}
             tone="danger"

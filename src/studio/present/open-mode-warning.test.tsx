@@ -58,6 +58,36 @@ describe("open mode (#839 S15)", () => {
     expect(element.querySelector('[data-testid="open-mode-warning"]')).not.toBeNull()
   })
 
+  it("a failed status read keeps the warning; a partial read that still shows keys off with a LAN listener shows it", async () => {
+    await act(async () => root.render(<OpenModeWarning />))
+    expect(element.querySelector('[data-testid="open-mode-warning"]')).not.toBeNull()
+    const working = invokeMock.getMockImplementation()!
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_remote_auth_status") throw new Error("host busy")
+      return working(cmd)
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(OPEN_MODE_POLL_MS) })
+    expect(element.querySelector('[data-testid="open-mode-warning"]')).not.toBeNull()
+
+    // Started with keys on, then the OSC read fails while HTTP shows keys off on the LAN.
+    act(() => root.unmount())
+    element.remove()
+    element = document.createElement("div")
+    document.body.append(element)
+    root = createRoot(element)
+    status.auth = { required: true }
+    invokeMock.mockImplementation(working)
+    await act(async () => root.render(<OpenModeWarning />))
+    expect(element.querySelector('[data-testid="open-mode-warning"]')).toBeNull()
+    status.auth = { required: false }
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_osc_status") throw new Error("host busy")
+      return working(cmd)
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(OPEN_MODE_POLL_MS) })
+    expect(element.querySelector('[data-testid="open-mode-warning"]')).not.toBeNull()
+  })
+
   it("goes away when keys are turned on, and comes back if they are turned off again", async () => {
     await act(async () => root.render(<OpenModeWarning />))
     expect(element.querySelector('[data-testid="open-mode-warning"]')).not.toBeNull()

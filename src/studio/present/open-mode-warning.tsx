@@ -20,7 +20,12 @@ export function OpenModeWarning() {
         invoke<ListenerStatus>("get_osc_status").catch(() => null),
         invoke<AuthStatus>("get_remote_auth_status").catch(() => null),
       ])
-      if (!cancelled) setOpen(isOpenMode(http, osc, auth))
+      if (cancelled) return
+      // A failed read never hides the warning: with all three known, the host decides; with one
+      // missing, keys off with a listener known to be on the LAN is still open mode, and anything
+      // else keeps the last known state.
+      if (http && osc && auth) setOpen(isOpenMode(http, osc, auth))
+      else if (isOpenMode(http, osc, auth)) setOpen(true)
     }
     void poll()
     const interval = setInterval(() => void poll(), OPEN_MODE_POLL_MS)

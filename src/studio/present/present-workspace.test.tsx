@@ -929,6 +929,21 @@ describe("Live safety keys (#816 Enter is Take, #817 Esc twice clears)", () => {
     expect(presentCalls.clear).not.toHaveBeenCalled()
   })
 
+  it("a Take between the two presses (mouse, remote or cue) starts over: the second Esc only asks", async () => {
+    let now = 3_000_000
+    vi.spyOn(Date, "now").mockImplementation(() => now)
+    await renderWorkspace()
+    await act(async () => pressKey("Escape"))
+    expect(element.querySelector('[data-testid="clear-confirm-prompt"]')).not.toBeNull()
+    now += 500
+    await act(async () => useBroadcastStore.setState({ liveVerse: { reference: "Something new", segments: [] } }))
+    expect(element.querySelector('[data-testid="clear-confirm-prompt"]')).toBeNull()
+    now += 500
+    await act(async () => pressKey("Escape"))
+    expect(presentCalls.clear).not.toHaveBeenCalled()
+    expect(element.querySelector('[data-testid="clear-confirm-prompt"]')).not.toBeNull()
+  })
+
   it("the prompt goes away by itself after the window", async () => {
     vi.useFakeTimers()
     try {

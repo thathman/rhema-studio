@@ -535,14 +535,24 @@ export async function putBack(value: unknown): Promise<boolean> {
 
 /**
  * Whether this change is the operator taking something new live: Program going live or moving to other
- * content, or a congregation output taking a different scene. Rehearsal and putting back are not.
+ * content, or a congregation output taking a different scene. Rehearsal and putting back are not, and
+ * neither is leaving rehearsal, which puts back what the screens showed before it, unless the operator
+ * chose Show this live and the rehearsed Program differs from it (a real go-live).
  */
-export function isNewTake(s: Pick<ReturnType<typeof useBroadcastStore.getState>, "isLive" | "liveVerse" | "rehearsal" | "outputs">, p: Pick<ReturnType<typeof useBroadcastStore.getState>, "isLive" | "liveVerse" | "outputs">): boolean {
+type TakeState = Pick<ReturnType<typeof useBroadcastStore.getState>, "isLive" | "liveVerse" | "rehearsal" | "rehearsalReturn" | "outputs">
+export function isNewTake(s: TakeState, p: TakeState): boolean {
   if (s.rehearsal || puttingBackNow > 0 || isPuttingBack()) return false
+  if (p.rehearsal) {
+    const before = p.rehearsalReturn
+    // Leaving rehearsal: the scenes always come back as they were. Program is new only when the
+    // rehearsed one stayed (Show this live) and is not what was live before rehearsal.
+    return !!before && s.isLive && !!s.liveVerse && (!before.isLive || s.liveVerse !== before.liveVerse)
+  }
   if (s.isLive && s.liveVerse && (!p.isLive || s.liveVerse !== p.liveVerse)) return true
   if (s.outputs === p.outputs) return false
   const before = new Map(p.outputs.map((o) => [o.id, o.sceneId ?? null]))
-  return s.outputs.some((o) => !!o.sceneId && before.get(o.id) !== o.sceneId)
+  // Only the congregation's screens: a Stage or other role's scene is not what was offered back.
+  return s.outputs.some((o) => (o.role ?? "congregation") === "congregation" && !!o.sceneId && before.get(o.id) !== o.sceneId)
 }
 
 /**

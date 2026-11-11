@@ -177,9 +177,18 @@ export function PresentWorkspace() {
       }
       presentActions[action]()
     }
+    // Program changed between the two presses (a mouse Take, a remote, a cue): the second Esc must not
+    // clear something new that was never asked about, so the next Esc asks again.
+    const offProgram = useBroadcastStore.subscribe((s, p) => {
+      if (s.liveVerse !== p.liveVerse) {
+        confirm.reset()
+        hidePrompt()
+      }
+    })
     window.addEventListener("keydown", onKey)
     return () => {
       window.removeEventListener("keydown", onKey)
+      offProgram()
       if (promptTimer) clearTimeout(promptTimer)
     }
   }, [])

@@ -68,7 +68,7 @@ export const TUTORIAL_STEPS: Step[] = [
   at({ workspace: "present" }, {
     target: '[role="toolbar"][aria-label="Presentation controls"]',
     title: "Next, Take live, Clear",
-    content: "Next and Previous step through slides and items (arrow keys or a clicker work too). Take source live sends Preview to outputs subscribed to that source; the words beside it explain the destination. Take scene is scoped to the selected congregation output. Clear (Esc) takes the screen off; Restore brings it back.",
+    content: "Next and Previous step through slides and items (arrow keys or a clicker work too). Take source live (Enter) sends Preview to outputs subscribed to that source; the words beside it explain the destination. Take scene is scoped to the selected congregation output. Clear (Esc twice: the first press only asks) takes the screen off; Restore brings it back.",
     placement: "top",
   }),
   at({ workspace: "present" }, {

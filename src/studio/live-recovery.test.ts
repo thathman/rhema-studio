@@ -1113,6 +1113,44 @@ describe("an unanswered recovery offer ends at the first new Take (#829)", () =>
     vi.mocked(invoke).mockImplementation(async () => null)
   })
 
+  it("leaving rehearsal puts the screens back without ending the offer; Show this live with new Program ends it", async () => {
+    const sceneA = { id: "scene-a", name: "A", background: "#000000", layers: [], createdAt: 1, updatedAt: 1 }
+    const sceneB = { id: "scene-b", name: "B", background: "#111111", layers: [], createdAt: 1, updatedAt: 1 }
+    const output = useBroadcastStore.getState().outputs[0]
+    useBroadcastStore.setState({ scenes: [sceneA, sceneB], outputs: [{ ...output, sceneId: sceneA.id }] })
+    const { stop } = await startWithOffer()
+    const b = () => useBroadcastStore.getState()
+
+    // The real path: into rehearsal, Take scene B and a verse there, then leave (screens come back).
+    b().setRehearsal(true)
+    b().takeScene(MAIN_OUTPUT_ID, sceneB.id)
+    b().setLiveVerse(newVerse, null, { goLive: true })
+    expect(b().outputs[0].sceneId).toBe(sceneB.id)
+    b().setRehearsal(false)
+    expect(b().outputs[0].sceneId).toBe(sceneA.id)
+    expect(useRecovery.getState().offer).not.toBeNull()
+
+    // Show this live: the rehearsed Program stays, and it is new, so that is a real go-live.
+    b().setRehearsal(true)
+    b().setLiveVerse(newVerse, null, { goLive: true })
+    b().setRehearsal(false, { keepRehearsed: true })
+    expect(b().liveVerse?.reference).toBe("John 3:16")
+    expect(useRecovery.getState().offer).toBeNull()
+    stop()
+    vi.mocked(invoke).mockImplementation(async () => null)
+  })
+
+  it("a Stage or other non-congregation output's scene does not end it (#829 review)", async () => {
+    const output = useBroadcastStore.getState().outputs[0]
+    const { stop } = await startWithOffer()
+    const stage = { ...output, id: "stage-1", name: "Stage", role: "stage" as const }
+    useBroadcastStore.setState({ outputs: [output, stage] })
+    useBroadcastStore.setState({ outputs: [output, { ...stage, sceneId: "stage-scene" }] })
+    expect(useRecovery.getState().offer).not.toBeNull()
+    stop()
+    vi.mocked(invoke).mockImplementation(async () => null)
+  })
+
   it("Put back itself, a rehearsal Take and an offer already put off (Not now) do not end it here", async () => {
     const { crash, stop } = await startWithOffer()
     // Rehearsal is a sandbox.
