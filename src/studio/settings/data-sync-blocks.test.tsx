@@ -39,3 +39,11 @@ describe("Settings → Restore from a backup", () => {
     expect(restore().title).toContain("clear the screens first")
   })
 })
+
+describe("a failed restore's title", () => {
+  it("never says 'Nothing was changed' when the previous database could not be put back", async () => {
+    const { restoreFailedTitle } = await import("@/studio/library/content-actions")
+    expect(restoreFailedTitle(new Error("not a database file"))).toBe("Nothing was changed")
+    expect(restoreFailedTitle("invalid: the previous database could not be put back: the backup could not be opened")).toContain("could not be put back")
+  })
+})

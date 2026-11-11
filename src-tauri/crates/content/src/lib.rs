@@ -773,12 +773,18 @@ pub fn read_installation(source: &Path) -> Result<Option<String>> {
 /// Every handle on `path` must be dropped before calling. If the restored
 /// file cannot be opened, the snapshot is put back and the error returned.
 /// Returns the new handle and the snapshot path (None when nothing existed).
+/// How a restore's error begins when the previous database could not be put back: the screens show
+/// it under its own title, never under "Nothing was changed".
+pub const RESTORE_NOT_PUT_BACK: &str = "the previous database could not be put back";
+
 pub fn restore_from(path: &Path, source: &Path) -> Result<(ContentDb, Option<PathBuf>)> {
     // A newer Rhema's backup is refused before anything here is touched (#411 data hunt: it was put
     // in place first and only failed to open, so the current database went through a rollback).
     let newer: Vec<String> = verify_backup(source)?.into_iter().filter(|v| !MIGRATIONS.iter().any(|(k, _)| k == v)).collect();
     if !newer.is_empty() {
-        return Err(ContentError::NewerSchema { versions: newer });
+        // Said of the backup picked, not of "this database" (NewerSchema's words are for a live file).
+        log::warn!("[content] restore refused: the backup has newer migrations {newer:?}");
+        return Err(ContentError::Invalid("this backup was made by a newer Rhema Studio: update Rhema Studio on this computer first".into()));
     }
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -830,7 +836,7 @@ pub fn restore_from(path: &Path, source: &Path) -> Result<(ContentDb, Option<Pat
                     let _ = std::fs::remove_file(&incoming);
                     log::error!("[content] restore failed ({e}) and the previous database could not be put back: {put_back}");
                     return Err(ContentError::Invalid(format!(
-                        "the backup could not be opened ({e}), and the previous database could not be put back ({put_back}): it is kept at {}",
+                        "{RESTORE_NOT_PUT_BACK}: the backup could not be opened ({e}), and putting the previous database back failed ({put_back}). It is kept at {}",
                         snap.display()
                     )));
                 }
@@ -2251,7 +2257,8 @@ lines"}"#.to_string(), false),
             db.backup_to(&backup).unwrap();
         }
         Connection::open(&backup).unwrap().execute("INSERT INTO schema_migrations (version) VALUES ('9999_from_the_future')", []).unwrap();
-        assert!(matches!(restore_from(&tmp.db(), &backup), Err(ContentError::NewerSchema { .. })));
+        let refused = restore_from(&tmp.db(), &backup).unwrap_err().to_string();
+        assert!(refused.contains("made by a newer Rhema Studio"), "{refused}");
         let snapshots = std::fs::read_dir(&tmp.0).unwrap().filter(|e| e.as_ref().unwrap().file_name().to_string_lossy().contains("before-restore")).count();
         assert_eq!(snapshots, 0, "no snapshot taken, no file swapped");
         assert_eq!(ContentDb::open(&tmp.db()).unwrap().list_programs().unwrap().len(), 1);

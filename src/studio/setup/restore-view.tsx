@@ -10,7 +10,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useShellStore } from "@/studio/shell-store"
 import { ChurchFolderBlock } from "@/studio/settings/data-sync-blocks"
-import { describeError, reloadAfterRestore } from "@/studio/library/content-actions"
+import { describeError, reloadAfterRestore, restoreFailedTitle } from "@/studio/library/content-actions"
 import type { BackupSummary } from "@/types"
 
 type Leave = (open: () => void) => void
@@ -84,7 +84,7 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
       setPicked(null)
       toast.success(picked.undo ? "Restore undone" : "Backup restored", { description: r.snapshot ? `What was here before is kept at ${r.snapshot}` : undefined })
     } catch (e) {
-      toast.error("Nothing was changed", { description: describeError(e) })
+      toast.error(restoreFailedTitle(e), { description: describeError(e) })
     } finally {
       setBusy(null)
     }
