@@ -11,7 +11,7 @@ Remote control enables you to:
 - **Build the queue** - Add the previewed verse to the queue
 - **Control broadcast** - Show/hide output, toggle on-air status
 - **Switch themes** - Change active broadcast theme by name
-- **Adjust settings** - Modify confidence threshold and opacity
+- **Adjust settings** - Modify the confidence threshold
 - **Monitor status** - Query current state via HTTP API
 
 ## Supported Protocols
@@ -158,9 +158,9 @@ curl -X POST http://localhost:8080/api/v1/command \
   -d '{"command":"theme","value":"Classic Dark"}'
 ```
 
-### 7. **opacity** — Set Broadcast Opacity
+### 7. **opacity** — Not available yet
 
-Adjusts the opacity of the broadcast output.
+Refused today: nothing on the screens takes it yet. HTTP answers 422 with that reason; OSC ignores it. The address and command are kept so a controller gets a plain refusal, not "unknown command".
 
 **Parameters:**
 - `value` (float): Opacity from 0.0 (transparent) to 1.0 (opaque)
@@ -178,7 +178,7 @@ curl -X POST http://localhost:8080/api/v1/command \
   -d '{"command":"opacity","value":0.75}'
 ```
 
-**Note:** This command is currently a placeholder and will be fully wired when the broadcast store adds opacity support.
+**Note:** Refused until the screens support opacity.
 
 ### 8. **confidence** — Set Detection Confidence Threshold
 
@@ -439,7 +439,7 @@ osc.send('/rhema/bible_prev');
 osc.send('/rhema/send_to_live');
 osc.send('/rhema/add_to_queue');
 osc.send('/rhema/theme', 'Classic Dark');
-osc.send('/rhema/opacity', 0.8);
+osc.send('/rhema/confidence', 0.8);
 osc.send('/rhema/on_air', true);
 ```
 
@@ -486,7 +486,7 @@ osc.send_message('/rhema/bible_prev', [])
 osc.send_message('/rhema/send_to_live', [])
 osc.send_message('/rhema/add_to_queue', [])
 osc.send_message('/rhema/theme', 'Classic Dark')
-osc.send_message('/rhema/opacity', 0.8)
+osc.send_message('/rhema/confidence', 0.8)
 osc.send_message('/rhema/on_air', True)
 ```
 

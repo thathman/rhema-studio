@@ -57,7 +57,7 @@ OSC addresses and HTTP commands do exactly what the buttons do, with the same sa
 | Step the Bible panel (preview only) | `/rhema/bible_next`, `/rhema/bible_prev` | `bible_next`, `bible_prev` |
 | Output on / off | `/rhema/show`, `/rhema/hide`, `/rhema/on_air <bool>` | `show`, `hide`, `on_air` |
 | Run a macro | `/rhema/macro "service-start"` | `macro` with `"value": "service-start"` |
-| Theme, opacity, confidence | `/rhema/theme <name>`, `/rhema/opacity <0–1>`, `/rhema/confidence <0–1>` | `theme`, `opacity`, `confidence` |
+| Theme, confidence | `/rhema/theme <name>`, `/rhema/confidence <0–1>` | `theme`, `confidence` (`opacity` is refused: not available yet) |
 
 `confidence` sets how sure speech recognition must be before Auto puts a heard verse on air (default 0.8); below it the verse waits in the preview.
 
