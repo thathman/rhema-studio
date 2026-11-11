@@ -21,6 +21,7 @@ import {
 } from "@/lib/song-form"
 import { isChoir, withChoir } from "@/lib/song-kind"
 import { ArrangementStrip } from "@/studio/prepare/arrangement-strip"
+import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 
 const LANGUAGES: Array<[string, string]> = [["en", "English"], ["yo", "Yorùbá"]]
 const LICENCE_LABEL: Record<Licence, string> = { public_domain: "Public domain", ccli: "CCLI", custom: "Custom permission", unknown: "Unknown" }
@@ -515,7 +516,7 @@ function HymnNumbers({ form, set }: { form: SongForm; set: (patch: Partial<SongF
 }
 
 /** Chord charts and sheet music for a saved song: files in the media folder, opened with the computer's own viewer. */
-function Attachments({ songId }: { songId: string }) {
+export function Attachments({ songId }: { songId: string }) {
   const [files, setFiles] = useState<MediaAsset[]>([])
   const [busy, setBusy] = useState(false)
   useEffect(() => {
@@ -565,7 +566,8 @@ function Attachments({ songId }: { songId: string }) {
         {files.map((m) => (
           <li key={m.id} className="flex items-center gap-2 text-xs">
             <button type="button" className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => void openFile(m)} title="Open">{m.name}</button>
-            <Button size="icon-xs" variant="ghost" aria-label={`Remove ${m.name}`} onClick={() => void remove(m)}><XIcon /></Button>
+            {/* Asks once before removing (#831 S7): the chart or track is unlinked from this song. */}
+            <ConfirmDelete label={`Remove ${m.name}`} verb="Remove" onConfirm={() => void remove(m)} />
           </li>
         ))}
       </ul>

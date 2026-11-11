@@ -125,4 +125,42 @@ describe("Prepare → AI drafts", () => {
     // The slide the assistant wrote waits to be accepted.
     expect(useQueueStore.getState().items[0]).toMatchObject({ reference: "Welcome", ai_suggestion: "Claude" })
   })
+
+  it("asks before removing a draft, and Keep leaves it (#831 S7)", async () => {
+    drafts = [draft]
+    useSettingsStore.setState({ mcpEnabled: true })
+    useQueueStore.setState({ items: [], headers: [] })
+    useServiceStore.setState({ current: null, dirty: false })
+    invoke.mockClear()
+    await mount()
+    await act(async () => button("Remove").click())
+    expect(invoke).not.toHaveBeenCalledWith("ai_draft_delete", expect.anything())
+    expect(document.body.textContent).toContain("Remove this draft? It cannot be opened again.")
+    await act(async () => button("Keep").click())
+    expect(invoke).not.toHaveBeenCalledWith("ai_draft_delete", expect.anything())
+    await act(async () => button("Remove").click())
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>("[role='alert'] button")].find((b) => b.textContent === "Remove")!
+    await act(async () => confirm.click())
+    expect(invoke).toHaveBeenCalledWith("ai_draft_delete", { id: draft.id })
+  })
+
+  it("a failed load reads as a failure with Try again, not as None waiting (#832 S8)", async () => {
+    useSettingsStore.setState({ mcpEnabled: true })
+    let fail = true
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd !== "ai_drafts_list") return null
+      if (fail) throw { kind: "unavailable", message: "The drafts folder could not be read" }
+      return [draft]
+    })
+    await mount()
+    const text = () => document.body.textContent ?? ""
+    expect(text()).toContain("Could not load AI drafts")
+    expect(text()).toContain("The drafts folder could not be read")
+    expect(text()).not.toContain("None waiting")
+    fail = false
+    await act(async () => { button("Try again").click(); await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(text()).not.toContain("Could not load AI drafts")
+    expect(text()).toContain("Thanksgiving Service")
+    invoke.mockImplementation(async (cmd: string) => (cmd === "ai_drafts_list" ? drafts : null))
+  })
 })

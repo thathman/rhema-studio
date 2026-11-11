@@ -125,9 +125,9 @@ import { useAddDialog } from "@/studio/prepare/add-target"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useServiceStore } from "@/stores/service-store"
 import type { QueueItem } from "@/types"
-import { SongLibrary } from "./song-library"
-import { AddItems } from "./add-items"
-import { ItemEditor } from "./item-editor"
+import { SongLibrary } from "@/studio/library/song-library"
+import { AddItems } from "@/studio/prepare/add-items"
+import { ItemEditor } from "@/studio/prepare/item-editor"
 
 const slide = (id: string): QueueItem => ({
   id,
@@ -395,5 +395,36 @@ describe("Add item workflow (#386)", () => {
     expect(useRundownSelection.getState().focusId).toBe(inserted.id)
     expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
     expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
+})
+
+describe("SongLibrary failed search (#832 S8)", () => {
+  it("says the search failed, with Try again, instead of No songs match", async () => {
+    const { invoke } = await import("@tauri-apps/api/core")
+    const { useSongStore } = await import("@/stores/song-store")
+    const mocked = vi.mocked(invoke)
+    const original = mocked.getMockImplementation()!
+    let fail = true
+    mocked.mockImplementation(async (command: string, args?: unknown) => {
+      if (command === "content_list_songs" && fail) throw new Error("database is locked")
+      return original(command, args as never)
+    })
+    try {
+      useSongStore.setState({ results: [], error: null, searching: false })
+      await act(async () => root!.render(<SongLibrary />))
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+      const text = () => document.body.textContent ?? ""
+      expect(text()).toContain("Could not load songs")
+      expect(text()).toContain("database is locked")
+      expect(text()).not.toContain("No songs")
+
+      fail = false
+      const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.includes("Try again"))!
+      await act(async () => { retry.click(); await new Promise((resolve) => setTimeout(resolve, 0)) })
+      expect(text()).not.toContain("Could not load songs")
+      expect(text()).toContain(song.title)
+    } finally {
+      mocked.mockImplementation(original)
+    }
   })
 })

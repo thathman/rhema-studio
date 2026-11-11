@@ -10,9 +10,9 @@ vi.mock("@/lib/cac-hymnbook", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/cac-hymnbook")>()
   return { ...actual, listCacHymns: vi.fn(async () => [{ id: "h1", title: "Ọlọ́run Ọba", authors: "", licence: "public_domain", primary_language: "yo", languages: ["yo", "en"], numbers: ["CAC 12"], first_line: "", revision: 1, updated_at: "" }]) }
 })
-import { MediaLibrary } from "@/studio/prepare/media-library"
-import { HymnBook } from "@/studio/prepare/hymn-book"
-import { SongLibrary } from "@/studio/prepare/song-library"
+import { MediaLibrary } from "@/studio/library/media-library"
+import { HymnBook } from "@/studio/library/hymn-book"
+import { SongLibrary } from "@/studio/library/song-library"
 import { LibraryPreviewPane } from "./library-preview-pane"
 import { useLibraryPreview } from "@/stores/library-preview-store"
 import { useBibleStore } from "@/stores/bible-store"

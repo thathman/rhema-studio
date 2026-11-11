@@ -1,11 +1,8 @@
-import { useEffect, useState } from "react"
-import { BookOpenIcon, ImageIcon, PlusIcon, UploadIcon } from "lucide-react"
-import { toast } from "sonner"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useMediaStore } from "@/stores/media-store"
+import { useState } from "react"
+import { BookOpenIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+import { SlideFields } from "@/studio/library/slide-fields"
 import { useQueueStore } from "@/stores"
 import { PreviewPanel, type PreviewSource } from "@/components/panels/preview-panel"
 import type { SlideQueueItem } from "@/types"
@@ -17,6 +14,9 @@ import { hasReadingMarks, readingPages } from "@/lib/responsive-reading"
 import { useShellStore } from "@/studio/shell-store"
 import { prepareLibraryReturnForAddTarget } from "@/studio/prepare/library-return"
 import { useAddDialog } from "@/studio/prepare/add-target"
+
+// The background picker is part of the shared slide editor (#807); Design imports it from here.
+export { SlideBackground } from "@/studio/library/slide-fields"
 
 const EXAMPLES = [
   { title: "Welcome", body: "We're glad you're here.\nPlease silence your phone." },
@@ -135,12 +135,6 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
           </button>
         ))}
       </div>
-      {mode === "qr" && (
-        <div className="flex flex-col gap-1">
-          <Input aria-label="Link" placeholder="https://… (giving, sign-up, bulletin)" value={link} onChange={(e) => { setLink(e.target.value) }} className="h-9" />
-          <p className="text-xs text-muted-foreground">{link.trim() && !safeLink(link) ? "Only a full http(s) address can be shown as a code." : "The code and the address are shown together on a white panel, so people see where it goes. Works offline; nothing is tracked. The preview shows the words; the code itself appears on the output. A background picture is not used on this slide."}</p>
-        </div>
-      )}
       {mode === "reading" && (
         <p className="text-xs text-muted-foreground">
           {body.trim() && !hasReadingMarks(body) ? "No parts marked yet: start the leader's lines with L: and the congregation's with P: (or All:)." : "One slide per exchange; \"Leader:\" and \"All:\" show where each part starts. The preview shows the first slide."}
@@ -152,23 +146,22 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
           <Input aria-label="Where" placeholder="Where (main hall)" value={where} onChange={(e) => { setWhere(e.target.value) }} className="h-9" />
         </div>
       )}
-      <Input
-        aria-label="Slide title"
-        placeholder="Title (optional)"
-        value={title}
-        maxLength={200}
-        onChange={(e) => { setTitle(e.target.value) }}
-        className="h-10"
+      {/* The shared slide editor (#807): the same fields Library's reusable slides use. */}
+      <SlideFields
+        title={title}
+        body={body}
+        onTitle={setTitle}
+        onBody={setBody}
+        placeholders={{ body: mode === "announcement" ? "Details, one line per line (what to bring, who to ask…)" : mode === "reading" ? "L: Give thanks to the Lord, for he is good.\nP: His love endures for ever.\n(L: / Leader:  and  P: / People: / All: / C:)" : "What goes on screen. One line per line.\nPress Add when it looks right in the preview." }}
+        link={mode === "qr" ? {
+          value: link,
+          onChange: setLink,
+          label: "Link",
+          placeholder: "https://… (giving, sign-up, bulletin)",
+          hint: link.trim() && !safeLink(link) ? "Only a full http(s) address can be shown as a code." : "The code and the address are shown together on a white panel, so people see where it goes. Works offline; nothing is tracked. The preview shows the words; the code itself appears on the output. A background picture is not used on this slide.",
+        } : null}
+        background={mode !== "qr" ? { value: background, onChange: setBackground } : null}
       />
-      <Textarea
-        aria-label="Slide text"
-        placeholder={mode === "announcement" ? "Details, one line per line (what to bring, who to ask…)" : mode === "reading" ? "L: Give thanks to the Lord, for he is good.\nP: His love endures for ever.\n(L: / Leader:  and  P: / People: / All: / C:)" : "What goes on screen. One line per line.\nPress Add when it looks right in the preview."}
-        value={body}
-        onChange={(e) => { setBody(e.target.value) }}
-        rows={6}
-        className="text-sm"
-      />
-      {mode !== "qr" && <SlideBackground value={background} onChange={setBackground} />}
       <div className="flex items-center gap-2">
         <Button size="sm" disabled={empty || (mode === "reading" && (pages.length === 0 || !hasReadingMarks(body)))} onClick={add}><PlusIcon /> {mode === "reading" && pages.length > 1 ? `Add as ${pages.length} slides` : "Add to service"}</Button>
         {mode !== "reading" && pages.length > 1 && (
@@ -195,46 +188,3 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
     </div>
   )
 }
-
-const PICTURES_AND_VIDEOS = [{ name: "Pictures and videos", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "mp4", "m4v", "mov", "webm"] }]
-
-/** A picture or a video behind the slide's words: one from the media library, or import one here. */
-/** A picture or video from the media library (or one imported here), or none. */
-export function SlideBackground({ value, onChange, label = "Background", noneLabel = "None (the theme's)", hint = "A video plays silently and loops behind the words." }: { value: { media_id: string; name: string } | null; onChange: (v: { media_id: string; name: string; kind?: "image" | "video" } | null) => void; label?: string; noneLabel?: string; hint?: string }) {
-  const assets = useMediaStore((s) => s.assets)
-  const loaded = useMediaStore((s) => s.loaded)
-  const loading = useMediaStore((s) => s.loading)
-  const [busy, setBusy] = useState(false)
-  useEffect(() => {
-    if (!loaded && !loading) void useMediaStore.getState().list()
-  }, [loaded, loading])
-  const choices = assets.filter((a) => (a.kind === "image" || a.kind === "video") && a.present)
-  const importOne = async () => {
-    setBusy(true)
-    try {
-      const results = await useMediaStore.getState().importFiles(PICTURES_AND_VIDEOS)
-      const first = results?.find((r) => r.status === "imported")
-      if (first && first.status === "imported") onChange({ media_id: first.asset.id, name: first.asset.name, kind: first.asset.kind === "video" ? "video" : "image" })
-      const failed = results?.find((r) => r.status === "failed")
-      if (failed && failed.status === "failed") toast.error(`Could not import ${failed.path}`, { description: failed.message })
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-xs">
-      <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-      <span className="text-muted-foreground">{label}</span>
-      <Select value={value?.media_id ?? "__none"} onValueChange={(v) => { const c = choices.find((x) => x.id === v); onChange(v === "__none" ? null : { media_id: v, name: c?.name ?? "", kind: c?.kind === "video" ? "video" : "image" }) }}>
-        <SelectTrigger className="h-7 w-56 text-xs" aria-label={label}><SelectValue placeholder="None" /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__none">{noneLabel}</SelectItem>
-          {choices.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}{c.kind === "video" ? " · video" : ""}</SelectItem>)}
-        </SelectContent>
-      </Select>
-      <Button size="xs" variant="outline" disabled={busy} onClick={() => void importOne()}><UploadIcon /> {busy ? "Importing…" : "Import a picture or video…"}</Button>
-      {hint && <span className="text-[0.6875rem] text-muted-foreground">{hint}</span>}
-    </div>
-  )
-}
-

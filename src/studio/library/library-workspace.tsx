@@ -21,10 +21,12 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import type { OutlineHeader } from "@/lib/run-of-show"
 import { useQueueStore } from "@/stores"
 import { useServiceStore } from "@/stores/service-store"
-import { SongLibrary } from "@/studio/prepare/song-library"
-import { HymnBook } from "@/studio/prepare/hymn-book"
-import { MediaLibrary } from "@/studio/prepare/media-library"
+import { SongLibrary } from "@/studio/library/song-library"
+import { HymnBook } from "@/studio/library/hymn-book"
+import { MediaLibrary } from "@/studio/library/media-library"
 import { SongFiles } from "@/studio/library/library-blocks"
+import { CollectionsPanel } from "@/studio/library/collections-panel"
+import { LibraryFileBlock } from "@/studio/library/library-file-block"
 import { SlideLibrary } from "@/studio/library/slide-library"
 import { BibleLibrary } from "@/studio/library/bible-library"
 import { DesignDocumentsWorkspace, DesignVersionPicker } from "@/studio/design/design-documents-workspace"
@@ -55,6 +57,7 @@ const SECTIONS: ReadonlyArray<readonly [LibrarySection, string]> = [
   ["designs", "Visual designs"],
   ["media", "Pictures & videos"],
   ["audio", "Sounds"],
+  ["collections", "Collections"],
   ["files", "Import & export"],
 ]
 
@@ -137,7 +140,9 @@ export function LibraryWorkspace() {
   const choices = destinationChoices(headers)
   const currentDestination = rememberedDestinationIsValid(rememberedTarget, choices)
     ? choices.find((choice) => choice.key === rememberedTarget) ?? null
-    : null
+    : choices.length === 1 ? choices[0] : null
+  // Only one place an item can go: there is nothing to choose, so no chooser is offered.
+  const realChoice = choices.length > 1
   const selectedDestination = choices.find((choice) => choice.key === targetSelection) ?? null
 
   const closeTargetChooser = () => {
@@ -266,11 +271,16 @@ export function LibraryWorkspace() {
 
     const targetKey = useLibraryTargetStore.getState().byServiceId[libraryTargetOwner(invocation)]
     const currentChoices = destinationChoices(useQueueStore.getState().headers)
-    if (!rememberedDestinationIsValid(targetKey, currentChoices)) {
+    // F9: ask only when there is a real choice. One destination (an empty run of show, or a single
+    // section) is used straight away and remembered like a chosen one.
+    const onlyChoice = currentChoices.length === 1 ? currentChoices[0] : null
+    if (!rememberedDestinationIsValid(targetKey, currentChoices) && !onlyChoice) {
       openTargetChooser(item, invocation)
       return
     }
-    const target = currentChoices.find((choice) => choice.key === targetKey)!
+    const target = rememberedDestinationIsValid(targetKey, currentChoices)
+      ? currentChoices.find((choice) => choice.key === targetKey)!
+      : onlyChoice!
     const context = target.headerId ? prepareLibraryReturnForHeader(target.headerId) : null
     if (target.headerId && !sameDestinationContext(context, target.headerId, invocation.serviceId)) {
       openTargetChooser(item, invocation)
@@ -386,10 +396,9 @@ export function LibraryWorkspace() {
         {section !== "designs" && (
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setSection("files")}><UploadIcon /> Import files</Button>
-            <Button onClick={() => {
-              if (section === "slides") { setNewSlide((n) => n + 1); return }
-              setSection("songs"); setNewSong((n) => n + 1)
-            }}><PlusIcon /> {section === "slides" ? "New slide" : "New song"}</Button>
+            {/* F9: "New song" belongs to Songs and Hymns; Slides gets "New slide"; other sections get neither. */}
+            {(section === "songs" || section === "hymns") && <Button onClick={() => { setSection("songs"); setNewSong((n) => n + 1) }}><PlusIcon /> New song</Button>}
+            {section === "slides" && <Button onClick={() => setNewSlide((n) => n + 1)}><PlusIcon /> New slide</Button>}
           </div>
         )}
       </header>
@@ -403,11 +412,13 @@ export function LibraryWorkspace() {
               {contextualDestination
                 ? "The item returns to its captured Prepare section."
                 : currentDestination
-                  ? `Library items go to ${currentDestination.label}. This choice is remembered for this service.`
-                  : "Choose a destination before using Library content. The choice is remembered per service."}
+                  ? realChoice
+                    ? `Library items go to ${currentDestination.label}. This choice is remembered for this service.`
+                    : `Library items go to ${currentDestination.label}.`
+                  : "Use asks once where items go in this service, then remembers it."}
             </p>
           </div>
-          {!contextualDestination && (
+          {!contextualDestination && realChoice && (
             <Button
               variant="outline"
               onClick={() => {
@@ -469,10 +480,11 @@ export function LibraryWorkspace() {
         {section !== "songs" && section !== "bible" && section !== "designs" && (
           <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-card p-4">
             {section === "hymns" && <HymnBook onUseItem={useItem} privatePreview />}
-            {section === "slides" && <SlideLibrary key={newSlide} onUseItem={useItem} />}
+            {section === "slides" && <SlideLibrary newRequest={newSlide} onUseItem={useItem} />}
             {section === "media" && <MediaLibrary kinds="visual" onUseItem={useItem} privatePreview />}
             {section === "audio" && <MediaLibrary kinds="audio" onUseItem={useItem} privatePreview />}
-            {section === "files" && <div className="h-full max-w-2xl overflow-y-auto"><SongFiles /></div>}
+            {section === "collections" && <CollectionsPanel onUseItem={useItem} />}
+            {section === "files" && <div className="h-full max-w-2xl overflow-y-auto"><SongFiles /><LibraryFileBlock /></div>}
           </div>
         )}
         <LibraryPreviewPane onAdd={(item) => addToService(item, captureLibraryUseInvocation())} />
