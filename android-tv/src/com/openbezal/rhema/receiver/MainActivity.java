@@ -148,6 +148,8 @@ public class MainActivity extends Activity {
     private int insetShown = -1;
     /** Identify TV (#849): the TV's name, big, for a few seconds. */
     private TextView ident;
+    /** "Stays on this screen" after Back (BackKey). */
+    private TextView backHint;
     /** The display's refresh rate (Hz), for GET /status. */
     private volatile float displayHz;
     /** At this start: the last boot's launch was refused by the TV (#834). */
@@ -235,6 +237,17 @@ public class MainActivity extends Activity {
         root.addView(note, corner);
         root.addView(panel, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
         root.addView(ident, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+        // Back on the remote (BackKey): a small line at the foot of the screen, for a few seconds.
+        backHint = new TextView(this);
+        backHint.setTextColor(Color.WHITE);
+        backHint.setTextSize(16);
+        backHint.setBackgroundColor(Color.argb(170, 0, 0, 0));
+        backHint.setPadding((int) (16 * dp), (int) (8 * dp), (int) (16 * dp), (int) (8 * dp));
+        backHint.setText("Rhema Studio Receiver stays on this screen. Press Home to leave.");
+        backHint.setVisibility(View.GONE);
+        FrameLayout.LayoutParams foot = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        foot.bottomMargin = (int) (24 * dp);
+        root.addView(backHint, foot);
         setContentView(root);
         immersive();
         // The inset follows the screen's size (it is a share of each edge).
@@ -617,7 +630,7 @@ public class MainActivity extends Activity {
     /** Only of a page that has drawn (#604): a loaded-but-black page is never kept. */
     private boolean stillWanted(String url) {
         return url != null && ready.drawn() && problem == null && !certRefused && !pageOff && panel.getVisibility() != View.VISIBLE && still.getVisibility() != View.VISIBLE
-                && hold.getVisibility() != View.VISIBLE && ident.getVisibility() != View.VISIBLE;
+                && hold.getVisibility() != View.VISIBLE && ident.getVisibility() != View.VISIBLE && backHint.getVisibility() != View.VISIBLE;
     }
 
     private void takeStill(final String url) {
@@ -1011,8 +1024,46 @@ public class MainActivity extends Activity {
             }
             return true;
         }
+        // Back never leaves the app (device test, 1.7): the congregation would see the TV's home screen.
+        if (k == KeyEvent.KEYCODE_BACK) {
+            if (event.getAction() == KeyEvent.ACTION_UP) backPressed();
+            return true;
+        }
         return super.dispatchKeyEvent(event);
     }
+
+    /** Any other way Back arrives (a gesture, or a key the page did not pass on): the same rule. */
+    @Override
+    public void onBackPressed() {
+        backPressed();
+    }
+
+    /** Back (BackKey): the code screen gives way to the feed, as OK does; otherwise stay. */
+    private void backPressed() {
+        boolean feedReady;
+        synchronized (this) {
+            feedReady = shown() != null && problem == null && triesLeft > 0;
+        }
+        switch (BackKey.decide(panel.getVisibility() == View.VISIBLE, feedReady)) {
+            case BackKey.HIDE_PANEL:
+                hideInfo();
+                break;
+            case BackKey.STAY_HINT:
+                backHint.setVisibility(View.VISIBLE);
+                ui.removeCallbacks(backHintOff);
+                ui.postDelayed(backHintOff, BackKey.HINT_MS);
+                break;
+            default:
+                break;
+        }
+    }
+
+    private final Runnable backHintOff = new Runnable() {
+        @Override
+        public void run() {
+            backHint.setVisibility(View.GONE);
+        }
+    };
 
     /** OK: hide the address and code, or show them with a new code (also after too many wrong ones). */
     private synchronized void okPressed() {

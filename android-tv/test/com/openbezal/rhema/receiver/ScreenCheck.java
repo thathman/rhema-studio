@@ -29,6 +29,12 @@ public final class ScreenCheck {
         check("a feed or a new code clears it", t.words(40_000) == null && t.changesAt() == -1);
         check("never a digit of a code", !wrong.matches(".*\\d{2,}.*"));
 
+        // BackKey: Back never leaves the app.
+        check("Back on the code screen over a feed: back to the feed", BackKey.decide(true, true) == BackKey.HIDE_PANEL);
+        check("Back on the code screen with no feed (or a problem): stays", BackKey.decide(true, false) == BackKey.STAY);
+        check("Back over a feed: stays, with the hint", BackKey.decide(false, true) == BackKey.STAY_HINT);
+        check("Back with nothing up: stays, with the hint", BackKey.decide(false, false) == BackKey.STAY_HINT);
+
         // BootStart
         check("an Off chosen in 1.6 (the setting saved, no mark) is a choice", BootStart.chosen(false, true));
         check("never saved, never marked: not chosen", !BootStart.chosen(false, false));
