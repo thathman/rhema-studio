@@ -1519,6 +1519,12 @@ describe("QR code and rotation layers (#851 G7)", () => {
       [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add QR code")!.click()
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
+    // The code is drawn asynchronously; wait for the layer to land.
+    for (let i = 0; i < 100 && !element.textContent?.includes("QR code added"); i++) {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)) })
+    }
+    expect(element.querySelector('[role="alert"]')?.textContent ?? "").toBe("")
+    expect(element.textContent).toContain("QR code added")
     await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
 
     const input = store.saveDraft.mock.calls[0]![2] as DesignInput
