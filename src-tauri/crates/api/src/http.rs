@@ -1812,6 +1812,11 @@ impl RecentIds {
             })
     }
 
+    /// Drop an id noted before its command ran, when the command then failed (a recorder command).
+    fn forget(&self, id: &str) {
+        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).retain(|(saved, _, _)| saved != id);
+    }
+
     /// Remember a successfully dispatched id and its complete request identity.
     fn record(&self, id: &str, fingerprint: &str) {
         let mut seen = self
@@ -1893,6 +1898,7 @@ fn lyrics_up(live: Option<&str>) -> bool {
 const NO_LYRICS_MESSAGE: &str = "No song or hymn is on the screens";
 
 /// What an OBS director is told in rehearsal: OBS is the online stream (the host's own wording).
+const RECORD_REHEARSAL_MESSAGE: &str = "Rehearsal is on: Rhema Studio does not record a private rehearsal";
 const OBS_REHEARSAL_MESSAGE: &str = "Rehearsal is on: OBS is the live stream, so Rhema Studio doesn't change it while you practise";
 
 #[derive(Deserialize)]
@@ -3030,6 +3036,12 @@ async fn command_handler<S: CommandSink + 'static>(
     if matches!(command, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsTakeScene(_) | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsRecord(_) | RemoteCommand::ObsTransition(_)) && in_rehearsal(state.live.current().as_deref()) {
         return (StatusCode::FORBIDDEN, CommandResponse::refused(OBS_REHEARSAL_MESSAGE));
     }
+    // Rhema's own recorder neither (#411 remote hunt): the main desk will not record a private
+    // rehearsal, but a desk granted the recorder could start one, filed as the service's recording.
+    // Stop and Mark stay allowed, so a recording begun before rehearsal can still be ended.
+    if matches!(&command, RemoteCommand::Record(r) if matches!(r.action, crate::command::RecordAction::Start)) && in_rehearsal(state.live.current().as_deref()) {
+        return (StatusCode::FORBIDDEN, CommandResponse::refused(RECORD_REHEARSAL_MESSAGE));
+    }
     // An extra timer belongs to a role (#196 R2.5): only the timekeeping desks and that role may run it.
     if let RemoteCommand::AuxTimer(t) = &command {
         if let Err(why) = crate::aux_timers::judge(state.live.current().as_deref(), role, t) {
@@ -3053,7 +3065,7 @@ async fn command_handler<S: CommandSink + 'static>(
         return (StatusCode::UNPROCESSABLE_ENTITY, CommandResponse::refused(NO_LYRICS_MESSAGE));
     }
     // From here one command at a time, so two desks pressing at once are checked one after the other.
-    let _turn = state
+    let turn = state
         .gate
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -3260,6 +3272,19 @@ async fn command_handler<S: CommandSink + 'static>(
             );
         }
     }
+    // The recorder starts and stops on the host, waiting for its file (up to a minute when the
+    // encoder is slow to close): not in every desk's turn (#411 remote hunt: a Stop at the end of
+    // the service held every other desk's Next and Bible until the file closed). It changes no
+    // output, scene or revision the turn protects, and the recorder serialises itself.
+    // Its id is noted first, so a desk retrying a slow Stop hears "already carried out", not the
+    // recorder's "already closing"; forgotten again below if the recorder refuses.
+    let early = matches!(command, RemoteCommand::Record(_));
+    if early {
+        if let (Some(id), Some(fingerprint)) = (request.id.as_deref(), request_fingerprint.as_deref()) {
+            state.recent.record(id, fingerprint);
+        }
+        drop(turn);
+    }
     let done = match (&command, why) {
         (RemoteCommand::NoticeAck(_), Some(why)) => CommandDispatcher::dispatch_from(&command, &WithWhy { inner: &*state.sink, why: &why }, &by, by_id.as_deref()),
         _ => CommandDispatcher::dispatch_from(&command, &*state.sink, &by, by_id.as_deref()),
@@ -3283,7 +3308,14 @@ async fn command_handler<S: CommandSink + 'static>(
             };
             (StatusCode::OK, Json(CommandResponse { success: true, note, revision, ..Default::default() }))
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, CommandResponse::refused(e.to_string())),
+        Err(e) => {
+            if early {
+                if let Some(id) = request.id.as_deref() {
+                    state.recent.forget(id);
+                }
+            }
+            (StatusCode::INTERNAL_SERVER_ERROR, CommandResponse::refused(e.to_string()))
+        }
     }
 }
 
@@ -5371,6 +5403,32 @@ mod tests {
         }
         let open = send("").await;
         assert!(open.contains("403"), "{open}");
+        assert_eq!(sink.command_count(), 1);
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[tokio::test]
+    async fn a_desk_never_starts_the_recorder_in_rehearsal_but_may_stop_it() {
+        use crate::keys::{KeyEntry, Keys, Role};
+        let sink = Arc::new(MockSink::new());
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys {
+            require_auth: true,
+            entries: vec![KeyEntry { hash: hash_key("rec"), name: "Media desk".into(), role: Role::Viewer, paused: false, output_scope: Vec::new(), group_take_scope: Vec::new(), record: true }],
+        }));
+        let live = new_live_hub();
+        live.publish(r#"{"v":1,"program":{"onAir":true,"rehearsal":true}}"#.into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live, ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let send = |action: &'static str| async move { raw_http_request_with(port, "POST", "/api/v1/command", Some(&format!(r#"{{"command":"record","value":{{"action":"{action}"}}}}"#)), "X-Rhema-Key: rec\r\n").await };
+        let start = send("start").await;
+        assert!(start.contains("403") && start.contains("does not record a private rehearsal"), "{start}");
+        assert_eq!(sink.command_count(), 0);
+        // One begun before rehearsal can still be ended.
+        assert!(send("stop").await.contains("200 OK"));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         assert_eq!(sink.command_count(), 1);
         let mut handle = result.handle;
         handle.stop();
