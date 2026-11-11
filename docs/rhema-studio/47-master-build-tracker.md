@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.0.0.0 · 11 Nov 2026 · main `ca08c0e5`**
+**Version 1.0.0.1 · 11 Nov 2026 · main `ca08c0e5`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -46,11 +46,12 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | Receiver pairing (code check) | PHYSICAL TESTED | Onn Google TV (Android 14), Receiver 1.6.3.1, real Wi-Fi, 11 Nov: a code check and /show through the QA host worked. |
 | Overlapping pairing requests | AUTOMATED TESTED | #789 `PendingCheck`. A forced interleaved race on a device is not tested; `tv_show` does both steps at once. |
 | TV feed survives an outputs load failure | AUTOMATED TESTED | #787 |
+| TV: Welcome, Black, Back, Clear, Restore on Program | PHYSICAL TESTED | Onn, host built at `5b816a1f`, 11 Nov. Each step was acknowledged as drawn (frames 5–9). The bilingual Welcome showed Yorùbá diacritics correctly; Clear leaves only the background. |
 | TV display-mode change without restart | MERGED | #787 configChanges. Not yet tested on a device. |
 | Stale picture never kept as the TV's start picture | PHYSICAL TESTED | Onn, host built at `5b816a1f`, 11 Nov. During a 145 s host freeze the TV showed "Not updating" and saved no picture; saving resumed after. Before the fix, the same test saved stale pictures. |
 | Host restart → TV reconnects | PHYSICAL TESTED | Onn, 11 Nov: the TV acknowledged the current frame 22 s after the host's LAN port opened. Feeds stay off after a restart until an operator or Live recovery turns them on (by design). |
 | TV Wi-Fi loss and recovery | PHYSICAL TESTED | Onn, 11 Nov: with Wi-Fi off 200 s, the watcher count dropped to 0 within about 30 s and returned on reconnect. A real power cut is not tested. |
-| TV keeps an old page after a host update | IN PR | #790: the page reloads itself when the host serves another build. Device check needs two host builds in a row. |
+| TV keeps an old page after a host update | IN PR | #790: the page reloads itself when the host serves another build (independent review done). Device check needs two host builds in a row. |
 | TV/Cam after the host's address changes (DHCP) | BLOCKED | The host makes a new certificate and key per address, and the devices pin the old one. Needs a pin-model design (stable key or local CA) before code. |
 | Phone camera → host → TV | PHYSICAL TESTED | Vsmart V340U, Rhema Cam → bundled router → Onn, 11 Nov 16:40, about 13 Mbit/s 1080p H.264. The Onn's WebRTC reader fell behind once (218 frames discarded). Measuring FPS and delay is still to do. |
 | Phone camera: start/stop, background, lock, network loss, tally, roles | NOT YET AUDITED | Blocked on 11 Nov: the phone's battery was dead. |
