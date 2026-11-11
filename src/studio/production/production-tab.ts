@@ -15,7 +15,24 @@ export const useProductionTab = create<{
   open: boolean
   liveToolsTab: LiveToolsTab
   liveOutputId: string | null
-}>(() => ({ requested: null, selected: "timekeeper", scene: null, open: false, liveToolsTab: "bible", liveOutputId: null }))
+  /**
+   * Which Live tools tabs fill the console as a full-height sheet instead of the strip under
+   * Program (#812 F1). Production tools (Scenes, OBS, Cameras, Show health, Operators) are whole
+   * workspaces, so they start expanded; Find & cue starts as the strip so Preview stays in view.
+   * The operator's choice per tab is kept for this session.
+   */
+  expanded: Partial<Record<LiveToolsTab, boolean>>
+}>(() => ({ requested: null, selected: "timekeeper", scene: null, open: false, liveToolsTab: "bible", liveOutputId: null, expanded: {} }))
+
+/** Whether this Live tools tab shows as the full-height sheet (#812 F1). */
+export function liveToolsExpanded(expanded: Partial<Record<LiveToolsTab, boolean>>, tab: LiveToolsTab): boolean {
+  return expanded[tab] ?? tab === "production"
+}
+
+/** Expand this Live tools tab to the full-height sheet, or restore it to the strip under Program. */
+export function setLiveToolsExpanded(tab: LiveToolsTab, value: boolean): void {
+  useProductionTab.setState((s) => ({ expanded: { ...s.expanded, [tab]: value } }))
+}
 
 export function openProductionTab(tab: ProductionTab, opts: { sceneId?: string } = {}): void {
   useProductionTab.setState({ requested: tab, selected: tab, scene: opts.sceneId ?? null, open: true, liveToolsTab: "production" })

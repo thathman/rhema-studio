@@ -345,7 +345,7 @@ function LiveConsoleSurface({
     <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3 [@media(max-height:860px)]:gap-0.5 [@media(max-height:860px)]:pt-1">
     <PhaseStrip />
     <RecorderDock />
-    <div className={`grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] ${bottomRow} gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2`}>
+    <div className={`relative grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] ${bottomRow} gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2`}>
       <section className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken ${emptyRundown ? "row-span-1 h-fit self-start" : "row-span-3"}`} data-tour="present-rundown">
         <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
           <div className="min-w-0">
@@ -425,9 +425,13 @@ function LiveConsoleSurface({
       <TransportBar hasSelectedOutputSceneTake={selectedOutputSceneTake !== null} className="col-span-2 min-[1201px]:col-start-2 max-[1200px]:shrink-0 max-[1023px]:col-span-1" />
 
       {toolsOpen ? (
-        <div className="col-span-2 min-[1201px]:col-start-2 min-h-0 overflow-hidden max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">
-          <LiveToolsDrawer tab={toolsTab} onTabChange={onToolsTabChange} onClose={onCloseTools} />
-        </div>
+        // The strip under Program, or (#812 F1) a full-height sheet over this grid: the drawer decides.
+        <LiveToolsDrawer
+          tab={toolsTab}
+          onTabChange={onToolsTabChange}
+          onClose={onCloseTools}
+          stripClassName="col-span-2 min-[1201px]:col-start-2 min-h-0 overflow-hidden max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1"
+        />
       ) : (
         <div className="col-span-2 min-[1201px]:col-start-2 min-h-0 max-[1200px]:h-[10.75rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">
           <section className="flex h-full min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card p-3" role="group" aria-label="Quick screens" aria-describedby="live-quick-screen-scope">

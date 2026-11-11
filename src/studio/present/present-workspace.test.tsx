@@ -165,7 +165,6 @@ beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   presentCalls.next.mockClear()
   presentCalls.prev.mockClear()
-  useShellStore.setState({ presentView: "production" })
   useProductionTab.setState({ requested: null, selected: "timekeeper", scene: null, open: false })
   useBibleStore.setState({ selectedVerse: verse, selectedSlide: null, selectedQueueItemId: "stable-item" })
   useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "Program item", segments: [] } })
@@ -641,7 +640,6 @@ describe("Present's unified Live console", () => {
     expect(quickActions.className).toContain("overflow-x-hidden")
     expect(quickActions.textContent).toContain("Technical issue")
     expect(quickActions.textContent).toContain("Black")
-    expect(useShellStore.getState().presentView).toBe("production")
     expect(addListener.mock.calls.filter(([event]) => event === "keydown")).toHaveLength(1)
 
     pressArrowRight()
@@ -702,7 +700,6 @@ describe("Present's unified Live console", () => {
     expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveVerse: { reference: "Program item" } })
     expect(useTranscriptStore.getState().segments).toEqual([transcript])
     expect(useDetectionStore.getState().detections[0]?.verse_ref).toBe("John 3:16")
-    expect(useShellStore.getState().presentView).toBe("production")
   })
 
   it("keeps the Live toolbar compact and opens secondary controls from the shared tools drawer", async () => {

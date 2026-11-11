@@ -89,6 +89,33 @@ describe("Production control", () => {
     await act(async () => pauseAuxTimer.click())
     expect(useAuxTimers.getState().timers[0]?.timer.startedAt).toBeNull()
     expect([...el.querySelectorAll("button")].some((button) => /^(Start|Pause|Resume|Reset)$/.test(button.textContent?.trim() ?? ""))).toBe(false)
+    // #808 R9: Live's top bar shows the service clock, so the docked Timekeeper has no second readout.
+    expect(el.querySelector('[aria-label="Service timing"]')).not.toBeNull()
+    expect(el.querySelector('[aria-label="Service timing"] [role="timer"]')).toBeNull()
+    expect(el.textContent).toContain("Planned finish")
+  })
+
+  it("Live tools gives Production tools a full-height sheet and lets the operator shrink it back (#812 F1)", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const { LiveToolsDrawer } = await import("@/studio/present/live-tools-drawer")
+    useProductionTab.setState({ expanded: {} })
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    const root = createRoot(el)
+    roots.push(root)
+    const render = () => root.render(<LiveToolsDrawer tab="production" onTabChange={() => {}} onClose={() => {}} stripClassName="strip-row" />)
+    await act(async () => render())
+    const frame = () => el.querySelector<HTMLElement>('[data-slot="live-tools-frame"]')!
+    expect(frame().dataset.expanded).toBe("true")
+    expect(frame().className).toContain("absolute inset-0")
+    expect(el.querySelector('[role="tabpanel"][data-expanded="true"]')).not.toBeNull()
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Show Live tools under Program"]')!.click())
+    expect(frame().dataset.expanded).toBe("false")
+    expect(frame().className).toBe("strip-row")
+    expect(useProductionTab.getState().expanded).toEqual({ production: false })
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Expand Live tools to full height"]')!.click())
+    expect(frame().dataset.expanded).toBe("true")
+    useProductionTab.setState({ expanded: {} })
   })
 
   it("Scenes (once Programs) is a private editor; saved scenes go through the named Program Take", async () => {
