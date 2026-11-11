@@ -18,6 +18,7 @@ import {
 } from "@/lib/feed-freshness"
 import { insetArea, lostView, overscanPct, type FeedLost } from "@/lib/feed-receivers"
 import { feedPageOutdated } from "@/lib/feed-page-version"
+import { afterDrawn, pageAckClock } from "@/lib/feed-ack"
 import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
@@ -329,6 +330,11 @@ let lastFade = 0
 
 function show(next: Frame) {
   if (typeof next.hostNow === "number") offset = next.hostNow - Date.now()
+  // Read by Rhema Studio Receiver (#835 S11, #849 G5): an output switched off in Rhema Studio shows
+  // the TV's calm hold instead of a black or "no picture" screen, and a TV-side edge inset applies
+  // only when the output has none of its own. A plain browser or OBS ignores both.
+  document.documentElement.dataset.off = String(next.off === true)
+  document.documentElement.dataset.overscan = String(overscanPct(next.overscan))
   lagClock.show(next.latencyClock === true && !next.off)
   // A Take or release fades when the scene says so; Black and Logo always cut.
   const key = next.off ? "off" : next.scene?.sceneId ?? (next.verse?.screen ? "screen" : "own")
@@ -524,11 +530,12 @@ function listen(source: EventSource) {
     checkStale()
     // Tell the host this frame is on this screen (receiver trust), after it is drawn.
     const seq = Number(ev.lastEventId)
+    // A hidden page (an OBS source off the scene) gets no animation frames: afterDrawn falls back to a timer (#844).
     if (Number.isFinite(seq) && seq > 0) {
-      requestAnimationFrame(() => {
+      afterDrawn(() => {
         drawnSeq = seq
         void ack({ seq })
-      })
+      }, pageAckClock)
     }
   })
 }

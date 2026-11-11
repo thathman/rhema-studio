@@ -84,6 +84,29 @@ describe("the feed page acknowledges only what it drew (#604)", () => {
     expect(acks()).toEqual([])
   })
 
+  it("acknowledges from a hidden page too, which gets no animation frames (an OBS source off the scene, #844)", async () => {
+    vi.stubGlobal("requestAnimationFrame", () => 0)
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" })
+    try {
+      FakeEvents.last.send("frame", JSON.stringify({ off: false, verse: null }), "9")
+      await nextFrame()
+      expect(acks().map((a) => a.body.seq)).toEqual([9])
+    } finally {
+      Reflect.deleteProperty(document, "visibilityState")
+    }
+  })
+
+  it("tells the Receiver an output is off, even before anything is published (#835), and its own overscan (#849)", async () => {
+    FakeEvents.last.send("frame", JSON.stringify({ off: true }), "0")
+    expect(document.documentElement.dataset.off).toBe("true")
+    expect(document.documentElement.dataset.overscan).toBe("0")
+    FakeEvents.last.send("frame", JSON.stringify({ off: false, verse: null, overscan: 3.2 }), "2")
+    expect(document.documentElement.dataset.off).toBe("false")
+    expect(document.documentElement.dataset.overscan).toBe("3")
+    await nextFrame()
+    expect(acks().map((a) => a.body.seq)).toEqual([2])
+  })
+
   it("keeps acknowledging while it hears beats after drawing (the heartbeat)", async () => {
     FakeEvents.last.send("frame", JSON.stringify({ off: true }), "5")
     await nextFrame()

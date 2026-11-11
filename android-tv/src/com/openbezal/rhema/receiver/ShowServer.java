@@ -25,7 +25,8 @@ import java.util.concurrent.TimeUnit;
  * the feed's https link and Rhema's certificate fingerprint, encrypted with the check's key (1.3;
  * the plain {"url","proof"} of 1.2 is refused); and (#213, 1.1) GET /status →
  * {"ok","name","feed","problem"} (and, 1.5, "width","height": the display's size): the id of the
- * feed shown, never its secret link. Small bodies
+ * feed shown, never its secret link; 1.7 adds "hz", the display's refresh rate; and (#849, 1.7)
+ * GET or POST /identify → {"ok","name"}: the TV shows its name for a few seconds. Small bodies
  * only; nothing else is served.
  *
  * Any device on the network can reach this port, so (1.3): a few requests are served at a time and
@@ -138,9 +139,23 @@ final class ShowServer extends Thread {
             reply.put("ok", true).put("name", app.name()).put("feed", app.feedShown()).put("problem", app.problem());
             // 1.5: the display's size, for the host's TV list.
             if (size[0] > 0 && size[1] > 0) reply.put("width", size[0]).put("height", size[1]);
+            // 1.7: its refresh rate (#849), so the host can see a TV left at 24 or 30 Hz.
+            float hz = app.displayHz();
+            if (hz > 0) reply.put("hz", Math.round(hz * 100) / 100.0);
+        } else if (("GET".equals(request[0]) || "POST".equals(request[0])) && "/identify".equals(path)) {
+            // 1.7, Identify TV (#849): the TV's name, big, for a few seconds. It shows nothing secret and
+            // changes nothing, so it needs no code; a body, if any, is not read. Over a feed, only the
+            // computer that sent it may ask (no one else puts words over a service).
+            String name = app.identify(c.getInetAddress().getHostAddress());
+            if (name != null) {
+                reply.put("ok", true).put("name", name);
+            } else {
+                status = 403;
+                reply.put("ok", false).put("error", "This TV is showing a feed: only the Rhema Studio that sent it can identify it");
+            }
         } else if (!post) {
             status = 404;
-            reply.put("ok", false).put("error", "Rhema Studio Receiver only takes POST /challenge, POST /show and GET /status");
+            reply.put("ok", false).put("error", "Rhema Studio Receiver only takes POST /challenge, POST /show, GET /status and GET or POST /identify");
         } else if (type == null || !"application/json".equalsIgnoreCase(type.split(";")[0].trim())) {
             // A web page can send text without asking first, but not JSON.
             status = 415;
@@ -178,7 +193,7 @@ final class ShowServer extends Thread {
                 } else if (req.has("url")) {
                     // Rhema before 1.3's form: the link in clear text, which this TV no longer takes.
                     status = 403;
-                    reply.put("ok", false).put("error", "This Rhema Studio Receiver takes only Rhema Studio's secure link: update Rhema Studio on the computer");
+                    reply.put("ok", false).put("error", "This Rhema Studio Receiver takes only Rhema Studio's secure link: update Rhema Studio on the main computer");
                 } else {
                     String why = app.show(peer, req.optString("nonce", ""), req.optString("data", ""));
                     if (why == null) {
