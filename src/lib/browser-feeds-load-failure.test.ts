@@ -20,8 +20,14 @@ describe("TV feeds when the saved outputs cannot be read", () => {
     const { startBrowserFeeds } = await import("./browser-feeds")
     const stop = startBrowserFeeds()
     await new Promise((r) => setTimeout(r, 0))
-    stop()
     expect(invoked).not.toContain("feeds_set")
+    // The operator changes the outputs: theirs now, so a feed added or renewed reaches the listener.
+    const { useBroadcastStore } = await import("@/stores/broadcast-store")
+    useBroadcastStore.setState((st) => ({ outputs: [...st.outputs] }))
+    await new Promise((r) => setTimeout(r, 0))
+    stop()
+    expect(savedOutputsUnread()).toBe(false)
+    expect(invoked).toContain("feeds_set")
   })
 
   it("still sends it once the outputs were read", async () => {

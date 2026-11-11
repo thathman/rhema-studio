@@ -1848,6 +1848,8 @@ let hydrationPromise: Promise<void> | null = null
  */
 let broadcastLoadFailed = false
 export const savedOutputsUnread = (): boolean => broadcastLoadFailed
+/** The operator changed the outputs after a failed load: what is here now is theirs to act on. */
+export const outputsChangedSinceLoad = (): void => { broadcastLoadFailed = false }
 
 async function getThemeStore(): Promise<Store> {
   if (!tauriStore) {
