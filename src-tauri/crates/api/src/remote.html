@@ -160,6 +160,13 @@
 
   // One id per press: if the answer is lost on Wi-Fi the phone asks again with the same id, and
   // the computer, having already done it, does not do it twice. (No crypto.randomUUID on plain http.)
+  // A LAN fetch to a computer that went away can hang for tens of seconds instead of failing:
+  // give up after a few seconds so the page can say it is not updating.
+  const timed = (url, init, ms) => {
+    const c = new AbortController()
+    const t = setTimeout(() => c.abort(), ms || 3000)
+    return fetch(url, Object.assign({}, init, { signal: c.signal })).finally(() => clearTimeout(t))
+  }
   const pressId = () => Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10)
   async function post(cmd, id, value, extra) {
     let lastError
@@ -175,6 +182,7 @@
   }
   async function send(cmd, btn, value) {
     btn.disabled = true
+    sending.add(btn)
     try {
       const r = await post(cmd, pressId(), value)
       if (r.status === 401 || r.status === 403) {
@@ -186,7 +194,7 @@
       else if (!r.ok) { const j = await r.json().catch(() => ({})); say(j.error || "Command failed (" + r.status + ")", true) }
       else { say(""); poll() }
     } catch { say("No answer from the presentation computer. Check the screen before pressing again.", true) }
-    finally { btn.disabled = false }
+    finally { sending.delete(btn); btn.disabled = staleNow }
   }
   // One command for an action request: null when the computer did it, else its reason.
   async function attempt(cmd, value, extra) {
@@ -204,9 +212,14 @@
   let timer, polling = false
   // Two missed answers in a row: what the phone shows is no longer known, so it says so and its
   // buttons wait, instead of still saying "On air" from before (11 Nov review).
-  let missed = 0, lastHeard = 0
+  let missed = 0, lastHeard = 0, staleNow = false
+  const sending = new Set()
+  // Everything that sends a command: the big buttons, each source's Take off / Put back, and the
+  // notice answers and form (Talk is its own channel and stays as it is).
+  const actions = () => document.querySelectorAll("[data-cmd], #sources button, #notices button, #noticeForm button[type=submit]")
   function stale(isStale) {
-    document.querySelectorAll("[data-cmd]").forEach((b) => { b.disabled = isStale })
+    staleNow = isStale
+    actions().forEach((b) => { if (!sending.has(b)) b.disabled = isStale })
     if (!isStale) return
     $("air").textContent = "Not updating"
     $("air").className = "air stale"
@@ -218,7 +231,7 @@
     if (polling || !get() || document.hidden) return
     polling = true
     try {
-      const r = await fetch("/api/v1/status", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } })
+      const r = await timed("/api/v1/status", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } })
       if (r.status === 401) { set(null); show(); say("This phone is no longer paired. Pair it again.", true); polling = false; return }
       if (!r.ok) throw new Error("status " + r.status)
       const s = await r.json()
@@ -246,7 +259,7 @@
   const ACTIONS = { timer: ["Pause", "Resume"], camera: ["Hide", "Show"] }
   async function sources() {
     const box = $("sources")
-    const r = await fetch("/api/v1/live", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
+    const r = await timed("/api/v1/live", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
     const live = r && r.status === 200 ? await r.json().catch(() => null) : null
     lastLive = live
     await notices(live)
@@ -309,7 +322,7 @@
     // Asked again every 10 s: the main desk may change this phone's role mid-service, and its notices
     // (a Timekeeper's reminders) must show without a reload (#411 phone QA). The last answer stays on a failure.
     if (!me || Date.now() - meAt > 10000) {
-      const r = await fetch("/api/v1/me", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
+      const r = await timed("/api/v1/me", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
       const now = r && r.ok ? await r.json().catch(() => null) : null
       if (now) { me = now; meAt = Date.now() }
     }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import page from "../../src-tauri/crates/api/src/remote.html?raw"
 
 /** The phone remote page (served by the LAN listener): live sources, taken off and put back (ADR 0001). */
@@ -52,6 +52,11 @@ describe("phone remote: live sources", () => {
 })
 
 describe("phone remote: what it shows when the computer stops answering (11 Nov review)", () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    document.body.innerHTML = ""
+  })
   const boot = () => {
     document.body.innerHTML = page.slice(page.indexOf("<body>") + 6, page.indexOf("<script>"))
     new Function(page.slice(page.indexOf("<script>") + 8, page.indexOf("</script>")))()
@@ -60,20 +65,22 @@ describe("phone remote: what it shows when the computer stops answering (11 Nov 
     const store = new Map([["rhema-remote-token", "phone-key"]])
     vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) })
   }
+  const live = { v: 1, sources: [{ id: "bible", reference: "John 3:16", on: true, revision: 1 }], notices: [] }
 
-  it("stops saying On air after two missed answers, holds its buttons, and comes back when the computer does", async () => {
+  it("stops saying On air after two missed answers, holds every action button, and comes back when the computer does", async () => {
     vi.useFakeTimers()
     keyed()
     let up = true
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (!up && url === "/api/v1/status") throw new TypeError("Failed to fetch")
       if (url === "/api/v1/status") return new Response(JSON.stringify({ on_air: true, live_verse: "John 3:16" }))
-      if (url === "/api/v1/live") return new Response(JSON.stringify({ v: 1, sources: [], notices: [] }))
+      if (url === "/api/v1/live") return new Response(JSON.stringify(live))
       return new Response(JSON.stringify({ name: "Usher phone", role: "present" }))
     }))
     boot()
-    await vi.waitFor(() => expect(document.getElementById("air")!.textContent).toBe("On air"))
+    await vi.waitFor(() => expect(document.querySelectorAll("#sources .src button")).toHaveLength(1))
     const next = document.querySelector('[data-cmd="next"]') as HTMLButtonElement
+    const takeOff = document.querySelector("#sources .src button") as HTMLButtonElement
     up = false
     await vi.advanceTimersByTimeAsync(2100)
     expect(document.getElementById("air")!.textContent).toBe("On air") // one miss is a blip
@@ -81,12 +88,48 @@ describe("phone remote: what it shows when the computer stops answering (11 Nov 
     expect(document.getElementById("air")!.textContent).toBe("Not updating")
     expect(document.getElementById("live")!.textContent).toContain("No answer from the presentation computer since")
     expect(next.disabled).toBe(true)
+    expect(takeOff.disabled).toBe(true)
     up = true
     await vi.advanceTimersByTimeAsync(2100)
     await vi.waitFor(() => expect(document.getElementById("air")!.textContent).toBe("On air"))
     expect(next.disabled).toBe(false)
-    vi.useRealTimers()
-    vi.unstubAllGlobals()
+  })
+
+  it("also goes stale when the computer's answer never comes (a hung fetch, not a refused one)", async () => {
+    vi.useFakeTimers()
+    keyed()
+    let up = true
+    vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
+      if (!up) return new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))))
+      if (url === "/api/v1/status") return Promise.resolve(new Response(JSON.stringify({ on_air: true, live_verse: "John 3:16" })))
+      if (url === "/api/v1/live") return Promise.resolve(new Response(JSON.stringify(live)))
+      return Promise.resolve(new Response(JSON.stringify({ name: "Usher phone", role: "present" })))
+    }))
+    boot()
+    await vi.waitFor(() => expect(document.getElementById("air")!.textContent).toBe("On air"))
+    up = false
+    await vi.advanceTimersByTimeAsync(2100 + 3100 + 2100 + 3100)
+    expect(document.getElementById("air")!.textContent).toBe("Not updating")
+  })
+
+  it("keeps a button pressed during an outage held after the press fails", async () => {
+    vi.useFakeTimers()
+    keyed()
+    let up = true
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (!up) throw new TypeError("Failed to fetch")
+      if (url === "/api/v1/status") return new Response(JSON.stringify({ on_air: true, live_verse: "John 3:16" }))
+      if (url === "/api/v1/live") return new Response(JSON.stringify(live))
+      return new Response(JSON.stringify({ name: "Usher phone", role: "present" }))
+    }))
+    boot()
+    await vi.waitFor(() => expect(document.getElementById("air")!.textContent).toBe("On air"))
+    up = false
+    const next = document.querySelector('[data-cmd="next"]') as HTMLButtonElement
+    next.click()
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(document.getElementById("air")!.textContent).toBe("Not updating")
+    expect(next.disabled).toBe(true)
   })
 
   it("says the computer's own reason when it refuses, e.g. paused by the main desk", async () => {
@@ -101,6 +144,5 @@ describe("phone remote: what it shows when the computer stops answering (11 Nov 
     ;(document.querySelector('[data-cmd="next"]') as HTMLButtonElement).click()
     await vi.waitFor(() => expect(document.getElementById("msg")!.textContent).toBe("The main desk has taken back control for now."))
     expect(document.getElementById("msg")!.className).toBe("err")
-    vi.unstubAllGlobals()
   })
 })
