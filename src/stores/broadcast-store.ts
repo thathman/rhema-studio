@@ -2194,16 +2194,17 @@ useBroadcastStore.subscribe((s, prev) => {
   lastSoundOutput = now
 })
 
-// A video item on air while a TV or browser feed follows Program: that screen shows only the
-// background. Said once per video, where the operator presents (#411, Onn TV).
+// A video item on air while a TV or browser feed would show it: that screen shows only the
+// background. Said where the operator presents, once per video and set of such screens (a TV
+// turned on mid-video is named too). Not in rehearsal: the real screens keep their frame (#411, Onn TV).
 let lastVideoWarned: string | undefined
 useBroadcastStore.subscribe((s) => {
-  const v = s.isLive ? s.liveVerse?.video : undefined
-  const key = v ? `${v.url}#${v.token}` : undefined
+  const v = !s.rehearsal && s.isLive ? s.liveVerse?.video : undefined
+  const feeds = v ? feedsWithoutVideo(s) : []
+  const key = v && feeds.length > 0 ? `${v.url}#${v.token}|${feeds.join("|")}` : undefined
   if (key === lastVideoWarned) return
   lastVideoWarned = key
-  if (!v) return
-  const warning = videoOnFeedsWarning(v.name, feedsWithoutVideo(s.outputs, s.outputStatus, s.scenes))
+  const warning = v ? videoOnFeedsWarning(v.name, feeds) : null
   if (warning) s.setPresentWarning(warning)
 })
 

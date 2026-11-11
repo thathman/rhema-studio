@@ -1433,21 +1433,28 @@ describe("updateDraftNested deep paths", () => {
 
 
 describe("a video item while a TV feed follows Program (#411, Onn TV)", () => {
-  it("tells the operator once per video that the TV shows only the background", async () => {
+  it("tells the operator once per video and set of TVs, also for a TV turned on mid-video, never in rehearsal", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const main = useBroadcastStore.getState().outputs[0]!
-    useBroadcastStore.setState({
-      outputs: [main, { ...main, id: "tv", name: "Hall TV", type: "browser", sceneId: undefined, shows: undefined }],
-      outputStatus: { tv: { feedActive: true } } as never,
-      presentWarning: null,
-      isLive: true,
-    })
+    const tv = { ...main, id: "tv", name: "Hall TV", type: "browser" as const, sceneId: undefined, shows: undefined }
+    const foyer = { ...tv, id: "foyer", name: "Foyer" }
     const video = { url: "asset://intro.mp4", fit: "contain" as const, loop: false, sound: false, name: "Intro", token: 7 }
-    useBroadcastStore.setState({ liveVerse: { reference: "", segments: [], kind: "image", video } as never })
+    const liveVideo = { reference: "", segments: [], kind: "image" as const, video }
+    const feedOn = { previewOpen: false, ndiActive: false, feedActive: true }
+    useBroadcastStore.setState({ outputs: [main, tv, foyer], outputStatus: { tv: feedOn }, presentWarning: null, rehearsal: false, isLive: true, liveVerse: null })
+    useBroadcastStore.setState({ liveVerse: liveVideo })
     expect(useBroadcastStore.getState().presentWarning).toMatch(/^Hall TV shows only the background while "Intro" plays/)
     // The same video again (a re-render, a sync): not said twice.
     useBroadcastStore.setState({ presentWarning: null })
-    useBroadcastStore.setState({ liveVerse: { reference: "", segments: [], kind: "image", video } as never })
+    useBroadcastStore.setState({ liveVerse: { ...liveVideo } })
     expect(useBroadcastStore.getState().presentWarning).toBeNull()
+    // Another TV turned on while it plays: said again, naming both.
+    useBroadcastStore.setState({ outputStatus: { tv: feedOn, foyer: feedOn } })
+    expect(useBroadcastStore.getState().presentWarning).toMatch(/^Hall TV and Foyer show only the background/)
+    // In rehearsal the real screens keep their frame: nothing said.
+    useBroadcastStore.setState({ presentWarning: null, liveVerse: null })
+    useBroadcastStore.setState({ rehearsal: true, liveVerse: { ...liveVideo, video: { ...video, token: 8 } } })
+    expect(useBroadcastStore.getState().presentWarning).toBeNull()
+    useBroadcastStore.setState({ rehearsal: false, liveVerse: null })
   })
 })
