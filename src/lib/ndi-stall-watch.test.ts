@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 let frames = 100
 vi.mock("@tauri-apps/api/core", () => ({ invoke: async () => ({ active: true, framesSent: frames }) }))
 const warning = vi.fn()
-vi.mock("sonner", () => ({ toast: { warning: (...a: unknown[]) => warning(...a) } }))
+const dismiss = vi.fn()
+vi.mock("sonner", () => ({ toast: { warning: (...a: unknown[]) => warning(...a), dismiss: (...a: unknown[]) => dismiss(...a) } }))
 
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { startNdiStallWatch } from "./ndi-stall-watch"
@@ -22,6 +23,11 @@ describe("an NDI sender that stops is said wherever the operator is (#411)", () 
     expect(warning.mock.calls[0][0]).toContain("Stream NDI")
     await vi.advanceTimersByTimeAsync(30_000)
     expect(warning).toHaveBeenCalledTimes(1) // once per stall
+    expect(warning.mock.calls[0][1]).toMatchObject({ id: "ndi-stall-ndi-1" })
+    // Sending again: the warning comes down.
+    frames += 30
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(dismiss).toHaveBeenCalledWith("ndi-stall-ndi-1")
     stop()
   })
 })
