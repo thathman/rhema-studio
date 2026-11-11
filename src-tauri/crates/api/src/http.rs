@@ -1419,8 +1419,6 @@ where
         .route("/api/v1/feed/{id}/camera/{name}/whep", post(feed_camera_handler::<S>))
         .route("/api/v1/cameras/watch", get(companion_cameras_handler::<S>))
         .route("/api/v1/cameras/tally", post(companion_tally_handler::<S>))
-        // Undocumented alias for the path the code shipped with before #146.
-        .route("/api/v1/control", post(command_handler::<S>))
         // Rhema's own pages are served from here (same origin) and its windows call through Rust, so
         // no other web page may use this API from a browser on the network (see `same_origin_only`).
         .layer(app_cors())
@@ -1895,7 +1893,6 @@ fn lyrics_up(live: Option<&str>) -> bool {
     live.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()).is_some_and(|v| v.get("lyrics").is_some_and(|l| l.is_object()))
 }
 
-const OPACITY_MESSAGE: &str = "Opacity is not available in Rhema Studio yet: the screens do not change";
 const NO_LYRICS_MESSAGE: &str = "No song or hymn is on the screens";
 
 /// What an OBS director is told in rehearsal: OBS is the online stream (the host's own wording).
@@ -2029,6 +2026,20 @@ async fn me_handler<S: CommandSink + 'static>(
     }
 }
 
+/// What `/api/v1/status` adds to the Live State's `program` (11 Nov review R11), so a page reads
+/// one place: `waitingForApproval` (the main computer is asking whether to show this service) and
+/// `shown` (what the screens show in words, including a picture's item name), each only as the
+/// key's role may read it (`status_for`). A Live State without a `program` is left as it is.
+fn with_status(data: String, status: &StatusSnapshot) -> String {
+    let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&data) else { return data };
+    let Some(program) = v.get_mut("program").and_then(serde_json::Value::as_object_mut) else { return data };
+    program.insert("waitingForApproval".into(), status.waiting_for_approval.into());
+    if let Some(shown) = &status.live_verse {
+        program.insert("shown".into(), shown.clone().into());
+    }
+    v.to_string()
+}
+
 /// `GET /api/v1/live`: the host's Live State now (204 before the app has published one).
 async fn live_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
@@ -2045,6 +2056,7 @@ async fn live_handler<S: CommandSink + 'static>(
             if sees_crew(reader.as_ref()) {
                 data = with_crew(data, crew_rows(&state.keys, &state.presence));
             }
+            data = with_status(data, &status_for(&*state.status.read().await, reader.as_ref()));
             ([(axum::http::header::CONTENT_TYPE, "application/json"), (axum::http::header::CACHE_CONTROL, "no-store")], data).into_response()
         }
         None => StatusCode::NO_CONTENT.into_response(),
@@ -3062,10 +3074,6 @@ async fn command_handler<S: CommandSink + 'static>(
             return (status, CommandResponse::refused(why));
         }
     }
-    // Not available (#411): refused before the desk waits its turn, as "cannot do that", not a server fault.
-    if matches!(command, RemoteCommand::Opacity(_)) {
-        return (StatusCode::UNPROCESSABLE_ENTITY, CommandResponse::refused(OPACITY_MESSAGE));
-    }
     if matches!(command, RemoteCommand::SongSection(_)) && !lyrics_up(state.live.current().as_deref()) {
         return (StatusCode::UNPROCESSABLE_ENTITY, CommandResponse::refused(NO_LYRICS_MESSAGE));
     }
@@ -3801,6 +3809,42 @@ mod tests {
 
         let mut h = result.handle;
         h.stop();
+    }
+
+    #[tokio::test]
+    async fn the_live_state_carries_what_status_said_so_a_phone_reads_one_place() {
+        let entry = |hash: &str, role| crate::keys::KeyEntry { hash: crate::keys::hash_key(hash), name: hash.into(), role, paused: false, output_scope: Vec::new(), group_take_scope: Vec::new(), record: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(crate::keys::Keys {
+            require_auth: true,
+            entries: vec![entry("tk", crate::keys::Role::Timekeeper), entry("view", crate::keys::Role::Viewer)],
+        }));
+        let live = new_live_hub();
+        let status = new_shared_status();
+        *status.write().await = StatusSnapshot { on_air: true, live_verse: Some("Welcome slide".into()), waiting_for_approval: true, ..StatusSnapshot::default() };
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), status).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        live.publish(r#"{"v":1,"program":{"onAir":true,"reference":null,"rehearsal":false}}"#.into());
+        let body = |raw: String| serde_json::from_str::<serde_json::Value>(raw.split("\r\n\r\n").nth(1).unwrap_or("")).unwrap_or_default();
+        let tk = body(get_with(port, "/api/v1/live", "Authorization: Bearer tk\r\n", None).await);
+        assert_eq!(tk["program"]["waitingForApproval"], true, "{tk}");
+        assert_eq!(tk["program"]["shown"], "Welcome slide", "{tk}");
+        // View only never read the words on the screens from /status, nor here.
+        let view = body(get_with(port, "/api/v1/live", "Authorization: Bearer view\r\n", None).await);
+        assert_eq!(view["program"]["waitingForApproval"], true, "{view}");
+        assert!(view["program"].get("shown").is_none(), "{view}");
+        // /status itself is unchanged for anything else that reads it.
+        assert!(get_with(port, "/api/v1/status", "Authorization: Bearer tk\r\n", None).await.contains("\"live_verse\":\"Welcome slide\""));
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[test]
+    fn with_status_leaves_a_live_state_without_a_program_alone() {
+        let status = StatusSnapshot { waiting_for_approval: true, ..StatusSnapshot::default() };
+        assert_eq!(with_status(r#"{"v":1}"#.into(), &status), r#"{"v":1}"#);
+        assert_eq!(with_status("not json".into(), &status), "not json");
     }
 
     /// A paired key; its hash is its id (here a short stand-in per desk).
@@ -5414,14 +5458,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn opacity_is_refused_as_not_available_not_answered_as_done() {
+    async fn opacity_is_not_a_command_and_reaches_nothing() {
+        // Removed (11 Nov review G12): an unknown command, never answered as done.
         let sink = Arc::new(MockSink::new());
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), ..Default::default() };
         let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
         let port = result.bound_port;
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         let answer = raw_http_request(port, "POST", "/api/v1/command", Some(r#"{"command":"opacity","value":0.75}"#)).await;
-        assert!(answer.contains("422") && answer.contains("not available"), "{answer}");
+        assert!(answer.contains("422"), "{answer}");
+        assert!(!answer.contains("\"success\":true"), "{answer}");
         assert_eq!(sink.command_count(), 0);
         let mut handle = result.handle;
         handle.stop();
@@ -5546,7 +5592,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn control_alias_still_dispatches() {
+    async fn the_old_control_alias_is_gone() {
         let sink = Arc::new(MockSink::new());
         let status = new_shared_status();
         let config = HttpConfig {
@@ -5563,9 +5609,10 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         let body = r#"{"command":"next"}"#;
+        // No client used it (11 Nov review R10): only /api/v1/command carries commands.
         let resp = raw_http_request(port, "POST", "/api/v1/control", Some(body)).await;
-        assert!(resp.contains("200 OK"), "Expected 200, got: {resp}");
-        assert!(resp.contains("\"success\":true"));
+        assert!(resp.contains("404"), "Expected 404, got: {resp}");
+        assert_eq!(sink.command_count(), 0);
 
         let mut handle = result.handle;
         handle.stop();

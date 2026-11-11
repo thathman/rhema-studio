@@ -72,7 +72,7 @@ describe("phone remote: notices and requests", () => {
     const { commands } = start({ v: 1, notices: [], sources: [], crew: ["Ade", "Usher phone"] })
     await vi.waitFor(() => expect([...(document.getElementById("noticeTo") as HTMLSelectElement).options].map((o) => o.textContent)).toContain("Ade"))
     const to = [...(document.getElementById("noticeTo") as HTMLSelectElement).options].map((o) => o.textContent)
-    expect(to[0]).toBe("The main desk")
+    expect(to[0]).toBe("The main computer")
     expect(to).not.toContain("Usher phone")
     pick("noticeTo", "name:Ade")
     pick("noticeAsk", "song")
@@ -119,7 +119,7 @@ describe("phone remote: Talk to and each person's mute", () => {
     await vi.waitFor(() => expect((document.getElementById("talkOpts") as HTMLElement).hidden).toBe(false))
     const options = () => [...(document.getElementById("talkTo") as HTMLSelectElement).options].map((o) => o.textContent)
     // Production is the Bible desk's only: a Present phone sees All crew, Stage & worship and the people.
-    await vi.waitFor(() => expect(options()).toEqual(["All crew", "Stage & worship", "The main desk", "Ade"]))
+    await vi.waitFor(() => expect(options()).toEqual(["All crew", "Stage & worship", "The main computer", "Ade"]))
     await vi.waitFor(() => expect(commands().some((c) => c.command === "voice_channels")).toBe(true))
     expect(commands().filter((c) => c.command === "voice_channels").at(-1)).toMatchObject({ value: { listen: ["stage"], talk: "all" } })
     pick("talkTo", "to:Ade")

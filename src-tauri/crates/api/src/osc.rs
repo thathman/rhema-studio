@@ -223,12 +223,6 @@ fn handle_message_from_live(msg: &OscMessage, sink: &dyn CommandSink, keys: &Key
                     return;
                 }
             }
-            // Not available (the dispatcher refuses it): a fader sends dozens a second, so it is
-            // dropped quietly here rather than warned about each time.
-            if matches!(cmd, RemoteCommand::Opacity(_)) {
-                log::debug!("OSC opacity ignored: not available");
-                return;
-            }
             if let Some((rate, ip)) = limit {
                 let fader = matches!(cmd, RemoteCommand::Confidence(_));
                 if !fader && !rate.allow(ip) {
