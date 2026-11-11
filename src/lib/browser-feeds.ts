@@ -1,10 +1,11 @@
 import { useEffect } from "react"
 import { invoke } from "@tauri-apps/api/core"
+import { toast } from "sonner"
 import { listen } from "@tauri-apps/api/event"
 import { newFeedToken } from "@/lib/output-on-air"
 import { useFeedHealthStore } from "@/lib/show-health"
 import { SKEW_WARN_MS, skewWords } from "@/lib/desk-freshness"
-import { useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
+import { savedOutputsUnread, useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
 import { useJournalStore } from "@/stores/journal-store"
 import type { PageVideo } from "@/lib/camera-playback"
 import { tvKeys } from "@/lib/feed-receivers"
@@ -20,6 +21,8 @@ let last = ""
 let sent: Promise<unknown> = Promise.resolve()
 
 function sync(): Promise<unknown> {
+  // Default outputs, not the church's: telling the listener "no feeds" would cut and unpair every TV.
+  if (savedOutputsUnread()) return sent
   const b = useBroadcastStore.getState()
   for (const o of b.outputs) if (o.type === "browser" && !o.feedToken) b.updateOutput(o.id, { feedToken: newFeedToken() })
   // Each paired TV's own key goes with its feed (#198): removing one revokes that TV alone.
@@ -66,6 +69,8 @@ export async function revokeTv(outputId: string, address: string): Promise<void>
 }
 
 export function startBrowserFeeds(): () => void {
+  // Said, not only logged (shown once the shell is up, so the toast is seen): the outputs here are defaults.
+  if (savedOutputsUnread()) toast.error("Saved outputs and looks could not be read", { description: "Rhema Studio is showing its defaults. TVs keep the feeds they have until you change the outputs. Restart Rhema Studio before the service.", duration: Infinity })
   void sync()
   const stop = useBroadcastStore.subscribe((s, p) => { if (s.outputs !== p.outputs) void sync() })
   // The first page to draw a new frame (crates/api http.rs ack): which screen showed what, and how soon.

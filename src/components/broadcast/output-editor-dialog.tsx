@@ -34,6 +34,7 @@ import {
   NDI_RESOLUTION_OPTIONS,
 } from "@/lib/broadcast-output-control"
 import { useBroadcastStore } from "@/stores"
+import { outputsChangedSinceLoad } from "@/stores/broadcast-store"
 import { useNearbyConnection } from "@/studio/connections/connections-store"
 import { useMediaStore } from "@/stores/media-store"
 import { CONTENT_TYPES, FEED_SOURCES, type ContentType, type FeedSourceKind } from "@/types/broadcast"
@@ -180,6 +181,9 @@ export function OutputEditorDialog({
       }
     }
     const keepOpen = continueSetup
+    // The operator saved an output: after a failed load (#411), the outputs are now theirs, so the
+    // TV feeds follow them again. Only here, never from an automatic change (a Take, a snapshot).
+    outputsChangedSinceLoad()
     onSubmit({
       ...form,
       name,

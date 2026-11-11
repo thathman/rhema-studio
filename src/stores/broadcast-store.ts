@@ -1841,6 +1841,15 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
 
 let tauriStore: Store | null = null
 let hydrationPromise: Promise<void> | null = null
+/**
+ * The saved outputs could not be read, so the outputs here are the defaults, not the church's
+ * (#411 TV hunt). Nothing may act on them as if they were: the feed list sent from them was empty,
+ * which cut every TV, and a TV takes that as being removed and goes back to its code screen.
+ */
+let broadcastLoadFailed = false
+export const savedOutputsUnread = (): boolean => broadcastLoadFailed
+/** The operator changed the outputs after a failed load: what is here now is theirs to act on. */
+export const outputsChangedSinceLoad = (): void => { broadcastLoadFailed = false }
 
 async function getThemeStore(): Promise<Store> {
   if (!tauriStore) {
@@ -1950,6 +1959,7 @@ export function hydrateBroadcastThemes(): Promise<void> {
       })
     } catch {
       console.warn("[broadcast] Failed to load persisted themes, using defaults")
+      broadcastLoadFailed = true
     }
   })()
   return hydrationPromise
