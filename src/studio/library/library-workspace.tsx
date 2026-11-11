@@ -27,7 +27,7 @@ import { MediaLibrary } from "@/studio/prepare/media-library"
 import { SongFiles } from "@/studio/library/library-blocks"
 import { SlideLibrary } from "@/studio/library/slide-library"
 import { BibleLibrary } from "@/studio/library/bible-library"
-import { DesignDocumentsWorkspace, DesignVersionPicker } from "@/studio/design/design-documents-workspace"
+import { DesignVersionPicker } from "@/studio/design/design-documents-workspace"
 import type { LibrarySection, PrepareLibraryReturnContext } from "@/studio/shell-store"
 import { useShellStore } from "@/studio/shell-store"
 import {
@@ -462,7 +462,14 @@ export function LibraryWorkspace() {
                   <Button variant="outline" onClick={() => setDesignInvocation(captureLibraryUseInvocation())}>Choose a saved version for this moment</Button>
                 </section>
               )}
-              <DesignDocumentsWorkspace />
+              {/* My Designs lives in one place, Design (#806 R7); Library links to it. */}
+              <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-4" aria-label="My Designs">
+                <div>
+                  <h2 className="text-sm font-semibold">My Designs</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">Editable designs, their drafts and versions are made and kept in Design → My Designs. Choose a saved version for a Prepare moment here.</p>
+                </div>
+                <Button onClick={() => useShellStore.getState().openDesign("my-designs")}>Open My Designs in Design</Button>
+              </section>
             </>
           )}
         </div>}

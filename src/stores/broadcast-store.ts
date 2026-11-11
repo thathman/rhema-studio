@@ -43,7 +43,7 @@ import type { ApprovedSceneTake } from "@/lib/scene-take"
 import type { CountdownTargets } from "@/lib/countdown"
 import { zoneCity } from "@/lib/stage-clock"
 import { countdownFrame, countsToTarget, DEFAULT_COUNTDOWN_LOOK, lookCounting, NO_COUNTDOWN_SOURCES, normalizeCountdownLook, type CountdownSources } from "@/lib/countdown-display"
-import { normalizeDesignDraft, normalizeDesignDrafts, type DesignDraft } from "@/lib/design-drafts"
+import { designDraftId, normalizeDesignDraft, normalizeDesignDrafts, type DesignDraft } from "@/lib/design-drafts"
 import { aspectRatioLabel, type GroupTakeHostCheck, type GroupTakeResult } from "@/lib/group-take"
 import { dropReplacedGradients } from "@/lib/scene-gradient"
 import { dropStaleImageDraws } from "@/lib/scene-image"
@@ -393,7 +393,11 @@ interface BroadcastState {
   stopEditing: () => void
   updateDraft: (updates: Partial<BroadcastTheme>) => void
   updateDraftNested: (path: string, value: unknown) => void
+  /** Apply the theme draft: the saved theme (and the outputs on it) change. Design asks first (#830). */
   saveDraft: () => void
+  /** Keep the theme draft privately (a design draft): no theme, output or Program changes. */
+  saveThemeDraft: () => void
+  /** Drop the theme draft, saved or not, and go back to the saved theme. */
   discardDraft: () => void
   setSelectedElement: (el: SelectedElement) => void
   setRenamingTheme: (id: string | null) => void
@@ -939,7 +943,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   deleteTheme: (id) => {
     const users = get().outputs.filter((o) => themeIdsOf(o).includes(id))
     if (users.length > 0) return { inUse: users.map((o) => o.name) }
-    set((s) => ({ themes: s.themes.filter((t) => t.id !== id || t.builtin) }))
+    set((s) => ({ themes: s.themes.filter((t) => t.id !== id || t.builtin), designDrafts: s.designDrafts.filter((d) => d.id !== designDraftId("theme", id) || s.themes.some((t) => t.id === id && t.builtin)) }))
     return { inUse: [] }
   },
   duplicateTheme: (id) => {
@@ -1750,9 +1754,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const theme = get().themes.find((t) => t.id === themeId)
     if (!theme) return
     const was = get().editingThemeId
+    // A saved theme draft (#830) reopens where it was left; the saved theme is unchanged.
+    const saved = get().designDrafts.find((draft) => draft.id === designDraftId("theme", themeId))
     set({
       editingThemeId: themeId,
-      draftTheme: { ...theme, updatedAt: Date.now() },
+      draftTheme: saved?.kind === "theme" ? { ...saved.value, id: themeId, builtin: theme.builtin } : { ...theme, updatedAt: Date.now() },
       ...(was !== themeId ? { liveDesign: false } : {}),
       selectedElement: null,
     })
@@ -1791,6 +1797,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   saveDraft: () => {
     const { draftTheme: edited } = get()
     if (!edited) return
+    // Applied: its private draft is done with.
+    get().deleteDesignDraft(designDraftId("theme", edited.id))
     // A hand edit detaches a Brand Kit theme, so Apply never overwrites it again.
     const draftTheme = edited.brandManaged ? { ...edited, brandManaged: false } : edited
     // If editing a builtin, save as a new custom theme
@@ -1821,9 +1829,18 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       set({ draftTheme })
     }
   },
+  saveThemeDraft: () => {
+    const { draftTheme, editingThemeId } = get()
+    if (!draftTheme || !editingThemeId) return
+    get().saveDesignDraft({ id: designDraftId("theme", editingThemeId), kind: "theme", sourceId: editingThemeId, value: draftTheme, updatedAt: Date.now() })
+    // The Designer now holds exactly what was kept, so it no longer reads as unsaved.
+    const kept = get().designDrafts.find((draft) => draft.id === designDraftId("theme", editingThemeId))
+    if (kept?.kind === "theme") set({ draftTheme: kept.value })
+  },
   discardDraft: () => {
     const { editingThemeId } = get()
     if (editingThemeId) {
+      get().deleteDesignDraft(designDraftId("theme", editingThemeId))
       get().startEditing(editingThemeId)
       resyncThemeOutputs(editingThemeId)
     }
@@ -2124,10 +2141,13 @@ export function restoreLooksFromBackup(raw: unknown): void {
 
 /** The theme open in the Designer has changes that are not saved. */
 export function themeDraftChanged(): boolean {
-  const { draftTheme, themes, editingThemeId } = useBroadcastStore.getState()
+  const { draftTheme, themes, editingThemeId, designDrafts } = useBroadcastStore.getState()
   if (!draftTheme) return false
-  const saved = themes.find((t) => t.id === editingThemeId)
-  if (!saved) return false // the theme was deleted: nothing left to save it over
+  const theme = themes.find((t) => t.id === editingThemeId)
+  if (!theme) return false // the theme was deleted: nothing left to save it over
+  // Against its saved draft when there is one (#830): a saved draft is kept, not unsaved.
+  const draft = designDrafts.find((d) => d.id === designDraftId("theme", theme.id))
+  const saved = draft?.kind === "theme" ? draft.value : theme
   return JSON.stringify({ ...draftTheme, updatedAt: 0 }) !== JSON.stringify({ ...saved, updatedAt: 0 })
 }
 

@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react"
-import { ChevronDownIcon, ExternalLinkIcon, Layers3Icon, SaveIcon, TrashIcon } from "lucide-react"
+import { ChevronDownIcon, ExternalLinkIcon, Layers3Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
 import { useBroadcastStore } from "@/stores"
+import { themeDraftChanged } from "@/stores/broadcast-store"
+import { designDraftId } from "@/lib/design-drafts"
+import { DesignDraftActions } from "@/studio/design/design-draft-actions"
+import { outputsUsingTheme, SAVE_VOCABULARY } from "@/studio/design/design-vocabulary"
 import { useShellStore, type DesignTab } from "@/studio/shell-store"
 import { ThemeLibrary } from "@/components/broadcast/theme-library"
 import { DesignCanvas } from "@/components/broadcast/design-canvas"
@@ -58,12 +62,10 @@ export function DesignWorkspace() {
     setTab("my-designs")
   }
 
-  // Editing starts on the first theme, as the designer always did (leaving the page settles it: see the shell).
+  // Opening Themes edits nothing until a theme is chosen (#830); leaving the page settles a draft (see the shell).
   useEffect(() => {
     if (tab !== "themes") return
-    const s = useBroadcastStore.getState()
-    s.setDesignerOpen(true)
-    if (!s.draftTheme && s.themes.length > 0) s.startEditing(s.themes[0].id)
+    useBroadcastStore.getState().setDesignerOpen(true)
   }, [tab])
 
   return (
@@ -73,14 +75,11 @@ export function DesignWorkspace() {
           <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">The creative workspace</p>
           <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Choose, customize, and use your designs.</h1>
           <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Start in My Designs: choose a scene template, customize a private draft, then create a version for Prepare. A design version changes public output only through the normal approval and explicit Take flow.</p>
+          <p className="mt-0.5 max-w-3xl text-xs text-muted-foreground">{SAVE_VOCABULARY}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {tab !== "my-designs" && <Button variant="outline" onClick={() => void changeTab("my-designs")}><Layers3Icon /> Open My Designs</Button>}
-          {tab === "themes" && <>
-            <LiveEditSwitch />
-            <Button variant="outline" onClick={() => useBroadcastStore.getState().discardDraft()}><TrashIcon /> Discard changes</Button>
-            <Button onClick={() => useBroadcastStore.getState().saveDraft()}><SaveIcon /> Save theme</Button>
-          </>}
+          {tab === "themes" && <LiveEditSwitch />}
         </div>
       </header>
       <nav aria-label="Design sections" className="mx-8 mb-3 flex shrink-0 flex-wrap items-center gap-1 border-b border-border max-[1200px]:mx-5">
@@ -128,6 +127,7 @@ export function DesignWorkspace() {
           </DropdownMenuContent>
         </DropdownMenu>
       </nav>
+      {tab === "themes" && <div className="shrink-0 px-8 pb-3 max-[1200px]:px-5"><ThemeDraftActions /></div>}
       {tab === "themes" && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-8 pb-3 text-xs max-[1200px]:px-5" aria-label="More ways to use this look">
           <span className="font-semibold">More ways to use this look</span>
@@ -149,6 +149,7 @@ export function DesignWorkspace() {
           <div className="h-full overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-panel">
             {tab === "library" && <LookLibraryView onOpen={(next, id) => { setStyleId(id); void changeTab(next) }} onSceneTemplate={(look, customize) => { void startTemplate(look, customize) }} />}
             {tab === "my-designs" && <DesignDocumentsWorkspace
+              onBrowseTemplates={() => void changeTab("library")}
               initialTemplate={pendingTemplate}
               onInitialTemplateHandled={() => setPendingTemplate(null)}
               initialDesignId={documentRequest}
@@ -254,6 +255,42 @@ export function UsedOn() {
 }
 
 /**
+ * Themes on the same Save draft → Apply to outputs flow as the specialist tools (#830): a theme
+ * draft is kept privately and changes the saved theme, and so Program, only through Apply, which
+ * names the affected outputs first. Live edit stays the one explicit exception.
+ */
+export function ThemeDraftActions() {
+  const editingThemeId = useBroadcastStore((s) => s.editingThemeId)
+  const draftTheme = useBroadcastStore((s) => s.draftTheme)
+  const themes = useBroadcastStore((s) => s.themes)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const scenes = useBroadcastStore((s) => s.scenes)
+  const saved = useBroadcastStore((s) => !!editingThemeId && s.designDrafts.some((draft) => draft.id === designDraftId("theme", editingThemeId)))
+  const theme = themes.find((t) => t.id === editingThemeId)
+  if (!editingThemeId || !draftTheme || !theme) {
+    return <p role="status" className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">Choose a theme on the left to edit it. Edits stay in a private draft until you apply them to outputs.</p>
+  }
+  const using = outputsUsingTheme(theme.id, { outputs, scenes })
+  const names = using.map((output) => output.name)
+  const scope = theme.builtin
+    ? `a new copy, “${theme.name} (Custom)”. Built-in themes are never changed, so every output now on “${theme.name}” switches to the copy`
+    : `the theme “${theme.name}” and every output that uses it`
+  return (
+    <DesignDraftActions
+      dirty={themeDraftChanged()}
+      saved={saved}
+      scope={scope}
+      outputs={names}
+      onSave={() => useBroadcastStore.getState().saveThemeDraft()}
+      onDiscard={() => useBroadcastStore.getState().discardDraft()}
+      onApply={() => useBroadcastStore.getState().saveDraft()}
+      onApplied={() => {}}
+      detail={<span className="text-[0.6875rem] text-muted-foreground" aria-label={`“${theme.name}” is used on`}>Used on: {names.length ? names.join(", ") : "no output yet"}</span>}
+    />
+  )
+}
+
+/**
  * Live edit (ADR 0001): off, a draft stays in the Designer; on, the screens using this theme show it
  * as it is edited. It turns itself off when editing ends.
  */
@@ -264,7 +301,7 @@ function LiveEditSwitch() {
   const screens = editing ? outputs.filter((o) => (o.role ?? "congregation") === "congregation" && themeIdsOf(o).includes(editing)) : []
   if (!editing) return null
   return (
-    <label className={cn("flex h-[33px] items-center gap-2 rounded-md border px-3 text-[0.6875rem] font-semibold", on ? "border-on-air/50 bg-on-air/10 text-on-air" : "border-border text-muted-foreground")} title="Off: changes stay here until you save. On: the screens using this theme show your changes as you make them.">
+    <label className={cn("flex h-[33px] items-center gap-2 rounded-md border px-3 text-[0.6875rem] font-semibold", on ? "border-on-air/50 bg-on-air/10 text-on-air" : "border-border text-muted-foreground")} title="Off: changes stay in the draft until you apply them. On: the screens using this theme show your changes as you make them.">
       <Switch checked={on} onCheckedChange={(v) => useBroadcastStore.getState().setLiveDesign(v)} aria-label="Live edit: show unsaved changes on the screens" />
       {on ? `Live edit · ${screens.length} ${screens.length === 1 ? "screen" : "screens"}` : "Live edit off"}
     </label>

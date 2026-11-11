@@ -59,12 +59,12 @@ async function render(node: React.ReactNode) {
 }
 
 async function saveAndApply(element: HTMLElement) {
-  await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+  await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save draft")!.click())
   expect(useBroadcastStore.getState().designDrafts).toHaveLength(1)
   expect(element.textContent).toContain("Saved draft · outputs unchanged")
-  await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply design…")!.click())
+  await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply to outputs…")!.click())
   expect(document.body.querySelector('[role="dialog"]')).not.toBeNull()
-  await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply design")!.click())
+  await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply to outputs")!.click())
   expect(useBroadcastStore.getState().designDrafts).toHaveLength(0)
 }
 
@@ -84,7 +84,7 @@ describe("design editors keep edits in draft until applied (#442)", () => {
     ask.mockResolvedValueOnce(false)
     expect(await mayLeaveDesignDocumentDraft()).toBe(false)
     expect(ask).toHaveBeenLastCalledWith(expect.stringContaining("this lower third"), expect.anything())
-    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save draft")!.click())
     expect(useUnsavedStore.getState().specialistDraft).toBeNull()
     await act(async () => setValue(element.querySelector<HTMLInputElement>('[aria-label="Style name"]')!, "Again"))
     act(() => root?.unmount())
@@ -126,7 +126,7 @@ describe("design editors keep edits in draft until applied (#442)", () => {
     expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
     expect(element.textContent).toContain("Draft changes · outputs unchanged")
 
-    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save draft")!.click())
     expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: `lower-third:${style.id}`, value: { line1: { color: "#c49a56" }, line2: { color: "#c49a56" } } }])
     expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
 
@@ -155,7 +155,7 @@ describe("design editors keep edits in draft until applied (#442)", () => {
     expect(useBroadcastStore.getState().lowerThirdStyles[0]).toEqual(style)
     expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
     expect(element.textContent).toContain("Draft changes · outputs unchanged")
-    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save draft")!.click())
     expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: `lower-third:${style.id}`, value: { accent: { color: "#d66b42" } } }])
     expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
   })
@@ -175,7 +175,7 @@ describe("design editors keep edits in draft until applied (#442)", () => {
     expect(useBroadcastStore.getState().lowerThirdStyles[0]).toEqual(style)
     expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
     expect(element.textContent).toContain("Draft changes · outputs unchanged")
-    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save draft")!.click())
     expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: `lower-third:${style.id}`, value: { background: { color: "#182a43" } } }])
     expect(useBroadcastStore.getState().lowerThird?.style).toEqual(style)
   })
@@ -251,7 +251,7 @@ describe("design editors keep edits in draft until applied (#442)", () => {
     expect(useBroadcastStore.getState().ticker?.style).toEqual(style)
     expect(element.textContent).toContain("Draft changes · outputs unchanged")
 
-    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save draft")!.click())
     expect(useBroadcastStore.getState().designDrafts).toMatchObject([{
       id: "ticker:default",
       value: {
@@ -299,7 +299,7 @@ describe("design editors keep edits in draft until applied (#442)", () => {
     await act(async () => element.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click())
 
     expect(useBroadcastStore.getState().stageStyle).toEqual(style)
-    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save draft")!.click())
     expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: "stage:default", value: { showTimer: false } }])
     act(() => root?.unmount())
     root = null
@@ -329,7 +329,7 @@ describe("design editors keep edits in draft until applied (#442)", () => {
 
     expect(useBroadcastStore.getState().stageStyle).toEqual(style)
     expect(element.textContent).toContain("Draft changes · outputs unchanged")
-    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save draft")!.click())
     expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: "stage:default", value: { background: "#172a44", words: "#e8c271" } }])
     expect(useBroadcastStore.getState().stageStyle).toEqual(style)
   })
@@ -339,7 +339,7 @@ describe("design editors keep edits in draft until applied (#442)", () => {
     useBroadcastStore.setState({ outputs: [{ ...state.outputs[0], id: "stage", name: "Sanctuary stage", role: "stage" }] })
     const element = await render(<StageDesigner />)
     await act(async () => element.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click())
-    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply design…")!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply to outputs…")!.click())
 
     const dialog = document.body.querySelector('[role="dialog"]')!
     expect(dialog.textContent).toContain("all Stage outputs using this shared stage design")
@@ -350,14 +350,14 @@ describe("design editors keep edits in draft until applied (#442)", () => {
     const published = { ...DEFAULT_STAGE_STYLE, background: "#16202a" }
     useBroadcastStore.setState({ stageStyle: published })
     const element = await render(<StageDesigner />)
-    expect([...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply design…")?.disabled).toBe(true)
+    expect([...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply to outputs…")?.disabled).toBe(true)
 
     await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("built-in look"))!.click())
 
     expect(useBroadcastStore.getState().stageStyle).toEqual(published)
     expect(element.textContent).toContain("Draft changes · outputs unchanged")
-    expect([...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply design…")?.disabled).toBe(false)
-    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    expect([...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply to outputs…")?.disabled).toBe(false)
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save draft")!.click())
     expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: "stage:default", value: DEFAULT_STAGE_STYLE }])
     expect(useBroadcastStore.getState().stageStyle).toEqual(published)
   })
@@ -395,7 +395,7 @@ describe("design editors keep edits in draft until applied (#442)", () => {
 
     expect(useBroadcastStore.getState().countdownLook).toEqual(look)
     expect(element.textContent).toContain("Draft changes · outputs unchanged")
-    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save draft")!.click())
     expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: "countdown:default", value: { background: "#172a44", text: "#e8c271", steps: look.steps } }])
     expect(useBroadcastStore.getState().countdownLook).toEqual(look)
   })
@@ -409,7 +409,7 @@ describe("design editors keep edits in draft until applied (#442)", () => {
 
     expect(useBroadcastStore.getState().countdownLook).toEqual(published)
     expect(element.textContent).toContain("Draft changes · outputs unchanged")
-    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save Draft")!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save draft")!.click())
     expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: "countdown:default", value: DEFAULT_COUNTDOWN_LOOK }])
     expect(useBroadcastStore.getState().countdownLook).toEqual(published)
   })
@@ -423,12 +423,28 @@ describe("design editors keep edits in draft until applied (#442)", () => {
     const originalApply = useBroadcastStore.getState().saveStageStyle
     useBroadcastStore.setState({ saveStageStyle: () => { throw new Error("The stage output is unavailable") } })
 
-    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply design…")!.click())
-    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply design")!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply to outputs…")!.click())
+    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Apply to outputs")!.click())
 
     expect(useBroadcastStore.getState().stageStyle).toEqual(published)
     expect(useBroadcastStore.getState().designDrafts).toMatchObject([{ id: "stage:default", value: { showTimer: false } }])
     expect(document.body.querySelector('[role="alert"]')?.textContent).toContain("The stage output is unavailable")
     useBroadcastStore.setState({ saveStageStyle: originalApply })
+  })
+})
+
+describe("lower-third style delete (#831 S7)", () => {
+  it("asks before deleting a style and keeps it when the operator says no", async () => {
+    const second = { ...DEFAULT_LOWER_THIRD_STYLE, id: "evening", name: "Evening band" }
+    useBroadcastStore.setState({ lowerThirdStyles: [{ ...DEFAULT_LOWER_THIRD_STYLE }, second] })
+    const element = await render(<LowerThirdDesigner initialId="evening" />)
+    ask.mockResolvedValueOnce(false)
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Delete style"]')!.click())
+    expect(ask).toHaveBeenLastCalledWith(expect.stringContaining("Evening band"), expect.objectContaining({ title: "Delete lower-third style?", okLabel: "Delete" }))
+    expect(useBroadcastStore.getState().lowerThirdStyles.map((s) => s.id)).toContain("evening")
+
+    ask.mockResolvedValueOnce(true)
+    await act(async () => element.querySelector<HTMLButtonElement>('[aria-label="Delete style"]')!.click())
+    expect(useBroadcastStore.getState().lowerThirdStyles.map((s) => s.id)).not.toContain("evening")
   })
 })

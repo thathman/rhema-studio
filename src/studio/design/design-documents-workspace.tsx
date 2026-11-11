@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ask } from "@tauri-apps/plugin-dialog"
-import { ArrowLeftIcon, FilePlus2Icon, Layers3Icon, PaletteIcon } from "lucide-react"
+import { ArrowLeftIcon, CheckIcon, FilePlus2Icon, Layers3Icon, PaletteIcon, PencilIcon, Trash2Icon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,6 +13,7 @@ import { useBroadcastStore, useSettingsStore } from "@/stores"
 import { useUnsavedStore } from "@/stores/unsaved-store"
 import { useShellStore } from "@/studio/shell-store"
 import { LookLibraryView } from "@/studio/design/look-library-view"
+import { TEMPLATE_LABELS } from "@/studio/design/design-vocabulary"
 import { DesignDocumentEditor } from "@/studio/design/design-document-editor"
 import { DesignUsagePanel } from "@/studio/design/design-usage-panel"
 import { hydrateDesignSceneMedia } from "@/lib/design-media"
@@ -31,11 +32,13 @@ export type InitialDesignTemplate = {
   customize: boolean
 }
 
-export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemplateHandled, initialDesignId = null, onInitialDesignHandled }: {
+export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemplateHandled, initialDesignId = null, onInitialDesignHandled, onBrowseTemplates }: {
   initialTemplate?: InitialDesignTemplate | null
   onInitialTemplateHandled?: () => void
   initialDesignId?: string | null
   onInitialDesignHandled?: () => void
+  /** Design's one Templates section (#806 R7); without it, templates open here. */
+  onBrowseTemplates?: () => void
 }) {
   const [documents, setDocuments] = useState<DesignSummary[]>([])
   const [active, setActive] = useState<DesignDocument | null>(null)
@@ -48,6 +51,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
   const [query, setQuery] = useState("")
   const [error, setError] = useState("")
   const [reloadToken, setReloadToken] = useState(0)
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null)
   const handledInitialTemplate = useRef<InitialDesignTemplate | null>(null)
   const handledInitialDesign = useRef<string | null>(null)
   const mainRef = useRef<HTMLElement>(null)
@@ -199,6 +203,11 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
   const showTemplates = async () => {
     if (!(await confirmDiscard())) return
     useUnsavedStore.getState().setDesignEditor(null)
+    if (onBrowseTemplates) {
+      setActiveDirty(false)
+      onBrowseTemplates()
+      return
+    }
     setBrowseTemplates(true)
     setActive(null)
     setChosenDesign(null)
@@ -229,6 +238,64 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
       setCreating(false)
     }
   }
+  /** Rename from the list (#851 G7): a draft save of the same document with the new name. */
+  const renameDesign = async (id: string, nextTitle: string) => {
+    const title = nextTitle.trim().slice(0, 200)
+    setRenaming(null)
+    if (!title) return
+    if (active?.id === id && activeDirty) {
+      setError("Save or discard the changes to the open design before renaming it.")
+      return
+    }
+    try {
+      const current = await designStore.get(id)
+      if (!current) throw new Error("That design is no longer available.")
+      if (current.title === title) return
+      const saved = await designStore.saveDraft(id, current.revision, {
+        title,
+        kind: current.kind,
+        document: { ...current.document, meta: { ...current.document.meta, name: title } },
+      })
+      setDocuments((items) => items.map((item) => item.id === id ? summaryOf(saved) : item))
+      if (active?.id === id) setActive(saved)
+      setError("")
+    } catch (failure) {
+      setError("The design could not be renamed: " + messageOf(failure))
+    }
+  }
+  /** Delete from the list, after asking (#851 G7). Designs with versions are kept by the host. */
+  const deleteDesign = async (item: DesignSummary) => {
+    if (active?.id === item.id && activeDirty) {
+      setError("Save or discard the changes to the open design before deleting it.")
+      return
+    }
+    let confirmed = false
+    try {
+      confirmed = await ask(`Delete “${item.title}” from My Designs? This cannot be undone.`, {
+        title: "Delete design?",
+        kind: "warning",
+        okLabel: "Delete",
+        cancelLabel: "Keep design",
+      })
+    } catch {
+      confirmed = false
+    }
+    if (!confirmed) return
+    try {
+      await designStore.remove(item.id, item.revision)
+      setDocuments((items) => items.filter((candidate) => candidate.id !== item.id))
+      if (active?.id === item.id) {
+        useUnsavedStore.getState().setDesignEditor(null)
+        setActive(null)
+        setActiveDirty(false)
+      }
+      if (chosenDesign?.id === item.id) setChosenDesign(null)
+      setError("")
+      toast.success("Design deleted", { description: `“${item.title}” was removed from My Designs.` })
+    } catch (failure) {
+      setError("The design was not deleted: " + messageOf(failure))
+    }
+  }
   const onSaved = (saved: DesignDocument) => {
     setActive(saved)
     setChosenDesign(null)
@@ -257,11 +324,33 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {loading && <p className="px-2 py-3 text-xs text-muted-foreground">Loading saved designs…</p>}
           {!loading && documents.length === 0 && <p className="px-2 py-3 text-xs text-muted-foreground">No saved designs match this search. Create a blank design or start from a scene template.</p>}
-          {documents.map((item) => (
-            <button key={item.id} type="button" onClick={() => void open(item.id)} className={cn("mb-1 flex w-full flex-col rounded-md border px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring", active?.id === item.id ? "border-primary bg-accent" : "border-transparent hover:bg-accent/60")}>
-              <span className="truncate text-xs font-semibold">{item.title}</span>
-              <span className="mt-0.5 text-[0.6875rem] text-muted-foreground">{item.kind}{item.latestVersion ? " · v" + item.latestVersion : " · draft only"}</span>
-            </button>
+          {documents.map((item) => renaming?.id === item.id ? (
+            <form key={item.id} className="mb-1 flex items-center gap-1 rounded-md border border-primary px-1.5 py-1.5" onSubmit={(event) => { event.preventDefault(); void renameDesign(item.id, renaming.title) }}>
+              <Input autoFocus aria-label={`New name for ${item.title}`} value={renaming.title} maxLength={200} onChange={(event) => setRenaming({ id: item.id, title: event.currentTarget.value })} onKeyDown={(event) => { if (event.key === "Escape") setRenaming(null) }} className="h-7 min-w-0 flex-1 text-xs" />
+              <Button type="submit" size="icon-xs" variant="ghost" aria-label={`Save name for ${item.title}`} disabled={!renaming.title.trim()}><CheckIcon /></Button>
+              <Button type="button" size="icon-xs" variant="ghost" aria-label="Cancel rename" onClick={() => setRenaming(null)}><XIcon /></Button>
+            </form>
+          ) : (
+            <div key={item.id} className={cn("mb-1 flex items-start gap-1 rounded-md border", active?.id === item.id ? "border-primary bg-accent" : "border-transparent hover:bg-accent/60")}>
+              <button type="button" onClick={() => void open(item.id)} className="flex min-w-0 flex-1 flex-col rounded-md px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <span className="truncate text-xs font-semibold">{item.title}</span>
+                <span className="mt-0.5 text-[0.6875rem] text-muted-foreground">{item.kind}{item.latestVersion ? " · v" + item.latestVersion : " · draft only"}</span>
+              </button>
+              {item.kind !== "template" && (
+                <div className="flex shrink-0 items-center gap-0.5 py-1.5 pr-1">
+                  <Button type="button" size="icon-xs" variant="ghost" aria-label={`Rename ${item.title}`} title="Rename" onClick={() => setRenaming({ id: item.id, title: item.title })}><PencilIcon /></Button>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    aria-label={`Delete ${item.title}`}
+                    title={item.latestVersion ? "Kept: this design has versions a service may use" : "Delete"}
+                    disabled={!!item.latestVersion}
+                    onClick={() => void deleteDesign(item)}
+                  ><Trash2Icon /></Button>
+                </div>
+              )}
+            </div>
           ))}
         </div>
         {active && <DesignUsagePanel designId={active.id} />}
@@ -295,7 +384,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
             <p role="status" className="mt-2 text-sm text-muted-foreground">“{chosenDesign.title}” is a private editable copy. Customize and save a draft here; Preview, Program and screens are unchanged.</p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               <Button onClick={() => void open(chosenDesign.id)} disabled={loading || creating}>Customize this design</Button>
-              <Button variant="outline" onClick={() => { setChosenDesign(null); setBrowseTemplates(true) }} disabled={creating}>Choose another template</Button>
+              <Button variant="outline" onClick={() => { setChosenDesign(null); if (onBrowseTemplates) onBrowseTemplates(); else setBrowseTemplates(true) }} disabled={creating}>Choose another template</Button>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">When ready, create an immutable version and choose it for a moment in Prepare. Only an explicit Take can change the public output.</p>
           </section>
@@ -319,7 +408,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
             </ol>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               <Button onClick={() => void createBlank()} disabled={creating}>Create a blank design</Button>
-              <Button variant="outline" onClick={() => setBrowseTemplates(true)} disabled={creating}>Browse scene templates</Button>
+              <Button variant="outline" onClick={() => { if (onBrowseTemplates) onBrowseTemplates(); else setBrowseTemplates(true) }} disabled={creating}>Browse scene templates</Button>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">Design work stays private until a version is deliberately attached to a plan, approved and explicitly Taken.</p>
           </div>
@@ -566,7 +655,7 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
                 if (editingDirty) return
                 onDirtyChange?.(false)
                 void attachResolvedVersion(createdVersion, effectiveCreatedPageId)
-              }} disabled={editingDirty || busy}>{useLabel ?? `Use version ${createdVersion.version} in Prepare`}</Button>
+              }} disabled={editingDirty || busy} title={`Uses version ${createdVersion.version} for this moment`}>{useLabel ?? TEMPLATE_LABELS.useVersion}</Button>
             ) : (
               <div role="status" className="max-w-xl rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
                 <p className="font-semibold">Version {createdVersion.version} is saved, but cannot be used in Prepare yet.</p>
@@ -625,7 +714,7 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
     ? previewPageId
     : previewPages[0]?.id
   const previewPage = previewPages.find((page) => page.id === effectivePreviewPageId)
-  const finalUseLabel = useLabel ?? (previewPages.length > 1 ? "Use selected page in Prepare" : "Use in Prepare")
+  const finalUseLabel = useLabel ?? TEMPLATE_LABELS.useVersion
   const changeQuery = (nextQuery: string) => {
     previewRequestId.current += 1
     const matches = documents.filter((item) => item.title.toLocaleLowerCase().includes(nextQuery.trim().toLocaleLowerCase()))

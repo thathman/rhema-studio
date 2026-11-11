@@ -113,7 +113,7 @@ export function LookProperties() {
           </select>
         </Field>
       </section>
-      <p className="rounded-md bg-accent px-3 py-2 text-[0.6875rem] text-accent-foreground">Changes are a preview until you Save theme. Click the words or the reference on the canvas for every detail.</p>
+      <p className="rounded-md bg-accent px-3 py-2 text-[0.6875rem] text-accent-foreground">Changes stay in a private draft until you Apply them to outputs. Click the words or the reference on the canvas for every detail.</p>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
@@ -11,6 +11,7 @@ export function DesignDraftActions({
   onDiscard,
   onApply,
   onApplied,
+  detail,
 }: {
   dirty: boolean
   saved: boolean
@@ -20,6 +21,8 @@ export function DesignDraftActions({
   onDiscard: () => void
   onApply: () => void | Promise<void>
   onApplied: () => void
+  /** Item detail beside the status, such as where this look is used. */
+  detail?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const [applying, setApplying] = useState(false)
@@ -42,18 +45,21 @@ export function DesignDraftActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
-      <span role="status" className="mr-auto text-xs text-muted-foreground">
-        {dirty ? "Draft changes · outputs unchanged" : saved ? "Saved draft · outputs unchanged" : "Published design preview · edits stay here until applied"}
-      </span>
-      <Button type="button" size="sm" variant="outline" onClick={onSave} disabled={!dirty}>Save Draft</Button>
-      {(dirty || saved) && <Button type="button" size="sm" variant="ghost" onClick={onDiscard}>Discard Draft</Button>}
-      <Button type="button" size="sm" onClick={() => { setError(null); setOpen(true) }} disabled={!dirty && !saved}>Apply design…</Button>
+      <div className="mr-auto flex min-w-0 flex-col gap-0.5">
+        <span role="status" className="text-xs text-muted-foreground">
+          {dirty ? "Draft changes · outputs unchanged" : saved ? "Saved draft · outputs unchanged" : "Published design preview · edits stay here until applied"}
+        </span>
+        {detail}
+      </div>
+      <Button type="button" size="sm" variant="outline" onClick={onSave} disabled={!dirty} title="Keep these changes privately. Outputs are unchanged.">Save draft</Button>
+      {(dirty || saved) && <Button type="button" size="sm" variant="ghost" onClick={onDiscard}>Discard draft</Button>}
+      <Button type="button" size="sm" onClick={() => { setError(null); setOpen(true) }} disabled={!dirty && !saved} title="Shows the affected outputs before anything changes">Apply to outputs…</Button>
       <Dialog open={open} onOpenChange={(next) => { if (!applying) setOpen(next) }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Apply this design?</DialogTitle>
+            <DialogTitle>Apply this draft to outputs?</DialogTitle>
             <DialogDescription>
-              This applies the edited design to {scope}. It can change what connected outputs show now.
+              This applies the draft to {scope}. It can change what connected outputs show now.
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
@@ -69,7 +75,7 @@ export function DesignDraftActions({
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" disabled={applying} onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="button" disabled={applying} onClick={() => void finishApply()}>{applying ? "Applying…" : "Apply design"}</Button>
+            <Button type="button" disabled={applying} onClick={() => void finishApply()}>{applying ? "Applying…" : "Apply to outputs"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
