@@ -449,6 +449,8 @@ function checkStale() {
   const show = stale ? "block" : "none"
   if (staleMark.style.display !== show) staleMark.style.display = show
   showLost(stale)
+  // Read by the Google TV Receiver before it keeps a picture: never one with this mark or cover on it.
+  document.documentElement.dataset.stale = String(stale)
 }
 setInterval(checkStale, 1000)
 /**

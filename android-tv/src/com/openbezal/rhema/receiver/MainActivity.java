@@ -35,6 +35,7 @@ import android.webkit.SslErrorHandler;
 import android.webkit.WebResourceResponse;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebSettings;
+import android.webkit.ValueCallback;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
@@ -513,37 +514,52 @@ public class MainActivity extends Activity {
             ui.removeCallbacks(keepStill);
             ui.postDelayed(keepStill, STILL_EVERY_MS);
             final String url = shown();
-            // Only of a page that has drawn (#604): a loaded-but-black page is never kept.
-            if (url == null || !ready.drawn() || problem != null || certRefused || panel.getVisibility() == View.VISIBLE || still.getVisibility() == View.VISIBLE) return;
-            int[] size = Guard.stillSize(web.getWidth(), web.getHeight());
-            if (size == null) return;
-            final Bitmap bmp;
-            try {
-                bmp = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
-            } catch (Throwable noMemory) {
-                return;
-            }
-            if (Build.VERSION.SDK_INT >= 26) {
-                // The window as shown (the page's canvas included); it is scaled to the bitmap.
-                try {
-                    PixelCopy.request(getWindow(), bmp, new PixelCopy.OnPixelCopyFinishedListener() {
-                        @Override
-                        public void onPixelCopyFinished(int result) {
-                            if (result == PixelCopy.SUCCESS) saveStill(bmp, url, System.currentTimeMillis());
-                            else bmp.recycle();
-                        }
-                    }, ui);
-                } catch (Throwable e) {
-                    bmp.recycle();
+            if (!stillWanted(url)) return;
+            // Never of the page's "Not updating" mark or lost-host cover: it would be what the TV
+            // starts with next time. A page from an older Rhema Studio says nothing and is kept as before.
+            web.evaluateJavascript("document.documentElement.dataset.stale === 'true'", new ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String stale) {
+                    if (!"true".equals(stale) && url.equals(shown()) && stillWanted(url)) takeStill(url);
                 }
-            } else {
-                Canvas c = new Canvas(bmp);
-                c.scale((float) size[0] / web.getWidth(), (float) size[1] / web.getHeight());
-                web.draw(c);
-                saveStill(bmp, url, System.currentTimeMillis());
-            }
+            });
         }
     };
+
+    /** Only of a page that has drawn (#604): a loaded-but-black page is never kept. */
+    private boolean stillWanted(String url) {
+        return url != null && ready.drawn() && problem == null && !certRefused && panel.getVisibility() != View.VISIBLE && still.getVisibility() != View.VISIBLE;
+    }
+
+    private void takeStill(final String url) {
+        int[] size = Guard.stillSize(web.getWidth(), web.getHeight());
+        if (size == null) return;
+        final Bitmap bmp;
+        try {
+            bmp = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
+        } catch (Throwable noMemory) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 26) {
+            // The window as shown (the page's canvas included); it is scaled to the bitmap.
+            try {
+                PixelCopy.request(getWindow(), bmp, new PixelCopy.OnPixelCopyFinishedListener() {
+                    @Override
+                    public void onPixelCopyFinished(int result) {
+                        if (result == PixelCopy.SUCCESS) saveStill(bmp, url, System.currentTimeMillis());
+                        else bmp.recycle();
+                    }
+                }, ui);
+            } catch (Throwable e) {
+                bmp.recycle();
+            }
+        } else {
+            Canvas c = new Canvas(bmp);
+            c.scale((float) size[0] / web.getWidth(), (float) size[1] / web.getHeight());
+            web.draw(c);
+            saveStill(bmp, url, System.currentTimeMillis());
+        }
+    }
 
     /** Writes the picture away from the screen's thread, whole or not at all. */
     private void saveStill(final Bitmap bmp, final String url, final long capturedAtMillis) {
