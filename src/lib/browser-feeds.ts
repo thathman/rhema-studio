@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event"
 import { newFeedToken } from "@/lib/output-on-air"
 import { useFeedHealthStore } from "@/lib/show-health"
 import { SKEW_WARN_MS, skewWords } from "@/lib/desk-freshness"
-import { useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
+import { savedOutputsUnread, useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
 import { useJournalStore } from "@/stores/journal-store"
 import type { PageVideo } from "@/lib/camera-playback"
 import { tvKeys } from "@/lib/feed-receivers"
@@ -20,6 +20,8 @@ let last = ""
 let sent: Promise<unknown> = Promise.resolve()
 
 function sync(): Promise<unknown> {
+  // Default outputs, not the church's: telling the listener "no feeds" would cut and unpair every TV.
+  if (savedOutputsUnread()) return sent
   const b = useBroadcastStore.getState()
   for (const o of b.outputs) if (o.type === "browser" && !o.feedToken) b.updateOutput(o.id, { feedToken: newFeedToken() })
   // Each paired TV's own key goes with its feed (#198): removing one revokes that TV alone.
