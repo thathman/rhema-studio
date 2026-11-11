@@ -313,10 +313,11 @@ public final class SettingsActivity extends Activity {
         final TextView why = note(c, "");
         if (p == null) {
             state.setText("Not paired");
-            why.setText("In Rhema: Production → Cameras → add a camera → \"Rhema Camera app\". Scan its QR code with this phone's camera, or copy the link and paste it here.");
+            why.setText("In Rhema Studio: Live → Production tools → Cameras → add a camera; its card has a \"Rhema Studio Cam app (Android)\" QR code. Scan it with this phone's camera, or copy the link and paste it here.");
         } else {
-            info(c, "Rhema", p.host + ":" + p.port);
-            info(c, "This camera", p.title());
+            info(c, "Rhema Studio", p.host + ":" + p.port);
+            // The name Rhema Studio gives it now (#850), else the link's.
+            info(c, "This camera", Prefs.cameraTitle(this, p));
         }
         final TextView sent = p == null ? null : info(c, "Picture sent", "—");
         final TextView rate = p == null ? null : info(c, "Bitrate", "—");
@@ -330,9 +331,13 @@ public final class SettingsActivity extends Activity {
                 boolean on = s != null && s.sending;
                 Publisher pub = s == null ? null : s.publisher();
                 boolean isLive = pub != null && pub.live();
-                state.setText(isLive ? "● Sending to Rhema" : on ? "Connecting…" : "Not sending");
-                state.setTextColor(isLive ? Ui.LIVE : on ? Ui.AMBER : Ui.FG);
-                why.setText(s == null ? "" : s.cameraError != null ? s.cameraError : on && !isLive ? s.status : on ? "" : "Press Start sending, or tap the dot on the viewfinder.");
+                // Sending is not received (#850): Rhema Studio says when its router gets the picture.
+                int rec = s == null ? CamAction.RECEIVING_UNKNOWN : s.receiving;
+                state.setText(!isLive ? (on ? "Connecting…" : "Not sending")
+                        : rec == CamAction.RECEIVED ? "● Rhema Studio is receiving"
+                        : rec == CamAction.NOT_RECEIVED ? "● Sending · Rhema Studio has not received it yet" : "● Sending to Rhema Studio");
+                state.setTextColor(isLive ? (rec == CamAction.NOT_RECEIVED ? Ui.AMBER : Ui.TEAL_TEXT) : on ? Ui.AMBER : Ui.FG);
+                why.setText(s == null ? "" : s.cameraError != null ? s.cameraError : on && !isLive ? s.status : on ? "" : s.stopReason != null ? s.stopReason : "Press Start sending, or tap the dot on the viewfinder.");
                 why.setVisibility(why.getText().length() == 0 ? View.GONE : View.VISIBLE);
                 Plan.Shape sh = s == null ? null : s.shape;
                 sent.setText(sh == null ? "—" : sh.height + "p · " + sh.fps + " fps · " + (sh.hevc ? "HEVC" : "H.264"));
@@ -370,7 +375,10 @@ public final class SettingsActivity extends Activity {
             }
         });
         c.addView(buttons, Ui.wide());
-        toggle(c, "Start sending when the app opens", "Open Rhema Camera on the stand and it goes live by itself.", Prefs.AUTO_START, true, false);
+        toggle(c, "Start sending when the app opens", "Open Rhema Studio Cam on the stand and it goes live by itself.", Prefs.AUTO_START, true, false);
+        toggle(c, "Send again after a restart", Build.VERSION.SDK_INT >= Lifecycle.BACKGROUND_CAMERA_LIMIT_SDK
+                ? "If it was sending when the phone restarted, a notification asks for one tap to send again (Android does not let an app open the camera by itself after a restart)."
+                : "If it was sending when the phone restarted or Android closed the app, it sends again by itself.", Prefs.RESUME, true, false);
         if (p != null) {
             LinearLayout adv = fold(c, "connection");
             note(adv, "Sends RTSP over TLS (RTSPS) to " + p.url() + " as " + p.user + ", picture and sound interleaved over TCP. Only Rhema's certificate is accepted (SHA-256 " + p.fp.substring(0, 16) + "…); there is no unencrypted fallback.");
@@ -585,7 +593,7 @@ public final class SettingsActivity extends Activity {
             prefs.edit().putString(Prefs.CUBE_NAME, name).putString(Prefs.LOOK, "cube").apply();
             render();
         } catch (java.io.IOException | RuntimeException e) {
-            new AlertDialog.Builder(this).setTitle("Not a look Rhema Camera can use").setMessage(e.getMessage()).setPositiveButton("OK", null).show();
+            new AlertDialog.Builder(this).setTitle("Not a look Rhema Studio Cam can use").setMessage(e.getMessage()).setPositiveButton("OK", null).show();
         }
     }
 
@@ -599,7 +607,7 @@ public final class SettingsActivity extends Activity {
             CharSequence t = clip.getItemAt(0).coerceToText(this);
             if (t != null && t.toString().trim().toLowerCase(Locale.ROOT).startsWith("rhema-camera://")) field.setText(t.toString().trim());
         }
-        new AlertDialog.Builder(this).setTitle("Pairing link").setMessage("Copy the link from the camera's card in Rhema (Production → Cameras → Rhema Camera app) and paste it here.")
+        new AlertDialog.Builder(this).setTitle("Pairing link").setMessage("Copy the link from the camera's card in Rhema Studio (Live → Production tools → Cameras → Rhema Studio Cam app (Android)) and paste it here.")
                 .setView(field)
                 .setPositiveButton("Pair", new DialogInterface.OnClickListener() {
                     @Override
@@ -617,7 +625,7 @@ public final class SettingsActivity extends Activity {
     private void picture(CameraManager cm, String id) {
         LinearLayout c = card("Picture");
         if (chars == null) {
-            note(c, "No camera found that Rhema Camera can use.");
+            note(c, "No camera found that Rhema Studio Cam can use.");
             return;
         }
         final List<Plan.Preset> presets = Caps.presets(chars);
@@ -648,6 +656,15 @@ public final class SettingsActivity extends Activity {
                 prefs.edit().putInt(Prefs.HEIGHT, heights.get(which)).apply();
             }
         });
+        // Rhema Studio's suggested quality for this camera (#838): a ceiling over the size and bitrate here.
+        int sh = prefs.getInt(Prefs.SUGGEST_HEIGHT, 0), sm = prefs.getInt(Prefs.SUGGEST_MBPS, 0);
+        String sw = prefs.getString(Prefs.SUGGEST_WORDS, "");
+        boolean follow = prefs.getBoolean(Prefs.FOLLOW_HOST, true);
+        if (sh > 0 || sm > 0) {
+            note(c, "Rhema Studio suggests " + (sw == null || sw.isEmpty() ? "" : sw + ": ") + "at most " + Plan.sizeLabel(sh) + " and " + sm + " Mbit/s for this camera"
+                    + (follow ? ", so it sends no more than that." : ". This phone does not follow it (below)."));
+        }
+        toggle(c, "Follow Rhema Studio's suggested quality", "Rhema Studio can suggest a smaller picture or a lower bitrate for this camera (Live → Production tools → Cameras), e.g. for a TV that stutters at a high bitrate. On: it is the most this phone sends.", Prefs.FOLLOW_HOST, true, true);
         final List<Caps.Lens> lenses = Caps.lenses(cm);
         String[] lensNames = new String[lenses.size()];
         int lensIndex = 0;
@@ -982,7 +999,7 @@ public final class SettingsActivity extends Activity {
         note(c, "To save battery: keep the phone on a charger, use Screen off (the moon button: the screen goes black and the camera feeds only the encoder), or press the power button: sending carries on with the screen off. A smaller size or a lower frame rate uses less.");
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         boolean free = pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
-        note(c, free ? "Android lets Rhema Camera run with the screen off." : "Some phones stop apps with the screen off to save battery. If sending stops when the screen is off, let Rhema Camera run unrestricted:");
+        note(c, free ? "Android lets Rhema Studio Cam run with the screen off." : "Some phones stop apps with the screen off to save battery. If sending stops when the screen is off, let Rhema Studio Cam run unrestricted:");
         if (!free) {
             button(c, "Battery settings", false, new View.OnClickListener() {
                 @Override
@@ -996,7 +1013,7 @@ public final class SettingsActivity extends Activity {
             });
         }
         LinearLayout adv = fold(c, "battery");
-        note(adv, "While sending, Rhema Camera is a foreground service (its notification says so) with a partial wake lock and a high-performance Wi-Fi lock. Android " + Build.VERSION.RELEASE + ". From Android 9 only a foreground service may use the camera with the screen off; Android 14 asks for the camera and microphone service types, which this app declares. Some makers (Xiaomi, Huawei, Samsung's \"sleeping apps\") still stop apps unless allowed above. When the phone gets hot (Android 10+), sending steps down: bitrate 30 % lower, then 1080p and 30 frames a second, then 720p.");
+        note(adv, "While sending, Rhema Studio Cam is a foreground service (its notification says so) with a partial wake lock and a high-performance Wi-Fi lock. Android " + Build.VERSION.RELEASE + ". From Android 9 only a foreground service may use the camera with the screen off; Android 14 asks for the camera and microphone service types, which this app declares. Some makers (Xiaomi, Huawei, Samsung's \"sleeping apps\") still stop apps unless allowed above. When the phone gets hot (Android 10+), sending steps down: bitrate 30 % lower, then 1080p and 30 frames a second, then 720p.");
     }
 
     private void about() {
@@ -1007,7 +1024,7 @@ public final class SettingsActivity extends Activity {
         } catch (PackageManager.NameNotFoundException ignored) {
             // The built-in value.
         }
-        info(c, "Rhema Camera", version);
+        info(c, "Rhema Studio Cam", version);
         info(c, "This phone", Build.MANUFACTURER + " " + Build.MODEL + " · Android " + Build.VERSION.RELEASE);
         note(c, "Sends this phone's camera to Rhema Studio's camera router on the church network. Nothing goes to the internet.");
         LinearLayout adv = fold(c, "about");

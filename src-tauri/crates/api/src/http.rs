@@ -2631,7 +2631,16 @@ async fn camera_status_handler<S: CommandSink + 'static>(
     let Ok(status) = serde_json::from_slice::<crate::cameras::PhoneStatus>(&body) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
+    if !state.cameras.loaded() {
+        return camera_list_not_loaded();
+    }
     if state.cameras.set_phone(&name, token, status) { StatusCode::NO_CONTENT.into_response() } else { StatusCode::FORBIDDEN.into_response() }
+}
+
+/// Rhema has just started and the app has not given the camera list yet: try again, never 403,
+/// which the Cam reads as "removed or given a new link" and stops for (#836).
+fn camera_list_not_loaded() -> axum::response::Response {
+    (StatusCode::SERVICE_UNAVAILABLE, [(axum::http::header::RETRY_AFTER, "5")]).into_response()
 }
 
 /// `GET /api/v1/camera/{name}/tally` with `Authorization: Bearer <the camera's secret>`: whether
@@ -2639,6 +2648,10 @@ async fn camera_status_handler<S: CommandSink + 'static>(
 /// for "sending". `online`: a paired OBS companion has it in Program (its tally, at most 15 s old).
 /// `congregation`: a paired Google TV's page plays it (its report, at most 3.5 s old). A projector
 /// Rhema drives from its own window reports nothing and is not counted. Only the camera's own.
+/// Besides (each optional, so an older Cam reads the two above as before): `name`, what the host
+/// calls the camera (#850); `receiving`, the router is getting its picture now (#850); `suggest`,
+/// the quality the host suggests (#838, `{id, height, mbps, words}`, absent: the phone's own).
+/// 403 means the camera was removed or given a new link: Rhema Studio Cam stops sending (#836).
 async fn camera_tally_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
@@ -2649,10 +2662,16 @@ async fn camera_tally_handler<S: CommandSink + 'static>(
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
     let token = headers.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).unwrap_or("").trim();
+    if !state.cameras.loaded() {
+        return camera_list_not_loaded();
+    }
     if !state.cameras.knows(&name, token) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    Json(serde_json::json!({ "online": state.cameras.on_program(&name), "congregation": state.feeds.on_tv(&name) })).into_response()
+    let mut answer = state.cameras.phone_answer(&name);
+    answer.insert("online".into(), state.cameras.on_program(&name).into());
+    answer.insert("congregation".into(), state.feeds.on_tv(&name).into());
+    ([(axum::http::header::CACHE_CONTROL, "no-store")], Json(serde_json::Value::Object(answer))).into_response()
 }
 
 /// `PATCH` (more ICE candidates) and `DELETE` (hang up) on a camera's WHIP session.
@@ -4705,6 +4724,11 @@ mod tests {
         assert!(send("/api/v1/camera/pulpit/tally?k=0123456789abcdef", "").await.contains("403"), "never the secret in the address");
         let off = send("/api/v1/camera/pulpit/tally", "Authorization: Bearer 0123456789abcdef\r\n").await;
         assert!(off.contains("200") && off.contains(r#""online":false"#) && off.contains(r#""congregation":false"#), "{off}");
+        assert!(off.contains(r#""receiving":false"#) && !off.contains("suggest"), "{off}");
+        // The host's name for it (#850) and the quality it suggests (#838), as optional extras.
+        cameras.set_info(vec![("pulpit".into(), crate::cameras::CameraInfo::new("Pulpit", Some("tv720")))]);
+        let named = send("/api/v1/camera/pulpit/tally", "Authorization: Bearer 0123456789abcdef\r\n").await;
+        assert!(named.contains(r#""name":"Pulpit""#) && named.contains(r#""height":720"#) && named.contains(r#""mbps":4"#) && named.contains(r#""online":false"#), "{named}");
         let desk = "d".repeat(64);
         cameras.sync_readers(&[(desk.clone(), "Media desk".into())]);
         assert!(cameras.set_tally(&desk, crate::cameras::Tally { program: vec!["pulpit".into()], ..crate::cameras::Tally::default() }));
@@ -4715,6 +4739,36 @@ mod tests {
         assert!(send("/api/v1/camera/pulpit/tally", "Authorization: Bearer fedcba9876543210\r\n").await.contains("403"), "another camera's secret");
         cameras.set(&[]);
         assert!(send("/api/v1/camera/pulpit/tally", "Authorization: Bearer 0123456789abcdef\r\n").await.contains("403"), "a removed camera");
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn a_phone_is_not_told_it_was_removed_before_the_camera_list_is_loaded() {
+        let cameras = crate::cameras::new_camera_hub();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), cameras: cameras.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let send = |method: &'static str, path: &'static str| async move {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+            let body = if method == "POST" { "{\"battery\":50}" } else { "" };
+            s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer 0123456789abcdef\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+            let mut out = String::new();
+            s.read_to_string(&mut out).await.unwrap();
+            out
+        };
+        // Rhema has just started: the app has not given its cameras yet (#836).
+        let early = send("GET", "/api/v1/camera/pulpit/tally").await;
+        assert!(early.contains("503") && early.to_ascii_lowercase().contains("retry-after"), "{early}");
+        assert!(send("POST", "/api/v1/camera/pulpit/status").await.contains("503"));
+        cameras.set(&[("pulpit".into(), "0123456789abcdef".into())]);
+        assert!(send("GET", "/api/v1/camera/pulpit/tally").await.contains("200"));
+        assert!(send("POST", "/api/v1/camera/pulpit/status").await.contains("204"));
+        cameras.set(&[]);
+        assert!(send("GET", "/api/v1/camera/pulpit/tally").await.contains("403"), "removed: the phone stops");
+        assert!(send("POST", "/api/v1/camera/pulpit/status").await.contains("403"));
         let mut h = result.handle;
         h.stop();
     }

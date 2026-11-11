@@ -96,6 +96,8 @@ final class Publisher {
     volatile long framesSent;
     volatile long framesDropped;
     volatile int reconnects;
+    /** The router refused this camera's sign-in this many times running (0 once it took it, #836). */
+    volatile int refusedInARow;
     volatile String message = "Connecting to Rhema…";
 
     Publisher(Pairing pair, String sdp, boolean hevc, boolean audio, int audioRate, int bitrate, Listener listener, Clock clock) {
@@ -221,6 +223,7 @@ final class Publisher {
             try {
                 connect();
                 handshake();
+                refusedInARow = 0;
                 synchronized (queue) {
                     queue.clear();
                     queuedBytes = 0;
@@ -235,6 +238,7 @@ final class Publisher {
                 writeLoop();
             } catch (IOException e) {
                 if (!stopped) message = plain(e);
+                if (e instanceof Refused) refusedInARow++;
             } finally {
                 boolean was = live;
                 live = false;
@@ -320,7 +324,7 @@ final class Publisher {
         StringBuilder sb = new StringBuilder();
         sb.append(method).append(' ').append(url).append(" RTSP/1.0\r\n");
         sb.append("CSeq: ").append(++cseq).append("\r\n");
-        sb.append("User-Agent: Rhema Camera 1.0.0.0\r\n");
+        sb.append("User-Agent: Rhema Studio Cam 1.4.0.0\r\n");
         if (auth != null) sb.append("Authorization: ").append(auth.header(method, url, pair.user, pair.token)).append("\r\n");
         if (session != null) sb.append("Session: ").append(session).append("\r\n");
         if (extra != null) for (int i = 0; i + 1 < extra.length; i += 2) sb.append(extra[i]).append(": ").append(extra[i + 1]).append("\r\n");
@@ -339,7 +343,7 @@ final class Publisher {
 
     private void expect(RtspReader.Response r, String what) throws IOException {
         if (r.status == 200) return;
-        if (r.status == 401) throw new Refused("Rhema did not accept this camera's link: it was renewed, or the camera was removed. Scan the camera's new link in Rhema.");
+        if (r.status == 401) throw new Refused("Rhema did not accept this camera's link: it was renewed, or the camera was removed. Scan its new QR code from Rhema Studio (Live → Production tools → Cameras).");
         if (r.status == 400 && what.equals("ANNOUNCE")) throw new Refused("Rhema's camera router did not take this phone's picture format (" + r.status + " " + r.reason + ").");
         throw new Refused("Rhema's camera router refused the camera (" + what + ": " + r.status + " " + r.reason + ").");
     }

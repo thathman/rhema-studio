@@ -47,7 +47,7 @@ final class Pairing {
         String s = link.trim();
         String prefix = "rhema-camera://pair?";
         if (!s.regionMatches(true, 0, prefix, 0, prefix.length())) {
-            throw new IllegalArgumentException("That is not a Rhema Camera link (it starts with rhema-camera://pair)");
+            throw new IllegalArgumentException("That is not a Rhema Studio Cam link (it starts with rhema-camera://pair)");
         }
         Map<String, String> q = new HashMap<String, String>();
         for (String part : s.substring(prefix.length()).split("&")) {

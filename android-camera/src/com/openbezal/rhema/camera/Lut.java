@@ -58,10 +58,10 @@ final class Lut {
             String key = f[0].toUpperCase(Locale.ROOT);
             if (key.equals("LUT_3D_SIZE")) {
                 size = Integer.parseInt(f[1]);
-                if (size < 2 || size > MAX) throw new IllegalArgumentException("This look's table is " + size + " points; Rhema Camera takes 2 to " + MAX + ".");
+                if (size < 2 || size > MAX) throw new IllegalArgumentException("This look's table is " + size + " points; Rhema Studio Cam takes 2 to " + MAX + ".");
                 data = new float[size * size * size * 3];
             } else if (key.equals("LUT_1D_SIZE")) {
-                throw new IllegalArgumentException("This is a 1D look; Rhema Camera takes 3D .cube looks.");
+                throw new IllegalArgumentException("This is a 1D look; Rhema Studio Cam takes 3D .cube looks.");
             } else if (key.equals("DOMAIN_MIN") && f.length >= 4) {
                 for (int i = 0; i < 3; i++) min[i] = Float.parseFloat(f[i + 1]);
             } else if (key.equals("DOMAIN_MAX") && f.length >= 4) {

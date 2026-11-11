@@ -806,6 +806,12 @@ pub async fn camera_router_status(router: State<'_, CameraRouter>, http: State<'
 pub struct CameraEntry {
     name: String,
     token: String,
+    /// What the operator called it, told to Rhema Studio Cam (#850); absent from an older page.
+    #[serde(default)]
+    label: String,
+    /// The quality suggested to Rhema Studio Cam (#838, `rhema_api::cameras::quality_suggestion`).
+    #[serde(default)]
+    quality: Option<String>,
 }
 
 /// The cameras the operator added and the secrets in their camera-page links. While the router
@@ -815,6 +821,7 @@ pub struct CameraEntry {
 pub fn cameras_set(router: State<'_, CameraRouter>, http: State<'_, Mutex<HttpRuntime>>, cameras: Vec<CameraEntry>) -> Result<(), String> {
     let hub = http.lock().map_err(|e| e.to_string())?.cameras();
     let before = hub.list();
+    hub.set_info(cameras.iter().map(|c| (c.name.clone(), rhema_api::cameras::CameraInfo::new(&c.label, c.quality.as_deref()))).collect());
     hub.set(&cameras.into_iter().map(|c| (c.name, c.token)).collect::<Vec<_>>());
     let now = hub.list();
     let gone = closed_cameras(&before, &now);

@@ -42,8 +42,14 @@ public final class CameraService extends Service {
     static final String TAG = "RhemaCamera";
     static final String ACTION_SEND = "com.openbezal.rhema.camera.SEND";
     static final String ACTION_STOP = "com.openbezal.rhema.camera.STOP";
+    /** Send again after the phone restarted (Android 10 and older; #836). */
+    static final String ACTION_RESUME = "com.openbezal.rhema.camera.RESUME";
+    /** MainActivity's extra: the person tapped "Tap to send again" after a restart. */
+    static final String EXTRA_RESUME = "resume";
     private static final String CHANNEL = "sending";
+    private static final String CHANNEL_RESUME = "resume";
     private static final int NOTE_ID = 1;
+    private static final int RESUME_NOTE_ID = 2;
 
     /** The running service (this app has one process); null when none runs. */
     static volatile CameraService current;
@@ -84,6 +90,13 @@ public final class CameraService extends Service {
     volatile String status = "Not sending";
     volatile String cameraError;
     volatile String note = "";
+    /** Why sending stopped by itself (Rhema removed the camera, #836); null after a stop the person made or a new start. */
+    volatile String stopReason;
+    /** Whether Rhema says its router gets the picture now (#850; CamAction.RECEIVED …). */
+    volatile int receiving = CamAction.RECEIVING_UNKNOWN;
+    /** Rhema answered "I do not know this camera" this many times running (#836), and when it last knew it. */
+    private volatile int forbiddenInARow;
+    private volatile long knownAt;
     volatile Plan.Shape shape;
     volatile String encoderName = "";
     volatile double mbps;
@@ -143,8 +156,60 @@ public final class CameraService extends Service {
             stopSending();
         } else if (ACTION_SEND.equals(action)) {
             foreground();
+        } else if (ACTION_RESUME.equals(action) || intent == null) {
+            // After a restart (the boot receiver) or Android starting it again after ending it (sticky, no intent; #836).
+            resumeAfterRestart(ACTION_RESUME.equals(action));
         }
-        return START_NOT_STICKY;
+        // Sticky: if Android ends the app while it sends, it is started again and resumes (#836).
+        return START_STICKY;
+    }
+
+    /** Send again if it was sending before the restart; from Android 11 ask with a notification instead (Lifecycle). */
+    private void resumeAfterRestart(boolean foregroundStart) {
+        if (sending) return;
+        // Started with startForegroundService: in the foreground at once, as Android asks.
+        if (foregroundStart) foreground();
+        int how = Lifecycle.resume(Build.VERSION.SDK_INT, Prefs.pairing(this) != null, prefs.getBoolean(Prefs.WAS_SENDING, false), prefs.getBoolean(Prefs.RESUME, true));
+        if (how == Lifecycle.START) {
+            try {
+                String why = startSending();
+                if (why == null) {
+                    Log.i(TAG, "sending again after a restart");
+                    return;
+                }
+                Log.w(TAG, "could not send again after a restart: " + why);
+            } catch (RuntimeException e) {
+                Log.w(TAG, "could not send again after a restart: " + e);
+            }
+            how = Lifecycle.ASK;
+        }
+        if (how == Lifecycle.ASK) askToResume(this);
+        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE);
+        else stopForeground(true);
+        stopSelf();
+    }
+
+    /** "Rhema Studio Cam was sending when the phone restarted · Tap to send again" (#836). */
+    static void askToResume(Context c) {
+        NotificationManager nm = (NotificationManager) c.getSystemService(NOTIFICATION_SERVICE);
+        if (nm == null) return;
+        nm.createNotificationChannel(new NotificationChannel(CHANNEL_RESUME, "Send again after a restart", NotificationManager.IMPORTANCE_HIGH));
+        Pairing p = Prefs.pairing(c);
+        PendingIntent open = PendingIntent.getActivity(c, 2, new Intent(c, MainActivity.class).putExtra(EXTRA_RESUME, true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        nm.notify(RESUME_NOTE_ID, new Notification.Builder(c, CHANNEL_RESUME)
+                .setSmallIcon(R.drawable.ic_stat)
+                .setContentTitle("Rhema Studio Cam stopped sending")
+                .setContentText("\"" + Prefs.cameraTitle(c, p) + "\" was sending when the phone restarted. Tap to send again.")
+                .setStyle(new Notification.BigTextStyle().bigText("\"" + Prefs.cameraTitle(c, p) + "\" was sending to Rhema Studio when the phone restarted. Tap to open the camera and send again. Android does not let an app start the camera by itself after a restart."))
+                .setAutoCancel(true)
+                .setContentIntent(open)
+                .build());
+    }
+
+    static void cancelResumeNote(Context c) {
+        NotificationManager nm = (NotificationManager) c.getSystemService(NOTIFICATION_SERVICE);
+        if (nm != null) nm.cancel(RESUME_NOTE_ID);
     }
 
     @Override
@@ -152,7 +217,8 @@ public final class CameraService extends Service {
         prefs.unregisterOnSharedPreferenceChangeListener(prefsChanged);
         main.removeCallbacks(tick);
         unwatchHeat();
-        if (sending) stopSending();
+        // Not a stop the person made: it was sending, so a restart resumes it.
+        if (sending) stopNow();
         cam.post(new Runnable() {
             @Override
             public void run() {
@@ -194,7 +260,7 @@ public final class CameraService extends Service {
     private void camera(final Plan.Shape s, final Runnable then) {
         final String id = Caps.camera((CameraManager) getSystemService(CAMERA_SERVICE), prefs.getString(Prefs.CAMERA, null));
         if (id == null) {
-            cameraError = "This phone has no camera Rhema Camera can use.";
+            cameraError = "This phone has no camera Rhema Studio Cam can use.";
             if (then != null) then.run();
             return;
         }
@@ -288,10 +354,16 @@ public final class CameraService extends Service {
     /** Start sending to the paired Rhema (from the viewfinder or Settings). */
     String startSending() {
         if (Prefs.pairing(this) == null) return "Pair this phone with Rhema first: Settings → Connection.";
-        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return "Rhema Camera needs the camera permission.";
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return "Rhema Studio Cam needs the camera permission.";
         if (sending) return null;
         sending = true;
         status = "Starting…";
+        stopReason = null;
+        forbiddenInARow = 0;
+        knownAt = 0;
+        receiving = CamAction.RECEIVING_UNKNOWN;
+        prefs.edit().putBoolean(Prefs.WAS_SENDING, true).apply();
+        cancelResumeNote(this);
         Intent i = new Intent(this, CameraService.class).setAction(ACTION_SEND);
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(i);
         else startService(i);
@@ -305,9 +377,25 @@ public final class CameraService extends Service {
         return null;
     }
 
+    /** The person stopped sending: it stays stopped after a restart. */
     void stopSending() {
+        prefs.edit().putBoolean(Prefs.WAS_SENDING, false).apply();
+        stopNow();
+    }
+
+    /** Rhema no longer knows this camera (#836): stop, say why, and do not resume after a restart. */
+    private void stopBecause(String reason) {
+        if (!sending) return;
+        Log.w(TAG, "stopped: " + reason);
+        stopSending();
+        stopReason = reason;
+        status = "Not sending";
+    }
+
+    private void stopNow() {
         if (!sending) return;
         sending = false;
+        receiving = CamAction.RECEIVING_UNKNOWN;
         status = "Not sending";
         cam.post(new Runnable() {
             @Override
@@ -346,8 +434,8 @@ public final class CameraService extends Service {
         PendingIntent stop = PendingIntent.getService(this, 1, new Intent(this, CameraService.class).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat)
-                .setContentTitle("Rhema Camera is sending")
-                .setContentText((p == null ? "Camera" : p.title()) + " to Rhema at " + (p == null ? "" : p.host))
+                .setContentTitle("Rhema Studio Cam is sending")
+                .setContentText(Prefs.cameraTitle(this, p) + " to Rhema Studio at " + (p == null ? "" : p.host))
                 .setOngoing(true)
                 .setContentIntent(open)
                 .addAction(new Notification.Action.Builder(null, "Stop sending", stop).build())
@@ -396,6 +484,8 @@ public final class CameraService extends Service {
         List<Integer> heights = Caps.sizes(c, preset.fps, codecChoice);
         int h = prefs.getInt(Prefs.HEIGHT, 0);
         if (!heights.contains(h)) h = heights.isEmpty() ? 720 : heights.get(0);
+        // Rhema Studio's suggested quality for this camera, a ceiling over the phone's choice (#838).
+        h = Plan.suggestedHeight(heights, h, Prefs.suggestion(prefs)[0]);
         int w = Caps.widthFor(h);
         String mime = Caps.codecFor(codecChoice, w, h, preset.fps);
         boolean hevc = Caps.HEVC.equals(mime);
@@ -409,7 +499,7 @@ public final class CameraService extends Service {
 
     private int bitrateFor(int w, int h, int fps, boolean hevc, String mime) {
         int manual = prefs.getInt(Prefs.BITRATE, 0);
-        int want = manual > 0 ? manual * 1_000_000 : Plan.autoBitrate(w, h, fps, hevc);
+        int want = Plan.suggestedBitrate(manual > 0 ? manual * 1_000_000 : Plan.autoBitrate(w, h, fps, hevc), Prefs.suggestion(prefs)[1]);
         return Plan.capBitrate(want, wifiUplinkMbps(), Caps.maxBitrate(Caps.encoder(mime == null ? Caps.AVC : mime), mime == null ? Caps.AVC : mime));
     }
 
@@ -430,7 +520,7 @@ public final class CameraService extends Service {
         CameraManager cm = (CameraManager) getSystemService(CAMERA_SERVICE);
         final String id = Caps.camera(cm, prefs.getString(Prefs.CAMERA, null));
         if (id == null) {
-            cameraError = "This phone has no camera Rhema Camera can use.";
+            cameraError = "This phone has no camera Rhema Studio Cam can use.";
             return;
         }
         Plan.Shape s = Plan.cool(choose(), thermalStep);
@@ -569,6 +659,22 @@ public final class CameraService extends Service {
         else if (preview != null) camera(choose(), null);
     }
 
+    /** The settings ask for another shape: a new bitrate only if the size and frame rate stay, else start again. */
+    private void resizeIfNeeded() {
+        if (!sending || video == null || shape == null) {
+            rebuild();
+            return;
+        }
+        Plan.Shape wanted = Plan.cool(choose(), thermalStep);
+        Plan.Shape now = shape;
+        if (wanted.width == now.width && wanted.height == now.height && wanted.fps == now.fps && wanted.hevc == now.hevc) {
+            shape = wanted;
+            video.bitrate((int) (wanted.bitrate * netFactor));
+        } else {
+            rebuild();
+        }
+    }
+
     /** The look from Settings, to the GPU (and its exposure bias and sharpening to the camera). */
     private void grade() {
         String id = prefs.getString(Prefs.LOOK, "studio");
@@ -683,9 +789,17 @@ public final class CameraService extends Service {
                         rebuild();
                     } else if (Prefs.grades(key)) {
                         grade();
-                    } else if (Prefs.reshapes(key) || Prefs.PAIR.equals(key)) {
+                    } else if (Prefs.PAIR.equals(key)) {
+                        // Another camera, or another Rhema: what the last one said no longer holds.
+                        prefs.edit().remove(Prefs.HOST_NAME).remove(Prefs.SUGGEST_HEIGHT).remove(Prefs.SUGGEST_MBPS).remove(Prefs.SUGGEST_WORDS).apply();
+                        stopReason = null;
                         rebuild();
-                    } else if (Prefs.BITRATE.equals(key) && video != null && shape != null) {
+                    } else if (Prefs.SUGGEST_HEIGHT.equals(key) || Prefs.FOLLOW_HOST.equals(key)) {
+                        // Rhema's suggestion (#838): start again only if the size has to change.
+                        resizeIfNeeded();
+                    } else if (Prefs.reshapes(key)) {
+                        rebuild();
+                    } else if (Prefs.rates(key) && video != null && shape != null) {
                         Plan.Shape s = shape;
                         int b = (int) (bitrateFor(s.width, s.height, s.fps, s.hevc, s.hevc ? Caps.HEVC : Caps.AVC) * (thermalStep > 0 ? 0.7 : 1));
                         shape = new Plan.Shape(s.width, s.height, s.fps, s.hevc, b);
@@ -805,9 +919,18 @@ public final class CameraService extends Service {
             @Override
             public void run() {
                 try {
-                    int t = Report.tally(p);
-                    tally = t;
-                    if (t != CamAction.TALLY_UNKNOWN) tallyOkAt = SystemClock.elapsedRealtime();
+                    Report.Answer a = Report.ask(p);
+                    tally = a.tally;
+                    if (a.tally != CamAction.TALLY_UNKNOWN) tallyOkAt = SystemClock.elapsedRealtime();
+                    if (a.forbidden()) {
+                        forbiddenInARow++;
+                        receiving = CamAction.RECEIVING_UNKNOWN;
+                    } else if (a.code == 200) {
+                        forbiddenInARow = 0;
+                        knownAt = SystemClock.elapsedRealtime();
+                        receiving = a.receiving;
+                        heard(a);
+                    }
                 } catch (IOException e) {
                     // Unreachable: the tally goes unknown after TALLY_FRESH_MS (never a stale ON AIR).
                 } finally {
@@ -815,6 +938,29 @@ public final class CameraService extends Service {
                 }
             }
         });
+    }
+
+    /** Keep what Rhema said about this camera: its name (#850) and its suggested quality (#838); prefs change only when it does. */
+    private void heard(Report.Answer a) {
+        SharedPreferences.Editor e = prefs.edit();
+        boolean changed = false;
+        if (!a.name.isEmpty() && !a.name.equals(prefs.getString(Prefs.HOST_NAME, ""))) {
+            e.putString(Prefs.HOST_NAME, a.name);
+            changed = true;
+        }
+        int h = a.suggest == null ? 0 : a.suggest.height, m = a.suggest == null ? 0 : a.suggest.mbps;
+        String words = a.suggest == null ? "" : a.suggest.words;
+        if (h != prefs.getInt(Prefs.SUGGEST_HEIGHT, 0) || m != prefs.getInt(Prefs.SUGGEST_MBPS, 0) || !words.equals(prefs.getString(Prefs.SUGGEST_WORDS, ""))) {
+            e.putInt(Prefs.SUGGEST_HEIGHT, h).putInt(Prefs.SUGGEST_MBPS, m).putString(Prefs.SUGGEST_WORDS, words);
+            changed = true;
+            Log.i(TAG, "Rhema suggests " + (a.suggest == null ? "nothing (the phone's own quality)" : h + "p, " + m + " Mbit/s"));
+        }
+        if (changed) e.apply();
+    }
+
+    /** The name Rhema Studio gives this camera, else the pairing link's (#850). */
+    String cameraTitle() {
+        return Prefs.cameraTitle(this, Prefs.pairing(this));
     }
 
     Publisher publisher() {
@@ -846,6 +992,11 @@ public final class CameraService extends Service {
                 askTally();
             }
             if (!sending) tallyOkAt = 0;
+            // Removed from Rhema, or given a new link (#836): stop, and say why, instead of trying forever.
+            if (sending) {
+                String gone = Lifecycle.removed(forbiddenInARow, p == null ? 0 : p.refusedInARow, knownAt > 0 && now - knownAt < 60000);
+                if (gone != null) stopBecause(gone);
+            }
             if (sending && now - batteryLogAt >= 60000) {
                 batteryLogAt = now;
                 float[] b = battery();

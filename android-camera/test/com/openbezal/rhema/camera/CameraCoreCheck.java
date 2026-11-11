@@ -68,6 +68,42 @@ public final class CameraCoreCheck {
         check("tally: both", both.status.equals("ON AIR · ONLINE + CONGREGATION") && CamAction.onAir(both));
         check("tally: not yet connected is never on air", CamAction.resolve(true, true, false, CamAction.ONLINE).status.equals("CONNECTING"));
         check("tally: not sending is never on air", CamAction.resolve(true, false, false, CamAction.ONLINE).status.equals("NOT SENDING"));
+
+        // #850: Rhema receiving is not the same as sending.
+        check("receiving: Rhema says it gets the picture", CamAction.resolve(true, true, true, 0, CamAction.RECEIVED).status.equals(CamAction.RECEIVING));
+        check("receiving: Rhema says it does not (yet)", CamAction.resolve(true, true, true, 0, CamAction.NOT_RECEIVED).status.equals(CamAction.NOT_RECEIVED_YET));
+        check("receiving: an older Rhema says neither", CamAction.resolve(true, true, true, 0, CamAction.RECEIVING_UNKNOWN).status.equals("SENDING"));
+        check("receiving: on air outranks receiving", CamAction.resolve(true, true, true, CamAction.ONLINE, CamAction.RECEIVED).status.equals("ON AIR · ONLINE"));
+        check("receiving: never claimed before the phone's own connection is up", CamAction.resolve(true, true, false, 0, CamAction.RECEIVED).status.equals("CONNECTING"));
+        check("receiving: never claimed with no tally", CamAction.resolve(true, true, true, CamAction.TALLY_UNKNOWN, CamAction.RECEIVED).status.equals("SENDING · NO TALLY"));
+        check("receiving: not sending", CamAction.resolve(true, false, false, 0, CamAction.RECEIVED).status.equals("NOT SENDING"));
+        lifecycle();
+        health();
+    }
+
+    /** #836: sending again after a restart, and stopping when Rhema no longer knows the camera. */
+    static void lifecycle() {
+        check("resume: Android 10 sends again by itself", Lifecycle.resume(29, true, true, true) == Lifecycle.START);
+        check("resume: Android 11 and newer ask with a notification", Lifecycle.resume(30, true, true, true) == Lifecycle.ASK && Lifecycle.resume(34, true, true, true) == Lifecycle.ASK);
+        check("resume: not when it was not sending", Lifecycle.resume(29, true, false, true) == Lifecycle.NONE);
+        check("resume: not when turned off", Lifecycle.resume(29, true, true, false) == Lifecycle.NONE);
+        check("resume: not when unpaired", Lifecycle.resume(34, false, true, true) == Lifecycle.NONE);
+        check("removed: two 403s keep trying", Lifecycle.removed(2, 0, false) == null);
+        check("removed: three 403s running stop it, saying why", Lifecycle.removed(3, 0, true) != null && Lifecycle.removed(3, 0, true).contains("removed"));
+        check("removed: the router refusing six times stops it", Lifecycle.removed(0, 6, false) != null && Lifecycle.removed(0, 5, false) == null);
+        check("removed: not while Rhema says it knows the camera", Lifecycle.removed(0, 12, true) == null);
+    }
+
+    /** #837: the viewfinder's heat and battery badge. */
+    static void health() {
+        check("health: nothing to say", Health.badge(0, false, 80, false).isEmpty() && Health.badge(1, false, 19, true).isEmpty());
+        check("health: unknown is not a warning", Health.badge(-1, false, -1, false).isEmpty());
+        check("health: hot from moderate", Health.badge(2, false, 80, false).equals("HOT") && Health.badge(1, false, 80, false).isEmpty());
+        check("health: very hot from critical", Health.badge(4, true, 80, false).equals("VERY HOT · COOLING"));
+        check("health: cooling", Health.badge(0, true, 80, true).equals("COOLING"));
+        check("health: low battery not charging", Health.badge(0, false, 15, false).equals("BATTERY 15%") && Health.badge(0, false, 20, false).isEmpty());
+        check("health: all at once", Health.badge(3, true, 9.6f, false).equals("HOT · COOLING · BATTERY 10%"));
+        check("health: advice says what to do", Health.advice(3, true, 9.6f, false).contains("plug the phone in") && Health.advice(4, false, 80, false).contains("critically hot"));
     }
 
     static void pairing() {
@@ -257,6 +293,14 @@ public final class CameraCoreCheck {
     }
 
     static void plan() {
+        // #838: Rhema Studio's suggested quality is a ceiling over the phone's choice.
+        List<Integer> offered = Arrays.asList(1080, 720);
+        check("suggest: no suggestion keeps the choice", Plan.suggestedHeight(offered, 1080, 0) == 1080);
+        check("suggest: 720p asked, 1080p chosen", Plan.suggestedHeight(offered, 1080, 720) == 720);
+        check("suggest: a smaller choice stays", Plan.suggestedHeight(offered, 720, 1080) == 720);
+        check("suggest: nothing that small, the smallest offered", Plan.suggestedHeight(offered, 1080, 480) == 720);
+        check("suggest: the tallest within", Plan.suggestedHeight(Arrays.asList(2160, 1440, 1080, 720), 2160, 1440) == 1440);
+        check("suggest: bitrate ceiling", Plan.suggestedBitrate(14000000, 4) == 4000000 && Plan.suggestedBitrate(3000000, 4) == 3000000 && Plan.suggestedBitrate(14000000, 0) == 14000000);
         check("bitrate: 4K24 H.264 about 48 Mbit/s", Plan.autoBitrate(3840, 2160, 24, false) == 48000000);
         check("bitrate: 1080p30 about 14 Mbit/s", Plan.autoBitrate(1920, 1080, 30, false) == 14000000);
         check("bitrate: 1080p60 more but not double", Plan.autoBitrate(1920, 1080, 60, false) == 21000000);
@@ -519,6 +563,25 @@ public final class CameraCoreCheck {
                 && Report.parseTally("{\"online\":false,\"congregation\":false}") == 0);
         check("tally: anything else is unknown, never off air", Report.parseTally("") == CamAction.TALLY_UNKNOWN
                 && Report.parseTally("{\"online\":true}") == CamAction.TALLY_UNKNOWN && Report.parseTally("<html>404</html>") == CamAction.TALLY_UNKNOWN);
+
+        // #836, #838, #850: what a newer Rhema adds to the tally.
+        String full = "{\"name\":\"Pulpit \\\"wide\\\" \\u00e9\",\"receiving\":true,\"suggest\":{\"id\":\"tv720\",\"height\":720,\"mbps\":4,\"words\":\"TV-friendly 720p, lower bitrate\"},\"online\":false,\"congregation\":true}";
+        Report.Answer a = Report.parseAnswer(200, full);
+        check("answer: the tally", a.tally == CamAction.CONGREGATION && a.code == 200 && !a.forbidden());
+        check("answer: the host's name, escapes read", a.name.equals("Pulpit \"wide\" \u00e9"));
+        check("answer: receiving", a.receiving == CamAction.RECEIVED && Report.parseAnswer(200, "{\"online\":false,\"congregation\":false,\"receiving\":false}").receiving == CamAction.NOT_RECEIVED);
+        check("answer: the suggestion", a.suggest != null && a.suggest.height == 720 && a.suggest.mbps == 4 && a.suggest.id.equals("tv720") && a.suggest.words.startsWith("TV-friendly"));
+        Report.Answer old = Report.parseAnswer(200, "{\"online\":true,\"congregation\":false}");
+        check("answer: an older Rhema", old.tally == CamAction.ONLINE && old.receiving == CamAction.RECEIVING_UNKNOWN && old.name.isEmpty() && old.suggest == null);
+        check("answer: 403 is forbidden and knows nothing else", Report.parseAnswer(403, "").forbidden() && Report.parseAnswer(403, full).tally == CamAction.TALLY_UNKNOWN && Report.parseAnswer(403, full).suggest == null);
+        check("answer: 503 (Rhema starting) is not forbidden", !Report.parseAnswer(503, "").forbidden());
+        check("answer: a key's words inside a name are not the key", Report.parseAnswer(200, "{\"name\":\"\\\"online\\\":true\",\"online\":false,\"congregation\":false}").tally == 0);
+        check("answer: an odd suggestion is none", Report.parseAnswer(200, "{\"online\":false,\"congregation\":false,\"suggest\":{\"height\":99999,\"mbps\":4}}").suggest == null
+                && Report.parseAnswer(200, "{\"online\":false,\"congregation\":false,\"suggest\":{\"height\":720,\"mbps\":0}}").suggest == null
+                && Report.parseAnswer(200, "{\"online\":false,\"congregation\":false,\"suggest\":\"720\"}").suggest == null);
+        check("answer: control characters and long names are cleaned", Report.parseAnswer(200, "{\"name\":\"a\\u0007b\",\"online\":false,\"congregation\":false}").name.equals("ab")
+                && Report.parseAnswer(200, "{\"name\":\"" + new String(new char[90]).replace('\0', 'x') + "\",\"online\":false,\"congregation\":false}").name.length() == 60);
+        check("json: not one object is nothing", Json.object("{\"a\":1} x") == null && Json.object("[1]") == null && Json.object("{\"a\":") == null && Json.object("{\"a\":tru}") == null);
     }
 
     static void check(String name, boolean ok) {

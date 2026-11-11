@@ -166,6 +166,26 @@ final class Plan {
         return new Shape(w, h, fps, s.hevc, bitrate);
     }
 
+    /**
+     * The height to send under Rhema Studio's suggestion (#838): the chosen one when it is within
+     * maxHeight (0: no suggestion), else the tallest offered size within it, else the smallest
+     * offered size.
+     */
+    static int suggestedHeight(java.util.List<Integer> offered, int chosen, int maxHeight) {
+        if (maxHeight <= 0 || chosen <= maxHeight) return chosen;
+        int best = 0, smallest = Integer.MAX_VALUE;
+        for (int h : offered) {
+            if (h <= maxHeight && h > best) best = h;
+            smallest = Math.min(smallest, h);
+        }
+        return best > 0 ? best : smallest == Integer.MAX_VALUE ? chosen : smallest;
+    }
+
+    /** The bitrate under Rhema Studio's suggested ceiling (Mbit/s; 0: none). */
+    static int suggestedBitrate(int want, int maxMbps) {
+        return maxMbps > 0 ? (int) Math.min(want, maxMbps * 1000000L) : want;
+    }
+
     /** What the step means, for Settings. */
     static String thermalNote(int step) {
         switch (step) {

@@ -45,12 +45,42 @@ final class Prefs {
     static final String AUDIO = "audio";
     /** The viewfinder shows over the lock screen (on unless turned off). */
     static final String OVER_LOCK = "over_lock";
+    /** It was sending when the app last ran (cleared by a stop the person made, or by Rhema removing the camera; #836). */
+    static final String WAS_SENDING = "was_sending";
+    /** Resume sending after the phone restarts or Android ends the app (on unless turned off; #836). */
+    static final String RESUME = "resume_after_restart";
+    /** Follow the quality Rhema Studio suggests for this camera (on unless turned off; #838). */
+    static final String FOLLOW_HOST = "follow_host_quality";
+    /** Rhema Studio's suggestion as it last said it (#838): height and Mbit/s (0: none) and in words. */
+    static final String SUGGEST_HEIGHT = "host_suggest_height";
+    static final String SUGGEST_MBPS = "host_suggest_mbps";
+    static final String SUGGEST_WORDS = "host_suggest_words";
+    /** What Rhema Studio calls this camera, as it last said (#850). */
+    static final String HOST_NAME = "host_camera_name";
     /** White-balance measurements per camera (see Kelvin.Anchor). */
     static final String ANCHORS = "wb_anchors_";
 
     /** Settings that change how the picture is made (the encoder and camera start again). */
     static boolean reshapes(String key) {
-        return PRESET.equals(key) || HEIGHT.equals(key) || CODEC.equals(key) || CAMERA.equals(key) || AUDIO.equals(key);
+        return PRESET.equals(key) || HEIGHT.equals(key) || CODEC.equals(key) || CAMERA.equals(key) || AUDIO.equals(key)
+                || SUGGEST_HEIGHT.equals(key) || FOLLOW_HOST.equals(key);
+    }
+
+    /** Settings that change only the bitrate (the encoder takes it while it runs). */
+    static boolean rates(String key) {
+        return BITRATE.equals(key) || SUGGEST_MBPS.equals(key);
+    }
+
+    /** Rhema Studio's suggestion (#838) when this phone follows it: {height, Mbit/s}, 0 for none. */
+    static int[] suggestion(SharedPreferences p) {
+        if (!p.getBoolean(FOLLOW_HOST, true)) return new int[] {0, 0};
+        return new int[] {p.getInt(SUGGEST_HEIGHT, 0), p.getInt(SUGGEST_MBPS, 0)};
+    }
+
+    /** What to call this camera: Rhema Studio's name for it when it has said one, else the pairing link's. */
+    static String cameraTitle(Context c, Pairing p) {
+        String host = get(c).getString(HOST_NAME, "");
+        return host != null && !host.isEmpty() ? host : p == null ? "Camera" : p.title();
     }
 
     /** Settings the camera takes while it runs. */

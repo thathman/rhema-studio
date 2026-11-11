@@ -7,13 +7,14 @@ everything else is in Settings. It sends to the camera router that comes with Rh
 encrypted, on the church network only. Rhema's scenes and TVs and OBS take it from there as they take
 any camera.
 
-Version 1.3.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) and newer · target API 34.
+Version 1.4.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) and newer · target API 34.
 
 ## Using it
 
 1. In Rhema: **Settings → Remote control**: turn on the network listener and **Secure page for phones
-   (https)** (this makes Rhema's certificate, which the camera router also uses). **Production →
-   Cameras**: add a camera; its card shows **Rhema Studio Cam app (Android)** with a QR code and a link.
+   (https)** (this makes Rhema's certificate, which the camera router also uses). **Live → Production
+   tools → Cameras**: add a camera; its card shows **Rhema Studio Cam app (Android)** with a QR code and
+   a link, and **Quality for Rhema Studio Cam** (below).
 2. On the phone: scan the QR code with the phone's camera or Google Lens and open it in Rhema Studio Cam
    (or copy the link and paste it in **Settings → Connection → Paste the pairing link**). Confirm
    **Pair**. The app goes live at once (unless **Start sending when the app opens** is off).
@@ -21,13 +22,39 @@ Version 1.3.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) an
    the scene again, **pinch** to zoom (below 1× on phones with an ultra-wide lens, Android 11+). The
    dot top left is the tally: **ON AIR · ONLINE** / **ON AIR · CONGREGATION** / **ON AIR · ONLINE +
    CONGREGATION** (red: OBS has this camera in
-   Program / a Google TV shows it), **SENDING** (teal: sent, on no Program), **SENDING · NO TALLY** (Rhema
-   has not said, or is older), **CONNECTING** (amber), **NOT SENDING** (grey). A projector Rhema drives
-   from its own window is not counted (it reports nothing). Tap it
-   to start, hold it to stop. The gear opens Settings; the moon blacks the screen out.
+   Program / a Google TV shows it), **RHEMA RECEIVING** (teal: Rhema Studio says its camera router
+   gets the picture, on no Program), **SENDING · NOT RECEIVED YET** (amber: sent, but Rhema's router
+   has nothing from it yet), **SENDING** (teal: a Rhema Studio before 1.4 that does not say),
+   **SENDING · NO TALLY** (Rhema has not said, or is older), **CONNECTING** (amber), **NOT SENDING**
+   (grey; with the reason underneath when it stopped by itself). A projector Rhema drives from its own
+   window is not counted (it reports nothing). Tap it to start, hold it to stop. The gear opens
+   Settings; the moon blacks the screen out. The name under it is what Rhema Studio calls the camera
+   (from 1.4; before, the name in the pairing link).
+   Under the dot an amber badge says **HOT**, **VERY HOT**, **COOLING** or **BATTERY 15%** while the
+   phone is hot (Android's thermal status moderate or worse), sends less to cool down, or has under 20 %
+   battery and is not charging. It stays until that is over (tap it for what to do).
 4. Keep the phone on a charger on a stand. It may lock: the viewfinder shows over the lock screen
    (Settings asks for the PIN; turn it off in Settings → On screen → Show over the lock screen), and
    sending carries on with the screen off.
+
+## Restarts, removal and Rhema Studio's suggested quality (1.4)
+
+- **Restarts** (#836): the sending service is sticky, so if Android ends the app while it sends, it is
+  started again. After the phone restarts (or the app is updated) while it was sending, Android 8–10
+  sends again by itself; from Android 11 Android does not let a background app open the camera, so a
+  notification says **Tap to send again**. Settings → Connection → **Send again after a restart** turns
+  this off. A stop you make (hold the dot, Stop sending, the notification's Stop) is never undone by a
+  restart.
+- **Removed or given a new link** (#836): when Rhema Studio answers three times running that it does
+  not know this camera (its tally reply is 403), or its camera router refuses the camera's sign-in six
+  times running while Rhema has not said it knows the camera, the app stops, shows **NOT SENDING** with
+  the reason, and does not resume after a restart. Just after Rhema starts (before it has its camera
+  list) it answers 503, which is not counted.
+- **Suggested quality** (#838): Live → Production tools → Cameras → **Quality for Rhema Studio Cam**
+  per camera: The phone decides, **TV-friendly 720p, lower bitrate** (at most 720p, 4 Mbit/s), 1080p
+  moderate (8 Mbit/s) or Light 720p (2 Mbit/s). It comes with the tally (every 2 s) and is a ceiling
+  over the size and bitrate set on the phone; it changes only the bitrate when the size can stay.
+  Settings → Picture shows it and has **Follow Rhema Studio's suggested quality** (on).
 
 ## The look
 
@@ -95,7 +122,7 @@ shown.
 
 - **Screen off** (the moon): the screen goes black at the lowest brightness and the viewfinder is not
   drawn at all; the GPU draws for the encoder only. Touch to wake.
-- **Power button**: while sending, the app is a foreground service (notification "Rhema Camera is
+- **Power button**: while sending, the app is a foreground service (notification "Rhema Studio Cam is
   sending", with Stop) holding a partial wake lock and a high-performance Wi-Fi lock, so sending
   carries on with the display off. From Android 9 only a foreground service may use the camera in the
   background; Android 14 needs the camera/microphone service types, which the app declares. Some makers
@@ -117,7 +144,7 @@ shown.
   whether it is charging, the battery temperature, Android's heat level and whether it is cooling the
   phone. It goes over https to Rhema Studio's secure listener (the port is in the pairing link as
   `api=`; the same pinned certificate as the picture), signed in with the camera's own secret in a
-  header, never in the address. Production → Cameras and Show health show it and warn when the
+  header, never in the address. Live → Production tools → Cameras and Show health show it and warn when the
   battery is under 20 % and not charging, or the phone is hot. A link made before this version has no
   `api=`: pair again (scan the camera's Rhema Studio Cam QR code) to turn the report on.
 
