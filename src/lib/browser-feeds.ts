@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event"
 import { newFeedToken } from "@/lib/output-on-air"
 import { useFeedHealthStore } from "@/lib/show-health"
 import { SKEW_WARN_MS, skewWords } from "@/lib/desk-freshness"
-import { outputsChangedSinceLoad, savedOutputsUnread, useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
+import { savedOutputsUnread, useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
 import { useJournalStore } from "@/stores/journal-store"
 import type { PageVideo } from "@/lib/camera-playback"
 import { tvKeys } from "@/lib/feed-receivers"
@@ -72,8 +72,7 @@ export function startBrowserFeeds(): () => void {
   // Said, not only logged (shown once the shell is up, so the toast is seen): the outputs here are defaults.
   if (savedOutputsUnread()) toast.error("Saved outputs and looks could not be read", { description: "Rhema Studio is showing its defaults. TVs keep the feeds they have until you change the outputs. Restart Rhema Studio before the service.", duration: Infinity })
   void sync()
-  // An operator's change after a failed load is theirs (a feed added or renewed must reach the listener).
-  const stop = useBroadcastStore.subscribe((s, p) => { if (s.outputs !== p.outputs) { outputsChangedSinceLoad(); void sync() } })
+  const stop = useBroadcastStore.subscribe((s, p) => { if (s.outputs !== p.outputs) void sync() })
   // The first page to draw a new frame (crates/api http.rs ack): which screen showed what, and how soon.
   let alive = true
   let unlisten: (() => void) | undefined

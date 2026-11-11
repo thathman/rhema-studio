@@ -21,8 +21,13 @@ describe("TV feeds when the saved outputs cannot be read", () => {
     const stop = startBrowserFeeds()
     await new Promise((r) => setTimeout(r, 0))
     expect(invoked).not.toContain("feeds_set")
-    // The operator changes the outputs: theirs now, so a feed added or renewed reaches the listener.
-    const { useBroadcastStore } = await import("@/stores/broadcast-store")
+    // An automatic change (a Take's snapshot) is not the operator's: still nothing sent.
+    const { useBroadcastStore, outputsChangedSinceLoad } = await import("@/stores/broadcast-store")
+    useBroadcastStore.setState((st) => ({ outputs: [...st.outputs] }))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(invoked).not.toContain("feeds_set")
+    // The operator saves an output in the editor: theirs now, so a feed added or renewed reaches the listener.
+    outputsChangedSinceLoad()
     useBroadcastStore.setState((st) => ({ outputs: [...st.outputs] }))
     await new Promise((r) => setTimeout(r, 0))
     stop()
