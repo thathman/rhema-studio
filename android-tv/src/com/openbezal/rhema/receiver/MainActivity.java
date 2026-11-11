@@ -24,6 +24,10 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.PixelCopy;
@@ -161,7 +165,7 @@ public class MainActivity extends Activity {
 
         info = new TextView(this);
         info.setTextColor(Color.WHITE);
-        info.setTextSize(28);
+        info.setTextSize(24);
         info.setLineSpacing(0, 1.25f);
         info.setGravity(Gravity.CENTER);
 
@@ -176,8 +180,8 @@ public class MainActivity extends Activity {
         panel.setGravity(Gravity.CENTER_HORIZONTAL);
         panel.setBackgroundColor(PANEL_BLACK);
         panel.setPadding(80, 48, 80, 60);
-        LinearLayout.LayoutParams logoSize = new LinearLayout.LayoutParams((int) (360 * dp), -2);
-        logoSize.bottomMargin = (int) (16 * dp);
+        LinearLayout.LayoutParams logoSize = new LinearLayout.LayoutParams((int) (300 * dp), -2);
+        logoSize.bottomMargin = (int) (12 * dp);
         panel.addView(logo, logoSize);
         panel.addView(info, new LinearLayout.LayoutParams(-2, -2));
 
@@ -254,9 +258,10 @@ public class MainActivity extends Activity {
             prefs.edit().remove("url").remove("pin").apply();
             problem = "Rhema Studio Receiver was updated and now opens only Rhema Studio's secure page. Send the feed again: in Rhema Studio, " + SEND_PATH + ".";
         }
-        measureDisplay();
         askFrameRate();
-        if (BootStart.turnOnAfterPairing(prefs.getBoolean("bootChosen", false), startsWithTv(), shown() != null)) setStartWithTv(true);
+        // After the request: /status says the rate the TV runs at (measured again on focus, once it switched).
+        measureDisplay();
+        if (BootStart.turnOnAfterPairing(bootChosen(), startsWithTv(), shown() != null)) setStartWithTv(true);
         server = new ShowServer(PORT, this);
         server.start();
         advertise();
@@ -815,8 +820,9 @@ public class MainActivity extends Activity {
      */
     String identify(String peer, String[] why, int[] status) {
         String from = prefs.getString("host", null);
-        // A feed sent before 1.7 has no sender kept: send it again to identify the TV over it.
-        if (shown() != null && (from == null || !from.equals(peer))) {
+        // A feed sent before 1.7 kept no sender: the computer its saved link points to may.
+        String link = shown();
+        if (link != null && !IdentifyGate.mayAskOverFeed(from, Uri.parse(link).getHost(), peer)) {
             status[0] = 403;
             why[0] = "This TV is showing a feed: only the Rhema Studio that sent it can identify it";
             return null;
@@ -859,6 +865,14 @@ public class MainActivity extends Activity {
     /** Whether the app opens by itself when the TV starts (off unless turned on here). */
     private boolean startsWithTv() {
         return prefs.getBoolean("boot", false);
+    }
+
+    /**
+     * Whether a person chose Start with the TV on or off: this release marks it, and before 1.7 the
+     * "boot" setting was written only by that choice, so an Off from 1.6 is never forced On (#834).
+     */
+    private boolean bootChosen() {
+        return BootStart.chosen(prefs.getBoolean("bootChosen", false), prefs.contains("boot"));
     }
 
     /** ← or → on the code screen: Start with the TV on or off; the person's choice is kept (#834). */
@@ -931,11 +945,11 @@ public class MainActivity extends Activity {
     /** The code screen's words, as they are now. */
     private void renderInfo() {
         String ip = address();
-        StringBuilder t = new StringBuilder();
+        // Fits a 1080p TV with every line present (device check, 1.7): the settings are a smaller block.
+        SpannableStringBuilder t = new SpannableStringBuilder();
         if (problem != null) t.append(problem).append("\n\n");
         t.append(shown() == null ? "To show a screen here: in Rhema Studio on the main computer, " : "To show another screen: in Rhema Studio on the main computer, ").append(SEND_PATH).append(".\n\n");
-        t.append("TV name   ").append(name()).append("\n");
-        t.append("TV address   ").append(ip == null ? "not on a network" : ip).append("\n");
+        t.append("TV   ").append(name()).append("   ·   ").append(ip == null ? "not on a network" : ip).append("\n");
         String tried;
         long changes;
         synchronized (this) {
@@ -948,13 +962,16 @@ public class MainActivity extends Activity {
         ui.removeCallbacks(refreshInfo);
         if (changes > SystemClock.elapsedRealtime()) ui.postAtTime(refreshInfo, changes + 50);
         t.append("\n");
-        t.append("Start with the TV   ").append(startsWithTv() ? "On" : "Off").append("   (← or → to change)");
+        int small = t.length();
+        t.append("Start with the TV   ").append(startsWithTv() ? "On" : "Off").append("   (← →)");
         if (startsWithTv() && !mayOpenByItself()) {
-            t.append("\n").append(bootBlocked ? "At the last start this TV did not let Rhema Studio Receiver open by itself. " : "This TV may not let it open by itself. ")
-                    .append("Allow \"Display over other apps\" for Rhema Studio Receiver (Settings → Apps → Special app access).");
+            t.append("\n").append(bootBlocked ? "Blocked at the last start: " : "May be blocked: ")
+                    .append("allow \"Display over other apps\" (Settings → Apps → Special app access)");
         }
         double own = pageOverscan;
-        t.append("\nEdge inset   ").append(own > 0 ? "set in Rhema Studio (" + trim(own) + "%)" : tvInset() + "%   (↑ or ↓ to change, for a TV that cuts off the edges)");
+        t.append("\nEdge inset   ").append(own > 0 ? "set in Rhema Studio (" + trim(own) + "%)" : tvInset() + "%   (↑ ↓, for a TV that cuts off the edges)");
+        t.setSpan(new RelativeSizeSpan(0.72f), small, t.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        t.setSpan(new ForegroundColorSpan(Color.rgb(190, 190, 190)), small, t.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         info.setText(t);
     }
 
@@ -1167,6 +1184,8 @@ public class MainActivity extends Activity {
         }
         if (!Guard.feedLink(url) || !Guard.fingerprint(pin)) return "That is not a Rhema Studio secure feed link (update Rhema Studio if this keeps happening)";
         newCode();
+        // The code worked: no "a code was tried" left on the code screen (#841; newCode clears it too).
+        tries.clear();
         ui.post(new Runnable() {
             @Override
             public void run() {
@@ -1182,7 +1201,7 @@ public class MainActivity extends Activity {
                 // Also who sent it: only that computer may Identify this TV over its feed (#849).
                 prefs.edit().putString("url", url).putString("pin", pin).putString("host", peer).apply();
                 // Paired: a TV that loses power comes back to this feed by itself (#834), unless a person chose Off.
-                if (BootStart.turnOnAfterPairing(prefs.getBoolean("bootChosen", false), startsWithTv(), true)) setStartWithTv(true);
+                if (BootStart.turnOnAfterPairing(bootChosen(), startsWithTv(), true)) setStartWithTv(true);
                 problem = null;
                 certRefused = false;
                 ui.removeCallbacks(reload);

@@ -22,6 +22,16 @@ final class IdentifyGate {
     private boolean any;
     private long until;
 
+    /**
+     * While a feed shows: whether peer may identify the TV over it. Only the computer that sent the
+     * feed (kept since 1.7). A feed sent before 1.7 kept no sender: then the computer its saved link
+     * points to (the host's address in it), which is the sender in practice.
+     */
+    static boolean mayAskOverFeed(String sender, String linkHost, String peer) {
+        if (peer == null) return false;
+        return sender != null ? sender.equals(peer) : peer.equals(linkHost);
+    }
+
     /** Whether peer may flash the name now; when true, the flash runs SHOW_MS from now. */
     synchronized boolean allow(String peer, long now) {
         Long last = lastByPeer.get(peer);

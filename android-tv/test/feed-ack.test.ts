@@ -84,13 +84,17 @@ describe("the feed page acknowledges only what it drew (#604)", () => {
     expect(acks()).toEqual([])
   })
 
-  it("acknowledges from a hidden page too, which gets no animation frames (an OBS source off the scene, #844)", async () => {
+  it("a hidden page (no animation frames: an OBS source off the scene, a TV after Home) acknowledges marked hidden, never as seen (#844)", async () => {
     vi.stubGlobal("requestAnimationFrame", () => 0)
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" })
     try {
       FakeEvents.last.send("frame", JSON.stringify({ off: false, verse: null }), "9")
       await nextFrame()
-      expect(acks().map((a) => a.body.seq)).toEqual([9])
+      expect(acks()).toEqual([{ url: "/api/v1/feed/l3/ack?k=s3cr%2Bt&hidden=1", body: { seq: 9, hidden: true } }])
+      // Its heartbeat acknowledgements stay marked: the frame was never seen.
+      FakeEvents.last.send("beat", String(Date.now()))
+      await nextFrame()
+      expect(acks().map((a) => a.url.endsWith("&hidden=1"))).toEqual([true, true])
     } finally {
       Reflect.deleteProperty(document, "visibilityState")
     }

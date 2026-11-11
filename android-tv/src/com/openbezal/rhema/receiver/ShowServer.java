@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit;
  * the plain {"url","proof"} of 1.2 is refused); and (#213, 1.1) GET /status →
  * {"ok","name","feed","problem"} (and, 1.5, "width","height": the display's size): the id of the
  * feed shown, never its secret link; 1.7 adds "hz", the display's refresh rate; and (#849, 1.7)
- * GET or POST /identify → {"ok","name"} (403 over another computer's feed, 429 when just
+ * POST /identify {} (JSON, like the rest) → {"ok","name"} (403 over another computer's feed, 429 when just
  * identified; IdentifyGate): the TV shows its name for a few seconds. Small bodies
  * only; nothing else is served.
  *
@@ -127,7 +127,7 @@ final class ShowServer extends Thread {
         JSONObject reply = new JSONObject();
         int status = 200;
         String path = request.length >= 2 ? request[1] : "";
-        boolean post = "POST".equals(request[0]) && ("/challenge".equals(path) || "/show".equals(path));
+        boolean post = "POST".equals(request[0]) && ("/challenge".equals(path) || "/show".equals(path) || "/identify".equals(path));
         if (headers.containsKey("origin")) {
             // A web page on some computer here (Rhema itself never sends one).
             status = 403;
@@ -143,23 +143,9 @@ final class ShowServer extends Thread {
             // 1.7: its refresh rate (#849), so the host can see a TV left at 24 or 30 Hz.
             float hz = app.displayHz();
             if (hz > 0) reply.put("hz", Math.round(hz * 100) / 100.0);
-        } else if (("GET".equals(request[0]) || "POST".equals(request[0])) && "/identify".equals(path)) {
-            // 1.7, Identify TV (#849): the TV's name, big, for a few seconds. It shows nothing secret and
-            // changes nothing, so it needs no code; a body, if any, is not read. Over a feed, only the
-            // computer that sent it may ask (no one else puts words over a service).
-            String[] why = new String[1];
-            int[] refused = new int[1];
-            String name = app.identify(c.getInetAddress().getHostAddress(), why, refused);
-            if (name != null) {
-                reply.put("ok", true).put("name", name);
-            } else {
-                // 403: not the computer that sent the feed shown; 429: identified moments ago (IdentifyGate).
-                status = refused[0];
-                reply.put("ok", false).put("error", why[0]);
-            }
         } else if (!post) {
             status = 404;
-            reply.put("ok", false).put("error", "Rhema Studio Receiver only takes POST /challenge, POST /show, GET /status and GET or POST /identify");
+            reply.put("ok", false).put("error", "Rhema Studio Receiver only takes POST /challenge, POST /show, POST /identify and GET /status");
         } else if (type == null || !"application/json".equalsIgnoreCase(type.split(";")[0].trim())) {
             // A web page can send text without asking first, but not JSON.
             status = 415;
@@ -182,7 +168,22 @@ final class ShowServer extends Thread {
             } else {
                 JSONObject req = new JSONObject(text);
                 String peer = c.getInetAddress().getHostAddress();
-                if ("/challenge".equals(path)) {
+                if ("/identify".equals(path)) {
+                    // 1.7, Identify TV (#849): the TV's name, big, for a few seconds. POST with JSON only
+                    // (Rhema Studio sends {}), like the rest, so no web page can ask (an <img> sends a GET).
+                    // It shows nothing secret, so it needs no code; over a feed only the computer that
+                    // sent it may ask, and IdentifyGate keeps any computer from holding it up.
+                    String[] why = new String[1];
+                    int[] refused = new int[1];
+                    String name = app.identify(peer, why, refused);
+                    if (name != null) {
+                        reply.put("ok", true).put("name", name);
+                    } else {
+                        // 403: not the computer that sent the feed shown; 429: identified moments ago.
+                        status = refused[0];
+                        reply.put("ok", false).put("error", why[0]);
+                    }
+                } else if ("/challenge".equals(path)) {
                     // The address Rhema reached this TV at, as Rhema names it ("192.168.3.37:8095").
                     String local = c.getLocalAddress().getHostAddress() + ":" + c.getLocalPort();
                     String[] why = new String[1];

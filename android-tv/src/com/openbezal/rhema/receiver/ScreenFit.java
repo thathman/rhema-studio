@@ -10,6 +10,11 @@ final class ScreenFit {
     static final int MAX_INSET = 10;
     /** The frame rate asked for: the feed page draws at the display's rate, and a TV left at 24 or 30 Hz stutters. */
     static final float WANT_HZ = 60f;
+    /**
+     * Only a TV slower than this is asked to change (24, 25 or 30 Hz). A 50 Hz TV is left alone: it is
+     * smooth, may be the region's setting, and a switch costs an HDMI re-sync of 1 to 3 s at each start.
+     */
+    static final float RAISE_BELOW_HZ = 48f;
 
     private ScreenFit() { }
 
@@ -67,11 +72,11 @@ final class ScreenFit {
 
     /**
      * The display mode to ask for: the same resolution as now, at the rate nearest WANT_HZ (60 or
-     * 59.94), only when the current rate is not already that; -1 leaves the TV as it is. Never a
+     * 59.94), only when the TV runs below RAISE_BELOW_HZ; -1 leaves the TV as it is. Never a
      * different resolution (that would rescale the picture the TV was set up for).
      */
     static int preferredMode(int curW, int curH, float curHz, int[] ids, int[] ws, int[] hs, float[] hzs) {
-        if (Math.abs(curHz - WANT_HZ) < 0.5f) return -1;
+        if (curHz >= RAISE_BELOW_HZ) return -1;
         int best = -1;
         float bestGap = 0.5f;
         for (int i = 0; i < ids.length; i++) {

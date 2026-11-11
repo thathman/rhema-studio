@@ -30,6 +30,10 @@ public final class ScreenCheck {
         check("never a digit of a code", !wrong.matches(".*\\d{2,}.*"));
 
         // BootStart
+        check("an Off chosen in 1.6 (the setting saved, no mark) is a choice", BootStart.chosen(false, true));
+        check("never saved, never marked: not chosen", !BootStart.chosen(false, false));
+        check("marked in 1.7: chosen", BootStart.chosen(true, false));
+        check("so a 1.6 Off is not forced On", !BootStart.turnOnAfterPairing(BootStart.chosen(false, true), false, true));
         check("first pairing turns it on", BootStart.turnOnAfterPairing(false, false, true));
         check("a person's Off stays off", !BootStart.turnOnAfterPairing(true, false, true));
         check("not before pairing", !BootStart.turnOnAfterPairing(false, false, false));
@@ -62,7 +66,11 @@ public final class ScreenCheck {
         check("at 59.94 already: left alone", ScreenFit.preferredMode(1920, 1080, 59.94f, ids, ws, hs, hz) == -1);
         check("at 30: 60 at the same size", ScreenFit.preferredMode(1920, 1080, 30f, ids, ws, hs, hz) == 5);
         check("never another resolution", ScreenFit.preferredMode(3840, 2160, 30f, new int[] {7, 8}, new int[] {3840, 1920}, new int[] {2160, 1080}, new float[] {30f, 60f}) == -1);
-        check("59.94 when that is all there is", ScreenFit.preferredMode(1920, 1080, 50f, new int[] {1, 2}, new int[] {1920, 1920}, new int[] {1080, 1080}, new float[] {50f, 59.94f}) == 2);
+        check("a 50 Hz TV is left alone (its region's rate; no re-sync at every start)", ScreenFit.preferredMode(1920, 1080, 50f, new int[] {1, 2}, new int[] {1920, 1920}, new int[] {1080, 1080}, new float[] {50f, 59.94f}) == -1);
+        check("nor anything from 48 Hz up", ScreenFit.preferredMode(1920, 1080, 48f, ids, ws, hs, hz) == -1);
+        check("at 24: 60 at the same size", ScreenFit.preferredMode(1920, 1080, 24f, ids, ws, hs, hz) == 5);
+        check("at 25: 59.94 when that is all there is", ScreenFit.preferredMode(1920, 1080, 25f, new int[] {1, 2}, new int[] {1920, 1920}, new int[] {1080, 1080}, new float[] {25f, 59.94f}) == 2);
+        check("slow with no 60 mode: left alone", ScreenFit.preferredMode(1920, 1080, 30f, new int[] {1, 2}, new int[] {1920, 1920}, new int[] {1080, 1080}, new float[] {30f, 50f}) == -1);
 
         if (failed > 0) {
             System.err.println(failed + " screen check(s) failed");

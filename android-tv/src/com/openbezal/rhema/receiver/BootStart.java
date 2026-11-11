@@ -19,6 +19,14 @@ final class BootStart {
     }
 
     /**
+     * Whether a person has chosen: marked since 1.7, and before it the "boot" setting existed only
+     * once someone had toggled it on the code screen, so its presence alone is a choice to keep.
+     */
+    static boolean chosen(boolean marked, boolean bootSettingSaved) {
+        return marked || bootSettingSaved;
+    }
+
+    /**
      * At the app's start: whether the last boot's launch was refused by the TV (Android 10 and later
      * do not let an app open by itself unless it may draw over other apps). triedAt is when the boot
      * receiver asked (elapsedRealtime, -1 when it did not), now is this start's elapsedRealtime: in
