@@ -31,6 +31,7 @@ import { TopBar } from "@/studio/shell/top-bar"
 import { startLiveStatePublisher } from "@/lib/live-state"
 import { startCountdownChime } from "@/stores/countdown-chime"
 import { startBrowserFeeds } from "@/lib/browser-feeds"
+import { startNdiStallWatch } from "@/lib/ndi-stall-watch"
 import { startCameras } from "@/lib/cameras"
 import { startLiveRecovery } from "@/lib/live-recovery"
 import { RecoveryBanner } from "@/studio/shell/recovery-banner"
@@ -174,6 +175,7 @@ export function AppShell() {
   useEffect(() => startCountdownChime(), [])
   // Browser feeds: the LAN listener knows each feed and its secret.
   useEffect(() => startBrowserFeeds(), [])
+  useEffect(() => startNdiStallWatch(), [])
   // Kept transcripts older than the church allows lose their transcript (#246 C17), at start and on a change.
   const transcriptDays = useSettingsStore((s) => s.transcriptRetentionDays)
   useEffect(() => { void removeOldTranscripts(transcriptDays) }, [transcriptDays])
