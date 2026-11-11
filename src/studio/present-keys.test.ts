@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest"
-import { keyToPresentAction, shouldIgnoreKeyboard, isClickerKey } from "./present-keys"
+import { CLEAR_CONFIRM_MS, createClearConfirm, enterBelongsToFocus, keyToPresentAction, shouldIgnoreKeyboard, isClickerKey } from "./present-keys"
 
 const key = (key: string, mods: Partial<{ shiftKey: boolean; metaKey: boolean; ctrlKey: boolean; altKey: boolean }> = {}) => ({
   key,
@@ -36,7 +36,53 @@ describe("keyToPresentAction", () => {
     expect(keyToPresentAction(key("ArrowRight", { metaKey: true }))).toBeNull()
     expect(keyToPresentAction(key("ArrowRight", { ctrlKey: true }))).toBeNull()
     expect(keyToPresentAction(key("a"))).toBeNull()
-    expect(keyToPresentAction(key("Enter"))).toBeNull()
+    expect(keyToPresentAction(key("Enter", { metaKey: true }))).toBeNull()
+  })
+})
+
+describe("Enter is Take source live (#816)", () => {
+  it("plain Enter maps to take; Shift or a modifier does nothing", () => {
+    expect(keyToPresentAction(key("Enter"))).toBe("take")
+    expect(keyToPresentAction(key("Enter", { shiftKey: true }))).toBeNull()
+    expect(keyToPresentAction(key("Enter", { ctrlKey: true }))).toBeNull()
+    expect(keyToPresentAction(key("Enter", { altKey: true }))).toBeNull()
+  })
+
+  it("leaves Enter to a focused button, link, tab or list row", () => {
+    const make = (html: string) => {
+      const host = document.createElement("div")
+      host.innerHTML = html
+      document.body.append(host)
+      return host
+    }
+    const host = make('<button id="b"><span id="in-b">x</span></button><a id="a" href="#">l</a><div role="tab" id="t"></div><div role="option" id="o"></div><div id="plain"></div>')
+    for (const id of ["b", "in-b", "a", "t", "o"]) expect(enterBelongsToFocus(document.getElementById(id))).toBe(true)
+    expect(enterBelongsToFocus(document.getElementById("plain"))).toBe(false)
+    expect(enterBelongsToFocus(document.body)).toBe(false)
+    expect(enterBelongsToFocus(null)).toBe(false)
+    host.remove()
+  })
+})
+
+describe("Clear needs Esc twice (#817)", () => {
+  it("asks first, clears on a second press within the window", () => {
+    const c = createClearConfirm()
+    expect(c.press(0)).toBe("prompt")
+    expect(c.armed(10)).toBe(true)
+    expect(c.press(CLEAR_CONFIRM_MS)).toBe("clear")
+    // Spent: the next press asks again.
+    expect(c.press(CLEAR_CONFIRM_MS + 10)).toBe("prompt")
+  })
+
+  it("a late second press only asks again, and reset starts over", () => {
+    const c = createClearConfirm(1500)
+    expect(c.press(0)).toBe("prompt")
+    expect(c.press(1501)).toBe("prompt")
+    expect(c.press(2000)).toBe("clear")
+    expect(c.press(3000)).toBe("prompt")
+    c.reset()
+    expect(c.armed(3001)).toBe(false)
+    expect(c.press(3100)).toBe("prompt")
   })
 })
 

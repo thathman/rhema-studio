@@ -21,6 +21,7 @@ const presentCalls = vi.hoisted(() => {
     verseNext: vi.fn(),
     versePrev: vi.fn(),
     ticker: vi.fn(),
+    showLive: vi.fn(),
   }
 })
 
@@ -64,6 +65,7 @@ import { useJoin } from "@/stores/join-store"
 import { useApprovalRequestsStore, type ApprovalRequest } from "@/studio/permissions/approval-requests-store"
 import { openProductionTab, useProductionTab } from "@/studio/production/production-tab"
 import { useServiceStore } from "@/stores/service-store"
+import { useEngageHost } from "@/studio/engage/host-store"
 import { useTimingTrust } from "@/stores/timing-trust-store"
 import type { Program, QueueItem, TranscriptSegment, Verse } from "@/types"
 import { PresentWorkspace } from "./present-workspace"
@@ -738,7 +740,8 @@ describe("Present's unified Live console", () => {
     expect(controls.textContent).toContain("Sound controls")
     expect(controls.textContent).toContain("Lower thirds")
     expect(controls.textContent).toContain("Stage messages")
-    expect(controls.textContent).toContain("Engage host")
+    // Engage is deferred (#858): hidden until this computer turns it on.
+    expect(controls.textContent).not.toContain("Engage host")
     expect(element.querySelector('[data-tour="live-tools"]')?.getAttribute("aria-expanded")).toBe("false")
 
     const close = element.querySelector<HTMLButtonElement>('[data-slot="live-tools-panel"] button[aria-label="Close Live tools"]')!
@@ -849,5 +852,133 @@ describe("Present's unified Live console", () => {
     const tab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })
     await act(async () => findAndListen.dispatchEvent(tab))
     expect(tab.defaultPrevented).toBe(false)
+  })
+})
+
+describe("Live safety keys (#816 Enter is Take, #817 Esc twice clears)", () => {
+  beforeEach(() => {
+    presentCalls.clear.mockClear()
+    presentCalls.restore.mockClear()
+    presentCalls.showLive.mockClear()
+  })
+
+  it("Enter takes Preview live through the button's own verb, once per press", async () => {
+    await renderWorkspace()
+    await act(async () => pressKey("Enter"))
+    expect(presentCalls.showLive).toHaveBeenCalledTimes(1)
+    for (let i = 0; i < 10; i++) window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true, cancelable: true }))
+    expect(presentCalls.showLive).toHaveBeenCalledTimes(1)
+  })
+
+  it("Enter does nothing with an empty Preview, on a focused button, while typing, with Shift, or with Live tools open", async () => {
+    await renderWorkspace()
+    useBibleStore.setState({ selectedVerse: null, selectedSlide: null })
+    pressKey("Enter")
+    expect(presentCalls.showLive).not.toHaveBeenCalled()
+    useBibleStore.setState({ selectedVerse: verse })
+
+    const liveTools = element.querySelector<HTMLButtonElement>('[aria-label="Toggle Live tools"]')!
+    const enterOnButton = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })
+    liveTools.dispatchEvent(enterOnButton)
+    expect(presentCalls.showLive).not.toHaveBeenCalled()
+    // The button keeps its own Enter.
+    expect(enterOnButton.defaultPrevented).toBe(false)
+
+    const field = document.createElement("input")
+    element.append(field)
+    pressKey("Enter", field)
+    expect(presentCalls.showLive).not.toHaveBeenCalled()
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }))
+    expect(presentCalls.showLive).not.toHaveBeenCalled()
+
+    await act(async () => useProductionTab.setState({ open: true, liveToolsTab: "production" }))
+    pressKey("Enter")
+    expect(presentCalls.showLive).not.toHaveBeenCalled()
+  })
+
+  it("the first Esc only shows the prompt; a second within 1.5 s clears", async () => {
+    let now = 1_000_000
+    vi.spyOn(Date, "now").mockImplementation(() => now)
+    await renderWorkspace()
+    await act(async () => pressKey("Escape"))
+    expect(presentCalls.clear).not.toHaveBeenCalled()
+    expect(element.querySelector('[data-testid="clear-confirm-prompt"]')?.textContent).toBe("Press Esc again to clear the screens")
+
+    now += 1_000
+    await act(async () => pressKey("Escape"))
+    expect(presentCalls.clear).toHaveBeenCalledTimes(1)
+    expect(element.querySelector('[data-testid="clear-confirm-prompt"]')).toBeNull()
+  })
+
+  it("a second Esc too late, a held Esc, or another key between them never clears", async () => {
+    let now = 2_000_000
+    vi.spyOn(Date, "now").mockImplementation(() => now)
+    await renderWorkspace()
+    await act(async () => pressKey("Escape"))
+    now += 1_600
+    await act(async () => pressKey("Escape"))
+    expect(presentCalls.clear).not.toHaveBeenCalled()
+    // That late press asked again; a held Esc repeating is still one press.
+    now += 100
+    for (let i = 0; i < 5; i++) window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", repeat: true, bubbles: true, cancelable: true }))
+    expect(presentCalls.clear).not.toHaveBeenCalled()
+    // Another Live key in between starts over.
+    await act(async () => pressArrowRight())
+    await act(async () => pressKey("Escape"))
+    expect(presentCalls.clear).not.toHaveBeenCalled()
+  })
+
+  it("the prompt goes away by itself after the window", async () => {
+    vi.useFakeTimers()
+    try {
+      await renderWorkspace()
+      await act(async () => pressKey("Escape"))
+      expect(element.querySelector('[data-testid="clear-confirm-prompt"]')).not.toBeNull()
+      await act(async () => { vi.advanceTimersByTime(1_600) })
+      expect(element.querySelector('[data-testid="clear-confirm-prompt"]')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("with nothing on the screens Esc neither prompts nor clears; Shift+Esc restores at once", async () => {
+    useBroadcastStore.setState({ isLive: false })
+    await renderWorkspace()
+    await act(async () => pressKey("Escape"))
+    expect(element.querySelector('[data-testid="clear-confirm-prompt"]')).toBeNull()
+    expect(presentCalls.clear).not.toHaveBeenCalled()
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", shiftKey: true, bubbles: true, cancelable: true }))
+    expect(presentCalls.restore).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("Engage stays hidden while deferred (#858 G14)", () => {
+  afterEach(() => {
+    useSettingsStore.setState({ engageEnabled: false })
+    useEngageHost.setState({ session: null })
+  })
+
+  async function openMoreControls() {
+    await renderWorkspace()
+    await act(async () => useProductionTab.setState({ open: true, liveToolsTab: "controls" }))
+    return element.querySelector<HTMLElement>('[role="group"][aria-label="Secondary Live controls"]')!
+  }
+
+  it("is off by default", async () => {
+    expect(useSettingsStore.getState().engageEnabled).toBe(false)
+    const controls = await openMoreControls()
+    expect(controls.textContent).toContain("Stage messages")
+    expect(controls.textContent).not.toContain("Engage host")
+  })
+
+  it("shows when this computer turns it on, or while a room is already open", async () => {
+    useSettingsStore.setState({ engageEnabled: true })
+    expect((await openMoreControls()).textContent).toContain("Engage host")
+    act(() => root.unmount())
+    element.remove()
+    useSettingsStore.setState({ engageEnabled: false })
+    useEngageHost.setState({ session: { endpoint: "https://engage.example", code: "ABCD", hostToken: "t", joinUrl: "https://engage.example/j", screenUrl: "https://engage.example/s", quizItemId: "q" } })
+    expect((await openMoreControls()).textContent).toContain("Engage host")
   })
 })

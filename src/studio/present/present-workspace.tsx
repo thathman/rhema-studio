@@ -7,11 +7,12 @@ import { ArrowUpIcon, BookOpenIcon, FolderOpenIcon, GiftIcon, HandIcon, HeartIco
 import { Button } from "@/components/ui/button"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { LiveOutputPanel } from "@/components/panels/live-output-panel"
-import { useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
+import { useBibleStore, useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
 import { presentActions } from "@/studio/present-actions"
-import { keyToPresentAction, shouldIgnoreKeyboard, isClickerKey } from "@/studio/present-keys"
+import { CLEAR_CONFIRM_MS, createClearConfirm, enterBelongsToFocus, keyToPresentAction, shouldIgnoreKeyboard, isClickerKey } from "@/studio/present-keys"
+import { OpenModeWarning } from "@/studio/present/open-mode-warning"
 import { BigButton } from "@/studio/ui/big-button"
 import { useAudioStore } from "@/stores/audio-store"
 import { StatusChip } from "@/studio/ui/status-chip"
@@ -127,19 +128,60 @@ export function PresentWorkspace() {
   // Register one keyboard map for the whole Live console. shouldIgnoreKeyboard
   // suppresses it while typing or under a modal; with Live tools open only the
   // presenter clicker (PageUp/PageDown) acts (#411), the panel keeps its arrows.
+  // Enter is Take source live (#816); Esc clears only when pressed twice (#817), the first press asks.
+  const [clearPrompt, setClearPrompt] = useState(false)
   useEffect(() => {
+    const confirm = createClearConfirm()
+    let promptTimer: ReturnType<typeof setTimeout> | null = null
+    const hidePrompt = () => {
+      if (promptTimer) clearTimeout(promptTimer)
+      promptTimer = null
+      setClearPrompt(false)
+    }
     const onKey = (e: KeyboardEvent) => {
       if ((useProductionTab.getState().open && !isClickerKey(e)) || e.defaultPrevented || shouldIgnoreKeyboard(e.target, e.key)) return
       const action = keyToPresentAction(e)
       if (!action) return
+      // A focused button, link or list row keeps its own Enter: it never also takes Preview live.
+      if (action === "take" && enterBelongsToFocus(e.target)) return
       e.preventDefault()
       // One press, one action (#411 input hunt): a held key or a clicker that repeats a held button
       // raced through the song (about 30 a second) and on into the next items, firing their cues.
+      // A held Esc is one press too, so it never confirms its own Clear.
       if (e.repeat) return
+      if (action === "clear") {
+        // Nothing on the screens: Clear has nothing to do, as the button says.
+        if (!useBroadcastStore.getState().isLive) {
+          confirm.reset()
+          hidePrompt()
+          return
+        }
+        if (confirm.press(Date.now()) === "prompt") {
+          if (promptTimer) clearTimeout(promptTimer)
+          setClearPrompt(true)
+          promptTimer = setTimeout(hidePrompt, CLEAR_CONFIRM_MS)
+          return
+        }
+        hidePrompt()
+        presentActions.clear()
+        return
+      }
+      confirm.reset()
+      hidePrompt()
+      if (action === "take") {
+        // The button's own rule: nothing in Preview, nothing to take. Same verb, same approval gate.
+        const bible = useBibleStore.getState()
+        if (!bible.selectedSlide && !bible.selectedVerse) return
+        presentActions.showLive()
+        return
+      }
       presentActions[action]()
     }
     window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      if (promptTimer) clearTimeout(promptTimer)
+    }
   }, [])
 
   // Keep the toolbar to one Tab stop, even when conditional controls appear, and
@@ -280,6 +322,16 @@ export function PresentWorkspace() {
           )}
           <TakeAttemptNotice attempts={takeAttempts} />
         </div>
+        <OpenModeWarning />
+        {clearPrompt && (
+          <div
+            role="alert"
+            data-testid="clear-confirm-prompt"
+            className="pointer-events-none fixed inset-x-0 top-24 z-50 mx-auto w-fit rounded-lg border border-destructive/40 bg-card px-4 py-2.5 text-sm font-semibold text-destructive shadow-lg"
+          >
+            Press Esc again to clear the screens
+          </div>
+        )}
         {/* Always present, so screen readers announce changes: what is on air, and warnings about it. */}
         <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
           {isLive ? `${rehearsal ? "Rehearsal" : "On air"}${liveRef ? `: ${liveRef}` : ""}` : rehearsal ? "Rehearsal: nothing live" : "Off air"}
