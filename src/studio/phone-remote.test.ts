@@ -50,3 +50,57 @@ describe("phone remote: live sources", () => {
     vi.unstubAllGlobals()
   })
 })
+
+describe("phone remote: what it shows when the computer stops answering (11 Nov review)", () => {
+  const boot = () => {
+    document.body.innerHTML = page.slice(page.indexOf("<body>") + 6, page.indexOf("<script>"))
+    new Function(page.slice(page.indexOf("<script>") + 8, page.indexOf("</script>")))()
+  }
+  const keyed = () => {
+    const store = new Map([["rhema-remote-token", "phone-key"]])
+    vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) })
+  }
+
+  it("stops saying On air after two missed answers, holds its buttons, and comes back when the computer does", async () => {
+    vi.useFakeTimers()
+    keyed()
+    let up = true
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (!up && url === "/api/v1/status") throw new TypeError("Failed to fetch")
+      if (url === "/api/v1/status") return new Response(JSON.stringify({ on_air: true, live_verse: "John 3:16" }))
+      if (url === "/api/v1/live") return new Response(JSON.stringify({ v: 1, sources: [], notices: [] }))
+      return new Response(JSON.stringify({ name: "Usher phone", role: "present" }))
+    }))
+    boot()
+    await vi.waitFor(() => expect(document.getElementById("air")!.textContent).toBe("On air"))
+    const next = document.querySelector('[data-cmd="next"]') as HTMLButtonElement
+    up = false
+    await vi.advanceTimersByTimeAsync(2100)
+    expect(document.getElementById("air")!.textContent).toBe("On air") // one miss is a blip
+    await vi.advanceTimersByTimeAsync(2100)
+    expect(document.getElementById("air")!.textContent).toBe("Not updating")
+    expect(document.getElementById("live")!.textContent).toContain("No answer from the presentation computer since")
+    expect(next.disabled).toBe(true)
+    up = true
+    await vi.advanceTimersByTimeAsync(2100)
+    await vi.waitFor(() => expect(document.getElementById("air")!.textContent).toBe("On air"))
+    expect(next.disabled).toBe(false)
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it("says the computer's own reason when it refuses, e.g. paused by the main desk", async () => {
+    keyed()
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/v1/command") return new Response(JSON.stringify({ success: false, error: "The main desk has taken back control for now." }), { status: 423 })
+      if (url === "/api/v1/status") return new Response(JSON.stringify({ on_air: false }))
+      if (url === "/api/v1/live") return new Response(JSON.stringify({ v: 1, sources: [], notices: [] }))
+      return new Response(JSON.stringify({ name: "Usher phone", role: "present" }))
+    }))
+    boot()
+    ;(document.querySelector('[data-cmd="next"]') as HTMLButtonElement).click()
+    await vi.waitFor(() => expect(document.getElementById("msg")!.textContent).toBe("The main desk has taken back control for now."))
+    expect(document.getElementById("msg")!.className).toBe("err")
+    vi.unstubAllGlobals()
+  })
+})
