@@ -82,6 +82,9 @@ function Row({ title, detail, state, tone = "off", action, stage }: { title: str
   )
 }
 
+/** The one entry for pairing any device (#861): the explanation tiles all point to it. */
+const PAIR_ENTRY = "Pair a device"
+
 /**
  * One local-first front door for displays, cameras, volunteer devices and OBS computers.
  * Device identity and health come from the existing secured protocols; pairing and presentation
@@ -169,7 +172,7 @@ export function ConnectionsWorkspace() {
             <h1 className="mt-1 text-2xl leading-tight font-bold tracking-[-0.035em]">Connections</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Connect screens, cameras, volunteer devices and OBS on the church network. This computer keeps every service control and works on its own; other devices are optional.</p>
           </div>
-          <div className="flex flex-wrap gap-2"><PairDeviceDialog label="Pair phone, controller or OBS computer" /><Button onClick={() => void findNearby()} disabled={scanning}><SearchIcon /> {scanning ? "Looking nearby…" : "Find nearby devices"}</Button></div>
+          <div className="flex flex-wrap gap-2"><PairDeviceDialog /><Button onClick={() => void findNearby()} disabled={scanning}><SearchIcon /> {scanning ? "Looking nearby…" : "Find nearby devices"}</Button></div>
         </header>
 
         <section aria-labelledby="connections-nearby" className="rounded-lg border border-border bg-card p-4 shadow-panel">
@@ -188,16 +191,15 @@ export function ConnectionsWorkspace() {
           <div className="mt-4 grid gap-3 border-t border-border pt-3 md:grid-cols-3">
             <div className="flex min-w-0 items-start gap-2 rounded-md border border-border bg-background p-3 text-xs leading-relaxed">
               <CameraIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1"><p className="font-semibold">Camera phones</p><p className="text-muted-foreground">Do not advertise for discovery. Add a camera to get its secure QR setup link.</p></div>
-              <Button size="xs" variant="ghost" className="shrink-0" onClick={() => setCamerasOpen(true)}>Set up</Button>
+              <div className="min-w-0 flex-1"><p className="font-semibold">Camera phones</p><p className="text-muted-foreground">Do not advertise for discovery. {PAIR_ENTRY} → Camera phone: the same three steps, ending with its secure QR setup link.</p></div>
             </div>
             <div className="flex min-w-0 items-start gap-2 rounded-md border border-border bg-background p-3 text-xs leading-relaxed">
               <SmartphoneIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1"><p className="font-semibold">Phone remotes</p><p className="text-muted-foreground">Use the shared short-lived code or QR above.</p></div>
+              <div className="min-w-0 flex-1"><p className="font-semibold">Phone remotes</p><p className="text-muted-foreground">{PAIR_ENTRY} → Phone remote: the same three steps, with this computer's short-lived code or QR.</p></div>
             </div>
             <div className="flex min-w-0 items-start gap-2 rounded-md border border-border bg-background p-3 text-xs leading-relaxed">
               <RadioIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1"><p className="font-semibold">OBS computers</p><p className="text-muted-foreground">Pair as a Companion with a host certificate check; use the same code above.</p></div>
+              <div className="min-w-0 flex-1"><p className="font-semibold">OBS computers</p><p className="text-muted-foreground">{PAIR_ENTRY} → OBS computer: the same three steps, as a Companion with a host certificate check.</p></div>
             </div>
           </div>
         </section>

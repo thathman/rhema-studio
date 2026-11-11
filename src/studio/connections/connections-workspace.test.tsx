@@ -64,6 +64,16 @@ afterEach(async () => {
 })
 
 describe("Connections hub (#401)", () => {
+  it("has one Pair a device entry, and each explanation tile points to it (#861)", async () => {
+    await mount()
+    const buttons = [...host.querySelectorAll("button")].map((button) => button.textContent)
+    expect(buttons.filter((text) => text === "Pair a device")).toHaveLength(1)
+    expect(host.textContent).not.toContain("Pair phone, controller or OBS computer")
+    expect(host.textContent).toContain("Pair a device → Camera phone: the same three steps")
+    expect(host.textContent).toContain("Pair a device → Phone remote: the same three steps")
+    expect(host.textContent).toContain("Pair a device → OBS computer: the same three steps")
+  })
+
   it("offers nearby TV and Rhema host discovery, with camera phones routed to their QR setup", async () => {
     await mount()
     expect(host.textContent).toContain("Nearby")
@@ -285,7 +295,7 @@ describe("Connections hub (#401)", () => {
       return null
     })
     await mount()
-    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Pair phone, controller or OBS computer"))!.click())
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Pair a device")!.click())
     const start = [...document.body.querySelectorAll("button")].find((button) => button.textContent?.includes("Show pairing code")) as HTMLButtonElement
     await act(async () => start.click())
     expect(mockedInvoke).toHaveBeenCalledWith("remote_pair_start")
@@ -308,7 +318,7 @@ describe("Connections hub (#401)", () => {
       return null
     })
     await mount()
-    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Pair phone, controller or OBS computer"))!.click())
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Pair a device")!.click())
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Show pairing code"))!.click())
 
     expect(document.body.textContent).toContain("Not encrypted")
@@ -334,7 +344,7 @@ describe("Connections hub (#401)", () => {
       return null
     })
     await mount()
-    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Pair phone, controller or OBS computer"))!.click())
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Pair a device")!.click())
     const start = [...document.body.querySelectorAll("button")].find((button) => button.textContent?.includes("Show pairing code")) as HTMLButtonElement
     expect(start.disabled).toBe(true)
     expect(document.body.textContent).toContain("The network listener is off")
@@ -351,7 +361,7 @@ describe("Connections hub (#401)", () => {
       return null
     })
     await mount()
-    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Pair phone, controller or OBS computer"))!.click())
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Pair a device")!.click())
     expect([...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Show pairing code"))?.disabled).toBe(true)
 
     listenerOn = true
@@ -361,7 +371,7 @@ describe("Connections hub (#401)", () => {
 
   it("opens the existing phone camera QR setup from Connections", async () => {
     await mount()
-    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Set up")!.click())
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Set up or check cameras"))!.click())
     expect(document.body.textContent).toContain("Connect church cameras")
     expect(document.body.textContent).toContain("Camera router")
     expect(document.body.textContent).toContain("Add a camera")
