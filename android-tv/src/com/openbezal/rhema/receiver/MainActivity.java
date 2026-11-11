@@ -35,6 +35,7 @@ import android.webkit.SslErrorHandler;
 import android.webkit.WebResourceResponse;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebSettings;
+import android.webkit.ValueCallback;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
@@ -79,7 +80,6 @@ public class MainActivity extends Activity {
     static final String SERVICE_TYPE = "_rhema-tv._tcp";
     private static final int MAX_TRIES = 5;
     private static final long INFO_MS = 20_000;
-    private static final long PENDING_MS = 30_000;
     /** How long a code still works after it leaves the screen (time to finish typing it). */
     private static final long GRACE_MS = 120_000;
     private static final String REVOKED = "This screen's link no longer works (this TV was revoked, or a new link was made in Rhema Studio). Send the feed again.";
@@ -105,10 +105,8 @@ public class MainActivity extends Activity {
     private long codeUntil;
     private volatile String problem;
     private NsdManager nsd;
-    /** The code check waiting for its /show (see challenge). */
-    private byte[] pendingKey;
-    private String pendingPeer;
-    private long pendingUntil;
+    /** The code checks waiting for their /show, one per computer (see challenge). */
+    private final Pending pending = new Pending();
     private NsdManager.RegistrationListener advert;
     /** The last page load stopped because the certificate was not the one Rhema sent. */
     private boolean certRefused;
@@ -374,7 +372,7 @@ public class MainActivity extends Activity {
     private synchronized void newCode() {
         code = new CodeProof.Code(String.format("%06d", random.nextInt(1_000_000)));
         triesLeft = MAX_TRIES;
-        pendingKey = null;
+        pending.clear();
     }
 
     private synchronized void codeOnScreen(boolean on) {
@@ -516,37 +514,52 @@ public class MainActivity extends Activity {
             ui.removeCallbacks(keepStill);
             ui.postDelayed(keepStill, STILL_EVERY_MS);
             final String url = shown();
-            // Only of a page that has drawn (#604): a loaded-but-black page is never kept.
-            if (url == null || !ready.drawn() || problem != null || certRefused || panel.getVisibility() == View.VISIBLE || still.getVisibility() == View.VISIBLE) return;
-            int[] size = Guard.stillSize(web.getWidth(), web.getHeight());
-            if (size == null) return;
-            final Bitmap bmp;
-            try {
-                bmp = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
-            } catch (Throwable noMemory) {
-                return;
-            }
-            if (Build.VERSION.SDK_INT >= 26) {
-                // The window as shown (the page's canvas included); it is scaled to the bitmap.
-                try {
-                    PixelCopy.request(getWindow(), bmp, new PixelCopy.OnPixelCopyFinishedListener() {
-                        @Override
-                        public void onPixelCopyFinished(int result) {
-                            if (result == PixelCopy.SUCCESS) saveStill(bmp, url, System.currentTimeMillis());
-                            else bmp.recycle();
-                        }
-                    }, ui);
-                } catch (Throwable e) {
-                    bmp.recycle();
+            if (!stillWanted(url)) return;
+            // Never of the page's "Not updating" mark or lost-host cover: it would be what the TV
+            // starts with next time. A page from an older Rhema Studio says nothing and is kept as before.
+            web.evaluateJavascript("document.documentElement.dataset.stale === 'true'", new ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String stale) {
+                    if (!"true".equals(stale) && url.equals(shown()) && stillWanted(url)) takeStill(url);
                 }
-            } else {
-                Canvas c = new Canvas(bmp);
-                c.scale((float) size[0] / web.getWidth(), (float) size[1] / web.getHeight());
-                web.draw(c);
-                saveStill(bmp, url, System.currentTimeMillis());
-            }
+            });
         }
     };
+
+    /** Only of a page that has drawn (#604): a loaded-but-black page is never kept. */
+    private boolean stillWanted(String url) {
+        return url != null && ready.drawn() && problem == null && !certRefused && panel.getVisibility() != View.VISIBLE && still.getVisibility() != View.VISIBLE;
+    }
+
+    private void takeStill(final String url) {
+        int[] size = Guard.stillSize(web.getWidth(), web.getHeight());
+        if (size == null) return;
+        final Bitmap bmp;
+        try {
+            bmp = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
+        } catch (Throwable noMemory) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 26) {
+            // The window as shown (the page's canvas included); it is scaled to the bitmap.
+            try {
+                PixelCopy.request(getWindow(), bmp, new PixelCopy.OnPixelCopyFinishedListener() {
+                    @Override
+                    public void onPixelCopyFinished(int result) {
+                        if (result == PixelCopy.SUCCESS) saveStill(bmp, url, System.currentTimeMillis());
+                        else bmp.recycle();
+                    }
+                }, ui);
+            } catch (Throwable e) {
+                bmp.recycle();
+            }
+        } else {
+            Canvas c = new Canvas(bmp);
+            c.scale((float) size[0] / web.getWidth(), (float) size[1] / web.getHeight());
+            web.draw(c);
+            saveStill(bmp, url, System.currentTimeMillis());
+        }
+    }
 
     /** Writes the picture away from the screen's thread, whole or not at all. */
     private void saveStill(final Bitmap bmp, final String url, final long capturedAtMillis) {
@@ -778,7 +791,7 @@ public class MainActivity extends Activity {
      * why[0]. Each exchange is one try, whatever code Rhema typed: the TV cannot tell a wrong code
      * from a right one here (that is what keeps the code from being guessed offline), so five
      * exchanges without a shown feed lock the code until OK is pressed. The answer is good for one
-     * /show from the same computer within 30 seconds. A code no longer on screen (GRACE_MS after it
+     * /show from the same computer within 30 seconds, whatever other computers ask meanwhile. A code no longer on screen (GRACE_MS after it
      * left) is refused at once, before any maths and without using a try.
      */
     synchronized String[] challenge(String x, String peer, String local, String[] why) {
@@ -806,9 +819,7 @@ public class MainActivity extends Activity {
             why[0] = "That was not a Rhema Studio code check";
             return null;
         }
-        pendingKey = a.enc;
-        pendingPeer = peer;
-        pendingUntil = SystemClock.elapsedRealtime() + PENDING_MS;
+        pending.put(peer, a.enc, SystemClock.elapsedRealtime());
         return new String[] {a.y, a.proof};
     }
 
@@ -818,12 +829,10 @@ public class MainActivity extends Activity {
      * check with the same code could seal it. Null when shown, else why not.
      */
     synchronized String show(String peer, String nonce, String data) {
-        // Only the computer that did the check can use (or spend) it: another device's /show in
-        // between must not break Rhema's exchange.
-        if (pendingKey == null || !peer.equals(pendingPeer)) return "Rhema Studio must check the code first (update Rhema Studio if this keeps happening)";
-        byte[] key = pendingKey;
-        pendingKey = null;
-        if (SystemClock.elapsedRealtime() >= pendingUntil) return "Rhema Studio must check the code first (update Rhema Studio if this keeps happening)";
+        // Only the computer that did the check can use (or spend) it: another device's /challenge or
+        // /show in between must not break Rhema's exchange.
+        byte[] key = pending.take(peer, SystemClock.elapsedRealtime());
+        if (key == null) return "Rhema Studio must check the code first (update Rhema Studio if this keeps happening)";
         String sent = CodeProof.open(key, nonce, data);
         if (sent == null) return "Rhema Studio's code check did not match: try again";
         final String url;

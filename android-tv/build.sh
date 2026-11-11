@@ -5,7 +5,8 @@
 # (~/.android/rhema-receiver-debug.jks, made once). Install: adb install -r build/rhema-receiver.apk
 # RECEIVER_DEBUG=1 makes it debuggable, so chrome://inspect can read the page (WebRTC stats).
 # First it runs CodeProofCheck (test/) on this computer: the code check and its refusals, against the
-# same test vector Rhema's Rust tests use; and ReadyCheck, when a feed page counts as shown (#604).
+# same test vector Rhema's Rust tests use; ReadyCheck, when a feed page counts as shown (#604); and PendingCheck, one waiting
+# code check per computer.
 # A failure stops the build.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -15,9 +16,10 @@ JAR=$SDK/platforms/android-34/android.jar
 J=${JAVA_HOME:+$JAVA_HOME/bin/}
 rm -rf build && mkdir -p build/classes build/dex build/gen build/check
 # Plain Java parts only (no Android), checked with the computer's own Java.
-"${J}javac" --release 8 -Xlint:-options -d build/check src/com/openbezal/rhema/receiver/CodeProof.java src/com/openbezal/rhema/receiver/Guard.java src/com/openbezal/rhema/receiver/Ready.java $(find test -name '*.java')
+"${J}javac" --release 8 -Xlint:-options -d build/check src/com/openbezal/rhema/receiver/CodeProof.java src/com/openbezal/rhema/receiver/Guard.java src/com/openbezal/rhema/receiver/Ready.java src/com/openbezal/rhema/receiver/Pending.java $(find test -name '*.java')
 "${J}java" -cp build/check com.openbezal.rhema.receiver.CodeProofCheck
 "${J}java" -cp build/check com.openbezal.rhema.receiver.ReadyCheck
+"${J}java" -cp build/check com.openbezal.rhema.receiver.PendingCheck
 "$BT/aapt2" compile --dir res -o build/res.zip
 "$BT/aapt2" link ${RECEIVER_DEBUG:+--debug-mode} -o build/base.apk -I "$JAR" --manifest AndroidManifest.xml --java build/gen build/res.zip
 "${J}javac" -source 8 -target 8 -bootclasspath "$JAR" -Xlint:-options -d build/classes $(find src build/gen -name '*.java')
