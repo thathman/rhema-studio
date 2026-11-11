@@ -12,6 +12,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { ApprovalRequestsPanel } from "./approval-requests-panel"
 import { MyApprovalRequests } from "./my-approval-requests"
+import { RevokeAction } from "@/studio/connections/revoke-action"
 
 const dateWords = (at: number) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
 
@@ -23,6 +24,7 @@ export function PermissionsWorkspace() {
   const hydrated = useSceneApprovalsStore((s) => s.hydrated)
   const loadError = useSceneApprovalsStore((s) => s.error)
   const remoteDevices = useSettingsStore((s) => s.remoteDevices)
+  const requireApproval = useSettingsStore((s) => s.requireApproval)
   const outputs = useBroadcastStore((s) => s.outputs)
   const congregationOutputs = outputs.filter((output) => (output.role ?? "congregation") === "congregation")
   const stageOutputs = outputs.filter((output) => output.role === "stage")
@@ -74,6 +76,47 @@ export function PermissionsWorkspace() {
     }
   }
 
+  // Requests from desks on older versions (no host request ID) belong to the same Approval Requests
+  // list (doc 28, #855): open ones first, decided ones folded away, nothing dropped.
+  const isOpen = (request: SceneEditApproval) => request.status === "pending" || request.status === "needs-review"
+  const openLocal = ordered.filter(isOpen)
+  const decidedLocal = ordered.filter((request) => !isOpen(request))
+  const localRow = (request: SceneEditApproval) => {
+    const status = request.status === "needs-review" ? "Needs a fresh request" : request.status[0].toUpperCase() + request.status.slice(1)
+    return (
+      <li key={request.id} className="flex flex-wrap items-start gap-3 py-3 first:pt-0 last:pb-0">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2"><h4 className="font-semibold">{request.scene ? `Change “${request.name}”` : `Delete “${request.name}”`}</h4><Badge variant={request.status === "pending" ? "amber" : request.status === "approved" ? "green" : request.status === "declined" ? "neutral" : "rose"}>{status}</Badge></div>
+          <p className="mt-1 text-xs text-muted-foreground">From {request.by} · {dateWords(request.at)}{request.decidedBy ? ` · ${request.status} by ${request.decidedBy}` : ""}</p>
+          {request.reason && <p className="mt-1 text-xs text-muted-foreground">{request.reason}</p>}
+          {errors[request.id] && <p role="alert" className="mt-2 text-xs text-destructive">{errors[request.id]}</p>}
+        </div>
+        {isHost && isOpen(request) && <div className="flex gap-2">
+          {request.status === "pending" && <Button size="sm" disabled={busy === request.id} onClick={() => void decide(request, "accept")}><CheckIcon /> Accept</Button>}
+          <Button size="sm" variant="outline" disabled={busy === request.id} onClick={() => void decide(request, "decline")}><XIcon /> Decline</Button>
+        </div>}
+      </li>
+    )
+  }
+  const localRequests = ordered.length > 0 || loadError || !hydrated ? {
+    open: pending.length,
+    content: (
+      <div role="group" aria-labelledby="local-requests-title" className="mt-4 border-t border-border pt-3 first:mt-0 first:border-0 first:pt-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 id="local-requests-title" className="min-w-0 flex-1 text-sm font-semibold">From desks on an older version</h3>
+          {loadError && <Button size="sm" variant="outline" disabled={reloading} onClick={() => { setReloading(true); void reloadSceneApprovals().catch(() => {}).finally(() => setReloading(false)) }}><RefreshCwIcon /> Try again</Button>}
+        </div>
+        <p className="mt-1 mb-3 text-xs text-muted-foreground">These scene requests came without a host request ID, so this computer keeps them. Accept saves the scene here and never takes it live.</p>
+        {loadError && <p role="alert" className="mb-3 flex items-start gap-2 text-sm text-destructive"><CircleAlertIcon className="mt-0.5 size-4 shrink-0" />These requests could not be loaded: {loadError}</p>}
+        {!hydrated && !loadError ? <p role="status" className="text-sm text-muted-foreground">Loading saved requests…</p> : openLocal.length === 0 ? <p className="text-sm text-muted-foreground">None waiting.</p> : <ul className="divide-y divide-border">{openLocal.map(localRow)}</ul>}
+        {decidedLocal.length > 0 && <details className="mt-3 text-sm">
+          <summary className="cursor-pointer text-xs text-muted-foreground">Decided earlier ({decidedLocal.length})</summary>
+          <ul className="mt-2 divide-y divide-border">{decidedLocal.map(localRow)}</ul>
+        </details>}
+      </div>
+    ),
+  } : undefined
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-8 pt-6 pb-16 max-[1200px]:px-5">
@@ -87,39 +130,22 @@ export function PermissionsWorkspace() {
 
         {!isHost && <p role="status" className="rounded-md border border-border bg-muted/40 p-3 text-sm">This joined desk is read-only for approvals and device access. Ask the main host to make changes.</p>}
 
-        <ApprovalRequestsPanel />
+        <ApprovalRequestsPanel local={localRequests} />
 
-        <section aria-labelledby="scene-approvals-title" className="rounded-lg border border-border bg-card shadow-panel">
-          <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
+        <section aria-labelledby="approval-policy-title" className="rounded-lg border border-border bg-card shadow-panel">
+          <header className="flex items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
             <ShieldCheckIcon aria-hidden className="size-4 text-muted-foreground" />
-            <div className="min-w-0 flex-1"><h2 id="scene-approvals-title" className="font-semibold">Legacy local scene requests</h2><p className="text-xs text-muted-foreground">Compatibility requests without a host request ID live in this computer’s local ledger. Accept saves locally and never takes a scene live; new host-tagged requests appear above.</p></div>
-            <Badge variant={pending.length ? "amber" : "neutral"}>{pending.length} to review</Badge>
-            {loadError && <Button size="sm" variant="outline" disabled={reloading} onClick={() => { setReloading(true); void reloadSceneApprovals().catch(() => {}).finally(() => setReloading(false)) }}><RefreshCwIcon /> Try again</Button>}
+            <div><h2 id="approval-policy-title" className="font-semibold">Before a service goes live</h2><p className="text-xs text-muted-foreground">The approval rule this host applies to Take live and to scene changes from joined desks. Approving a service itself happens in Prepare.</p></div>
           </header>
           <div className="p-4">
-            {loadError && <p role="alert" className="mb-3 flex items-start gap-2 text-sm text-destructive"><CircleAlertIcon className="mt-0.5 size-4 shrink-0" />Local request history could not be loaded: {loadError}</p>}
-            {!hydrated && !loadError ? <p role="status" className="text-sm text-muted-foreground">Loading saved requests…</p> : ordered.length === 0 ? <p className="text-sm text-muted-foreground">No legacy local scene requests.</p> : (
-              <ul className="divide-y divide-border">
-                {ordered.map((request) => {
-                  const status = request.status === "needs-review" ? "Needs a fresh request" : request.status[0].toUpperCase() + request.status.slice(1)
-                  const open = request.status === "pending" || request.status === "needs-review"
-                  return (
-                    <li key={request.id} className="flex flex-wrap items-start gap-3 py-3 first:pt-0 last:pb-0">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{request.scene ? `Change “${request.name}”` : `Delete “${request.name}”`}</h3><Badge variant={request.status === "pending" ? "amber" : request.status === "approved" ? "green" : request.status === "declined" ? "neutral" : "rose"}>{status}</Badge></div>
-                        <p className="mt-1 text-xs text-muted-foreground">From {request.by} · {dateWords(request.at)}{request.decidedBy ? ` · ${request.status} by ${request.decidedBy}` : ""}</p>
-                        {request.reason && <p className="mt-1 text-xs text-muted-foreground">{request.reason}</p>}
-                        {errors[request.id] && <p role="alert" className="mt-2 text-xs text-destructive">{errors[request.id]}</p>}
-                      </div>
-                      {isHost && open && <div className="flex gap-2">
-                        {request.status === "pending" && <Button size="sm" disabled={busy === request.id} onClick={() => void decide(request, "accept")}><CheckIcon /> Accept</Button>}
-                        <Button size="sm" variant="outline" disabled={busy === request.id} onClick={() => void decide(request, "decline")}><XIcon /> Decline</Button>
-                      </div>}
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" aria-describedby="approval-policy-detail" disabled={!isHost} checked={requireApproval} onChange={(e) => useSettingsStore.getState().setRequireApproval(e.target.checked)} />
+              <span>
+                Ask before showing an unapproved service
+                <span id="approval-policy-detail" className="block text-xs text-muted-foreground">When the open service is not approved, or changed after approval, the first Take live asks first. Quick screens and rehearsal are never held. While this is on, a scene change from a joined desk also waits for the main desk to accept it.</span>
+              </span>
+            </label>
+            {!isHost && <p role="status" className="mt-2 text-xs text-muted-foreground">The main host’s setting applies while this desk is joined.</p>}
           </div>
         </section>
 
@@ -208,7 +234,7 @@ export function PermissionsWorkspace() {
                   </fieldset>}
                   {isHost && <>
                     <Button size="sm" variant="outline" aria-label={device.paused ? `Give control back to ${device.name}` : `Take back control from ${device.name}`} aria-pressed={device.paused === true} onClick={() => void setDeskControl(device.hash, device.paused !== true)}>{device.paused ? "Give control back" : "Take back control"}</Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" aria-label={`Revoke ${device.name}`} onClick={() => void useSettingsStore.getState().revokeRemoteDevice(device.hash)}>Revoke</Button>
+                    <RevokeAction label={device.name} what={`${device.name}'s key is removed: it is disconnected now and must pair again. This computer keeps full control.`} onRevoke={() => void useSettingsStore.getState().revokeRemoteDevice(device.hash)} />
                   </>}
                 </li>)}
               </ul>

@@ -605,7 +605,7 @@ const sectionTitles: Record<NavSection, string> = {
   appearance: "Appearance",
   assistants: "AI assistants (MCP)",
   data: "Data & Sync",
-  screens: "Screens and NDI",
+  screens: "Outputs",
   audio: "Audio",
   speech: "Speech Recognition",
   bible: "Bible Translation",
@@ -1315,7 +1315,7 @@ function DataSyncSection() {
   )
 }
 
-/** Screens and NDI: where outputs are set up and which look each shows. */
+/** Outputs (#803): the one name for projectors, stage screens, signage and NDI. The Outputs dialog sets them up; this page keeps the way there and the capacity limits. */
 function ScreensSection() {
   return (
     <div className="flex max-w-xl flex-col gap-4 text-sm">

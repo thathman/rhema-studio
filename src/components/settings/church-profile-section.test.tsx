@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { ChurchProfileSection } from "./church-profile-section"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useSettingsDialogStore } from "@/lib/settings-dialog"
+import { useShellStore } from "@/studio/shell-store"
 
 /** #447: Settings → Church and profile corrects what setup filled in, without running setup again. */
 let element: HTMLDivElement
@@ -34,22 +35,29 @@ function type(input: HTMLInputElement, text: string) {
 }
 
 describe("Settings → Church and profile (#447)", () => {
-  it("edits the church's name (as Home reads it) and the operator's, in the same fields as setup", () => {
+  it("edits the church's name (as Home reads it) in the same field as setup", () => {
     act(() => root.render(<ChurchProfileSection />))
     const church = element.querySelector<HTMLInputElement>("#settings-church-name")!
-    const operator = element.querySelector<HTMLInputElement>("#settings-operator-name")!
     expect(church.value).toBe("Christ Apostolic Church")
-    expect(operator.value).toBe("Tolu")
 
     type(church, "Christ Apostolic Church, Òkè-Ìgbàlà")
-    type(operator, "Femi")
     expect(useSettingsStore.getState().brandKit.churchName).toBe("Christ Apostolic Church, Òkè-Ìgbàlà")
-    expect(useSettingsStore.getState().operatorName).toBe("Femi")
     // Home's heading, previewed as setup does, with the accents kept.
     expect(element.textContent).toContain("Christ Apostolic Church, Òkè-Ìgbàlà workspace")
     expect(element.textContent).toContain("Nothing here changes what is on the screens")
     // Its own ids: setup can open over Settings without doubling the wizard's fields.
     expect(element.querySelector("#setup-church-name")).toBeNull()
+  })
+
+  it("shows the operator's name and sends a change to the Desk menu, its one editor (#802)", () => {
+    act(() => root.render(<ChurchProfileSection />))
+    expect(element.querySelector("#settings-operator-name")).toBeNull()
+    expect(element.querySelector("#settings-operator-name-summary")?.textContent).toContain("Tolu")
+    const before = useShellStore.getState().deskMenuRequest
+    const change = [...element.querySelectorAll("button")].find((b) => b.textContent?.includes("Change in the Desk menu"))!
+    act(() => change.click())
+    expect(useShellStore.getState().deskMenuRequest).toBe(before + 1)
+    expect(useSettingsStore.getState().operatorName).toBe("Tolu")
   })
 
   it("leaving after a rename does not rebuild the brand looks (that is Design → Brand kit's)", async () => {

@@ -98,6 +98,17 @@ describe("Settings page search", () => {
     expect(headings).toEqual(["Church and profile", "Audio and speech", "Connections", "AI and MCP", "Data and sync", "Preferences", "Diagnostics and about"])
   })
 
+  it("names the Outputs section Outputs on its page too, and its button opens the Outputs dialog (#803)", async () => {
+    const outputs = [...host.querySelectorAll<HTMLButtonElement>('nav[aria-label="Settings sections"] button')].find((b) => b.textContent === "Outputs")!
+    await act(async () => outputs.click())
+    const page = host.querySelector('section[aria-label="Outputs"]')!
+    expect(page.querySelector("h2")?.textContent).toBe("Outputs")
+    expect(host.textContent).not.toContain("Screens and NDI")
+    useShellStore.setState({ outputsDialogOpen: false })
+    await act(async () => [...page.querySelectorAll("button")].find((b) => b.textContent?.includes("Open outputs"))!.click())
+    expect(useShellStore.getState().outputsDialogOpen).toBe(true)
+  })
+
   it("finds the church's name and the operator's in Church and profile", async () => {
     await type("church name")
     expect(sections()).toEqual(["Church and profile"])
