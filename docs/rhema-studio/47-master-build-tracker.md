@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.0.0.4 · 11 Nov 2026 · main `b390ef8b`**
+**Version 1.0.0.5 · 11 Nov 2026 · main `b64dec1d`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -35,7 +35,7 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 
 | Area | Status | Evidence / next |
 | --- | --- | --- |
-| Six destinations, Prepare, Preview/Take, Library, Design, History | NOT YET AUDITED | Next: an end-to-end run of a throwaway service on the release QA build (Home → Library/Design → Prepare → Save/Approve → Preview → Take → Recording → History). |
+| Six destinations, Prepare, Preview/Take, Library, Design, History | AUTOMATED TESTED | All native journeys passed on the Intel Mac host against a release build of `b390ef8b` with a fresh profile, 11 Nov: Home, hymn (Prepare add, edit, save, reopen, Send to Live Preview, with Live untouched), scene save, failed Take, and the Live empty, configured and Find states. Also green in CI on each PR. Not yet done: a full throwaway service run by hand with roles, LAN browser desks and the clicker. |
 | LAN browser operator desks and role permissions | NOT YET AUDITED | — |
 | NDI stall warning on every screen | AUTOMATED TESTED | #788 |
 
@@ -67,7 +67,8 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 
 | Area | Status | Evidence / next |
 | --- | --- | --- |
-| Native recording of the selected congregation Program | NOT YET AUDITED | A 60-minute line-in recording with the church mixer is NOT TESTED (mixer not available). |
+| Native recording of the selected congregation Program | AUTOMATED TESTED | Native recording journey on the Intel Mac host, 11 Nov. 720p30, 2.4 s, 69 frames written and 2 dropped, a marker and a History manifest; sound explicitly off. Note: it needs Rhema's windows uncovered on a desktop Mac, because WebKit slows windows another app covers, and with the Claude app in front the 60 s journey timed out. The 60-minute recording with the church mixer is NOT TESTED (no mixer here). |
+| Crash recovery (host killed while live) | PHYSICAL TESTED | Onn, 11 Nov. After `kill -9` with Welcome on the TV, the next start closed the orphaned camera router and offered "Put back on the screens"; nothing went back until it was chosen. While an offer stays unanswered, no new recovery point is saved (by design), so "Put back" restored the 15:56 state, not the 19:39 one. Owner decision: should an ignored offer expire? |
 | Backup and restore safety | MERGED | #786 (refuses backups from newer versions; restore blocked while on air). |
 
 ### Phase E — Supervised church rehearsal
