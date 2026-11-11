@@ -33,6 +33,7 @@ import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from 
 import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
 import { feedLost, overscanPct } from "@/lib/feed-receivers"
+import { feedsWithoutVideo, videoOnFeedsWarning } from "@/lib/video-on-feeds"
 import { cameraSourceId, feedFrame, followsLowerThird, followsOnlyOverlays, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
 import { captureSceneAppearance, normalizeScene, presetFromScene, sceneClock, sceneForOutput, sceneFrame, sceneHasLanguageFallback, sceneOwns } from "@/lib/scenes"
 import { hasPendingRemotePolicyUpdate, useSettingsStore } from "@/stores/settings-store"
@@ -2191,6 +2192,20 @@ useBroadcastStore.subscribe((s, prev) => {
   const now = soundOutputId(s.outputs, s.outputStatus)
   if (lastSoundOutput !== undefined && now !== lastSoundOutput) s.syncBroadcastOutput()
   lastSoundOutput = now
+})
+
+// A video item on air while a TV or browser feed would show it: that screen shows only the
+// background. Said where the operator presents, once per video and set of such screens (a TV
+// turned on mid-video is named too). Not in rehearsal: the real screens keep their frame (#411, Onn TV).
+let lastVideoWarned: string | undefined
+useBroadcastStore.subscribe((s) => {
+  const v = !s.rehearsal && s.isLive ? s.liveVerse?.video : undefined
+  const feeds = v ? feedsWithoutVideo(s) : []
+  const key = v && feeds.length > 0 ? `${v.url}#${v.token}|${feeds.join("|")}` : undefined
+  if (key === lastVideoWarned) return
+  lastVideoWarned = key
+  const warning = v ? videoOnFeedsWarning(v.name, feeds) : null
+  if (warning) s.setPresentWarning(warning)
 })
 
 /** A camera's backup camera, by the router's names (#213). */

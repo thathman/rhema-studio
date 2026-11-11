@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.0.0.2 · 11 Nov 2026 · main `dc299c05`**
+**Version 1.0.0.3 · 11 Nov 2026 · main `38314dce`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -48,6 +48,9 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | TV feed survives an outputs load failure | AUTOMATED TESTED | #787 |
 | TV: Welcome, Black, Back, Clear, Restore on Program | PHYSICAL TESTED | Onn, host built at `5b816a1f`, 11 Nov. Each step was acknowledged as drawn (frames 5–9). The bilingual Welcome showed Yorùbá diacritics correctly; Clear leaves only the background. |
 | TV revocation (new feed link) and re-pairing | PHYSICAL TESTED | Onn, 11 Nov. After a new link, the old key is refused within 1 s and the TV shows its own "link no longer works" screen with a code. Re-pairing put the frame back about 0.5 s after `tv_show` returned. Receiver 1.6.3.2 no longer shows the host's 403 text behind that screen. |
+| TV: bilingual hymn and Scripture | PHYSICAL TESTED | Onn, 11 Nov. A CAC 999 hymn (QA fixture) showed Yorùbá then English with its number in the header. John 3:16 showed English then Yorùbá. Both were acknowledged as drawn. |
+| TV: video item | MERGED (by design) | A video item does not play on TVs or browser feeds; the file stays on the host, and the TV shows the background. This PR tells the operator in Live whenever that happens. A scene's video layer does stream to TVs (not yet tested on a device). |
+| TV feed reassignment and per-output language | PHYSICAL TESTED | Onn, 11 Nov. The TV was moved from `onn-tv` to a Yorùbá-only feed: the old feed's watcher dropped to 0, and John 3:16 showed in Yorùbá only on the new one (acknowledged). |
 | TV display-mode change without restart | MERGED | #787 configChanges. Not yet tested on a device. |
 | Stale picture never kept as the TV's start picture | PHYSICAL TESTED | Onn, host built at `5b816a1f`, 11 Nov. During a 145 s host freeze the TV showed "Not updating" and saved no picture; saving resumed after. Before the fix, the same test saved stale pictures. |
 | Host restart → TV reconnects | PHYSICAL TESTED | Onn, 11 Nov: the TV acknowledged the current frame 22 s after the host's LAN port opened. Feeds stay off after a restart until an operator or Live recovery turns them on (by design). |
