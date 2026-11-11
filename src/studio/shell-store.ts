@@ -180,6 +180,19 @@ interface ShellState extends ShellPrefs {
   /** Ask the Desk menu to open (Settings search → Appearance). A new count each time. */
   deskMenuRequest: number
   openDeskMenu: () => void
+  /**
+   * While this computer is joined to a host, Live shows its role's desk (#813 F2), or this
+   * computer's own Live console when the operator asks for it from the desk's menu. In memory only.
+   */
+  joinedDeskView: JoinedDeskView
+  setJoinedDeskView: (view: JoinedDeskView) => void
+}
+
+export type JoinedDeskView = "desk" | "console"
+
+/** Whether the Live page shows this computer's joined desk instead of its own Live console. */
+export function showsJoinedDesk(joinStatus: string, workspace: Workspace, view: JoinedDeskView): boolean {
+  return joinStatus !== "off" && canonicalWorkspace(workspace) === "present" && view === "desk"
 }
 
 // ponytail: localStorage like ThemeProvider; per-machine UI convenience, not content.
@@ -199,6 +212,8 @@ export const useShellStore = create<ShellState>((set) => ({
   clearDesignDocumentRequest: (expectedId) => set((state) => state.designDocumentRequest === expectedId ? { designDocumentRequest: null } : {}),
   deskMenuRequest: 0,
   openDeskMenu: () => set((s) => ({ deskMenuRequest: s.deskMenuRequest + 1 })),
+  joinedDeskView: "desk",
+  setJoinedDeskView: (joinedDeskView) => set({ joinedDeskView }),
   goRequest: null,
   goTo: (workspace) => set({ goRequest: canonicalWorkspace(workspace) }),
   prepareProgramRequest: null,
