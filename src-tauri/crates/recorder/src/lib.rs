@@ -367,6 +367,7 @@ impl Recorder {
         if req.audio_device_id.is_none() && !req.allow_silent {
             problems.push(RecorderProblem::new(ProblemCode::AudioMissing, "Choose the sound desk input, or confirm recording without sound."));
         }
+        problems.extend(audio_input_problem(req.audio_device_id.as_deref(), &audio::devices()));
         if let Some(free) = disk_free(&self.folder) {
             if free < DISK_START_MIN {
                 problems.push(RecorderProblem::new(ProblemCode::DiskLow, format!("Only {} free; recording needs at least 2 GB.", gb(free))));
@@ -1180,6 +1181,15 @@ pub fn disk_free(path: &Path) -> Option<u64> {
     }
 }
 
+/// The chosen sound desk input is not connected: Start would refuse it, so Ready must not say Ready
+/// (seen 11 Nov: preflight passed for an input that was not there). An empty name is the system default.
+fn audio_input_problem(device: Option<&str>, connected: &[String]) -> Option<RecorderProblem> {
+    let device = device.filter(|d| !d.is_empty())?;
+    (!connected.iter().any(|c| c == device)).then(|| {
+        RecorderProblem::new(ProblemCode::AudioMissing, format!("The sound desk input \"{device}\" is not connected: plug it in or choose another input."))
+    })
+}
+
 fn gb(bytes: u64) -> String {
     format!("{:.1} GB", bytes as f64 / f64::from(1u32 << 30))
 }
@@ -1204,6 +1214,19 @@ pub fn iso_utc(t: SystemTime) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_chosen_sound_input_that_is_not_connected_is_a_problem_before_start() {
+        let connected = vec!["MacBook Pro Microphone".to_string(), "Behringer X32".to_string()];
+        assert_eq!(audio_input_problem(Some("Behringer X32"), &connected), None);
+        assert_eq!(audio_input_problem(None, &connected), None, "no input chosen is the other check's case");
+        assert_eq!(audio_input_problem(Some(""), &connected), None, "empty is the system default");
+        let missing = audio_input_problem(Some("Yamaha MG10XU"), &connected).expect("a missing input is a problem");
+        assert_eq!(missing.code, ProblemCode::AudioMissing);
+        assert!(missing.message.contains("Yamaha MG10XU"));
+        assert!(audio_input_problem(Some("Behringer X32"), &[]).is_some(), "nothing connected at all");
+    }
+
     #[test]
     fn a_removed_drive_has_no_free_space_to_report() {
         assert_eq!(super::disk_free(std::path::Path::new("/Volumes/Rhema-unplugged-drive-test/Recordings/session")), None, "never the boot disk's free space");
