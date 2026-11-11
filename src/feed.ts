@@ -538,6 +538,7 @@ setInterval(() => {
   if (events.readyState !== EventSource.OPEN || !feedReconnectDue(freshness, now, eventSourceStartedAt)) return
   // A quiet OPEN socket can survive a lost Wi-Fi path without firing EventSource's error event.
   freshness = feedConnectionLost(freshness)
+  lostSinceOpen = true
   checkStale()
   restartEventSource()
 }, Math.min(1000, FEED_RECONNECT_AFTER_MS / 3))

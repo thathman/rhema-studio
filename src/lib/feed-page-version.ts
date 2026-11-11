@@ -6,7 +6,8 @@
 
 /** The feed script the page's HTML loads (`feed-<hash>.js`), or null when it names none. */
 export function feedScriptName(html: string): string | null {
-  return html.match(/\/assets\/(feed-[\w-]+\.js)["'?]/)?.[1] ?? null
+  // The script tag itself: the page also preloads chunks like feed-receivers-<hash>.js.
+  return html.match(/<script[^>]*\bsrc=["']\/assets\/(feed-[\w-]+\.js)["'?]/)?.[1] ?? null
 }
 
 /** Whether the host now serves another build than the one running (`ownScriptUrl`: import.meta.url). */

@@ -8,6 +8,10 @@ describe("feed page after a host update", () => {
   it("reads the build's script name from the served page", () => {
     expect(feedScriptName(page("feed-NW1eyKrK.js"))).toBe("feed-NW1eyKrK.js")
     expect(feedScriptName("<html>feed page</html>")).toBeNull()
+    // A preloaded chunk listed before the script is not the page's build.
+    const preloadFirst = `<link rel="modulepreload" crossorigin href="/assets/feed-receivers-CGR2aXp7.js">${page("feed-NW1eyKrK.js")}`
+    expect(feedScriptName(preloadFirst)).toBe("feed-NW1eyKrK.js")
+    expect(feedPageOutdated(preloadFirst, running)).toBe(false)
   })
 
   it("is out of date only when the host serves another build", () => {
