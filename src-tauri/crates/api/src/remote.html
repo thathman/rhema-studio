@@ -17,6 +17,7 @@
   .status b { display:block; color:var(--fg); font-size:17px; margin-top:2px; overflow-wrap:anywhere; }
   .air { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; background:#333; }
   .air.on { background:var(--live); }
+  .air.stale { background:#555; color:#ddd; }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   button { font:inherit; font-weight:600; color:var(--fg); background:var(--card); border:1px solid var(--line); border-radius:12px; min-height:88px; touch-action:manipulation; }
   button:active { transform:scale(.98); }
@@ -159,6 +160,13 @@
 
   // One id per press: if the answer is lost on Wi-Fi the phone asks again with the same id, and
   // the computer, having already done it, does not do it twice. (No crypto.randomUUID on plain http.)
+  // A LAN fetch to a computer that went away can hang for tens of seconds instead of failing:
+  // give up after a few seconds so the page can say it is not updating.
+  const timed = (url, init, ms) => {
+    const c = new AbortController()
+    const t = setTimeout(() => c.abort(), ms || 3000)
+    return fetch(url, Object.assign({}, init, { signal: c.signal })).finally(() => clearTimeout(t))
+  }
   const pressId = () => Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10)
   async function post(cmd, id, value, extra) {
     let lastError
@@ -174,6 +182,7 @@
   }
   async function send(cmd, btn, value) {
     btn.disabled = true
+    sending.add(btn)
     try {
       const r = await post(cmd, pressId(), value)
       if (r.status === 401 || r.status === 403) {
@@ -181,10 +190,11 @@
         if (r.status === 401) { set(null); show(); say("This phone is no longer paired. Pair it again.", true) }
         else say(j.error || "Not allowed for this phone.", true)
       } else if (r.status === 429) say("Too fast; wait a second.", true)
-      else if (!r.ok) say("Command failed (" + r.status + ")", true)
+      // The computer's own reason first (paused by the main desk, an output not this phone's…).
+      else if (!r.ok) { const j = await r.json().catch(() => ({})); say(j.error || "Command failed (" + r.status + ")", true) }
       else { say(""); poll() }
     } catch { say("No answer from the presentation computer. Check the screen before pressing again.", true) }
-    finally { btn.disabled = false }
+    finally { sending.delete(btn); btn.disabled = staleNow }
   }
   // One command for an action request: null when the computer did it, else its reason.
   async function attempt(cmd, value, extra) {
@@ -200,14 +210,34 @@
   $("forget").addEventListener("click", () => { set(null); show(); say("Unpaired here. Revoke it in Settings → Remote too.") })
 
   let timer, polling = false
+  // Two missed answers in a row: what the phone shows is no longer known, so it says so and its
+  // buttons wait, instead of still saying "On air" from before (11 Nov review).
+  let missed = 0, lastHeard = 0, staleNow = false
+  const sending = new Set()
+  // Everything that sends a command: the big buttons, each source's Take off / Put back, and the
+  // notice answers and form (Talk is its own channel and stays as it is).
+  const actions = () => document.querySelectorAll("[data-cmd], #sources button, #notices button, #noticeForm button[type=submit]")
+  function stale(isStale) {
+    staleNow = isStale
+    actions().forEach((b) => { if (!sending.has(b)) b.disabled = isStale })
+    if (!isStale) return
+    $("air").textContent = "Not updating"
+    $("air").className = "air stale"
+    const at = lastHeard ? new Date(lastHeard).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ""
+    $("live").textContent = "No answer from the presentation computer" + (at ? " since " + at : "") + ". What is on the screens may have changed."
+  }
   async function poll() {
     clearTimeout(timer)
     if (polling || !get() || document.hidden) return
     polling = true
     try {
-      const r = await fetch("/api/v1/status", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } })
+      const r = await timed("/api/v1/status", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } })
       if (r.status === 401) { set(null); show(); say("This phone is no longer paired. Pair it again.", true); polling = false; return }
+      if (!r.ok) throw new Error("status " + r.status)
       const s = await r.json()
+      missed = 0
+      lastHeard = Date.now()
+      stale(false)
       $("air").textContent = s.on_air ? "On air" : "Off air"
       $("air").className = "air" + (s.on_air ? " on" : "")
       $("live").textContent = s.waiting_for_approval
@@ -216,7 +246,9 @@
           ? "Rehearsal: the screens are frozen. " + (s.live_verse ? "Rehearsing: " + s.live_verse : "")
           : (s.live_verse || "Nothing on screen")
       sources()
-    } catch {}
+    } catch {
+      if (++missed >= 2) stale(true)
+    }
     polling = false
     timer = setTimeout(poll, 2000)
   }
@@ -227,7 +259,7 @@
   const ACTIONS = { timer: ["Pause", "Resume"], camera: ["Hide", "Show"] }
   async function sources() {
     const box = $("sources")
-    const r = await fetch("/api/v1/live", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
+    const r = await timed("/api/v1/live", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
     const live = r && r.status === 200 ? await r.json().catch(() => null) : null
     lastLive = live
     await notices(live)
@@ -268,6 +300,7 @@
   async function doRequest(n, mode, btn) {
     const a = n.action, live = lastLive || {}
     btn.disabled = true
+    sending.add(btn)
     let why = null
     if (mode === "queue") {
       // Into the run of show for later, nothing shown; acting on the run of show this phone saw.
@@ -281,7 +314,7 @@
     const what = "\u201c" + (mode === "preview" ? "Preview " + a.value : mode === "queue" ? "Queue " + a.value : actionName(a, live)) + "\u201d"
     failed[n.id] = why ? what + " was not done: " + why + ". Answered Unable." : ""
     await post("notice_ack", pressId(), { id: n.id, state: why ? "unable" : "ready" }, why ? { why: what + ": " + why } : undefined).catch(() => {})
-    btn.disabled = false
+    sending.delete(btn); btn.disabled = staleNow
     poll()
   }
   const QUEUE_ROLES = ["present", "configure", "editor"]
@@ -290,7 +323,7 @@
     // Asked again every 10 s: the main desk may change this phone's role mid-service, and its notices
     // (a Timekeeper's reminders) must show without a reload (#411 phone QA). The last answer stays on a failure.
     if (!me || Date.now() - meAt > 10000) {
-      const r = await fetch("/api/v1/me", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
+      const r = await timed("/api/v1/me", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
       const now = r && r.ok ? await r.json().catch(() => null) : null
       if (now) { me = now; meAt = Date.now() }
     }
