@@ -195,7 +195,10 @@ public final class CameraService extends Service {
         if (nm == null) return;
         nm.createNotificationChannel(new NotificationChannel(CHANNEL_RESUME, "Send again after a restart", NotificationManager.IMPORTANCE_HIGH));
         Pairing p = Prefs.pairing(c);
-        PendingIntent open = PendingIntent.getActivity(c, 2, new Intent(c, MainActivity.class).putExtra(EXTRA_RESUME, true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        // MainActivity is exported: only a tap carrying this notification's own nonce starts sending.
+        String nonce = Lifecycle.nonce(new java.security.SecureRandom());
+        Prefs.get(c).edit().putString(Prefs.RESUME_NONCE, nonce).commit();
+        PendingIntent open = PendingIntent.getActivity(c, 2, new Intent(c, MainActivity.class).putExtra(EXTRA_RESUME, nonce).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         nm.notify(RESUME_NOTE_ID, new Notification.Builder(c, CHANNEL_RESUME)
                 .setSmallIcon(R.drawable.ic_stat)
@@ -210,6 +213,7 @@ public final class CameraService extends Service {
     static void cancelResumeNote(Context c) {
         NotificationManager nm = (NotificationManager) c.getSystemService(NOTIFICATION_SERVICE);
         if (nm != null) nm.cancel(RESUME_NOTE_ID);
+        Prefs.get(c).edit().remove(Prefs.RESUME_NONCE).apply();
     }
 
     @Override

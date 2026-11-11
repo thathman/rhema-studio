@@ -29,6 +29,24 @@ final class Lifecycle {
         return sdk >= BACKGROUND_CAMERA_LIMIT_SDK ? ASK : START;
     }
 
+    /**
+     * Whether a "Tap to send again" opening of the app may start sending: only with the nonce this
+     * app put in its own notification (MainActivity is exported, so another app could send the
+     * extra), and only while it was sending before the restart and resuming is on.
+     */
+    static boolean resumeTap(String given, String kept, boolean paired, boolean wasSending, boolean resumeOn) {
+        if (given == null || kept == null || kept.length() < 32 || given.length() != kept.length()) return false;
+        if (!java.security.MessageDigest.isEqual(given.getBytes(java.nio.charset.StandardCharsets.UTF_8), kept.getBytes(java.nio.charset.StandardCharsets.UTF_8))) return false;
+        return resume(0, paired, wasSending, resumeOn) != NONE;
+    }
+
+    /** A fresh nonce for one resume notification: 32 random hex characters. */
+    static String nonce(java.security.SecureRandom random) {
+        byte[] b = new byte[16];
+        random.nextBytes(b);
+        return Pairing.hex(b);
+    }
+
     static final int FORBIDDEN_TIMES = 3;
     static final int REFUSED_TIMES = 6;
 

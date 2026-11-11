@@ -44,7 +44,9 @@ Version 1.4.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) an
   sends again by itself; from Android 11 Android does not let a background app open the camera, so a
   notification says **Tap to send again**. Settings → Connection → **Send again after a restart** turns
   this off. A stop you make (hold the dot, Stop sending, the notification's Stop) is never undone by a
-  restart.
+  restart. The viewfinder is exported (for pairing links), so the tap carries a random one-time nonce
+  kept in the app's private settings: another app opening the viewfinder with a "resume" extra cannot
+  start sending, and the tap resumes only while it is still wanted (paired, was sending, setting on).
 - **Removed or given a new link** (#836): when Rhema Studio answers three times running that it does
   not know this camera (its tally reply is 403), or its camera router refuses the camera's sign-in six
   times running while Rhema has not said it knows the camera, the app stops, shows **NOT SENDING** with

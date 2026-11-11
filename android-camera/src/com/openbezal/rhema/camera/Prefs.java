@@ -49,6 +49,8 @@ final class Prefs {
     static final String WAS_SENDING = "was_sending";
     /** Resume sending after the phone restarts or Android ends the app (on unless turned off; #836). */
     static final String RESUME = "resume_after_restart";
+    /** The nonce in the current "Tap to send again" notification (#836); only that tap may start sending. */
+    static final String RESUME_NONCE = "resume_nonce";
     /** Follow the quality Rhema Studio suggests for this camera (on unless turned off; #838). */
     static final String FOLLOW_HOST = "follow_host_quality";
     /** Rhema Studio's suggestion as it last said it (#838): height and Mbit/s (0: none) and in words. */

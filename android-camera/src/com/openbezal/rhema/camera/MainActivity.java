@@ -333,11 +333,17 @@ public final class MainActivity extends Activity {
     /** A pairing link opened from the phone's QR scanner or a message: ask, then keep it. */
     private void handlePairing(Intent intent) {
         // "Tap to send again" after a restart (#836).
-        if (intent != null && intent.getBooleanExtra(CameraService.EXTRA_RESUME, false)) {
+        // This activity is exported: only the nonce from this app's own notification counts, once.
+        String given = intent == null ? null : intent.getStringExtra(CameraService.EXTRA_RESUME);
+        if (given != null) {
             intent.removeExtra(CameraService.EXTRA_RESUME);
-            CameraService.cancelResumeNote(this);
-            resumeAsked = true;
-            if (service != null) resumeNow();
+            String kept = prefs.getString(Prefs.RESUME_NONCE, null);
+            boolean ok = Lifecycle.resumeTap(given, kept, Prefs.pairing(this) != null, prefs.getBoolean(Prefs.WAS_SENDING, false), prefs.getBoolean(Prefs.RESUME, true));
+            if (ok) {
+                CameraService.cancelResumeNote(this);
+                resumeAsked = true;
+                if (service != null) resumeNow();
+            }
         }
         // A look or exposure mode chosen by name, for checking from a computer (am start … --es look cinematic --es ae auto --es preset smooth30).
         String look = intent == null ? null : intent.getStringExtra("look");
@@ -498,7 +504,9 @@ public final class MainActivity extends Activity {
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return;
         resumeAsked = false;
         autoStartDone = true;
-        if (!service.sending && Prefs.pairing(this) != null) startSending();
+        // Still wanted: paired, it was sending before the restart, and resuming is on.
+        if (Lifecycle.resume(Build.VERSION.SDK_INT, Prefs.pairing(this) != null, prefs.getBoolean(Prefs.WAS_SENDING, false), prefs.getBoolean(Prefs.RESUME, true)) == Lifecycle.NONE) return;
+        if (!service.sending) startSending();
     }
 
     private void autoStart() {

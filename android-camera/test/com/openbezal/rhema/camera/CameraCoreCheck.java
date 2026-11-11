@@ -88,6 +88,12 @@ public final class CameraCoreCheck {
         check("resume: not when it was not sending", Lifecycle.resume(29, true, false, true) == Lifecycle.NONE);
         check("resume: not when turned off", Lifecycle.resume(29, true, true, false) == Lifecycle.NONE);
         check("resume: not when unpaired", Lifecycle.resume(34, false, true, true) == Lifecycle.NONE);
+        String n = Lifecycle.nonce(new java.security.SecureRandom());
+        check("resume tap: a nonce is 32 hex characters, fresh each time", n.length() == 32 && Pairing.hex(Pairing.unhex(n)).equals(n) && !n.equals(Lifecycle.nonce(new java.security.SecureRandom())));
+        check("resume tap: this notification's nonce resumes", Lifecycle.resumeTap(n, n, true, true, true));
+        check("resume tap: another app's intent cannot (no nonce, wrong, or nothing kept)", !Lifecycle.resumeTap(null, n, true, true, true) && !Lifecycle.resumeTap("true", n, true, true, true)
+                && !Lifecycle.resumeTap(n.replace(n.charAt(0), n.charAt(0) == 'a' ? 'b' : 'a'), n, true, true, true) && !Lifecycle.resumeTap(n, null, true, true, true) && !Lifecycle.resumeTap("", "", true, true, true));
+        check("resume tap: not when no longer wanted", !Lifecycle.resumeTap(n, n, true, false, true) && !Lifecycle.resumeTap(n, n, true, true, false) && !Lifecycle.resumeTap(n, n, false, true, true));
         check("removed: two 403s keep trying", Lifecycle.removed(2, 0, false) == null);
         check("removed: three 403s running stop it, saying why", Lifecycle.removed(3, 0, true) != null && Lifecycle.removed(3, 0, true).contains("removed"));
         check("removed: the router refusing six times stops it", Lifecycle.removed(0, 6, false) != null && Lifecycle.removed(0, 5, false) == null);
