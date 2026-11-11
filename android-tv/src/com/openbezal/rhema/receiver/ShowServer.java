@@ -26,7 +26,8 @@ import java.util.concurrent.TimeUnit;
  * the plain {"url","proof"} of 1.2 is refused); and (#213, 1.1) GET /status →
  * {"ok","name","feed","problem"} (and, 1.5, "width","height": the display's size): the id of the
  * feed shown, never its secret link; 1.7 adds "hz", the display's refresh rate; and (#849, 1.7)
- * GET or POST /identify → {"ok","name"}: the TV shows its name for a few seconds. Small bodies
+ * GET or POST /identify → {"ok","name"} (403 over another computer's feed, 429 when just
+ * identified; IdentifyGate): the TV shows its name for a few seconds. Small bodies
  * only; nothing else is served.
  *
  * Any device on the network can reach this port, so (1.3): a few requests are served at a time and
@@ -146,12 +147,15 @@ final class ShowServer extends Thread {
             // 1.7, Identify TV (#849): the TV's name, big, for a few seconds. It shows nothing secret and
             // changes nothing, so it needs no code; a body, if any, is not read. Over a feed, only the
             // computer that sent it may ask (no one else puts words over a service).
-            String name = app.identify(c.getInetAddress().getHostAddress());
+            String[] why = new String[1];
+            int[] refused = new int[1];
+            String name = app.identify(c.getInetAddress().getHostAddress(), why, refused);
             if (name != null) {
                 reply.put("ok", true).put("name", name);
             } else {
-                status = 403;
-                reply.put("ok", false).put("error", "This TV is showing a feed: only the Rhema Studio that sent it can identify it");
+                // 403: not the computer that sent the feed shown; 429: identified moments ago (IdentifyGate).
+                status = refused[0];
+                reply.put("ok", false).put("error", why[0]);
             }
         } else if (!post) {
             status = 404;

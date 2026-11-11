@@ -144,7 +144,6 @@ public class MainActivity extends Activity {
     private int insetShown = -1;
     /** Identify TV (#849): the TV's name, big, for a few seconds. */
     private TextView ident;
-    private static final long IDENT_MS = 6_000;
     /** The display's refresh rate (Hz), for GET /status. */
     private volatile float displayHz;
     /** At this start: the last boot's launch was refused by the TV (#834). */
@@ -175,7 +174,7 @@ public class MainActivity extends Activity {
         panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setGravity(Gravity.CENTER_HORIZONTAL);
-        panel.setBackgroundColor(Color.argb(230, 0, 0, 0));
+        panel.setBackgroundColor(PANEL_BLACK);
         panel.setPadding(80, 48, 80, 60);
         LinearLayout.LayoutParams logoSize = new LinearLayout.LayoutParams((int) (360 * dp), -2);
         logoSize.bottomMargin = (int) (16 * dp);
@@ -218,7 +217,7 @@ public class MainActivity extends Activity {
         ident.setTextColor(Color.WHITE);
         ident.setTextSize(64);
         ident.setGravity(Gravity.CENTER);
-        ident.setBackgroundColor(Color.argb(235, 20, 60, 140));
+        ident.setBackgroundColor(IDENT_BLUE);
         ident.setPadding((int) (48 * dp), (int) (28 * dp), (int) (48 * dp), (int) (28 * dp));
         ident.setVisibility(View.GONE);
 
@@ -807,31 +806,53 @@ public class MainActivity extends Activity {
 
     /**
      * Identify TV (#849, from the server thread): this TV's name and address, big, for a few seconds,
-     * so someone at the main computer can tell which TV in the room is which. Asked again meanwhile,
-     * it stays up longer; nothing else changes. While a feed shows, only the computer that sent it
-     * may ask (anyone else gets null), so no other device on the network puts words over a service.
+     * so someone at the main computer can tell which TV in the room is which. Any device can reach
+     * this, so (IdentifyGate) a flash is never extended, is followed by a quiet spell, and each
+     * computer may ask once per 10 s; and while a feed shows, only the computer that sent it may ask,
+     * so no other device puts words over a service. The pairing code is never covered: with the code
+     * screen up, the code screen itself lights up instead. Returns the name, or null with why[0] and
+     * the HTTP status in status[0].
      */
-    String identify(String peer) {
+    String identify(String peer, String[] why, int[] status) {
         String from = prefs.getString("host", null);
         // A feed sent before 1.7 has no sender kept: send it again to identify the TV over it.
-        if (shown() != null && (from == null || !from.equals(peer))) return null;
+        if (shown() != null && (from == null || !from.equals(peer))) {
+            status[0] = 403;
+            why[0] = "This TV is showing a feed: only the Rhema Studio that sent it can identify it";
+            return null;
+        }
+        if (!identifyGate.allow(peer, SystemClock.elapsedRealtime())) {
+            status[0] = 429;
+            why[0] = "This TV was just identified: try again in a few seconds";
+            return null;
+        }
         ui.post(new Runnable() {
             @Override
             public void run() {
-                String ip = address();
-                ident.setText(name() + (ip == null ? "" : "\n" + ip));
-                ident.setVisibility(View.VISIBLE);
+                if (panel.getVisibility() == View.VISIBLE) {
+                    // The code screen already says the TV's name: light it up, the code stays readable.
+                    panel.setBackgroundColor(IDENT_BLUE);
+                } else {
+                    String ip = address();
+                    ident.setText(name() + (ip == null ? "" : "\n" + ip));
+                    ident.setVisibility(View.VISIBLE);
+                }
                 ui.removeCallbacks(identOff);
-                ui.postDelayed(identOff, IDENT_MS);
+                ui.postDelayed(identOff, IdentifyGate.SHOW_MS);
             }
         });
         return name();
     }
 
+    private static final int PANEL_BLACK = Color.argb(230, 0, 0, 0);
+    private static final int IDENT_BLUE = Color.argb(235, 20, 60, 140);
+    private final IdentifyGate identifyGate = new IdentifyGate();
+
     private final Runnable identOff = new Runnable() {
         @Override
         public void run() {
             ident.setVisibility(View.GONE);
+            panel.setBackgroundColor(PANEL_BLACK);
         }
     };
 
@@ -899,6 +920,8 @@ public class MainActivity extends Activity {
     /** The address and code; kept up until there is something to show, or for a while. */
     private void showInfo(boolean stay) {
         renderInfo();
+        // Identify TV never covers the code (#849): its overlay goes when the code screen comes up.
+        ident.setVisibility(View.GONE);
         panel.setVisibility(View.VISIBLE);
         codeOnScreen(true);
         ui.removeCallbacks(hide);
