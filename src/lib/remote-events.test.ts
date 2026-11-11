@@ -10,7 +10,6 @@ const EXPECTED_EVENT_NAMES = [
   "remote:show",
   "remote:hide",
   "remote:theme",
-  "remote:opacity",
   "remote:confidence",
   "remote:on_air",
   "remote:send_to_live",
@@ -56,8 +55,9 @@ const EXPECTED_EVENT_NAMES = [
 ]
 
 describe("REMOTE_EVENTS", () => {
-  it("has one entry per RemoteCommand variant", () => {
-    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(48)
+  it("has one entry per RemoteCommand variant that emits an event", () => {
+    // Opacity is refused by the dispatcher and emits nothing (#411), so it has none.
+    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(47)
   })
 
   it("matches the event names the Rust dispatcher emits", () => {

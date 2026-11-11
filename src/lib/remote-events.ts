@@ -17,7 +17,6 @@ export const REMOTE_EVENTS = {
   show: "remote:show",
   hide: "remote:hide",
   theme: "remote:theme",
-  opacity: "remote:opacity",
   confidence: "remote:confidence",
   on_air: "remote:on_air",
   send_to_live: "remote:send_to_live",

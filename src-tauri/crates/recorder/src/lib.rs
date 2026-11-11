@@ -542,6 +542,9 @@ impl Recorder {
             }
             return true;
         }
+        // The screen is back at the recording's size (#411 recorder hunt): its warning goes, or it
+        // stayed for good and hid a later "No picture" or "disk low". The skipped frames stay counted.
+        s.shared.clear_problem_if(ProblemCode::FrameSizeChanged);
         s.frame.clear();
         s.frame.extend_from_slice(rgba);
         send_frame(s, timing);
@@ -1500,6 +1503,19 @@ mod tests {
             audio: None,
             page_skipped: 0,
         }
+    }
+
+    #[test]
+    fn a_screen_back_at_the_recording_size_clears_its_size_warning() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        *rec.lock() = Some(stub_session(t.path()));
+        let code = |rec: &Recorder| rec.lock().as_ref().unwrap().shared.problem().map(|p| p.code);
+        assert!(rec.push_frame("sanctuary", 640, 360, &[0; 640 * 360 * 4], FrameTiming::default()));
+        assert_eq!(code(&rec), Some(ProblemCode::FrameSizeChanged));
+        assert!(rec.push_frame("sanctuary", 1280, 720, &[0; 1280 * 720 * 4], FrameTiming::default()));
+        assert_eq!(code(&rec), None, "back at size: no stale warning to hide later ones");
+        assert_eq!(rec.lock().as_ref().unwrap().shared.frames_dropped.load(Ordering::Relaxed), 1, "the skipped one stays counted");
     }
 
     #[test]
