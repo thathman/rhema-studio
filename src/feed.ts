@@ -17,6 +17,7 @@ import {
   pageClockSkew,
 } from "@/lib/feed-freshness"
 import { insetArea, lostView, overscanPct, type FeedLost } from "@/lib/feed-receivers"
+import { feedPageOutdated } from "@/lib/feed-page-version"
 import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
@@ -463,6 +464,7 @@ async function streamStopped(source: EventSource) {
   const r = await fetch(`/feed/${encodeURIComponent(id)}?k=${encodeURIComponent(key)}`, { cache: "no-store" }).catch(() => null)
   if (source !== events) return
   if (r?.status === 403) return location.reload()
+  if (r?.ok && feedPageOutdated(await r.text().catch(() => ""), import.meta.url)) return location.reload()
   if (reconnectTimer) clearTimeout(reconnectTimer)
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null
@@ -479,12 +481,22 @@ function restartEventSource() {
   eventSourceStartedAt = performance.now()
   listen(events)
 }
+/** Back after the host was gone (an update, a restart): a page from an older build loads the new one. */
+let lostSinceOpen = false
+async function reloadIfOutdated() {
+  const r = await fetch(`/feed/${encodeURIComponent(id)}?k=${encodeURIComponent(key)}`, { cache: "no-store" }).catch(() => null)
+  if (r?.ok && feedPageOutdated(await r.text().catch(() => ""), import.meta.url)) location.reload()
+}
 function listen(source: EventSource) {
   source.addEventListener("open", () => {
-    if (source === events) eventSourceStartedAt = performance.now()
+    if (source !== events) return
+    eventSourceStartedAt = performance.now()
+    if (lostSinceOpen) void reloadIfOutdated()
+    lostSinceOpen = false
   })
   source.addEventListener("error", () => {
     if (source !== events) return
+    lostSinceOpen = true
     freshness = feedConnectionLost(freshness)
     checkStale()
     if (source.readyState === EventSource.CLOSED) void streamStopped(source)
@@ -526,6 +538,7 @@ setInterval(() => {
   if (events.readyState !== EventSource.OPEN || !feedReconnectDue(freshness, now, eventSourceStartedAt)) return
   // A quiet OPEN socket can survive a lost Wi-Fi path without firing EventSource's error event.
   freshness = feedConnectionLost(freshness)
+  lostSinceOpen = true
   checkStale()
   restartEventSource()
 }, Math.min(1000, FEED_RECONNECT_AFTER_MS / 3))
