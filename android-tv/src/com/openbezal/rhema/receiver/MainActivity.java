@@ -244,6 +244,8 @@ public class MainActivity extends Activity {
                     // Revoked (1.5) or a new link: its kept picture goes too, and whatever it had shown.
                     forgetStill();
                     forgetReady();
+                    // The page's own "not valid" words must not show at the screen's edge behind ours.
+                    view.setVisibility(View.INVISIBLE);
                     problem = REVOKED;
                     showInfo(true);
                 } else {
@@ -255,6 +257,8 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 loads++;
+                // A refused link's page starts after its 403 (onReceivedHttpError): it stays hidden.
+                view.setVisibility(REVOKED.equals(problem) ? View.INVISIBLE : View.VISIBLE);
                 ui.removeCallbacks(hideStill);
                 ui.removeCallbacks(keepStill);
                 ui.removeCallbacks(noFrame);
