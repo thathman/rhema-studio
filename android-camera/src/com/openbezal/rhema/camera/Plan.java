@@ -181,6 +181,14 @@ final class Plan {
         return best > 0 ? best : smallest == Integer.MAX_VALUE ? chosen : smallest;
     }
 
+    /**
+     * Whether a suggested size change may restart the stream now (#838): only when Rhema says the
+     * camera is on no Program (tally 0). On air, or no word from Rhema, it waits.
+     */
+    static boolean resizeNow(int tally) {
+        return tally == 0;
+    }
+
     /** The bitrate under Rhema Studio's suggested ceiling (Mbit/s; 0: none). */
     static int suggestedBitrate(int want, int maxMbps) {
         return maxMbps > 0 ? (int) Math.min(want, maxMbps * 1000000L) : want;

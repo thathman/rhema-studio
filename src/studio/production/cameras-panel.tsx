@@ -270,7 +270,7 @@ function CamQuality({ cam }: { cam: CameraSource }) {
           {CAMERA_QUALITIES.map((q) => <option key={q.id} value={q.id}>{q.label}</option>)}
         </select>
       </label>
-      <p className="text-muted-foreground">{detail} The phone takes it within a few seconds while it sends (Rhema Studio Cam 1.4 or newer, unless it is set not to follow); the camera page and other apps keep their own.</p>
+      <p className="text-muted-foreground">{detail} The phone takes it within a few seconds while it sends (Rhema Studio Cam 1.4 or newer, unless it is set not to follow): a lower bitrate at once, but a smaller picture only while this camera is on no Program, because changing the size restarts its stream. The camera page and other apps keep their own.</p>
     </div>
   )
 }

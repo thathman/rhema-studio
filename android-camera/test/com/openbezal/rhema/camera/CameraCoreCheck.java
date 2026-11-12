@@ -83,21 +83,28 @@ public final class CameraCoreCheck {
 
     /** #836: sending again after a restart, and stopping when Rhema no longer knows the camera. */
     static void lifecycle() {
-        check("resume: Android 10 sends again by itself", Lifecycle.resume(29, true, true, true) == Lifecycle.START);
+        check("resume: off by default on Android 10 and older, on from 11", !Lifecycle.resumeDefault(29) && Lifecycle.resumeDefault(30) && Lifecycle.resumeDefault(34));
+        check("resume: Android 10 goes live by itself only when turned on", Lifecycle.resume(29, true, true, true) == Lifecycle.START);
+        check("resume: Android 10 by default asks with a notification", Lifecycle.resume(29, true, true, Lifecycle.resumeDefault(29)) == Lifecycle.ASK);
         check("resume: Android 11 and newer ask with a notification", Lifecycle.resume(30, true, true, true) == Lifecycle.ASK && Lifecycle.resume(34, true, true, true) == Lifecycle.ASK);
-        check("resume: not when it was not sending", Lifecycle.resume(29, true, false, true) == Lifecycle.NONE);
-        check("resume: not when turned off", Lifecycle.resume(29, true, true, false) == Lifecycle.NONE);
-        check("resume: not when unpaired", Lifecycle.resume(34, false, true, true) == Lifecycle.NONE);
+        check("resume: Android 11 turned off, nothing", Lifecycle.resume(34, true, true, false) == Lifecycle.NONE);
+        check("resume: not when it was not sending", Lifecycle.resume(29, true, false, true) == Lifecycle.NONE && Lifecycle.resume(34, true, false, true) == Lifecycle.NONE);
+        check("resume: not when unpaired", Lifecycle.resume(34, false, true, true) == Lifecycle.NONE && Lifecycle.resume(29, false, true, false) == Lifecycle.NONE);
         String n = Lifecycle.nonce(new java.security.SecureRandom());
         check("resume tap: a nonce is 32 hex characters, fresh each time", n.length() == 32 && Pairing.hex(Pairing.unhex(n)).equals(n) && !n.equals(Lifecycle.nonce(new java.security.SecureRandom())));
-        check("resume tap: this notification's nonce resumes", Lifecycle.resumeTap(n, n, true, true, true));
-        check("resume tap: another app's intent cannot (no nonce, wrong, or nothing kept)", !Lifecycle.resumeTap(null, n, true, true, true) && !Lifecycle.resumeTap("true", n, true, true, true)
-                && !Lifecycle.resumeTap(n.replace(n.charAt(0), n.charAt(0) == 'a' ? 'b' : 'a'), n, true, true, true) && !Lifecycle.resumeTap(n, null, true, true, true) && !Lifecycle.resumeTap("", "", true, true, true));
-        check("resume tap: not when no longer wanted", !Lifecycle.resumeTap(n, n, true, false, true) && !Lifecycle.resumeTap(n, n, true, true, false) && !Lifecycle.resumeTap(n, n, false, true, true));
-        check("removed: two 403s keep trying", Lifecycle.removed(2, 0, false) == null);
-        check("removed: three 403s running stop it, saying why", Lifecycle.removed(3, 0, true) != null && Lifecycle.removed(3, 0, true).contains("removed"));
-        check("removed: the router refusing six times stops it", Lifecycle.removed(0, 6, false) != null && Lifecycle.removed(0, 5, false) == null);
-        check("removed: not while Rhema says it knows the camera", Lifecycle.removed(0, 12, true) == null);
+        check("resume tap: this notification's nonce resumes", Lifecycle.resumeTap(n, n, 34, true, true, true) && Lifecycle.resumeTap(n, n, 29, true, true, false));
+        check("resume tap: another app's intent cannot (no nonce, wrong, or nothing kept)", !Lifecycle.resumeTap(null, n, 34, true, true, true) && !Lifecycle.resumeTap("true", n, 34, true, true, true)
+                && !Lifecycle.resumeTap(n.replace(n.charAt(0), n.charAt(0) == 'a' ? 'b' : 'a'), n, 34, true, true, true) && !Lifecycle.resumeTap(n, null, 34, true, true, true) && !Lifecycle.resumeTap("", "", 34, true, true, true));
+        check("resume tap: not when no longer wanted", !Lifecycle.resumeTap(n, n, 34, true, false, true) && !Lifecycle.resumeTap(n, n, 34, true, true, false) && !Lifecycle.resumeTap(n, n, 34, false, true, true));
+        check("removed: two 403s keep trying", Lifecycle.removed(2, 0, true, false) == null);
+        check("removed: three 403s running stop it, saying why", Lifecycle.removed(3, 0, true, true) != null && Lifecycle.removed(3, 0, true, true).contains("removed"));
+        check("removed: sign-in refused for 90 s stops it", Lifecycle.removed(0, 90000, true, false) != null);
+        check("removed: sign-in refused for less (six quick retries are about 31 s) keeps trying", Lifecycle.removed(0, 31000, true, false) == null && Lifecycle.removed(0, 89999, true, false) == null);
+        check("removed: never from the router alone without a tally", Lifecycle.removed(0, 3600000, false, false) == null);
+        check("removed: not while Rhema says it knows the camera", Lifecycle.removed(0, 3600000, true, true) == null);
+        // #838: a suggested size restarts the stream only off air, with word from Rhema.
+        check("resize: off air, now", Plan.resizeNow(0));
+        check("resize: on air or no word from Rhema, it waits", !Plan.resizeNow(CamAction.ONLINE) && !Plan.resizeNow(CamAction.CONGREGATION) && !Plan.resizeNow(CamAction.ONLINE | CamAction.CONGREGATION) && !Plan.resizeNow(CamAction.TALLY_UNKNOWN));
     }
 
     /** #837: the viewfinder's heat and battery badge. */

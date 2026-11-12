@@ -73,6 +73,11 @@ final class Prefs {
         return BITRATE.equals(key) || SUGGEST_MBPS.equals(key);
     }
 
+    /** Send again after a restart (#836): as set, else Lifecycle.resumeDefault for this Android. */
+    static boolean resumeOn(SharedPreferences p) {
+        return p.getBoolean(RESUME, Lifecycle.resumeDefault(android.os.Build.VERSION.SDK_INT));
+    }
+
     /** Rhema Studio's suggestion (#838) when this phone follows it: {height, Mbit/s}, 0 for none. */
     static int[] suggestion(SharedPreferences p) {
         if (!p.getBoolean(FOLLOW_HOST, true)) return new int[] {0, 0};

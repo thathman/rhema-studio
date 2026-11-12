@@ -376,9 +376,11 @@ public final class SettingsActivity extends Activity {
         });
         c.addView(buttons, Ui.wide());
         toggle(c, "Start sending when the app opens", "Open Rhema Studio Cam on the stand and it goes live by itself.", Prefs.AUTO_START, true, false);
-        toggle(c, "Send again after a restart", Build.VERSION.SDK_INT >= Lifecycle.BACKGROUND_CAMERA_LIMIT_SDK
-                ? "If it was sending when the phone restarted, a notification asks for one tap to send again (Android does not let an app open the camera by itself after a restart)."
-                : "If it was sending when the phone restarted or Android closed the app, it sends again by itself.", Prefs.RESUME, true, false);
+        toggle(c, Build.VERSION.SDK_INT >= Lifecycle.BACKGROUND_CAMERA_LIMIT_SDK ? "Offer to send again after a restart" : "Send again by itself after a restart",
+                Build.VERSION.SDK_INT >= Lifecycle.BACKGROUND_CAMERA_LIMIT_SDK
+                ? "If it was sending when the phone restarted or the app was updated, a notification asks for one tap to send again (Android does not let an app open the camera by itself after a restart)."
+                : "Off (the default): if it was sending when the phone restarted or the app was updated, a notification asks for one tap to send again. On: it goes live again by itself, with nobody touching the phone.",
+                Prefs.RESUME, Lifecycle.resumeDefault(Build.VERSION.SDK_INT), false);
         if (p != null) {
             LinearLayout adv = fold(c, "connection");
             note(adv, "Sends RTSP over TLS (RTSPS) to " + p.url() + " as " + p.user + ", picture and sound interleaved over TCP. Only Rhema's certificate is accepted (SHA-256 " + p.fp.substring(0, 16) + "…); there is no unencrypted fallback.");

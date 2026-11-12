@@ -40,22 +40,28 @@ Version 1.4.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) an
 ## Restarts, removal and Rhema Studio's suggested quality (1.4)
 
 - **Restarts** (#836): the sending service is sticky, so if Android ends the app while it sends, it is
-  started again. After the phone restarts (or the app is updated) while it was sending, Android 8–10
-  sends again by itself; from Android 11 Android does not let a background app open the camera, so a
-  notification says **Tap to send again**. Settings → Connection → **Send again after a restart** turns
-  this off. A stop you make (hold the dot, Stop sending, the notification's Stop) is never undone by a
-  restart. The viewfinder is exported (for pairing links), so the tap carries a random one-time nonce
-  kept in the app's private settings: another app opening the viewfinder with a "resume" extra cannot
-  start sending, and the tap resumes only while it is still wanted (paired, was sending, setting on).
+  started again. After the phone restarts or the app is updated while it was sending, a notification
+  says it was sending "when the phone restarted" / "when the app was updated" · **Tap to send again**.
+  From Android 11 that is all Android allows (a background app may not open the camera); Settings →
+  Connection → **Offer to send again after a restart** (on) turns the notification off. On Android 8–10
+  the notification is the default too; only if the person turns **Send again by itself after a
+  restart** on (off by default) does the camera go live again with nobody touching the phone. A stop
+  you make (hold the dot, Stop sending, the notification's Stop) is never undone by a restart. The
+  viewfinder is exported (for pairing links), so the tap carries a random one-time nonce kept in the
+  app's private settings: another app opening the viewfinder with a "resume" extra cannot start
+  sending, and the tap resumes only while it is still wanted (paired, was sending, setting allows).
 - **Removed or given a new link** (#836): when Rhema Studio answers three times running that it does
-  not know this camera (its tally reply is 403), or its camera router refuses the camera's sign-in six
-  times running while Rhema has not said it knows the camera, the app stops, shows **NOT SENDING** with
-  the reason, and does not resume after a restart. Just after Rhema starts (before it has its camera
-  list) it answers 503, which is not counted.
+  not know this camera (its tally reply is 403; any other answer, or no answer, breaks the run), the
+  app stops, shows **NOT SENDING** with the reason, and does not resume after a restart. Fallback when
+  the tally cannot be read: the camera router has refused its sign-in (401 only; never a 400, 404 or
+  503 while the router restarts) for at least 90 s with no success between, and Rhema has not said in
+  the last minute that it knows the camera. A pairing link without a report port never stops on the
+  router alone. Just after Rhema starts (before it has its camera list) it answers 503, not counted.
 - **Suggested quality** (#838): Live → Production tools → Cameras → **Quality for Rhema Studio Cam**
   per camera: The phone decides, **TV-friendly 720p, lower bitrate** (at most 720p, 4 Mbit/s), 1080p
   moderate (8 Mbit/s) or Light 720p (2 Mbit/s). It comes with the tally (every 2 s) and is a ceiling
-  over the size and bitrate set on the phone; it changes only the bitrate when the size can stay.
+  over the size and bitrate set on the phone. A lower bitrate applies at once; a smaller size restarts
+  the stream, so it waits until Rhema says the camera is on no Program (not online, not on a TV).
   Settings → Picture shows it and has **Follow Rhema Studio's suggested quality** (on).
 
 ## The look

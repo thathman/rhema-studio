@@ -4729,6 +4729,12 @@ mod tests {
         cameras.set_info(vec![("pulpit".into(), crate::cameras::CameraInfo::new("Pulpit", Some("tv720")))]);
         let named = send("/api/v1/camera/pulpit/tally", "Authorization: Bearer 0123456789abcdef\r\n").await;
         assert!(named.contains(r#""name":"Pulpit""#) && named.contains(r#""height":720"#) && named.contains(r#""mbps":4"#) && named.contains(r#""online":false"#), "{named}");
+        // A Cam before 1.4 finds its tally by substring with the spaces taken out: a label can never
+        // make it read "online":true (its quotes are escaped, so a backslash always breaks the match).
+        cameras.set_info(vec![("pulpit".into(), crate::cameras::CameraInfo::new(r#"x" online" :true "congregation":true"#, None))]);
+        let tricky = send("/api/v1/camera/pulpit/tally", "Authorization: Bearer 0123456789abcdef\r\n").await.replace(' ', "");
+        assert!(!tricky.contains(r#""online":true"#) && !tricky.contains(r#""congregation":true"#) && tricky.contains(r#""online":false"#), "{tricky}");
+        cameras.set_info(vec![("pulpit".into(), crate::cameras::CameraInfo::new("Pulpit", Some("tv720")))]);
         let desk = "d".repeat(64);
         cameras.sync_readers(&[(desk.clone(), "Media desk".into())]);
         assert!(cameras.set_tally(&desk, crate::cameras::Tally { program: vec!["pulpit".into()], ..crate::cameras::Tally::default() }));

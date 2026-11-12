@@ -338,7 +338,7 @@ public final class MainActivity extends Activity {
         if (given != null) {
             intent.removeExtra(CameraService.EXTRA_RESUME);
             String kept = prefs.getString(Prefs.RESUME_NONCE, null);
-            boolean ok = Lifecycle.resumeTap(given, kept, Prefs.pairing(this) != null, prefs.getBoolean(Prefs.WAS_SENDING, false), prefs.getBoolean(Prefs.RESUME, true));
+            boolean ok = Lifecycle.resumeTap(given, kept, Build.VERSION.SDK_INT, Prefs.pairing(this) != null, prefs.getBoolean(Prefs.WAS_SENDING, false), Prefs.resumeOn(prefs));
             if (ok) {
                 CameraService.cancelResumeNote(this);
                 resumeAsked = true;
@@ -505,7 +505,7 @@ public final class MainActivity extends Activity {
         resumeAsked = false;
         autoStartDone = true;
         // Still wanted: paired, it was sending before the restart, and resuming is on.
-        if (Lifecycle.resume(Build.VERSION.SDK_INT, Prefs.pairing(this) != null, prefs.getBoolean(Prefs.WAS_SENDING, false), prefs.getBoolean(Prefs.RESUME, true)) == Lifecycle.NONE) return;
+        if (Lifecycle.resume(Build.VERSION.SDK_INT, Prefs.pairing(this) != null, prefs.getBoolean(Prefs.WAS_SENDING, false), Prefs.resumeOn(prefs)) == Lifecycle.NONE) return;
         if (!service.sending) startSending();
     }
 
