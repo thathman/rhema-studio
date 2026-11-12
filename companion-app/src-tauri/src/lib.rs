@@ -155,7 +155,7 @@ mod resolve_tests {
     fn an_address_is_itself_and_nonsense_is_nothing() {
         assert_eq!(resolve("192.168.1.20"), vec!["192.168.1.20".to_string()]);
         assert_eq!(resolve("[::1]"), vec!["::1".to_string()]);
-        assert!(resolve("").is_empty());
-        assert!(resolve("host/../x").is_empty());
+        assert_eq!(resolve(""), Vec::<String>::new());
+        assert_eq!(resolve("host/../x"), Vec::<String>::new());
     }
 }
