@@ -1437,6 +1437,7 @@ where
         .route("/api/v1/feed/{id}/media/{file}", get(feed_media_handler::<S>))
         .route("/assets/{*path}", get(asset_handler::<S>))
         .route("/remote", get(remote_page))
+        .route("/desk", get(desk_page_handler::<S>))
         .route("/camera", get(camera_page_handler::<S>))
         .route("/api/v1/camera/{name}/whip", post(camera_whip_handler::<S>))
         .route("/api/v1/camera/{name}/whip/{session}", axum::routing::patch(camera_session_handler::<S>).delete(camera_session_handler::<S>))
@@ -1689,7 +1690,7 @@ fn host_trusted(host: &str, ports: &[u16]) -> bool {
 /// and the status and health answers: their `Host` is checked
 /// even without an `Origin`, since a rebound page's same-origin read sends none.
 fn browser_page(path: &str) -> bool {
-    matches!(path, "/remote" | "/camera" | "/api/v1/status" | "/api/v1/health") || ["/feed/", "/assets/", "/api/v1/feed/", "/api/v1/camera/"].iter().any(|p| path.starts_with(p))
+    matches!(path, "/remote" | "/desk" | "/camera" | "/api/v1/status" | "/api/v1/health") || ["/feed/", "/assets/", "/api/v1/feed/", "/api/v1/camera/"].iter().any(|p| path.starts_with(p))
 }
 
 /// Refuse a request a browser sent for another web page: its `Origin` is neither this listener's
@@ -1729,6 +1730,34 @@ async fn remote_page() -> impl IntoResponse {
         ],
         axum::response::Html(include_str!("remote.html")),
     )
+}
+
+/// The browser operator desk's security policy (#845 G1): its own built scripts and styles only
+/// (inline style attributes for the blocks' layout), and network only to this listener. Nothing
+/// frames it, nothing it loads is sent elsewhere, and it never asks for the camera or microphone.
+const DESK_CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+/// `GET /desk`: the browser operator desk (#845 G1), the app's own built `desk.html`, for a laptop,
+/// tablet or phone on the church network with nothing installed. Static like `/remote`, so serving
+/// it needs no key: the page pairs with the same code, and every read and command it makes is
+/// checked by its key and role exactly as a joined desk's are.
+async fn desk_page_handler<S: CommandSink + 'static>(AxumState(state): AxumState<Arc<AppState<S>>>) -> axum::response::Response {
+    match state.sink.asset("desk.html") {
+        Some((bytes, _)) => (
+            [
+                (axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                (axum::http::header::CACHE_CONTROL, "no-store"),
+                (axum::http::header::X_FRAME_OPTIONS, "DENY"),
+                (axum::http::header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+                (axum::http::header::REFERRER_POLICY, "no-referrer"),
+                (axum::http::header::CONTENT_SECURITY_POLICY, DESK_CSP),
+                (axum::http::header::HeaderName::from_static("permissions-policy"), "camera=(), microphone=(), geolocation=()"),
+            ],
+            bytes,
+        )
+            .into_response(),
+        None => (StatusCode::NOT_FOUND, "The browser desk is not in this build of Rhema Studio.").into_response(),
+    }
 }
 
 /// The status as this key may read it, built up from nothing so a new field stays private until
@@ -4080,6 +4109,8 @@ mod tests {
             match path {
                 "feed.html" => Some((b"<html>feed page</html>".to_vec(), "text/html".into())),
                 "assets/feed.js" => Some((b"console.log(1)".to_vec(), "text/javascript".into())),
+                "desk.html" => Some((b"<html>browser desk page</html>".to_vec(), "text/html".into())),
+                "assets/desk.js" => Some((b"console.log(2)".to_vec(), "text/javascript".into())),
                 _ => None,
             }
         }
@@ -5716,6 +5747,94 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_browser_desk_page_is_served_without_a_key_under_its_own_policy() {
+        let result = start_http_server(HttpConfig { port: 0, host: "127.0.0.1".into(), keys: key_set_from(&[("tok", "Laptop")]), ..Default::default() }, Arc::new(PageSink), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let page = raw(port, "GET /desk HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await;
+        assert!(page.starts_with("HTTP/1.1 200") && page.contains("browser desk page"), "{page}");
+        let head = page.to_lowercase();
+        assert!(head.contains("content-type: text/html"), "{page}");
+        assert!(head.contains("cache-control: no-store") && head.contains("x-frame-options: deny") && head.contains("x-content-type-options: nosniff") && head.contains("referrer-policy: no-referrer"), "{page}");
+        assert!(head.contains("permissions-policy: camera=(), microphone=(), geolocation=()"), "{page}");
+        let csp = head.lines().find(|l| l.starts_with("content-security-policy:")).expect("a policy").to_string();
+        for part in ["default-src 'none'", "script-src 'self';", "connect-src 'self'", "frame-ancestors 'none'", "form-action 'none'", "base-uri 'none'"] {
+            assert!(csp.contains(part), "{part} in {csp}");
+        }
+        // Only its own built scripts run: no inline script, nothing from elsewhere.
+        assert!(!csp.contains("script-src 'self' 'unsafe-inline'") && !csp.contains("http:") && !csp.contains("https:"), "{csp}");
+        // Its built scripts come from the same listener.
+        let script = raw(port, "GET /assets/desk.js HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await;
+        assert!(script.starts_with("HTTP/1.1 200") && script.contains("console.log(2)"), "{script}");
+        // Under another name (DNS rebinding), refused like the phone page.
+        let rebound = raw(port, "GET /desk HTTP/1.1\r\nHost: evil.example:{port}\r\nConnection: close\r\n\r\n").await;
+        assert!(rebound.starts_with("HTTP/1.1 421"), "{rebound}");
+        let mut h = result.handle;
+        h.stop();
+
+        // A build without the desk page says so rather than serving something else.
+        let bare = start_http_server(HttpConfig { port: 0, host: "127.0.0.1".into(), ..Default::default() }, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let missing = raw(bare.bound_port, "GET /desk HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await;
+        assert!(missing.starts_with("HTTP/1.1 404") && missing.contains("not in this build"), "{missing}");
+        let mut h = bare.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn a_browser_desk_reads_and_commands_only_as_its_key_and_role_allow() {
+        let entry = |key: &str, role, paused| crate::keys::KeyEntry { hash: crate::keys::hash_key(key), name: format!("{key} desk"), role, paused, output_scope: Vec::new(), group_take_scope: Vec::new(), record: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(crate::keys::Keys {
+            require_auth: true,
+            entries: vec![entry("bib", crate::keys::Role::Bible, false), entry("view", crate::keys::Role::Viewer, false), entry("tk", crate::keys::Role::Timekeeper, true)],
+        }));
+        let live = new_live_hub();
+        let sink = Arc::new(MockSink::new());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        live.publish(r#"{"v":1,"program":{"onAir":true,"reference":"John 3:16","rehearsal":false},"notices":[{"id":"n1","from":"Main desk","to":"timekeeper","text":"Pastor has 5 minutes"}]}"#.into());
+        // Every call the desk page makes carries its own origin and the key it paired with.
+        let read = |path: &str, key: &str| {
+            let request = format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{{port}}\r\nOrigin: http://127.0.0.1:{{port}}\r\n{key}Connection: close\r\n\r\n");
+            async move { raw(port, &request).await }
+        };
+        let command = |key: &str, body: &str| {
+            let request = format!("POST /api/v1/command HTTP/1.1\r\nHost: 127.0.0.1:{{port}}\r\nOrigin: http://127.0.0.1:{{port}}\r\nAuthorization: Bearer {key}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+            async move { raw(port, &request).await }
+        };
+
+        // Unpaired, or a key the host does not know: nothing about the service.
+        assert!(read("/api/v1/me", "").await.starts_with("HTTP/1.1 401"));
+        assert!(read("/api/v1/live", "Authorization: Bearer nope\r\n").await.starts_with("HTTP/1.1 401"));
+        // Paired: who it is, and the Live State without another role's private notices.
+        let me = read("/api/v1/me", "Authorization: Bearer bib\r\n").await;
+        assert!(me.starts_with("HTTP/1.1 200") && me.contains("\"role\":\"bible\"") && me.contains("\"paused\":false"), "{me}");
+        let state = read("/api/v1/live", "Authorization: Bearer bib\r\n").await;
+        assert!(state.starts_with("HTTP/1.1 200") && state.contains("John 3:16") && !state.contains("Pastor has 5 minutes"), "{state}");
+
+        // The Bible desk steps the verse; it cannot move the service, and View only changes nothing.
+        assert!(command("bib", r#"{"command":"verse_next","id":"d-1"}"#).await.starts_with("HTTP/1.1 200"));
+        assert_eq!(sink.command_count(), 1);
+        assert!(command("bib", r#"{"command":"next","id":"d-2"}"#).await.starts_with("HTTP/1.1 403"));
+        assert!(command("view", r#"{"command":"verse_next","id":"d-3"}"#).await.starts_with("HTTP/1.1 403"));
+        assert_eq!(sink.command_count(), 1, "a refused command does nothing");
+        // A paused desk still reads, and its commands wait (423), as a joined desk's do.
+        assert!(read("/api/v1/me", "Authorization: Bearer tk\r\n").await.contains("\"paused\":true"));
+        assert!(command("tk", r#"{"command":"event_next","id":"d-4"}"#).await.starts_with("HTTP/1.1 423"));
+        assert_eq!(sink.command_count(), 1);
+
+        // Revoked on the host: the same page is unpaired at once.
+        keys.write().unwrap().entries.retain(|e| e.hash != crate::keys::hash_key("bib"));
+        assert!(read("/api/v1/me", "Authorization: Bearer bib\r\n").await.starts_with("HTTP/1.1 401"));
+        assert!(command("bib", r#"{"command":"verse_next","id":"d-5"}"#).await.starts_with("HTTP/1.1 401"));
+        assert_eq!(sink.command_count(), 1);
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
     async fn command_endpoint_dispatches_command() {
         let sink = Arc::new(MockSink::new());
         let status = new_shared_status();
@@ -6519,7 +6638,7 @@ mod tests {
             assert!(!host_trusted(bad, &ports), "{bad}");
         }
         assert!(browser_page("/feed/l3") && browser_page("/remote") && browser_page("/camera") && browser_page("/assets/feed.js") && browser_page("/api/v1/feed/l3/events") && browser_page("/api/v1/camera/pulpit/whip"));
-        assert!(browser_page("/api/v1/status") && browser_page("/api/v1/health"));
+        assert!(browser_page("/api/v1/status") && browser_page("/api/v1/health") && browser_page("/desk"));
         assert!(!browser_page("/api/v1/command") && !browser_page("/api/v1/live") && !browser_page("/remotes"));
     }
 
