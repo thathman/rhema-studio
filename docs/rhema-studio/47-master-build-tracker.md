@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.1.0.3 · 12 Nov 2026 · main `c01a8534`**
+**Version 1.1.0.4 · 12 Nov 2026 · main `96dc47cf`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -36,7 +36,7 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 
 | Area | Status | Evidence / next |
 | --- | --- | --- |
-| Six destinations, Prepare, Preview/Take, Library, Design, History | AUTOMATED TESTED | All native journeys passed on the Intel Mac host against a release build of `b390ef8b` with a fresh profile, 11 Nov: Home, hymn (Prepare add, edit, save, reopen, Send to Live Preview, with Live untouched), scene save, failed Take, and the Live empty, configured and Find states. Also green in CI on each PR. Not yet done: a full throwaway service run by hand with roles, LAN browser desks and the clicker. |
+| Six destinations, Prepare, Preview/Take, Library, Design, History | AUTOMATED TESTED | All native journeys passed on the Intel Mac host against a release build of `b390ef8b` with a fresh profile, 11 Nov: Home, hymn (Prepare add, edit, save, reopen, Send to Live Preview, with Live untouched), scene save, failed Take, and the Live empty, configured and Find states. Also green in CI on each PR. 12 Nov, locally on the Intel Mac against `4b188798` (native app, fresh profile): the six-event throwaway service journey passed: Opening Prayer, Worship (hymn with an alternate arrangement), bilingual Scripture, Announcements, Media and a two-moment Sermon, organised into four phases (pre-service loop, warm-up, main, post-service loop) with 20 view switches; undo restored the plan; Program stayed on its baseline until Take, and Take put bilingual John 3:16 (English and Yorùbá) on air. Roles and LAN desks were run separately on real devices (see Phase B rows). Not yet done: the physical clicker (computer-use access was declined). |
 | LAN browser operator desks and role permissions | PHYSICAL TESTED | #872 (`/desk`, milestone 1), merged 12 Nov. Vsmart Chrome through a USB tunnel (not Wi-Fi), host `c79cb16e`, 12 Nov: paired as Present only; Find and Activate John 3:16 reached the host; host pause showed "Paused by the main desk" and greyed the controls, and a command sent around the page got 423; pairing off then on kept the key and reconnected in 3 s; revoke returned to pairing in 1 s and deleted the key. Over real Wi-Fi the plain-http address correctly refuses and links to `https://<host>:8081/desk`; With the church certificate installed by the owner, the secure desk over real Wi-Fi (12 Nov, host `c79cb16e`): paired as Present only; Activate Romans 8:28 confirmed on the desk 525 ms after the press; host pause showed on the desk and a command sent around the page got 423; revoke returned to pairing in 2 s with the key deleted. Security review 12 Nov: no blockers; its two should-fix items are fixed. |
 | NDI stall warning on every screen | AUTOMATED TESTED | #788 |
 
@@ -86,7 +86,7 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | Backup | PHYSICAL TESTED | 12 Nov, host `c79cb16e`: a backup wrote in 59 ms (463 KB) and inspected back correctly (2 services, 1 song, not newer than this build). 11 Nov, Intel Mac host. A backup wrote (463 KB, 48 ms) and inspected back correctly (2 services, 1 song, settings). Restore was not run over the live QA data. |
 | Recorder ready check: unplugged input | AUTOMATED TESTED | #797. Preflight now flags a chosen sound input that is not connected (before this, only Start refused it). Disk-full during a recording is NOT TESTED; a start below 2 GB free is refused. |
 | Phone remote when the host stops answering | AUTOMATED TESTED | #798. It says "Not updating" after two missed answers, holds every command button, and shows the host's refusal reasons. Device check waits for the next host build. |
-| Physical clicker | NOT TESTED | Computer-use access to the QA app was declined; unit tests cover held-key and focus behaviour. |
+| Physical clicker | AUTOMATED TESTED | 12 Nov, QA host `4b188798`, key events sent into the running app's Live page (not a physical clicker): Page Down took the next item (John 3:16 → 3:17), a held Page Down (key repeat) did nothing, Page Down again → 3:18, Page Up → 3:17; one Esc asked first and kept Program, a second Esc cleared it. A physical clicker is still untested. |
 | Hidden output window goes blank | MERGED | #874 fixes #873, merged 12 Nov after two independent reviews: a hidden output's canvas can go fully transparent and stay so (seen in CI since 3 Nov). The fix rebuilds the canvas and reports it as output health; only full-frame opaque looks are read back, at most once a second. Not yet seen in WebKit on hardware. |
 | Backup and restore safety | MERGED | #786 (refuses backups from newer versions; restore blocked while on air). |
 
