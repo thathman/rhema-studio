@@ -182,8 +182,10 @@ public class MainActivity extends Activity {
     /** Announced services waiting to be resolved (one at a time: Android allows no more). */
     private final ArrayDeque<NsdServiceInfo> toResolve = new ArrayDeque<NsdServiceInfo>();
     private boolean resolving;
-    /** Services already resolved in this browse. */
+    /** Services already found in this browse. */
     private final Set<String> seenServices = new HashSet<String>();
+    /** Services whose resolve failed once in this browse (tried once more). */
+    private final Set<String> resolveRetried = new HashSet<String>();
     /** Addresses waiting for their TLS check in this browse (ProbeQueue: capped per service, fair). */
     private final ProbeQueue probes = new ProbeQueue(random);
     /** A TLS check is running (they run one at a time; the next starts when it ends). */
@@ -384,14 +386,15 @@ public class MainActivity extends Activity {
             @Override
             public void onReceivedHttpError(WebView view, WebResourceRequest req, WebResourceResponse res) {
                 if (!req.isForMainFrame()) return;
+                // Any answer (403, 401, 404, 5xx) comes from the paired Rhema Studio (the page only
+                // loads past the key pin) at the address the TV has: it has not moved, so stop looking.
+                reachedRhema();
                 if (res.getStatusCode() == 403) {
                     // Revoked (1.5) or a new link: its kept picture goes too, and whatever it had shown.
                     forgetStill();
                     forgetReady();
                     // The page's own "not valid" words must not show at the screen's edge behind ours.
                     view.setVisibility(View.INVISIBLE);
-                    // Rhema Studio answered: nothing to look for.
-                    reachedRhema();
                     problem = REVOKED;
                     showInfo(true);
                 } else {
@@ -1394,13 +1397,35 @@ public class MainActivity extends Activity {
         }
     };
 
-    /** A browse's time is over without finding it: rest, then look again (Rediscovery). */
+    /**
+     * A browse's time may be over (Rediscovery.over): after BROWSE_MS, unless addresses still wait
+     * for their check or services for resolving, then at the latest after BROWSE_MAX_MS.
+     */
     private final Runnable endBrowse = new Runnable() {
         @Override
         public void run() {
-            stopBrowse();
-            rediscovery.stop(SystemClock.elapsedRealtime());
-            scheduleLook();
+            boolean pending = probes.pending() || probing || resolving || !toResolve.isEmpty();
+            if (rediscovery.over(SystemClock.elapsedRealtime(), pending)) {
+                browseOver();
+            } else {
+                ui.removeCallbacks(endBrowse);
+                ui.postDelayed(endBrowse, 2_000);
+            }
+        }
+    };
+
+    /** Ends the browse without finding it: rest, then look again (Rediscovery). */
+    private void browseOver() {
+        stopBrowse();
+        rediscovery.stop(SystemClock.elapsedRealtime());
+        scheduleLook();
+    }
+
+    /** Starts the next check shortly after one could not be started (it was kept aside, ProbeQueue). */
+    private final Runnable pumpLater = new Runnable() {
+        @Override
+        public void run() {
+            pumpProbes(browseGen.get());
         }
     };
 
@@ -1421,7 +1446,7 @@ public class MainActivity extends Activity {
                         if (gen != browseGen.get()) return;
                         // Not this time (no network yet): rest, then again.
                         browse = null;
-                        endBrowse.run();
+                        browseOver();
                     }
                 });
             }
@@ -1454,7 +1479,7 @@ public class MainActivity extends Activity {
             nsd.discoverServices(HOST_SERVICE, NsdManager.PROTOCOL_DNS_SD, browse);
         } catch (RuntimeException e) {
             browse = null;
-            endBrowse.run();
+            browseOver();
             return;
         }
         ui.removeCallbacks(endBrowse);
@@ -1465,6 +1490,8 @@ public class MainActivity extends Activity {
     private void stopBrowse() {
         browseGen.incrementAndGet();
         ui.removeCallbacks(endBrowse);
+        ui.removeCallbacks(pumpLater);
+        resolveRetried.clear();
         if (browse != null) {
             try { nsd.stopServiceDiscovery(browse); } catch (RuntimeException ignored) { }
             browse = null;
@@ -1483,12 +1510,14 @@ public class MainActivity extends Activity {
         try {
             nsd.resolveService(next, new NsdManager.ResolveListener() {
                 @Override
-                public void onResolveFailed(NsdServiceInfo info, int error) {
+                public void onResolveFailed(final NsdServiceInfo info, int error) {
                     ui.post(new Runnable() {
                         @Override
                         public void run() {
                             if (gen != browseGen.get()) return;
                             resolving = false;
+                            // Found once per browse only: a failed resolve (another one was running) is tried once more, last.
+                            if (resolveRetried.add(String.valueOf(info.getServiceName()))) toResolve.add(info);
                             resolveNext(gen);
                         }
                     });
@@ -1544,12 +1573,11 @@ public class MainActivity extends Activity {
      * running; the feed moves only if it passes. When it ends, the next one starts.
      */
     private void pumpProbes(final int gen) {
-        if (probing || gen != browseGen.get()) return;
+        final String url = shown();
+        if (probing || gen != browseGen.get() || url == null) return;
         final ProbeQueue.Candidate c = probes.next();
         if (c == null) return;
         final String keyPin = prefs.getString("keyPin", null);
-        final String url = shown();
-        if (url == null) return;
         probing = true;
         try {
             prober.execute(new Runnable() {
@@ -1573,10 +1601,12 @@ public class MainActivity extends Activity {
                 }
             });
         } catch (RuntimeException full) {
-            // Could not be started (a check of an ended browse still holds the queue, or shutting
-            // down): unmarked, so it can be offered again, and tried after the running one.
+            // Could not be started (checks of an ended browse still hold the queue, or shutting
+            // down): unmarked and kept aside (ProbeQueue.release), and tried again shortly.
             probing = false;
             probes.release(c);
+            ui.removeCallbacks(pumpLater);
+            ui.postDelayed(pumpLater, 1_000);
         }
     }
 
