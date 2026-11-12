@@ -4,11 +4,15 @@
  * screen, NDI and a recording pinned to the output go fully transparent while the app still says a
  * scene is up. This notices it, has the window rebuild its canvas, and says so to the host.
  *
- * Two signals:
+ * Three signals:
  * - the canvas's own `contextlost` event (and `isContextLost()`, where WebKit has them);
  * - after a real redraw of a frame that certainly covers the whole canvas with something opaque
  *   (see frameMustBeOpaque), one read of a 1-pixel strip across the middle: all of it fully
- *   transparent means the drawing never landed. At most once a second, never per frame.
+ *   transparent means the drawing never landed. At most once a second, never per frame;
+ * - the same read every few seconds while such a frame is held and nothing redraws (a held scene in
+ *   a hidden window): WebKit can drop an idle hidden canvas's backing store long after its last
+ *   draw, and a check that only follows draws never sees it (CI run 43297534893: a baseline scene
+ *   drawn at 20:28:58, idle while Design was used, read [0,0,0,0] at 20:29:33 with no rebuild).
  *
  * Never loops: a few rebuilds that do not hold back off (5 s, doubling up to 5 min), report a
  * failure once, and try again when the wait is over (a held verse draws nothing by itself).
@@ -16,6 +20,8 @@
 
 /** At most one read-back check this often (ms). */
 export const SURFACE_CHECK_MS = 1000
+/** How often a held frame (nothing redrawing) is checked (ms); see SurfaceWatch.whileHeld. */
+export const SURFACE_HELD_CHECK_MS = 2000
 /** Rebuilds in a row (no healthy check between) before backing off. */
 export const SURFACE_MAX_STRIKES = 3
 export const SURFACE_BACKOFF_MS = 5000
@@ -145,6 +151,11 @@ export interface SurfaceWatch {
   attach: (canvas: HTMLCanvasElement) => () => void
   /** After a real redraw: check the surface (rate-limited) when the frame drawn must be opaque. */
   afterDraw: (canvas: HTMLCanvasElement, mustBeOpaque: boolean) => void
+  /**
+   * On a timer (every SURFACE_HELD_CHECK_MS): check the canvas when the last frame drawn must be
+   * opaque, even though nothing has redrawn since. Skipped while draws are already being checked.
+   */
+  whileHeld: (canvas: HTMLCanvasElement | null) => void
   /** Stop the retry timer (the window is going). */
   dispose: () => void
 }
@@ -161,6 +172,8 @@ export function createSurfaceWatch(opts: SurfaceWatchOptions): SurfaceWatch {
   let retryTimer: unknown = null
   let failing = false
   let recovering = false
+  // Whether the last frame drawn must be opaque (so a held frame can be checked). Nothing drawn yet: no.
+  let heldOpaque = false
   // A draw made while rebuilding (the redraw): checked as soon as the rebuild is done.
   let pending: { canvas: HTMLCanvasElement; mustBeOpaque: boolean } | null = null
 
@@ -257,6 +270,7 @@ export function createSurfaceWatch(opts: SurfaceWatchOptions): SurfaceWatch {
       }
     },
     afterDraw(canvas, mustBeOpaque) {
+      heldOpaque = mustBeOpaque
       if (recovering) {
         pending = { canvas, mustBeOpaque }
         return
@@ -274,7 +288,32 @@ export function createSurfaceWatch(opts: SurfaceWatchOptions): SurfaceWatch {
       if (t - lastCheck < SURFACE_CHECK_MS) return
       runCheck(canvas, t)
     },
+    whileHeld(canvas) {
+      if (!canvas || !heldOpaque || recovering) return
+      const t = now()
+      // Frames are being drawn and checked (or the back-off holds): nothing to add.
+      if (t - lastCheck < SURFACE_CHECK_MS || t < retryAt) return
+      runCheck(canvas, t)
+    },
     dispose: stopRetry,
+  }
+}
+
+/** At most one "rebuilt" notice (toast / health event) per output this often (ms); each rebuild is still logged. */
+export const SURFACE_REBUILT_NOTICE_MS = 10 * 60_000
+
+/**
+ * Whether an output's surface event goes to the host (a toast, the health status). WebKit can keep
+ * dropping an idle hidden canvas: each drop is rebuilt and logged, but the operator is told at most
+ * once per SURFACE_REBUILT_NOTICE_MS. A failure, a recovery and "unchecked" always go.
+ */
+export function createSurfaceNoticeGate(intervalMs = SURFACE_REBUILT_NOTICE_MS): (event: SurfaceEvent) => boolean {
+  let lastRebuiltNotice = -Infinity
+  return (event) => {
+    if (event.kind !== "rebuilt") return true
+    if (event.at - lastRebuiltNotice < intervalMs) return false
+    lastRebuiltNotice = event.at
+    return true
   }
 }
 
