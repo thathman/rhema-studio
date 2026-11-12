@@ -615,6 +615,6 @@ mod tests {
         ]));
         let october = db.song_usage_shown("2026-10-01", "2026-10-31").unwrap();
         assert_eq!((october.len(), october[0].last_date.as_str()), (1, "2026-10-31"));
-        assert!(db.song_usage_shown("2026-11-01", "2026-11-30").unwrap().is_empty());
+        assert_eq!(db.song_usage_shown("2026-11-01", "2026-11-30").unwrap().len(), 0);
     }
 }
