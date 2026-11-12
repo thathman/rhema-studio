@@ -180,6 +180,9 @@ struct Feed {
     /// The newest frame a page said it drew, and when (receiver trust, #246 item 9).
     acked: u64,
     acked_at: Option<std::time::Instant>,
+    /// The newest frame a page received but did not visibly draw (hidden page, or no animation
+    /// frame within 1 s), and when (#844 S20): health only, never a confirmed frame.
+    seen_hidden: Option<(u64, std::time::Instant)>,
     /// When the newest frame was published, for how long it took a page to draw it (#246 C17).
     published_at: Option<std::time::Instant>,
     /// What its pages last said about the cameras they play (#213).
@@ -197,6 +200,12 @@ pub struct FeedStatus {
     pub acked: u64,
     /// Milliseconds since a page last said it drew a frame; None if none has.
     pub acked_ago_ms: Option<u64>,
+    /// The newest frame a page received while hidden (not drawn where anyone could see it), and
+    /// how long ago (#844 S20). Never counted in `acked`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seen_hidden: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seen_hidden_ago_ms: Option<u64>,
     /// Each page that reported lately: the cameras it plays, frames shown and dropped (#213).
     pub video: Vec<crate::feed_video::PageVideo>,
     /// A page's clock minus the host's (ms), when one said so in the last half minute (#196).
@@ -208,7 +217,7 @@ pub struct FeedStatus {
 
 impl Feed {
     fn new(token: String) -> Self {
-        Self { token, tvs: Vec::new(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None, published_at: None, video: crate::feed_video::FeedVideo::default(), clock: None }
+        Self { token, tvs: Vec::new(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None, seen_hidden: None, published_at: None, video: crate::feed_video::FeedVideo::default(), clock: None }
     }
 
     /// Whether a key opens this feed: the feed's own (`Some(None)`) or a paired TV's (`Some(Some(tv))`).
@@ -286,11 +295,23 @@ impl FeedHub {
 
     /// A page drew frame `seq` (only with the feed's secret; never ahead of what was sent). Err: refused.
     /// `Ok(Some(ms))`: the first page to draw the newest frame, `ms` after it was published (#246 C17).
+    #[cfg(test)]
     fn ack(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>, clock: Option<i64>) -> Result<Option<u64>, ()> {
+        self.ack_shown(id, token, seq, video, clock, false)
+    }
+
+    /// `ack`, saying whether the page drew the frame where it could be seen (#844 S20). A `hidden`
+    /// ack (a hidden page, or no animation frame within 1 s) is kept for health as seen hidden: it
+    /// never advances `acked` nor counts as the first draw, so the host never calls it confirmed.
+    fn ack_shown(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>, clock: Option<i64>, hidden: bool) -> Result<Option<u64>, ()> {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
         let f = feeds.get_mut(id).filter(|f| f.admits(token).is_some()).ok_or(())?;
         let mut first = None;
-        if seq <= f.seq && seq >= f.acked {
+        if hidden {
+            if seq <= f.seq && !matches!(f.seen_hidden, Some((old, _)) if seq < old) {
+                f.seen_hidden = Some((seq, std::time::Instant::now()));
+            }
+        } else if seq <= f.seq && seq >= f.acked {
             if seq == f.seq && seq > f.acked {
                 first = f.published_at.map(|t| u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX));
             }
@@ -327,6 +348,8 @@ impl FeedHub {
             seq: f.seq,
             acked: f.acked,
             acked_ago_ms: f.acked_at.map(|t| u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX)),
+            seen_hidden: f.seen_hidden.map(|(seq, _)| seq),
+            seen_hidden_ago_ms: f.seen_hidden.map(|(_, t)| u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX)),
             video: f.video.pages(std::time::Instant::now()),
             clock_skew_ms: f.clock.filter(|(_, at)| at.elapsed() < CLOCK_REPORT_FOR).map(|(ms, _)| ms),
             tvs: f.tvs.iter().map(|t| TvWatching { id: t.id.clone(), watching: t.watching.load(std::sync::atomic::Ordering::Relaxed) }).collect(),
@@ -2733,6 +2756,10 @@ struct FeedAck {
     /// The page's clock minus the host's (ms), from the host's beats (#196); absent from older pages.
     #[serde(default)]
     clock: Option<i64>,
+    /// The page received the frame but did not visibly draw it (#844 S20; also `&hidden=1` in the
+    /// query). Absent from older pages: drawn, as before.
+    #[serde(default)]
+    hidden: bool,
 }
 
 /// `POST /api/v1/feed/{id}/ack?k=<secret>`: the page drew frame `seq` (receiver trust).
@@ -2746,7 +2773,8 @@ async fn feed_ack_handler<S: CommandSink + 'static>(
     if !state.rate.allow(peer.ip()) {
         return StatusCode::TOO_MANY_REQUESTS;
     }
-    match state.feeds.ack(&id, q.get("k").map_or("", String::as_str), ack.seq, ack.video.map(|v| (peer.ip(), v)), ack.clock.map(|c| c.clamp(-86_400_000, 86_400_000))) {
+    let hidden = ack.hidden || q.get("hidden").is_some_and(|h| h == "1" || h == "true");
+    match state.feeds.ack_shown(&id, q.get("k").map_or("", String::as_str), ack.seq, ack.video.map(|v| (peer.ip(), v)), ack.clock.map(|c| c.clamp(-86_400_000, 86_400_000)), hidden) {
         Err(()) => StatusCode::FORBIDDEN,
         Ok(first) => {
             // The first page to draw a new frame: the app logs which screen showed what, and how soon
@@ -4599,6 +4627,62 @@ mod tests {
         assert!(stream.contains("event: frame"), "{stream}");
         let beat = stream.split("event: beat\ndata: ").nth(1).and_then(|r| r.lines().next()).and_then(|n| n.trim().parse::<i64>().ok());
         assert!(beat.is_some_and(|ms| ms >= before && ms - before < 10_000), "a beat with the host's clock: {stream}");
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[test]
+    fn a_hidden_ack_is_seen_hidden_never_a_confirmed_frame() {
+        let feeds = new_feed_hub();
+        feeds.set(&[("tv".into(), "s3cret".into())]);
+        feeds.publish("tv", "{}".into());
+        // Received while hidden (#844 S20): kept for health, not counted as drawn, not the first draw.
+        assert_eq!(feeds.ack_shown("tv", "s3cret", 1, None, None, true), Ok(None));
+        let st = feeds.status("tv").unwrap();
+        assert_eq!((st.seq, st.acked, st.seen_hidden), (1, 0, Some(1)));
+        assert!(st.acked_ago_ms.is_none() && st.seen_hidden_ago_ms.is_some());
+        assert_eq!(feeds.ack_shown("tv", "wrong", 1, None, None, true), Err(()), "still only with the secret");
+        // Drawn where it can be seen: counted, and the first draw.
+        assert!(matches!(feeds.ack_shown("tv", "s3cret", 1, None, None, false), Ok(Some(_))));
+        assert_eq!(feeds.status("tv").unwrap().acked, 1);
+    }
+
+    /// Records each event the app would get.
+    struct EventSink(Mutex<Vec<String>>);
+
+    impl CommandSink for EventSink {
+        fn emit_event(&self, event: &str, _payload: &str) -> Result<(), CommandError> {
+            self.0.lock().unwrap().push(event.to_string());
+            Ok(())
+        }
+
+        fn invoke_backend(&self, _action: &str, _args: &str) -> Result<(), CommandError> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn a_feed_page_ack_marked_hidden_is_not_confirmed_and_a_normal_one_is() {
+        let feeds = new_feed_hub();
+        feeds.set(&[("tv".into(), "s3cret".into())]);
+        feeds.publish("tv", "{}".into());
+        let sink = Arc::new(EventSink(Mutex::new(Vec::new())));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds: feeds.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let acked = || sink.0.lock().unwrap().iter().filter(|e| *e == "feed:acked").count();
+        // PR #860's page: `&hidden=1` in the query and `"hidden": true` in the body; either is enough.
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/tv/ack?k=s3cret&hidden=1", Some(r#"{"seq":1,"hidden":true}"#), "").await.contains("204"));
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/tv/ack?k=s3cret", Some(r#"{"seq":1,"hidden":true}"#), "").await.contains("204"));
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/tv/ack?k=s3cret&hidden=1", Some(r#"{"seq":1}"#), "").await.contains("204"));
+        let st = feeds.status("tv").unwrap();
+        assert_eq!((st.acked, st.seen_hidden), (0, Some(1)), "a hidden ack is not a visibly confirmed frame");
+        assert_eq!(acked(), 0, "no feed:acked for a hidden ack");
+        // An older page never sends the field: drawn, as before.
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/tv/ack?k=s3cret", Some(r#"{"seq":1}"#), "").await.contains("204"));
+        assert_eq!(feeds.status("tv").unwrap().acked, 1);
+        assert_eq!(acked(), 1);
         let mut h = result.handle;
         h.stop();
     }
