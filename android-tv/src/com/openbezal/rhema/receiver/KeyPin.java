@@ -10,6 +10,11 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -144,27 +149,50 @@ final class KeyPin {
         }
     }
 
+    /** Closes probe sockets whose whole time is over (one daemon thread for all probes). */
+    private static final ScheduledExecutorService DEADLINES = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, "rhema-probe-deadline");
+            t.setDaemon(true);
+            return t;
+        }
+    });
+
     /**
      * Whether Rhema Studio with this key pin answers TLS at host:port: the handshake completes only
      * when the server's certificate carries the pinned key and the server proves it holds that key's
      * private half (TLS signs the handshake with it). Sends nothing else. Blocking; never on the
-     * screen's thread.
+     * screen's thread. timeoutMs is the whole check, connect and handshake together: a host that
+     * sends a byte now and then (anyone can announce the public k= hint) is cut off when it is over,
+     * since a read timeout alone would restart with every byte.
      */
     static boolean probe(String host, int port, String keyPin, int timeoutMs) {
-        if (!Guard.fingerprint(keyPin)) return false;
+        if (!Guard.fingerprint(keyPin) || timeoutMs <= 0) return false;
+        final long until = System.nanoTime() + timeoutMs * 1_000_000L;
+        final Socket raw = new Socket();
+        ScheduledFuture<?> cut = null;
         try {
+            cut = DEADLINES.schedule(new Runnable() {
+                @Override
+                public void run() {
+                    try { raw.close(); } catch (Exception ignored) { }
+                }
+            }, timeoutMs, TimeUnit.MILLISECONDS);
             SSLContext ctx = SSLContext.getInstance("TLS");
             ctx.init(null, new TrustManager[] {new Pinned(keyPin)}, null);
-            try (Socket raw = new Socket()) {
-                raw.connect(new InetSocketAddress(host, port), timeoutMs);
-                raw.setSoTimeout(timeoutMs);
-                try (SSLSocket s = (SSLSocket) ctx.getSocketFactory().createSocket(raw, host, port, false)) {
-                    s.startHandshake();
-                    return true;
-                }
+            raw.connect(new InetSocketAddress(host, port), timeoutMs);
+            raw.setSoTimeout(timeoutMs);
+            try (SSLSocket s = (SSLSocket) ctx.getSocketFactory().createSocket(raw, host, port, false)) {
+                s.startHandshake();
+                // Done in time (a handshake finished just as the deadline closed it does not count).
+                return System.nanoTime() < until && !raw.isClosed();
             }
         } catch (Exception e) {
             return false;
+        } finally {
+            if (cut != null) cut.cancel(false);
+            try { raw.close(); } catch (Exception ignored) { }
         }
     }
 

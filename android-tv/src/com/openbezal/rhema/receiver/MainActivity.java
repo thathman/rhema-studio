@@ -66,8 +66,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Rhema Studio Receiver (#198, formerly Rhema Receiver): shows one Rhema browser feed full screen and keeps showing it, across
@@ -175,14 +178,19 @@ public class MainActivity extends Activity {
     /** The browse for _rhema-host._tcp now, or null. */
     private NsdManager.DiscoveryListener browse;
     /** Counts browses, so a late answer from one that ended is ignored. */
-    private int browseGen;
+    private final AtomicInteger browseGen = new AtomicInteger();
     /** Announced services waiting to be resolved (one at a time: Android allows no more). */
     private final ArrayDeque<NsdServiceInfo> toResolve = new ArrayDeque<NsdServiceInfo>();
     private boolean resolving;
     /** Services and addresses already tried in this browse. */
     private final Set<String> tried = new HashSet<String>();
-    /** The TLS checks at candidate addresses, one at a time, off the screen's thread. */
-    private final ExecutorService prober = Executors.newSingleThreadExecutor();
+    /**
+     * The TLS checks at candidate addresses, one at a time, off the screen's thread. At most
+     * PROBES_WAITING wait their turn (more are dropped; the next browse tries them again), and each
+     * is skipped at its start when its browse has ended.
+     */
+    private static final int PROBES_WAITING = 4;
+    private final ExecutorService prober = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<Runnable>(PROBES_WAITING));
     /** The app is on screen (between onStart and onStop): only then does it look. */
     private boolean visible;
 
@@ -1396,7 +1404,7 @@ public class MainActivity extends Activity {
 
     /** Browses _rhema-host._tcp for Rediscovery.BROWSE_MS. */
     private void startBrowse() {
-        final int gen = ++browseGen;
+        final int gen = browseGen.incrementAndGet();
         toResolve.clear();
         resolving = false;
         tried.clear();
@@ -1406,7 +1414,7 @@ public class MainActivity extends Activity {
                 ui.post(new Runnable() {
                     @Override
                     public void run() {
-                        if (gen != browseGen) return;
+                        if (gen != browseGen.get()) return;
                         // Not this time (no network yet): rest, then again.
                         browse = null;
                         endBrowse.run();
@@ -1428,7 +1436,7 @@ public class MainActivity extends Activity {
                 ui.post(new Runnable() {
                     @Override
                     public void run() {
-                        if (gen != browseGen || !tried.add("service " + info.getServiceName())) return;
+                        if (gen != browseGen.get() || !tried.add("service " + info.getServiceName())) return;
                         toResolve.add(info);
                         resolveNext(gen);
                     }
@@ -1451,7 +1459,7 @@ public class MainActivity extends Activity {
 
     /** Ends the browse now (found, a new feed, its time over, or the screen left the feed). */
     private void stopBrowse() {
-        browseGen++;
+        browseGen.incrementAndGet();
         ui.removeCallbacks(endBrowse);
         if (browse != null) {
             try { nsd.stopServiceDiscovery(browse); } catch (RuntimeException ignored) { }
@@ -1463,7 +1471,7 @@ public class MainActivity extends Activity {
 
     /** Resolves the next announced service (one at a time). */
     private void resolveNext(final int gen) {
-        if (gen != browseGen || resolving || toResolve.isEmpty()) return;
+        if (gen != browseGen.get() || resolving || toResolve.isEmpty()) return;
         resolving = true;
         NsdServiceInfo next = toResolve.poll();
         try {
@@ -1473,7 +1481,7 @@ public class MainActivity extends Activity {
                     ui.post(new Runnable() {
                         @Override
                         public void run() {
-                            if (gen != browseGen) return;
+                            if (gen != browseGen.get()) return;
                             resolving = false;
                             resolveNext(gen);
                         }
@@ -1485,7 +1493,7 @@ public class MainActivity extends Activity {
                     ui.post(new Runnable() {
                         @Override
                         public void run() {
-                            if (gen != browseGen) return;
+                            if (gen != browseGen.get()) return;
                             resolving = false;
                             candidate(info, gen);
                             resolveNext(gen);
@@ -1494,7 +1502,9 @@ public class MainActivity extends Activity {
                 }
             });
         } catch (RuntimeException e) {
+            // This one could not be asked: on to the next (it was taken off the queue).
             resolving = false;
+            resolveNext(gen);
         }
     }
 
@@ -1511,39 +1521,50 @@ public class MainActivity extends Activity {
             return;
         }
         if (!KeyPin.hintMatches(KeyPin.txt(txt, "k"), keyPin)) return;
-        final int port = KeyPin.port(KeyPin.txt(txt, "tls"));
-        final String ip = ipv4(info);
-        final String url = shown();
-        if (port < 0 || ip == null || url == null || !tried.add(ip + ":" + port)) return;
+        int port = KeyPin.port(KeyPin.txt(txt, "tls"));
+        String url = shown();
+        if (port < 0 || url == null) return;
+        // Each of its IPv4 addresses (a computer on Wi-Fi and Ethernet announces both).
+        for (String ip : ipv4s(info)) {
+            if (tried.add(ip + ":" + port)) probeAt(ip, port, keyPin, url, gen);
+        }
+    }
+
+    /** One TLS check (KeyPin.probe, 4 s in all) off the screen's thread; the feed moves only if it passes. */
+    private void probeAt(final String ip, final int port, final String keyPin, final String url, final int gen) {
         try {
             prober.execute(new Runnable() {
                 @Override
                 public void run() {
+                    // Its browse ended while it waited: not checked at all.
+                    if (gen != browseGen.get()) return;
                     if (!KeyPin.probe(ip, port, keyPin, 4_000)) return;
                     ui.post(new Runnable() {
                         @Override
                         public void run() {
                             // Still the same feed, pin and browse (nothing changed while it was checked).
-                            if (gen == browseGen && url.equals(shown()) && KeyPin.same(keyPin, prefs.getString("keyPin", null))) moveTo(ip, port);
+                            if (gen == browseGen.get() && url.equals(shown()) && KeyPin.same(keyPin, prefs.getString("keyPin", null))) moveTo(ip, port);
                         }
                     });
                 }
             });
-        } catch (RuntimeException ignored) {
-            // Shutting down.
+        } catch (RuntimeException full) {
+            // PROBES_WAITING already waiting (or shutting down): the next browse tries it again.
         }
     }
 
-    /** The service's IPv4 address (feed links name Rhema Studio by one), or null. */
-    private static String ipv4(NsdServiceInfo info) {
+    /** The service's IPv4 addresses (feed links name Rhema Studio by one), maybe none. */
+    private static List<String> ipv4s(NsdServiceInfo info) {
+        List<String> out = new java.util.ArrayList<String>();
         if (Build.VERSION.SDK_INT >= 34) {
             for (InetAddress a : info.getHostAddresses()) {
-                if (a instanceof Inet4Address) return a.getHostAddress();
+                if (a instanceof Inet4Address && !out.contains(a.getHostAddress())) out.add(a.getHostAddress());
             }
-            return null;
+        } else {
+            InetAddress a = info.getHost();
+            if (a instanceof Inet4Address) out.add(a.getHostAddress());
         }
-        InetAddress a = info.getHost();
-        return a instanceof Inet4Address ? a.getHostAddress() : null;
+        return out;
     }
 
     /** The paired Rhema Studio proved itself at ip:port: the feed (same path and key) opens there from now on. */

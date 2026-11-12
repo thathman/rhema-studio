@@ -1,6 +1,9 @@
 package com.openbezal.rhema.receiver;
 
+import java.io.OutputStream;
 import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.security.KeyFactory;
 import java.security.KeyStore;
 import java.security.PrivateKey;
@@ -100,6 +103,7 @@ public final class KeyPinCheck {
         String feed = "https://192.168.1.20:8081/feed/abc%20d?k=x%2By";
         check("moved link", "https://10.0.0.5:8082/feed/abc%20d?k=x%2By".equals(KeyPin.movedTo(feed, "10.0.0.5", 8082)));
         check("not moved to a name or v6", KeyPin.movedTo(feed, "evil.example", 8081) == null && KeyPin.movedTo(feed, "fe80::1", 8081) == null);
+        check("not moved to an address carrying its own port", KeyPin.movedTo(feed, "10.0.0.5:99", 8081) == null && KeyPin.movedTo(feed, "10.0.0.5:", 8081) == null);
         check("not moved to a bad port", KeyPin.movedTo(feed, "10.0.0.5", 0) == null && KeyPin.movedTo(feed, "10.0.0.5", 70000) == null);
         check("not from a link that is not a feed", KeyPin.movedTo("https://192.168.1.20:8081/remote", "10.0.0.5", 8081) == null && KeyPin.movedTo(null, "10.0.0.5", 8081) == null);
 
@@ -111,6 +115,15 @@ public final class KeyPinCheck {
         check("a wrong pin is refused at Rhema Studio too", !KeyPin.probe("127.0.0.1", rhema.getLocalPort(), PIN_B, 3_000));
         check("the old certificate pin is no key pin", !KeyPin.probe("127.0.0.1", rhema.getLocalPort(), CERT_A2, 3_000));
         check("no pin: no check", !KeyPin.probe("127.0.0.1", rhema.getLocalPort(), null, 3_000));
+        // A host that trickles a byte every 300 ms (each read in time) is cut off at the whole deadline.
+        ServerSocket trickle = trickler();
+        long t0 = System.nanoTime();
+        boolean trickled = KeyPin.probe("127.0.0.1", trickle.getLocalPort(), PIN_A, 1_500);
+        long tookMs = (System.nanoTime() - t0) / 1_000_000L;
+        check("a trickling host is not found", !trickled);
+        check("and is cut off at the whole deadline (took " + tookMs + " ms)", tookMs < 3_000);
+        trickle.close();
+        check("no time: no check", !KeyPin.probe("127.0.0.1", rhema.getLocalPort(), PIN_A, 0));
         int closed = rhema.getLocalPort();
         rhema.close();
         other.close();
@@ -175,6 +188,33 @@ public final class KeyPinCheck {
                 }
             }
         }, "keypin-check-server");
+        t.setDaemon(true);
+        t.start();
+        return s;
+    }
+
+    /** A plain server that answers every connection with one byte every 300 ms, forever. */
+    private static ServerSocket trickler() throws Exception {
+        final ServerSocket s = new ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"));
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (!s.isClosed()) {
+                    try (Socket conn = s.accept()) {
+                        OutputStream out = conn.getOutputStream();
+                        // A TLS record header that never ends: type handshake, version, a long length.
+                        byte[] slow = {0x16, 0x03, 0x03, 0x40, 0x00};
+                        for (int i = 0; !s.isClosed(); i++) {
+                            out.write(slow[Math.min(i, slow.length - 1)]);
+                            out.flush();
+                            Thread.sleep(300);
+                        }
+                    } catch (Exception ignored) {
+                        // The probe gave up, or the server closed.
+                    }
+                }
+            }
+        }, "keypin-check-trickle");
         t.setDaemon(true);
         t.start();
         return s;
