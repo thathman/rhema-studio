@@ -37,7 +37,12 @@ export function EditorPlanDraft() {
   const [draft, setDraft] = useState<DraftItem[]>([])
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<"save" | "submit" | "resolve" | null>(null)
-  const [conflict, setConflict] = useState<{ actual: number } | null>(null)
+  const [conflict, setConflict] = useState<{ actual: number; from: "save" | "submit" } | null>(null)
+  // After "Keep my draft": the host's newer plan this desk chose to save over. Saving asks first.
+  const [theirs, setTheirs] = useState<HostPlan | null>(null)
+  const [confirmingReplace, setConfirmingReplace] = useState(false)
+  // A plan the operator picked while this draft had unsaved changes.
+  const [pendingSwitch, setPendingSwitch] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   const [addReference, setAddReference] = useState("")
   const [addCue, setAddCue] = useState("")
@@ -50,6 +55,9 @@ export function EditorPlanDraft() {
     const request = ++loadRequest.current
     setLoading(true)
     setConflict(null)
+    setTheirs(null)
+    setConfirmingReplace(false)
+    setPendingSwitch(null)
     setOutcome(null)
     const got = await getHostPlan(id)
     if (request !== loadRequest.current) return
@@ -118,20 +126,34 @@ export function EditorPlanDraft() {
     setAddCue("")
   }
 
-  const save = async () => {
+  /** What saving over the host's newer plan removes: the item counts and the items that disappear. */
+  const ids = new Set(draft.map((item) => item.id).filter(Boolean))
+  const replacing = theirs && theirs.program.revision === revision
+    ? { before: theirs.items.length, after: draft.length, removed: theirs.items.filter((item) => !ids.has(item.id)).map((item) => item.reference) }
+    : null
+
+  const save = async (confirmed = false) => {
     if (!host || revision === null) return
+    if (replacing && !confirmed) {
+      setConfirmingReplace(true)
+      return
+    }
+    setConfirmingReplace(false)
     setBusy("save")
     setOutcome(null)
+    // Editing is locked while the save is in flight (the fieldset below), so the host's answer is
+    // exactly what was sent and nothing typed meanwhile can be dropped.
     const saved = await saveHostPlanDraft(host.program.id, revision, draft)
     setBusy(null)
     if (saved.ok) {
       setHost(saved.value)
       setDraft(saved.value.items.map(keyed))
       setConflict(null)
+      setTheirs(null)
       setOutcome({ tone: "ok", text: `Draft saved as revision ${saved.value.program.revision}. Live still uses the approved revision until the main desk approves this one.` })
       return
     }
-    if (saved.failure.kind === "conflict") setConflict({ actual: saved.failure.actual })
+    if (saved.failure.kind === "conflict") setConflict({ actual: saved.failure.actual, from: "save" })
     say(saved.failure)
   }
 
@@ -147,8 +169,10 @@ export function EditorPlanDraft() {
     }
     setHost(got.value)
     setConflict(null)
+    setConfirmingReplace(false)
+    setTheirs(keepMine ? got.value : null)
     if (keepMine) {
-      setOutcome({ tone: "ok", text: `Your draft is kept. The host's plan is now at revision ${got.value.program.revision}; Save draft replaces that change with yours.` })
+      setOutcome({ tone: "ok", text: `Your draft is kept. The host's plan is now at revision ${got.value.program.revision}; Save draft will ask before it replaces that change with yours.` })
     } else {
       setDraft(got.value.items.map(keyed))
       setOutcome({ tone: "ok", text: `Reloaded the host's plan at revision ${got.value.program.revision}. Your unsaved changes were dropped.` })
@@ -166,11 +190,21 @@ export function EditorPlanDraft() {
       setOutcome({ tone: "ok", text: `Revision ${revision} is with the main desk for review (in its Approval Requests). It is not approved or on a screen yet.` })
       return
     }
-    if (sent.failure.kind === "conflict") setConflict({ actual: sent.failure.actual })
+    if (sent.failure.kind === "conflict") setConflict({ actual: sent.failure.actual, from: "submit" })
     say(sent.failure)
   }
 
   const working = busy !== null || loading
+
+  const pick = (id: string) => {
+    if (dirty && id !== selected) {
+      setPendingSwitch(id)
+      return
+    }
+    setSelected(id)
+    void open(id)
+  }
+  const pendingTitle = plans?.find((plan) => plan.id === pendingSwitch)?.title
 
   return (
     <section aria-label="Service plan draft" className="flex flex-col gap-3 rounded-md border border-border p-3">
@@ -180,7 +214,7 @@ export function EditorPlanDraft() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <select aria-label="Service plan" value={selected} disabled={!plans?.length || working} onChange={(event) => { setSelected(event.currentTarget.value); void open(event.currentTarget.value) }} className="h-8 max-w-72 rounded-md border border-input bg-card px-1.5">
+        <select aria-label="Service plan" value={selected} disabled={!plans?.length || working} onChange={(event) => pick(event.currentTarget.value)} className="h-8 max-w-72 rounded-md border border-input bg-card px-1.5">
           {plans === null && <option value="">Loading the host's plans…</option>}
           {plans?.length === 0 && <option value="">No service plans on the host</option>}
           {plans?.map((plan) => <option key={plan.id} value={plan.id}>{plan.title}{plan.service_date ? ` · ${plan.service_date}` : ""}</option>)}
@@ -192,9 +226,21 @@ export function EditorPlanDraft() {
         )}
       </div>
 
+      {pendingSwitch && (
+        <div role="alert" aria-label="Unsaved draft" className="flex flex-col gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 p-2.5">
+          <p><span className="font-semibold">You have unsaved changes to {host?.program.title ?? "this plan"}.</span> Opening {pendingTitle ?? "another plan"} drops them.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => setPendingSwitch(null)}>Stay and keep my changes</Button>
+            <Button size="sm" variant="outline" onClick={() => { const id = pendingSwitch; setSelected(id); void open(id) }}>Open it and drop my changes</Button>
+          </div>
+        </div>
+      )}
+
       {conflict && (
         <div role="alert" aria-label="Plan conflict" className="flex flex-col gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 p-2.5">
-          <p><span className="font-semibold">The plan changed on the host since you opened it</span> (it is at revision {conflict.actual} now). Nothing of yours was saved.</p>
+          {conflict.from === "save"
+            ? <p><span className="font-semibold">The plan changed on the host since you opened it</span> (it is at revision {conflict.actual} now). Your latest changes were not saved.</p>
+            : <p><span className="font-semibold">Someone saved the plan after you</span> (it is at revision {conflict.actual} now). Your revision {revision} is still saved on the host, but it was not submitted for review.</p>}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" disabled={working} onClick={() => void resolve(false)}>Reload the host's plan</Button>
             <Button size="sm" variant="outline" disabled={working} onClick={() => void resolve(true)}>Keep my draft</Button>
@@ -202,6 +248,21 @@ export function EditorPlanDraft() {
         </div>
       )}
 
+      {confirmingReplace && replacing && (
+        <div role="alert" aria-label="Replace the host's changes" className="flex flex-col gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5">
+          <p><span className="font-semibold">Saving replaces the host's revision {revision} with your draft.</span> The host's plan has {replacing.before} item{replacing.before === 1 ? "" : "s"}; yours has {replacing.after}.</p>
+          {replacing.removed.length > 0
+            ? <p>These items will disappear: {replacing.removed.join(", ")}.</p>
+            : <p>No item disappears, but their changes to the items you share are replaced by yours.</p>}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="destructive" disabled={working} onClick={() => void save(true)}>Replace with my draft</Button>
+            <Button size="sm" variant="outline" disabled={working} onClick={() => setConfirmingReplace(false)}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      <fieldset disabled={working} aria-label="Draft editing" className="flex min-w-0 flex-col gap-3 disabled:opacity-70">
+      {busy === "save" && <p role="status" className="text-xs text-muted-foreground">Saving… editing is paused until the host answers.</p>}
       {host && (
         <ol aria-label="Draft items" className="flex flex-col divide-y divide-border rounded-md border border-border">
           {draft.length === 0 && <li className="px-2 py-2 text-sm text-muted-foreground">This plan has no items yet.</li>}
@@ -235,9 +296,11 @@ export function EditorPlanDraft() {
         </div>
       )}
 
+      </fieldset>
+
       {host && (
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" disabled={!canSend || !dirty || working || !!conflict} onClick={() => void save()}>{busy === "save" ? "Saving…" : "Save draft"}</Button>
+          <Button size="sm" disabled={!canSend || !dirty || working || !!conflict || confirmingReplace} onClick={() => void save()}>{busy === "save" ? "Saving…" : "Save draft"}</Button>
           <input aria-label="Note for the reviewer" value={note} onChange={(event) => setNote(event.currentTarget.value)} placeholder="Note for the reviewer (optional)" maxLength={500} className={`${field} min-w-40 flex-1`} />
           <Button size="sm" variant="outline" disabled={!canSend || dirty || working || !!conflict || revision === approved} onClick={() => void submit()}>{busy === "submit" ? "Submitting…" : "Submit for review"}</Button>
           {dirty && <p className="basis-full text-xs text-muted-foreground">Save your draft before submitting it for review.</p>}

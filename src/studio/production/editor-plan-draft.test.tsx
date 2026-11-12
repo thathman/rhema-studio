@@ -97,9 +97,96 @@ describe("joined Editor plan draft (#847)", () => {
     await click(button("Keep my draft"))
     expect(element.querySelector("[aria-label='Plan conflict']")).toBeNull()
     expect((element.querySelector("[aria-label='Notes for item 1']") as HTMLTextAreaElement).value).toBe("mine")
+    const before = calls("join_save_plan").length
     await click(button("Save draft"))
+    expect(calls("join_save_plan").length).toBe(before)
+    expect(element.querySelector(`[aria-label="Replace the host's changes"]`)?.textContent).toContain("replaces the host's revision 5")
+    await click(button("Replace with my draft"))
     expect(calls("join_save_plan").at(-1)![1]).toMatchObject({ expectedRevision: 5 })
     expect(result()).toContain("Draft saved as revision 6")
+  })
+
+  it("before saving over the host's newer plan, says how many items and which ones disappear", async () => {
+    mockInvoke.mockImplementation(async (command: string, args: { expectedRevision?: number }) => {
+      if (command === "join_plans") return [program(hostRevision)]
+      if (command === "join_plan") {
+        const p = plan(hostRevision)
+        if (hostRevision === 5) p.items.push({ ...p.items[0]!, id: "i3", position: 2, reference: "Offering" })
+        return p
+      }
+      if (command === "join_save_plan") {
+        if (args.expectedRevision !== hostRevision) throw "conflict:5: moved"
+        return plan(6)
+      }
+      return null
+    })
+    await click(button("Remove"))
+    hostRevision = 5
+    await click(button("Save draft"))
+    await click(button("Keep my draft"))
+    await click(button("Save draft"))
+    const warning = element.querySelector(`[aria-label="Replace the host's changes"]`)!.textContent!
+    expect(warning).toContain("The host's plan has 3 items; yours has 1")
+    expect(warning).toContain("These items will disappear: Welcome, Offering.")
+    await click(button("Cancel"))
+    expect(calls("join_save_plan").filter(([, a]) => (a as { expectedRevision: number }).expectedRevision === 5)).toEqual([])
+  })
+
+  it("a conflict on Submit does not claim the draft went unsaved", async () => {
+    mockInvoke.mockImplementation(async (command: string) => {
+      if (command === "join_plans") return [program(3)]
+      if (command === "join_plan") return plan(3)
+      if (command === "join_submit_plan") throw "conflict:4: moved"
+      return null
+    })
+    await click(button("Submit for review"))
+    const banner = element.querySelector("[aria-label='Plan conflict']")!.textContent!
+    expect(banner).toContain("Your revision 3 is still saved on the host, but it was not submitted for review")
+    expect(banner).not.toContain("not saved")
+  })
+
+  it("locks editing while a save is in flight, so nothing typed meanwhile is dropped", async () => {
+    let answer: (v: unknown) => void = () => {}
+    mockInvoke.mockImplementation(async (command: string) => {
+      if (command === "join_plans") return [program(3)]
+      if (command === "join_plan") return plan(3)
+      if (command === "join_save_plan") return new Promise((resolve) => { answer = resolve })
+      return null
+    })
+    await type(element.querySelector("[aria-label='Notes for item 1']") as HTMLTextAreaElement, "first")
+    await click(button("Save draft"))
+    expect((element.querySelector("[aria-label='Draft editing']") as HTMLFieldSetElement).disabled).toBe(true)
+    expect(element.textContent).toContain("editing is paused until the host answers")
+    await act(async () => answer(plan(4, "first")))
+    expect((element.querySelector("[aria-label='Draft editing']") as HTMLFieldSetElement).disabled).toBe(false)
+    expect((element.querySelector("[aria-label='Notes for item 1']") as HTMLTextAreaElement).value).toBe("first")
+  })
+
+  it("asks before switching plans drops unsaved changes", async () => {
+    mockInvoke.mockImplementation(async (command: string, args: { id?: string }) => {
+      if (command === "join_plans") return [program(3), { ...program(1), id: "p2", title: "Midweek" }]
+      if (command === "join_plan") return args.id === "p2" ? { ...plan(1), program: { ...program(1), id: "p2", title: "Midweek" } } : plan(3)
+      return null
+    })
+    await act(async () => root!.unmount())
+    root = createRoot(element)
+    await act(async () => root!.render(<EditorPlanDraft />))
+    await type(element.querySelector("[aria-label='Notes for item 1']") as HTMLTextAreaElement, "mine")
+    const choose = async (id: string) => act(async () => {
+      const select = element.querySelector("[aria-label='Service plan']") as HTMLSelectElement
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, id)
+      select.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    const opened = calls("join_plan").length
+    await choose("p2")
+    expect(element.querySelector("[aria-label='Unsaved draft']")?.textContent).toContain("Opening Midweek drops them")
+    expect(calls("join_plan").length).toBe(opened)
+    await click(button("Stay and keep my changes"))
+    expect((element.querySelector("[aria-label='Notes for item 1']") as HTMLTextAreaElement).value).toBe("mine")
+    await choose("p2")
+    await click(button("Open it and drop my changes"))
+    expect(calls("join_plan").at(-1)![1]).toMatchObject({ id: "p2" })
+    expect(element.textContent).toContain("Revision 1")
   })
 
   it("on a 409, reloading takes the host's plan and drops the unsaved change", async () => {

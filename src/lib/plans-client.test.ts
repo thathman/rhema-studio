@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mockInvoke = vi.fn()
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
 
-import { FORBIDDEN_WORDS, getHostPlan, listHostPlans, readPlanFailure, saveHostPlanDraft, submitHostPlan } from "./plans-client"
+import { FORBIDDEN_WORDS, UNPAIRED_WORDS,getHostPlan, listHostPlans, readPlanFailure, saveHostPlanDraft, submitHostPlan } from "./plans-client"
 import { useSettingsStore } from "@/stores/settings-store"
 
 const plan = (revision: number) => ({
@@ -54,6 +54,7 @@ describe("plans client (#847)", () => {
     mockInvoke.mockRejectedValueOnce("forbidden: This desk's role does not work on the service plan")
     expect(await submitHostPlan("p1", 4)).toEqual({ ok: false, failure: { kind: "forbidden", message: FORBIDDEN_WORDS } })
     expect(readPlanFailure("paused: taken back").kind).toBe("paused")
+    expect(readPlanFailure("The host no longer knows this computer: pair again")).toEqual({ kind: "unpaired", message: UNPAIRED_WORDS })
     expect(readPlanFailure("missing: no such plan")).toEqual({ kind: "missing", message: "no such plan" })
     expect(readPlanFailure("refused: Already decided")).toEqual({ kind: "refused", message: "Already decided" })
     expect(readPlanFailure("Could not reach the host: timed out")).toEqual({ kind: "error", message: "Could not reach the host: timed out" })

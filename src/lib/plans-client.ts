@@ -63,23 +63,26 @@ export interface PlanReviewRequest {
 /**
  * Why the host refused, so the desk can say it plainly and offer the right next step:
  * `conflict` (someone saved since this desk opened the plan; `actual` is the host's revision now),
- * `forbidden` (this desk's role does not work on the plan), `paused`, `missing`, `refused`, `error`.
+ * `forbidden` (this desk's role does not work on the plan), `unpaired` (401: pair again), `paused`, `missing`,
+ * `refused`, `error`.
  */
 export type PlanFailure =
   | { kind: "conflict"; actual: number; message: string }
-  | { kind: "forbidden" | "paused" | "missing" | "refused" | "error"; message: string }
+  | { kind: "forbidden" | "paused" | "missing" | "refused" | "unpaired" | "error"; message: string }
 
 export type PlanResult<T> = { ok: true; value: T } | { ok: false; failure: PlanFailure }
 
 export const FORBIDDEN_WORDS = "This desk is not allowed to work on the service plan. Ask the main desk to pair this computer as an Editor."
 export const PAUSED_WORDS = "The main desk has paused this desk. Your draft stays here; save it when control comes back."
 export const CONFLICT_WORDS = "The plan changed on the host since you opened it."
+export const UNPAIRED_WORDS = "This desk must pair with the host again: the host no longer knows this computer's key. Your draft stays here until you do."
 
 /** The join crate's refusal (`rhema_join::host::plan_failure`) as a typed failure. */
 export function readPlanFailure(error: unknown): PlanFailure {
   const said = error instanceof Error ? error.message : String(error)
   const conflict = /^conflict:(\d+):\s*(.*)$/s.exec(said)
   if (conflict) return { kind: "conflict", actual: Number(conflict[1]), message: CONFLICT_WORDS }
+  if (/pair again/i.test(said)) return { kind: "unpaired", message: UNPAIRED_WORDS }
   const prefixed = /^(forbidden|paused|missing|refused):\s*(.*)$/s.exec(said)
   if (!prefixed) return { kind: "error", message: said }
   const kind = prefixed[1] as "forbidden" | "paused" | "missing" | "refused"
