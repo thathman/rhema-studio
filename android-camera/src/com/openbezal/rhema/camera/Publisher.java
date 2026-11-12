@@ -96,6 +96,18 @@ final class Publisher {
     volatile long framesSent;
     volatile long framesDropped;
     volatile int reconnects;
+    /**
+     * When (System.nanoTime) the router first refused this camera's sign-in (401) with no
+     * successful connection since; 0 when it has not (#836). Other refusals (400, 404, 503 while the
+     * router restarts) and dropped connections are not counted.
+     */
+    volatile long signInRefusedSinceNs;
+
+    /** How long the router has refused this camera's sign-in without a success between (ms), 0 when it has not. */
+    long signInRefusedMs() {
+        long since = signInRefusedSinceNs;
+        return since == 0 ? 0 : (System.nanoTime() - since) / 1000000L;
+    }
     volatile String message = "Connecting to Rhema…";
 
     Publisher(Pairing pair, String sdp, boolean hevc, boolean audio, int audioRate, int bitrate, Listener listener, Clock clock) {
@@ -221,6 +233,7 @@ final class Publisher {
             try {
                 connect();
                 handshake();
+                signInRefusedSinceNs = 0;
                 synchronized (queue) {
                     queue.clear();
                     queuedBytes = 0;
@@ -235,6 +248,7 @@ final class Publisher {
                 writeLoop();
             } catch (IOException e) {
                 if (!stopped) message = plain(e);
+                if (e instanceof SignInRefused && signInRefusedSinceNs == 0) signInRefusedSinceNs = Math.max(1, System.nanoTime());
             } finally {
                 boolean was = live;
                 live = false;
@@ -320,7 +334,7 @@ final class Publisher {
         StringBuilder sb = new StringBuilder();
         sb.append(method).append(' ').append(url).append(" RTSP/1.0\r\n");
         sb.append("CSeq: ").append(++cseq).append("\r\n");
-        sb.append("User-Agent: Rhema Camera 1.0.0.0\r\n");
+        sb.append("User-Agent: Rhema Studio Cam 1.4.0.0\r\n");
         if (auth != null) sb.append("Authorization: ").append(auth.header(method, url, pair.user, pair.token)).append("\r\n");
         if (session != null) sb.append("Session: ").append(session).append("\r\n");
         if (extra != null) for (int i = 0; i + 1 < extra.length; i += 2) sb.append(extra[i]).append(": ").append(extra[i + 1]).append("\r\n");
@@ -339,13 +353,20 @@ final class Publisher {
 
     private void expect(RtspReader.Response r, String what) throws IOException {
         if (r.status == 200) return;
-        if (r.status == 401) throw new Refused("Rhema did not accept this camera's link: it was renewed, or the camera was removed. Scan the camera's new link in Rhema.");
+        if (r.status == 401) throw new SignInRefused("Rhema did not accept this camera's link: it was renewed, or the camera was removed. Scan its new QR code from Rhema Studio (Live → Production tools → Cameras).");
         if (r.status == 400 && what.equals("ANNOUNCE")) throw new Refused("Rhema's camera router did not take this phone's picture format (" + r.status + " " + r.reason + ").");
         throw new Refused("Rhema's camera router refused the camera (" + what + ": " + r.status + " " + r.reason + ").");
     }
 
-    private static final class Refused extends IOException {
+    private static class Refused extends IOException {
         Refused(String m) {
+            super(m);
+        }
+    }
+
+    /** The router did not accept this camera's sign-in (401): the only refusal that may mean "removed" (#836). */
+    private static final class SignInRefused extends Refused {
+        SignInRefused(String m) {
             super(m);
         }
     }

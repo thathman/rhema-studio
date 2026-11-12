@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds Rhema Camera (the Android phone camera app, #209) with the Android SDK's own tools, no
+# Builds Rhema Studio Cam (the Android phone camera app, #209; called Rhema Camera before 1.1) with the Android SDK's own tools, no
 # Gradle, like android-tv/build.sh. Needs a JDK 17 (JAVA_HOME or on PATH) and ANDROID_HOME with
 # platforms;android-34 and build-tools;34.0.0. Out: android-camera/build/rhema-camera.apk, signed
 # with a local debug key (~/.android/rhema-camera-debug.jks, made once).
@@ -7,8 +7,9 @@
 # First it runs CameraCoreCheck (test/) on this computer: the pairing link and certificate pin, RTP
 # packets, the session description, Digest sign-in (RFC 2617's example), the picture plan, the
 # looks' colour maths (the same as the GPU shader's), .cube tables, the film shutter's meter and
-# the GPU's step-down when it is short of time, the battery and heat report; a
-# failure stops the build.
+# the GPU's step-down when it is short of time, the battery and heat report, Rhema's tally reply
+# (name, receiving, suggested quality), the heat and battery badge, and resuming after a restart or
+# stopping when removed; a failure stops the build.
 set -euo pipefail
 cd "$(dirname "$0")"
 SDK=${ANDROID_HOME:?set ANDROID_HOME to the Android SDK}
@@ -18,7 +19,7 @@ J=${JAVA_HOME:+$JAVA_HOME/bin/}
 P=src/com/openbezal/rhema/camera
 rm -rf build && mkdir -p build/classes build/dex build/gen build/check
 # Plain Java parts only (no Android), checked with the computer's own Java.
-"${J}javac" --release 8 -Xlint:-options -d build/check $P/CamAction.java $P/Pairing.java $P/Rtp.java $P/Sdp.java $P/Auth.java $P/RtspReader.java $P/Plan.java $P/Kelvin.java $P/Looks.java $P/Lut.java $P/Exposure.java $P/Pace.java $P/Publisher.java $P/Report.java $(find test -name '*.java')
+"${J}javac" --release 8 -Xlint:-options -d build/check $P/CamAction.java $P/Pairing.java $P/Rtp.java $P/Sdp.java $P/Auth.java $P/RtspReader.java $P/Plan.java $P/Kelvin.java $P/Looks.java $P/Lut.java $P/Exposure.java $P/Pace.java $P/Publisher.java $P/Report.java $P/Json.java $P/Health.java $P/Lifecycle.java $(find test -name '*.java')
 "${J}java" -cp build/check com.openbezal.rhema.camera.CameraCoreCheck
 "$BT/aapt2" compile --dir res -o build/res.zip
 "$BT/aapt2" link ${CAMERA_DEBUG:+--debug-mode} -o build/base.apk -I "$JAR" --manifest AndroidManifest.xml --java build/gen build/res.zip

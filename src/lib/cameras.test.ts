@@ -1,6 +1,6 @@
 import { feedCameraUrl } from "@/lib/whep"
 import { describe, expect, it } from "vitest"
-import { cameraAppLink, rtmpsUrl, type RouterPorts } from "@/lib/cameras"
+import { CAMERA_QUALITIES, cameraAppLink, cameraListEntries, cameraQuality, rtmpsUrl, withCameraQuality, type RouterPorts } from "@/lib/cameras"
 
 const PORTS: RouterPorts = { webrtc: 8889, webrtcUdp: 8189, rtsp: 8554, rtsps: 8322, rtmp: 1935, srt: 8890, api: 9997 }
 const FP = "0123456789abcdef".repeat(4)
@@ -49,5 +49,31 @@ describe("rtmpsUrl", () => {
     expect(rtmpsUrl("192.168.1.20", { ...PORTS, rtmps: 1936 }, cam, "ab")).toBe("rtmps://192.168.1.20:1936/pulpit?user=cam-pulpit&pass=s3cret")
     expect(rtmpsUrl("192.168.1.20", { ...PORTS, rtmps: 1936 }, cam, null)).toBeNull()
     expect(rtmpsUrl("192.168.1.20", PORTS, cam, "ab")).toBeNull()
+  })
+})
+
+describe("Suggested quality for Rhema Studio Cam (#838)", () => {
+  const other = { name: "choir", label: "Choir", token: "f".repeat(32) }
+
+  it("leaves it to the phone until one is chosen, and ignores an unknown id", () => {
+    expect(cameraQuality(CAM)).toBe("phone")
+    expect(cameraQuality({ ...CAM, quality: "4k-ultra" } as typeof CAM)).toBe("phone")
+    expect(CAMERA_QUALITIES.map((q) => q.id)).toEqual(["phone", "tv720", "hd1080", "light"])
+  })
+
+  it("is kept on the camera it is chosen for only, and The phone decides removes it", () => {
+    const set = withCameraQuality([CAM, other], "pulpit", "tv720")
+    expect(cameraQuality(set[0])).toBe("tv720")
+    expect(set[1]).toBe(other)
+    const back = withCameraQuality(set, "pulpit", "phone")
+    expect(back[0]).toEqual(CAM)
+    expect("quality" in back[0]).toBe(false)
+  })
+
+  it("goes to the listener with the camera's label, and only when one is chosen", () => {
+    expect(cameraListEntries(withCameraQuality([CAM, other], "choir", "light"))).toEqual([
+      { name: "pulpit", token: CAM.token, label: "Pulpit & choir" },
+      { name: "choir", token: other.token, label: "Choir", quality: "light" },
+    ])
   })
 })

@@ -123,7 +123,7 @@ final class Rig {
                     if (device == d) {
                         device = null;
                         session = null;
-                        listener.onCameraError("Another app took the camera. Close it, then come back to Rhema Camera.");
+                        listener.onCameraError("Another app took the camera. Close it, then come back to Rhema Studio Cam.");
                     }
                 }
 

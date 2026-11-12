@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { openSettings } from "@/lib/settings-dialog"
 import { newLayer } from "@/lib/scenes"
-import { cameraAppLink, cameraName, cameraPageUrl, newCameraSecret, phoneWords, routerStatus, rtmpsUrl, rtmpUrl, rtspUrl, srtUrl, startRouter, stopRouter, whepUrl, type RouterPath, type RouterStatus } from "@/lib/cameras"
+import { CAMERA_QUALITIES, cameraAppLink, cameraName, cameraPageUrl, cameraQuality, newCameraSecret, phoneWords, withCameraQuality, type CameraQuality, routerStatus, rtmpsUrl, rtmpUrl, rtspUrl, srtUrl, startRouter, stopRouter, whepUrl, type RouterPath, type RouterStatus } from "@/lib/cameras"
 import { cameraTestWords, testCamera } from "@/lib/camera-test"
 import { latencyWords, measuresOf } from "@/lib/glass-latency"
 import { useBroadcastStore } from "@/stores/broadcast-store"
@@ -251,6 +251,30 @@ function CameraApp({ cam, link }: { cam: CameraSource; link: string | null }) {
   )
 }
 
+/**
+ * The quality suggested to Rhema Studio Cam for this camera (#838): a ceiling on its size and
+ * bitrate, sent in the tally it reads every 2 s. A camera page or another app does not read it.
+ */
+function CamQuality({ cam }: { cam: CameraSource }) {
+  const quality = cameraQuality(cam)
+  const detail = CAMERA_QUALITIES.find((q) => q.id === quality)?.detail
+  const pick = (q: CameraQuality) => {
+    const s = useSettingsStore.getState()
+    s.setCameras(withCameraQuality(s.cameras, cam.name, q))
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="flex flex-col gap-1">
+        <span className="text-[0.625rem] font-bold tracking-[0.06em] text-muted-foreground uppercase">Quality for Rhema Studio Cam</span>
+        <select aria-label={`Quality suggested to ${cam.label}'s Rhema Studio Cam`} value={quality} onChange={(e) => pick(e.target.value as CameraQuality)} className="h-8 w-fit rounded-md border border-input bg-card px-2">
+          {CAMERA_QUALITIES.map((q) => <option key={q.id} value={q.id}>{q.label}</option>)}
+        </select>
+      </label>
+      <p className="text-muted-foreground">{detail} The phone takes it within a few seconds while it sends (Rhema Studio Cam 1.4 or newer, unless it is set not to follow): a lower bitrate at once, but a smaller picture only while this camera is on no Program, because changing the size restarts its stream. The camera page and other apps keep their own.</p>
+    </div>
+  )
+}
+
 /** Test camera (#209): play it here a few seconds and say what was measured, with its lag if measured. */
 function TestCamera({ cam, whep }: { cam: CameraSource; whep: string | null }) {
   const [busy, setBusy] = useState(false)
@@ -379,6 +403,7 @@ function CameraCard({ cam, host, router, path, phonePage, onObs }: { cam: Camera
             )}
             {rtsp && <Copyable label="For OBS on this computer (Media Source, untick Local File)" value={rtsp} />}
             {host && ports && router?.running && <CameraApp cam={cam} link={cameraAppLink(host, ports, cam, router.rtspsFingerprint, phonePage)} />}
+            <CamQuality cam={cam} />
             {rtsp && <p className="text-muted-foreground">OBS on another computer: install Rhema Studio there and choose “This computer runs OBS only”. It adds the cameras to its OBS by itself, encrypted and with its own sign-in.</p>}
             {!host && <p className="text-muted-foreground">Addresses appear once the camera router is on and this computer is on the network.</p>}
             {host && ports && (

@@ -57,6 +57,12 @@ public final class MainActivity extends Activity {
     private SurfaceView view;
     private OverlayView overlay;
     private TextView pill;
+    /** The heat and battery warning (#837). */
+    private TextView warn;
+    private String warnAdvice;
+    private long healthAt;
+    /** The person tapped "Tap to send again" after a restart (#836): send once the service is here. */
+    private boolean resumeAsked;
     private TextView sendAction;
     private TextView detail;
     private TextView hint;
@@ -129,6 +135,23 @@ public final class MainActivity extends Activity {
             }
         });
         status.addView(pill, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // Heat and battery (#837): shown while there is something to warn about, never faded away.
+        warn = Ui.text(this, "", 11, 0xFF1A1206, true);
+        warn.setLetterSpacing(0.06f);
+        warn.setBackground(Ui.round(Ui.AMBER, Ui.dp(this, 12)));
+        Ui.pad(warn, this, 10, 4);
+        warn.setVisibility(View.GONE);
+        warn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                touched();
+                if (warnAdvice != null && !warnAdvice.isEmpty()) Toast.makeText(MainActivity.this, warnAdvice, Toast.LENGTH_LONG).show();
+            }
+        });
+        LinearLayout.LayoutParams warnParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        warnParams.topMargin = Ui.dp(this, 6);
+        status.addView(warn, warnParams);
 
         sendAction = Ui.text(this, "CONNECT", 13, Color.WHITE, true);
         sendAction.setGravity(Gravity.CENTER);
@@ -309,6 +332,19 @@ public final class MainActivity extends Activity {
 
     /** A pairing link opened from the phone's QR scanner or a message: ask, then keep it. */
     private void handlePairing(Intent intent) {
+        // "Tap to send again" after a restart (#836).
+        // This activity is exported: only the nonce from this app's own notification counts, once.
+        String given = intent == null ? null : intent.getStringExtra(CameraService.EXTRA_RESUME);
+        if (given != null) {
+            intent.removeExtra(CameraService.EXTRA_RESUME);
+            String kept = prefs.getString(Prefs.RESUME_NONCE, null);
+            boolean ok = Lifecycle.resumeTap(given, kept, Build.VERSION.SDK_INT, Prefs.pairing(this) != null, prefs.getBoolean(Prefs.WAS_SENDING, false), Prefs.resumeOn(prefs));
+            if (ok) {
+                CameraService.cancelResumeNote(this);
+                resumeAsked = true;
+                if (service != null) resumeNow();
+            }
+        }
         // A look or exposure mode chosen by name, for checking from a computer (am start … --es look cinematic --es ae auto --es preset smooth30).
         String look = intent == null ? null : intent.getStringExtra("look");
         if (look != null && java.util.Arrays.asList(Looks.IDS).contains(look)) prefs.edit().putString(Prefs.LOOK, look).apply();
@@ -334,7 +370,7 @@ public final class MainActivity extends Activity {
         try {
             p = Pairing.parse(link);
         } catch (IllegalArgumentException e) {
-            new AlertDialog.Builder(a).setTitle("Not a Rhema Camera link").setMessage(e.getMessage()).setPositiveButton("OK", null).show();
+            new AlertDialog.Builder(a).setTitle("Not a Rhema Studio Cam link").setMessage(e.getMessage()).setPositiveButton("OK", null).show();
             return;
         }
         new AlertDialog.Builder(a)
@@ -421,7 +457,7 @@ public final class MainActivity extends Activity {
             attach();
             autoStart();
         } else if (code == 1) {
-            detail.setText("Rhema Camera needs the camera permission to show and send the picture.");
+            detail.setText("Rhema Studio Cam needs the camera permission to show and send the picture.");
         } else if (code == 2) {
             sendNow();
         }
@@ -463,7 +499,18 @@ public final class MainActivity extends Activity {
         service.setPreview(surface, null);
     }
 
+    private void resumeNow() {
+        if (!resumeAsked || service == null) return;
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return;
+        resumeAsked = false;
+        autoStartDone = true;
+        // Still wanted: paired, it was sending before the restart, and resuming is on.
+        if (Lifecycle.resume(Build.VERSION.SDK_INT, Prefs.pairing(this) != null, prefs.getBoolean(Prefs.WAS_SENDING, false), Prefs.resumeOn(prefs)) == Lifecycle.NONE) return;
+        if (!service.sending) startSending();
+    }
+
     private void autoStart() {
+        resumeNow();
         if (autoStartDone || service == null || service.sending) return;
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return;
         autoStartDone = true;
@@ -474,7 +521,7 @@ public final class MainActivity extends Activity {
         if (service == null) return;
         if (Prefs.pairing(this) == null) {
             new AlertDialog.Builder(this).setTitle("Not paired yet")
-                    .setMessage("In Rhema, open Production → Cameras, add a camera and use \"Rhema Camera app\": scan its QR code with this phone, or copy its link into Settings → Connection here.")
+                    .setMessage("In Rhema Studio, open Live → Production tools → Cameras and add a camera. Its card has a \"Rhema Studio Cam app (Android)\" QR code: scan it with this phone, or copy its link into Settings → Connection here.")
                     .setPositiveButton("Open Settings", new DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(DialogInterface d, int which) {
@@ -644,10 +691,11 @@ public final class MainActivity extends Activity {
         CameraService s = service;
         Pairing p = Prefs.pairing(this);
         boolean live = s != null && s.sending && s.publisher() != null && s.publisher().live();
-        CamAction.State state = CamAction.resolve(p != null, s != null && s.sending, live, s == null ? CamAction.TALLY_UNKNOWN : s.tally());
-        // Red only on air (#209); sending but on no Program is teal, connecting amber.
+        CamAction.State state = CamAction.resolve(p != null, s != null && s.sending, live, s == null ? CamAction.TALLY_UNKNOWN : s.tally(), s == null ? CamAction.RECEIVING_UNKNOWN : s.receiving);
+        // Red only on air (#209); received or sending on no Program teal; connecting, or sent but not received, amber.
         int color = CamAction.onAir(state) ? Ui.LIVE
-                : state.status.startsWith("SENDING") ? Ui.TEAL_TEXT
+                : CamAction.NOT_RECEIVED_YET.equals(state.status) ? Ui.AMBER
+                : state.status.startsWith("SENDING") || CamAction.RECEIVING.equals(state.status) ? Ui.TEAL_TEXT
                 : "CONNECTING".equals(state.status) ? Ui.AMBER : Ui.IDLE;
         String label = state.status;
         // Views change only when what they show changes (no layout work twice a second for nothing).
@@ -673,21 +721,43 @@ public final class MainActivity extends Activity {
             }
         }
         String text = "";
+        // The name Rhema Studio gives this camera (#850), else the pairing link's.
+        String title = Prefs.cameraTitle(this, p);
         if (s != null) {
             if (s.cameraError != null) text = s.cameraError;
+            else if (!s.sending && s.stopReason != null) text = s.stopReason;
             else if (s.sending && !live) text = s.status;
-            else if (!s.sending) text = p == null ? "Tap to pair with Rhema" : "Tap to send to Rhema as \"" + p.title() + "\"";
-            else if (s.shape != null) text = s.shape.height + "p" + s.shape.fps + " · " + String.format(java.util.Locale.ROOT, "%.1f Mbit/s", s.mbps);
+            else if (!s.sending) text = p == null ? "Tap to pair with Rhema Studio" : "Tap to send to Rhema Studio as \"" + title + "\"";
+            else if (s.shape != null) text = title + " · " + s.shape.height + "p" + s.shape.fps + " · " + String.format(java.util.Locale.ROOT, "%.1f Mbit/s", s.mbps);
         }
         if (!text.contentEquals(detail.getText())) detail.setText(text);
         String h = s == null ? "" : !s.note.isEmpty() ? s.note : s.focusHeld() ? "Focus held here · double-tap to follow the scene" : "";
         if (!h.contentEquals(hint.getText())) hint.setText(h);
         int hv = h.isEmpty() || screenOff ? View.GONE : View.VISIBLE;
         if (hint.getVisibility() != hv) hint.setVisibility(hv);
-        boolean problem = s != null && (s.cameraError != null || (s.sending && !live));
+        health(s);
+        boolean problem = s != null && (s.cameraError != null || (s.sending && !live) || (!s.sending && s.stopReason != null));
         if (!problem && android.os.SystemClock.uptimeMillis() - touchedAt > 4000) controls(false);
         else if (problem) controls(true);
         histogram();
+    }
+
+    /** The heat and battery badge (#837), read every 5 s; it stays until the phone is fine again. */
+    private void health(CameraService s) {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (s == null || now - healthAt < 5000) return;
+        healthAt = now;
+        float[] b = s.battery();
+        boolean cooling = s.thermalStep > 0;
+        int thermal = Build.VERSION.SDK_INT >= 29 ? s.thermalStatus : -1;
+        String badge = Health.badge(thermal, cooling, b[0], b[2] > 0);
+        warnAdvice = Health.advice(thermal, cooling, b[0], b[2] > 0);
+        if (!badge.contentEquals(warn.getText())) {
+            warn.setText(badge);
+            warn.setContentDescription(warnAdvice);
+        }
+        int v = badge.isEmpty() ? View.GONE : View.VISIBLE;
+        if (warn.getVisibility() != v) warn.setVisibility(v);
     }
 
     /** The histogram comes from the GPU (a 64 × 36 copy of the graded picture, twice a second), only while shown. */

@@ -114,14 +114,63 @@ final class Report {
      * Rhema could not be reached. Same pinned https and header sign-in as the report.
      */
     static int tally(Pairing p) throws IOException {
+        return ask(p).tally;
+    }
+
+    /** The quality Rhema Studio suggests for this camera (#838): at most this tall and this many Mbit/s. */
+    static final class Suggest {
+        final String id;
+        final int height;
+        final int mbps;
+        final String words;
+
+        Suggest(String id, int height, int mbps, String words) {
+            this.id = id;
+            this.height = height;
+            this.mbps = mbps;
+            this.words = words;
+        }
+    }
+
+    /** Rhema's whole tally reply: the tally, and what newer Rhemas add (#836, #838, #850). */
+    static final class Answer {
+        /** The HTTP status (403: the camera was removed or given a new link; 503: Rhema is starting). */
+        final int code;
+        final int tally;
+        /** CamAction.RECEIVED / NOT_RECEIVED / RECEIVING_UNKNOWN. */
+        final int receiving;
+        /** What Rhema Studio calls this camera ("" when it does not say). */
+        final String name;
+        /** null: no suggestion (the phone's own choice). */
+        final Suggest suggest;
+
+        Answer(int code, int tally, int receiving, String name, Suggest suggest) {
+            this.code = code;
+            this.tally = tally;
+            this.receiving = receiving;
+            this.name = name;
+            this.suggest = suggest;
+        }
+
+        /** Rhema answered that it does not know this camera (with this secret). */
+        boolean forbidden() {
+            return code == HttpURLConnection.HTTP_FORBIDDEN;
+        }
+    }
+
+    /**
+     * Ask Rhema for the camera's tally and the rest of its reply. Throws when Rhema could not be
+     * reached. Same pinned https and header sign-in as the report.
+     */
+    static Answer ask(Pairing p) throws IOException {
         String url = p.tallyUrl();
-        if (url == null) return CamAction.TALLY_UNKNOWN;
+        if (url == null) return new Answer(0, CamAction.TALLY_UNKNOWN, CamAction.RECEIVING_UNKNOWN, "", null);
         HttpsURLConnection c = open(p, url);
         try {
             c.setRequestMethod("GET");
             int code = c.getResponseCode();
             InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
-            byte[] buf = new byte[512];
+            byte[] buf = new byte[4096];
             int n = 0;
             if (in != null) {
                 try {
@@ -130,7 +179,7 @@ final class Report {
                     in.close();
                 }
             }
-            return code == HttpURLConnection.HTTP_OK ? parseTally(new String(buf, 0, n, StandardCharsets.UTF_8)) : CamAction.TALLY_UNKNOWN;
+            return parseAnswer(code, new String(buf, 0, n, StandardCharsets.UTF_8));
         } finally {
             c.disconnect();
         }
@@ -138,11 +187,46 @@ final class Report {
 
     /** Rhema's tally reply ({"online":true,"congregation":false}); unknown if it is not one. */
     static int parseTally(String json) {
-        String j = json.replace(" ", "");
-        boolean on = j.contains("\"online\":true"), off = j.contains("\"online\":false");
-        boolean room = j.contains("\"congregation\":true"), noRoom = j.contains("\"congregation\":false");
-        if (!(on || off) || !(room || noRoom)) return CamAction.TALLY_UNKNOWN;
-        return (on ? CamAction.ONLINE : 0) | (room ? CamAction.CONGREGATION : 0);
+        return parseAnswer(HttpURLConnection.HTTP_OK, json).tally;
+    }
+
+    /** A reply as Answer; anything but a 200 with a JSON object knows nothing (never "off air"). */
+    static Answer parseAnswer(int code, String json) {
+        java.util.Map<String, Object> o = code == HttpURLConnection.HTTP_OK ? Json.object(json) : null;
+        if (o == null) return new Answer(code, CamAction.TALLY_UNKNOWN, CamAction.RECEIVING_UNKNOWN, "", null);
+        Object on = o.get("online"), room = o.get("congregation"), rec = o.get("receiving"), name = o.get("name"), sug = o.get("suggest");
+        int tally = on instanceof Boolean && room instanceof Boolean
+                ? ((Boolean) on ? CamAction.ONLINE : 0) | ((Boolean) room ? CamAction.CONGREGATION : 0) : CamAction.TALLY_UNKNOWN;
+        int receiving = rec instanceof Boolean ? ((Boolean) rec ? CamAction.RECEIVED : CamAction.NOT_RECEIVED) : CamAction.RECEIVING_UNKNOWN;
+        String label = name instanceof String ? clean((String) name) : "";
+        Suggest suggest = null;
+        if (sug instanceof java.util.Map) {
+            java.util.Map<?, ?> s = (java.util.Map<?, ?>) sug;
+            int h = whole(s.get("height")), m = whole(s.get("mbps"));
+            // Only sizes and bitrates a phone can send; anything else is no suggestion.
+            if (h >= 360 && h <= 2160 && m >= 1 && m <= 100) {
+                Object id = s.get("id"), words = s.get("words");
+                suggest = new Suggest(id instanceof String ? clean((String) id) : "", h, m, words instanceof String ? clean((String) words) : h + "p, at most " + m + " Mbit/s");
+            }
+        }
+        return new Answer(code, tally, receiving, label, suggest);
+    }
+
+    /** A whole number from a JSON number, or 0. */
+    private static int whole(Object v) {
+        if (!(v instanceof Double)) return 0;
+        double d = (Double) v;
+        return d == Math.rint(d) && Math.abs(d) < 1e6 ? (int) d : 0;
+    }
+
+    /** Text from Rhema for the screen: no control characters, at most 60 characters. */
+    private static String clean(String s) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < s.length() && b.length() < 60; i++) {
+            char ch = s.charAt(i);
+            if (!Character.isISOControl(ch)) b.append(ch);
+        }
+        return b.toString().trim();
     }
 
     /** A connection to the paired Rhema only (its pinned certificate), signed in with the camera's secret. */
