@@ -309,11 +309,11 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10q.1 | Desk menu → Your name "Tolu". Approve a service. Save the service log. Restart the app. | The log's first line ends "operator: Tolu"; the name is still there after restart; `audit_events.actor` for the approve row is "Tolu" (inspect the database with sqlite3). | Verified on the Intel Mac |
 
-### 10r. Earlier logs (AR-003)
+### 10r. Kept logs (AR-003; formerly "Earlier logs")
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10r.1 | After showing a few items, Library → Keep this log. Restart the app. Library → Earlier logs, search a reference you showed. | The log is listed with today's date; the search finds it; its download button saves the same text. | Verified on the Intel Mac |
+| 10r.1 | After showing a few items, History → This session's log → Keep this log. Restart the app. History → Kept logs, search a reference you showed. | The log is listed with today's date; the search finds it; its download button saves the same text. | Verified on the Intel Mac |
 
 ### 10s. Remote control key (OP-006)
 
@@ -477,7 +477,7 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10ao.1 | Archive → What went live → Earlier logs: press the bin next to a log. Then Prepare → Media: press the bin next to an unused picture. | Nothing is deleted on the first press; "Delete"/"Remove" and "Keep" appear in its place. Keep restores the bin; Delete/Remove deletes. | Verified on the Intel Mac |
+| 10ao.1 | History → Kept logs: press the bin next to a log. Then Prepare → Media: press the bin next to an unused picture. | Nothing is deleted on the first press; "Delete"/"Remove" and "Keep" appear in its place. Keep restores the bin; Delete/Remove deletes. | Verified on the Intel Mac |
 
 ### 10ap. Songs as text (FR-02)
 
@@ -609,7 +609,7 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10bf.1 | Listen for a few minutes (Whisper or Deepgram), present some items, then Archive → What went live. | "Include what was said (n recognised passages)" appears, unticked, with the notice. Keep this log without ticking: the kept log has no transcript. | Unverified |
-| 10bf.2 | Tick it and Keep this log; search Earlier logs for a phrase that was said. | The log ends with "Transcript (recognised speech by …; not checked…)" and timed passages; the search finds it. Reopening Library shows the box unticked again. | Unverified |
+| 10bf.2 | Tick it and Keep this log; search Kept logs for a phrase that was said. | The log ends with "Transcript (recognised speech by …; not checked…)" and timed passages; the search finds it. Reopening Library shows the box unticked again. | Unverified |
 
 ### 10bg. Who prepares, who saved (CL-007)
 
@@ -772,7 +772,7 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10by.1 | Start listening in Production, switch to Standard and Home; speak for a minute; unplug the microphone. | The transcript keeps growing (Library → Service log offers it); the "Audio source disconnected" warning appears. | Unverified |
+| 10by.1 | Start listening in Production, switch to Standard and Home; speak for a minute; unplug the microphone. | The transcript keeps growing (History → Service runs and logs → This session's log offers it); the "Audio source disconnected" warning appears. | Unverified |
 | 10by.2 | First launch: finish (or skip) the tour. | Back where you were (Home), and Present opens in Standard with its keys. | Verified on the Intel Mac |
 | 10by.3 | Bible panel: Genesis 50, press → (or Next chapter). | Exodus 1, not an empty Genesis 51. | Verified on the Intel Mac |
 | 10by.4 | While listening, open Settings → Audio or Speech. | "Rhema is listening now. Changes here apply when you stop and start listening again." | Unverified |
@@ -805,7 +805,7 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10cb.1 | Change a setting (say the operator name) and close Rhema straight away; reopen. | The change is kept. | Verified on the Intel Mac |
-| 10cb.2 | Go live with something, then close Rhema normally; reopen and look under Archive → What went live → Earlier logs. | The service log of that run is there. | Verified on the Intel Mac |
+| 10cb.2 | Go live with something, then close Rhema normally; reopen and look under History → Kept logs. | The service log of that run is there. | Verified on the Intel Mac |
 | 10cb.3 | Add a picture to the service on screen without saving; Prepare → Pictures → Remove it. Also a picture in a screen loop, and a file attached to a song. | Refused, naming where it is used; the file stays. | Verified on the Intel Mac |
 | 10cb.4 | Add a song to the service on screen without saving; open it in the editor and Delete. | Refused: used in the service on screen. | Verified on the Intel Mac |
 | 10cb.5 | Change a theme in the Designer; press Escape, Close, or pick another theme. Then close Rhema with a changed theme. | Rhema asks before discarding; the close question lists the theme. | Verified on the Intel Mac |

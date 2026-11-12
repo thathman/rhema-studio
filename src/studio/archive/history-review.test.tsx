@@ -112,6 +112,24 @@ describe("History: service runs and logs (#805 R6, #832 S8)", () => {
   })
 })
 
+describe("History: saved runs page past twenty", () => {
+  it("shows twenty runs and Show more asks for the next twenty", async () => {
+    const many = Array.from({ length: 25 }, (_, i) => ({ ...run, run_id: `run-${i}`, title: `Service ${i}` }))
+    mockInvoke.mockImplementation(async (command: string, args: Record<string, unknown> = {}) => {
+      if (command === "content_list_service_runs") return many.slice(0, Number(args.limit))
+      if (command === "content_list_service_logs") return []
+      return null
+    })
+    await act(async () => { root!.render(<JournalBlock onOpenRun={() => {}} />); await tick() })
+    const rows = () => document.querySelectorAll('[aria-label="Saved runs"] li').length
+    expect(rows()).toBe(20)
+    expect(mockInvoke).toHaveBeenCalledWith("content_list_service_runs", { programId: null, limit: 21 })
+    await act(async () => { button("Show more").click(); await tick() })
+    expect(rows()).toBe(25)
+    expect(button("Show more")).toBeUndefined()
+  })
+})
+
 describe("one thing called History (#805 R6)", () => {
   it("calls Prepare's per-save snapshots Versions", async () => {
     const { saveStateOf } = await import("@/studio/prepare/save-state")

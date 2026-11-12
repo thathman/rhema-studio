@@ -138,22 +138,50 @@ fn planned_song(kind: &str, reference: &str, payload: Option<&str>) -> Option<Pl
     Some(PlannedSong { song_id, reference: reference.to_string(), hymn, hymn_numbers })
 }
 
-/// The ids of the items that went live (or were put back on screen after a recovery) during a run.
-/// Rehearsal is never journalled, so it is not counted.
-fn shown_item_ids(checkpoint: &serde_json::Value) -> HashSet<String> {
+
+/// What a journal entry put on screen: the song (newer journals name it) and/or its rundown item.
+struct ShownEntry {
+    song_id: Option<String>,
+    item_id: Option<String>,
+}
+
+/// The entries of a run that put content on screen: program `live`/`restore` entries, and live
+/// `source` activations. Rehearsal is never journalled, so it is never counted.
+fn shown_entries(checkpoint: &serde_json::Value) -> Vec<ShownEntry> {
     checkpoint
         .get("entries")
         .and_then(serde_json::Value::as_array)
         .into_iter()
         .flatten()
-        .filter(|entry| matches!(entry.get("kind").and_then(serde_json::Value::as_str), Some("live" | "restore")))
-        .filter_map(|entry| entry.get("itemId").and_then(serde_json::Value::as_str).map(str::to_string))
+        .filter(|entry| {
+            let kind = entry.get("kind").and_then(serde_json::Value::as_str);
+            matches!(kind, Some("live" | "restore")) || (kind == Some("source") && entry.get("songId").is_some_and(serde_json::Value::is_string))
+        })
+        .map(|entry| ShownEntry {
+            song_id: entry.get("songId").and_then(serde_json::Value::as_str).filter(|s| !s.is_empty()).map(str::to_string),
+            item_id: entry.get("itemId").and_then(serde_json::Value::as_str).map(str::to_string),
+        })
+        .filter(|e| e.song_id.is_some() || e.item_id.is_some())
         .collect()
+}
+
+/// The run's church-local day: its service date, else the local start day the app wrote into the
+/// checkpoint (in the run's time zone), else, for journals from before that, the UTC start day.
+fn run_date(service_date: Option<&str>, checkpoint: &serde_json::Value, started_at: &str) -> String {
+    if let Some(date) = service_date.filter(|d| is_iso_date(d)) {
+        return date.to_string();
+    }
+    if let Some(local) = checkpoint.get("startedLocalDate").and_then(serde_json::Value::as_str).filter(|d| is_iso_date(d)) {
+        return local.to_string();
+    }
+    started_at.chars().take(10).collect()
 }
 
 #[derive(Default)]
 struct ShownTally {
-    runs: HashSet<String>,
+    /// Distinct services: (program, day). Two runs of one service (a new log mid-service, or an
+    /// interrupted run and its fresh one) count once.
+    services: HashSet<(String, String)>,
     last_date: String,
     reference: String,
     hymn: Option<bool>,
@@ -161,73 +189,94 @@ struct ShownTally {
 }
 
 impl ContentDb {
-    /// Songs **shown on screen** during service runs dated `from`..=`to` (#843 S19): each run's
-    /// journal says which items went live, and the run's own plan (the saved revision it ran, or
-    /// the service's items when that revision is gone) says which of them were songs. `services`
-    /// is the number of runs that showed the song. A run's date is its service date, or the day
-    /// it started. This is what a licence report needs; `song_usage` counts the plan instead.
+    /// Songs **shown on screen** during service runs dated `from`..=`to` (#843 S19). Newer journals
+    /// name the song on each live and source entry, so songs added mid-service, sent from Library or
+    /// sent on a feed are counted; older journals fall back to the run's saved plan revision (or the
+    /// service's items when that revision is gone) to find which shown items were songs. `services`
+    /// counts distinct services (program and day; the day alone for a run with no service). A run's
+    /// day is its service date, else its church-local start day. `song_usage` counts the plan instead.
     pub fn song_usage_shown(&self, from: &str, to: &str) -> Result<Vec<SongUsage>> {
         if !is_iso_date(from) || !is_iso_date(to) || from > to {
             return Err(ContentError::Invalid("give a date range as YYYY-MM-DD, start first".into()));
         }
         let conn = self.lock()?;
-        let runs: Vec<(String, Option<String>, Option<i64>, String, String)> = {
+        // A day of slack either side for runs dated by their start: the local day can differ from UTC.
+        let runs: Vec<(Option<String>, Option<i64>, Option<String>, String, String)> = {
             let mut st = conn.prepare(
-                "SELECT run_id, program_id, program_revision, COALESCE(service_date, substr(started_at, 1, 10)) AS d, checkpoint_json
-                   FROM service_runs WHERE d BETWEEN ?1 AND ?2",
+                "SELECT program_id, program_revision, service_date, started_at, checkpoint_json FROM service_runs
+                  WHERE (service_date IS NOT NULL AND service_date BETWEEN ?1 AND ?2)
+                     OR (service_date IS NULL AND substr(started_at, 1, 10) BETWEEN date(?1, '-1 day') AND date(?2, '+1 day'))",
             )?;
             let rows = st.query_map(params![from, to], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?;
             rows.collect::<std::result::Result<_, _>>()?
         };
         let mut tally: HashMap<String, ShownTally> = HashMap::new();
-        for (run_id, program_id, revision, date, checkpoint_json) in runs {
+        for (program_id, revision, service_date, started_at, checkpoint_json) in runs {
             let Ok(checkpoint) = serde_json::from_str::<serde_json::Value>(&checkpoint_json) else { continue };
-            let shown = shown_item_ids(&checkpoint);
+            let date = run_date(service_date.as_deref(), &checkpoint, &started_at);
+            if date.as_str() < from || date.as_str() > to {
+                continue;
+            }
+            let shown = shown_entries(&checkpoint);
             if shown.is_empty() {
                 continue;
             }
-            let Some(program_id) = program_id else { continue };
-            // The plan the run used: its saved revision when kept, else the service as it is now.
+            // The plan the run used, for hymn numbers and for older journals without song ids.
             let mut items: HashMap<String, PlannedSong> = HashMap::new();
-            let snapshot: Option<String> = match revision {
-                Some(revision) => conn
-                    .query_row("SELECT items FROM program_revisions WHERE program_id = ?1 AND revision = ?2", params![program_id, revision], |r| r.get(0))
-                    .optional()?,
-                None => None,
-            };
-            if let Some(snapshot) = snapshot.and_then(|json| serde_json::from_str::<Vec<crate::ItemInput>>(&json).ok()) {
-                for item in snapshot {
-                    if let (Some(id), Some(song)) = (item.id.clone(), planned_song(&item.kind, &item.reference, item.payload.as_deref())) {
-                        items.insert(id, song);
+            if let Some(program_id) = program_id.as_deref() {
+                let snapshot: Option<String> = match revision {
+                    Some(revision) => conn
+                        .query_row("SELECT items FROM program_revisions WHERE program_id = ?1 AND revision = ?2", params![program_id, revision], |r| r.get(0))
+                        .optional()?,
+                    None => None,
+                };
+                if let Some(snapshot) = snapshot.and_then(|json| serde_json::from_str::<Vec<crate::ItemInput>>(&json).ok()) {
+                    for item in snapshot {
+                        if let (Some(id), Some(song)) = (item.id.clone(), planned_song(&item.kind, &item.reference, item.payload.as_deref())) {
+                            items.insert(id, song);
+                        }
                     }
                 }
-            } else {
+                // Items added after the run started (or a pruned revision): the service's items now.
                 let mut st = conn.prepare("SELECT id, kind, reference, payload FROM program_items WHERE program_id = ?1")?;
                 let rows = st.query_map(params![program_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<String>>(3)?)))?;
                 for row in rows {
                     let (id, kind, reference, payload) = row?;
+                    if items.contains_key(&id) {
+                        continue;
+                    }
                     if let Some(song) = planned_song(&kind, &reference, payload.as_deref()) {
                         items.insert(id, song);
                     }
                 }
             }
-            for item_id in &shown {
-                let Some(song) = items.get(item_id) else { continue };
-                let entry = tally.entry(song.song_id.clone()).or_default();
-                entry.runs.insert(run_id.clone());
+            let service = (program_id.clone().unwrap_or_default(), date.clone());
+            for shown_entry in &shown {
+                let planned = shown_entry.item_id.as_ref().and_then(|id| items.get(id));
+                // The journal's own song id wins; a plan item that names another song is ignored.
+                let (song_id, planned) = match (&shown_entry.song_id, planned) {
+                    (Some(song_id), Some(p)) if &p.song_id == song_id => (song_id.clone(), Some(p)),
+                    (Some(song_id), _) => (song_id.clone(), None),
+                    (None, Some(p)) => (p.song_id.clone(), Some(p)),
+                    (None, None) => continue,
+                };
+                let entry = tally.entry(song_id).or_default();
+                entry.services.insert(service.clone());
                 if date > entry.last_date {
                     entry.last_date.clone_from(&date);
                 }
-                if entry.reference.is_empty() {
-                    entry.reference.clone_from(&song.reference);
-                }
-                entry.hymn = match (entry.hymn, song.hymn) {
-                    (Some(true), _) | (_, Some(true)) => Some(true),
-                    (Some(false), _) | (_, Some(false)) => Some(false),
-                    _ => None,
-                };
-                if let Some(numbers) = &song.hymn_numbers {
-                    entry.numbers.extend(numbers.iter().cloned());
+                if let Some(song) = planned {
+                    if entry.reference.is_empty() {
+                        entry.reference.clone_from(&song.reference);
+                    }
+                    entry.hymn = match (entry.hymn, song.hymn) {
+                        (Some(true), _) | (_, Some(true)) => Some(true),
+                        (Some(false), _) | (_, Some(false)) => Some(false),
+                        _ => None,
+                    };
+                    if let Some(numbers) = &song.hymn_numbers {
+                        entry.numbers.extend(numbers.iter().cloned());
+                    }
                 }
             }
         }
@@ -254,7 +303,7 @@ impl ContentDb {
             let hymn_numbers = if !hymn { Vec::new() } else if saved_numbers.is_empty() { library_numbers } else { saved_numbers };
             let (title, authors, ccli_number, licence) = match library {
                 Some((title, authors, ccli, licence, _)) => (title, authors, ccli, licence),
-                None => (t.reference, String::new(), None, "unknown".to_string()),
+                None => (if t.reference.is_empty() { format!("Song no longer in the library ({song_id})") } else { t.reference }, String::new(), None, "unknown".to_string()),
             };
             out.push(SongUsage {
                 song_id,
@@ -264,7 +313,7 @@ impl ContentDb {
                 hymn_numbers,
                 ccli_number,
                 licence,
-                services: i64::try_from(t.runs.len()).unwrap_or(i64::MAX),
+                services: i64::try_from(t.services.len()).unwrap_or(i64::MAX),
                 last_date: t.last_date,
             });
         }
@@ -495,5 +544,77 @@ mod tests {
         assert_eq!(shown.len(), 1);
         assert_eq!((shown[0].services, shown[0].last_date.as_str(), shown[0].hymn), (1, "2026-10-04", true));
         assert_eq!(shown[0].hymn_numbers, vec!["CAC 245"]);
+    }
+
+    /// A run saved the way the app saves it now: entries may name their song, and the checkpoint
+    /// carries the church-local start day.
+    fn run_now(db: &ContentDb, run_id: &str, program: Option<(&str, i64)>, service_date: Option<&str>, started_at: &str, local_day: &str, entries: serde_json::Value) {
+        db.checkpoint_service_run(&crate::ServiceRunCheckpoint {
+            run_id: run_id.into(),
+            program_id: program.map(|(id, _)| id.to_string()),
+            program_revision: program.map(|(_, revision)| revision),
+            service_date: service_date.map(Into::into),
+            title: "Sunday".into(),
+            time_zone: Some("America/Chicago".into()),
+            started_at: started_at.into(),
+            checkpoint: serde_json::json!({ "version": 2, "entries": entries, "startedLocalDate": local_day }),
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn two_runs_of_one_service_count_it_once() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let grace = song(&db, "Amazing Grace", None);
+        let p = db.create_program("Service", Some("2026-10-04")).unwrap();
+        let saved = db.replace_items(&p.id, p.revision, &[song_item("i-grace", &grace, "")]).unwrap();
+        // "Start a new log" mid-service, or an interrupted run and a fresh one: two run ids.
+        run(&db, "run-a", &saved, Some("2026-10-04"), &["i-grace"]);
+        run(&db, "run-b", &saved, Some("2026-10-04"), &["i-grace"]);
+        let shown = db.song_usage_shown("2026-10-01", "2026-10-31").unwrap();
+        assert_eq!(shown[0].services, 1);
+    }
+
+    #[test]
+    fn songs_added_mid_service_sent_without_an_item_or_in_a_run_with_no_service_are_counted() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let grace = song(&db, "Amazing Grace", None);
+        let late = song(&db, "Added Late", None);
+        let legacy_late = song(&db, "Added Late Legacy", None);
+        let sent = song(&db, "Sent From Library", None);
+        let loose = song(&db, "No Service", None);
+        let p = db.create_program("Service", Some("2026-10-04")).unwrap();
+        let saved = db.replace_items(&p.id, p.revision, &[song_item("i-grace", &grace, "")]).unwrap();
+        // Two items added after the run started: not in the revision the run captured.
+        db.replace_items(&p.id, saved.program.revision, &[song_item("i-grace", &grace, ""), song_item("i-late", &late, ""), song_item("i-legacy", &legacy_late, "")]).unwrap();
+        run_now(&db, "run-1", Some((&p.id, saved.program.revision)), Some("2026-10-04"), "2026-10-04T15:00:00Z", "2026-10-04", serde_json::json!([
+            { "at": 1, "mono": 1, "kind": "live", "label": "x", "itemId": "i-late", "songId": late },
+            // An older journal entry without a song id: found among the service's items now.
+            { "at": 2, "mono": 2, "kind": "live", "label": "x", "itemId": "i-legacy" },
+            // Sent from Library or on a feed: no rundown item, the song is named.
+            { "at": 3, "mono": 3, "kind": "live", "label": "x", "itemId": null, "songId": sent },
+            { "at": 4, "mono": 4, "kind": "source", "label": "x", "itemId": null, "songId": sent },
+            // A source change that is not a song is not counted.
+            { "at": 5, "mono": 5, "kind": "source", "label": "Bible: John 3:16", "itemId": "i-grace" },
+        ]));
+        run_now(&db, "run-2", None, None, "2026-10-11T15:00:00Z", "2026-10-11", serde_json::json!([
+            { "at": 1, "mono": 1, "kind": "live", "label": "x", "itemId": "library-x", "songId": loose },
+        ]));
+        let mut titles: Vec<(String, i64)> = db.song_usage_shown("2026-10-01", "2026-10-31").unwrap().into_iter().map(|u| (u.title, u.services)).collect();
+        titles.sort();
+        assert_eq!(titles, vec![("Added Late".to_string(), 1), ("Added Late Legacy".to_string(), 1), ("No Service".to_string(), 1), ("Sent From Library".to_string(), 1)]);
+    }
+
+    #[test]
+    fn a_run_without_a_service_date_counts_on_its_church_local_day() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let grace = song(&db, "Amazing Grace", None);
+        // 19:30 on 31 October in a UTC-5 church is 00:30 UTC on 1 November.
+        run_now(&db, "evening", None, None, "2026-11-01T00:30:00Z", "2026-10-31", serde_json::json!([
+            { "at": 1, "mono": 1, "kind": "live", "label": "x", "itemId": null, "songId": grace },
+        ]));
+        let october = db.song_usage_shown("2026-10-01", "2026-10-31").unwrap();
+        assert_eq!((october.len(), october[0].last_date.as_str()), (1, "2026-10-31"));
+        assert!(db.song_usage_shown("2026-11-01", "2026-11-30").unwrap().is_empty());
     }
 }

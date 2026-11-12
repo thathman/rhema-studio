@@ -1642,6 +1642,31 @@ mod tests {
     }
 
     #[test]
+    fn migration_0020_lets_a_run_saved_before_it_take_after_action_notes() {
+        let tmp = TempDir::new();
+        let before_0020 = MIGRATIONS.iter().position(|(v, _)| *v == "0020_service_run_notes").unwrap();
+        {
+            let db = ContentDb::open_with_migrations(&tmp.db(), &MIGRATIONS[..before_0020]).unwrap();
+            // A run written by the pre-0020 schema: no notes columns yet.
+            db.lock().unwrap().execute(
+                "INSERT INTO service_runs (run_id, program_id, program_revision, service_date, title, time_zone, started_at, updated_at, status, checkpoint_json)
+                 VALUES ('old-run', NULL, NULL, '2026-10-04', 'Harvest', NULL, '2026-10-04T09:00:00Z', '2026-10-04T11:00:00.000Z', 'finished', '{\"version\":1,\"entries\":[]}')",
+                [],
+            ).unwrap();
+        }
+        let db = ContentDb::open(&tmp.db()).unwrap();
+        assert!(db.last_backup().unwrap().to_string_lossy().contains("before-0020_service_run_notes"));
+        let old = db.get_service_run("old-run").unwrap().expect("the run survives the upgrade");
+        assert_eq!((old.after_action_notes, old.notes_updated_at), (None, None));
+        db.set_service_run_notes("old-run", "Choir needed a second microphone.").unwrap();
+        drop(db);
+        let reopened = ContentDb::open(&tmp.db()).unwrap();
+        let run = reopened.get_service_run("old-run").unwrap().unwrap();
+        assert_eq!(run.after_action_notes.as_deref(), Some("Choir needed a second microphone."));
+        assert_eq!((run.updated_at.as_str(), run.status.as_str()), ("2026-10-04T11:00:00.000Z", "finished"));
+    }
+
+    #[test]
     fn create_list_get() {
         let db = ContentDb::open_in_memory().unwrap();
         let p = db.create_program("Sunday", Some("2026-10-25")).unwrap();

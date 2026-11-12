@@ -216,17 +216,21 @@ function KeptLogs({ refresh, programId, onChanged }: { refresh: number; programI
   )
 }
 
+const RUNS_PAGE = 20
+
 /** Saved runs (current, interrupted and finished): each opens as its own chronology page (#854 G10). */
 function SavedRuns({ programId, onOpenRun }: { programId: string | null; onOpenRun?: (runId: string) => void }) {
   const [runs, setRuns] = useState<ServiceRunSummary[]>([])
+  // Paged (twenty at a time): Show more asks for the next twenty, keeping the order.
+  const [limit, setLimit] = useState(RUNS_PAGE)
   const [error, setError] = useState<string | null>(null)
   const load = useCallback(() => {
     let cancelled = false
-    invoke<ServiceRunSummary[]>("content_list_service_runs", { programId, limit: 20 })
+    invoke<ServiceRunSummary[]>("content_list_service_runs", { programId, limit: limit + 1 })
       .then((result) => { if (!cancelled) { setRuns(result); setError(null) } })
       .catch((e) => { if (!cancelled) { setRuns([]); setError(describeError(e)) } })
     return () => { cancelled = true }
-  }, [programId])
+  }, [programId, limit])
   useEffect(() => load(), [load])
   if (!error && runs.length === 0) return null
   return (
@@ -234,7 +238,7 @@ function SavedRuns({ programId, onOpenRun }: { programId: string | null; onOpenR
       <p className="mb-1 text-xs font-medium">Saved runs</p>
       {error && <LoadFailedRow what="saved runs" error={error} onRetry={() => void load()} />}
       <ul className="max-h-60 overflow-y-auto">
-        {runs.map((run) => (
+        {runs.slice(0, limit).map((run) => (
           <li key={run.run_id} className="flex items-center gap-2 border-b border-border/60 py-1.5 text-xs last:border-0">
             <span className="min-w-0 flex-1 truncate">{run.title}</span>
             <span className="shrink-0 text-muted-foreground">{run.status === "active" ? "Active" : run.status === "interrupted" ? "Interrupted" : "Finished"}</span>
@@ -244,6 +248,7 @@ function SavedRuns({ programId, onOpenRun }: { programId: string | null; onOpenR
           </li>
         ))}
       </ul>
+      {runs.length > limit && <Button size="xs" variant="ghost" className="mt-1" onClick={() => setLimit((n) => n + RUNS_PAGE)}>Show more</Button>}
     </section>
   )
 }
