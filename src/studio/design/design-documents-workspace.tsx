@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ask } from "@tauri-apps/plugin-dialog"
-import { ArchiveIcon, ArchiveRestoreIcon, ArrowLeftIcon, CheckIcon, FilePlus2Icon, Layers3Icon, PaletteIcon, PencilIcon, Trash2Icon, XIcon } from "lucide-react"
+import { ArchiveIcon, ArchiveRestoreIcon, CheckIcon, FilePlus2Icon, Layers3Icon, PaletteIcon, PencilIcon, Trash2Icon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,6 @@ import { libraryLooks } from "@/lib/design-packs"
 import { useBroadcastStore, useSettingsStore } from "@/stores"
 import { useUnsavedStore } from "@/stores/unsaved-store"
 import { useShellStore } from "@/studio/shell-store"
-import { LookLibraryView } from "@/studio/design/look-library-view"
 import { TEMPLATE_LABELS } from "@/studio/design/design-vocabulary"
 import { DesignDocumentEditor } from "@/studio/design/design-document-editor"
 import { DesignUsagePanel } from "@/studio/design/design-usage-panel"
@@ -39,8 +38,8 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
   onInitialTemplateHandled?: () => void
   initialDesignId?: string | null
   onInitialDesignHandled?: () => void
-  /** Design's one Templates section (#806 R7); without it, templates open here. */
-  onBrowseTemplates?: () => void
+  /** Design's one Templates section (#806 R7). Templates are never browsed inside My Designs (#809 R10). */
+  onBrowseTemplates: () => void
 }) {
   const [documents, setDocuments] = useState<DesignSummary[]>([])
   const [active, setActive] = useState<DesignDocument | null>(null)
@@ -49,7 +48,6 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
 
   const [creating, setCreating] = useState(false)
   const [activeDirty, setActiveDirty] = useState(false)
-  const [browseTemplates, setBrowseTemplates] = useState(false)
   const [query, setQuery] = useState("")
   const [error, setError] = useState("")
   const [reloadToken, setReloadToken] = useState(0)
@@ -121,7 +119,6 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
       setActive(next)
       setChosenDesign(null)
       setActiveDirty(false)
-      setBrowseTemplates(false)
       focusEditorId.current = null
       setError("")
     } catch (failure) {
@@ -141,7 +138,6 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
       setActive(created)
       setChosenDesign(null)
       setActiveDirty(false)
-      setBrowseTemplates(false)
       setLoading(true)
       setReloadToken((token) => token + 1)
     } catch (failure) {
@@ -175,7 +171,6 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
       setChosenDesign(customize ? null : created)
       focusEditorId.current = customize ? created.id : null
       setActiveDirty(false)
-      setBrowseTemplates(false)
       setLoading(true)
       setReloadToken((token) => token + 1)
       toast.success("Design copy created", {
@@ -206,15 +201,8 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
   const showTemplates = async () => {
     if (!(await confirmDiscard())) return
     useUnsavedStore.getState().setDesignEditor(null)
-    if (onBrowseTemplates) {
-      setActiveDirty(false)
-      onBrowseTemplates()
-      return
-    }
-    setBrowseTemplates(true)
-    setActive(null)
-    setChosenDesign(null)
     setActiveDirty(false)
+    onBrowseTemplates()
   }
 
   const reloadActive = async () => {
@@ -403,17 +391,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
       </aside>
       <main ref={mainRef} className="flex min-h-0 min-w-0 flex-col">
         {error && <p role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-xs">{error}</p>}
-        {browseTemplates ? (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex items-center gap-2 border-b border-border px-4 py-2">
-              <Button size="xs" variant="ghost" onClick={() => setBrowseTemplates(false)}><ArrowLeftIcon /> Back to My Designs</Button>
-              <span className="text-xs text-muted-foreground">Choose a template to save a private, editable copy in My Designs. It does not add a service moment or change any screen.</span>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <LookLibraryView onOpen={() => {}} scenePicker={{ purpose: "design", onChoose: (look, customize) => { void createFromTemplate(look, customize) } }} />
-            </div>
-          </div>
-        ) : active ? (
+        {active ? (
           <DesignDocumentEditor
             key={active.id + ":" + active.revision}
             document={active}
@@ -430,7 +408,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
             <p role="status" className="mt-2 text-sm text-muted-foreground">“{chosenDesign.title}” is a private editable copy. Customize and save a draft here; Preview, Program and screens are unchanged.</p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               <Button onClick={() => void open(chosenDesign.id)} disabled={loading || creating}>Customize this design</Button>
-              <Button variant="outline" onClick={() => { setChosenDesign(null); if (onBrowseTemplates) onBrowseTemplates(); else setBrowseTemplates(true) }} disabled={creating}>Choose another template</Button>
+              <Button variant="outline" onClick={() => { setChosenDesign(null); onBrowseTemplates() }} disabled={creating}>Choose another template</Button>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">When ready, create an immutable version and choose it for a moment in Prepare. Only an explicit Take can change the public output.</p>
           </section>
@@ -454,7 +432,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
             </ol>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               <Button onClick={() => void createBlank()} disabled={creating}>Create a blank design</Button>
-              <Button variant="outline" onClick={() => { if (onBrowseTemplates) onBrowseTemplates(); else setBrowseTemplates(true) }} disabled={creating}>Browse scene templates</Button>
+              <Button variant="outline" onClick={() => { onBrowseTemplates() }} disabled={creating}>Browse scene templates</Button>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">Design work stays private until a version is deliberately attached to a plan, approved and explicitly Taken.</p>
           </div>
