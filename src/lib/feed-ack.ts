@@ -57,10 +57,14 @@ export function ackUrl(id: string, key: string, seen: boolean): string {
  * last one drawn, so no drawn frame is acknowledged again, and the page's beat acknowledgements name
  * a frame the new host never sent, which it refuses.
  *
- * Within one host run the stream's frame numbers never go down (a reconnect starts at the frame
- * shown now), so a lower number than the last one heard, the restarted host's `0` ("off") included,
- * starts a new run: nothing drawn in it yet, and an acknowledgement still pending from the old run
- * is dropped.
+ * A host that says its run (`hostRun` in each frame, random per start) settles it: another run id
+ * than the last heard starts a new run, even when a TV reconnects so late that the new host's
+ * numbers have passed its old ones. Every acknowledgement carries the run id, and the host ignores
+ * one of another run. For an older host (no run id), the fallback: within one host run the
+ * stream's frame numbers never go down (a reconnect starts at the frame shown now), so a lower
+ * number than the last one heard, the restarted host's `0` ("off") included, starts a new run.
+ * Either way nothing is drawn in the new run yet, and an acknowledgement still pending from the old
+ * run is dropped.
  */
 export interface DrawnFrames {
   /** The newest frame drawn in this run (what the page acknowledges); 0 before any. */
@@ -71,18 +75,30 @@ export interface DrawnFrames {
   run: number
   /** The last frame number heard on the stream, -1 before any. */
   heard: number
+  /** The host's own run id from the last frame heard; undefined from an older host. */
+  hostRun?: string
 }
 
 export const drawnFrames = (): DrawnFrames => ({ seq: 0, seen: false, run: 0, heard: -1 })
 
-/** A frame numbered `seq` came on the stream: the run it belongs to (a new one when the number went down). */
-export function frameHeard(d: DrawnFrames, seq: number): number {
-  if (seq < d.heard) {
+/** The host run id a frame carries (`hostRun`), if it is one. */
+export function frameHostRun(frame: unknown): string | undefined {
+  const run = (frame as { hostRun?: unknown } | null)?.hostRun
+  return typeof run === "string" && run !== "" ? run : undefined
+}
+
+/**
+ * A frame numbered `seq`, of host run `hostRun` (undefined from an older host), came on the
+ * stream: the run it belongs to (a new one when the host run id changed, or the number went down).
+ */
+export function frameHeard(d: DrawnFrames, seq: number, hostRun?: string): number {
+  if ((d.heard >= 0 && hostRun !== d.hostRun) || seq < d.heard) {
     d.run += 1
     d.seq = 0
     d.seen = false
   }
   d.heard = seq
+  d.hostRun = hostRun
   return d.run
 }
 

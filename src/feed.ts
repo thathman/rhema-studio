@@ -18,7 +18,7 @@ import {
 } from "@/lib/feed-freshness"
 import { insetArea, lostView, overscanPct, type FeedLost } from "@/lib/feed-receivers"
 import { feedPageOutdated } from "@/lib/feed-page-version"
-import { ackUrl, afterDrawn, drawnFrames, frameDrawn, frameHeard, pageAckClock } from "@/lib/feed-ack"
+import { ackUrl, afterDrawn, drawnFrames, frameDrawn, frameHeard, frameHostRun, pageAckClock } from "@/lib/feed-ack"
 import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
@@ -394,10 +394,13 @@ const drawn = drawnFrames()
 /**
  * An acknowledgement. One that cannot say the frame is visibly up (a hidden page, or no animation
  * frame) is marked hidden, in the address and the body: Rhema Studio Receiver and the host must not
- * count it as shown.
+ * count it as shown. Each carries the host run its frame came from (`hostRun`, when the host sends
+ * one): a host restarted since ignores it, whatever the frame number.
  */
-const ack = (body: object, seen: boolean) =>
-  fetch(ackUrl(id, key, seen), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(seen ? body : { ...body, hidden: true }) }).catch(() => {})
+const ack = (body: object, seen: boolean) => {
+  const sent = { ...body, hostRun: drawn.hostRun }
+  return fetch(ackUrl(id, key, seen), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(seen ? sent : { ...sent, hidden: true }) }).catch(() => {})
+}
 /** Whether what this page last drew is on screen now. */
 const seenNow = () => drawn.seen && !pageAckClock.hidden()
 /**
@@ -528,8 +531,11 @@ function listen(source: EventSource) {
   source.addEventListener("frame", (e) => {
     if (source !== events) return
     const ev = e as MessageEvent<string>
+    let hostRun: string | undefined
     try {
-      show(JSON.parse(ev.data) as Frame)
+      const next = JSON.parse(ev.data) as Frame
+      hostRun = frameHostRun(next)
+      show(next)
     } catch {
       // A frame this page cannot read: keep the last one (and do not say it was drawn).
       return
@@ -538,8 +544,8 @@ function listen(source: EventSource) {
     checkStale()
     // Tell the host this frame is on this screen (receiver trust), after it is drawn.
     const seq = Number(ev.lastEventId)
-    // A restarted host numbers its frames from 1 again: a new run, nothing drawn in it yet.
-    const run = Number.isFinite(seq) ? frameHeard(drawn, seq) : drawn.run
+    // A restarted host has a new run id (an older host: numbers its frames from 1 again): a new run, nothing drawn in it yet.
+    const run = Number.isFinite(seq) ? frameHeard(drawn, seq, hostRun) : drawn.run
     // A hidden page (an OBS source off the scene) gets no animation frames: afterDrawn falls back to a
     // timer, and that acknowledgement is marked hidden (#844): drawn, not seen.
     if (Number.isFinite(seq) && seq > 0) {

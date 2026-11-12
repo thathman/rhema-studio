@@ -3009,6 +3009,35 @@ struct FeedAck {
     /// query). Absent from older pages: drawn, as before.
     #[serde(default)]
     hidden: bool,
+    /// The host run of the frame acknowledged, as its frame carried it (`hostRun`). Absent from
+    /// older pages, and from a page that heard an older host: counted as before.
+    #[serde(default, rename = "hostRun")]
+    host_run: Option<String>,
+}
+
+/// This host process's run id: random, made once at start. Frame numbers start again at 1 with
+/// each run, so a page that heard frame 7 of an earlier run (a TV that reconnects late after a
+/// restart) could otherwise acknowledge "7" as this run's frame 7 before it drew it.
+fn host_run() -> &'static str {
+    static RUN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    RUN.get_or_init(|| uuid::Uuid::new_v4().simple().to_string())
+}
+
+/// A frame as the stream sends it: the app's JSON object with this host's run id added as its
+/// first field (`hostRun`), so the page acknowledges it with that id. An older page ignores the
+/// field. Anything that is not a JSON object goes as it is (the page then has no run id).
+fn frame_with_run(json: &str) -> String {
+    let Some(rest) = json.trim_start().strip_prefix('{') else {
+        return json.to_owned();
+    };
+    let sep = if rest.trim_start().starts_with('}') { "" } else { "," };
+    format!(r#"{{"hostRun":"{}"{sep}{rest}"#, host_run())
+}
+
+/// Whether an acknowledgement names another host run than this one: one from a page that drew a
+/// frame of the host before a restart. Never counted; one without a run id is (older pages).
+fn foreign_run(run: Option<&str>) -> bool {
+    run.is_some_and(|r| r != host_run())
 }
 
 /// `POST /api/v1/feed/{id}/ack?k=<secret>`: the page drew frame `seq` (receiver trust).
@@ -3022,8 +3051,14 @@ async fn feed_ack_handler<S: CommandSink + 'static>(
     if !state.rate.allow(peer.ip()) {
         return StatusCode::TOO_MANY_REQUESTS;
     }
+    let key = q.get("k").map_or("", String::as_str);
+    // A frame of the host before a restart: the key still opens the feed, but its number is not
+    // this run's frame of that number, so nothing about it is recorded.
+    if foreign_run(ack.host_run.as_deref()) {
+        return if state.feeds.admits(&id, key) { StatusCode::NO_CONTENT } else { StatusCode::FORBIDDEN };
+    }
     let hidden = ack.hidden || q.get("hidden").is_some_and(|h| h == "1" || h == "true");
-    match state.feeds.ack_shown(&id, q.get("k").map_or("", String::as_str), ack.seq, ack.video.map(|v| (peer.ip(), v)), ack.clock.map(|c| c.clamp(-86_400_000, 86_400_000)), hidden) {
+    match state.feeds.ack_shown(&id, key, ack.seq, ack.video.map(|v| (peer.ip(), v)), ack.clock.map(|c| c.clamp(-86_400_000, 86_400_000)), hidden) {
         Err(()) => StatusCode::FORBIDDEN,
         Ok(first) => {
             // The first page to draw a new frame: the app logs which screen showed what, and how soon
@@ -3058,14 +3093,14 @@ async fn feed_events_handler<S: CommandSink + 'static>(
     // a page that hears neither knows it is out of date. An older page ignores the beats.
     let beat = tokio::time::interval_at(tokio::time::Instant::now() + FEED_BEAT, FEED_BEAT);
     let stream = futures_util::stream::unfold((rx, first, beat), |(mut rx, first, mut beat)| async move {
-        // The frame's number is the event id: the page acknowledges it once drawn.
+        // The frame's number is the event id and the host run is in it: the page acknowledges both once drawn.
         if let Some((seq, json)) = first {
-            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("frame").id(seq.to_string()).data(json)), (rx, None, beat)));
+            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("frame").id(seq.to_string()).data(frame_with_run(&json))), (rx, None, beat)));
         }
         loop {
             tokio::select! {
                 r = rx.recv() => match r {
-                    Ok((seq, json)) => return Some((Ok(Event::default().event("frame").id(seq.to_string()).data(json)), (rx, None, beat))),
+                    Ok((seq, json)) => return Some((Ok(Event::default().event("frame").id(seq.to_string()).data(frame_with_run(&json))), (rx, None, beat))),
                     Err(broadcast::error::RecvError::Lagged(_)) => {}
                     Err(broadcast::error::RecvError::Closed) => return None,
                 },
@@ -4847,7 +4882,7 @@ mod tests {
             }
             String::from_utf8_lossy(&out).into_owned()
         };
-        assert!(stream.contains("event: frame\nid: 0\ndata: {\"off\":true}"), "{stream}");
+        assert!(stream.contains(&format!("event: frame\nid: 0\ndata: {{\"hostRun\":\"{}\",\"off\":true}}", host_run())), "{stream}");
         let mut h = result.handle;
         h.stop();
     }
@@ -4943,6 +4978,55 @@ mod tests {
         assert_eq!(acked(), 1);
         let mut h = result.handle;
         h.stop();
+    }
+
+    /// A TV that reconnects late after a host restart: the new host's frame numbers have passed the
+    /// page's old one, so only the run id tells the page's acknowledgement of the old frame 2 from
+    /// this run's frame 2, which the page has not drawn yet.
+    #[tokio::test]
+    async fn an_ack_from_another_host_run_is_never_counted() {
+        let feeds = new_feed_hub();
+        feeds.set(&[("tv".into(), "s3cret".into())]);
+        feeds.publish("tv", "{}".into());
+        feeds.publish("tv", "{}".into());
+        let sink = Arc::new(EventSink(Mutex::new(Vec::new())));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds: feeds.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let acked = || sink.0.lock().unwrap().iter().filter(|e| *e == "feed:acked").count();
+        let ack = |k: &'static str, body: String| async move { raw_http_request_with(port, "POST", &format!("/api/v1/feed/tv/ack?k={k}"), Some(&body), "").await };
+        let foreign = r#"{"seq":2,"hostRun":"0123456789abcdef0123456789abcdef","clock":5000}"#.to_owned();
+        assert!(ack("s3cret", foreign.clone()).await.contains("204"), "the key opens the feed: no error for the page");
+        assert!(ack("wrong", foreign).await.contains("403"), "a wrong key is still refused, whatever its run");
+        let st = feeds.status("tv").unwrap();
+        assert_eq!((st.acked, st.seen_hidden, st.clock_skew_ms), (0, None, None), "nothing of another run is recorded");
+        assert_eq!(acked(), 0);
+        // This run's own id: counted, the first draw.
+        assert!(ack("s3cret", format!(r#"{{"seq":2,"hostRun":"{}"}}"#, host_run())).await.contains("204"));
+        assert_eq!((feeds.status("tv").unwrap().acked, acked()), (2, 1));
+        // An older page sends no run id: counted, as before.
+        feeds.publish("tv", "{}".into());
+        assert!(ack("s3cret", r#"{"seq":3}"#.to_owned()).await.contains("204"));
+        assert_eq!((feeds.status("tv").unwrap().acked, acked()), (3, 2));
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[test]
+    fn each_frame_carries_the_host_run_and_stays_the_apps_json() {
+        let run = host_run();
+        assert_eq!(run.len(), 32);
+        assert!(run.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(host_run(), run, "one run id for the whole process");
+        assert_eq!(frame_with_run("{}"), format!(r#"{{"hostRun":"{run}"}}"#));
+        assert_eq!(frame_with_run(r#"{"off":true}"#), format!(r#"{{"hostRun":"{run}","off":true}}"#));
+        assert_eq!(frame_with_run(" { } "), format!(r#"{{"hostRun":"{run}" }} "#));
+        let framed: serde_json::Value = serde_json::from_str(&frame_with_run(r#"{"verse":{"ref":"John 3:16"},"overscan":2}"#)).unwrap();
+        assert_eq!(framed["hostRun"], run);
+        assert_eq!(framed["verse"]["ref"], "John 3:16");
+        assert_eq!(frame_with_run("[1]"), "[1]", "not an object: as it is");
+        assert!(!foreign_run(None) && !foreign_run(Some(run)) && foreign_run(Some("other")) && foreign_run(Some("")));
     }
 
     #[tokio::test]
