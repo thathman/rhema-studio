@@ -497,13 +497,6 @@ impl FeedHub {
         })
     }
 
-    /// Whether `token` opens feed `id` (its link key, a paired TV's, or an OBS companion's own).
-    fn opens(&self, id: &str, token: &str) -> bool {
-        let desks = self.companions_for(token);
-        let feeds = self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner);
-        feeds.get(id).is_some_and(|f| Self::admit(id, f, token, &desks).is_some())
-    }
-
     /// The feed's current frame and a receiver for the next ones, if the key opens it; a paired
     /// TV's page is counted as that TV's while the stream lasts.
     fn follow(&self, id: &str, token: &str) -> Option<(Option<(u64, String)>, broadcast::Receiver<(u64, String)>, Option<Watching>)> {
@@ -3062,10 +3055,10 @@ async fn feed_ack_handler<S: CommandSink + 'static>(
     // A frame of the host before a restart: the key still opens the feed, but its number is not
     // this run's frame of that number, so nothing about it is recorded.
     if foreign_run(ack.host_run.as_deref()) {
-        return if state.feeds.opens(&id, key) { StatusCode::NO_CONTENT } else { StatusCode::FORBIDDEN };
+        return if state.feeds.admits(&id, key) { StatusCode::NO_CONTENT } else { StatusCode::FORBIDDEN };
     }
     let hidden = ack.hidden || q.get("hidden").is_some_and(|h| h == "1" || h == "true");
-    match state.feeds.ack_shown(&id, key,ack.seq, ack.video.map(|v| (peer.ip(), v)), ack.clock.map(|c| c.clamp(-86_400_000, 86_400_000)), hidden) {
+    match state.feeds.ack_shown(&id, key, ack.seq, ack.video.map(|v| (peer.ip(), v)), ack.clock.map(|c| c.clamp(-86_400_000, 86_400_000)), hidden) {
         Err(()) => StatusCode::FORBIDDEN,
         Ok(first) => {
             // The first page to draw a new frame: the app logs which screen showed what, and how soon
