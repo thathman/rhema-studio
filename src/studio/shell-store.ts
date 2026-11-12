@@ -4,7 +4,10 @@ import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 export type Workspace = "home" | "prepare" | "present" | "production" | "library" | "design" | "permissions" | "connections" | "team" | "archive" | "settings"
 /** `production` is a saved-route/deep-link alias; Live is the single canonical workspace. */
 export function canonicalWorkspace(workspace: Workspace): Workspace {
-  return workspace === "production" ? "present" : workspace
+  if (workspace === "production") return "present"
+  // A name from outside the app's own code (an old link, a script, a remote request) that is not a
+  // workspace opens Home rather than taking the whole main window down (12 Nov device round).
+  return (WORKSPACES as readonly string[]).includes(workspace) ? workspace : "home"
 }
 /**
  * The Design page's sections: every design edit lives there. "outputs" was the old Output looks
