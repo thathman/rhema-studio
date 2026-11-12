@@ -295,7 +295,7 @@ async fn setup(tokens: &[&str]) -> Option<Setup> {
         k.entries = tokens.iter().map(|t| key(t, Role::Present)).collect();
     }
     let feeds = new_feed_hub();
-    feeds.set_keys(&[FeedKeys { id: "tv".into(), token: FEED_KEY.into(), tvs: Vec::new() }]);
+    feeds.set_keys(&[FeedKeys { id: "tv".into(), token: FEED_KEY.into(), ..FeedKeys::default() }]);
     feeds.publish("tv", SCENE.into());
     let cameras = new_camera_hub();
     cameras.set(&[("pulpit".into(), TOKEN.into()), ("choir".into(), TOKEN.into())]);
@@ -472,7 +472,7 @@ async fn one_reader_is_cut_off_and_the_others_at_its_address_keep_playing() {
     // Back in the scene, then the TV is unpaired from the output (a new link).
     feeds.publish("tv", SCENE.into());
     let tv = rig.opened(rig.tv()).await;
-    feeds.set_keys(&[FeedKeys { id: "tv".into(), token: "0000111122223333".into(), tvs: Vec::new() }]);
+    feeds.set_keys(&[FeedKeys { id: "tv".into(), token: "0000111122223333".into(), ..FeedKeys::default() }]);
     let left = sweep(tv, 1).await;
     assert_eq!(rig.tv().await, 403);
     assert!(left.contains(&steady) && left.contains(&reconnected) && left.contains(&screen), "{left:?}");

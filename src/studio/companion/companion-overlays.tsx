@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
 import { LayersIcon, PlusIcon, RefreshCwIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { addOverlayToObs, hostKey, hostOf, maskFeedLink, OVERLAY_KINDS, overlayInputs, OverlayOnAirError, overlaySize, readFeedLink, testOverlay, updateOverlay, type ObsRequest, type OverlayInput, type OverlayKind, type OverlayResult, type OverlayTest } from "@/lib/obs-companion"
+import { addOverlayToObs, hostKey, hostOf, maskFeedLink, OVERLAY_KINDS, overlayInputs, OverlayOnAirError, overlaySize, readFeedLink, readHostOverlays, testOverlay, updateOverlay, type HostOverlay, type ObsRequest, type OverlayInput, type OverlayKind, type OverlayResult, type OverlayTest } from "@/lib/obs-companion"
 import { obsRequest, useObsStore } from "@/stores/obs-store"
 import { useSettingsStore } from "@/stores/settings-store"
 
@@ -105,11 +105,14 @@ export function Overlays({ Card }: { Card: (p: { title: string; kicker: string; 
   const scenes = useObsStore((s) => s.scenes)
   const joinAddress = useSettingsStore((s) => s.joinAddress)
   const [list, setList] = useState<OverlayInput[] | null>(null)
+  const host = useHostOverlays()
+  const reloadHost = host.reload
   const connected = obsStatus === "connected"
   const reload = useCallback(async () => {
     if (useObsStore.getState().status !== "connected") return
+    void reloadHost()
     setList(await overlayInputs(request).catch(() => null))
-  }, [])
+  }, [reloadHost])
   // Read again when OBS connects or its scenes change (an overlay may have been added or renamed there).
   useEffect(() => {
     if (!connected) return
@@ -124,9 +127,9 @@ export function Overlays({ Card }: { Card: (p: { title: string; kicker: string; 
       ) : (
         <>
           <p className="text-muted-foreground">
-            Each overlay is a Browser Source showing one of the host's feeds, added on top of a scene you already have. On the host: Outputs → Add a ready-made feed (for example "Rhema Bible | Lower third") as a browser feed, then copy its link for OBS and paste it here. Your own sources in OBS are never removed, moved or hidden, and an overlay added to the scene on air comes in hidden.
+            Each overlay is a Browser Source showing one of the host's feeds, added on top of a scene you already have. Pick one of the feeds the host offers (on the host: Outputs → Add a ready-made feed, for example "Rhema Bible | Lower third", as a browser feed), or paste a feed's link for OBS. Your own sources in OBS are never removed, moved or hidden, and an overlay added to the scene on air comes in hidden.
           </p>
-          <AddOverlay scenes={scenes} joinAddress={joinAddress} onDone={reload} />
+          <AddOverlay scenes={scenes} joinAddress={joinAddress} hostFeeds={host.feeds} hostError={host.error} onDone={reload} />
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">In this OBS</h3>
             <Button size="sm" variant="ghost" onClick={() => void reload()}><RefreshCwIcon /> Refresh</Button>
@@ -146,9 +149,56 @@ export function Overlays({ Card }: { Card: (p: { title: string; kicker: string; 
   )
 }
 
-function AddOverlay({ scenes, joinAddress, onDone }: { scenes: string[]; joinAddress: string | null | undefined; onDone: () => Promise<void> }) {
+/**
+ * The host's feeds this companion may add as overlays (#848 G4): asked of the host when the card
+ * opens and on Refresh. Null while not known; `error` when the host refused or cannot be reached.
+ */
+function useHostOverlays(): { feeds: HostOverlay[] | null; error: string | null; reload: () => Promise<void> } {
+  const address = useSettingsStore((s) => s.joinAddress)
+  const token = useSettingsStore((s) => s.joinToken)
+  const [state, setState] = useState<{ key: string; feeds: HostOverlay[] | null; error: string | null } | null>(null)
+  const key = `${address}|${token}`
+  const ask = useCallback(async () => {
+    if (!address || !token) return null
+    try {
+      return { key, feeds: readHostOverlays(await invoke("join_overlays", { address, token }), address), error: null }
+    } catch (e) {
+      const why = String(e instanceof Error ? e.message : e)
+      return { key, feeds: null, error: why.startsWith("paused:") ? why.slice(7).trim() || "The main desk has taken back control" : why }
+    }
+  }, [address, token, key])
+  useEffect(() => {
+    let alive = true
+    void ask().then((s) => { if (alive && s) setState(s) })
+    return () => { alive = false }
+  }, [ask])
+  const reload = useCallback(async () => { const s = await ask(); if (s) setState(s) }, [ask])
+  // An answer for another host or key (left and joined again) is not shown.
+  const now = state?.key === key ? state : null
+  return { feeds: now?.feeds ?? null, error: now?.error ?? null, reload }
+}
+
+/** The host's overlay feeds to pick from, or why there are none. */
+function HostFeedPicker({ feeds, error, picked, onPick }: { feeds: HostOverlay[] | null; error: string | null; picked: string; onPick: (f: HostOverlay | null) => void }) {
+  if (error) return <p role="alert" className="text-muted-foreground">The host's feeds cannot be listed: {error}. Paste a feed's link instead.</p>
+  if (!feeds) return null
+  if (!feeds.length) return <p className="text-muted-foreground">The host offers no overlay feeds yet. On the host: Outputs → Add a ready-made feed, as a browser feed (Bible, Lyrics, Name, Ticker or Clock).</p>
+  const label = (k: OverlayKind) => OVERLAY_KINDS.find((o) => o.id === k)!.label
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="font-medium">Feed from the host</span>
+      <select aria-label="Feed from the host" value={picked} onChange={(e) => onPick(feeds.find((f) => f.id === e.target.value) ?? null)} className={`${field} max-w-[360px]`}>
+        <option value="">Pick a feed, or paste a link below…</option>
+        {feeds.map((f) => <option key={f.id} value={f.id}>{f.name} ({label(f.kind)})</option>)}
+      </select>
+    </label>
+  )
+}
+
+function AddOverlay({ scenes, joinAddress, hostFeeds, hostError, onDone }: { scenes: string[]; joinAddress: string | null | undefined; hostFeeds: HostOverlay[] | null; hostError: string | null; onDone: () => Promise<void> }) {
   const [kind, setKind] = useState<OverlayKind>("bible")
   const [link, setLink] = useState("")
+  const [picked, setPicked] = useState("")
   const [scene, setScene] = useState("")
   const [width, setWidth] = useState("")
   const [height, setHeight] = useState("")
@@ -169,6 +219,7 @@ function AddOverlay({ scenes, joinAddress, onDone }: { scenes: string[]; joinAdd
       if (r.hidden) toast.warning(w.title, { description: w.description })
       else toast.success(w.title, { description: w.description })
       setLink("")
+      setPicked("")
       setAllowOther(false)
       await onDone()
     } catch (e) {
@@ -180,6 +231,13 @@ function AddOverlay({ scenes, joinAddress, onDone }: { scenes: string[]; joinAdd
   }
   return (
     <form aria-label="Add an overlay" className="flex flex-col gap-2 rounded-md border border-border p-3" onSubmit={(e) => { e.preventDefault(); void add() }}>
+      <HostFeedPicker feeds={hostFeeds} error={hostError} picked={picked} onPick={(f) => {
+        setPicked(f?.id ?? "")
+        setAllowOther(false)
+        if (!f) return setLink("")
+        setKind(f.kind)
+        setLink(f.url)
+      }} />
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
           <span className="font-medium">Overlay</span>
@@ -205,7 +263,7 @@ function AddOverlay({ scenes, joinAddress, onDone }: { scenes: string[]; joinAdd
       </div>
       <label className="flex flex-col gap-1">
         <span className="font-medium">Feed link from the host (meant for "{chosen.feed}")</span>
-        <LinkInput label="Feed link" placeholder="http://192.168.1.20:8080/feed/…?k=…" value={link} onChange={(v) => { setLink(v); setAllowOther(false) }} />
+        <LinkInput label="Feed link" placeholder="http://192.168.1.20:8080/feed/…?k=…" value={link} onChange={(v) => { setLink(v); setPicked(""); setAllowOther(false) }} />
       </label>
       {link.trim() && !valid && <p role="alert" className="font-semibold">That is not a Rhema feed link: it looks like http://host:port/feed/…?k=…</p>}
       {valid && <OtherHost match={match} allowed={allowOther} onAllow={setAllowOther} />}

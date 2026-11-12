@@ -232,6 +232,7 @@ pub fn run() {
             commands::join::join_save_plan,
             commands::join::join_submit_plan,
             commands::join::join_cameras,
+            commands::join::join_overlays,
             commands::join::join_tally,
             commands::companion::app_restart,
             commands::join::join_voice,

@@ -552,6 +552,12 @@ impl CameraHub {
         (StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY), [(axum::http::header::CONTENT_TYPE, "application/sdp")], answer).into_response()
     }
 
+    /// A relayed reader held by `holder`, as `relay_offer` records one (tests without a router).
+    #[cfg(test)]
+    pub(crate) fn relay_hold_for_test(&self, tag: &str, holder: RelayHolder, name: &str) {
+        self.relayed.write().unwrap_or_else(PoisonError::into_inner).insert(tag.to_string(), RelaySession { holder, name: name.to_string(), at: Instant::now() });
+    }
+
     /// How many relayed readers of this camera are still allowed.
     #[must_use]
     pub fn relay_readers(&self, name: &str) -> usize {

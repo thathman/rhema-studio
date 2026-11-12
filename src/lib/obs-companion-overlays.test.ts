@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { addOverlayToObs, maskFeedLink, overlayInputs, OverlayOnAirError, overlaySize, readFeedLink, testOverlay, updateOverlay, type ObsRequest } from "@/lib/obs-companion"
+import { addOverlayToObs, maskFeedLink, overlayInputs, OverlayOnAirError, overlaySize, readFeedLink, readHostOverlays, testOverlay, updateOverlay, type ObsRequest } from "@/lib/obs-companion"
 
 /**
  * #848 G4: the Companion adds Rhema's overlays (Bible, Lyrics, Name, Ticker, Timer) to existing
@@ -260,5 +260,39 @@ describe("testing an overlay (#848)", () => {
     await addOverlayToObs(o.request, { label: "Bible", url: LINK }, "Wide")
     o.state.program = "Wide"
     expect(await testOverlay(o.request, "Bible (Rhema overlay)", "Wide")).toMatchObject({ onAir: true, showing: true, hidden: false })
+  })
+})
+
+describe("the host's overlay feeds (#848 G4)", () => {
+  const answer = {
+    httpPort: 8080,
+    feeds: [
+      { id: "out-bible", name: "Rhema Bible | Lower third", kind: "bible", path: "/feed/out-bible?k=0123456789abcdef" },
+      { id: "clock", name: "Rhema Clock", kind: "timer", path: "/feed/clock?k=cccccccccccccccc" },
+      { id: "stage", name: "Stage", kind: "stage", path: "/feed/stage?k=ssssssssssssssss" },
+      { id: "x", name: "Elsewhere", kind: "bible", path: "http://10.0.0.9/feed/x?k=1" },
+      { id: "y", name: "Not its id", kind: "ticker", path: "/feed/z?k=1" },
+    ],
+  }
+
+  it("become links to the paired host's http port; any other kind or path is left out", () => {
+    expect(readHostOverlays(answer, "192.168.1.20:8443")).toEqual([
+      { id: "out-bible", name: "Rhema Bible | Lower third", kind: "bible", url: LINK },
+      { id: "clock", name: "Rhema Clock", kind: "timer", url: "http://192.168.1.20:8080/feed/clock?k=cccccccccccccccc" },
+    ])
+    expect(readHostOverlays({ ...answer, httpPort: null }, "192.168.1.20:8443")).toEqual([])
+    expect(readHostOverlays(answer, "")).toEqual([])
+    expect(readHostOverlays(null, "192.168.1.20:8443")).toEqual([])
+  })
+
+  it("added to a scene once, then again: one Browser Source, updated in place, and testable", async () => {
+    const o = fakeObs()
+    const [bible] = readHostOverlays(answer, "192.168.1.20:8443")
+    expect((await addOverlayToObs(o.request, { label: "Bible", url: bible.url }, "Wide")).done).toBe("added")
+    const renewed = readHostOverlays({ ...answer, feeds: [{ ...answer.feeds[0], path: "/feed/out-bible?k=fedcba9876543210" }] }, "192.168.1.20:8443")[0]
+    expect(await addOverlayToObs(o.request, { label: "Bible", url: renewed.url }, "Wide")).toEqual({ inputName: "Bible (Rhema overlay)", sceneName: "Wide", done: "updated", hidden: false })
+    expect(o.requests.filter((q) => q.type === "CreateInput")).toHaveLength(1)
+    expect(o.inputs.get("Bible (Rhema overlay)")!.settings).toMatchObject({ url: LINK2, width: 1920, height: 1080 })
+    expect((await testOverlay(o.request, "Bible (Rhema overlay)", "Wide")).image).toBeTruthy()
   })
 })

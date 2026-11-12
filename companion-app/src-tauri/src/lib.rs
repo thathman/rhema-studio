@@ -121,6 +121,7 @@ pub fn run() {
             host::join_pair,
             host::join_me,
             host::join_cameras,
+            host::join_overlays,
             host::join_tally,
             host::join_connect,
             host::join_disconnect,
