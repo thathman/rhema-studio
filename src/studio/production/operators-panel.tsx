@@ -185,6 +185,7 @@ function HostCard() {
           )}
         </div>
       )}
+      {/* #800 R1: status plus the emergency pause; roles, grants and revoke are managed in Permissions. */}
       <ul aria-label="Paired operators" className="flex flex-col divide-y divide-border rounded-md border border-border">
         {rows.length === 0 && <li className="px-2.5 py-2 text-muted-foreground">No one paired yet.</li>}
         {rows.map(({ device: d, hash, name, seen }) => (
@@ -200,9 +201,9 @@ function HostCard() {
           </li>
         ))}
       </ul>
-      <p className="text-muted-foreground">Take back control stops a desk's commands at once without unpairing it; it still sees the service and stays on Talk. Give control back when it may help again.</p>
+      <p className="text-muted-foreground">Take back control stops a desk's commands at once without unpairing it; it still sees the service and stays on Talk. Roles, grants and revoking a device are in Permissions.</p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" onClick={openPermissions}>Manage access and roles…</Button>
+        <Button size="sm" variant="outline" aria-label="Manage access and roles in Permissions" onClick={openPermissions}>Manage access and roles…</Button>
         {host?.running && !confirmStop && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirmStop(true)}>Stop hosting</Button>}
         {confirmStop && (
           <span role="group" aria-label="Stop hosting?" className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 px-2 py-1">

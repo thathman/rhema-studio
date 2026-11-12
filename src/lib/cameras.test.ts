@@ -36,6 +36,11 @@ describe("a feed page asks for a camera", () => {
   it("directly anywhere else", () => {
     for (const url of ["http://192.168.1.30:8889/pulpit/whep", "http://192.168.1.20:9000/pulpit/whep", "http://192.168.1.20:8889/other", "not a url"]) expect(feedCameraUrl(url, page, "tv", "k")).toBe(url)
   })
+  it("on the https page, any plain-http camera on the router's port through the host, whatever host name it saved (#840)", () => {
+    const tv = { hostname: "192.168.1.20", protocol: "https:" }
+    for (const url of ["http://192.168.1.35:8889/pulpit/whep", "http://rhema-mac.local:8889/pulpit/whep", "http://10.0.0.4:8889/pulpit/whep/"]) expect(feedCameraUrl(url, tv, "tv", "k")).toBe("/api/v1/feed/tv/camera/pulpit/whep?k=k")
+    for (const url of ["http://192.168.1.35:9000/pulpit/whep", "http://192.168.1.35:8889/other", "https://cams.example:8889/pulpit/whep"]) expect(feedCameraUrl(url, tv, "tv", "k")).toBe(url)
+  })
 })
 
 describe("rtmpsUrl", () => {

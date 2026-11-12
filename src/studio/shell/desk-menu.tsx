@@ -28,6 +28,25 @@ function initials(name: string): string {
   return name.trim().split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase()
 }
 
+/**
+ * The operator's name as other pages show it (#802): read-only, with the way to the one place it
+ * is edited, the Desk menu. Setup's first step still asks for it, as part of the first run.
+ */
+export function DeskNameSummary({ id = "desk-name-summary" }: { id?: string }) {
+  const name = useSettingsStore((s) => s.operatorName.trim())
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <p id={id} className="text-sm">
+        <span className="font-medium">Your name: </span>
+        {name ? <span className="font-semibold">{name}</span> : <span className="text-muted-foreground">not added yet</span>}
+      </p>
+      <Button size="sm" variant="outline" aria-describedby={id} onClick={() => useShellStore.getState().openDeskMenu()}>
+        <UserRoundIcon /> {name ? "Change in the Desk menu" : "Add it in the Desk menu"}
+      </Button>
+    </div>
+  )
+}
+
 const APPEARANCE = [
   ["light", "Light", <SunIcon key="i" />],
   ["dark", "Dark", <MoonIcon key="i" />],

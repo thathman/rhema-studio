@@ -102,7 +102,7 @@ function Badge({ tone, children }: { tone: "ok" | "warn" | "live" | "off"; child
  * one place. What is not built yet (the two-program parts, #197, #208) says so rather than offer
  * controls that do nothing.
  */
-export function ProductionWorkspace({ embedded = false }: { embedded?: boolean } = {}) {
+export function ProductionWorkspace({ embedded = false, expanded = false }: { embedded?: boolean; expanded?: boolean } = {}) {
   const requested = useProductionTab((s) => s.requested)
   const selected = useProductionTab((s) => s.selected)
   const tab = requested ?? selected
@@ -136,14 +136,17 @@ export function ProductionWorkspace({ embedded = false }: { embedded?: boolean }
             </button>
           ))}
         </nav>
-        <div role="tabpanel" aria-label={TABS.find(([id]) => id === tab)?.[1]} className={embedded ? "min-h-0 flex-1 overflow-y-auto" : undefined}>
-          {tab === "timekeeper" && <Timekeeper embedded={embedded} />}
-          {tab === "screens" && <Screens />}
-          {tab === "health" && <Health />}
-          {tab === "programs" && <SceneComposer />}
-          {tab === "obs" && <ObsPanel />}
-          {tab === "cameras" && <CamerasPanel />}
-          {tab === "operators" && <OperatorsPanel />}
+        <div role="tabpanel" aria-label={TABS.find(([id]) => id === tab)?.[1]} data-expanded={embedded ? expanded : undefined} className={embedded ? "min-h-0 flex-1 overflow-y-auto" : undefined}>
+          {/* The full-height sheet (#812 F1) gets the full-page width and spacing of this workspace. */}
+          <div className={embedded && expanded ? "mx-auto flex max-w-[1600px] flex-col gap-4 py-2" : "contents"}>
+            {tab === "timekeeper" && <Timekeeper embedded={embedded} />}
+            {tab === "screens" && <Screens />}
+            {tab === "health" && <Health />}
+            {tab === "programs" && <SceneComposer />}
+            {tab === "obs" && <ObsPanel />}
+            {tab === "cameras" && <CamerasPanel />}
+            {tab === "operators" && <OperatorsPanel />}
+          </div>
         </div>
       </div>
     </div>
@@ -167,12 +170,16 @@ function Timekeeper({ embedded = false }: { embedded?: boolean }) {
   return (
     <div className="grid gap-[18px] lg:grid-cols-2">
       <UntrustedTime />
-      <Card kicker="Service clock" title="The service timer" badge={<Badge tone={running ? "ok" : "off"}>{running ? "Running" : "Paused"}</Badge>}>
-        <div className="rounded-[10px] bg-[#182c32] px-[22px] py-5 text-[#eef6f0]">
-          <p className="text-[0.625rem] font-extrabold tracking-[0.12em] text-[#b8cec6] uppercase">{timer.durationMs > 0 ? "Remaining" : "Elapsed"}</p>
-          <p className={cn("font-mono text-[clamp(2.375rem,4.1vw,4rem)] leading-[1.15] font-semibold tracking-[-0.055em] tabular-nums", tone === "over" && "text-[#ff9b9d]", tone === "warn" && "text-[#ffd27a]")} role="timer">{formatMs(shown)}</p>
-          <p className="text-xs text-[#b8cec6]">The same service clock as Live; the stage display shows it.</p>
-        </div>
+      <Card kicker="Service clock" title={embedded ? "Service timing" : "The service timer"} badge={<Badge tone={running ? "ok" : "off"}>{running ? "Running" : "Paused"}</Badge>}>
+        {/* Inside Live (#808 R9) the top bar already shows this clock, and stays in view over the tools,
+            so the docked Timekeeper keeps the plan figures and drops its second big readout. */}
+        {!embedded && (
+          <div className="rounded-[10px] bg-[#182c32] px-[22px] py-5 text-[#eef6f0]">
+            <p className="text-[0.625rem] font-extrabold tracking-[0.12em] text-[#b8cec6] uppercase">{timer.durationMs > 0 ? "Remaining" : "Elapsed"}</p>
+            <p className={cn("font-mono text-[clamp(2.375rem,4.1vw,4rem)] leading-[1.15] font-semibold tracking-[-0.055em] tabular-nums", tone === "over" && "text-[#ff9b9d]", tone === "warn" && "text-[#ffd27a]")} role="timer">{formatMs(shown)}</p>
+            <p className="text-xs text-[#b8cec6]">The same service clock as Live; the stage display shows it.</p>
+          </div>
+        )}
         <dl className="grid grid-cols-3 gap-2 text-center">
           {[["Planned finish", timing ? hhmm(timing.plannedEnd) : "—"], ["Projected", timing ? hhmm(timing.expectedEnd) : "—"], ["Offset", timing ? (late === 0 ? "On time" : `${late > 0 ? "+" : "−"}${Math.abs(late)} min`) : "—"]].map(([k, v]) => (
             <div key={k} className="rounded-md bg-surface-sunken px-2 py-2">
@@ -182,7 +189,7 @@ function Timekeeper({ embedded = false }: { embedded?: boolean }) {
           ))}
         </dl>
         {embedded ? (
-          <p className="text-xs text-muted-foreground">Use the service timer in Live’s top bar to start, adjust, hold or reset this clock.</p>
+          <p className="text-xs text-muted-foreground">Use the service timer in Live’s top bar to see, start, adjust, hold or reset this clock.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => (running ? useTimerStore.getState().pause() : useTimerStore.getState().start())}>{running ? <><PauseIcon /> Pause</> : <><PlayIcon /> Start</>}</Button>

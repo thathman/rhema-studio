@@ -12,7 +12,6 @@ import { useBroadcastStore, useQueueStore } from "@/stores"
 import { HomeWorkspace } from "@/studio/home/home-workspace"
 import { PrepareWorkspace } from "@/studio/prepare/prepare-workspace"
 import { PresentWorkspace } from "@/studio/present/present-workspace"
-import { MoreWorkspace } from "@/studio/more/more-workspace"
 import { DesignWorkspace } from "@/studio/design/design-workspace"
 import { mayLeaveThemeDraft } from "@/lib/theme-draft"
 import { mayLeaveDesignDocumentDraft } from "@/lib/design-document-draft"
@@ -60,7 +59,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { REMOTE_EVENTS, REMOTE_REQUEST_WITHDRAWN_EVENT, REMOTE_STAGE_SEND_REQUEST_EVENT } from "@/lib/remote-events"
 
 /** What the top bar calls each page. */
-const TITLES: Record<Workspace, string> = { home: "Home", prepare: "Prepare", present: "Live", production: "Live", library: "Library", design: "Design", permissions: "Permissions", connections: "Connections", team: "Team", archive: "History", settings: "Settings", more: "More tools" }
+const TITLES: Record<Workspace, string> = { home: "Home", prepare: "Prepare", present: "Live", production: "Live", library: "Library", design: "Design", permissions: "Permissions", connections: "Connections", team: "Team", archive: "History", settings: "Settings" }
 
 const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   home: () => <HomeWorkspace />,
@@ -75,7 +74,6 @@ const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   permissions: () => <PermissionsWorkspace />,
   team: () => <TeamWorkspace />,
   settings: () => <SettingsPage />,
-  more: () => <MoreWorkspace />,
 }
 
 export function AppShell() {
@@ -109,7 +107,7 @@ export function AppShell() {
   useEffect(() => {
     if (workspace !== activeWorkspace) setWorkspace(activeWorkspace)
   }, [activeWorkspace, setWorkspace, workspace])
-  // A request to open Design at a section (Present's Design… buttons, More tools).
+  // A request to open Design at a section (Live's Design… buttons, Find anything).
   const designRequest = useShellStore((s) => s.designRequest)
   useEffect(() => {
     if (!designRequest) return
@@ -246,7 +244,7 @@ export function AppShell() {
     })
   }, [])
 
-  // Cmd/Ctrl+1..8 go to a place from anywhere; Cmd/Ctrl+, opens Settings. (Cmd/Ctrl+B is the sidebar's own.)
+  // Cmd/Ctrl+1..6 go to the six main places (nav-items.tsx) from anywhere; Cmd/Ctrl+, opens Settings. (Cmd/Ctrl+B is the sidebar's own.)
   useEffect(() => {
     const items: NavItem[] = [...WORKSPACE_ITEMS, ...church]
     const onKey = (e: KeyboardEvent) => {

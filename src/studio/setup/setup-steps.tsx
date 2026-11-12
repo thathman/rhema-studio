@@ -23,6 +23,7 @@ import { useSetupStatus } from "@/studio/setup/use-setup-status"
 import { EssentialRow, StatusRow } from "@/studio/setup/status-rows"
 import { ScreenTestRow } from "@/studio/setup/screen-test"
 import { StarterPackChooser } from "@/studio/setup/starter-pack"
+import { DeskNameSummary } from "@/studio/shell/desk-menu"
 
 type Leave = (open: () => void) => void
 
@@ -110,14 +111,18 @@ function TimeZoneField({ idPrefix: p }: { idPrefix: string }) {
   )
 }
 
-/** Step 2: the operator's display name, this computer's name, and Solo main desk. */
-export function OperatorStep({ error, onJoin, idPrefix: p = "setup" }: { error: string | null; onJoin: () => void; idPrefix?: string }) {
+/**
+ * Step 2: the operator's display name, this computer's name, and Solo main desk. Setup asks for the
+ * name as part of the first run; elsewhere (`nameInDeskMenu`, Settings) the name is only shown,
+ * with the way to the Desk menu, its one editor (#802).
+ */
+export function OperatorStep({ error, onJoin, idPrefix: p = "setup", nameInDeskMenu = false }: { error: string | null; onJoin: () => void; idPrefix?: string; nameInDeskMenu?: boolean }) {
   const operatorName = useSettingsStore((s) => s.operatorName)
   const deviceName = useSettingsStore((s) => s.setup.deviceName)
   const missing = !!error && !operatorName.trim()
   return (
     <div className="flex max-w-xl flex-col gap-5">
-      <Field id={`${p}-operator-name`} label="Your name" hint="Shown on the service log and in history as who did what. You can change it later; no account or password." error={missing ? error : null}>
+      {nameInDeskMenu ? <DeskNameSummary id={`${p}-operator-name-summary`} /> : <Field id={`${p}-operator-name`} label="Your name" hint="Shown on the service log and in history as who did what. You can change it later in the Desk menu (your name at the foot of the sidebar); no account or password." error={missing ? error : null}>
         <Input
           id={`${p}-operator-name`}
           value={operatorName}
@@ -128,7 +133,7 @@ export function OperatorStep({ error, onJoin, idPrefix: p = "setup" }: { error: 
           className={invalidAmber}
           onChange={(e) => useSettingsStore.getState().setOperatorName(e.target.value)}
         />
-      </Field>
+      </Field>}
       <Field id={`${p}-device-name`} label="This computer's name (optional)" hint="Helps tell desks apart when others join. Only on this computer.">
         <Input id={`${p}-device-name`} value={deviceName} placeholder="e.g. Sanctuary desk" onChange={(e) => useSettingsStore.getState().setSetup({ deviceName: e.target.value })} aria-describedby={`${p}-device-name-hint`} />
       </Field>

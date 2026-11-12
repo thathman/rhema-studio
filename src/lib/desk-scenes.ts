@@ -21,7 +21,7 @@ import { keepHostGradients } from "@/lib/scene-gradient"
  *
  * The approval rule, the default until the owner chooses another: a new scene, or a change to a
  * scene that is on no screen, goes in at once. A change to a scene that is on a screen, deleting
- * one, and any scene change while Approvals is on (Team → Approvals), becomes a request the main desk
+ * one, and any scene change while Approvals is on (Permissions → Before a service goes live), becomes a request the main desk
  * accepts or declines in its notices. In rehearsal a desk's changes are not on air, so only a
  * scene on a real screen waits. The server applies the same rule; the host checks again here and
  * never lets a waiting change in by itself.
@@ -178,7 +178,7 @@ export function mergeDeskScene(raw: unknown, existing: Scene | undefined, opts: 
 /** Why a change to this scene waits for the main desk, or null when it goes in at once. */
 export function waitsForMainDesk(sceneId: string): string | null {
   const b = useBroadcastStore.getState()
-  if (useSettingsStore.getState().requireApproval && !b.rehearsal) return "Approvals is on at the main desk (Team → Approvals)"
+  if (useSettingsStore.getState().requireApproval && !b.rehearsal) return "Approvals is on at the main desk (Permissions → Before a service goes live)"
   if (scenesOnScreen(b).has(sceneId)) return "that scene is on a screen"
   return null
 }
