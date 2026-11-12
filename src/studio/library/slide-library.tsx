@@ -13,7 +13,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { isCurrentPrepareLibraryReturn } from "@/studio/prepare/library-return"
 import { captureLibraryUseInvocation, type LibraryItemUseHandler } from "@/studio/library/library-target-store"
 import type { ReusableSlide, ReusableSlideInput, SlideQueueItem } from "@/types"
-import { reusableSlideQueueItem, slideFormIsDirty } from "@/studio/library/slide-items"
+import { reusableSlideQueueItem, slideFormIsDirty, useSlideDraft } from "@/studio/library/slide-items"
 
 const empty: ReusableSlideInput = { kind: "slide", title: "", body: "", link: null, background_media_id: null }
 
@@ -31,9 +31,13 @@ export function SlideLibrary({ onUseItem, newRequest = 0 }: { onUseItem?: Librar
   // The slide Prepare has selected (#447), not what Live has cued.
   const selectedQueueItemId = useRundownSelection((s) => s.focusId)
   const [query, setQuery] = useState("")
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [form, setForm] = useState<ReusableSlideInput>(empty)
-  const [editing, setEditing] = useState<ReusableSlide | null>(null)
+  // The form outlives the section (#833 S9): leaving Slides or Library and coming back finds the
+  // unsaved words where they were, instead of losing them on unmount.
+  const kept = useSlideDraft.getState()
+  const [selectedId, setSelectedId] = useState<string | null>(kept.selectedId)
+  const [form, setForm] = useState<ReusableSlideInput>(kept.form ?? empty)
+  const [editing, setEditing] = useState<ReusableSlide | null>(kept.editing)
+  useEffect(() => { useSlideDraft.setState({ selectedId, form, editing }) }, [selectedId, form, editing])
   const [busy, setBusy] = useState(false)
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null)
   const selectedItem = useMemo(() => queueItems.find((item) => item.id === selectedQueueItemId && item.kind === "slide") as SlideQueueItem | undefined, [queueItems, selectedQueueItemId])
@@ -59,7 +63,7 @@ export function SlideLibrary({ onUseItem, newRequest = 0 }: { onUseItem?: Librar
   }
   // Selecting another slide, New or Clear never overwrites unsaved words: Save, Discard or Cancel first.
   const requestSwitch = (next: PendingSwitch) => {
-    if (next.kind === "select" && editing?.id === next.slide.id && !dirty) return
+    if (next.kind === "select" && editing?.id === next.slide.id && editing.revision === next.slide.revision && !dirty) return
     if (dirty) setPendingSwitch(next)
     else apply(next)
   }
@@ -240,7 +244,7 @@ export function SlideLibrary({ onUseItem, newRequest = 0 }: { onUseItem?: Librar
             <Button size="xs" variant="ghost" onClick={() => setPendingSwitch(null)}>Cancel</Button>
           </div>
         )}
-        {error && <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md bg-destructive/10 p-2 text-xs text-destructive"><span>{error}</span><Button size="xs" variant="outline" disabled={loading} onClick={() => { void useSlideStore.getState().list("").then((all) => { const latest = editing ? all.find((item) => item.id === editing.id) : undefined; if (latest) select(latest) }).catch(() => {}) }}>Reload library</Button></div>}
+        {error && <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md bg-destructive/10 p-2 text-xs text-destructive"><span>{error}</span><Button size="xs" variant="outline" disabled={loading} onClick={() => { void useSlideStore.getState().list("").then((all) => { const latest = editing ? all.find((item) => item.id === editing.id) : undefined; if (latest) requestSwitch({ kind: "select", slide: latest }) }).catch(() => {}) }}>Reload library</Button></div>}
         <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
           <p className="text-[0.6875rem] text-muted-foreground">Each service gets a copy. Save any source edits before adding the updated revision.</p>
           <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => requestSwitch({ kind: "new" })}>Clear</Button><Button size="sm" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : editing ? "Save source" : "Save to library"}</Button></div>

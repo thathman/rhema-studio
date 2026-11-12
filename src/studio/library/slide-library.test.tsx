@@ -13,7 +13,7 @@ import { CustomSlideEditor } from "@/studio/prepare/item-editor-parts"
 import { isCurrentPrepareLibraryReturn } from "@/studio/prepare/library-return"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { SlideLibrary } from "./slide-library"
-import { slideFormIsDirty } from "@/studio/library/slide-items"
+import { slideFormIsDirty, useSlideDraft } from "@/studio/library/slide-items"
 
 const mockInvoke = vi.fn()
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args), convertFileSrc: (p: string) => p }))
@@ -50,6 +50,7 @@ beforeEach(() => {
     throw new Error(`Unexpected command ${command}`)
   })
   useSlideStore.setState({ slides: [], loading: false, error: null, query: "", pendingSourceId: null })
+  useSlideDraft.setState({ selectedId: null, form: null, editing: null })
   useQueueStore.setState({ items: [], headers: [], activeIndex: null, addTarget: null })
   useBibleStore.setState({ selectedSlide: null, selectedQueueItemId: null })
   useRundownSelection.setState({ focusId: null })
@@ -465,6 +466,27 @@ describe("reusable slide form dirty check (#833 S9)", () => {
     await act(async () => { root!.render(<SlideLibrary newRequest={1} />) })
     expect(prompt()).not.toBeNull()
     expect(field("Reusable slide title")).toBe("Unsaved")
+  })
+
+  it("Reload library asks before replacing unsaved edits with the saved source", async () => {
+    await editWelcome()
+    rows.set(welcome.id, { ...welcome, body: "Changed elsewhere", revision: 2 })
+    await act(async () => useSlideStore.setState({ error: "This slide changed elsewhere" }))
+    await act(async () => { button("Reload library").click(); await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(prompt()).not.toBeNull()
+    expect(field("Reusable slide text")).toBe("Edited words")
+    await act(async () => promptButton("Discard").click())
+    expect(field("Reusable slide text")).toBe("Changed elsewhere")
+  })
+
+  it("leaving the section and coming back keeps the unsaved words", async () => {
+    await editWelcome()
+    await act(async () => root!.render(<div />))
+    await render()
+    expect(field("Reusable slide title")).toBe("Welcome")
+    expect(field("Reusable slide text")).toBe("Edited words")
+    await act(async () => button("Offering").click())
+    expect(prompt()).not.toBeNull()
   })
 
   it("slideFormIsDirty compares with the saved source, or with an empty form for a new slide", () => {

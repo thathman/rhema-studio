@@ -991,7 +991,7 @@ describe("Library workspace", () => {
     expect(useBibleStore.getState().savedPassages).toEqual([])
   })
 
-  it("adds straight to the only destination without asking, and remembers it (#820 F9)", async () => {
+  it("adds straight to the only destination without asking, and does not store it as a choice (#820 F9)", async () => {
     useBibleStore.setState({
       savedPassages: [{ id: "4:43:3:16", translationId: 4, bookNumber: 43, chapter: 3, verse: 16, reference: "John 3:16" }],
     })
@@ -1014,7 +1014,7 @@ describe("Library workspace", () => {
     expect(queue.items).toHaveLength(1)
     expect(queue.items[0]).toMatchObject({ reference: "John 3:16" })
     expect(queue.headers[0]).toMatchObject({ id: "event-only", at: 0 })
-    expect(useLibraryTargetStore.getState().byServiceId["service-a"]).toBe(libraryHeaderTarget("event-only"))
+    expect(useLibraryTargetStore.getState().byServiceId["service-a"]).toBeUndefined()
     expect(useShellStore.getState().workspace).toBe("prepare")
   })
 
