@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { testObsConnection } from "@/lib/obs"
 import { useObsStore } from "@/stores/obs-store"
 import { sameObs, useSettingsStore, type ObsProfile } from "@/stores/settings-store"
@@ -64,7 +65,8 @@ function ObsProfiles() {
                 {inUse && <span className="rounded-[5px] bg-tone-green px-[7px] py-[3px] text-[0.625rem] font-bold uppercase text-tone-green-foreground">In use</span>}
                 <Button size="sm" variant="outline" className="h-7 text-xs" disabled={tests[p.id] === "testing"} onClick={() => void test(p)} aria-label={`Test ${p.label}`}>Test</Button>
                 <Button size="sm" variant="outline" className="h-7 text-xs" disabled={inUse} onClick={() => setObs({ host: p.host, port: p.port, password: p.password })} aria-label={`Use ${p.label}`}>Use</Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setObsProfiles(profiles.filter((x) => x.id !== p.id))} aria-label={`Remove ${p.label}`}>Remove</Button>
+                {/* Its address and saved password go with it, so it is asked first (#831 S7). */}
+                <ConfirmDelete label={`Remove ${p.label}`} verb="Remove" onConfirm={() => setObsProfiles(useSettingsStore.getState().obsProfiles.filter((x) => x.id !== p.id))} />
                 {tests[p.id] && <span className="basis-full"><TestLine result={tests[p.id]} /></span>}
               </li>
             )

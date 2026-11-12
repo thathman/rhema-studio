@@ -24,6 +24,7 @@ import type { BroadcastOutput } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings } from "@/types"
 import { OutputCard } from "./output-card"
 import { OutputEditorDialog } from "./output-editor-dialog"
+import { removeOutputAsked } from "./delete-asks"
 import { outputEditPatch } from "@/lib/output-summary"
 import { useShellStore } from "@/studio/shell-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -153,18 +154,7 @@ export function BroadcastOutputsDialog({
   const handleToggle = (output: BroadcastOutput, enabled: boolean) =>
     void withBusy(output.id, async () => (enabled ? (await confirmStart(output)) && enableOutput(output) : disableOutput(output)))
 
-  const handleRemove = (output: BroadcastOutput) =>
-    void withBusy(output.id, async () => {
-      // Stop the transport first: close_broadcast_window only hides the window
-      // while NDI is still running for that output.
-      // If the sender did not stop, keep the output: removed, nothing could stop it any more.
-      if ((await disableOutput(output)) === false) {
-        toast.error(`${output.name} was not removed`, { description: "Its NDI sender did not stop. Try again, or restart Rhema Studio." })
-        return
-      }
-      useBroadcastStore.getState().removeOutput(output.id)
-      toast.success(`Removed ${output.name}`)
-    })
+  const handleRemove = (output: BroadcastOutput) => void withBusy(output.id, () => removeOutputAsked(output))
 
   const handleEditorSubmit = (next: BroadcastOutput, options?: { continueSetup?: boolean }) => {
     const store = useBroadcastStore.getState()
