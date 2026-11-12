@@ -177,6 +177,40 @@ fn run_date(service_date: Option<&str>, checkpoint: &serde_json::Value, started_
     started_at.chars().take(10).collect()
 }
 
+/// The songs in the plan a run used, by item id: its saved revision, plus the service's items now
+/// (items added after the run started, or a revision since pruned).
+fn run_plan_songs(conn: &rusqlite::Connection, program_id: &str, revision: Option<i64>) -> Result<HashMap<String, PlannedSong>> {
+    let mut items: HashMap<String, PlannedSong> = HashMap::new();
+    let snapshot: Option<String> = match revision {
+        Some(revision) => conn
+            .query_row("SELECT items FROM program_revisions WHERE program_id = ?1 AND revision = ?2", params![program_id, revision], |r| r.get(0))
+            .optional()?,
+        None => None,
+    };
+    if let Some(snapshot) = snapshot.and_then(|json| serde_json::from_str::<Vec<crate::ItemInput>>(&json).ok()) {
+        for item in snapshot {
+            if let (Some(id), Some(song)) = (item.id.clone(), planned_song(&item.kind, &item.reference, item.payload.as_deref())) {
+                items.insert(id, song);
+            }
+        }
+    }
+    let mut st = conn.prepare("SELECT id, kind, reference, payload FROM program_items WHERE program_id = ?1")?;
+    let rows = st.query_map(params![program_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<String>>(3)?)))?;
+    for row in rows {
+        let (id, kind, reference, payload) = row?;
+        if items.contains_key(&id) {
+            continue;
+        }
+        if let Some(song) = planned_song(&kind, &reference, payload.as_deref()) {
+            items.insert(id, song);
+        }
+    }
+    Ok(items)
+}
+
+/// A service run as song usage reads it: program, plan revision, service date, start, checkpoint.
+type RunRow = (Option<String>, Option<i64>, Option<String>, String, String);
+
 #[derive(Default)]
 struct ShownTally {
     /// Distinct services: (program, day). Two runs of one service (a new log mid-service, or an
@@ -201,7 +235,7 @@ impl ContentDb {
         }
         let conn = self.lock()?;
         // A day of slack either side for runs dated by their start: the local day can differ from UTC.
-        let runs: Vec<(Option<String>, Option<i64>, Option<String>, String, String)> = {
+        let runs: Vec<RunRow> = {
             let mut st = conn.prepare(
                 "SELECT program_id, program_revision, service_date, started_at, checkpoint_json FROM service_runs
                   WHERE (service_date IS NOT NULL AND service_date BETWEEN ?1 AND ?2)
@@ -222,34 +256,10 @@ impl ContentDb {
                 continue;
             }
             // The plan the run used, for hymn numbers and for older journals without song ids.
-            let mut items: HashMap<String, PlannedSong> = HashMap::new();
-            if let Some(program_id) = program_id.as_deref() {
-                let snapshot: Option<String> = match revision {
-                    Some(revision) => conn
-                        .query_row("SELECT items FROM program_revisions WHERE program_id = ?1 AND revision = ?2", params![program_id, revision], |r| r.get(0))
-                        .optional()?,
-                    None => None,
-                };
-                if let Some(snapshot) = snapshot.and_then(|json| serde_json::from_str::<Vec<crate::ItemInput>>(&json).ok()) {
-                    for item in snapshot {
-                        if let (Some(id), Some(song)) = (item.id.clone(), planned_song(&item.kind, &item.reference, item.payload.as_deref())) {
-                            items.insert(id, song);
-                        }
-                    }
-                }
-                // Items added after the run started (or a pruned revision): the service's items now.
-                let mut st = conn.prepare("SELECT id, kind, reference, payload FROM program_items WHERE program_id = ?1")?;
-                let rows = st.query_map(params![program_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<String>>(3)?)))?;
-                for row in rows {
-                    let (id, kind, reference, payload) = row?;
-                    if items.contains_key(&id) {
-                        continue;
-                    }
-                    if let Some(song) = planned_song(&kind, &reference, payload.as_deref()) {
-                        items.insert(id, song);
-                    }
-                }
-            }
+            let items = match program_id.as_deref() {
+                Some(program_id) => run_plan_songs(&conn, program_id, revision)?,
+                None => HashMap::new(),
+            };
             let service = (program_id.clone().unwrap_or_default(), date.clone());
             for shown_entry in &shown {
                 let planned = shown_entry.item_id.as_ref().and_then(|id| items.get(id));
@@ -548,7 +558,7 @@ mod tests {
 
     /// A run saved the way the app saves it now: entries may name their song, and the checkpoint
     /// carries the church-local start day.
-    fn run_now(db: &ContentDb, run_id: &str, program: Option<(&str, i64)>, service_date: Option<&str>, started_at: &str, local_day: &str, entries: serde_json::Value) {
+    fn run_now(db: &ContentDb, run_id: &str, program: Option<(&str, i64)>, service_date: Option<&str>, started_at: &str, local_day: &str, entries: &serde_json::Value) {
         db.checkpoint_service_run(&crate::ServiceRunCheckpoint {
             run_id: run_id.into(),
             program_id: program.map(|(id, _)| id.to_string()),
@@ -587,7 +597,7 @@ mod tests {
         let saved = db.replace_items(&p.id, p.revision, &[song_item("i-grace", &grace, "")]).unwrap();
         // Two items added after the run started: not in the revision the run captured.
         db.replace_items(&p.id, saved.program.revision, &[song_item("i-grace", &grace, ""), song_item("i-late", &late, ""), song_item("i-legacy", &legacy_late, "")]).unwrap();
-        run_now(&db, "run-1", Some((&p.id, saved.program.revision)), Some("2026-10-04"), "2026-10-04T15:00:00Z", "2026-10-04", serde_json::json!([
+        run_now(&db, "run-1", Some((&p.id, saved.program.revision)), Some("2026-10-04"), "2026-10-04T15:00:00Z", "2026-10-04", &serde_json::json!([
             { "at": 1, "mono": 1, "kind": "live", "label": "x", "itemId": "i-late", "songId": late },
             // An older journal entry without a song id: found among the service's items now.
             { "at": 2, "mono": 2, "kind": "live", "label": "x", "itemId": "i-legacy" },
@@ -597,7 +607,7 @@ mod tests {
             // A source change that is not a song is not counted.
             { "at": 5, "mono": 5, "kind": "source", "label": "Bible: John 3:16", "itemId": "i-grace" },
         ]));
-        run_now(&db, "run-2", None, None, "2026-10-11T15:00:00Z", "2026-10-11", serde_json::json!([
+        run_now(&db, "run-2", None, None, "2026-10-11T15:00:00Z", "2026-10-11", &serde_json::json!([
             { "at": 1, "mono": 1, "kind": "live", "label": "x", "itemId": "library-x", "songId": loose },
         ]));
         let mut titles: Vec<(String, i64)> = db.song_usage_shown("2026-10-01", "2026-10-31").unwrap().into_iter().map(|u| (u.title, u.services)).collect();
@@ -610,7 +620,7 @@ mod tests {
         let db = ContentDb::open_in_memory().unwrap();
         let grace = song(&db, "Amazing Grace", None);
         // 19:30 on 31 October in a UTC-5 church is 00:30 UTC on 1 November.
-        run_now(&db, "evening", None, None, "2026-11-01T00:30:00Z", "2026-10-31", serde_json::json!([
+        run_now(&db, "evening", None, None, "2026-11-01T00:30:00Z", "2026-10-31", &serde_json::json!([
             { "at": 1, "mono": 1, "kind": "live", "label": "x", "itemId": null, "songId": grace },
         ]));
         let october = db.song_usage_shown("2026-10-01", "2026-10-31").unwrap();
