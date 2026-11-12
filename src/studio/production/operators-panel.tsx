@@ -436,7 +436,9 @@ type ViewerLiveProjection = {
   timing?: { expectedEnd: number; timeZone?: string } | null
 }
 
-function viewerLiveProjection(live: LiveStateV1): ViewerLiveProjection {
+// Shared with the browser desk (#845 G1), so View only shows exactly this projection there too.
+// eslint-disable-next-line react-refresh/only-export-components
+export function viewerLiveProjection(live: LiveStateV1): ViewerLiveProjection {
   const row = ({ id, reference, plannedMinutes, time }: LiveStateV1["rundown"][number]): ViewerEventRow => ({
     id,
     reference,
@@ -458,7 +460,7 @@ function viewerLiveProjection(live: LiveStateV1): ViewerLiveProjection {
 }
 
 /** A View only operator follows the host's service clock and run of show without seeing production state. */
-function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: ViewerLiveProjection; stale: boolean; connected: boolean; now: number; receivedAt: number }) {
+export function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: ViewerLiveProjection; stale: boolean; connected: boolean; now: number; receivedAt: number }) {
   const [showFullOrder, setShowFullOrder] = useState(false)
   const sinceReceipt = receivedAt > 0 ? Math.max(0, now - receivedAt) : 0
   const lastTrustedElapsed = stale
@@ -554,7 +556,7 @@ function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: ViewerL
 }
 
 /** The event clock: Now, the run of show, Start / Back one, Hold / Resume (Timekeeper). `stale`: the host has not been heard from lately. */
-function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }) {
+export function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }) {
   const off = !useCanSend()
   const events = live.event.targets ?? live.rundown
   const current = events.find((r) => r.id === live.event.currentId)
@@ -604,7 +606,7 @@ const offsetText = (m: number) => (m === 0 ? "on time" : `${m > 0 ? "+" : "−"}
  * its role. Read only: nothing here starts, moves or changes anything. A fixed start has a pin, a
  * pause its own thin row (R3).
  */
-function RunOfShowView({ live, stale }: { live: LiveStateV1; stale: boolean }) {
+export function RunOfShowView({ live, stale }: { live: LiveStateV1; stale: boolean }) {
   const rows = backstageRows(live.event.targets ?? live.rundown)
   const th = "px-1.5 py-1 text-left text-[0.625rem] font-semibold tracking-wide text-muted-foreground uppercase"
   const td = "px-1.5 py-1 tabular-nums"
@@ -688,7 +690,7 @@ function DeskTimer({ live, stale }: { live: LiveStateV1; stale: boolean }) {
  * time, or whose role a timer belongs to, may start, pause and reset it; every other desk sees
  * them read only. Hidden for an older host that does not send them, and when there are none.
  */
-function DeskAuxTimers({ live, role, stale }: { live: LiveStateV1; role: string; stale: boolean }) {
+export function DeskAuxTimers({ live, role, stale }: { live: LiveStateV1; role: string; stale: boolean }) {
   const ok = useCanSend()
   const receivedAt = useJoin((s) => s.receivedAt)
   const [now, setNow] = useState(() => performance.now())
@@ -780,7 +782,7 @@ function receiverProgramFingerprint(live: LiveStateV1, outputId: string): string
   })
 }
 
-function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveStateV1; role: string; outputScope: string[]; groupTakeScope: string[] }) {
+export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveStateV1; role: string; outputScope: string[]; groupTakeScope: string[] }) {
   const ok = useCanSend()
   const connectionStatus = useJoin((s) => s.status)
   const groupTakeContext = `${connectionStatus}:${live.service?.id ?? ""}`
