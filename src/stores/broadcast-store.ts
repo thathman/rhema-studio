@@ -12,7 +12,8 @@ import type {
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
-  VerseRenderData, LowerThird, LowerThirdStyle, StageAux, StageClock, StageFinish, StageStyle, Ticker, TickerPreset, TickerStyle, CountdownLook, HostLostRule, ReceiverTv, ContentType } from "@/types"
+  VerseRenderData, LowerThird, LowerThirdStyle, StageAux, StageClock, StageFinish, StageStyle, Ticker, TickerPreset, TickerStyle, CountdownLook, HostLostRule, ReceiverTv } from "@/types"
+import type { ContentType } from "@/types/broadcast"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
