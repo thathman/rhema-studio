@@ -667,6 +667,8 @@ impl Revisions {
             ("offset".to_string(), serde_json::json!([v["timing"]["offsetMinutes"], v["timing"]["offsetBy"]]).to_string()),
             ("timer".to_string(), serde_json::json!([v["timer"]["running"], v["timer"]["durationMs"], v["timer"]["revision"]]).to_string()),
             ("hold".to_string(), v["hold"].to_string()),
+            // What is on the congregation screens: on air, which reference, and where in a song (#827).
+            ("program".to_string(), serde_json::json!([v["program"]["onAir"], v["program"]["reference"], v["lyrics"]["itemId"], v["lyrics"]["index"]]).to_string()),
             // The song or hymn on the screens and where in it (desk consoles): a section step from a
             // Worship desk acts on the section it saw.
             ("lyrics".to_string(), serde_json::json!([v["lyrics"]["itemId"], v["lyrics"]["index"]]).to_string()),
@@ -779,6 +781,10 @@ fn revision_part(cmd: &RemoteCommand) -> Option<String> {
     Some(match cmd {
         RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => "event".into(),
         RemoteCommand::EventOffset(_) => "offset".into(),
+        // What the congregation screens show (#827): a step from where they are, or putting them back
+        // on, acts on the screen it saw. Hide is never refused (taking the screens off is always
+        // safe); Bible activate and song show name exactly what to show, so they are not either.
+        RemoteCommand::Next | RemoteCommand::Prev | RemoteCommand::VerseNext | RemoteCommand::VersePrev | RemoteCommand::Show | RemoteCommand::SendToLive => "program".into(),
         RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) => "timer".into(),
         RemoteCommand::Hold(_) | RemoteCommand::Resume => "hold".into(),
         RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => format!("source:{id}"),
@@ -1509,6 +1515,7 @@ struct AppState<S: CommandSink> {
     pairing: PairingWindow,
     rate: crate::rate::RateLimiter,
     recent: RecentIds,
+    own: OwnPresses,
     /// One command at a time from its revision check to the app: two desks pressing at once are
     /// carried out one after the other, and the second is checked against the first.
     gate: std::sync::Mutex<()>,
@@ -1576,6 +1583,7 @@ where
         pairing: config.pairing.clone(),
         rate: crate::rate::RateLimiter::default(),
         recent: RecentIds::default(),
+        own: OwnPresses::default(),
         gate: std::sync::Mutex::new(()),
     });
 
@@ -1990,6 +1998,43 @@ struct CommandRequest {
 const OTHER_SERVICE_MESSAGE: &str = "That desk is looking at a different service; it will refresh";
 /// What a desk acting on what it saw is told when someone changed that part of the service first.
 pub const STALE_MESSAGE: &str = "Someone changed this first \u{2014} look again";
+
+/// A step from where the screens are (#827): pressing it again quickly is the point, so the same
+/// desk's second press is not stale against its own first (`OwnPresses`). Anything that sets a
+/// value (a save, OBS record, a song order change) is still refused when sent from an old view.
+fn is_step(cmd: &RemoteCommand) -> bool {
+    matches!(cmd, RemoteCommand::Next | RemoteCommand::Prev | RemoteCommand::VerseNext | RemoteCommand::VersePrev | RemoteCommand::SongSection(_))
+}
+
+/// The last press that moved each part: whose, from which revision, and when (#827). A desk's or
+/// phone's quick second step, sent before its Live State caught up with its first, is not stale:
+/// the server moved the revision for that desk's own press. Another desk's press in between
+/// replaces the entry, so that one is still refused.
+// ponytail: a main-desk change within the 5 s goes unnoticed (it moves revisions by publishing,
+// not through a press); tag publish-driven bumps with their source if that ever matters.
+#[derive(Default)]
+struct OwnPresses(std::sync::Mutex<std::collections::HashMap<String, (String, u64, std::time::Instant)>>);
+
+impl OwnPresses {
+    const FOR: std::time::Duration = std::time::Duration::from_secs(5);
+
+    /// `by` pressed `part` when it stood at `before`. Repeated presses by the same desk keep the
+    /// first floor, so a desk whose view is two of its own presses behind still gets through.
+    fn note(&self, part: &str, by: &str, before: u64) {
+        let mut own = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let floor = match own.get(part) {
+            Some((who, floor, at)) if who == by && at.elapsed() < Self::FOR => (*floor).min(before),
+            _ => before,
+        };
+        own.insert(part.to_string(), (by.to_string(), floor, std::time::Instant::now()));
+    }
+
+    /// Whether every change to `part` since `sent` was `by`'s own recent press.
+    fn covers(&self, part: &str, by: &str, sent: u64) -> bool {
+        let own = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        own.get(part).is_some_and(|(who, floor, at)| who == by && at.elapsed() < Self::FOR && sent >= *floor)
+    }
+}
 
 /// Command ids seen recently, so an exact retry is not carried out twice and a reused id is refused.
 #[derive(Default)]
@@ -3543,7 +3588,7 @@ async fn command_handler<S: CommandSink + 'static>(
         if let Some(seen) = request.seen.as_ref() {
             for part in command_revision_parts(&command) {
                 if let (Some(sent), Some(now)) = (seen.get(&part), state.live.revision(&part)) {
-                    if *sent != now {
+                    if *sent != now && !(is_step(&command) && by_id.as_deref().is_some_and(|me| state.own.covers(&part, me, *sent))) {
                         log::info!("HTTP command {command:?} from {by} refused: {part} changed since (revision {sent}, now {now})");
                         return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(STALE_MESSAGE.into()), code: Some("stale"), ..Default::default() }));
                     }
@@ -3625,6 +3670,9 @@ async fn command_handler<S: CommandSink + 'static>(
             // A change that waits for the main desk has not changed the scene yet: another desk may still act on it.
             if !waits && !reserve_group_outputs {
                 for part in changed_revision_parts(&command) {
+                    if let (Some(me), Some(before)) = (by_id.as_deref(), state.live.revision(&part)) {
+                        state.own.note(&part, me, before);
+                    }
                     state.live.bump(&part);
                 }
             }
@@ -3855,6 +3903,7 @@ mod tests {
             pairing: new_pairing_window(),
             rate: crate::rate::RateLimiter::default(),
             recent: RecentIds::default(),
+            own: OwnPresses::default(),
             gate: std::sync::Mutex::new(()),
         })
     }
@@ -6645,7 +6694,10 @@ mod tests {
             assert_eq!(part(event).as_deref(), Some("event"));
         }
         assert_eq!(part(r#"{"command":"event_offset","value":5}"#).as_deref(), Some("offset"));
-        for unchecked in [r#"{"command":"verse_next"}"#, r#"{"command":"bible_activate","value":"John 3:16"}"#, r#"{"command":"notice_ack","value":{"id":"n","state":"seen"}}"#, r#"{"command":"next"}"#] {
+        for screen in [r#"{"command":"next"}"#, r#"{"command":"prev"}"#, r#"{"command":"verse_next"}"#, r#"{"command":"verse_prev"}"#, r#"{"command":"show"}"#, r#"{"command":"send_to_live"}"#] {
+            assert_eq!(part(screen).as_deref(), Some("program"), "{screen}");
+        }
+        for unchecked in [r#"{"command":"hide"}"#, r#"{"command":"bible_next"}"#, r#"{"command":"bible_activate","value":"John 3:16"}"#, r#"{"command":"song_show","value":"Amazing Grace"}"#, r#"{"command":"notice_ack","value":{"id":"n","state":"seen"}}"#] {
             assert_eq!(part(unchecked), None, "{unchecked}");
         }
     }
@@ -6665,6 +6717,8 @@ mod tests {
         hold: Option<String>,
         bible_on: bool,
         bible_revision: u64,
+        /// The slide on the congregation screens (#827): Next and Prev move it.
+        slide: i64,
         /// The service log: one line per command carried out.
         journal: Vec<String>,
         /// Service s1 is approved with only this scene pinned (#410); None: not approved.
@@ -6678,6 +6732,8 @@ mod tests {
                 "outputs": [{ "id": "main", "name": "Main", "sceneId": self.scene, "sceneRevision": self.scene_revision }],
                 "sources": [{ "id": "bible", "reference": "John 3:16", "on": self.bible_on, "revision": self.bible_revision }],
                 "hold": self.hold.as_ref().map(|r| serde_json::json!({ "reason": r, "since": 1 })),
+                "program": { "onAir": true, "reference": "Song", "rehearsal": false },
+                "lyrics": { "itemId": "song", "index": self.slide },
             })
             .to_string()
         }
@@ -6707,6 +6763,8 @@ mod tests {
                     // The hold store logs its own line (src/stores/hold-store.ts).
                     "remote:hold" => if m.hold.is_none() { m.hold = Some(p["reason"].as_str().unwrap_or("").to_string()); m.journal.push(format!("{by}: hold")); },
                     "remote:resume" => if m.hold.take().is_some() { m.journal.push(format!("{by}: resumed")); },
+                    "remote:next" => m.slide += 1,
+                    "remote:prev" => m.slide -= 1,
                     // The app's log line for each other command (use-remote-control.ts).
                     "remote:audit" => m.journal.push(format!("{} · by {by}", p["command"].as_str().unwrap_or("?"))),
                     _ => {}
@@ -6742,6 +6800,32 @@ mod tests {
         assert_eq!((m.scene, m.scene_revision, m.journal.len()), (None, 0, 0), "nothing reached the output");
         assert_eq!(read_revisions(port, "ka").await, seen, "no revision moved");
         assert_eq!(press(port, "ka", take("choir")).await.0, 200, "the pinned scene goes through");
+        handle.stop();
+    }
+
+    /// #827: a step acts on the screen the desk saw. The same desk's quick second press, before its
+    /// Live State caught up with its first, goes through; a press after someone else's is refused;
+    /// Hide always goes through.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_step_acts_on_the_screen_it_saw_but_a_quick_second_press_is_not_stale() {
+        let host = HostSim::new(Model::default());
+        let (port, mut handle) = sim_server(&host).await;
+        let seen = read_revisions(port, "ka").await;
+        let next = |seen: &serde_json::Value| serde_json::json!({ "command": "next", "seen": seen });
+        assert_eq!(press(port, "ka", next(&seen)).await.0, 200);
+        settle().await;
+        assert_eq!(press(port, "ka", next(&seen)).await.0, 200, "Desk A's own press moved it, nobody else");
+        settle().await;
+        let (status, body) = press(port, "kb", next(&seen)).await;
+        assert_eq!(status, 409, "Desk B saw the screen before Desk A's presses: {body}");
+        assert!(body.contains(r#""code":"stale""#), "{body}");
+        let b_seen = read_revisions(port, "kb").await;
+        assert_eq!(press(port, "kb", next(&b_seen)).await.0, 200, "Desk B looked again");
+        settle().await;
+        assert_eq!(press(port, "ka", next(&seen)).await.0, 409, "Desk B pressed in between: Desk A looks again");
+        assert_eq!(press(port, "ka", serde_json::json!({ "command": "hide", "seen": seen })).await.0, 200, "Hide is never stale");
+        settle().await;
+        assert_eq!(host.model.lock().unwrap().slide, 3, "three steps carried out, the refused ones not");
         handle.stop();
     }
 
