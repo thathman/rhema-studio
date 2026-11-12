@@ -126,6 +126,22 @@ pub struct FeedHub {
     /// Told whenever the keys change, so a page whose key was withdrawn (a revoked TV, a new link)
     /// is cut at once instead of following until it reconnects.
     changed: tokio::sync::Notify,
+    /// The paired desks (the listener's key set), for each OBS companion's own overlay key (#848
+    /// G4): a companion unpaired, paused or taken off a feed's scope loses it at once.
+    desks: std::sync::RwLock<Option<KeySet>>,
+}
+
+/// An OBS companion's own key for one overlay feed (#848 G4): made from the feed's link key and the
+/// companion's key hash, so it opens only that feed, only for that companion, and stops working when
+/// the companion is unpaired or paused, or the feed gets a new link.
+fn companion_feed_key(feed_token: &str, companion_hash: &str) -> String {
+    crate::keys::hash_key(&format!("rhema-companion-feed\n{feed_token}\n{companion_hash}"))
+}
+
+/// Whether this paired desk is an OBS companion that may open this overlay feed now: unpaused, and
+/// the feed in its output scope when the host gave it one.
+fn companion_may_open(e: &crate::keys::KeyEntry, id: &str) -> bool {
+    e.role == crate::keys::Role::ObsCompanion && !e.paused && (e.output_scope.is_empty() || e.output_scope.iter().any(|o| o == id))
 }
 
 /// A feed's keys as the app keeps them (#198): the feed's own link key, and each paired TV's own
@@ -273,6 +289,29 @@ fn frame_plays_camera(frame: &str, name: &str) -> bool {
 }
 
 impl FeedHub {
+    /// The listener's paired desks, for the OBS companions' own overlay keys (set when it starts).
+    pub(crate) fn set_desks(&self, keys: KeySet) {
+        *self.desks.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(keys);
+        self.changed.notify_waiters();
+    }
+
+    /// Whether a key opens this feed: its own or a paired TV's (`Feed::admits`), or an OBS
+    /// companion's own key for an overlay feed (#848 G4), counted as the feed's own.
+    #[allow(clippy::option_option)] // as `Feed::admits`: not admitted, the feed's own, or a TV's.
+    fn admit<'a>(&self, id: &str, f: &'a Feed, token: &str) -> Option<Option<&'a TvKey>> {
+        f.admits(token).or_else(|| self.companion_opens(id, f, token).then_some(None))
+    }
+
+    fn companion_opens(&self, id: &str, f: &Feed, token: &str) -> bool {
+        if f.kind.is_none() || token.len() != 64 {
+            return false;
+        }
+        let desks = self.desks.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(keys) = desks.as_ref() else { return false };
+        let keys = keys.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+        keys.entries.iter().any(|e| companion_may_open(e, id) && crate::command::same_key(token, &companion_feed_key(&f.token, &e.hash)))
+    }
+
     /// Whether this feed's frame now plays this camera (a TV reads only what its scene shows).
     pub(crate) fn plays_camera(&self, id: &str, name: &str) -> bool {
         self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).and_then(|f| f.current.as_ref()).is_some_and(|(_, frame)| frame_plays_camera(frame, name))
@@ -280,7 +319,7 @@ impl FeedHub {
 
     /// Whether this key opens this feed now.
     pub(crate) fn admits(&self, id: &str, key: &str) -> bool {
-        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).is_some_and(|f| f.admits(key).is_some())
+        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).is_some_and(|f| self.admit(id, f, key).is_some())
     }
 
     /// Replace the list of feeds (id, secret) with no TV keys; frames of feeds that stay are kept.
@@ -339,7 +378,7 @@ impl FeedHub {
     /// never advances `acked` nor counts as the first draw, so the host never calls it confirmed.
     fn ack_shown(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>, clock: Option<i64>, hidden: bool) -> Result<Option<u64>, ()> {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let f = feeds.get_mut(id).filter(|f| f.admits(token).is_some()).ok_or(())?;
+        let f = feeds.get_mut(id).filter(|f| self.admit(id, f, token).is_some()).ok_or(())?;
         let mut first = None;
         if hidden {
             if seq <= f.seq && !matches!(f.seen_hidden, Some((old, _)) if seq < old) {
@@ -399,28 +438,31 @@ impl FeedHub {
     fn follow(&self, id: &str, token: &str) -> Option<(Option<(u64, String)>, broadcast::Receiver<(u64, String)>, Option<Watching>)> {
         let feeds = self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner);
         let f = feeds.get(id)?;
-        let tv = f.admits(token)?;
+        let tv = self.admit(id, f, token)?;
         Some((f.current.clone(), f.tx.subscribe(), tv.map(|t| Watching::new(&t.watching))))
     }
 
-    /// The feeds an OBS companion may add as overlays (#848 G4), by name: only those the app marked
-    /// with an overlay kind, each with its own link key (a paired TV's key is never given out).
+    /// The feeds this OBS companion may add as overlays (#848 G4), by name: only those the app marked
+    /// with an overlay kind, within its output scope when it has one, each with the companion's own
+    /// key for it (never the feed's link key, never a paired TV's).
     #[must_use]
-    pub fn overlays(&self) -> Vec<OverlayFeed> {
+    pub fn overlays(&self, companion: &crate::keys::KeyEntry) -> Vec<OverlayFeed> {
         let feeds = self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut list: Vec<OverlayFeed> = feeds
             .iter()
-            .filter_map(|(id, f)| Some(OverlayFeed { id: id.clone(), name: f.name.clone(), kind: f.kind?, path: feed_path(id, &f.token)? }))
+            .filter(|(id, _)| companion_may_open(companion, id))
+            .filter_map(|(id, f)| Some(OverlayFeed { id: id.clone(), name: f.name.clone(), kind: f.kind?, path: feed_path(id, &companion_feed_key(&f.token, &companion.hash))? }))
             .collect();
         list.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
         list
     }
 
     fn knows(&self, id: &str, token: &str) -> bool {
-        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).is_some_and(|f| f.admits(token).is_some())
+        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).is_some_and(|f| self.admit(id, f, token).is_some())
     }
 
-    /// Ends once this key no longer opens the feed (a revoked TV, a new link, the feed removed).
+    /// Ends once this key no longer opens the feed (a revoked TV, a new link, the feed removed, an
+    /// OBS companion unpaired or paused: the desks are looked at again every 2 s).
     async fn until_withdrawn(self: Arc<Self>, id: String, token: String) {
         loop {
             let changed = self.changed.notified();
@@ -429,7 +471,7 @@ impl FeedHub {
             if !self.knows(&id, &token) {
                 return;
             }
-            changed.await;
+            let _ = tokio::time::timeout(DESKS_RECHECK, changed).await;
         }
     }
 
@@ -437,11 +479,15 @@ impl FeedHub {
     fn shows_file(&self, id: &str, token: &str, file: &str) -> bool {
         let feeds = self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner);
         let needle = format!("\"mediaFile\":\"{file}\"");
-        feeds.get(id).is_some_and(|f| f.admits(token).is_some() && f.current.as_ref().is_some_and(|(_, json)| json.contains(&needle)))
+        feeds.get(id).is_some_and(|f| self.admit(id, f, token).is_some() && f.current.as_ref().is_some_and(|(_, json)| json.contains(&needle)))
     }
 }
 
 pub type SharedFeeds = Arc<FeedHub>;
+
+/// How often a feed page's stream looks again at whether its key still opens the feed, for keys
+/// that change outside the feed list (an OBS companion unpaired or paused).
+const DESKS_RECHECK: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// How long a page's clock report counts (pages send one every few seconds).
 const CLOCK_REPORT_FOR: std::time::Duration = std::time::Duration::from_secs(30);
@@ -1448,6 +1494,7 @@ where
 
     let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
     let ports = Arc::new(ListenPorts::default());
+    config.feeds.set_desks(config.keys.clone());
     let state = Arc::new(AppState {
         stopping: shutdown_rx.clone(),
         live: config.live.clone(),
@@ -2512,9 +2559,9 @@ async fn companion_overlays_handler<S: CommandSink + 'static>(
     headers: HeaderMap,
 ) -> axum::response::Response {
     match companion_key(&state, peer, &headers) {
-        Ok(_) => (
+        Ok(e) => (
             [(axum::http::header::CACHE_CONTROL, "no-store")],
-            Json(serde_json::json!({ "httpPort": state.http_port.get().copied(), "feeds": state.feeds.overlays() })),
+            Json(serde_json::json!({ "httpPort": state.http_port.get().copied(), "feeds": state.feeds.overlays(&e) })),
         )
             .into_response(),
         Err((code, why)) => (code, Json(serde_json::json!({ "error": why }))).into_response(),
@@ -5452,7 +5499,8 @@ mod tests {
     }
 
     /// The overlays an OBS companion may add (#848 G4): only to a paired, unpaused companion; only the
-    /// feeds the app marked as overlays; each with the feed's own key, never a paired TV's.
+    /// feeds the app marked as overlays; each with the companion's own key, never the feed's link key
+    /// or a paired TV's.
     #[tokio::test]
     async fn an_obs_companion_lists_only_the_overlay_feeds() {
         use crate::keys::{hash_key, KeyEntry, Keys, Role};
@@ -5473,25 +5521,88 @@ mod tests {
         assert!(get_with(port, "/api/v1/overlays", "", None).await.contains("401"), "no key");
         assert!(get_with(port, "/api/v1/overlays", "X-Rhema-Key: nope\r\n", None).await.contains("401"), "unknown key");
         let phone = get_with(port, "/api/v1/overlays", "X-Rhema-Key: pres\r\n", None).await;
-        assert!(phone.contains("403") && !phone.contains("biblekey"), "another role: {phone}");
+        assert!(phone.contains("403") && !phone.contains("/feed/"), "another role: {phone}");
         let list = get_with(port, "/api/v1/overlays", "X-Rhema-Key: comp\r\n", None).await;
         assert!(list.contains("200 OK") && list.contains("no-store"), "{list}");
         let body: serde_json::Value = serde_json::from_str(list.split("\r\n\r\n").nth(1).unwrap_or("")).expect("json");
         assert_eq!(body["httpPort"], port);
+        let own = |feed_token: &str| companion_feed_key(feed_token, &hash_key("comp"));
         assert_eq!(
             body["feeds"],
             serde_json::json!([
-                { "id": "l3", "name": "Rhema Bible | Lower third", "kind": "bible", "path": "/feed/l3?k=biblekey-0123456789" },
-                { "id": "clock", "name": "Rhema Clock", "kind": "timer", "path": "/feed/clock?k=clockkey-0123456789" },
+                { "id": "l3", "name": "Rhema Bible | Lower third", "kind": "bible", "path": format!("/feed/l3?k={}", own("biblekey-0123456789")) },
+                { "id": "clock", "name": "Rhema Clock", "kind": "timer", "path": format!("/feed/clock?k={}", own("clockkey-0123456789")) },
             ])
         );
-        for never in ["tvkey", "stagekey", "oddkey"] {
+        for never in ["biblekey", "clockkey", "tvkey", "stagekey", "oddkey"] {
             assert!(!list.contains(never), "{never} is not for a companion: {list}");
         }
         keys.write().unwrap().entries[0].paused = true;
         assert!(get_with(port, "/api/v1/overlays", "X-Rhema-Key: comp\r\n", None).await.contains("423"), "paused");
         let mut handle = result.handle;
         handle.stop();
+    }
+
+    /// A companion's overlay link opens its feed only while the companion is paired, unpaused and
+    /// (when scoped) given that feed; unpairing it cuts the link that is already in OBS.
+    #[tokio::test]
+    async fn a_companion_overlay_link_stops_when_the_companion_is_revoked_and_follows_its_scope() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        let entry = |tok: &str, scope: &[&str]| KeyEntry { hash: hash_key(tok), name: tok.into(), role: Role::ObsCompanion, paused: false, output_scope: scope.iter().map(|s| (*s).to_string()).collect(), group_take_scope: Vec::new(), record: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("comp", &[]), entry("scoped", &["clock"])] }));
+        let feeds = new_feed_hub();
+        let feed = |id: &str, token: &str, kind: &str| FeedKeys { id: id.into(), token: token.into(), name: id.into(), kind: Some(kind.into()), ..FeedKeys::default() };
+        feeds.set_keys(&[feed("l3", "biblekey-0123456789", "bible"), feed("clock", "clockkey-0123456789", "timer"), FeedKeys { kind: None, ..feed("stage", "stagekey-0123456789", "bible") }]);
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), feeds: feeds.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let paths = |who: &'static str| async move {
+            let r = get_with(port, "/api/v1/overlays", &format!("X-Rhema-Key: {who}\r\n"), None).await;
+            let v: serde_json::Value = serde_json::from_str(r.split("\r\n\r\n").nth(1).unwrap_or("")).expect("json");
+            v["feeds"].as_array().into_iter().flatten().filter_map(|f| f["path"].as_str().map(str::to_string)).collect::<Vec<_>>()
+        };
+        let scoped = paths("scoped").await;
+        assert_eq!(scoped.len(), 1, "a scoped companion sees only its feeds: {scoped:?}");
+        assert!(scoped[0].starts_with("/feed/clock?k="), "{scoped:?}");
+        let all = paths("comp").await;
+        assert_eq!(all.len(), 2, "{all:?}");
+        let bible = all.iter().find(|p| p.starts_with("/feed/l3?")).cloned().expect("the bible overlay");
+        let opened = get_with(port, &bible, "", None).await;
+        assert!(!opened.contains("403") && opened.contains("feed page"), "the companion's own link opens its feed: {opened}");
+        let scoped_key = &scoped[0]["/feed/clock?k=".len()..];
+        assert!(get_with(port, &format!("/feed/l3?k={scoped_key}"), "", None).await.contains("403"), "one feed's key never opens another");
+        let stage_key = companion_feed_key("stagekey-0123456789", &hash_key("comp"));
+        assert!(get_with(port, &format!("/feed/stage?k={stage_key}"), "", None).await.contains("403"), "never a feed that is not an overlay");
+        let scoped_bible = companion_feed_key("biblekey-0123456789", &hash_key("scoped"));
+        assert!(get_with(port, &format!("/feed/l3?k={scoped_bible}"), "", None).await.contains("403"), "never a feed outside its scope");
+        keys.write().unwrap().entries[0].paused = true;
+        assert!(get_with(port, &bible, "", None).await.contains("403"), "paused: its links stop");
+        keys.write().unwrap().entries[0].paused = false;
+        assert!(!get_with(port, &bible, "", None).await.contains("403"), "unpaused: it opens again");
+        keys.write().unwrap().entries.retain(|e| e.hash != hash_key("comp"));
+        assert!(get_with(port, &bible, "", None).await.contains("403"), "unpaired: the link already in OBS stops");
+        assert!(feeds.admits("l3", "biblekey-0123456789"), "the feed's own link is untouched");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    /// An open feed stream for a companion's key ends within the re-check after the companion is unpaired.
+    #[tokio::test]
+    async fn a_companion_feed_stream_ends_when_it_is_unpaired() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![KeyEntry { hash: hash_key("comp"), name: "comp".into(), role: Role::ObsCompanion, paused: false, output_scope: Vec::new(), group_take_scope: Vec::new(), record: false }] }));
+        let feeds = new_feed_hub();
+        feeds.set_keys(&[FeedKeys { id: "l3".into(), token: "biblekey-0123456789".into(), name: "l3".into(), kind: Some("bible".into()), ..FeedKeys::default() }]);
+        feeds.set_desks(keys.clone());
+        let key = companion_feed_key("biblekey-0123456789", &hash_key("comp"));
+        assert!(feeds.knows("l3", &key));
+        let ended = tokio::spawn(feeds.clone().until_withdrawn("l3".into(), key.clone()));
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert!(!ended.is_finished());
+        keys.write().unwrap().entries.clear();
+        tokio::time::timeout(DESKS_RECHECK * 2, ended).await.expect("cut within the re-check").expect("joined");
+        assert!(!feeds.knows("l3", &key));
     }
 
     #[test]
