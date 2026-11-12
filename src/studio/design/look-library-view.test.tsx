@@ -128,7 +128,7 @@ describe("Design → Templates (#299)", () => {
     await act(async () => tabs[2].click())
     expect(useShellStore.getState().designTab).toBe("used-on")
     expect(sections().map((button) => button.textContent?.trim())).toEqual(["Outputs overview"])
-    expect(el.querySelector('[role="tabpanel"]')?.getAttribute("aria-label")).toBe("Outputs overview")
+    expect(el.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe("design-group-where-used design-section-current")
 
     // Back to a group returns to the section last open in it.
     await act(async () => tabs[0].click())
@@ -137,23 +137,55 @@ describe("Design → Templates (#299)", () => {
     expect(useShellStore.getState().designTab).toBe("brand")
   })
 
+  // Each section's own designer, found by something only that designer renders.
   it.each([
-    ["my-designs", "Make", "My Designs"],
-    ["library", "Make", "Templates"],
-    ["lower-thirds", "Make", "Lower thirds"],
-    ["ticker", "Make", "News ticker"],
-    ["countdown", "Make", "Countdown"],
-    ["stage", "Make", "Stage"],
-    ["themes", "Style", "Themes"],
-    ["brand", "Style", "Brand kit"],
-    ["used-on", "Where used", "Outputs overview"],
-    ["outputs", "Where used", "Outputs overview"],
-  ] as const)("opens the former %s tab in %s → %s (#818)", async (tab, group, section) => {
+    ["my-designs", "Make", "My Designs", '[aria-label="My designs"]'],
+    ["library", "Make", "Templates", '[aria-label="Layout"]'],
+    ["lower-thirds", "Make", "Lower thirds", '[aria-label="Styles"]'],
+    ["ticker", "Make", "News ticker", '[aria-label="Between items"]'],
+    ["countdown", "Make", "Countdown", '[aria-label="What the countdown counts"]'],
+    ["stage", "Make", "Stage", '[aria-label^="Stage display preview"]'],
+    ["themes", "Style", "Themes", '[aria-label="Search themes"]'],
+    ["brand", "Style", "Brand kit", '[aria-label="Logo corner"]'],
+    ["used-on", "Where used", "Outputs overview", 'section[aria-labelledby="design-usage-themes"]'],
+    ["outputs", "Where used", "Outputs overview", 'section[aria-labelledby="design-usage-themes"]'],
+  ] as const)("opens the former %s tab in %s → %s with its own designer (#818)", async (tab, group, section, marker) => {
     const el = await renderDesignWorkspace(tab)
-    expect(el.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(group)
-    expect(el.querySelector('nav[aria-label="Design sections"] [aria-current="page"]')?.textContent).toBe(section)
-    expect(el.querySelector('[role="tabpanel"]')?.getAttribute("aria-label")).toBe(section)
+    const selected = el.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')!
+    const current = el.querySelector<HTMLElement>('nav[aria-label="Design sections"] [aria-current="page"]')!
+    expect(selected.textContent).toBe(group)
+    expect(current.textContent).toBe(section)
+    const panel = el.querySelector<HTMLElement>('[role="tabpanel"]')!
+    // The panel is named by the selected group tab and the open section.
+    expect(panel.getAttribute("aria-labelledby")).toBe(`${selected.id} ${current.id}`)
+    expect(selected.id).toBe(`design-group-${group === "Where used" ? "where-used" : group.toLowerCase()}`)
+    expect(selected.getAttribute("aria-controls")).toBe(panel.id)
+    expect(el.querySelector(marker)).not.toBeNull()
+    // No other section's designer is mounted alongside it.
+    for (const other of ['[aria-label="My designs"]', '[aria-label="Styles"]', '[aria-label="Between items"]', '[aria-label="What the countdown counts"]', '[aria-label="Logo corner"]', '[aria-label="Search themes"]']) {
+      if (other !== marker) expect(el.querySelector(other)).toBeNull()
+    }
     if (section === "Outputs overview") expect(el.textContent).toContain("this overview covers every output at once")
+  })
+
+  it("wraps arrow keys and jumps with Home and End across the group tabs, without opening a group", async () => {
+    const el = await renderDesignWorkspace("brand")
+    const tabs = [...el.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+    const key = async (target: HTMLElement, k: string) => act(async () => target.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })))
+    expect(tabs.map((tab) => tab.tabIndex)).toEqual([-1, 0, -1])
+    tabs[1].focus()
+    await key(tabs[1], "ArrowRight")
+    expect(document.activeElement).toBe(tabs[2])
+    await key(tabs[2], "ArrowRight")
+    expect(document.activeElement).toBe(tabs[0])
+    await key(tabs[0], "ArrowLeft")
+    expect(document.activeElement).toBe(tabs[2])
+    await key(tabs[2], "Home")
+    expect(document.activeElement).toBe(tabs[0])
+    await key(tabs[0], "End")
+    expect(document.activeElement).toBe(tabs[2])
+    expect(useShellStore.getState().designTab).toBe("brand")
+    expect(tabs[1].getAttribute("aria-selected")).toBe("true")
   })
 
   it("starts primary Templates from a canonical private design instead of a legacy scene", async () => {

@@ -118,6 +118,7 @@ export function DesignWorkspace() {
           {group.sections.map(({ id, label, hint }) => (
             <button
               key={id}
+              id={section.id === id ? "design-section-current" : undefined}
               type="button"
               aria-current={section.id === id ? "page" : undefined}
               title={hint}
@@ -143,7 +144,7 @@ export function DesignWorkspace() {
           ))}
         </div>
       )}
-      <div id="design-section-panel" role="tabpanel" aria-label={section.label} className="min-h-0 flex-1 px-8 pb-6 max-[1200px]:px-5">
+      <div id="design-section-panel" role="tabpanel" aria-labelledby={`design-group-${group.id} design-section-current`} className="min-h-0 flex-1 px-8 pb-6 max-[1200px]:px-5">
         {tab === "themes" ? (
           <div className="grid h-full min-h-0 grid-cols-[240px_minmax(0,1fr)_300px] overflow-hidden rounded-lg border border-border bg-card shadow-panel max-[1200px]:grid-cols-[200px_minmax(0,1fr)_280px]">
             <ThemeLibrary />

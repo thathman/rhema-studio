@@ -154,7 +154,7 @@ interface ShellState extends ShellPrefs {
   setSidebarCollapsed: (collapsed: boolean) => void
   toggleSidebar: () => void
   openOutputs: () => void
-  /** Open the outputs with this output's editor on top (Design → Used on… → Open output). A new object each time. */
+  /** Open the outputs with this output's editor on top (Design → Where used → Open output). A new object each time. */
   editOutputRequest: { id: string } | null
   editOutput: (id: string) => void
   setOutputsDialogOpen: (open: boolean) => void
