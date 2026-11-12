@@ -10,7 +10,7 @@ vi.mock("@/stores/journal-store", async (orig) => ({ ...(await orig<typeof impor
 
 import { act } from "react"
 import { createRoot } from "react-dom/client"
-const { JournalBlock } = await import("./library-blocks")
+const { JournalBlock } = await import("@/studio/archive/service-runs")
 const { useJournalStore } = await import("@/stores/journal-store")
 const { useTranscriptStore } = await import("@/stores/transcript-store")
 

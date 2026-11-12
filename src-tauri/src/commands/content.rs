@@ -137,6 +137,18 @@ pub fn content_song_usage(state: State<'_, ContentState>, from: String, to: Stri
     with_db(&state, |db| db.song_usage(&from, &to))
 }
 
+/// Songs shown on screen during service runs between two ISO dates (#843 S19), from the run journal.
+#[tauri::command]
+pub fn content_song_usage_shown(state: State<'_, ContentState>, from: String, to: String) -> CmdResult<Vec<SongUsage>> {
+    with_db(&state, |db| db.song_usage_shown(&from, &to))
+}
+
+/// A run's after-action notes (#854 G10). The run's captured record is not changed.
+#[tauri::command]
+pub fn content_set_service_run_notes(state: State<'_, ContentState>, run_id: String, notes: String) -> CmdResult<ServiceRun> {
+    with_db(&state, |db| db.set_service_run_notes(&run_id, &notes))
+}
+
 #[tauri::command]
 pub fn content_list_service_logs(
     state: State<'_, ContentState>,

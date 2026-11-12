@@ -103,6 +103,7 @@ pub const MIGRATIONS: &[Migration] = &[
     ("0017_approval_requests", include_str!("../migrations/0017_approval_requests.sql")),
     ("0018_design_documents", include_str!("../migrations/0018_design_documents.sql")),
     ("0019_library_collections", include_str!("../migrations/0019_library_collections.sql")),
+    ("0020_service_run_notes", include_str!("../migrations/0020_service_run_notes.sql")),
 ];
 
 /// Item kinds this version can read and write. Future kinds arrive with a
@@ -1613,7 +1614,7 @@ mod tests {
     #[test]
     fn migrations_apply_once_and_in_order() {
         let db = ContentDb::open_in_memory().unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides", "0016_service_runs", "0017_approval_requests", "0018_design_documents", "0019_library_collections"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides", "0016_service_runs", "0017_approval_requests", "0018_design_documents", "0019_library_collections", "0020_service_run_notes"]);
     }
 
     #[test]
@@ -1638,6 +1639,31 @@ mod tests {
         assert_eq!(saved.summary.time_zone, None);
         assert_eq!(saved.body, "09:00 LIVE Psalm 23");
         assert!(db.list_service_runs(None, 10).unwrap().is_empty(), "migration does not fabricate service runs");
+    }
+
+    #[test]
+    fn migration_0020_lets_a_run_saved_before_it_take_after_action_notes() {
+        let tmp = TempDir::new();
+        let before_0020 = MIGRATIONS.iter().position(|(v, _)| *v == "0020_service_run_notes").unwrap();
+        {
+            let db = ContentDb::open_with_migrations(&tmp.db(), &MIGRATIONS[..before_0020]).unwrap();
+            // A run written by the pre-0020 schema: no notes columns yet.
+            db.lock().unwrap().execute(
+                "INSERT INTO service_runs (run_id, program_id, program_revision, service_date, title, time_zone, started_at, updated_at, status, checkpoint_json)
+                 VALUES ('old-run', NULL, NULL, '2026-10-04', 'Harvest', NULL, '2026-10-04T09:00:00Z', '2026-10-04T11:00:00.000Z', 'finished', '{\"version\":1,\"entries\":[]}')",
+                [],
+            ).unwrap();
+        }
+        let db = ContentDb::open(&tmp.db()).unwrap();
+        assert!(db.last_backup().unwrap().to_string_lossy().contains("before-0020_service_run_notes"));
+        let old = db.get_service_run("old-run").unwrap().expect("the run survives the upgrade");
+        assert_eq!((old.after_action_notes, old.notes_updated_at), (None, None));
+        db.set_service_run_notes("old-run", "Choir needed a second microphone.").unwrap();
+        drop(db);
+        let reopened = ContentDb::open(&tmp.db()).unwrap();
+        let run = reopened.get_service_run("old-run").unwrap().unwrap();
+        assert_eq!(run.after_action_notes.as_deref(), Some("Choir needed a second microphone."));
+        assert_eq!((run.updated_at.as_str(), run.status.as_str()), ("2026-10-04T11:00:00.000Z", "finished"));
     }
 
     #[test]
@@ -2095,7 +2121,7 @@ lines"}"#.to_string(), false),
         let older = &MIGRATIONS[..5];
         let err = ContentDb::open_with_migrations(&tmp.db(), older).unwrap_err();
         match &err {
-            ContentError::NewerSchema { versions } => assert_eq!(versions, &vec!["0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides", "0016_service_runs", "0017_approval_requests", "0018_design_documents", "0019_library_collections"]),
+            ContentError::NewerSchema { versions } => assert_eq!(versions, &vec!["0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides", "0016_service_runs", "0017_approval_requests", "0018_design_documents", "0019_library_collections", "0020_service_run_notes"]),
             other => panic!("{other:?}"),
         }
         assert!(err.to_string().contains("newer Rhema Studio"));
@@ -2144,7 +2170,7 @@ lines"}"#.to_string(), false),
             p.id
         };
         let db = ContentDb::open(&tmp.db()).unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides", "0016_service_runs", "0017_approval_requests", "0018_design_documents", "0019_library_collections"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides", "0016_service_runs", "0017_approval_requests", "0018_design_documents", "0019_library_collections", "0020_service_run_notes"]);
         let backup = db.last_backup().expect("backup before migrating an existing file").to_path_buf();
         assert!(backup.exists());
         assert!(backup.to_string_lossy().contains("before-0002_item_identity"));

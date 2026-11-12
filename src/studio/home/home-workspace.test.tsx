@@ -284,4 +284,24 @@ describe("Home workspace", () => {
     expect(home.textContent).not.toContain("Camera is not sending")
     expect(home.textContent).toContain("Camera is sending")
   })
+
+  it("lists only a few recent services and links to the full list in History (#804 R5)", async () => {
+    const program = (id: string, extra: Record<string, unknown> = {}) => ({ id, title: `Service ${id}`, service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 0, ...extra })
+    const setWorkspace = vi.fn()
+    vi.mocked(useReadiness).mockReturnValue({
+      ...readinessValue([], [], null),
+      programs: [program("1"), program("2"), program("template", { is_template: true }), program("old", { archived_at: "2026-01-01" }), program("3"), program("4"), program("5")],
+      setWorkspace,
+    } as unknown as ReturnType<typeof useReadiness>)
+    element = document.createElement("div")
+    document.body.appendChild(element)
+    root = createRoot(element)
+    await act(async () => root.render(<HomeWorkspace />))
+    const list = element.querySelector('section[aria-labelledby="services"]')!
+    expect(list.textContent).toContain("Recent services")
+    expect([...list.querySelectorAll("li")].map((li) => li.textContent?.match(/Service \d/)?.[0])).toEqual(["Service 1", "Service 2", "Service 3"])
+    const all = [...list.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.includes("All saved services"))!
+    await act(async () => all.click())
+    expect(setWorkspace).toHaveBeenCalledWith("archive")
+  })
 })
