@@ -8,8 +8,13 @@ program and preview.
 
 It also puts Rhema's **overlays** (Bible, Lyrics, Name lower third, Ticker, Timer) into scenes
 this OBS already has, as Browser Sources opening the host's browser feeds (#848). On the host,
-add the ready-made feed (Outputs → Add a ready-made feed, as a browser feed), copy its link for
-OBS, and paste it in the Companion's Overlays card with the scene to add it to. An overlay's link
+add the ready-made feed (Outputs → Add a ready-made feed, as a browser feed); the Companion's
+Overlays card lists the host's Bible, Lyrics, Name, Ticker and Clock browser feeds (the host's
+`GET /api/v1/overlays`, for a paired OBS companion only, within its output scope when the host gave
+it one; stage feeds are never listed). Each listed link carries this Companion's own key for that
+feed, not the feed's shared link key: when the host unpairs or pauses this Companion, those overlays
+stop drawing in OBS (a page already open is cut within about 2 seconds). Pick one and the scene to
+add it to, or paste a feed's link for OBS instead. An overlay's link
 and size can be changed there (an overlay on air is reloaded only after you confirm, since it
 blanks for a moment), and **Test in this scene** asks OBS for a picture of it and whether it is on
 air, changing nothing. An overlay added to the scene on air comes in hidden: show it in OBS when

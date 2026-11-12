@@ -1510,6 +1510,13 @@ pub struct FeedEntry {
     /// Each paired TV's own key (#198), by the TV's address; absent from an older window.
     #[serde(default)]
     tvs: Vec<FeedTvEntry>,
+    /// The output's name; absent from an older window.
+    #[serde(default)]
+    name: String,
+    /// The overlay an OBS companion may add it as (#848 G4: bible, lyrics, name, ticker, timer);
+    /// absent: never offered to a companion.
+    #[serde(default)]
+    kind: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -1523,7 +1530,7 @@ fn feed_keys(feeds: Vec<FeedEntry>) -> Vec<rhema_api::FeedKeys> {
     feeds
         .into_iter()
         .filter(|f| f.token.len() >= 16)
-        .map(|f| rhema_api::FeedKeys { id: f.id, token: f.token, tvs: f.tvs.into_iter().filter(|t| t.token.len() >= 16).map(|t| (t.id, t.token)).collect() })
+        .map(|f| rhema_api::FeedKeys { id: f.id, token: f.token, tvs: f.tvs.into_iter().filter(|t| t.token.len() >= 16).map(|t| (t.id, t.token)).collect(), name: f.name, kind: f.kind })
         .collect()
 }
 

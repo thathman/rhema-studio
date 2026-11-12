@@ -152,7 +152,19 @@ pub async fn me(host: &Host, token: &str) -> Result<serde_json::Value, String> {
 /// its own way to read them while the host's camera router runs. A refusal while the main desk has
 /// taken back control starts with "paused:".
 pub async fn cameras(host: &Host, token: &str) -> Result<serde_json::Value, String> {
-    let r = host.client(Some(Duration::from_secs(8)))?.get(host.url("/api/v1/cameras/watch")).header("X-Rhema-Key", token).send().await.map_err(|e| host.unreachable(&e))?;
+    companion_get(host, token, "/api/v1/cameras/watch").await
+}
+
+/// The host's feeds an OBS companion may add to its scenes as overlays (#848 G4): each one's id,
+/// name, kind (bible, lyrics, name, ticker, timer) and link path, and the host's http port.
+/// Refused as `cameras` is.
+pub async fn overlays(host: &Host, token: &str) -> Result<serde_json::Value, String> {
+    companion_get(host, token, "/api/v1/overlays").await
+}
+
+/// A companion's read from its host; a refusal while the main desk has taken back control starts with "paused:".
+async fn companion_get(host: &Host, token: &str, path: &str) -> Result<serde_json::Value, String> {
+    let r = host.client(Some(Duration::from_secs(8)))?.get(host.url(path)).header("X-Rhema-Key", token).send().await.map_err(|e| host.unreachable(&e))?;
     let status = r.status().as_u16();
     let v = r.json::<serde_json::Value>().await.unwrap_or_default();
     if (200..300).contains(&status) {
@@ -546,12 +558,13 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn a_paused_companion_is_told_so_and_an_unknown_key_must_pair_again() {
         let address = pretend_host(|path| match path {
-            "/api/v1/cameras/watch" => (423, r#"{"error":"The main desk has taken back control"}"#.into()),
+            "/api/v1/cameras/watch" | "/api/v1/overlays" => (423, r#"{"error":"The main desk has taken back control"}"#.into()),
             _ => (401, "{}".into()),
         })
         .await;
         let host = Host::plain(&address).unwrap();
         assert_eq!(cameras(&host, "k").await.unwrap_err(), "paused: The main desk has taken back control");
+        assert_eq!(overlays(&host, "k").await.unwrap_err(), "paused: The main desk has taken back control");
         assert!(me(&host, "k").await.unwrap_err().contains("pair again"));
     }
 

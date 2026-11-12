@@ -105,3 +105,23 @@ export function readyMadeFeed(
 export function tickerOnly(o: Pick<BroadcastOutput, "role" | "ticker">, pictures: number, theme: Pick<BroadcastTheme, "background"> | undefined): boolean {
   return o.role === "signage" && o.ticker === true && pictures === 0 && theme?.background.type === "transparent"
 }
+
+/** The overlays an OBS companion may add (#848 G4); the host lists only feeds of these kinds to it. */
+export type OverlayFeedKind = "bible" | "lyrics" | "name" | "ticker" | "timer"
+
+/**
+ * Which overlay a browser feed is for an OBS companion, or null when it is not one: the Bible, the
+ * lyrics (songs, hymns), the name band, the ticker, or the timer (its own scene with a clock layer,
+ * following nothing else). A stage or signage output (private messages, a foyer loop) never is.
+ */
+export function overlayKindOf(o: Pick<BroadcastOutput, "type" | "role" | "shows" | "sceneId">, scenes: readonly Pick<Scene, "id" | "layers">[]): OverlayFeedKind | null {
+  if (o.type !== "browser" || (o.role && o.role !== "congregation")) return null
+  const shows = new Set(o.shows ?? [])
+  const only = (...kinds: FeedSourceKind[]) => shows.size > 0 && [...shows].every((k) => kinds.includes(k))
+  if (only("bible")) return "bible"
+  if (only("song", "hymn")) return "lyrics"
+  if (only("lowerThird")) return "name"
+  if (only("ticker")) return "ticker"
+  if (shows.size === 0 && o.sceneId && scenes.find((s) => s.id === o.sceneId)?.layers.some((l) => l.kind === "clock")) return "timer"
+  return null
+}

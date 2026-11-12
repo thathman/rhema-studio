@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { BUILTIN_THEMES } from "@/lib/builtin-themes"
-import { existingFeed, FEED_PRESETS, readyMadeFeed, tickerOnly } from "@/lib/feed-presets"
+import { existingFeed, FEED_PRESETS, overlayKindOf, readyMadeFeed, tickerOnly } from "@/lib/feed-presets"
 import { outputFollows, outputPresentation } from "@/lib/output-summary"
 import { defaultNdiSettings, type BroadcastOutput } from "@/types"
 
@@ -95,5 +95,31 @@ describe("ready-made feeds (#299)", () => {
     expect(after.outputStatus).toEqual(statusBefore)
     // Asking again adds nothing.
     for (const p of FEED_PRESETS) expect("taken" in readyMadeFeed(p, "ndi", after.outputs, after.themes)).toBe(true)
+  })
+})
+
+describe("overlay kinds for an OBS companion (#848 G4)", () => {
+  it("each ready-made browser feed for OBS is its overlay; the countdown (a stage output) and announcements are not", () => {
+    const kinds: Record<string, string | null> = {}
+    let outputs: BroadcastOutput[] = [main]
+    const scenes: { id: string; layers: { kind: "clock" | "text" }[] }[] = []
+    for (const p of FEED_PRESETS) {
+      const r = readyMadeFeed(p, "browser", outputs, BUILTIN_THEMES, () => p.id, scenes as never)
+      if (!("output" in r)) throw new Error("not added")
+      if (r.scene) scenes.push(r.scene as never)
+      outputs = [...outputs, r.output]
+      kinds[p.id] = overlayKindOf(r.output, scenes as never)
+    }
+    expect(kinds).toEqual({ "bible-full": "bible", "bible-l3": "bible", "lyrics-full": "lyrics", "lyrics-l3": "lyrics", "announcements-full": null, "presenter-l3": "name", "ticker-alpha": "ticker", clock: "timer", countdown: null })
+  })
+
+  it("never an NDI or display output, a stage or signage output, or a feed following more than one thing", () => {
+    const feed: BroadcastOutput = { ...main, id: "f", type: "browser", shows: ["bible"] }
+    expect(overlayKindOf(feed, [])).toBe("bible")
+    expect(overlayKindOf({ ...feed, type: "ndi" }, [])).toBeNull()
+    expect(overlayKindOf({ ...feed, role: "stage" }, [])).toBeNull()
+    expect(overlayKindOf({ ...feed, role: "signage", shows: ["ticker"] }, [])).toBeNull()
+    expect(overlayKindOf({ ...feed, shows: ["bible", "song"] }, [])).toBeNull()
+    expect(overlayKindOf({ ...feed, shows: [], sceneId: "s" }, [{ id: "s", layers: [{ kind: "text" }] }] as never)).toBeNull()
   })
 })
