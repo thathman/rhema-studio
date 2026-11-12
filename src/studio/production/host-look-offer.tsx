@@ -21,7 +21,7 @@ export function HostLookOffer({ look, church }: { look: ChurchLook | undefined; 
   const [confirming, setConfirming] = useState(false)
   const offer = hostLookOffer(look, kit, themes, seen)
   if (!offer) return null
-  const name = offer.kit.churchName.trim() || church || "the host"
+  const name = offer.kit.churchName.trim() || church || "the main computer"
   const count = offer.themes.length
   const use = () => {
     const b = useBroadcastStore.getState()
@@ -31,11 +31,11 @@ export function HostLookOffer({ look, church }: { look: ChurchLook | undefined; 
     useBroadcastStore.setState({ themes: merged.themes })
     s.setHostLookSeen(offer.revision)
     setConfirming(false)
-    toast.success("Using the host's church look", { description: offer.logoLeftOut ? "The logo here stays as it was: the host's is too large to send. Copy it with a backup." : undefined })
+    toast.success("Using the main computer's church look", { description: offer.logoLeftOut ? "The logo here stays as it was: the main computer's is too large to send. Copy it with a backup." : undefined })
   }
   return (
-    <section role="region" aria-label="The host's church look" className="flex flex-col gap-2 rounded-md border border-border bg-card px-2.5 py-2">
-      <p className="flex items-center gap-2 font-semibold"><PaletteIcon aria-hidden className="size-4 text-primary-text" /> The host's church look changed</p>
+    <section role="region" aria-label="The main computer's church look" className="flex flex-col gap-2 rounded-md border border-border bg-card px-2.5 py-2">
+      <p className="flex items-center gap-2 font-semibold"><PaletteIcon aria-hidden className="size-4 text-primary-text" /> The main computer's church look changed</p>
       <p className="text-muted-foreground">
         {name}'s Brand Kit (colours, fonts{offer.logoLeftOut ? "" : ", logo"}) and the {count === 1 ? "theme" : `${count} themes`} made from it. This computer's own name, screens and settings stay as they are.
       </p>
@@ -45,12 +45,12 @@ export function HostLookOffer({ look, church }: { look: ChurchLook | undefined; 
           <Button size="sm" variant="ghost" onClick={() => useSettingsStore.getState().setHostLookSeen(offer.revision)}>Not now</Button>
         </div>
       ) : (
-        <div role="group" aria-label="Use the host's church look?" className="flex flex-col gap-2 rounded-md bg-muted px-2.5 py-2">
-          <p>Replace this computer's Brand Kit and the themes made from it with the host's? Themes edited by hand here, and every other look, stay. Screens on this computer that show these themes change too.</p>
+        <div role="group" aria-label="Use the main computer's church look?" className="flex flex-col gap-2 rounded-md bg-muted px-2.5 py-2">
+          <p>Replace this computer's Brand Kit and the themes made from it with the main computer's? Themes edited by hand here, and every other look, stay. Screens on this computer that show these themes change too.</p>
           {onAir && <p role="alert" className="font-medium text-confidence-mid">Something is on air on this computer. Clear its screens first.</p>}
           <div className="flex flex-wrap justify-end gap-2">
             <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>Keep this computer's</Button>
-            <Button size="sm" disabled={onAir} onClick={use}>Use the host's look</Button>
+            <Button size="sm" disabled={onAir} onClick={use}>Use the main computer's look</Button>
           </div>
         </div>
       )}

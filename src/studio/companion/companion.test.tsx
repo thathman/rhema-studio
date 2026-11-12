@@ -89,8 +89,8 @@ beforeEach(() => {
   useCompanion.setState({ cameras: [], srt: null, router: false, hostError: null, heard: false, inputs: {}, tally: { program: [], preview: [] } })
 })
 
-describe("OBS companion: following the host (#209)", () => {
-  it("keeps OBS's camera addresses current and tells the host what is on OBS's program", async () => {
+describe("OBS companion: following the main computer (#209)", () => {
+  it("keeps OBS's camera addresses current and tells the main computer what is on OBS's program", async () => {
     // Pulpit is in OBS from an earlier run (an old address) and on the program scene.
     obs.inputs.set("Pulpit (Rhema camera)", { input: companionUrl("192.168.1.20", { ...SRT, pass: "b".repeat(64) }, "pulpit", 200) })
     obs.inputs.set("Mic", { device: "x" })
@@ -116,21 +116,21 @@ describe("OBS companion: following the host (#209)", () => {
     expect(useCompanion.getState().inputs.pulpit.state).toBe("ended")
   })
 
-  it("says plainly when the host has taken back control, and touches nothing in OBS for the cameras it cannot read", async () => {
-    hostRefusal = "paused: The main desk has taken back control"
+  it("says plainly when the main computer has taken back control, and touches nothing in OBS for the cameras it cannot read", async () => {
+    hostRefusal = "paused: The main computer has taken back control"
     await look()
-    expect(useCompanion.getState().hostError).toBe("The main desk has taken back control")
+    expect(useCompanion.getState().hostError).toBe("The main computer has taken back control")
     expect(useCompanion.getState().srt).toBeNull()
     // No old rows saying Sending under the error (#411): cameras read, then the host refuses.
     hostRefusal = null
     await look()
     expect(useCompanion.getState().cameras.length).toBeGreaterThan(0)
-    hostRefusal = "paused: The main desk has taken back control"
+    hostRefusal = "paused: The main computer has taken back control"
     await look()
     expect(useCompanion.getState().cameras).toEqual([])
   })
 
-  it("asks nothing of the host while it is not joined", async () => {
+  it("asks nothing of the main computer while it is not joined", async () => {
     useJoin.setState({ status: "off" })
     await look()
     expect(calls.some((c) => c.cmd === "join_cameras" || c.cmd === "join_tally")).toBe(false)
@@ -151,7 +151,7 @@ describe("OBS companion screen (#209)", () => {
     host.remove()
   })
 
-  it("shows only the companion screen in companion mode: the host, OBS, and the cameras with who watches", async () => {
+  it("shows only the companion screen in companion mode: the main computer, OBS, and the cameras with who watches", async () => {
     useSettingsStore.setState({ companionMode: true })
     useSettingsStore.setState((s) => ({ obs: { ...s.obs, enabled: true } }))
     useJoin.setState({ live: { cameraFeeds: [{ name: "pulpit", label: "Pulpit", url: null }] } as never })
@@ -194,31 +194,31 @@ describe("OBS companion screen (#209)", () => {
     useSettingsStore.setState({ companionMode: true })
     useJoin.setState({ status: "reconnecting", error: "error sending request for url (https://192.168.1.20:8081/api/v1/live/events)" })
     await act(async () => root.render(<App />))
-    expect(host.querySelector('[aria-label="Host connection status"]')?.textContent).toBe("Host unreachable")
-    expect(host.querySelector('[aria-label="Why the host is not connected"]')?.textContent).toContain("error sending request")
-    await act(async () => useJoin.setState({ status: "refused", error: "The host refused this computer (403): pair again" }))
-    expect(host.querySelector('[aria-label="Host connection status"]')?.textContent).toBe("Key revoked")
-    expect(host.querySelector('[aria-label="Why the host is not connected"]')?.textContent).toContain("Pair a device")
+    expect(host.querySelector('[aria-label="Main computer connection status"]')?.textContent).toBe("Main computer unreachable")
+    expect(host.querySelector('[aria-label="Why the main computer is not connected"]')?.textContent).toContain("error sending request")
+    await act(async () => useJoin.setState({ status: "refused", error: "The main computer refused this computer (403): pair again" }))
+    expect(host.querySelector('[aria-label="Main computer connection status"]')?.textContent).toBe("Key revoked")
+    expect(host.querySelector('[aria-label="Why the main computer is not connected"]')?.textContent).toContain("Pair a device")
     // Trying a revoked key again cannot help: only Leave (and pair again) is offered.
     expect([...host.querySelectorAll("button")].some((b) => b.textContent === "Try again")).toBe(false)
     // The crate's certificate-mismatch words (pin.rs) say "pair again" too: a security warning, not a revoked key.
-    await act(async () => useJoin.setState({ status: "reconnecting", error: "The host's certificate is not the one this computer paired with, so nothing was sent: pair again if the host computer was reinstalled (Leave this host, then join with a new code). Otherwise another computer may be pretending to be the host." }))
-    expect(host.querySelector('[aria-label="Host connection status"]')?.textContent).toBe("Host certificate changed: this may not be your Rhema computer")
+    await act(async () => useJoin.setState({ status: "reconnecting", error: "The main computer's certificate is not the one this computer paired with, so nothing was sent: pair again if the main computer was reinstalled (Leave this main computer, then join with a new code). Otherwise another computer may be pretending to be the main computer." }))
+    expect(host.querySelector('[aria-label="Main computer connection status"]')?.textContent).toBe("Main computer certificate changed: this may not be your Rhema computer")
   })
 
-  it("asks before leaving the host, and stays joined on Stay (#831)", async () => {
+  it("asks before leaving the main computer, and stays joined on Stay (#831)", async () => {
     useSettingsStore.setState({ companionMode: true })
     const leave = vi.spyOn(useJoin.getState(), "leave").mockResolvedValue()
     await act(async () => root.render(<App />))
     const button = (text: string) => [...host.querySelectorAll("button")].find((b) => b.textContent === text)
-    await act(async () => button("Leave this host")!.click())
+    await act(async () => button("Leave this main computer")!.click())
     expect(leave).not.toHaveBeenCalled()
-    expect(host.querySelector('[aria-label="Leave this host?"]')?.textContent).toContain("new pairing code")
+    expect(host.querySelector('[aria-label="Leave this main computer?"]')?.textContent).toContain("new pairing code")
     await act(async () => button("Stay joined")!.click())
-    expect(host.querySelector('[aria-label="Leave this host?"]')).toBeNull()
+    expect(host.querySelector('[aria-label="Leave this main computer?"]')).toBeNull()
     expect(leave).not.toHaveBeenCalled()
-    await act(async () => button("Leave this host")!.click())
-    await act(async () => button("Leave and forget the host")!.click())
+    await act(async () => button("Leave this main computer")!.click())
+    await act(async () => button("Leave and forget the main computer")!.click())
     expect(leave).toHaveBeenCalledWith(true)
     leave.mockRestore()
   })
@@ -259,17 +259,17 @@ describe("OBS companion screen (#209)", () => {
       set(form.querySelector<HTMLInputElement>('input[aria-label="Feed link"]')!, "http://10.9.9.9:8080/feed/out-bible?k=0123456789abcdef")
     })
     await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
-    expect(form.textContent).toContain("not for the host this Companion joined")
+    expect(form.textContent).toContain("not for the main computer this Companion joined")
     expect(add().disabled).toBe(true)
     await act(async () => form.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click())
     expect(add().disabled).toBe(false)
     // The paired host's own address needs no confirmation.
     await act(async () => set(form.querySelector<HTMLInputElement>('input[aria-label="Feed link"]')!, "http://192.168.1.20:8080/feed/out-bible?k=0123456789abcdef"))
-    expect(form.textContent).not.toContain("not for the host this Companion joined")
+    expect(form.textContent).not.toContain("not for the main computer this Companion joined")
     expect(add().disabled).toBe(false)
   })
 
-  it("offers the host's overlay feeds: picking one fills the overlay and its link for the paired host (#848 G4)", async () => {
+  it("offers the main computer's overlay feeds: picking one fills the overlay and its link for the paired host (#848 G4)", async () => {
     overlaysAnswer = { httpPort: 8080, feeds: [{ id: "out-clock", name: "Rhema Clock", kind: "timer", path: "/feed/out-clock?k=0123456789abcdef" }] }
     useSettingsStore.setState({ companionMode: true, joinAddress: "192.168.1.20:8443" })
     const { useObsStore } = await import("@/stores/obs-store")
@@ -278,7 +278,7 @@ describe("OBS companion screen (#209)", () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
     expect(calls.find((c) => c.cmd === "join_overlays")?.args).toEqual({ address: "192.168.1.20:8443", token: "tok" })
     const form = host.querySelector('form[aria-label="Add an overlay"]')!
-    const pick = form.querySelector<HTMLSelectElement>('select[aria-label="Feed from the host"]')!
+    const pick = form.querySelector<HTMLSelectElement>('select[aria-label="Feed from the main computer"]')!
     expect([...pick.options].map((o) => o.textContent)).toEqual(["Pick a feed, or paste a link below…", "Rhema Clock (Timer)"])
     const set = (el: HTMLSelectElement, v: string) => {
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(el, v)
@@ -291,24 +291,24 @@ describe("OBS companion screen (#209)", () => {
     expect(form.querySelector<HTMLSelectElement>('select[aria-label="Overlay"]')!.value).toBe("timer")
     // The key stays hidden on screen; the link is the paired host's own, so no warning.
     expect(form.querySelector<HTMLInputElement>('input[aria-label="Feed link"]')!.value).toBe("http://192.168.1.20:8080/feed/out-clock?k=••••cdef")
-    expect(form.textContent).not.toContain("not for the host this Companion joined")
+    expect(form.textContent).not.toContain("not for the main computer this Companion joined")
     expect([...form.querySelectorAll("button")].find((b) => b.textContent?.includes("Add to the scene"))!.disabled).toBe(false)
   })
 
-  it("says why the host's feeds cannot be listed, and keeps pasting a link possible", async () => {
-    overlaysRefusal = "paused: The main desk has taken back control"
+  it("says why the main computer's feeds cannot be listed, and keeps pasting a link possible", async () => {
+    overlaysRefusal = "paused: The main computer has taken back control"
     useSettingsStore.setState({ companionMode: true })
     const { useObsStore } = await import("@/stores/obs-store")
     useObsStore.setState({ status: "connected", error: null })
     await act(async () => root.render(<App />))
     await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
     const form = host.querySelector('form[aria-label="Add an overlay"]')!
-    expect(form.textContent).toContain("The host's feeds cannot be listed: The main desk has taken back control")
-    expect(form.querySelector('select[aria-label="Feed from the host"]')).toBeNull()
+    expect(form.textContent).toContain("The main computer's feeds cannot be listed: The main computer has taken back control")
+    expect(form.querySelector('select[aria-label="Feed from the main computer"]')).toBeNull()
     expect(form.querySelector('input[aria-label="Feed link"]')).not.toBeNull()
   })
 
-  it("tells the operator when the host gave this computer another role", async () => {
+  it("tells the operator when the main computer gave this computer another role", async () => {
     useSettingsStore.setState({ companionMode: true })
     useJoin.setState({ me: { name: "Media desk", role: "present" } })
     await act(async () => root.render(<App />))
@@ -325,7 +325,7 @@ describe("OBS companion screen (#209)", () => {
     const input = (label: string) => [...host.querySelectorAll("label")].find((l) => l.textContent?.includes(label))!.querySelector("input")!
     await act(async () => {
       const set = (el: HTMLInputElement, v: string) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, v); el.dispatchEvent(new Event("input", { bubbles: true })) }
-      set(input("Host address"), "192.168.1.20:8080")
+      set(input("Main computer address"), "192.168.1.20:8080")
       set(input("Pairing code"), "123456")
     })
     await act(async () => host.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })))

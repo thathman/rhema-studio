@@ -112,7 +112,7 @@ describe("drawn frames across a host restart (TV acks stopped after a restart)",
 describe("drawn frames by host run id (a TV that reconnects late after a restart)", () => {
   const show = (d: ReturnType<typeof drawnFrames>, seq: number, run?: string) => frameDrawn(d, seq, frameHeard(d, seq, run), true)
 
-  it("reads the host run id from a frame, and nothing else", () => {
+  it("reads the main computer run id from a frame, and nothing else", () => {
     expect(frameHostRun({ hostRun: "abc", off: true })).toBe("abc")
     expect(frameHostRun({ off: true })).toBeUndefined()
     expect(frameHostRun({ hostRun: 7 })).toBeUndefined()

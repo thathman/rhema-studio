@@ -77,7 +77,7 @@ describe("action requests", () => {
     const onSend = vi.fn()
     const findSongs = vi.fn(async () => [{ title: "Amazing Grace", number: "CAC 12" }])
     const el = document.createElement("div")
-    await act(async () => createRoot(el).render(<NoticesPanel notices={[]} role="host" me="Main desk" onSend={onSend} onAnswer={vi.fn()} onAction={vi.fn()} findSongs={findSongs} cameras={["Camera 2"]} />))
+    await act(async () => createRoot(el).render(<NoticesPanel notices={[]} role="host" me="Main computer" onSend={onSend} onAnswer={vi.fn()} onAction={vi.fn()} findSongs={findSongs} cameras={["Camera 2"]} />))
     await type(el.querySelector('[aria-label="Ask them to"]') as HTMLSelectElement, "song")
     await type(el.querySelector('[aria-label="Song or hymn"]') as HTMLInputElement, "Amazing")
     await vi.waitFor(() => expect(el.querySelector("datalist option")?.getAttribute("value")).toBe("Amazing Grace"))
@@ -97,8 +97,8 @@ describe("action requests", () => {
   })
 
   it("the recipient chooses Preview or Show for a song; camera ready is answered, nothing runs", async () => {
-    const song = useNotices.getState().send({ from: "Main desk", to: "present", text: "Next", action: { kind: "song", value: "Amazing Grace" } })!
-    const cam = useNotices.getState().send({ from: "Main desk", to: "present", text: "Pastor up next", action: { kind: "camera", value: "Camera 2" } })!
+    const song = useNotices.getState().send({ from: "Main computer", to: "present", text: "Next", action: { kind: "song", value: "Amazing Grace" } })!
+    const cam = useNotices.getState().send({ from: "Main computer", to: "present", text: "Pastor up next", action: { kind: "camera", value: "Camera 2" } })!
     const onAction = vi.fn(async () => null)
     const onAnswer = vi.fn()
     const el = document.createElement("div")
@@ -119,9 +119,9 @@ describe("action requests", () => {
     expect(onAction).toHaveBeenCalledTimes(2)
   })
 
-  it("on a joined desk, Preview and Show go to the main desk, and Ready waits for it to accept", async () => {
-    const song = useNotices.getState().send({ from: "Main desk", to: "present", text: "Next", action: { kind: "song", value: "Amazing Grace" } })!
-    const bible = useNotices.getState().send({ from: "Main desk", to: "present", text: "Reading", action: { kind: "bible", value: "Romans 8:28" } })!
+  it("on a joined desk, Preview and Show go to the main computer, and Ready waits for it to accept", async () => {
+    const song = useNotices.getState().send({ from: "Main computer", to: "present", text: "Next", action: { kind: "song", value: "Amazing Grace" } })!
+    const bible = useNotices.getState().send({ from: "Main computer", to: "present", text: "Reading", action: { kind: "bible", value: "Romans 8:28" } })!
     const live: LiveStateV1 = {
       v: 1, at: 0, church: "CAC", service: null, program: { onAir: false, reference: null, rehearsal: false }, sources: [], event: { mode: "own", currentId: null }, rundown: [], timing: null, stageMessage: "",
       scenes: [], outputs: [], notices: [bible, song],
@@ -159,7 +159,7 @@ describe("action requests", () => {
     expect(el.querySelector('[aria-label="Notices desk"] [role="alert"]')?.textContent).toContain(`“Preview Amazing Grace” was not done: ${refuse}`)
   })
 
-  it("on the main desk, Preview puts a verse or a song in Preview only; Show puts the song on air", async () => {
+  it("on the main computer, Preview puts a verse or a song in Preview only; Show puts the song on air", async () => {
     expect(await previewBibleReference("not a verse")).toBeNull()
     expect(await previewBibleReference("Romans 8:99")).toBe("empty")
     expect(await previewBibleReference("Rom 8 28")).toBe("previewed")
@@ -178,7 +178,7 @@ describe("action requests", () => {
     expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveVerse: { reference: "Amazing Grace · Verse 1" } })
   })
 
-  it("a joined desk's song or verse request runs on the main desk, as that desk's", async () => {
+  it("a joined desk's song or verse request runs on the main computer, as that desk's", async () => {
     const el = document.createElement("div")
     const root = createRoot(el)
     function Host() {
@@ -205,7 +205,7 @@ describe("action requests", () => {
 })
 
 /** Round two (#251 queue from desks and phones, #197 OBS desk): the host carries them out as the desk's. */
-describe("round two commands on the main desk", () => {
+describe("round two commands on the main computer", () => {
   async function host() {
     const el = document.createElement("div")
     const root = createRoot(el)

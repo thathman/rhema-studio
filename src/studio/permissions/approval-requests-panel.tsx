@@ -61,22 +61,22 @@ function requestImpact(
   if (request.kind === "stage_send") {
     const payload = record(request.payload)
     const text = typeof payload?.text === "string" ? payload.text : "Message unavailable"
-    return `Private Stage display · ${request.targetId} · Message: “${text}”. It is not sent until the host applies this approval; receiver playback is not confirmed.`
+    return `Private Stage display · ${request.targetId} · Message: “${text}”. It is not sent until the main computer applies this approval; receiver playback is not confirmed.`
   }
   if (request.kind === "plan_approve") {
-    if (request.baseRevision === null) return "This request has no host-checked base revision and cannot be confirmed safely."
-    return `Submitted revision ${request.baseRevision}. Approve this exact revision in Prepare first; the host verifies it before confirmation.`
+    if (request.baseRevision === null) return "This request has no base revision checked by the main computer and cannot be confirmed safely."
+    return `Submitted revision ${request.baseRevision}. Approve this exact revision in Prepare first; the main computer verifies it before confirmation.`
   }
   return `Target: ${request.targetId}`
 }
 
 function sceneDeleteInstruction(request: ApprovalRequest): string {
   switch (request.state) {
-    case "submitted": return "If approved, the scene will be removed only after explicit host Apply."
-    case "approved": return "The scene will be removed only after explicit host Apply."
-    case "applied": return "The host applied this deletion. The scene was removed from its library; Program remains unchanged."
-    case "declined": return "The host declined this deletion. The scene remains in the library."
-    case "requested_changes": return "The host requested changes. The scene remains in the library until a fresh request is reviewed."
+    case "submitted": return "If approved, the scene will be removed only after an explicit Apply on the main computer."
+    case "approved": return "The scene will be removed only after an explicit Apply on the main computer."
+    case "applied": return "The main computer applied this deletion. The scene was removed from its library; Program remains unchanged."
+    case "declined": return "The main computer declined this deletion. The scene remains in the library."
+    case "requested_changes": return "The main computer's requested changes. The scene remains in the library until a fresh request is reviewed."
     case "expired": return "This deletion request expired. The scene remains in the library."
     case "withdrawn": return "This deletion request was withdrawn. The scene remains in the library."
     case "superseded": return "This deletion request is stale. The scene remains in the library; submit a fresh request after reviewing its current revision."
@@ -143,7 +143,7 @@ function SceneRequestReview({
         <h4 className="text-sm font-medium">Scene change review</h4>
         <Badge variant="neutral">{model.baseRevisionLabel}</Badge>
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">Current scene data is local review context. The host checks the submitted revision again before Apply. This review does not change Preview or Program.</p>
+      <p className="mt-1 text-xs text-muted-foreground">Current scene data is local review context. The main computer checks the submitted revision again before Apply. This review does not change Preview or Program.</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="min-w-0 rounded-md border border-border bg-background p-3">
           <h5 className="text-xs font-semibold">{model.beforeLabel}</h5>
@@ -194,7 +194,7 @@ function stateLabel(request: ApprovalRequest): string {
     case "submitted": return "Pending review"
     case "approved": return request.kind === "plan_approve" ? "Approved · awaiting Prepare" : request.kind === "stage_send" ? "Approved · ready to send" : request.kind.startsWith("scene_") ? "Approved · ready to apply" : "Approved · not applied"
     case "requested_changes": return "Changes requested"
-    case "applied": return request.kind === "plan_approve" ? "Revision confirmed by host" : request.kind === "stage_send" ? "Applied · receiver not confirmed" : request.kind.startsWith("scene_") ? "Applied by host · no Live change" : "Marked applied by host"
+    case "applied": return request.kind === "plan_approve" ? "Revision confirmed by the main computer" : request.kind === "stage_send" ? "Applied · receiver not confirmed" : request.kind.startsWith("scene_") ? "Applied by host · no Live change" : "Marked applied by host"
     default: return state[0].toUpperCase() + state.slice(1)
   }
 }
@@ -341,15 +341,15 @@ export function ApprovalRequestsPanel({ local }: { local?: { open: number; conte
         <ShieldCheckIcon aria-hidden className="size-4 text-muted-foreground" />
         <div className="min-w-0 flex-1">
           <h2 id="host-approval-requests-title" className="font-semibold">Approval Requests</h2>
-          <p className="text-xs text-muted-foreground">Durable requests recorded by this host. Approved scenes need an explicit Apply and never Take to Program. An approved Stage cue needs explicit host Apply before it reaches its private display. Service revisions use Prepare.</p>
+          <p className="text-xs text-muted-foreground">Durable requests recorded by this computer. Approved scenes need an explicit Apply and never Take to Program. An approved Stage cue needs an explicit Apply on the main computer before it reaches its private display. Service revisions use Prepare.</p>
         </div>
         <Badge variant={pending.length + (local?.open ?? 0) ? "amber" : "neutral"}>{pending.length + (local?.open ?? 0)} pending</Badge>
         <Button size="sm" variant="outline" aria-label="Refresh approval requests" disabled={!isHost || loading} onClick={reload}><RefreshCwIcon /> Refresh</Button>
       </header>
       <div className="p-4">
-        {!isHost && <p role="status" className="mb-3 rounded-md border border-border bg-muted/40 p-3 text-sm">Only the main host can review or decide host approval requests. This view is read-only.</p>}
-        {error && <p role="alert" className="mb-3 flex items-start gap-2 text-sm text-destructive"><CircleAlertIcon className="mt-0.5 size-4 shrink-0" />Host approval requests could not be loaded: {error}</p>}
-        {!isHost ? <p className="text-sm text-muted-foreground">Open Permissions on the main host to review its approval requests.</p> : !hydrated && !error ? <p role="status" className="text-sm text-muted-foreground">Loading host requests…</p> : requests.length === 0 && error ? <p className="text-sm text-muted-foreground">Retry to see whether the host has recorded requests.</p> : requests.length === 0 ? (local ? null : <p className="text-sm text-muted-foreground">No approval requests.</p>) : (
+        {!isHost && <p role="status" className="mb-3 rounded-md border border-border bg-muted/40 p-3 text-sm">Only the main computer can review or decide approval requests. This view is read-only.</p>}
+        {error && <p role="alert" className="mb-3 flex items-start gap-2 text-sm text-destructive"><CircleAlertIcon className="mt-0.5 size-4 shrink-0" />Main computer approval requests could not be loaded: {error}</p>}
+        {!isHost ? <p className="text-sm text-muted-foreground">Open Permissions on the main computer to review its approval requests.</p> : !hydrated && !error ? <p role="status" className="text-sm text-muted-foreground">Loading host requests…</p> : requests.length === 0 && error ? <p className="text-sm text-muted-foreground">Retry to see whether the main computer has recorded requests.</p> : requests.length === 0 ? (local ? null : <p className="text-sm text-muted-foreground">No approval requests.</p>) : (
           <ul className="divide-y divide-border">
             {requests.map((request) => {
               const open = request.state === "submitted"
@@ -366,18 +366,18 @@ export function ApprovalRequestsPanel({ local }: { local?: { open: number; conte
                       <h3 className="font-semibold">{requestDescription(request, scenes)}</h3>
                       <Badge variant={stateVariant(request.state)}>{stateLabel(request)}</Badge>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">From {request.requester.name} · {dateWords(request.createdAt)} · {request.baseRevision === null ? "No base revision" : `Based on host revision ${request.baseRevision}`} · Expires {dateWords(request.expiresAt)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">From {request.requester.name} · {dateWords(request.createdAt)} · {request.baseRevision === null ? "No base revision" : `Based on main computer revision ${request.baseRevision}`} · Expires {dateWords(request.expiresAt)}</p>
                     {!sceneReview && <p className="mt-1 text-xs text-muted-foreground">{requestImpact(request)}</p>}
                     {sceneReview && <SceneRequestReview request={request} model={sceneReview} assignedOutputs={assignedOutputs} rehearsal={rehearsal} planReferences={planReferences} cameraLabelForUrl={cameraLabelForUrl} />}
-                    {request.state === "approved" && request.kind.startsWith("scene_") && <p className="mt-1 text-xs text-muted-foreground">Apply checks the scene revision and current output assignment on this host. Saving changes the scene library only; it does not Take the scene live.</p>}
-                    {request.state === "approved" && request.kind.startsWith("scene_") && localHostStatusUnknown[request.id] && <p role="alert" className="mt-1 text-xs text-amber-800">The host response was interrupted and its status is unknown. The local recovery record was kept. Refresh host status before trying again.</p>}
+                    {request.state === "approved" && request.kind.startsWith("scene_") && <p className="mt-1 text-xs text-muted-foreground">Apply checks the scene revision and current output assignment on this computer. Saving changes the scene library only; it does not Take the scene live.</p>}
+                    {request.state === "approved" && request.kind.startsWith("scene_") && localHostStatusUnknown[request.id] && <p role="alert" className="mt-1 text-xs text-amber-800">The main computer's response was interrupted and its status is unknown. The local recovery record was kept. Refresh main computer status before trying again.</p>}
                     {request.state === "approved" && request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId) && <p role="status" className="mt-1 text-xs text-amber-800">Move every real screen away from this scene before applying its deletion.</p>}
-                    {request.state === "applied" && request.kind.startsWith("scene_") && needsLocalRecovery && !localRecoveryUnavailable[request.id] && <p role="status" className="mt-1 text-xs text-amber-800">The host recorded this approval, but local scene recovery is still needed. Program has not changed. Retry applies only this approved version and stops if the local scene changed since approval.</p>}
+                    {request.state === "applied" && request.kind.startsWith("scene_") && needsLocalRecovery && !localRecoveryUnavailable[request.id] && <p role="status" className="mt-1 text-xs text-amber-800">The main computer recorded this approval, but local scene recovery is still needed. Program has not changed. Retry applies only this approved version and stops if the local scene changed since approval.</p>}
                     {request.state === "applied" && request.kind.startsWith("scene_") && needsLocalRecovery && localRecoveryUnavailable[request.id] && <p role="alert" className="mt-1 text-xs text-amber-800">This applied request has no safe local recovery record. The current scene was preserved. Send a fresh request to synchronize it.</p>}
-                    {request.state === "applied" && request.kind.startsWith("scene_") && localRecoveryDismissed[request.id] && <p role="status" className="mt-1 text-xs text-amber-800">You kept the newer local scene. The host request remains applied; send a fresh request to synchronize this version. Program was not changed.</p>}
-                    {request.state === "applied" && request.kind.startsWith("scene_") && !needsLocalRecovery && !localRecoveryDismissed[request.id] && <p role="status" className="mt-1 text-xs text-muted-foreground">Saved in the local scene library after host approval. No scene was Taken live; Program stays unchanged.</p>}
-                    {request.state === "approved" && request.kind === "stage_send" && <p role="status" className="mt-1 text-xs text-muted-foreground">The message remains private and unsent until the host applies it. Stage display playback is not acknowledged.</p>}
-                    {request.state === "applied" && request.kind === "stage_send" && <p role="status" className="mt-1 text-xs text-muted-foreground">The host applied this private cue to the Stage display. Receiver playback and whether anyone read it are not confirmed.</p>}
+                    {request.state === "applied" && request.kind.startsWith("scene_") && localRecoveryDismissed[request.id] && <p role="status" className="mt-1 text-xs text-amber-800">You kept the newer local scene. The main computer's request remains applied; send a fresh request to synchronize this version. Program was not changed.</p>}
+                    {request.state === "applied" && request.kind.startsWith("scene_") && !needsLocalRecovery && !localRecoveryDismissed[request.id] && <p role="status" className="mt-1 text-xs text-muted-foreground">Saved in the local scene library after the main computer approved it. No scene was Taken live; Program stays unchanged.</p>}
+                    {request.state === "approved" && request.kind === "stage_send" && <p role="status" className="mt-1 text-xs text-muted-foreground">The message remains private and unsent until the main computer applies it. Stage display playback is not acknowledged.</p>}
+                    {request.state === "applied" && request.kind === "stage_send" && <p role="status" className="mt-1 text-xs text-muted-foreground">The main computer applied this private cue to the Stage display. Receiver playback and whether anyone read it are not confirmed.</p>}
                     {request.reason && <p className="mt-1 text-xs text-muted-foreground">Reason: {request.reason}</p>}
                     {request.decisionNote && <p className="mt-1 text-xs text-muted-foreground">Decision note: {request.decisionNote}</p>}
                     {rowErrors[request.id] && <p role="alert" className="mt-2 text-xs text-destructive">{rowErrors[request.id]}</p>}
@@ -420,7 +420,7 @@ export function ApprovalRequestsPanel({ local }: { local?: { open: number; conte
                     </Button>
                   </div>}
                   {isHost && request.kind.startsWith("scene_") && request.state === "approved" && localHostStatusUnknown[request.id] && <div className="flex flex-wrap items-center gap-2">
-                    <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void refreshHostStatus(request)}>Refresh host status</Button>
+                    <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void refreshHostStatus(request)}>Refresh main computer status</Button>
                   </div>}
                   {isHost && request.kind.startsWith("scene_") && request.state === "applied" && needsLocalRecovery && !localRecoveryUnavailable[request.id] && <div className="flex flex-wrap items-center gap-2">
                     <Button

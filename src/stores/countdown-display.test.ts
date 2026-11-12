@@ -52,7 +52,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe("the countdown display on the host", () => {
+describe("the countdown display on the main computer", () => {
   it("counts the service timer: the frame says when it ends; the full stage view gets no countdown", () => {
     useTimerStore.getState().setDurationMinutes(10)
     useTimerStore.getState().start()
@@ -103,7 +103,7 @@ describe("the countdown display on the host", () => {
     expect(lastCountdown().look.background).toBe("#112233")
   })
 
-  it("a browser feed (a Google TV) is sent the same frame, with the host's clock to count by", () => {
+  it("a browser feed (a Google TV) is sent the same frame, with the main computer's clock to count by", () => {
     useBroadcastStore.setState({ outputs: [{ ...countdownOut, type: "browser", feedToken: "k" }], outputStatus: { cd: { feedActive: true } as never } })
     useTimerStore.getState().setDurationMinutes(10)
     useTimerStore.getState().start()

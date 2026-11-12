@@ -780,8 +780,8 @@ export function FeedLink({ id, token, onRenew, onTv }: { id: string; token?: str
   const qr = code && code.url === url && where?.lan ? code.data : null
   return (
     <div className="flex flex-col gap-2 text-xs">
-      {!where?.port && <p className="text-muted-foreground">Start the HTTP listener on the church network (Settings → Remote control) to give this feed a link.</p>}
-      {where?.port && !where.lan && <p className="text-muted-foreground">The listener is on this computer only: only a browser here can open the link. Turn on the network in Settings → Remote control for OBS or a TV.</p>}
+      {!where?.port && <p className="text-muted-foreground">Start the HTTP listener on the church network (Settings → Remote Control) to give this feed a link.</p>}
+      {where?.port && !where.lan && <p className="text-muted-foreground">The listener is on this computer only: only a browser here can open the link. Turn on the network in Settings → Remote Control for OBS or a TV.</p>}
       {!token && <p className="text-muted-foreground">Save this output to make its link.</p>}
       {url && (
         <>
@@ -878,7 +878,7 @@ export function ShowOnTv({ url, onShown, outputId, ownLink }: { url: string | nu
       <p className="text-muted-foreground">Open Rhema Studio Receiver on the TV: it shows its name, address and a code. Pick the TV with the same address, then type the code.</p>
       {!url && (
         <p role="status" className="text-muted-foreground">
-          Turn on the secure page in Settings → Remote control (<span className="font-medium">Secure page for phones</span>), then stop and start the listener: Rhema Studio sends a TV only the feed&apos;s secure link.
+          Turn on the secure page in Settings → Remote Control (<span className="font-medium">Secure page for phones</span>), then stop and start the listener: Rhema Studio sends a TV only the feed&apos;s secure link.
         </p>
       )}
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="TVs on this network">

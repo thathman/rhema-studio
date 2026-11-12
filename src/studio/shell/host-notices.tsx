@@ -40,7 +40,7 @@ export function HostNotices({ compact = false }: { compact?: boolean }) {
   const event = runOfShowClockRows(items, headers).rows.find(
     (row) => row.id === current
   )
-  const me = operator ? `${operator} (main desk)` : "Main desk"
+  const me = operator ? `${operator} (main computer)` : "Main computer"
   const scenes = useBroadcastStore((s) => s.scenes)
   const rundown = useQueueStore((s) => s.items)
   const devices = useSettingsStore((s) => s.remoteDevices)
@@ -117,7 +117,7 @@ export function HostNotices({ compact = false }: { compact?: boolean }) {
               !(await declineSceneRequest(action.value))
             ) {
               throw new Error(
-                "The decline could not be saved on this host. The request remains open."
+                "The decline could not be saved on this computer. The request remains open."
               )
             }
             useNotices.getState().answer(id, me, state, why)
@@ -191,5 +191,5 @@ async function runNoticeAction(
     return null
   }
   if (action.kind === "scene") return runSceneNoticeAction(action.value)
-  return "this request is not available on the main desk"
+  return "this request is not available on the main computer"
 }

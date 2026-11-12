@@ -829,7 +829,7 @@ describe("Present's unified Live console", () => {
     expect(useShellStore.getState().goRequest).toBe("permissions")
   })
 
-  it("shows an actionable unknown-status cue instead of implying the host inbox is empty", async () => {
+  it("shows an actionable unknown-status cue instead of implying the main computer inbox is empty", async () => {
     useApprovalRequestsStore.setState({ requests: [], hydrated: true, error: "Host unavailable" })
     await renderWorkspace()
 
@@ -839,7 +839,7 @@ describe("Present's unified Live console", () => {
     expect(useShellStore.getState().goRequest).toBe("permissions")
   })
 
-  it("does not expose the host approval count on a joined desk", async () => {
+  it("does not expose the main computer's approval count on a joined desk", async () => {
     useJoin.setState({ status: "connected" })
     useApprovalRequestsStore.setState({ requests: [pendingApprovalRequest], hydrated: true, error: null })
     await renderWorkspace()

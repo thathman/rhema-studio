@@ -48,10 +48,10 @@ afterEach(() => {
 })
 
 describe("the browser desk's commands", () => {
-  it("go to the host's command route with this desk's key, what it saw and the service it is looking at", async () => {
-    answer = () => json(200, { success: true, note: "Sent to the main desk" })
+  it("go to the main computer's command route with this desk's key, what it saw and the service it is looking at", async () => {
+    answer = () => json(200, { success: true, note: "Sent to the main computer" })
     const r = await useJoin.getState().send({ command: "verse_next" })
-    expect(r).toEqual({ ok: true, note: "Sent to the main desk" })
+    expect(r).toEqual({ ok: true, note: "Sent to the main computer" })
     expect(calls).toHaveLength(1)
     expect(calls[0]!.url).toBe("/api/v1/command")
     expect(calls[0]!.init.method).toBe("POST")
@@ -62,14 +62,14 @@ describe("the browser desk's commands", () => {
   })
 
   it("say paused, stale and another service as the installed desk does", async () => {
-    expect(refusalWords(423, "Paused by the main desk", undefined)).toBe("paused: Paused by the main desk")
+    expect(refusalWords(423, "Paused by the main computer", undefined)).toBe("paused: Paused by the main computer")
     expect(refusalWords(409, "changed", "stale")).toBe("stale: changed")
     expect(refusalWords(409, "other", "other-service")).toBe("other-service: other")
     expect(refusalWords(403, "Not allowed for this desk's role", undefined)).toBe("Not allowed for this desk's role")
     expect(refusalWords(429, undefined, undefined)).toMatch(/Too many/)
 
-    answer = () => json(423, { error: "The main desk has taken back control" })
-    expect(await useJoin.getState().send({ command: "verse_next" })).toEqual({ ok: false, error: "The main desk has taken back control" })
+    answer = () => json(423, { error: "The main computer has taken back control" })
+    expect(await useJoin.getState().send({ command: "verse_next" })).toEqual({ ok: false, error: "The main computer has taken back control" })
     expect(useJoin.getState().paused).toBe(true)
 
     useJoin.setState({ paused: false })
@@ -90,13 +90,13 @@ describe("the browser desk's commands", () => {
       expect(r.ok).toBe(false)
       expect(calls).toHaveLength(3)
       expect(new Set(calls.map((c) => sent(c).id)).size).toBe(1)
-      expect(!r.ok && r.error).toMatch(/No answer from the host/)
+      expect(!r.ok && r.error).toMatch(/No answer from the main computer/)
     } finally {
       vi.useRealTimers()
     }
   })
 
-  it("unpair the desk when the host no longer knows its key", async () => {
+  it("unpair the desk when the main computer no longer knows its key", async () => {
     answer = () => json(401, {})
     const r = await useJoin.getState().send({ command: "verse_next" })
     expect(r.ok).toBe(false)
@@ -107,7 +107,7 @@ describe("the browser desk's commands", () => {
     expect(useJoin.getState()).toMatchObject({ status: "off", live: null, me: null })
   })
 
-  it("look things up in the host's library through the same route as a joined desk", async () => {
+  it("look things up in the main computer's library through the same route as a joined desk", async () => {
     answer = (url) => url === "/api/v1/lookup" ? json(200, { translations: [{ id: 1, abbreviation: "KJV" }], active: 1 }) : json(500, {})
     expect(await DESK_TRANSPORT.lookup({ what: "translations" })).toEqual({ translations: [{ id: 1, abbreviation: "KJV" }], active: 1 })
     expect(sent(calls[0]!)).toEqual({ what: "translations" })
@@ -116,7 +116,7 @@ describe("the browser desk's commands", () => {
   })
 })
 
-describe("following the host", () => {
+describe("following the main computer", () => {
   it("is held after two missed answers, and live again with the next Live State", () => {
     applyLive(live())
     expect(useJoin.getState().status).toBe("connected")
@@ -129,7 +129,7 @@ describe("following the host", () => {
     expect(useDeskSession.getState().lastHeard).toBeGreaterThan(0)
   })
 
-  it("is paused when the host lists this desk, and takes the role and scopes the host gives it", () => {
+  it("is paused when the main computer lists this desk, and takes the role and scopes the main computer gives it", () => {
     expect(applyMe({ name: "Media laptop", role: "screens", paused: false, outputScope: ["main", 3], groupTakeScope: ["main"] })).toBe(true)
     expect(useJoin.getState().me).toEqual({ name: "Media laptop", role: "screens" })
     applyMe({ name: "Media laptop", role: "screens", outputScope: ["main", "side"], groupTakeScope: ["main", "foyer"] })
@@ -139,7 +139,7 @@ describe("following the host", () => {
     expect(applyMe({ name: 3 })).toBe(false)
   })
 
-  it("reads the Live State stream with its key, and asks who it is again when the host changes it", async () => {
+  it("reads the Live State stream with its key, and asks who it is again when the main computer changes it", async () => {
     let meCalls = 0
     answer = (url) => {
       if (url === "/api/v1/me") {
@@ -148,7 +148,7 @@ describe("following the host", () => {
       }
       if (url === "/api/v1/live/events") {
         const text = meCalls === 1
-          ? `event: live\ndata: ${JSON.stringify(live({ program: { onAir: true, reference: "Romans 8:28", rehearsal: false } }))}\n\nevent: rejoin\ndata: the host changed this desk\n\n`
+          ? `event: live\ndata: ${JSON.stringify(live({ program: { onAir: true, reference: "Romans 8:28", rehearsal: false } }))}\n\nevent: rejoin\ndata: the main computer changed this desk\n\n`
           : `event: live\ndata: ${JSON.stringify(live({ program: { onAir: false, reference: null, rehearsal: false } }))}\n\n`
         const stream = new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(text)); if (meCalls > 1) return; c.close() } })
         return new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } })
@@ -176,7 +176,7 @@ describe("following the host", () => {
     expect(header(calls.find((c) => c.url === "/api/v1/live")!, "Authorization")).toBe("Bearer tok-1")
   })
 
-  it("goes back to pairing, saying why, when the host has removed this device", async () => {
+  it("goes back to pairing, saying why, when the main computer has removed this device", async () => {
     answer = (url) => url === "/api/v1/me" ? json(401, {}) : json(500, {})
     begin()
     await vi.waitFor(() => expect(useDeskSession.getState().phase).toBe("pair"))
@@ -184,7 +184,7 @@ describe("following the host", () => {
     expect(readToken()).toBeNull()
   })
 
-  it("keeps its key and holds its controls while the host has pairing off", async () => {
+  it("keeps its key and holds its controls while the main computer has pairing off", async () => {
     answer = (url) => url === "/api/v1/me" ? json(403, {}) : json(403, {})
     begin()
     await vi.waitFor(() => expect(useJoin.getState().error).toBe(PAIRING_OFF))
@@ -204,21 +204,21 @@ describe("following the host", () => {
 })
 
 describe("starting the desk", () => {
-  it("sends a plain http page on the network to the host's secure desk", async () => {
+  it("sends a plain http page on the network to the main computer's secure desk", async () => {
     answer = (url) => url === "/api/v1/health" ? json(200, { status: "ok", service: "rhema", tls_port: 8081 }) : json(500, {})
     await startDesk({ protocol: "http:", hostname: "192.168.1.20", hash: "#code=123456" })
     expect(useDeskSession.getState()).toMatchObject({ phase: "insecure", secureUrl: "https://192.168.1.20:8081/desk#code=123456" })
     expect(calls.map((c) => c.url)).toEqual(["/api/v1/health"])
   })
 
-  it("pairs first without a key, and warns on plain http when the host has no secure page", async () => {
+  it("pairs first without a key, and warns on plain http when the main computer has no secure page", async () => {
     writeToken(null)
     answer = (url) => url === "/api/v1/health" ? json(200, { status: "ok", service: "rhema" }) : json(500, {})
     await startDesk({ protocol: "http:", hostname: "192.168.1.20", hash: "" })
     expect(useDeskSession.getState()).toMatchObject({ phase: "pair", plain: true })
   })
 
-  it("follows the host straight away over https with a kept key", async () => {
+  it("follows the main computer straight away over https with a kept key", async () => {
     answer = (url) => url === "/api/v1/me" ? json(200, { name: "Media laptop", role: "viewer" }) : json(503, {})
     await startDesk({ protocol: "https:", hostname: "192.168.1.20", hash: "" })
     expect(useDeskSession.getState().phase).toBe("desk")

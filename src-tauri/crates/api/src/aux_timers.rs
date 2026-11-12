@@ -27,10 +27,10 @@ pub fn judge(live: Option<&str>, role: Role, cmd: &AuxTimerIn) -> Result<(), Str
         return Err("an extra timer can be started, paused or reset only".into());
     }
     let Some(host) = live.and_then(|j| serde_json::from_str::<HostTimers>(j).ok()) else {
-        return Err("the host has not shared its timers yet; try again in a moment".into());
+        return Err("the main computer has not shared its timers yet; try again in a moment".into());
     };
     let Some(timer) = host.aux_timers.unwrap_or_default().into_iter().find(|t| t.id == cmd.id) else {
-        return Err("that timer is no longer on the host".into());
+        return Err("that timer is no longer on the main computer".into());
     };
     if matches!(role, Role::Timekeeper | Role::Present | Role::Configure) {
         return Ok(());

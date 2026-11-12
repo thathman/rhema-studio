@@ -1,5 +1,6 @@
 import { useDismissedChecks } from "@/studio/dismissed-checks"
 import { offsetWords, useServiceOffset } from "@/stores/service-offset-store"
+import { OBS_SCREEN, onAir } from "@/lib/wording"
 import { RUN_STATE_WORDS } from "@/lib/timing-state"
 import type { SectionTiming } from "@/lib/timing-engine"
 import { useTimingTrust } from "@/stores/timing-trust-store"
@@ -698,7 +699,7 @@ function ObsHealth() {
   return (
     <Card kicker="Online (OBS)" title={onlineProgramName(connected ? video : null)} badge={<Badge tone={!enabled ? "off" : connected ? (stream?.active ? "live" : "ok") : "warn"}>{!enabled ? "Off" : connected ? (stream?.active ? "Streaming" : "Connected") : status === "connecting" ? "Connecting" : "Not connected"}</Badge>}>
       {!enabled ? (
-        <p className="text-xs text-muted-foreground">OBS is not connected. It is optional: connect it in Settings → Remote control to see the online program here.</p>
+        <p className="text-xs text-muted-foreground">OBS is not connected. It is optional: connect it in Settings → Remote Control to see the online program here.</p>
       ) : !connected ? (
         <p className="text-xs text-confidence-mid">{status === "connecting" ? "Connecting to OBS…" : `Not connected${error ? `: ${error}` : ""}. Rhema Studio keeps trying every 15 seconds.`}</p>
       ) : (
@@ -818,13 +819,13 @@ function CamerasHealth() {
                   <span className={cn("block", bad && c.onAir.length > 0 ? "font-semibold text-destructive" : bad ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{cameraStateWords(c)}</span>
                   <span className="block text-muted-foreground">
                     {c.scenes.length === 0 ? "Not in a scene yet" : `In ${c.scenes.join(", ")}`}
-                    {c.onAir.length > 0 ? ` · on air on ${c.onAir.join(", ")}` : c.assigned.length > 0 ? ` · set on ${c.assigned.join(", ")}` : ""}
+                    {c.onAir.length > 0 ? ` · ${onAir(c.onAir)}` : c.assigned.length > 0 ? ` · set on ${c.assigned.join(", ")}` : ""}
                   </span>
                   {(c.onBackup || c.held || onObs.has(c.key)) && (
                     <span className="mt-1 flex flex-wrap gap-1">
                       {c.onBackup && <Badge tone="warn">On backup: {c.onBackup}</Badge>}
                       {c.held && <Badge tone="warn">Frozen by you</Badge>}
-                      {onObs.has(c.key) && <Badge tone="off">On OBS's program</Badge>}
+                      {onObs.has(c.key) && <Badge tone="off">{onAir([OBS_SCREEN])}</Badge>}
                     </span>
                   )}
                   {(c.screens ?? []).length > 0 && (
@@ -1044,7 +1045,7 @@ function EventClockBar() {
 /** The service's shared running-late offset (#196): the same one Prepare and a Timekeeper desk move. */
 function RunningLate() {
   const { minutes, by, mode } = useServiceOffset()
-  const me = useSettingsStore((s) => s.operatorName.trim()) || "Main desk"
+  const me = useSettingsStore((s) => s.operatorName.trim()) || "Main computer"
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Running late or early">
       <span className="font-semibold">Running</span>

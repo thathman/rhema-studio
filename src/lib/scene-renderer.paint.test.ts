@@ -173,7 +173,7 @@ describe("gradient paint outside the editor (review of #656)", () => {
     expect(saved().backgroundGradient?.angle).toBe(45)
   })
 
-  it("a joined desk's save keeps the host's gradients unless it changed that colour", async () => {
+  it("a joined desk's save keeps the main computer's gradients unless it changed that colour", async () => {
     const { mergeDeskScene, sceneForDesk } = await import("@/lib/desk-scenes")
     const sent = JSON.parse(JSON.stringify(sceneForDesk(painted, false)))
     // Desks see the gradient (and its revision); what they send back cannot set one.

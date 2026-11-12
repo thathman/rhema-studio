@@ -183,7 +183,7 @@ export function mergeDeskScene(raw: unknown, existing: Scene | undefined, opts: 
 /** Why a change to this scene waits for the main desk, or null when it goes in at once. */
 export function waitsForMainDesk(sceneId: string): string | null {
   const b = useBroadcastStore.getState()
-  if (useSettingsStore.getState().requireApproval && !b.rehearsal) return "Approvals is on at the main desk (Permissions → Before a service goes live)"
+  if (useSettingsStore.getState().requireApproval && !b.rehearsal) return "Approvals is on at the main computer (Permissions → Before a service goes live)"
   if (scenesOnScreen(b).has(sceneId)) return "that scene is on a screen"
   return null
 }
@@ -198,7 +198,7 @@ function apply(r: Pick<SceneEditApproval, "scene" | "sceneId" | "name" | "by">, 
   if (r.scene) b.saveScene(r.scene)
   else b.deleteScene(r.sceneId)
   const what = r.scene ? (b.scenes.some((s) => s.id === r.sceneId) ? "changed" : "made") : "deleted"
-  useJournalStore.getState().add({ kind: "scene", label: `Scene ${r.name} ${what} by ${r.by}${accepted ? " (accepted on the main desk)" : ""}` })
+  useJournalStore.getState().add({ kind: "scene", label: `Scene ${r.name} ${what} by ${r.by}${accepted ? " (accepted on the main computer)" : ""}` })
 }
 
 const asText = (v: unknown, n: number): string => (typeof v === "string" ? v.trim().slice(0, n) : "")
@@ -218,7 +218,7 @@ export async function receiveDeskScene(p: Record<string, unknown>, deleting = fa
     const action = deleting ? "delete" : existing ? "change" : "add"
     const name = asText((p.scene as { name?: unknown } | null)?.name, 80) || existing?.name || "the scene"
     toast.info(`${by} requested to ${action} “${name}”`, {
-      description: "The host recorded this in Permissions → Approval Requests. A decision does not save the scene or change Preview or Program.",
+      description: "The main computer recorded this in Permissions → Approval Requests. A decision does not save the scene or change Preview or Program.",
     })
     return
   }
@@ -230,7 +230,7 @@ export async function receiveDeskScene(p: Record<string, unknown>, deleting = fa
     return
   }
   const name = scene?.name ?? existing?.name ?? "the scene"
-  const why = p.request === true ? waitsForMainDesk(sceneId) ?? "the host's server asked for it" : waitsForMainDesk(sceneId)
+  const why = p.request === true ? waitsForMainDesk(sceneId) ?? "the main computer's server asked for it" : waitsForMainDesk(sceneId)
   if (!why) return apply({ scene, sceneId, name, by }, false)
   let request: Awaited<ReturnType<typeof createSceneEditApproval>>
   try {
@@ -246,18 +246,18 @@ export async function receiveDeskScene(p: Record<string, unknown>, deleting = fa
 
 /** Accept a waiting scene change (the main desk's notice button): null when done, else why not. */
 export async function acceptSceneRequest(id: string): Promise<string | null> {
-  if (useJoin.getState().status !== "off") return "only the main host can approve scene changes"
+  if (useJoin.getState().status !== "off") return "only the main computer can approve scene changes"
   try {
     await hydrateSceneApprovals()
   } catch {
-    return "scene approvals could not be loaded from this host"
+    return "scene approvals could not be loaded from this computer"
   }
   const r = useSceneRequests.getState().requests.find((x) => x.id === id)
   if (!r) return "that change was already answered, or Rhema Studio restarted since"
   if (r.status !== "pending") return r.status === "needs-review" ? "that request needs a fresh review from the operator" : "that request was already handled"
   if (savedAt(r.sceneId) !== r.savedAt) {
     try {
-      await decideSceneEditApproval(id, "needs-review", useSettingsStore.getState().operatorName || "Main desk", "The host scene changed after this request was made.")
+      await decideSceneEditApproval(id, "needs-review", useSettingsStore.getState().operatorName || "Main computer", "The main computer's scene changed after this request was made.")
     } catch {
       return "the scene changed here since it was asked, and its review status could not be saved"
     }
@@ -270,9 +270,9 @@ export async function acceptSceneRequest(id: string): Promise<string | null> {
   const proposed = r.scene ? mergeDeskScene(r.scene, existing) : null
   if (r.scene && !proposed) return "that scene proposal could not be restored safely; ask the desk to send it again"
   try {
-    if (!await decideSceneEditApproval(id, "approved", useSettingsStore.getState().operatorName || "Main desk")) return "that request was already handled"
+    if (!await decideSceneEditApproval(id, "approved", useSettingsStore.getState().operatorName || "Main computer")) return "that request was already handled"
   } catch {
-    return "the decision could not be saved on this host; the scene was left unchanged"
+    return "the decision could not be saved on this computer; the scene was left unchanged"
   }
   apply({ ...r, scene: proposed }, true)
   return null
@@ -289,10 +289,10 @@ export async function declineSceneRequest(id: string): Promise<boolean> {
   const r = useSceneRequests.getState().requests.find((x) => x.id === id && (x.status === "pending" || x.status === "needs-review"))
   if (!r) return false
   try {
-    if (!await decideSceneEditApproval(id, "declined", useSettingsStore.getState().operatorName || "Main desk")) return false
+    if (!await decideSceneEditApproval(id, "declined", useSettingsStore.getState().operatorName || "Main computer")) return false
   } catch {
     return false
   }
-  useJournalStore.getState().add({ kind: "scene", label: `Scene change to ${r.name} from ${r.by} declined on the main desk` })
+  useJournalStore.getState().add({ kind: "scene", label: `Scene change to ${r.name} from ${r.by} declined on the main computer` })
   return true
 }

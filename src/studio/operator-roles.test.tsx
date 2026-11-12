@@ -115,7 +115,7 @@ describe("the desks a joined computer gets", () => {
       notices: [{ id: "notice-1", from: "Host", fromId: "host", to: { name: "Op" }, priority: "normal", text: "Please show Romans 8:28", action: { kind: "bible", value: "Romans 8:28" }, at, answers: [] }],
     }
     const el = await render("viewer", viewerLive, "reconnecting")
-    const hostClock = el.querySelector<HTMLTimeElement>('time[aria-label="Host clock"]')
+    const hostClock = el.querySelector<HTMLTimeElement>('time[aria-label="Main computer clock"]')
     expect(hostClock).not.toBeNull()
     expect(hostClock?.textContent).toBe(new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }))
     expect(el.querySelector('[aria-label="Service countdown"]')?.textContent).toBe("5:00")
@@ -136,7 +136,7 @@ describe("the desks a joined computer gets", () => {
     expect(el.querySelector('[aria-label="Event clock desk"]')).toBeNull()
     expect(el.querySelector('[aria-label="Extra timers"]')).toBeNull()
     expect(el.querySelector('[aria-label="Talk desk"]')).not.toBeNull()
-    expect(el.querySelector('[aria-label="Talk desk"]')?.textContent).toContain("paused until the host connection is current")
+    expect(el.querySelector('[aria-label="Talk desk"]')?.textContent).toContain("paused until the connection to the main computer is current")
     expect(el.querySelector('[aria-label="Talk desk"] button')).toBeNull()
     expect(el.querySelector('[aria-label="Notices desk"]')).not.toBeNull()
     expect(el.querySelector('[aria-label="Ask them to"]')).toBeNull()
@@ -155,7 +155,7 @@ describe("the desks a joined computer gets", () => {
     }
     const serviceClockDesk = await render("viewer", serviceClockOnly, "reconnecting", 0)
     expect(serviceClockDesk.querySelector('[aria-label="Service countdown"]')?.textContent).toBe("1:05:00")
-    expect(serviceClockDesk.textContent).toContain("until expected service end · host estimate")
+    expect(serviceClockDesk.textContent).toContain("until expected service end · main computer estimate")
 
     const liveStatus = await render("viewer", { ...viewerLive, showMode: undefined, program: { onAir: true, reference: "PRIVATE PROGRAM DETAIL", rehearsal: false } }, "connected")
     expect(liveStatus.querySelector('[aria-label="Show status"]')?.textContent).toContain("Live")
@@ -235,18 +235,18 @@ describe("the desks a joined computer gets", () => {
   it("a paused desk says so, keeps Talk and notices, and its controls wait", async () => {
     const el = await render("bible")
     await act(async () => useJoin.setState({ paused: true }))
-    expect(el.textContent).toContain("Paused by the main desk")
+    expect(el.textContent).toContain("Paused by the main computer")
     const nextVerse = [...el.querySelectorAll("button")].find((b) => b.textContent === "Next verse")!
     expect(nextVerse.disabled).toBe(true)
     expect(el.querySelector('[aria-label="Talk desk"]')).not.toBeNull()
     expect(el.querySelector('[aria-label="Notices desk"]')).not.toBeNull()
     await act(async () => useJoin.setState({ paused: false }))
-    expect(el.textContent).not.toContain("Paused by the main desk")
+    expect(el.textContent).not.toContain("Paused by the main computer")
     expect([...el.querySelectorAll("button")].find((b) => b.textContent === "Next verse")!.disabled).toBe(false)
   })
 })
 
-describe("the main desk's operator list", () => {
+describe("the main computer's operator list", () => {
   it("takes back control from a desk and gives it back, without unpairing it", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     useJoin.setState({ status: "off", me: null, live: null, error: null, paused: false, note: null })
@@ -258,11 +258,11 @@ describe("the main desk's operator list", () => {
     await act(async () => take.click())
     expect(useSettingsStore.getState().remoteDevices[0].paused).toBe(true)
     expect(el.textContent).toContain("Paused")
-    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main desk took back control from Desk C")
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main computer took back control from Desk C")
     await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Give control back to Desk C"]')!.click())
     expect(useSettingsStore.getState().remoteDevices).toHaveLength(1)
     expect(useSettingsStore.getState().remoteDevices[0].paused).toBeUndefined()
-    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main desk gave control back to Desk C")
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main computer gave control back to Desk C")
     // #800 R1: the emergency pause stays here; roles, grants and revoke are managed in Permissions.
     useShellStore.setState({ goRequest: null })
     expect(el.querySelector('[aria-label="Revoke Desk C"]')).toBeNull()
@@ -351,13 +351,13 @@ describe("a Screens group Take", () => {
       { id: "sanctuary", name: "Sanctuary", status: "pending" },
       { id: "overflow", name: "Overflow", status: "pending" },
     ] }] } }))
-    expect(el.textContent).toContain("Waiting for the host result.")
+    expect(el.textContent).toContain("Waiting for the main computer result.")
     expect(el.textContent).not.toContain("Not applied on host")
     await act(async () => useJoin.setState({ live: { ...live, groupTakeResults: [{ requestId: id, scene: "sermon", at: Date.now(), by: "Screens desk", outputs: [
       { id: "sanctuary", name: "Sanctuary", status: "host-applied" },
       { id: "overflow", name: "Overflow", status: "host-applied" },
     ] }] } }))
-    expect(el.textContent).toContain("Applied on host; receiver confirmation is not available.")
+    expect(el.textContent).toContain("Applied on the main computer; receiver confirmation is not available.")
     await act(async () => root.unmount())
   })
 })

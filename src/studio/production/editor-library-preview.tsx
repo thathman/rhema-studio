@@ -45,9 +45,9 @@ export function EditorLibraryPreview() {
       const list = Array.isArray(result?.translations) ? result.translations : []
       setTranslations(list)
       setTranslation(list.some((item) => item.id === result.active) ? result.active : (list[0]?.id ?? null))
-      setScriptureError(list.length ? null : "The host has no Bible translations available.")
+      setScriptureError(list.length ? null : "The main computer has no Bible translations available.")
     }).catch((error: unknown) => {
-      if (mounted) setScriptureError(`Could not load the host's Bible translations: ${String(error)}`)
+      if (mounted) setScriptureError(`Could not load the main computer's Bible translations: ${String(error)}`)
     }).finally(() => {
       if (mounted) setLoadingTranslations(false)
     })
@@ -70,12 +70,12 @@ export function EditorLibraryPreview() {
     setPassage(null)
     setSelectedSong(null)
     try {
-      if (translation === null) throw new Error("Choose a host Bible translation first.")
+      if (translation === null) throw new Error("Choose a Bible translation on the main computer first.")
       const result = await lookupOnHost<{ verses: HostVerse[] }>({ what: "chapter", translation, book, chapter })
       if (request !== scriptureRequest.current) return
       const excerpt = passageFrom(result?.verses ?? [], verse)
       setPassage(excerpt.length ? excerpt : null)
-      if (!excerpt.length) setScriptureError(`${bookName} ${chapter}:${verse} is not available in this host translation.`)
+      if (!excerpt.length) setScriptureError(`${bookName} ${chapter}:${verse} is not available in this translation on the main computer.`)
     } catch (error) {
       if (request === scriptureRequest.current) setScriptureError(String(error))
     } finally {
@@ -106,7 +106,7 @@ export function EditorLibraryPreview() {
         if (request !== scriptureRequest.current) return
         const excerpt = passageFrom(result?.verses ?? [], reference.verse)
         setPassage(excerpt.length ? excerpt : null)
-        if (!excerpt.length) setScriptureError(`${reference.book.name} ${reference.chapter}:${reference.verse} is not available in this host translation.`)
+        if (!excerpt.length) setScriptureError(`${reference.book.name} ${reference.chapter}:${reference.verse} is not available in this translation on the main computer.`)
       } else if (/\b\d{1,3}:\d{1,3}\b/.test(query)) {
         setScriptureError("This computer could not match that reference to a Bible book. Check the local book index or search by verse words.")
       } else {
@@ -138,7 +138,7 @@ export function EditorLibraryPreview() {
       if (request !== songRequest.current) return
       const found = Array.isArray(result?.songs) ? result.songs : []
       setSongs(found)
-      if (!found.length) setSongError(query ? `Nothing in the host's song library for “${query}”.` : "The host's song library is empty.")
+      if (!found.length) setSongError(query ? `Nothing in the main computer's song library for “${query}”.` : "The main computer's song library is empty.")
     } catch (error) {
       if (request === songRequest.current) setSongError(String(error))
     } finally {
@@ -159,19 +159,19 @@ export function EditorLibraryPreview() {
   const requestRundown = async () => {
     if (!queueSelection) return
     if (!canSend) {
-      setQueueOutcome({ key: queueKey, state: "error", message: "The host is not currently accepting actions from this desk." })
+      setQueueOutcome({ key: queueKey, state: "error", message: "The main computer is not currently accepting actions from this desk." })
       return
     }
     const request = ++queueRequest.current
     const selected = queueSelection
     const key = queueKey
     setQueueing(true)
-    setQueueOutcome({ key, state: "sending", message: `Sending a request for ${selected.label} to the host…` })
+    setQueueOutcome({ key, state: "sending", message: `Sending a request for ${selected.label} to the main computer…` })
     try {
       const result = await useJoin.getState().send({ command: "queue_request", value: { kind: selected.kind, value: selected.value } })
       if (request !== queueRequest.current) return
       if (result.ok) {
-        setQueueOutcome({ key, state: "sent", message: `Request sent for ${selected.label}. Check the host rundown; nothing changed on a screen.` })
+        setQueueOutcome({ key, state: "sent", message: `Request sent for ${selected.label}. Check the main computer's rundown; nothing changed on a screen.` })
       } else {
         setQueueOutcome({ key, state: "error", message: result.error })
       }
@@ -185,21 +185,21 @@ export function EditorLibraryPreview() {
   return (
     <section aria-label="Prepare desk" className="flex flex-col gap-3 rounded-md border border-border p-3">
       <div>
-        <h2 className="font-semibold">Prepare from the host Library</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Find Scripture and songs, then inspect them in this private text preview. Searching and selecting never changes the service, host Preview, Program, or outputs.</p>
+        <h2 className="font-semibold">Prepare from the main computer's Library</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Find Scripture and songs, then inspect them in this private text preview. Searching and selecting never changes the service, main computer Preview, Program, or outputs.</p>
       </div>
 
       <div className="grid gap-3 xl:grid-cols-2">
-        <section aria-label="Host Bible Library" className="flex min-w-0 flex-col gap-2 rounded-md border border-border p-2.5">
+        <section aria-label="Main computer Bible Library" className="flex min-w-0 flex-col gap-2 rounded-md border border-border p-2.5">
           <h3 className="font-semibold">Scripture</h3>
           <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); void findScripture() }}>
             <input aria-label="Editor Scripture reference or words" value={scriptureQuery} onChange={(event) => setScriptureQuery(event.currentTarget.value)} placeholder="Romans 8:28 or words to find" maxLength={120} className={`${field} min-w-40 flex-1`} />
             <select aria-label="Editor Bible translation" value={translation ?? ""} disabled={loadingTranslations || !translations.length} onChange={(event) => { scriptureRequest.current++; setSearchingScripture(false); setTranslation(Number(event.currentTarget.value)); setScriptureResults(null); setPassage(null); setScriptureError(null) }} className="h-8 max-w-48 rounded-md border border-input bg-card px-1.5">
-              {loadingTranslations && <option value="">Loading host editions…</option>}
-              {!loadingTranslations && translations.length === 0 && <option value="">No host editions</option>}
+              {loadingTranslations && <option value="">Loading main computer editions…</option>}
+              {!loadingTranslations && translations.length === 0 && <option value="">No main computer editions</option>}
               {translations.map((item) => <option key={item.id} value={item.id}>{item.abbreviation} · {item.name}</option>)}
             </select>
-            <Button size="sm" type="submit" variant="outline" aria-label="Find in host Bible" disabled={!scriptureQuery.trim() || translation === null || searchingScripture}>{searchingScripture ? "Searching…" : "Find"}</Button>
+            <Button size="sm" type="submit" variant="outline" aria-label="Find in main computer Bible" disabled={!scriptureQuery.trim() || translation === null || searchingScripture}>{searchingScripture ? "Searching…" : "Find"}</Button>
           </form>
           {scriptureError && <p role="alert" className="text-sm text-destructive">{scriptureError}</p>}
           {scriptureResults && scriptureResults.length > 0 && (
@@ -215,11 +215,11 @@ export function EditorLibraryPreview() {
           )}
         </section>
 
-        <section aria-label="Host song Library" className="flex min-w-0 flex-col gap-2 rounded-md border border-border p-2.5">
+        <section aria-label="Main computer song Library" className="flex min-w-0 flex-col gap-2 rounded-md border border-border p-2.5">
           <h3 className="font-semibold">Songs and hymns</h3>
           <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void findSongs() }}>
             <input aria-label="Editor song title, words or hymn number" value={songQuery} onChange={(event) => setSongQuery(event.currentTarget.value)} placeholder="Title, words or hymn number" maxLength={120} className={`${field} flex-1`} />
-            <Button size="sm" type="submit" variant="outline" aria-label="Find in host songs" disabled={searchingSongs}>{searchingSongs ? "Searching…" : "Find"}</Button>
+            <Button size="sm" type="submit" variant="outline" aria-label="Find in main computer songs" disabled={searchingSongs}>{searchingSongs ? "Searching…" : "Find"}</Button>
           </form>
           {songError && <p role="alert" className="text-sm text-destructive">{songError}</p>}
           {songs && songs.length > 0 && (
@@ -240,14 +240,14 @@ export function EditorLibraryPreview() {
         <section aria-label="Editor private preview" className="rounded-md border border-primary/30 bg-primary/5 p-3">
           <p className="text-xs font-bold uppercase tracking-wide text-primary-text">Private Library preview · not on a screen</p>
           {passage && <div className="mt-2" aria-label="Selected Scripture preview"><h3 className="font-semibold">{passage[0]?.bookName} {passage[0]?.chapter}:{passage[0]?.verse} · {abbreviation}</h3>{passage.map((verse) => <p key={verse.verse} className="mt-1"><sup className="mr-1 tabular-nums">{verse.verse}</sup>{verse.text}</p>)}</div>}
-          {selectedSong && <div className="mt-2" aria-label="Selected song preview"><h3 className="font-semibold">{selectedSong.title}</h3>{selectedSong.numbers.length > 0 && <p className="text-sm text-muted-foreground">{selectedSong.numbers.join(", ")}</p>}{selectedSong.firstLine && <p className="mt-1">{selectedSong.firstLine}</p>}<p className="mt-2 text-xs text-muted-foreground">The host lookup supplies this song summary. Full arrangement preview and service draft submission are not part of this joined Editor view yet.</p></div>}
+          {selectedSong && <div className="mt-2" aria-label="Selected song preview"><h3 className="font-semibold">{selectedSong.title}</h3>{selectedSong.numbers.length > 0 && <p className="text-sm text-muted-foreground">{selectedSong.numbers.join(", ")}</p>}{selectedSong.firstLine && <p className="mt-1">{selectedSong.firstLine}</p>}<p className="mt-2 text-xs text-muted-foreground">The main computer lookup supplies this song summary. Full arrangement preview and service draft submission are not part of this joined Editor view yet.</p></div>}
           {queueSelection && <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button type="button" size="sm" variant="outline" aria-label={`Request ${queueSelection.label} in host rundown`} disabled={!canSend || queueing || visibleQueueOutcome?.state === "sent"} onClick={() => void requestRundown()}>
-              {queueing ? "Sending request…" : visibleQueueOutcome?.state === "sent" ? "Request sent" : `Request ${queueSelection.kind === "bible" ? "Scripture" : "song"} in host rundown`}
+            <Button type="button" size="sm" variant="outline" aria-label={`Request ${queueSelection.label} in main computer rundown`} disabled={!canSend || queueing || visibleQueueOutcome?.state === "sent"} onClick={() => void requestRundown()}>
+              {queueing ? "Sending request…" : visibleQueueOutcome?.state === "sent" ? "Request sent" : `Request ${queueSelection.kind === "bible" ? "Scripture" : "song"} in main computer rundown`}
             </Button>
-            {!canSend && <p role="status" className="text-xs text-muted-foreground">The host is not currently accepting actions from this desk.</p>}
+            {!canSend && <p role="status" className="text-xs text-muted-foreground">The main computer is not currently accepting actions from this desk.</p>}
             {visibleQueueOutcome && <p aria-label="Editor add-to-rundown result" role={visibleQueueOutcome.state === "error" ? "alert" : "status"} aria-live="polite" className="text-xs text-muted-foreground">{visibleQueueOutcome.message}</p>}
-            <p className="basis-full text-xs text-muted-foreground">This sends a request for the host rundown. The host checks the item; nothing is sent to a screen.</p>
+            <p className="basis-full text-xs text-muted-foreground">This sends a request for the main computer's rundown. The main computer checks the item; nothing is sent to a screen.</p>
           </div>}
         </section>
       )}

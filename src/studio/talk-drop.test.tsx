@@ -172,7 +172,7 @@ describe("a dropped talk connection", () => {
   it("gives up after a bounded number of tries and says the channel is lost", async () => {
     const { seen, mic, pc } = await joined()
     invoke.mockImplementation(async (cmd: string) => {
-      if (cmd === "join_voice") throw new Error("Could not reach the host")
+      if (cmd === "join_voice") throw new Error("Could not reach the main computer")
       return null
     })
     pc.set("failed")
@@ -194,7 +194,7 @@ describe("a dropped talk connection", () => {
   })
 })
 
-describe("the main desk's view of a dropped desk", () => {
+describe("the main computer's view of a dropped desk", () => {
   async function offer(by: string) {
     handlers.get("remote:voice_offer")!({ payload: JSON.stringify({ id: "1", by, sdp: "offer" }) })
     await vi.advanceTimersByTimeAsync(10)
@@ -481,20 +481,20 @@ describe("talk rights and levels", () => {
     useJoin.setState({ me: { name: "Ade", role: "bible" }, live: { talkRights: { stage: ["stage"] } } as never })
     const el = document.createElement("div")
     document.body.append(el)
-    await act(async () => createRoot(el).render(<JoinedTalk people={[{ name: "Tolu", role: "stage", talking: true, speaking: true }, { name: "Pat (main desk)", talking: false, speaking: false }]} />))
+    await act(async () => createRoot(el).render(<JoinedTalk people={[{ name: "Tolu", role: "stage", talking: true, speaking: true }, { name: "Pat (main computer)", talking: false, speaking: false }]} />))
     const joinButton = [...el.querySelectorAll("button")].find((b) => b.textContent === "Join the talk channel")!
     await act(async () => { joinButton.click(); await vi.advanceTimersByTimeAsync(10) })
     const sent = () => invoke.mock.calls.filter((c) => c[0] === "join_command" && (c[1] as { command: { command: string } }).command.command === "voice_channels").map((c) => (c[1] as { command: { value: unknown } }).command.value)
     expect(sent().at(-1)).toEqual({ listen: ["production"], talk: "all" })
     const talkTo = el.querySelector<HTMLSelectElement>('select[aria-label="Talk to"]')!
-    expect([...talkTo.options].map((o) => o.textContent)).toEqual(["All crew", "Production", "The main desk", "Tolu"])
+    expect([...talkTo.options].map((o) => o.textContent)).toEqual(["All crew", "Production", "The main computer", "Tolu"])
     expect(el.textContent).not.toContain("Stage & worship")
     // The crew list says each person's role.
     expect(el.textContent).toContain("Tolu· Stage")
     // Muting Tolu here goes to the main desk, which mixes what this desk hears.
     await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Mute Tolu"]')!.click())
     expect(sent().at(-1)).toEqual({ listen: ["production"], talk: "all", levels: { Tolu: 0 } })
-    const mainDesk = el.querySelector<HTMLInputElement>('input[aria-label="Volume of The main desk"]')!
+    const mainDesk = el.querySelector<HTMLInputElement>('input[aria-label="Volume of The main computer"]')!
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(mainDesk, "0.5")
       mainDesk.dispatchEvent(new Event("input", { bubbles: true }))

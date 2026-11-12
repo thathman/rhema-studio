@@ -21,7 +21,7 @@ import type { LiveStateV1 } from "@/lib/live-state"
 /** The desk consoles' second round (#197) and Queue from a joined desk (#251). */
 const live: LiveStateV1 = {
   v: 1, at: 0, church: "CAC", service: null, program: { onAir: true, reference: null, rehearsal: false },
-  sources: [{ id: "ticker", reference: "Welcome to CAC", on: true, revision: 2, by: "Main desk", activatedAt: 0 }, { id: "lowerThird", reference: "Pastor Ade", on: false, revision: 1 }],
+  sources: [{ id: "ticker", reference: "Welcome to CAC", on: true, revision: 2, by: "Main computer", activatedAt: 0 }, { id: "lowerThird", reference: "Pastor Ade", on: false, revision: 1 }],
   event: { mode: "own", currentId: null }, rundown: [], timing: null, stageMessage: "", scenes: [], outputs: [], notices: [],
   revisions: { lyrics: 7, queue: 3, "obs:record": 4, "obs:transition": 5, "source:ticker": 2, "source:lowerThird": 1 },
   lyrics: { itemId: "i1", index: 2, title: "Amazing Grace", kind: "hymn", section: 2, sections: ["Verse 1", "Chorus", "Verse 2", "Chorus"], key: "G", choruses: [1, 3] },
@@ -144,15 +144,15 @@ describe("screens desk and the director's output map", () => {
   it("the screens desk confirms shared ticker and lower-third changes before sending them", async () => {
     const el = await render("screens")
     const box = el.querySelector('[aria-label="Ticker and lower third"]')!
-    expect(box.textContent).toContain("Ticker · host reports on · Welcome to CAC")
-    await click(button(box, "Take off ticker…"))
+    expect(box.textContent).toContain("Ticker · main computer reports on · Welcome to CAC")
+    await click(button(box, "Clear ticker…"))
     expect(sent).toHaveLength(0)
     expect(box.textContent).toContain("shared ticker anywhere a congregation output uses it")
     expect(box.textContent).toContain("cannot limit the change to one screen")
-    await click(button(box, "Confirm take off the shared ticker"))
+    await click(button(box, "Confirm clearing the shared ticker"))
     expect(sent.at(-1)).toMatchObject({ command: "clear_source", value: "ticker", seen: { "source:ticker": 2 } })
-    await click(button(box, "Put back lower third…"))
-    await click(button(box, "Confirm put back the shared lower third"))
+    await click(button(box, "Restore lower third…"))
+    await click(button(box, "Confirm restoring the shared lower third"))
     expect(sent.at(-1)).toMatchObject({ command: "restore_source", value: "lowerThird" })
     expect((await render("worship")).querySelector('[aria-label="Ticker and lower third"]')).toBeNull()
   })
@@ -160,7 +160,7 @@ describe("screens desk and the director's output map", () => {
   it("does not confirm a shared source change after that source changes during review", async () => {
     const el = await render("screens")
     const box = el.querySelector('[aria-label="Ticker and lower third"]')!
-    await click(button(box, "Take off ticker…"))
+    await click(button(box, "Clear ticker…"))
     const changed: LiveStateV1 = {
       ...live,
       sources: live.sources.map((source) => source.id === "ticker" ? { ...source, on: false } : source),
@@ -168,27 +168,27 @@ describe("screens desk and the director's output map", () => {
     }
     await act(async () => useJoin.setState({ live: changed }))
     expect(box.querySelector('[role="alert"]')?.textContent).toContain("changed while you were reviewing")
-    expect(button(box, "Confirm take off the shared ticker")).toBeUndefined()
+    expect(button(box, "Confirm clearing the shared ticker")).toBeUndefined()
     expect(sent).toHaveLength(0)
   })
 
   it("fails closed when an older host does not provide server source revisions", async () => {
     const el = await render("screens", { ...live, revisions: undefined })
     const box = el.querySelector('[aria-label="Ticker and lower third"]')!
-    expect(box.querySelector('[role="alert"]')?.textContent).toContain("Update the host")
-    expect(button(box, "Take off ticker…").disabled).toBe(true)
-    expect(button(box, "Put back lower third…").disabled).toBe(true)
+    expect(box.querySelector('[role="alert"]')?.textContent).toContain("Update the main computer")
+    expect(button(box, "Clear ticker…").disabled).toBe(true)
+    expect(button(box, "Restore lower third…").disabled).toBe(true)
     expect(sent).toHaveLength(0)
   })
 
   it("re-reads the current host revision immediately before sending", async () => {
     const el = await render("screens")
     const box = el.querySelector('[aria-label="Ticker and lower third"]')!
-    await click(button(box, "Take off ticker…"))
+    await click(button(box, "Clear ticker…"))
 
     // Model a Live State update just before the click handler runs, before the subscribed view rerenders.
     useJoin.getState().live!.revisions!["source:ticker"] = 3
-    await click(button(box, "Confirm take off the shared ticker"))
+    await click(button(box, "Confirm clearing the shared ticker"))
 
     expect(box.querySelector('[role="alert"]')?.textContent).toContain("changed while you were reviewing")
     expect(sent).toHaveLength(0)
@@ -196,10 +196,10 @@ describe("screens desk and the director's output map", () => {
 
   it.each(["present", "configure"])("the %s desk can change a shared source only after confirmation", async (role) => {
     const box = (await render(role)).querySelector('[aria-label="Ticker and lower third"]')!
-    await click(button(box, "Take off ticker…"))
+    await click(button(box, "Clear ticker…"))
     expect(sent).toHaveLength(0)
     expect(box.textContent).toContain("cannot limit the change to one screen")
-    await click(button(box, "Confirm take off the shared ticker"))
+    await click(button(box, "Confirm clearing the shared ticker"))
     expect(sent.at(-1)).toMatchObject({ command: "clear_source", value: "ticker" })
   })
 
@@ -230,7 +230,7 @@ describe("screens desk and the director's output map", () => {
     expect(sent).toHaveLength(0)
   })
 
-  it("says when the host is older and does not expose the graphics queue to unrelated roles", async () => {
+  it("says when the main computer is older and does not expose the graphics queue to unrelated roles", async () => {
     const oldHost = await render("screens", live)
     expect(oldHost.textContent).toContain("does not share the graphics queue yet")
     expect((await render("worship", { ...live, graphicsQueue })).querySelector('[aria-label="Upcoming graphics"]')).toBeNull()
@@ -241,14 +241,14 @@ describe("screens desk and the director's output map", () => {
     expect(empty.textContent).toContain("No visual moments are planned inside service events")
     const stale = await render("screens", { ...live, graphicsQueue })
     await act(async () => useJoin.setState({ status: "reconnecting" }))
-    expect(stale.querySelector('[aria-label="Upcoming graphics"] [role="status"]')?.textContent).toContain("Host is out of date")
+    expect(stale.querySelector('[aria-label="Upcoming graphics"] [role="status"]')?.textContent).toContain("The main computer is out of date")
   })
 })
 
 describe("Queue on a request from a joined desk (#251)", () => {
-  const ask = { id: "n1", from: "Main desk", to: "all" as const, priority: "normal" as const, text: "Next hymn", at: 0, answers: [], action: { kind: "song" as const, value: "Amazing Grace" } }
+  const ask = { id: "n1", from: "Main computer", to: "all" as const, priority: "normal" as const, text: "Next hymn", at: 0, answers: [], action: { kind: "song" as const, value: "Amazing Grace" } }
 
-  it("a Present or editor desk queues it on the host and answers Ready; other desks have no Queue", async () => {
+  it("a Present or editor desk queues it on the main computer and answers Ready; other desks have no Queue", async () => {
     for (const role of ["present", "editor"]) {
       sent.length = 0
       const el = await render(role, { ...live, notices: [ask] })

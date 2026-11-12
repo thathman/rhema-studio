@@ -91,12 +91,12 @@ describe("first launch", () => {
 })
 
 describe("the setup wizard", () => {
-  it("welcome → main desk → church name is required, saves as typed, and Continue moves on", async () => {
+  it("welcome → main computer → church name is required, saves as typed, and Continue moves on", async () => {
     useShellStore.setState({ setupOpen: true })
     await render(<SetupWizard />)
     expect(document.body.textContent).toContain("Welcome")
     expect(document.querySelector('img[alt="Rhema Studio"]')).not.toBeNull()
-    await click("Set up this computer as the main desk")
+    await click("Set up this computer as the main computer")
     expect(useSettingsStore.getState().setup.mode).toBe("main")
     expect(heading()).toBe("Church identity")
     expect(useSettingsStore.getState().setup.lastStep).toBe("church")
@@ -154,10 +154,10 @@ describe("the setup wizard", () => {
     expect(document.body.textContent).toContain("Not using:")
   })
 
-  it("Join an existing church host opens the Connections hub", async () => {
+  it("Join the church's main computer opens the Connections hub", async () => {
     useShellStore.setState({ setupOpen: true })
     await render(<SetupWizard />)
-    await click("Join an existing church host")
+    await click("Join the church's main computer")
     expect(useShellStore.getState().setupOpen).toBe(false)
     expect(useSettingsStore.getState().setup.mode).toBe("join")
     expect(useShellStore.getState().goRequest).toBe("connections")
@@ -211,7 +211,7 @@ describe("Join vs Solo keeps this computer's own settings (#298 G)", () => {
     expect(useShellStore.getState().goRequest).toBe("connections")
   })
 
-  it("Solo main desk needs no volunteer, host or other computer to finish", async () => {
+  it("Solo main computer needs no volunteer, host or other computer to finish", async () => {
     named()
     useSettingsStore.getState().setSetup({ lastStep: "finish" })
     useShellStore.setState({ setupOpen: true })

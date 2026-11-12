@@ -130,7 +130,7 @@ describe("the look as saved", () => {
   })
 })
 
-describe("what it counts, on the host", () => {
+describe("what it counts, on the main computer", () => {
   const timer = { durationMs: TEN, startedAt: 1000, accumulatedMs: 0 }
 
   it("the service timer: running, its end on the wall clock; held; not set", () => {

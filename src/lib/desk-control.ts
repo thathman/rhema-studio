@@ -12,6 +12,6 @@ export async function setDeskControl(hash: string, takeBack: boolean): Promise<b
   if ((device.paused === true) === takeBack) return true
   const applied = await useSettingsStore.getState().setRemoteDevicePaused(hash, takeBack)
   if (!applied) return false
-  useJournalStore.getState().add({ kind: "remote", label: takeBack ? `Main desk took back control from ${device.name}` : `Main desk gave control back to ${device.name}` })
+  useJournalStore.getState().add({ kind: "remote", label: takeBack ? `Main computer took back control from ${device.name}` : `Main computer gave control back to ${device.name}` })
   return true
 }

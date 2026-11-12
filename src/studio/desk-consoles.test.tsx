@@ -82,13 +82,13 @@ describe("desk consoles on a joined computer (#197)", () => {
     expect(sent).toEqual([{ command: "bible_activate", value: { reference: "John 3:16", translation: "YOR" }, seen: { lyrics: 7 } }])
   })
 
-  it("a Bible desk searches the host's Bible by words and activates a heard verse in one click", async () => {
+  it("a Bible desk searches the main computer's Bible by words and activates a heard verse in one click", async () => {
     const el = await render("bible")
     await type(el.querySelector<HTMLInputElement>('[aria-label="Reference or words"]')!, "work together")
     await click(button(el, "Find"))
     expect(asked.at(-1)).toEqual({ what: "search", query: "work together", translation: 2 })
     expect(el.querySelector('[aria-label="Verses found"]')!.textContent).toContain("Romans 8:28")
-    const heard = el.querySelector('[aria-label="Heard at the host"]')!
+    const heard = el.querySelector('[aria-label="Heard at the main computer"]')!
     expect(heard.textContent).toContain("Psalm 23:1")
     expect(heard.textContent).toContain("92%")
     await click([...heard.querySelectorAll("button")].find((b) => b.textContent === "Activate")!)

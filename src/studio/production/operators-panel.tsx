@@ -173,7 +173,7 @@ function HostCard() {
     <Card kicker="This computer" title="Host the service">
       <p className="text-muted-foreground">This computer runs the service with every control, with or without anyone joined. Paired computers and phones follow it and do only what their role allows; if one drops out, nothing here changes.</p>
       <p className={cn("font-semibold", hosting ? "text-primary-text" : "text-muted-foreground")}>
-        {hosting ? `Hosting on the church network (port ${host?.port})` : host?.running ? "Listening on this computer only: turn on the network in Settings → Remote control" : "Not hosting: start the HTTP listener on the network in Settings → Remote control"}
+        {hosting ? `Hosting on the church network (port ${host?.port})` : host?.running ? "Listening on this computer only: turn on the network in Settings → Remote Control" : "Not hosting: start the HTTP listener on the network in Settings → Remote Control"}
       </p>
       {hosting && (
         <div className="flex flex-col gap-1" aria-label="This computer's address">
@@ -185,7 +185,7 @@ function HostCard() {
           {host.tlsPort ? (
             <p className="text-muted-foreground">Secure link on port {host.tlsPort}{host.caFingerprint ? <>; certificate <span className="font-mono">{certificateWords(host.caFingerprint)}</span> (a joined computer shows the same)</> : null}.</p>
           ) : (
-            <p className="text-confidence-mid">No secure link: joined computers talk to this one unencrypted. Turn on Secure page for phones (https) in Settings → Remote control and start the listener again; computers paired before then pair again to use it.</p>
+            <p className="text-confidence-mid">No secure link: joined computers talk to this one unencrypted. Turn on Secure page for phones (https) in Settings → Remote Control and start the listener again; computers paired before then pair again to use it.</p>
           )}
         </div>
       )}
@@ -205,7 +205,7 @@ function HostCard() {
           </li>
         ))}
       </ul>
-      <p className="text-muted-foreground">Take back control stops a desk's commands at once without unpairing it; it still sees the service and stays on Talk. Roles, grants and revoking a device are in Permissions.</p>
+      <p className="text-muted-foreground">Take back control stops a desk's commands at once without unpairing it; it still sees the service and stays on Talk. Roles and grants are in Permissions; revoke a device in Connections.</p>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" aria-label="Manage access and roles in Permissions" onClick={openPermissions}>Manage access and roles…</Button>
         {host?.running && !confirmStop && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirmStop(true)}>Stop hosting</Button>}
@@ -265,7 +265,7 @@ export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"
       {me && role !== "viewer" && <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === role)?.may}>as {me.name} · {roleLabel(role)}</span>}
       {viewer && (!me || !REMOTE_ROLES.some((item) => item.id === me.role)) && <span role="status" className="text-muted-foreground">Role not confirmed · showing View only</span>}
       {live && fresh.showSince && <span role="status" className="font-semibold text-confidence-mid">Last update {Math.round(fresh.sinceMs / 1000)} s ago</span>}
-      {secure === true && <span className="text-muted-foreground" title="This computer checks the host's certificate, kept when it paired: compare it with the host's card (Live → Production tools → Operators).">Encrypted{fingerprint ? ` · certificate ${certificateWords(fingerprint)}` : ""}</span>}
+      {secure === true && <span className="text-muted-foreground" title="This computer checks the main computer's certificate, kept when it paired: compare it with the main computer's card (Live → Production tools → Operators).">Encrypted{fingerprint ? ` · certificate ${certificateWords(fingerprint)}` : ""}</span>}
       <span className="flex-1" />
       {layout === "card" && (
         <Button size="sm" variant="secondary" title="Show this desk as this computer's Live page" onClick={() => {
@@ -275,7 +275,7 @@ export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"
         }}>Open your desk</Button>
       )}
       <Button size="sm" variant="outline" onClick={() => void useJoin.getState().leave()}>Leave</Button>
-      <Button size="sm" variant="ghost" onClick={() => void useJoin.getState().leave(true)}>Forget this host</Button>
+      <Button size="sm" variant="ghost" onClick={() => void useJoin.getState().leave(true)}>Forget this main computer</Button>
     </>
   )
 
@@ -283,19 +283,19 @@ export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"
     <>
       {secure === false && status === "connected" && (
         <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2">
-          <span className="font-semibold">Not encrypted.</span> <span className="text-muted-foreground">This host has no secure link, so the service and this computer's key cross the network in plain text. At the host: Settings → Remote control → Secure page for phones (https), start the listener again, then pair this computer again.</span>
+          <span className="font-semibold">Not encrypted.</span> <span className="text-muted-foreground">This main computer has no secure link, so the service and this computer's key cross the network in plain text. At the main computer: Settings → Remote Control → Secure page for phones (https), start the listener again, then pair this computer again.</span>
         </p>
       )}
       {paused && (
         <p role="status" className="rounded-md border border-border bg-muted px-2.5 py-2 font-semibold">
-          Paused by the main desk. <span className="font-normal text-muted-foreground">You still see the service and can talk and send notices; the controls come back when the main desk gives control back.</span>
+          Paused by the main computer. <span className="font-normal text-muted-foreground">You still see the service and can talk and send notices; the controls come back when the main computer gives control back.</span>
         </p>
       )}
       {note && <p role="status" className="text-muted-foreground">{note}</p>}
       {live && !viewer && <HostLookOffer look={live.churchLook} church={live.church} />}
       {live && fresh.skewMs !== null && (
         <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2">
-          <span className="font-semibold">This computer's clock is {skewWords(fresh.skewMs)} the host's.</span> <span className="text-muted-foreground">Timers here follow the host, but times of day may not agree: set both computers to set their time automatically.</span>
+          <span className="font-semibold">This computer's clock is {skewWords(fresh.skewMs)} the main computer's.</span> <span className="text-muted-foreground">Timers here follow the main computer, but times of day may not agree: set both computers to set their time automatically.</span>
         </p>
       )}
       {error && <p role="alert" className="text-destructive">{error}</p>}
@@ -334,7 +334,7 @@ export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"
   const talk = live && <section aria-label="Talk desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
     <p className="font-semibold">Talk</p>
     {viewer && fresh.stale
-      ? <p role="status" className="text-muted-foreground">Talk is paused until the host connection is current.</p>
+      ? <p role="status" className="text-muted-foreground">Talk is paused until the connection to the main computer is current.</p>
       : <JoinedTalk people={(live.voice ?? []).filter((p) => p.name !== me?.name)} />}
   </section>
   const notices = live && <section aria-label="Notices desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
@@ -353,15 +353,15 @@ export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"
         // The host checks this desk's role for each, as for its own buttons; its refusal is the
         // reason. Preview puts a verse or a song in the main desk's Preview only.
         if (a.kind === "camera") return null // answering is the action
-        if (a.kind === "sceneEdit") return "only the main desk answers a scene change"
-        if (a.kind === "scene") return "This request did not change any output. The host must choose one output in Scenes; group Take is unavailable."
+        if (a.kind === "sceneEdit") return "only the main computer answers a scene change"
+        if (a.kind === "scene") return "This request did not change any output. The main computer must choose one output in Scenes; group Take is unavailable."
         const send = useJoin.getState().send
         const results = a.kind === "bible" ? [await send({ command: mode === "preview" ? "bible_preview" : "bible_activate", value: a.value })]
           : a.kind === "song" ? [await send({ command: mode === "preview" ? "song_preview" : "song_show", value: a.value })]
             : a.kind === "event" ? [await send({ command: "event_start", value: a.value })]
               : a.kind === "wrap" ? [await send({ command: "stage_message", value: a.value.slice(0, 120) })]
                 : []
-        if (results.length === 0) return "this action needs the main desk"
+        if (results.length === 0) return "this action needs the main computer"
         const refused = results.find((r) => !r.ok)
         return refused && !refused.ok ? refused.error : null
       }}
@@ -375,7 +375,7 @@ export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"
 
   if (layout === "card") {
     return (
-      <Card kicker={`Joined ${live?.church || address}`} title={live?.service?.title ?? "The host's service"}>
+      <Card kicker={`Joined ${live?.church || address}`} title={live?.service?.title ?? "The main computer's service"}>
         <div className="flex flex-wrap items-center gap-2">{statusRow}</div>
         {banners}
         {live && (viewer ? blocks.viewer : CARD_ORDER.map((block) => blocks[block] ? <Fragment key={block}>{blocks[block]}</Fragment> : null))}
@@ -392,16 +392,16 @@ export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"
         {menu}
         <div className="min-w-0">
           <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{`Joined ${live?.church || address}`} · {page.title}</p>
-          <h1 className="truncate text-base font-bold tracking-tight">{live?.service?.title ?? "The host's service"}</h1>
+          <h1 className="truncate text-base font-bold tracking-tight">{live?.service?.title ?? "The main computer's service"}</h1>
         </div>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{statusRow}</div>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-3 p-4 max-[800px]:p-3">
-          <p className="text-muted-foreground">{page.purpose} The host checks every command; leaving or losing this computer never stops the service.</p>
+          <p className="text-muted-foreground">{page.purpose} The main computer checks every command; leaving or losing this computer never stops the service.</p>
           {banners}
           {!live ? (
-            <p role="status" className="text-muted-foreground">{status === "refused" ? "The host refused this computer. Pair it again from the host's Connections." : "Waiting for the host's service…"}</p>
+            <p role="status" className="text-muted-foreground">{status === "refused" ? "The main computer refused this computer. Pair it again from the main computer's Connections." : "Waiting for the main computer's service…"}</p>
           ) : (
             <div className={cn("grid items-start gap-3", page.side.length > 0 || talk ? (page.sideFirst ? "lg:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]" : "lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]") : undefined)}>
               <section aria-label={`${page.title} desk`} className={cn("flex min-w-0 flex-col gap-3", page.mainColumns && "2xl:grid 2xl:grid-cols-2 2xl:items-start", page.sideFirst && "lg:order-2")}>
@@ -477,11 +477,11 @@ export function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: 
   const eventExpectedEnd = current?.time?.expected[1]
   const expectedEnd = eventExpectedEnd ?? live.timing?.expectedEnd
   const remainingMs = expectedEnd === undefined ? null : expectedEnd - hostNow
-  let countdownDescription = "No expected end from the host"
+  let countdownDescription = "No expected end from the main computer"
   if (remainingMs !== null && eventExpectedEnd !== undefined) {
-    countdownDescription = remainingMs < 0 ? "past this event's expected end" : "remaining in this event · host estimate"
+    countdownDescription = remainingMs < 0 ? "past this event's expected end" : "remaining in this event · main computer estimate"
   } else if (remainingMs !== null) {
-    countdownDescription = remainingMs < 0 ? "past expected service end" : "until expected service end · host estimate"
+    countdownDescription = remainingMs < 0 ? "past expected service end" : "until expected service end · main computer estimate"
   }
   return (
     <div className="flex flex-col gap-3">
@@ -511,7 +511,7 @@ export function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: 
             <p role="timer" aria-label="Service countdown" className="mt-1 font-mono text-3xl font-semibold tabular-nums">{formatMs(remainingMs)}</p>
           )}
           <p className="mt-1 text-xs text-[#9fb2b0]">{countdownDescription}</p>
-          <p className="mt-1 text-xs text-[#9fb2b0]">Host time <time dateTime={new Date(hostNow).toISOString()} aria-label="Host clock">{hhmm(hostNow, zone)}</time> · {stale ? "update may be out of date" : "authoritative"}</p>
+          <p className="mt-1 text-xs text-[#9fb2b0]">Main computer time <time dateTime={new Date(hostNow).toISOString()} aria-label="Main computer clock">{hhmm(hostNow, zone)}</time> · {stale ? "update may be out of date" : "authoritative"}</p>
         </section>
       </div>
       <section aria-label="Running order (read only)" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
@@ -533,7 +533,7 @@ export function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: 
             </Button>
           )}
         </div>
-        {events.length === 0 ? <p className="text-muted-foreground">The host has not shared a running order yet.</p> : (
+        {events.length === 0 ? <p className="text-muted-foreground">The main computer has not shared a running order yet.</p> : (
           <ol id="viewer-running-order" className={cn("flex max-h-64 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border", stale && "opacity-60")}>
             {visibleEvents.map((event) => {
               const index = events.indexOf(event)
@@ -584,7 +584,7 @@ export function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }
       {/* Who changed the time last (#196 R2.9; absent from older hosts). */}
       {live.timeChange !== undefined && <p role="status" aria-label="Last change to the time" className="text-muted-foreground">{live.timeChange ? <>Last change: {timeChangeWords({ what: live.timeChange.what, by: live.timeChange.by ?? null, at: live.timeChange.at }, live.at, (ms) => hhmm(ms, live.timing?.timeZone))}</> : "Nobody has changed the time yet."}</p>}
       <DeskHold live={live} />
-      <ol aria-label="The host's run of show" className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border">
+      <ol aria-label="The main computer's run of show" className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border">
         {events.map((r) => (
           <li key={r.id} className={cn("flex items-center gap-2 px-2.5 py-1.5", r.id === live.event.currentId && "bg-primary/10 font-semibold")}>
             <span className="min-w-0 flex-1 truncate">{r.reference}</span>
@@ -593,7 +593,7 @@ export function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }
           </li>
         ))}
       </ol>
-      <p className="text-muted-foreground">The event clock on the host {live.event.mode === "own" ? "is run by the timekeeper" : "follows its screens; starting an event here moves it too"}. Nothing here changes a screen.</p>
+      <p className="text-muted-foreground">The event clock on the main computer {live.event.mode === "own" ? "is run by the timekeeper" : "follows its screens; starting an event here moves it too"}. Nothing here changes a screen.</p>
     </section>
   )
 }
@@ -618,7 +618,7 @@ export function RunOfShowView({ live, stale }: { live: LiveStateV1; stale: boole
         {stale && <span className="font-semibold text-confidence-mid">may be out of date</span>}
       </div>
       {rows.length === 0 ? (
-        <p className="text-muted-foreground">No times from the host yet: the main service needs a start time there (Prepare), or the host needs updating.</p>
+        <p className="text-muted-foreground">No times from the main computer yet: the main service needs a start time there (Prepare), or the main computer needs updating.</p>
       ) : (
         <div className={cn("max-h-80 overflow-auto", stale && "opacity-60")}>
           <table className="w-full border-collapse">
@@ -671,7 +671,7 @@ function DeskTimer({ live, stale }: { live: LiveStateV1; stale: boolean }) {
   const left = t.durationMs ? t.durationMs - elapsed : null
   const send = useJoin.getState().send
   return (
-    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="The host's service timer">
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="The main computer's service timer">
       <span className={cn("font-mono text-lg font-semibold tabular-nums", left !== null && left < 0 && "text-destructive", left !== null && left >= 0 && left <= 120_000 && "text-confidence-mid", stale && "opacity-50")} role="timer">
         {left === null ? formatMs(elapsed) : left < 0 ? `+${formatMs(-left)}` : formatMs(left)}
       </span>
@@ -746,7 +746,7 @@ function DeskHold({ live }: { live: LiveStateV1 }) {
   if (live.hold === undefined) return null
   if (live.hold) {
     return (
-      <div role="status" aria-label="The host's service is on hold" className="flex flex-wrap items-center gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-1.5">
+      <div role="status" aria-label="The main computer's service is on hold" className="flex flex-wrap items-center gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-1.5">
         <span className="min-w-0 flex-1"><b>On hold</b> since {hhmm(live.hold.since, live.timing?.timeZone)}: {live.hold.reason}{live.hold.by ? ` · by ${live.hold.by}` : ""}</span>
         <Button size="sm" disabled={off} onClick={() => void send({ command: "resume" })}>Resume</Button>
       </div>
@@ -755,7 +755,7 @@ function DeskHold({ live }: { live: LiveStateV1 }) {
   return (
     <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); const r = reason.trim(); void send(r ? { command: "hold", value: r.slice(0, 80) } : { command: "hold" }); setReason("") }}>
       <input aria-label="Reason for the hold" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason, e.g. waiting for the pastor" maxLength={80} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
-      <Button size="sm" variant="outline" type="submit" disabled={off} title="Hold: in the host's service log and on its stage display; loops and timed moves wait until Resume">Hold</Button>
+      <Button size="sm" variant="outline" type="submit" disabled={off} title="Hold: in the main computer's service log and on its stage display; loops and timed moves wait until Resume">Hold</Button>
     </form>
   )
 }
@@ -877,7 +877,7 @@ export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: 
     let receiverBaselineError: string | undefined
     if ("rows" in baseline) {
       const row = baseline.rows.find((candidate) => candidate.id === before.id)
-      if (!row) receiverBaselineError = "The host did not report this output after the Take."
+      if (!row) receiverBaselineError = "The main computer did not report this output after the Take."
       else if (!row.feed) receiverBaselineFeed = false
       else {
         receiverBaselineFeed = true
@@ -929,7 +929,7 @@ export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: 
         const currentLive = useJoin.getState().live
         const currentOutput = currentLive?.outputs.find((candidate) => candidate.id === selectedOutputId)
         if (!currentLive || !currentOutput) {
-          publishError("The host no longer reports this output. Confirm its assignment in Permissions.")
+          publishError("The main computer no longer reports this output. Confirm its assignment in Permissions.")
           return
         }
 
@@ -963,7 +963,7 @@ export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: 
           if (!latestLive || receiverProgramFingerprint(latestLive, selectedOutputId) !== beforeFingerprint) continue
           const report = rows.find((row) => row.id === selectedOutputId)
           if (!report) {
-            publishError("The host did not report this output. Confirm it is still assigned and connected.", beforeFingerprint)
+            publishError("The main computer did not report this output. Confirm it is still assigned and connected.", beforeFingerprint)
             return
           }
           setReceiverSnapshot({ outputId: selectedOutputId, sceneId: currentFeedback.sceneId, revisionFingerprint: beforeFingerprint, report })
@@ -985,7 +985,7 @@ export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: 
       }
 
       if (alive && takeRequest.current === currentFeedback.request) {
-        publishError("The host accepted the Take but has not confirmed the requested Program state yet.")
+        publishError("The main computer accepted the Take but has not confirmed the requested Program state yet.")
       }
     }
     void check()
@@ -994,10 +994,10 @@ export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: 
 
   const takeStatus = (() => {
     if (!feedback) return null
-    if (!feedback.result) return { role: "status" as const, text: `Sending ${feedback.sceneName} to ${output?.name}; waiting for the host response.` }
-    if (!feedback.result.ok) return { role: "alert" as const, text: `${feedback.result.error}. The host did not apply ${feedback.sceneName}.` }
-    if (feedback.result.note) return { role: "status" as const, text: `Approval request sent for ${feedback.sceneName} on ${output?.name}. ${feedback.result.note} Current Program is unchanged until the host approves it.` }
-    if (!output) return { role: "status" as const, text: `The host accepted ${feedback.sceneName}; waiting for the output state.` }
+    if (!feedback.result) return { role: "status" as const, text: `Sending ${feedback.sceneName} to ${output?.name}; waiting for the main computer's response.` }
+    if (!feedback.result.ok) return { role: "alert" as const, text: `${feedback.result.error}. The main computer did not apply ${feedback.sceneName}.` }
+    if (feedback.result.note) return { role: "status" as const, text: `Approval request sent for ${feedback.sceneName} on ${output?.name}. ${feedback.result.note} Current Program is unchanged until the main computer approves it.` }
+    if (!output) return { role: "status" as const, text: `The main computer accepted ${feedback.sceneName}; waiting for the output state.` }
     const currentRevision = live.revisions?.[`output:${output.id}`]
     const hostShowsTake = output.sceneId === feedback.sceneId && (feedback.result.revision !== undefined
       ? currentRevision !== undefined && currentRevision >= feedback.result.revision
@@ -1005,7 +1005,7 @@ export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: 
         ? currentRevision > feedback.previousOutputRevision
         : feedback.previousSceneId !== output.sceneId || feedback.previousSceneRevision !== output.sceneRevision
           || (feedback.previousNeedsUpdate === true && output.sceneNeedsUpdate !== true))
-    if (hostShowsTake) return { role: "status" as const, text: `Host applied ${feedback.sceneName} to ${output.name}.` }
+    if (hostShowsTake) return { role: "status" as const, text: `The main computer applied ${feedback.sceneName} to ${output.name}.` }
     const outputAdvanced = currentRevision !== undefined && feedback.previousOutputRevision !== undefined
       ? currentRevision > feedback.previousOutputRevision
       : output.sceneRevision !== feedback.previousSceneRevision || (feedback.previousNeedsUpdate === true && output.sceneNeedsUpdate !== true)
@@ -1013,12 +1013,12 @@ export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: 
       const current = output.sceneName ?? live.scenes.find((scene) => scene.id === output.sceneId)?.name ?? "its own feed"
       return { role: "status" as const, text: `Current Program changed before this Take appeared. ${output.name} now shows ${current}; review before trying again.` }
     }
-    return { role: "status" as const, text: `The host accepted ${feedback.sceneName} for ${output.name}; waiting for Current Program to confirm.` }
+    return { role: "status" as const, text: `The main computer accepted ${feedback.sceneName} for ${output.name}; waiting for Current Program to confirm.` }
   })()
 
   const receiverStatus = (() => {
     if (role !== "screens" || !output || !feedback || !feedback.result?.ok || feedback.result.note) return null
-    if (connectionStatus !== "connected") return "Host connection unavailable; receiver status cannot be checked."
+    if (connectionStatus !== "connected") return "Main computer connection unavailable; receiver status cannot be checked."
     if (receiver?.error) return `Receiver status unavailable: ${receiver.error}`
     const currentRevision = live.revisions?.[`output:${output.id}`]
     const hostApplied = output.sceneId === feedback.sceneId && (feedback.result.revision !== undefined
@@ -1028,14 +1028,14 @@ export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: 
         : feedback.previousSceneId !== output.sceneId || feedback.previousSceneRevision !== output.sceneRevision
           || (feedback.previousNeedsUpdate === true && output.sceneNeedsUpdate !== true))
     if (!hostApplied) return "Waiting for Current Program to reflect this Take before checking receiver delivery."
-    if (!feedback.receiverBaselineReady) return "Host applied the Take; checking the receiver's first post-Take frame state…"
-    if (feedback.receiverBaselineFeed === false) return `No receiver can confirm frames on ${output.name}; this output is shown in a host window.`
+    if (!feedback.receiverBaselineReady) return "The main computer applied the Take; checking the receiver's first post-Take frame state…"
+    if (feedback.receiverBaselineFeed === false) return `No receiver can confirm frames on ${output.name}; this output is shown in a window on the main computer.`
     if (feedback.receiverBaselineSeq === undefined) {
-      return `Receiver confirmation is unavailable for this Take: ${feedback.receiverBaselineError ?? "the first post-Take frame sequence could not be read"}. The host can still apply the Take.`
+      return `Receiver confirmation is unavailable for this Take: ${feedback.receiverBaselineError ?? "the first post-Take frame sequence could not be read"}. The main computer can still apply the Take.`
     }
-    if (!receiver) return "Host applied the Take; checking whether the receiver drew the Program frame…"
+    if (!receiver) return "The main computer applied the Take; checking whether the receiver drew the Program frame…"
     if (!receiver.report) return `Receiver status unavailable: ${receiver.error ?? "No receiver details were reported."}`
-    if (!receiver.report.feed) return `No receiver confirmation is available for ${output.name}; this output is shown in a host window.`
+    if (!receiver.report.feed) return `No receiver confirmation is available for ${output.name}; this output is shown in a window on the main computer.`
     if ((receiver.report.watching ?? 0) === 0) return receiver.timedOut
       ? `No receiver is following ${output.name}'s feed. Check that its receiver is connected.`
       : `No receiver is following ${output.name}'s feed yet.`
@@ -1065,7 +1065,7 @@ export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: 
             <span className="text-muted-foreground">Current Program on {output.name}: {output.sceneName ?? live.scenes.find((s) => s.id === output.sceneId)?.name ?? "its own feed"}</span></>}
         </div>
       ) : (
-        <p role={role === "screens" ? "status" : undefined} className="text-muted-foreground">{role === "screens" ? "No congregation output is assigned to this desk. Ask the main host to review output scope in Permissions." : "The host has no congregation output."}</p>
+        <p role={role === "screens" ? "status" : undefined} className="text-muted-foreground">{role === "screens" ? "No congregation output is assigned to this desk. Ask the main computer to review output scope in Permissions." : "The main computer has no congregation output."}</p>
       )}
       {takes && takeBlockReason && <p role="status" className="text-xs text-amber-700">{takeBlockReason}</p>}
       {takes && output?.sceneId && releaseBlockReason && <p role="status" className="text-xs text-amber-700">{releaseBlockReason}</p>}
@@ -1078,7 +1078,7 @@ export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: 
             {edits && deskEditable(s) && <Button size="sm" variant="ghost" aria-label={cameraOnly ? `Change the cameras in ${s.name}` : `Edit ${s.name}`} disabled={!ok} onClick={() => { setSaid(""); setEditing(s.id) }}>{cameraOnly ? "Cameras…" : "Edit…"}</Button>}
           </li>
         ))}
-        {live.scenes.length === 0 && <li className="text-muted-foreground">No scenes yet{edits && !cameraOnly ? "" : ": they are made on the host (Live → Production tools → Scenes)"}.</li>}
+        {live.scenes.length === 0 && <li className="text-muted-foreground">No scenes yet{edits && !cameraOnly ? "" : ": they are made on the main computer (Live → Production tools → Scenes)"}.</li>}
       </ul>
       <div className="flex flex-wrap gap-2">
         {takes && output?.sceneId && !groupMode && <Button size="sm" variant="ghost" title={releaseBlockReason ?? undefined} disabled={!ok || !!releaseBlockReason} onClick={() => void send({ command: "release_scene", value: output.id })}>Back to its own feed</Button>}
@@ -1100,7 +1100,7 @@ export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: 
         <p className="mb-1 font-semibold">Recent group Take results</p>
         <ul className="flex flex-col gap-2">{live.groupTakeResults.slice(0, 5).map((result) => <li key={result.requestId} className="rounded-sm bg-muted/30 p-2 text-xs">
           <p className="font-semibold">{live.scenes.find((candidate) => candidate.id === result.scene)?.name ?? result.scene}{result.by ? ` · by ${result.by}` : ""}</p>
-          <ul className="mt-1 flex flex-col gap-1">{result.outputs.map((out) => <li key={out.id} role="status"><span className="font-medium">{out.name}:</span> {out.status === "pending" ? (Date.now() - result.at > 10_000 ? "No host result received yet. Check Current Program before retrying." : "Waiting for the host result.") : out.status === "host-applied" ? "Applied on host; receiver confirmation is not available." : `Not applied on host${out.reason ? `: ${out.reason}` : "."}`}</li>)}</ul>
+          <ul className="mt-1 flex flex-col gap-1">{result.outputs.map((out) => <li key={out.id} role="status"><span className="font-medium">{out.name}:</span> {out.status === "pending" ? (Date.now() - result.at > 10_000 ? "No main computer result received yet. Check Current Program before retrying." : "Waiting for the main computer result.") : out.status === "host-applied" ? "Applied on the main computer; receiver confirmation is not available." : `Not applied on the main computer${out.reason ? `: ${out.reason}` : "."}`}</li>)}</ul>
         </li>)}</ul>
       </section>}
       {said && <p role="status" className="text-muted-foreground">{said}</p>}
@@ -1146,11 +1146,11 @@ function GroupTakeControls({
       return
     }
     if (!groupScene) {
-      setSaid("The host has no scene available to Take.")
+      setSaid("The main computer has no scene available to Take.")
       return
     }
     if (!groupImpactReady) {
-      setSaid("The host has not supplied current language, look, and frame details for every output. Refresh the desk before reviewing this Take.")
+      setSaid("The main computer has not supplied current language, look, and frame details for every output. Refresh the desk before reviewing this Take.")
       return
     }
     setReviewGroupTake(true)
@@ -1165,12 +1165,12 @@ function GroupTakeControls({
     try {
       requestId = groupTakeCommandId()
     } catch {
-      setSaid("A secure command ID is unavailable in this browser. Reconnect using the host's secure link before requesting a group Take.")
+      setSaid("A secure command ID is unavailable in this browser. Reconnect using the main computer's secure link before requesting a group Take.")
       return
     }
     const result = await send({ command: "group_take_scene", value: { outputs: selectedGroupOutputs.map((output) => output.id), scene: groupScene.id }, id: requestId })
     if (result.ok) {
-      setSaid(result.note ?? "The host accepted the request. Waiting for per-output host results.")
+      setSaid(result.note ?? "The main computer accepted the request. Waiting for per-output results from the main computer.")
       setReviewGroupTake(false)
       setGroupTargets([])
     } else {
@@ -1185,7 +1185,7 @@ function GroupTakeControls({
         <Button size="sm" variant={groupMode ? "default" : "outline"} disabled={(!!takeBlockReason && !groupMode) || groupOutputs.length < 2 || takePending} aria-pressed={groupMode} onClick={() => { onGroupModeChange(!groupMode); setGroupTargets([]); setSaid("") }}>{groupMode ? "Exit group mode" : "Choose group targets…"}</Button>
       </div>
       {takeBlockReason && <p role="status" className="text-xs text-amber-700">Group Take unavailable: {takeBlockReason}</p>}
-      {groupOutputs.length < 2 && <p role="status" className="text-xs text-muted-foreground">A separate host grant for at least two congregation outputs is required before group Take can be used.</p>}
+      {groupOutputs.length < 2 && <p role="status" className="text-xs text-muted-foreground">A separate main computer grant for at least two congregation outputs is required before group Take can be used.</p>}
       {groupMode && groupOutputs.length >= 2 && <>
         <fieldset className="flex flex-wrap gap-x-4 gap-y-2">
           <legend className="mb-2 text-xs font-semibold">Choose exact outputs</legend>
@@ -1210,7 +1210,7 @@ function GroupTakeControls({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Review this group Take</DialogTitle>
-          <DialogDescription>The host rechecks access, service, scene, and every output revision before applying one request. Review each output’s Current Program, language, look, source followers, and scene layout. The layout sketch does not show live source frames or receiver status.</DialogDescription>
+          <DialogDescription>The main computer rechecks access, service, scene, and every output revision before applying one request. Review each output’s Current Program, language, look, source followers, and scene layout. The layout sketch does not show live source frames or receiver status.</DialogDescription>
         </DialogHeader>
         <div className="rounded-md border border-border bg-muted/30 p-3">
           <p className="font-semibold">{groupScene?.name ?? "Scene"} to {selectedGroupOutputs.length} outputs</p>

@@ -54,7 +54,7 @@ export interface SceneTakeRefusal {
 /** Where to look for the receiver's confirmation of this Take. */
 export type SceneTakeReceiver =
   | { kind: "feed"; feedSeq: number } // confirmed once the feed acknowledges `feedSeq` or later
-  | { kind: "none" } // a window or NDI: the host can say it sent it, not that anyone saw it
+  | { kind: "none" } // a window or NDI: the main computer can say it sent it, not that anyone saw it
 
 export type SceneTakeResult =
   | { ok: true; acceptedRevision: number; receiver: SceneTakeReceiver }
