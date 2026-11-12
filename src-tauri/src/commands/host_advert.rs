@@ -147,7 +147,8 @@ mod tests {
         assert_eq!(ad.txt, vec![("v".into(), "1".into()), ("tls".into(), "8081".into()), ("k".into(), "5e3c9a1f0b7d2e4a".into())]);
         // No https, no hint; nothing that is not a pin either.
         assert_eq!(host_advert("0.0.0.0", 8080, None, Some(pin), "CAC", "studio").unwrap().txt, vec![("v".into(), "1".into())]);
-        for odd in ["", "5e3c9a1f", "not a hex pin at all, no"] {
+        let (not_hex, hex_then_not) = ("g".repeat(64), format!("{}zz", &pin[..62]));
+        for odd in ["", "5e3c9a1f", "not a hex pin at all, no", not_hex.as_str(), hex_then_not.as_str()] {
             assert_eq!(host_advert("0.0.0.0", 8080, Some(8081), Some(odd), "CAC", "studio").unwrap().txt.len(), 2, "{odd:?}");
         }
     }

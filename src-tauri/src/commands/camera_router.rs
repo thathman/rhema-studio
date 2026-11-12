@@ -294,6 +294,11 @@ impl CameraRouter {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// Whether it is turned on (it may be between restarts).
+    pub fn wanted(&self) -> bool {
+        self.lock().want
+    }
+
     /// Stop it now (the operator turned it off, or Rhema is closing).
     pub fn stop(&self) {
         let mut s = self.lock();
