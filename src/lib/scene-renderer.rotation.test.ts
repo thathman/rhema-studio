@@ -84,7 +84,15 @@ function outputPivot(scene: Scene): { x: number; y: number } {
   const frame = sceneFrame({ isLive: false, liveVerse: null, sources: {} as never, themes: [] }, { themeId: "t" }, scene)
   const l = frame.layers[0]!
   const r = { x: (l.box.x / 100) * 1920, y: (l.box.y / 100) * 1080, w: (l.box.w / 100) * 1920, h: (l.box.h / 100) * 1080 }
-  return layerPivot(ctxOf(createCanvas(8, 8)), l, r, 1080)
+  return layerPivot(ctxOf(createCanvas(8, 8)), l, r, 1080, { x: 0, w: 1920 })
+}
+
+/** The leftmost and rightmost bright (text) pixel columns. */
+function inkSpan(c: Canvas): { min: number; max: number } {
+  const d = ctxOf(c).getImageData(0, 0, 1920, 1080).data
+  let min = Infinity, max = -Infinity
+  for (let i = 0; i < d.length; i += 4) if (d[i]! > 200 && d[i + 1]! > 200 && d[i + 2]! > 200) { const x = (i / 4) % 1920; min = Math.min(min, x); max = Math.max(max, x) }
+  return { min, max }
 }
 
 function differing(a: Canvas, b: Canvas): number {
@@ -202,7 +210,7 @@ describe("layer rotation (#851 G7)", () => {
     const { scene, issues } = designToScene({ ...design, scene: turnedScene })
     expect(issues).toEqual([])
     // The saved box is the width the editor wraps at, not an estimate stretched by the long word.
-    expect(scene.layers[0]).toMatchObject({ rotation: 30, box: { x: 20, w: 15 } })
+    expect(scene.layers[0]).toMatchObject({ rotation: 30, box: { x: 20, w: 15 }, textWiden: "right" })
     const editor = editorTextPivot(node)
     const output = outputPivot(scene)
     expect(Math.abs(output.x - editor.x), "pivot x").toBeLessThan(1)
@@ -212,6 +220,76 @@ describe("layer rotation (#851 G7)", () => {
     const upright = { ...scene, layers: [{ ...scene.layers[0]!, rotation: undefined }] }
     const still = [inkCentre(await drawEditor(upright)), inkCentre(drawOutput(upright))]
     expect(Math.hypot(still[0]!.x - still[1]!.x, still[0]!.y - still[1]!.y), "ink, upright").toBeLessThan(4)
+  })
+
+  it("draws text saved before the editor's wrap width exactly as before: an over-wide word squeezed into its box", () => {
+    // An approved scene from before: no `textWiden`, a box sized by the old estimate.
+    const layer = { text: "Olúwaseun ẹ kú àbọ̀", fontSize: 120, fontWeight: "800" as const, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const, lineHeight: 1.2, box: { x: 70, y: 30, w: 15, h: 40 } }
+    for (const rotation of [undefined, 20]) {
+      const scene = bar("text", { ...layer, rotation })
+      expect(normalizeScene(scene)?.layers[0]?.textWiden).toBeUndefined()
+      // What main drew: the box clipped, lines wrapped at the box and squeezed to its width.
+      const reference = createCanvas(1920, 1080)
+      const c = ctxOf(reference)
+      c.fillStyle = "#101020"
+      c.fillRect(0, 0, 1920, 1080)
+      const r = { x: 1344, y: 324, w: 288, h: 432 }
+      c.font = "normal 800 120px Arial"
+      const lines: string[] = []
+      let line = ""
+      for (const word of layer.text.split(" ")) {
+        const next = line ? `${line} ${word}` : word
+        if (line && c.measureText(next).width > r.w) {
+          lines.push(line)
+          line = word
+        } else line = next
+      }
+      lines.push(line)
+      const step = 120 * 1.2
+      const pivot = { x: r.x + r.w / 2, y: r.y + ((lines.length - 1) * step + 120) / 2 }
+      if (rotation) {
+        c.translate(pivot.x, pivot.y)
+        c.rotate((rotation * Math.PI) / 180)
+        c.translate(-pivot.x, -pivot.y)
+      }
+      c.beginPath()
+      c.rect(r.x, r.y, r.w, r.h)
+      c.clip()
+      c.fillStyle = "#ffffff"
+      c.textAlign = "center"
+      c.textBaseline = "top"
+      lines.forEach((l, i) => c.fillText(l, r.x + r.w / 2, r.y + i * step, r.w))
+      expect(differing(reference, drawOutput(scene)), `${rotation ?? 0}°`).toBe(0)
+    }
+  })
+
+  it("widens text saved by the editor, from its origin edge, but never past the frame", async () => {
+    const words = { text: "Supercalifragilistic", fontSize: 120, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const, lineHeight: 1.2 }
+    // Left origin, near the right edge: the word grows right and stops at the frame's edge.
+    const edge = bar("text", { ...words, textWiden: "right", box: { x: 80, y: 30, w: 15, h: 40 } })
+    const out = drawOutput(edge)
+    const ink = inkSpan(out)
+    expect(ink.min).toBeGreaterThanOrEqual(1536 - 1)
+    expect(ink.max).toBeLessThanOrEqual(1920)
+    expect(ink.max, "wider than the 288 px box").toBeGreaterThan(1536 + 288 + 50)
+    expect(outputPivot(edge).x, "turns about the capped block's centre").toBeCloseTo(1536 + (1920 - 1536) / 2, 0)
+    // Mid-frame it widens to the measured word, as the editor draws it.
+    const free = bar("text", { ...words, textWiden: "right", box: { x: 10, y: 30, w: 15, h: 40 } })
+    const both = [inkCentre(await drawEditor(free)), inkCentre(drawOutput(free))]
+    expect(Math.abs(both[0]!.x - both[1]!.x)).toBeLessThan(4)
+    // A centred-origin node (an imported Avnac design) widens both ways, as the editor does.
+    const design = sceneToDesign(bar("text", { ...words, box: { x: 40, y: 30, w: 15, h: 40 } }))
+    const node = design.scene.nodes.bar as SaraswatiTextNode
+    const centred = { ...design, scene: { ...design.scene, nodes: { ...design.scene.nodes, bar: { ...node, originX: "center" as const, x: node.x + node.width / 2 } } } }
+    const { scene, issues } = designToScene(centred)
+    expect(issues).toEqual([])
+    expect(scene.layers[0]).toMatchObject({ textWiden: "both", box: { x: 40, w: 15 } })
+    const turnedCentred = designToScene({ ...centred, scene: applyCommand(centred.scene, { type: "ROTATE_NODE", id: "bar", rotation: 25 }) }).scene
+    for (const s of [scene, turnedCentred]) {
+      const editorInk = inkCentre(await drawEditor(s)), outputInk = inkCentre(drawOutput(s))
+      expect(Math.hypot(editorInk.x - outputInk.x, editorInk.y - outputInk.y), `${s.layers[0]!.rotation ?? 0}°`).toBeLessThan(4)
+    }
+    expect(outputPivot(scene).x).toBeCloseTo(768 + 144, 0)
   })
 
   it("refuses to save a turned camera, video or ticker, and outputs never turn one from an older file", () => {

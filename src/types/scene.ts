@@ -127,6 +127,12 @@ export interface SceneLayer {
   lineHeight?: number
   textColor?: string
   underline?: boolean
+  /**
+   * text: how a word wider than the box widens the block, as the design editor lays it out: from
+   * the left edge ("right"), both sides ("both") or the right edge ("left"). Set by every save from
+   * the design editor; absent on text saved before, which squeezes the word into the box instead.
+   */
+  textWiden?: "right" | "both" | "left"
   /** picture: drawn as the design editor draws it (crop, rounded corners, clips); see `ImageDraw`. */
   imageDraw?: ImageDraw
   /** picture, video: a library picture or video. A picture also keeps its picture as a data URL (so outputs need nothing else). */
@@ -212,6 +218,8 @@ export interface SceneLayerFrame {
   lineHeight?: number
   textColor?: string
   underline?: boolean
+  /** text: how an over-wide word widens the block (see `SceneLayer.textWiden`). */
+  textWiden?: "right" | "both" | "left"
   imageUrl?: string | null
   /** picture: drawn as the design editor draws it. */
   imageDraw?: ImageDraw

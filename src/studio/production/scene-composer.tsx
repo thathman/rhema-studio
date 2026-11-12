@@ -1,6 +1,6 @@
 import { liveLanguage } from "@/lib/output-language"
 import { useTimerStore, monotonicNow } from "@/stores/timer-store"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { ArrowDownIcon, ArrowUpIcon, BookmarkPlusIcon, CopyIcon, EyeIcon, EyeOffIcon, PencilIcon, PinIcon, PinOffIcon, PlusIcon, SaveIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -438,10 +438,15 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
   const [measure] = useState(() => (typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d")))
   const frames = new Map(sceneFrame(live, output, scene, true).layers.map((f) => [f.id, f]))
   const pivots = new Map([...frames.values()].map((f) => [f.id, framePivot(measure, f, W, H)]))
+  // This render's frames, for a drag in progress (kept current without remaking `drag`).
+  const framesNow = useRef(frames)
+  useEffect(() => {
+    framesNow.current = frames
+  })
   const turnOf = (l: SceneLayer) => (layerTurns(l.kind) ? l.rotation : undefined)
 
   const box = useRef<HTMLDivElement>(null)
-  const drag = (e: React.PointerEvent, l: SceneLayer, mode: "move" | "size") => {
+  const drag = useCallback((e: React.PointerEvent, l: SceneLayer, mode: "move" | "size") => {
     e.preventDefault()
     e.stopPropagation()
     onSelect(l.id)
@@ -452,7 +457,7 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
     el.setPointerCapture?.(e.pointerId)
     const turn = layerTurns(l.kind) ? l.rotation : undefined
     // Where the layer turns for a given box, so a resize keeps its far corner still on screen.
-    const frame = frames.get(l.id)
+    const frame = framesNow.current.get(l.id)
     const pivotOf = (b: SceneBox) => (frame ? framePivot(measure, { ...frame, box: b }, W, H) : { x: b.x + b.w / 2, y: b.y + b.h / 2 })
     const move = (ev: PointerEvent) => {
       // A resize follows the layer's own (turned) edges.
@@ -471,7 +476,7 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
     }
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", up)
-  }
+  }, [onMove, onSelect, measure, W, H])
 
   /** Pick the topmost layer under the pointer where it is drawn (turned or not) and drag it. */
   const pick = (e: React.PointerEvent) => {

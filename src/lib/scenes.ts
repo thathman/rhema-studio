@@ -258,6 +258,7 @@ export function normalizeScene(raw: unknown): Scene | null {
       lineHeight: clamp(l.lineHeight, 0.5, 3, 1.2),
       textColor: typeof l.textColor === "string" && TEXT_COLOR.test(l.textColor) ? l.textColor : "#ffffff",
       underline: l.underline === true,
+      ...(l.textWiden === "right" || l.textWiden === "both" || l.textWiden === "left" ? { textWiden: l.textWiden } : {}),
     } : {}
     const ellipseColor = l.kind === "ellipse" ? (typeof l.color === "string" && TEXT_COLOR.test(l.color) ? l.color : "#3157a4") : undefined
     // A gradient Rhema cannot draw is dropped and the layer shows its solid colour.
@@ -404,7 +405,7 @@ function contentKey(f: SceneLayerFrame): string {
   if (f.kind === "camera") return f.cameraUrl ?? f.fallback ?? ""
   // A clock's time moves by itself: only starting, stopping or a different kind of clock is new.
   if (f.kind === "clock") return f.clock?.mode ?? ""
-  if (f.kind === "text") return fingerprint(JSON.stringify([f.text, f.fontFamily, f.fontSize, f.fontWeight, f.fontStyle, f.textAlign, f.lineHeight, f.textColor, f.underline]))
+  if (f.kind === "text") return fingerprint(JSON.stringify([f.text, f.fontFamily, f.fontSize, f.fontWeight, f.fontStyle, f.textAlign, f.lineHeight, f.textColor, f.underline, f.textWiden]))
   return f.gradient ? fingerprint(JSON.stringify(f.gradient)) : (f.color ?? "")
 }
 
@@ -463,6 +464,7 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
         lineHeight: l.lineHeight ?? 1.2,
         textColor: l.textColor ?? "#ffffff",
         underline: l.underline ?? false,
+        ...(l.textWiden ? { textWiden: l.textWiden } : {}),
       }
     }
     // A camera: its stream, played by each output from the church network. One hidden from scenes

@@ -83,14 +83,22 @@ describe("Scene Composer hit-testing of turned layers (#851 G7)", () => {
     expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeLessThan(1e-6)
     // Grown past the frame's edge, it stops where it still fits, corner still in place.
     const edge = resizeTurned(start, { w: 100, h: 100 }, 25, 1920, 1080, pivotOf)
-    expect(edge.x).toBeGreaterThanOrEqual(-1e-9)
-    expect(edge.y).toBeGreaterThanOrEqual(-1e-9)
-    expect(edge.x + edge.w).toBeLessThanOrEqual(100 + 1e-9)
-    expect(edge.y + edge.h).toBeLessThanOrEqual(100 + 1e-9)
+    // (within the 0.05% the composer's rounding is allowed)
+    expect(edge.x).toBeGreaterThanOrEqual(-0.05)
+    expect(edge.y).toBeGreaterThanOrEqual(-0.05)
+    expect(edge.x + edge.w).toBeLessThanOrEqual(100.05)
+    expect(edge.y + edge.h).toBeLessThanOrEqual(100.05)
     expect(edge.w).toBeGreaterThan(start.w)
     const kept = corner(edge)
     expect(Math.hypot(kept.x - before.x, kept.y - before.y)).toBeLessThan(1e-6)
     // Upright, the top-left stays and the size is held inside the frame, as before.
     expect(resizeTurned(start, { w: 90, h: 20 }, undefined, 1920, 1080)).toEqual({ x: 20, y: 30, w: 80, h: 20 })
+  })
+  it("still resizes a turned box the composer's rounding left a hair outside the frame", () => {
+    // Rounded to 0.1%, a turned layer's box can end 0.03% past the bottom edge.
+    const start = { x: 40, y: 60, w: 30, h: 40.03 }
+    const next = resizeTurned(start, { w: 35, h: 40.03 }, 180, 1920, 1080)
+    expect(next.w).toBe(35)
+    expect(next.x).toBeCloseTo(35, 6)
   })
 })

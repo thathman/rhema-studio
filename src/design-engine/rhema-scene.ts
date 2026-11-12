@@ -88,8 +88,12 @@ function toNode(layer: SceneLayer): SaraswatiNode {
   const width = (layer.box.w / 100) * DESIGN_WIDTH
   const height = (layer.box.h / 100) * DESIGN_HEIGHT
   if (layer.kind === "text") {
+    // Text that widens both ways (or leftwards) opens anchored where it widens from, as it was saved.
+    const origin = layer.textWiden === "both" ? "center" as const : layer.textWiden === "left" ? "right" as const : "left" as const
     const text: SaraswatiTextNode = {
       ...basePaint(layer),
+      x: (layer.box.x / 100) * DESIGN_WIDTH + (origin === "center" ? width / 2 : origin === "right" ? width : 0),
+      originX: origin,
       type: "text",
       text: layer.text ?? "",
       width,
@@ -370,6 +374,8 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
           layer.lineHeight = node.lineHeight
           layer.textColor = node.color.color
           layer.underline = node.underline
+          // Saved by the editor: outputs widen an over-wide word as the editor does (from its origin).
+          layer.textWiden = node.originX === "center" ? "both" : node.originX === "right" ? "left" : "right"
         }
       }
     } else if (node.type === "image") {

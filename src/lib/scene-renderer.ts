@@ -129,13 +129,20 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, r: { x: number; y:
 
 type Rect = { x: number; y: number; w: number; h: number }
 
+/** The frame's horizontal extent in canvas pixels (a letterboxed frame starts right of 0). */
+export type FrameSpan = { x: number; w: number }
+
 /**
- * How static text lays out in its box: font, wrapped lines, line step and width. Sets `ctx.font`.
- * The lines are those that fit in the box (each a whole em tall), as `paintStaticText` draws them.
- * As in the design editor, the words wrap at the box's width (the editor's text width) and a word
- * wider than that widens the block to its measured width rather than being squeezed.
+ * How static text lays out in its box: font, wrapped lines, line step, and the block's left edge
+ * and width. Sets `ctx.font`. The lines are those that fit in the box (each a whole em tall), as
+ * `paintStaticText` draws them. The words wrap at the box's width.
+ *
+ * Text saved by the design editor since #876's follow-up (`textWiden` set) lays out as the editor
+ * does: a word wider than the box widens the block to its measured width, growing away from the
+ * node's origin edge, but never past the frame's edges. Text saved before keeps the old look: the
+ * block is the box and an over-wide word is squeezed into it, so an approved scene never changes.
  */
-function staticTextLayout(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, r: Rect, frameHeight: number) {
+function staticTextLayout(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, r: Rect, frameHeight: number, span: FrameSpan) {
   const text = layer.text ?? ""
   const fontSize = Math.max(1, Math.min(400, layer.fontSize ?? 72) * frameHeight / 1080)
   const fontFamily = (layer.fontFamily ?? "Arial").replace(/[^\p{L}\p{N}, _-]/gu, "").trim().slice(0, 120) || "Arial"
@@ -162,10 +169,18 @@ function staticTextLayout(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame,
     }
     lines.push(line)
   }
-  const width = Math.max(r.w, ...lines.map((line) => ctx.measureText(line).width))
+  let left = r.x, width = r.w
+  const grow = layer.textWiden
+  if (grow === "right" || grow === "both" || grow === "left") {
+    const measured = Math.max(r.w, ...lines.map((line) => ctx.measureText(line).width))
+    const room = { left: Math.max(0, r.x - span.x), right: Math.max(0, span.x + span.w - r.x - r.w) }
+    const most = grow === "right" ? r.w + room.right : grow === "left" ? r.w + room.left : r.w + 2 * Math.min(room.left, room.right)
+    width = Math.min(measured, most)
+    left = r.x - (width - r.w) * (grow === "right" ? 0 : grow === "left" ? 1 : 0.5)
+  }
   // Only whole lines that fit in the box are drawn.
   const fit = Math.max(0, Math.floor((r.h - fontSize) / step) + 1)
-  return { fontSize, align, step, width, lines: lines.slice(0, fit) }
+  return { fontSize, align, step, left, width, lines: lines.slice(0, fit) }
 }
 
 /**
@@ -173,24 +188,24 @@ function staticTextLayout(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame,
  * about the centre of its words (a tight block: each line a line step, the last an em tall), not
  * about a taller box kept for clipping; every other layer about its box's centre.
  */
-export function layerPivot(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: Rect, frameHeight: number): { x: number; y: number } {
+export function layerPivot(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: Rect, frameHeight: number, span: FrameSpan): { x: number; y: number } {
   const centre = { x: r.x + r.w / 2, y: r.y + r.h / 2 }
   if (l.kind !== "text" || !l.text) return centre
   ctx.save()
-  const { fontSize, step, width, lines } = staticTextLayout(ctx, l, r, frameHeight)
+  const { fontSize, step, left, width, lines } = staticTextLayout(ctx, l, r, frameHeight, span)
   ctx.restore()
   if (!lines.length) return centre
-  return { x: r.x + width / 2, y: r.y + ((lines.length - 1) * step + fontSize) / 2 }
+  return { x: left + width / 2, y: r.y + ((lines.length - 1) * step + fontSize) / 2 }
 }
 
 /** Literal text saved in an Avnac design, drawn by the same renderer on Preview and every output. */
-function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, r: Rect, frameHeight: number): void {
+function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, r: Rect, frameHeight: number, span: FrameSpan): void {
   if (!layer.text) return
   const color = /^#[0-9a-f]{6}$/i.test(layer.textColor ?? "") ? layer.textColor! : "#ffffff"
   ctx.save()
-  const { fontSize, align, step, width: w, lines } = staticTextLayout(ctx, layer, r, frameHeight)
+  const { fontSize, align, step, left: x0, width: w, lines } = staticTextLayout(ctx, layer, r, frameHeight, span)
   ctx.beginPath()
-  ctx.rect(r.x, r.y, w, r.h)
+  ctx.rect(x0, r.y, w, r.h)
   ctx.clip()
   ctx.fillStyle = color
   ctx.textAlign = align
@@ -198,11 +213,11 @@ function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, 
   let y = r.y
   for (const line of lines) {
     if (line) {
-      const x = align === "center" ? r.x + w / 2 : align === "right" ? r.x + w : r.x
+      const x = align === "center" ? x0 + w / 2 : align === "right" ? x0 + w : x0
       ctx.fillText(line, x, y, w)
       if (layer.underline) {
         const width = Math.min(w, ctx.measureText(line).width)
-        const left = align === "center" ? r.x + (w - width) / 2 : align === "right" ? r.x + w - width : r.x
+        const left = align === "center" ? x0 + (w - width) / 2 : align === "right" ? x0 + w - width : x0
         const underlineY = y + fontSize * 1.04
         ctx.beginPath()
         ctx.moveTo(left, underlineY)
@@ -328,7 +343,7 @@ export function feedLayerFresh(canvas: HTMLCanvasElement, l: Pick<SceneLayerFram
 }
 
 /** One layer's content in its box (`ctx`'s alpha is already the layer's opacity). */
-function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions): void {
+function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions, span: FrameSpan): void {
   if (l.kind === "color") {
     ctx.fillStyle = scenePaint(ctx, l.color ?? "#000", l.gradient, r)
     ctx.fillRect(r.x, r.y, r.w, r.h)
@@ -378,7 +393,7 @@ function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: n
     // The time fills its box in the look's text style; whatever is behind shows around it.
     fitText(ctx, clockText(l.clock, opts.now ?? Date.now()), r, l.theme, 0.8)
   } else if (l.kind === "text") {
-    paintStaticText(ctx, l, r, height)
+    paintStaticText(ctx, l, r, height, span)
   } else if (l.kind === "feed" && l.theme && l.verse) {
     const lc = opts.layerCanvas(l.id)
     const { width: tw, height: th } = l.theme.resolution
@@ -403,15 +418,15 @@ function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: n
  * A layer with a fade: its content painted into a canvas of its own and placed over the old
  * content fading out. A camera or video the page shows under the canvas cannot fade there: it cuts.
  */
-function paintFading(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions, fader: LayerFader): void {
+function paintFading(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions, fader: LayerFader, span: FrameSpan): void {
   const w = Math.max(1, Math.round(r.w)), h = Math.max(1, Math.round(r.h))
   const { canvas, from, p } = fader.begin(l.id, l.key ?? "", l.fadeMs ?? 0, w, h)
   const c = canvas.getContext("2d")
-  if (!c) return paintLayer(ctx, l, r, height, opts)
+  if (!c) return paintLayer(ctx, l, r, height, opts, span)
   c.save()
   c.clearRect(0, 0, w, h)
   c.translate(-r.x, -r.y)
-  paintLayer(c, { ...l, opacity: 1 }, r, height, opts)
+  paintLayer(c, { ...l, opacity: 1 }, r, height, opts, span)
   c.restore()
   if (from) {
     ctx.globalAlpha = l.opacity * (1 - p)
@@ -448,16 +463,17 @@ export function drawScene(ctx: CanvasRenderingContext2D, canvasWidth: number, ca
   }
   const width = area.w
   const height = area.h
+  const span = { x: area.x, w: width }
   opts.fader?.keep(new Set(frame.layers.map((l) => l.id)))
   for (const l of frame.layers) {
     const box = rect(l, width, height)
     const r = { ...box, x: box.x + area.x, y: box.y + area.y }
     ctx.save()
     // A turned layer (#851 G7) turns about the point the design editor turns it about.
-    if (layerTurns(l.kind) && l.rotation) turnAbout(ctx, layerPivot(ctx, l, r, height), l.rotation)
+    if (layerTurns(l.kind) && l.rotation) turnAbout(ctx, layerPivot(ctx, l, r, height, span), l.rotation)
     ctx.globalAlpha = l.opacity
-    if (opts.fader && l.fadeMs && !opts.preview && !opts.cameraBelow?.(l.id)) paintFading(ctx, l, r, height, opts, opts.fader)
-    else paintLayer(ctx, l, r, height, opts)
+    if (opts.fader && l.fadeMs && !opts.preview && !opts.cameraBelow?.(l.id)) paintFading(ctx, l, r, height, opts, opts.fader, span)
+    else paintLayer(ctx, l, r, height, opts, span)
     if (opts.preview && l.label) {
       ctx.globalAlpha = 1
       ctx.globalCompositeOperation = "source-over"

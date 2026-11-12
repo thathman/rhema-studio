@@ -60,9 +60,12 @@ the small helpers they import. The editor UI, routing, storage, AI, MCP, Wails b
 - `saraswati/spatial/index.ts`: a lint exception on the deprecated no-op `setSaraswatiInteractionScale`.
 - Added `avnac-engine.test.ts` (Rhema's compatibility tests).
 - Text line height (12 November 2026): `saraswati/utils/text.ts` gains `textLineHeight`, which keeps a
-  text node's line height to 0.5–3 (the range Rhema saves and its outputs draw). `text.ts`,
-  `text-layout.ts` and `saraswati/spatial/index.ts` use it where upstream raised anything below 1 to 1,
-  and `text-layout.ts` adds the line height to its layout cache key, since the box height depends on it.
+  text node's line height to 0.5–3 (the range Rhema saves and its outputs draw): below 0.5 becomes 0.5,
+  above 3 becomes 3, and a missing or non-finite value (NaN, Infinity) becomes 1.2. Upstream raised
+  anything below 1 to 1 and had no upper limit. `text.ts`, `text-layout.ts` and
+  `saraswati/spatial/index.ts` (`getTextNodeVisualHeight`, `estimateTextNodeBox`) use it in place of
+  `Math.max(1, lineHeight)`, and `text-layout.ts` adds the line height to its layout cache key, since
+  the box height depends on it.
 
 Nothing else in these files is changed.
 

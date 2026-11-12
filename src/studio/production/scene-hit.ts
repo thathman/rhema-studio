@@ -14,6 +14,8 @@ export interface HitLayer {
 }
 
 const centreOf = (b: SceneBox) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 })
+/** How far (in % of the frame) a resized turned box may poke past the frame: the composer's rounding. */
+const SLACK = 0.05
 
 /**
  * The topmost layer under a point (in % of a `width`×`height` frame), or null. A layer is turned
@@ -37,7 +39,7 @@ export function layerAt(layers: readonly HitLayer[], p: { x: number; y: number }
 export function framePivot(ctx: CanvasRenderingContext2D | null, l: SceneLayerFrame, width: number, height: number): { x: number; y: number } {
   if (!ctx || !l.rotation || l.kind !== "text") return centreOf(l.box)
   const r = { x: (l.box.x / 100) * width, y: (l.box.y / 100) * height, w: (l.box.w / 100) * width, h: (l.box.h / 100) * height }
-  const p = layerPivot(ctx, l, r, height)
+  const p = layerPivot(ctx, l, r, height, { x: 0, w: width })
   return { x: (p.x / width) * 100, y: (p.y / height) * 100 }
 }
 
@@ -73,7 +75,9 @@ export function resizeTurned(
     const o = offset({ x: start.x, y: start.y, w, h }), t = turn(o)
     return { x: ((corner.x - o.x + t.x) / width) * 100, y: ((corner.y - o.y + t.y) / height) * 100, w, h }
   }
-  const fits = (b: SceneBox) => b.x >= -1e-9 && b.y >= -1e-9 && b.x + b.w <= 100 + 1e-9 && b.y + b.h <= 100 + 1e-9
+  // A little slack: the composer rounds boxes to 0.1%, which can leave a corner a hair outside the
+  // frame; without it a resize from such a box could never move.
+  const fits = (b: SceneBox) => b.x >= -SLACK && b.y >= -SLACK && b.x + b.w <= 100 + SLACK && b.y + b.h <= 100 + SLACK
   const target = place(size.w, size.h)
   if (fits(target)) return target
   // Shrink the change until the box fits (the start box is in the frame).
