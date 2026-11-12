@@ -9,7 +9,8 @@
 # code check per computer; and ScreenCheck: tries said on the TV, Start with the TV, an output that is off,
 # the edge inset and the frame rate; IdentifyGateCheck, Identify TV never extended and limited per computer;
 # KeyPinCheck (1.8, doc 48): the key pin, the old pin accepted once and upgraded, the network hint, the
-# TLS check at a new address (a wrong key refused, against a TLS server on this computer) and when it looks.
+# TLS check at a new address (a wrong key refused, against a TLS server on this computer), when it looks,
+# and which announced addresses get a check (ProbeQueue).
 # A failure stops the build.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -19,7 +20,7 @@ JAR=$SDK/platforms/android-34/android.jar
 J=${JAVA_HOME:+$JAVA_HOME/bin/}
 rm -rf build && mkdir -p build/classes build/dex build/gen build/check
 # Plain Java parts only (no Android), checked with the computer's own Java.
-"${J}javac" --release 8 -Xlint:-options -d build/check src/com/openbezal/rhema/receiver/CodeProof.java src/com/openbezal/rhema/receiver/Guard.java src/com/openbezal/rhema/receiver/Ready.java src/com/openbezal/rhema/receiver/Pending.java src/com/openbezal/rhema/receiver/CodeTries.java src/com/openbezal/rhema/receiver/BootStart.java src/com/openbezal/rhema/receiver/ScreenFit.java src/com/openbezal/rhema/receiver/IdentifyGate.java src/com/openbezal/rhema/receiver/BackKey.java src/com/openbezal/rhema/receiver/KeyPin.java src/com/openbezal/rhema/receiver/Rediscovery.java $(find test -name '*.java')
+"${J}javac" --release 8 -Xlint:-options -d build/check src/com/openbezal/rhema/receiver/CodeProof.java src/com/openbezal/rhema/receiver/Guard.java src/com/openbezal/rhema/receiver/Ready.java src/com/openbezal/rhema/receiver/Pending.java src/com/openbezal/rhema/receiver/CodeTries.java src/com/openbezal/rhema/receiver/BootStart.java src/com/openbezal/rhema/receiver/ScreenFit.java src/com/openbezal/rhema/receiver/IdentifyGate.java src/com/openbezal/rhema/receiver/BackKey.java src/com/openbezal/rhema/receiver/KeyPin.java src/com/openbezal/rhema/receiver/Rediscovery.java src/com/openbezal/rhema/receiver/ProbeQueue.java $(find test -name '*.java')
 "${J}java" -cp build/check com.openbezal.rhema.receiver.CodeProofCheck
 "${J}java" -cp build/check com.openbezal.rhema.receiver.ReadyCheck
 "${J}java" -cp build/check com.openbezal.rhema.receiver.PendingCheck

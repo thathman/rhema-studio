@@ -182,15 +182,17 @@ public class MainActivity extends Activity {
     /** Announced services waiting to be resolved (one at a time: Android allows no more). */
     private final ArrayDeque<NsdServiceInfo> toResolve = new ArrayDeque<NsdServiceInfo>();
     private boolean resolving;
-    /** Services and addresses already tried in this browse. */
-    private final Set<String> tried = new HashSet<String>();
+    /** Services already resolved in this browse. */
+    private final Set<String> seenServices = new HashSet<String>();
+    /** Addresses waiting for their TLS check in this browse (ProbeQueue: capped per service, fair). */
+    private final ProbeQueue probes = new ProbeQueue(random);
+    /** A TLS check is running (they run one at a time; the next starts when it ends). */
+    private boolean probing;
     /**
-     * The TLS checks at candidate addresses, one at a time, off the screen's thread. At most
-     * PROBES_WAITING wait their turn (more are dropped; the next browse tries them again), and each
-     * is skipped at its start when its browse has ended.
+     * Runs the TLS checks off the screen's thread. Only one is handed to it at a time (pumpProbes);
+     * the small queue only holds a check from a browse that just ended, which is skipped at its start.
      */
-    private static final int PROBES_WAITING = 4;
-    private final ExecutorService prober = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<Runnable>(PROBES_WAITING));
+    private final ExecutorService prober = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<Runnable>(4));
     /** The app is on screen (between onStart and onStop): only then does it look. */
     private boolean visible;
 
@@ -1311,7 +1313,7 @@ public class MainActivity extends Activity {
                 }
                 // Also who sent it: only that computer may Identify this TV over its feed (#849).
                 // One pin is kept: the server key's when Rhema Studio sent it, else (an older one) its certificate's.
-                SharedPreferences.Editor e = prefs.edit().putString("url", url).putString("host", peer);
+                SharedPreferences.Editor e = prefs.edit().putString("url", url).putString("host", peer).remove("hostService");
                 if (pins[1] != null) e.putString("keyPin", pins[1]).remove("pin");
                 else e.putString("pin", pins[0]).remove("keyPin");
                 e.apply();
@@ -1407,7 +1409,9 @@ public class MainActivity extends Activity {
         final int gen = browseGen.incrementAndGet();
         toResolve.clear();
         resolving = false;
-        tried.clear();
+        seenServices.clear();
+        probes.clear();
+        probing = false;
         browse = new NsdManager.DiscoveryListener() {
             @Override
             public void onStartDiscoveryFailed(String type, int error) {
@@ -1436,7 +1440,7 @@ public class MainActivity extends Activity {
                 ui.post(new Runnable() {
                     @Override
                     public void run() {
-                        if (gen != browseGen.get() || !tried.add("service " + info.getServiceName())) return;
+                        if (gen != browseGen.get() || !seenServices.add(String.valueOf(info.getServiceName()))) return;
                         toResolve.add(info);
                         resolveNext(gen);
                     }
@@ -1467,6 +1471,8 @@ public class MainActivity extends Activity {
         }
         toResolve.clear();
         resolving = false;
+        probes.clear();
+        probing = false;
     }
 
     /** Resolves the next announced service (one at a time). */
@@ -1524,32 +1530,53 @@ public class MainActivity extends Activity {
         int port = KeyPin.port(KeyPin.txt(txt, "tls"));
         String url = shown();
         if (port < 0 || url == null) return;
-        // Each of its IPv4 addresses (a computer on Wi-Fi and Ethernet announces both).
-        for (String ip : ipv4s(info)) {
-            if (tried.add(ip + ":" + port)) probeAt(ip, port, keyPin, url, gen);
-        }
+        String service = String.valueOf(info.getServiceName());
+        // The Rhema Studio this TV last reached goes first: its last address, or the name it was found under.
+        String lastIp = Uri.parse(url).getHost();
+        boolean sameName = service.equals(prefs.getString("hostService", null));
+        // Each of its IPv4 addresses (a computer on Wi-Fi and Ethernet announces both), ProbeQueue-capped.
+        for (String ip : ipv4s(info)) probes.offer(service, ip, port, sameName || ip.equals(lastIp));
+        pumpProbes(gen);
     }
 
-    /** One TLS check (KeyPin.probe, 4 s in all) off the screen's thread; the feed moves only if it passes. */
-    private void probeAt(final String ip, final int port, final String keyPin, final String url, final int gen) {
+    /**
+     * Starts the next TLS check (KeyPin.probe, 4 s in all) off the screen's thread when none is
+     * running; the feed moves only if it passes. When it ends, the next one starts.
+     */
+    private void pumpProbes(final int gen) {
+        if (probing || gen != browseGen.get()) return;
+        final ProbeQueue.Candidate c = probes.next();
+        if (c == null) return;
+        final String keyPin = prefs.getString("keyPin", null);
+        final String url = shown();
+        if (url == null) return;
+        probing = true;
         try {
             prober.execute(new Runnable() {
                 @Override
                 public void run() {
                     // Its browse ended while it waited: not checked at all.
-                    if (gen != browseGen.get()) return;
-                    if (!KeyPin.probe(ip, port, keyPin, 4_000)) return;
+                    final boolean found = gen == browseGen.get() && KeyPin.probe(c.ip, c.port, keyPin, 4_000);
                     ui.post(new Runnable() {
                         @Override
                         public void run() {
-                            // Still the same feed, pin and browse (nothing changed while it was checked).
-                            if (gen == browseGen.get() && url.equals(shown()) && KeyPin.same(keyPin, prefs.getString("keyPin", null))) moveTo(ip, port);
+                            if (gen != browseGen.get()) return;
+                            probing = false;
+                            // Still the same feed and pin (nothing changed while it was checked).
+                            if (found && url.equals(shown()) && KeyPin.same(keyPin, prefs.getString("keyPin", null))) {
+                                moveTo(c.ip, c.port, c.service);
+                            } else {
+                                pumpProbes(gen);
+                            }
                         }
                     });
                 }
             });
         } catch (RuntimeException full) {
-            // PROBES_WAITING already waiting (or shutting down): the next browse tries it again.
+            // Could not be started (a check of an ended browse still holds the queue, or shutting
+            // down): unmarked, so it can be offered again, and tried after the running one.
+            probing = false;
+            probes.release(c);
         }
     }
 
@@ -1568,13 +1595,14 @@ public class MainActivity extends Activity {
     }
 
     /** The paired Rhema Studio proved itself at ip:port: the feed (same path and key) opens there from now on. */
-    private void moveTo(String ip, int port) {
+    private void moveTo(String ip, int port, String service) {
         String from = shown();
         String to = KeyPin.movedTo(from, ip, port);
         if (to == null) return;
         reachedRhema();
-        // Also who may Identify this TV over its feed (#849): the same Rhema Studio, at its new address.
-        SharedPreferences.Editor e = prefs.edit().putString("url", to).putString("host", ip);
+        // Also who may Identify this TV over its feed (#849): the same Rhema Studio, at its new address;
+        // and the name it announced, looked at first next time.
+        SharedPreferences.Editor e = prefs.edit().putString("url", to).putString("host", ip).putString("hostService", service);
         // The kept picture is of the same feed: it stays until the page draws at the new address.
         if (from.equals(prefs.getString("stillOf", null))) e.putString("stillOf", to);
         e.apply();

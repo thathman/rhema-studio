@@ -155,6 +155,43 @@ public final class KeyPinCheck {
         r.reset();
         check("found or a new feed: all over", r.due(400_000) < 0 && !r.mayHaveMoved(400_000) && !r.browsing());
 
+        // Which addresses get a TLS check in one browse (ProbeQueue): one announcer cannot starve the real one.
+        ProbeQueue q = new ProbeQueue(new java.util.Random(7));
+        check("an address waits", q.offer("fake-1", "10.0.0.66", 8081, false));
+        check("the same address only once", !q.offer("fake-1", "10.0.0.66", 8081, false) && !q.offer("fake-2", "10.0.0.66", 8081, false));
+        check("a second address of the service", q.offer("fake-1", "10.0.0.67", 8081, false));
+        check("no third address per service", !q.offer("fake-1", "10.0.0.68", 8081, false));
+        check("no address or port: nothing", !q.offer("x", null, 8081, false) && !q.offer("x", "10.0.0.9", 0, false));
+        for (int i = 3; q.waiting() < ProbeQueue.MAX_WAITING; i++) q.offer("fake-" + i, "10.0.1." + i, 8081, false);
+        check("a full queue turns a newcomer away", !q.offer("CAC Ibadan", "10.0.0.5", 8081, false));
+        check("unmarked when turned away: offered again later it fits", q.waiting() == ProbeQueue.MAX_WAITING);
+        check("the last-known Rhema Studio makes room", q.offer("CAC Ibadan", "10.0.0.5", 8081, true) && q.waiting() == ProbeQueue.MAX_WAITING);
+        ProbeQueue.Candidate first = q.next();
+        check("and is checked first", first != null && "10.0.0.5".equals(first.ip) && first.preferred);
+        ProbeQueue.Candidate any = q.next();
+        check("then the rest", any != null && !any.preferred);
+        q.release(any);
+        check("a check that could not start is unmarked", q.offer(any.service, any.ip, any.port, false));
+        // A service whose both checks were released may be offered both again.
+        ProbeQueue r2 = new ProbeQueue(new java.util.Random(1));
+        r2.offer("s", "10.0.0.1", 8081, false);
+        r2.offer("s", "10.0.0.2", 8081, false);
+        ProbeQueue.Candidate a = r2.next();
+        r2.release(a);
+        check("released: its service has room again", r2.offer("s", a.ip, 8081, false) && !r2.offer("s", "10.0.0.3", 8081, false));
+        // Random order among the rest: over many browses each fake set leaves the real one a turn.
+        int realFirst = 0;
+        java.util.Random rnd = new java.util.Random(42);
+        for (int round = 0; round < 200; round++) {
+            ProbeQueue fair = new ProbeQueue(rnd);
+            for (int i = 0; i < 6; i++) fair.offer("fake-" + i, "10.0.2." + i, 8081, false);
+            fair.offer("CAC Ibadan", "10.0.0.5", 8081, false);
+            if ("10.0.0.5".equals(fair.next().ip)) realFirst++;
+        }
+        check("not always last (" + realFirst + "/200 first)", realFirst > 10);
+        q.clear();
+        check("a new browse starts clean", q.waiting() == 0 && q.next() == null && q.offer("fake-1", "10.0.0.66", 8081, false));
+
         if (failed > 0) {
             System.err.println(failed + " key pin check(s) failed");
             System.exit(1);
