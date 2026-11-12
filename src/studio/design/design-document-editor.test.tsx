@@ -1538,16 +1538,19 @@ describe("QR code and rotation layers (#851 G7)", () => {
     expect(prepared.scene.layers).toContainEqual(expect.objectContaining({ id: qr.id, kind: "picture", imageUrl: qr.src }))
   })
 
-  it("rotates a selected layer in the native design and says Prepare cannot show it yet", async () => {
+  it("rotates a selected layer, saves it, and the scene for Prepare and outputs keeps the turn", async () => {
     const documentValue = documentFixture()
     store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({ ...documentValue, revision: 5, document: input.document }))
     const element = await render(documentValue)
     await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Rectangle")!.click())
     await commitNumberInput(element, "Rotation °", "15")
-    expect(element.textContent).toContain("Prepare and outputs cannot show a rotated layer yet")
+    expect(element.textContent).not.toContain("stay upright on outputs")
     await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
     const input = store.saveDraft.mock.calls[0]![2] as DesignInput
     const rect = Object.values(input.document.scene.nodes).find((node) => node.name === "Rectangle")!
     expect(rect.rotation).toBe(15)
+    const prepared = designToScene(input.document)
+    expect(prepared.issues).toEqual([])
+    expect(prepared.scene.layers).toContainEqual(expect.objectContaining({ id: rect.id, rotation: 15 }))
   })
 })

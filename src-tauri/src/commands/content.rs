@@ -442,6 +442,12 @@ pub fn design_used_on(state: State<'_, ContentState>, id: String) -> CmdResult<V
     with_db(&state, |db| db.design_used_on(&id))
 }
 
+/// Archive a design from My Designs, or restore it (#851 G7). Never removes anything.
+#[tauri::command]
+pub fn design_set_archived(state: State<'_, ContentState>, id: String, archived: bool) -> CmdResult<rhema_content::DesignSummary> {
+    with_db(&state, |db| db.set_design_archived(&id, archived))
+}
+
 #[tauri::command]
 pub fn design_delete(state: State<'_, ContentState>, id: String, expected_revision: i64) -> CmdResult<()> {
     with_db(&state, |db| db.delete_design(&id, expected_revision))
