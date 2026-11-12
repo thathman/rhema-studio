@@ -4,8 +4,8 @@ import { toast } from "sonner"
 import "@/stores/journal-store"
 import "@/stores/monitor-store"
 import "@/stores/obs-store"
-import { useCallback, useEffect, useMemo } from "react"
-import { canonicalWorkspace, useShellStore, type Workspace } from "@/studio/shell-store"
+import { useCallback, useEffect, useMemo, useRef } from "react"
+import { canonicalWorkspace, showsJoinedDesk, useShellStore, type Workspace } from "@/studio/shell-store"
 import { bibleActions } from "@/hooks/use-bible"
 import { rememberedServiceId, useServiceStore } from "@/stores/service-store"
 import { useBroadcastStore, useQueueStore } from "@/stores"
@@ -24,6 +24,7 @@ import { TeamWorkspace } from "@/studio/team/team-workspace"
 import { ConnectionsWorkspace } from "@/studio/connections/connections-workspace"
 import { openSettings } from "@/lib/settings-dialog"
 import { Sidebar } from "@/studio/shell/sidebar"
+import { JoinedDeskRoute } from "@/studio/shell/joined-desk-route"
 import { WORKSPACE_ITEMS, churchItems, type NavItem } from "@/studio/shell/nav-items"
 import { cn } from "@/lib/utils"
 import { TopBar } from "@/studio/shell/top-bar"
@@ -90,6 +91,20 @@ export function AppShell() {
   const church = useMemo(() => churchItems(pendingApprovals), [pendingApprovals])
   // A joined director sees this computer's readiness checks (desk consoles): worked out only while someone is paired.
   const paired = useSettingsStore((s) => s.remoteDevices.length > 0)
+  // Joined to a host (#813 F2): Live is this computer's role desk, full window, the rest behind its menu.
+  const joinedDeskView = useShellStore((s) => s.joinedDeskView)
+  const deskPage = showsJoinedDesk(joinStatus, activeWorkspace, joinedDeskView)
+  useEffect(() => {
+    if (joinStatus === "off") useShellStore.getState().setJoinedDeskView("desk")
+  }, [joinStatus])
+  // Switching between the desk and the shell (or leaving mid-service) replaces the page: put focus
+  // on it so a keyboard or screen reader user is not left on a button that no longer exists.
+  const wasDeskPage = useRef(deskPage)
+  useEffect(() => {
+    if (wasDeskPage.current === deskPage) return
+    wasDeskPage.current = deskPage
+    queueMicrotask(() => document.getElementById("main")?.focus())
+  }, [deskPage])
 
   // Going anywhere from Design first settles an unsaved theme (keep editing, or discard it), as closing the designer did.
   const go = useCallback(async (next: Workspace) => {
@@ -277,6 +292,28 @@ export function AppShell() {
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [go, church])
+
+  if (deskPage) {
+    return (
+      <div className="dark present-surface fixed inset-0 flex flex-col bg-background text-foreground">
+        <a href="#main" className="fixed top-3 left-3 z-50 -translate-y-24 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground focus:translate-y-0">Skip to the page</a>
+        {/* The same bar and watches as every page: Find, recorder status, Talk, and the camera/signal watch never stop. */}
+        <TopBar title="Your desk" workspace="present" />
+        <RecoveryBanner />
+        <SignalWatch />
+        {paired && <ShareReadiness />}
+        <main id="main" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 outline-none">
+          <ErrorBoundary key="joined-desk" name="your desk">
+            <JoinedDeskRoute church={church} onGo={(w) => void go(w)} />
+          </ErrorBoundary>
+        </main>
+        <BroadcastOutputsDialog open={outputsOpen} onOpenChange={setOutputsOpen} />
+        <GlobalSearch />
+        <SetupWizard />
+        <SetupStatusDialog />
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 grid grid-cols-[auto_minmax(0,1fr)] bg-background text-foreground">
