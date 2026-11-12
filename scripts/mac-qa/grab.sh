@@ -5,7 +5,7 @@
 set -euo pipefail
 S="${QA_SCRATCH:?set QA_SCRATCH}"; export QA_DIR="$S/qa-run"; mkdir -p "$S/qa-shots"
 here="$(cd "$(dirname "$0")" && pwd)"
-echo 'const c = document.querySelector("canvas"); const shown = c && getComputedStyle(c).display !== "none"; return { w: c && c.width, h: c && c.height, png: shown ? c.toDataURL("image/png") : null, stage: document.body.innerText.trim().slice(0, 600) }' \
+echo 'const c = document.querySelector("canvas"); const shown = c && getComputedStyle(c).display !== "none" && (!c.parentElement || getComputedStyle(c.parentElement).display !== "none"); return { w: c && c.width, h: c && c.height, png: shown ? c.toDataURL("image/png") : null, stage: document.body.innerText.trim().slice(0, 600) }' \
   | "$here/qa.py" "$1" "grab-$2" - 30 > "$S/qa-run/grab.json"
 python3 - "$S" "$2" <<'PY'
 import json, sys, base64

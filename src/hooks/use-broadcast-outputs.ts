@@ -6,6 +6,7 @@ import { useBroadcastStore } from "@/stores"
 import { disableOutput, enableOutput } from "@/lib/broadcast-output-control"
 import { useWindowPlayback } from "@/lib/camera-playback"
 import type { CameraPlayback } from "@/lib/whep"
+import { surfaceHealthAction } from "@/lib/output-surface"
 
 /** One automatic restart per output per minute; after that the operator decides. */
 const lastRestart = new Map<string, number>()
@@ -102,6 +103,22 @@ export function useBroadcastOutputs(): void {
       if (store.presentWarning === renderWarning(outputName(event.payload?.outputId))) store.setPresentWarning(null)
     })
 
+    // An output window lost its canvas's drawing surface and rebuilt it, or keeps losing it (#873).
+    // The warning each output set, by output ID, so only that output's own warning is cleared.
+    const surfaceWarnings = new Map<string, string>()
+    const unlistenSurface = listen<{ outputId?: string; kind?: string; reason?: string; at?: number; retryInMs?: number }>("broadcast:surface-health", (event) => {
+      const store = useBroadcastStore.getState()
+      const id = event.payload?.outputId ?? ""
+      const action = surfaceHealthAction(outputName(id), event.payload, store.presentWarning, surfaceWarnings.get(id))
+      if (!action) return
+      if (action.toast === "warning") toast.warning(action.message)
+      else if (action.toast === "error") toast.error(action.message)
+      else if (action.toast === "success") toast.success(action.message)
+      if (typeof action.warning === "string") surfaceWarnings.set(id, action.warning)
+      else if (event.payload?.kind === "recovered" || event.payload?.kind === "unchecked") surfaceWarnings.delete(id)
+      if (action.warning !== undefined) store.setPresentWarning(action.warning)
+    })
+
     // How each output window really plays its scene's cameras (#213), for Show health.
     const unlistenPlayback = listen<{ outputId?: string; cameras?: CameraPlayback[] }>("broadcast:camera-playback", (event) => {
       const id = event.payload?.outputId
@@ -110,6 +127,7 @@ export function useBroadcastOutputs(): void {
 
     return () => {
       void unlistenPlayback.then((unlisten) => unlisten())
+      void unlistenSurface.then((unlisten) => unlisten())
       void unlistenRender.then((unlisten) => unlisten())
       void unlistenRenderOk.then((unlisten) => unlisten())
       for (const id of timeouts) clearTimeout(id)
