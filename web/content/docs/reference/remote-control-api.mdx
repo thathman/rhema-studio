@@ -24,12 +24,11 @@ Twelve commands are supported by both protocols:
 | `show` | Bring the overlay on-air |
 | `hide` | Take the overlay off-air |
 | `theme <value>` | Switch the active theme by name |
-| `opacity <value>` | Not available yet: refused (HTTP 422; OSC ignores it) |
 | `confidence <value>` | Set the detector's confidence threshold |
 | `on_air <value>` | Force the on-air toggle to the given value |
 
 Commands are case-insensitive on input. `value` argument types vary:
-`theme` is a string, `opacity` and `confidence` are floats in `[0.0,
+`theme` is a string, `confidence` is a float in `[0.0,
 1.0]`, and `on_air` is a boolean (`true` / `false`).
 
 `next`, `prev`, `bible_next`, `bible_prev`, `send_to_live`, `add_to_queue`,
@@ -67,7 +66,6 @@ works.
 | `/rhema/show` | none | `oscsend localhost 8000 /rhema/show` |
 | `/rhema/hide` | none | `oscsend localhost 8000 /rhema/hide` |
 | `/rhema/theme` | string | `oscsend localhost 8000 /rhema/theme s "Classic Dark"` |
-| `/rhema/opacity` | float | `oscsend localhost 8000 /rhema/opacity f 0.75` |
 | `/rhema/confidence` | float | `oscsend localhost 8000 /rhema/confidence f 0.8` |
 | `/rhema/on_air` | bool | `oscsend localhost 8000 /rhema/on_air T` |
 
@@ -132,9 +130,9 @@ curl -X POST http://localhost:8080/api/v1/command \
 `error` is present only on failure. Unknown commands and invalid JSON are
 rejected with `success: false` and a descriptive `error` string.
 
-`POST /api/v1/control` is mounted as an alias for the same handler. Earlier
-builds mounted only that path while the docs advertised `/api/v1/command`, so
-the alias stays to keep existing integrations working. Write new ones against
+The old `POST /api/v1/control` alias has been removed (nothing used it), and
+so has the `opacity` command (`/rhema/opacity` over OSC), which nothing on the
+screens ever took: both are now unknown. Send every command to
 `/api/v1/command`.
 
 <Callout title="CORS is permissive by default" type="warn">

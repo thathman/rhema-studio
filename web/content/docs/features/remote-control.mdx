@@ -55,9 +55,9 @@ controller you already own (or build) talks the same dialect.
 that's how you read straight through a passage the AI hasn't picked up yet.
 The verse you land on goes to preview; `send_to_live` pushes it out.
 
-<Callout title="Opacity is not available yet" type="warn">
-The `opacity` command is refused today (HTTP answers 422, OSC ignores it):
-nothing on the screens takes it yet.
+<Callout title="Opacity was removed" type="warn">
+The `opacity` command has been removed: nothing on the screens ever took it.
+HTTP answers it as an unknown command (422) and OSC as an unknown address.
 </Callout>
 
 ## OSC
@@ -99,9 +99,8 @@ curl -X POST http://localhost:8080/api/v1/command \
   -d '{"command":"theme","value":"Classic Dark"}'
 ```
 
-`POST /api/v1/control` is still accepted as an alias for the same handler, so
-integrations written against older builds keep working. Use `/api/v1/command`
-for anything new.
+The old `POST /api/v1/control` alias has been removed (nothing used it); send
+every command to `/api/v1/command`.
 
 The status endpoint returns an authoritative view from a Rust-side
 state cache that the frontend refreshes once a second:

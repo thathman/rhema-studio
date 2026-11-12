@@ -317,6 +317,10 @@ impl FeedHub {
             }
             f.acked = seq;
             f.acked_at = Some(std::time::Instant::now());
+            // Drawn where it can be seen: an older hidden report no longer says anything.
+            if f.seen_hidden.is_some_and(|(hidden, _)| hidden <= seq) {
+                f.seen_hidden = None;
+            }
         }
         if let Some((from, cameras)) = video {
             let tv = f.admits(token).flatten().map(|t| t.id.clone());
@@ -4644,7 +4648,13 @@ mod tests {
         assert_eq!(feeds.ack_shown("tv", "wrong", 1, None, None, true), Err(()), "still only with the secret");
         // Drawn where it can be seen: counted, and the first draw.
         assert!(matches!(feeds.ack_shown("tv", "s3cret", 1, None, None, false), Ok(Some(_))));
-        assert_eq!(feeds.status("tv").unwrap().acked, 1);
+        let st = feeds.status("tv").unwrap();
+        assert_eq!((st.acked, st.seen_hidden, st.seen_hidden_ago_ms), (1, None, None), "a visible draw clears the hidden report");
+        // A newer frame seen hidden stays reported after an older frame's visible ack.
+        feeds.publish("tv", "{}".into());
+        assert_eq!(feeds.ack_shown("tv", "s3cret", 2, None, None, true), Ok(None));
+        assert_eq!(feeds.ack_shown("tv", "s3cret", 1, None, None, false), Ok(None));
+        assert_eq!(feeds.status("tv").unwrap().seen_hidden, Some(2));
     }
 
     /// Records each event the app would get.

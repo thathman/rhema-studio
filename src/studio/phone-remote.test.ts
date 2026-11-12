@@ -90,14 +90,23 @@ describe("phone remote: live sources", () => {
     await vi.waitFor(() => expect(document.getElementById("live")!.textContent).toBe("The main computer is asking whether to show this service. Answer there first."))
   })
 
-  it("says the sources and notices could not load when /live fails, not that there are none (S8)", async () => {
+  it("keeps the last lists through one missed look, and says they could not load after two (S8)", async () => {
+    vi.useFakeTimers()
     keyed()
+    let up = true
+    const live = { v: 1, program: { onAir: true }, sources: [{ id: "bible", reference: "John 3:16", on: true, revision: 1 }], notices: [{ id: "n1", from: "Main desk", to: "all", priority: "normal", text: "Doors open", at: 0, answers: [] }] }
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url === "/api/v1/me") return new Response(JSON.stringify({ name: "Usher phone", role: "present" }))
-      return new Response("", { status: 500 })
+      return up ? new Response(JSON.stringify(live)) : new Response("", { status: 500 })
     }))
     boot()
-    await vi.waitFor(() => expect(document.getElementById("sources")!.textContent).toBe("Could not load · trying again"))
+    await vi.waitFor(() => expect(document.querySelectorAll("#sources .src")).toHaveLength(1))
+    up = false
+    await vi.advanceTimersByTimeAsync(2100)
+    expect(document.querySelectorAll("#sources .src")).toHaveLength(1) // one miss is a blip
+    expect(document.getElementById("notices")!.textContent).toContain("Doors open")
+    await vi.advanceTimersByTimeAsync(2100)
+    expect(document.getElementById("sources")!.textContent).toBe("Could not load · trying again")
     expect(document.getElementById("notices")!.textContent).toBe("Could not load · trying again")
   })
 })
@@ -144,6 +153,27 @@ describe("phone remote: buttons by role (11 Nov review F10)", () => {
     expect(commands().map((c) => [c.command, c.value])).toEqual([["song_section", -1], ["song_section", "chorus"]])
   })
 
+  it("a Camera phone is told it may clear and restore its sources here, not that every control is elsewhere", async () => {
+    host(() => ({ ...live, sources: [{ id: "camera:pulpit", reference: "Pulpit", on: true, revision: 0 }] }), { role: "camera" })
+    await vi.waitFor(() => expect(document.querySelectorAll("#sources .src button")).toHaveLength(1))
+    expect(document.getElementById("roleNote")!.textContent).toBe("This phone is set up as Camera. It shows what is on the screens and your notices, and lets you clear and restore the sources below that this role may change. This role's other controls are on a joined computer.")
+  })
+
+  it("a phone the main desk paused holds its controls and says so; notices still answer", async () => {
+    keyed()
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/v1/me") return new Response(JSON.stringify({ name: "Usher phone", role: "present", paused: true }))
+      if (url === "/api/v1/live") return new Response(JSON.stringify({ ...live, notices: [{ id: "n1", from: "Main desk", to: "all", priority: "normal", text: "Hi", at: 0, answers: [] }] }))
+      return new Response(JSON.stringify({ success: true }))
+    }))
+    boot()
+    await vi.waitFor(() => expect((document.getElementById("pausedNote") as HTMLElement).hidden).toBe(false))
+    expect(document.getElementById("pausedNote")!.textContent).toContain("Paused by the main desk")
+    expect([...document.querySelectorAll<HTMLButtonElement>("#pad button")].every((b) => b.disabled)).toBe(true)
+    expect([...document.querySelectorAll<HTMLButtonElement>("#sources button")].every((b) => b.disabled)).toBe(true)
+    expect(button(document.getElementById("notices")!, "Ready").disabled).toBe(false)
+  })
+
   it("a View only phone gets no buttons, and says what it is for", async () => {
     host(() => live, { role: "viewer" })
     await vi.waitFor(() => expect(document.getElementById("roleNote")!.textContent).toContain("This phone is set up as View only"))
@@ -170,6 +200,56 @@ describe("phone remote: what it saw, and what the screens show (11 Nov review S3
     await vi.waitFor(() => expect(commands()).toHaveLength(3))
     expect(commands()[2].seen).toBeUndefined()
   })
+
+  it("a second quick press of the same part is not refused as if someone else had changed it (review of #870)", async () => {
+    // The main computer moves the lyrics revision twice for one step: once taking it, once more
+    // when the screens publish it a moment later. It refuses a step whose seen lyrics is old.
+    let rev = 5, index = 0
+    const { commands } = host(() => ({ v: 1, program: { onAir: true }, lyrics: { itemId: "s1", index }, revisions: { lyrics: rev }, sources: [], notices: [] }), {
+      role: "worship",
+      answer: (b) => {
+        if (b.command !== "song_section") return null
+        const seen = (b.seen as Record<string, number> | undefined)?.lyrics
+        if (seen !== undefined && seen !== rev) return new Response(JSON.stringify({ success: false, error: "Someone changed this first — look again", code: "stale" }), { status: 409 })
+        rev += 1
+        setTimeout(() => { index += 1; rev += 1 }, 300)
+        return null
+      },
+    })
+    await vi.waitFor(() => expect(padWords()).toHaveLength(3))
+    const next = button(document.getElementById("pad")!, "Next section ▶")
+    next.click()
+    // Held until a look begun after the answer.
+    await vi.waitFor(() => expect(commands()).toHaveLength(1))
+    expect(next.disabled).toBe(true)
+    await vi.waitFor(() => expect(next.disabled).toBe(false))
+    next.click()
+    await vi.waitFor(() => expect(commands()).toHaveLength(2))
+    await vi.waitFor(() => expect(next.disabled).toBe(false))
+    expect(document.getElementById("msg")!.textContent).not.toContain("changed since")
+    expect(commands()[1].seen).not.toHaveProperty("lyrics")
+    // And the second step is confirmed from the Live State like the first.
+    await vi.waitFor(() => expect(document.getElementById("msg")!.textContent).toBe("Done: the screens show it."), { timeout: 3000 })
+  })
+
+  it("a late Done never replaces a newer message", async () => {
+    let onAir = true
+    host(() => ({ v: 1, program: { onAir }, sources: [], notices: [] }), {
+      answer: (b) => {
+        if (b.command === "hide") { setTimeout(() => { onAir = false }, 2500); return null }
+        if (b.command === "next") return new Response(JSON.stringify({ success: false, error: "The main desk has taken back control for now." }), { status: 423 })
+        return null
+      },
+    })
+    await vi.waitFor(() => expect(padWords()).toHaveLength(4))
+    button(document.getElementById("pad")!, "Clear").click()
+    await vi.waitFor(() => expect(document.getElementById("msg")!.textContent).toBe("Sent."))
+    await vi.waitFor(() => expect(button(document.getElementById("pad")!, "Next ▶").disabled).toBe(false))
+    button(document.getElementById("pad")!, "Next ▶").click()
+    await vi.waitFor(() => expect(document.getElementById("msg")!.textContent).toBe("The main desk has taken back control for now."))
+    await vi.waitFor(() => expect(document.getElementById("air")!.textContent).toBe("Off air"), { timeout: 5000 })
+    expect(document.getElementById("msg")!.textContent).toBe("The main desk has taken back control for now.")
+  }, 8000)
 
   it("a stale refusal says so in plain words and looks again", async () => {
     const { sent } = host(() => ({ v: 1, program: { onAir: true }, revisions: { "source:bible": 4 }, sources: [{ id: "bible", reference: "John 3:16", on: true, revision: 1 }], notices: [] }), {

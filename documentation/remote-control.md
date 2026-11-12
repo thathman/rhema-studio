@@ -158,27 +158,9 @@ curl -X POST http://localhost:8080/api/v1/command \
   -d '{"command":"theme","value":"Classic Dark"}'
 ```
 
-### 7. **opacity** — Not available yet
+### 7. **opacity** — Removed
 
-Refused today: nothing on the screens takes it yet. HTTP answers 422 with that reason; OSC ignores it. The address and command are kept so a controller gets a plain refusal, not "unknown command".
-
-**Parameters:**
-- `value` (float): Opacity from 0.0 (transparent) to 1.0 (opaque)
-
-**OSC:**
-```
-/rhema/opacity 0.75
-/rhema/opacity 1.0
-```
-
-**HTTP:**
-```bash
-curl -X POST http://localhost:8080/api/v1/command \
-  -H "Content-Type: application/json" \
-  -d '{"command":"opacity","value":0.75}'
-```
-
-**Note:** Refused until the screens support opacity.
+The opacity command has been removed: nothing on the screens ever took it. HTTP now answers it as an unknown command (422) and OSC treats `/rhema/opacity` as an unknown address. Remove it from controller layouts.
 
 ### 8. **confidence** — Set Detection Confidence Threshold
 

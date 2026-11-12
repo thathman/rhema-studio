@@ -99,6 +99,7 @@
     <div class="status" aria-live="polite"><span id="air" class="air">Off air</span><b id="live">Nothing on screen</b></div>
     <div class="sources" id="sources" aria-label="Live sources"></div>
     <p id="roleNote" hidden></p>
+    <p id="pausedNote" class="loadfail" role="status" hidden>Paused by the main desk: this phone's buttons wait until it gives control back. Notices and Talk still work.</p>
     <!-- Drawn from this phone's role (11 Nov review F10): only the buttons the main computer lets it use. -->
     <div class="grid" id="pad" aria-label="Controls"></div>
     <form id="verseForm" hidden>
@@ -143,7 +144,10 @@
   const $ = (id) => document.getElementById(id)
   const get = () => { try { return localStorage.getItem(KEY) } catch { return null } }
   const set = (v) => { try { v ? localStorage.setItem(KEY, v) : localStorage.removeItem(KEY) } catch {} }
-  const say = (text, bad) => { $("msg").textContent = text || ""; $("msg").className = bad ? "err" : "" }
+  let said = 0
+  // This page's own controls: once they are gone (the page replaced), it stops looking and speaking.
+  const root = $("controls")
+  const say = (text, bad) => { if (!root.isConnected) return; said++; $("msg").textContent = text || ""; $("msg").className = bad ? "err" : "" }
   const show = () => { const paired = !!get(); $("pair").hidden = paired; $("controls").hidden = !paired }
 
   // The code arrives in the fragment (never sent to the server or kept in logs); drop it from the address bar.
@@ -187,8 +191,22 @@
   // State's revisions, as the joined desks send them, so the main computer refuses one for a part
   // of the service someone changed since. A request's own `seen` (Queue) wins.
   const COMMS = ["notice_send", "notice_ack"]
+  // The part of the service each command changes, as the main computer counts it (http.rs
+  // `revision_part`). Just after this phone changed a part, the main computer moves its revision
+  // twice (once taking the command, once more when the screens publish it), so for a few seconds
+  // this phone's own part is left out of `seen`: a quick second press is not refused as if someone
+  // else had changed it (review of #870).
+  const PART = { song_section: () => "lyrics", timer_start: () => "timer", timer_pause: () => "timer", timer_adjust: () => "timer", event_next: () => "event", event_prev: () => "event", hold: () => "hold", resume: () => "hold", clear_source: (v) => "source:" + v, restore_source: (v) => "source:" + v, queue_request: () => "queue" }
+  const OWN_FOR = 5000
+  const own = {}
+  const seenNow = () => {
+    const seen = Object.assign({}, lastLive && lastLive.revisions)
+    for (const part of Object.keys(own)) if (own[part] > Date.now()) delete seen[part]; else delete own[part]
+    return seen
+  }
   const withSeen = (cmd, extra) => !COMMS.includes(cmd) && lastLive && lastLive.revisions && !(extra && extra.seen)
-    ? Object.assign({}, extra, { seen: lastLive.revisions }) : extra
+    ? Object.assign({}, extra, { seen: seenNow() }) : extra
+  const changed = (cmd, value) => { if (PART[cmd]) own[PART[cmd](value)] = Date.now() + OWN_FOR }
   const STALE_WORDS = "The screens changed since this phone last looked. Check them, then press again if you still need to."
   const OTHER_SERVICE_WORDS = "The main computer has opened another service. This phone is catching up; press again if you still need to."
   // A 200 means the main computer took the command, not that the screens show it (11 Nov review
@@ -220,8 +238,10 @@
   }
   const LOOKS = 3
   let pending = null
-  function confirmFrom(live) {
-    if (!pending) return
+  function confirmFrom(live, look) {
+    if (!pending || look < pending.from) return
+    // Something newer was said (a refusal, another press): that stays.
+    if (said !== pending.said) { pending = null; return }
     const now = pending.read(live)
     if (pending.want !== undefined ? now === pending.want : now !== pending.before) { say(pending.done); pending = null }
     else if (++pending.looks >= LOOKS) { say("Sent, but the main computer does not show the change yet. Look at the screens before pressing again.", true); pending = null }
@@ -237,15 +257,21 @@
       if (r.status === 401) { set(null); show(); say("This phone is no longer paired. Pair it again.", true) }
       else if (r.status === 403) say(j.error || "Not allowed for this phone.", true)
       else if (r.status === 429) say("Too fast; wait a second.", true)
-      else if (r.status === 409 && (j.code === "stale" || j.code === "other-service")) { say(j.code === "other-service" ? OTHER_SERVICE_WORDS : STALE_WORDS, true); poll() }
+      else if (r.status === 409 && (j.code === "stale" || j.code === "other-service")) { say(j.code === "other-service" ? OTHER_SERVICE_WORDS : STALE_WORDS, true); await freshLook() }
       // The main computer's own reason first (paused by the main desk, an output not this phone's…).
       else if (!r.ok) say(j.error || "Command failed (" + r.status + ")", true)
       // Asked of the main computer rather than done (a stage display not this desk's): its words.
-      else if (j.note) { say(j.note); poll() }
-      else if (w) { pending = Object.assign({ before, looks: 0 }, w); say("Sent."); poll() }
-      else { say(""); poll() }
+      else {
+        changed(cmd, value)
+        if (j.note) say(j.note)
+        else if (w) { say("Sent."); pending = Object.assign({ before, looks: 0, said, from: looksStarted + 1 }, w) }
+        else say("")
+        // The button waits for a look at the Live State begun after the main computer answered, so a
+        // second press acts on what this one changed (review of #870).
+        await freshLook()
+      }
     } catch { say("No answer from the main computer. Check the screens before pressing again.", true) }
-    finally { sending.delete(btn); btn.disabled = staleNow }
+    finally { sending.delete(btn); btn.disabled = held(btn) }
   }
   // One command for an action request: null when the main computer took it, else its reason.
   async function attempt(cmd, value, extra) {
@@ -293,13 +319,14 @@
       b.textContent = text
       if (cls) b.className = cls
       b.dataset.cmd = cmd
-      b.disabled = staleNow
+      b.disabled = held(b)
       b.addEventListener("click", () => send(cmd, b, value))
       pad.append(b)
     }
     pad.hidden = !list.length
     $("verseForm").hidden = role !== "bible"
-    const note = list.length ? ROLE_NOTES[role] || "" : "This phone is set up as " + (ROLE_NAMES[role] || role) + ". It shows what is on the screens and your notices; this role's controls are on a joined computer."
+    const rows = ["stage", "camera", "screens"].includes(role) ? ", and lets you clear and restore the sources below that this role may change" : ""
+    const note = list.length ? ROLE_NOTES[role] || "" : "This phone is set up as " + (ROLE_NAMES[role] || role) + ". It shows what is on the screens and your notices" + rows + ". This role's other controls are on a joined computer."
     $("roleNote").textContent = note
     $("roleNote").hidden = !note
   }
@@ -315,13 +342,29 @@
   // Two missed answers in a row: what the phone shows is no longer known, so it says so and its
   // buttons wait, instead of still saying "On air" from before (11 Nov review).
   let missed = 0, lastHeard = 0, staleNow = false
+  // The main desk has taken back control (`me.paused`): the controls wait; notices and Talk do not.
+  let pausedNow = false
+  const held = (b) => staleNow || (pausedNow && !b.closest("#notices, #noticeForm"))
   const sending = new Set()
+  // Looks at the Live State begun and finished, and who waits for a look begun after now.
+  let looksStarted = 0
+  const waiting = []
+  function freshLook() {
+    return new Promise((done) => {
+      const t = setTimeout(done, 8000) // a hidden page does not look; never hold a button for good
+      waiting.push({ from: looksStarted + 1, done: () => { clearTimeout(t); done() } })
+      poll()
+    })
+  }
   // Everything that sends a command: the role's buttons, each source's Clear / Restore, the verse
   // box, and the notice answers and form (Talk is its own channel and stays as it is).
   const actions = () => document.querySelectorAll("[data-cmd], #sources button, #notices button, #noticeForm button[type=submit], #verseForm button[type=submit]")
+  function holdAll() {
+    actions().forEach((b) => { if (!sending.has(b)) b.disabled = held(b) })
+  }
   function stale(isStale) {
     staleNow = isStale
-    actions().forEach((b) => { if (!sending.has(b)) b.disabled = isStale })
+    holdAll()
     if (!isStale) return
     $("air").textContent = "Not updating"
     $("air").className = "air stale"
@@ -329,7 +372,8 @@
     $("live").textContent = "No answer from the main computer" + (at ? " since " + at : "") + ". What is on the screens may have changed."
   }
   const unpaired = () => { set(null); show(); say("This phone is no longer paired. Pair it again.", true) }
-  // A failed look leaves the lists saying so (11 Nov review S8), never empty as if nothing were there.
+  // Two failed looks leave the lists saying so (11 Nov review S8), never empty as if nothing were
+  // there; one is a blip, and the last lists stay, as the stale mark does.
   function couldNotLoad() {
     for (const id of ["sources", "notices"]) {
       const p = document.createElement("p")
@@ -344,8 +388,9 @@
   // is (/me) every 10 s, since the main desk may change its role mid-service (#411 phone QA).
   async function poll() {
     clearTimeout(timer)
-    if (polling || !get() || document.hidden) return
+    if (polling || !get() || document.hidden || !root.isConnected) return
     polling = true
+    const look = ++looksStarted
     try {
       const auth = { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }
       if (!me || Date.now() - meAt > 10000) {
@@ -363,17 +408,20 @@
       missed = 0
       lastHeard = Date.now()
       stale(false)
-      render(live)
+      render(live, look)
     } catch {
-      couldNotLoad()
-      if (++missed >= 2) stale(true)
+      if (++missed >= 2) { couldNotLoad(); stale(true) }
     }
     polling = false
-    timer = setTimeout(poll, 2000)
+    for (let i = waiting.length - 1; i >= 0; i--) if (waiting[i].from <= look) waiting.splice(i, 1)[0].done()
+    // Someone waits for a look begun after this one: look again now, not in 2 s.
+    timer = setTimeout(poll, waiting.length ? 0 : 2000)
   }
-  function render(live) {
+  function render(live, look) {
     lastLive = live
     drawPad(me.role)
+    pausedNow = !!me.paused
+    $("pausedNote").hidden = !pausedNow
     const p = prog(live), shown = p.shown || p.reference
     $("air").textContent = p.onAir ? "On air" : "Off air"
     $("air").className = "air" + (p.onAir ? " on" : "")
@@ -386,7 +434,8 @@
     composer(live)
     talkView(live)
     sources(live)
-    confirmFrom(live)
+    holdAll()
+    confirmFrom(live, look)
   }
   // Each live source (ADR 0001): what it shows, and Clear or Restore where this phone's role may.
   // The main computer checks again.
@@ -411,7 +460,7 @@
         const words = ACTIONS[camera ? "camera" : s.id] || ["Clear", "Restore"]
         b.textContent = s.on ? words[0] : words[1]
         b.setAttribute("aria-label", (s.on ? words[0] : words[1]) + " " + (camera ? s.reference || s.id : NAMES[s.id] || s.id))
-        b.disabled = staleNow
+        b.disabled = held(b)
         b.addEventListener("click", () => send(s.on ? "clear_source" : "restore_source", b, s.id))
         row.append(b)
       }
@@ -447,7 +496,7 @@
     const what = "\u201c" + (mode === "preview" ? "Preview " + a.value : mode === "queue" ? "Queue " + a.value : actionName(a, live)) + "\u201d"
     failed[n.id] = why ? what + " was not done: " + why + ". Answered Unable." : ""
     await post("notice_ack", pressId(), { id: n.id, state: why ? "unable" : "ready" }, why ? { why: what + ": " + why } : undefined).catch(() => {})
-    sending.delete(btn); btn.disabled = staleNow
+    sending.delete(btn); btn.disabled = held(btn)
     poll()
   }
   const QUEUE_ROLES = ["present", "configure", "editor"]
