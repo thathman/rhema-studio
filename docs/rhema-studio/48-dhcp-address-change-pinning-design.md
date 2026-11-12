@@ -73,3 +73,7 @@ Build order (each its own PR, ≤2 open at once):
 Device acceptance: pair TV and Cam, change the Mac's address (owner-side: a different DHCP reservation, or switch Wi-Fi), and both come back by themselves within ~30 s with no taps; a second Mac running Rhema on the same network is never accepted.
 
 Open questions for the owner: OK to keep one server key for the life of the CA (rotated only by "Reset https keys")? Any objection to the `k=` TXT hint?
+
+## Decision (12 Nov 2026)
+
+The owner delegated this decision. Accepted: option (a), one stable server key for the life of the local CA, pinned by SPKI. Migration needs no taps: the devices accept the legacy leaf hash once and upgrade to the SPKI pin over the verified connection. Rediscovery uses `_rhema-host._tcp` with the `k=` TXT hint. Re-pairing (c) stays as the fallback message. Both open questions: yes. Build order: host, Receiver, Cam, one PR each.
