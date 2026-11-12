@@ -271,7 +271,7 @@ function AudioSection() {
         </label>
         <TalkRulesSettings />
         <p className="text-xs text-muted-foreground">
-          Set on the main desk for every joined desk and phone. Everyone is always in All crew; a role left out neither hears nor talks on that channel.
+          Set on the main computer for every joined desk and phone. Everyone is always in All crew; a role left out neither hears nor talks on that channel.
         </p>
       </div>
     </div>
@@ -924,7 +924,7 @@ function RemoteControlSection() {
         </span>
       </label>
       <div className="flex flex-wrap items-center gap-3 rounded-md border border-border p-3 text-xs">
-        <div className="min-w-0 flex-1"><p className="font-semibold">Paired device access</p><p className="text-muted-foreground">Manage roles, pause control or revoke a device in Permissions. Pair new devices from Connections.</p></div>
+        <div className="min-w-0 flex-1"><p className="font-semibold">Paired device access</p><p className="text-muted-foreground">Manage roles and pause control in Permissions. Pair new devices and revoke them in Connections.</p></div>
         <Button size="sm" variant="outline" onClick={() => { useSettingsDialogStore.getState().closeSettings(); useShellStore.getState().goTo("permissions") }}>Manage access</Button>
       </div>
       <ObsSettingsBlock />
@@ -1322,7 +1322,7 @@ function ScreensSection() {
       <p className="text-muted-foreground">Projectors, stage screens, signage windows and NDI streams are outputs. Each one shows the congregation, stage or signage view, in its own languages and look.</p>
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => useShellStore.getState().openOutputs()}><MonitorIcon /> Open outputs</Button>
-        <Button variant="outline" onClick={() => useShellStore.getState().openDesign("used-on")}><PaletteIcon /> Where each look is used (Design)</Button>
+        <Button variant="outline" onClick={() => useShellStore.getState().openDesign("used-on")}><PaletteIcon /> Where each look is used (Design → Where used)</Button>
       </div>
       <CapacityLimitsBlock />
     </div>

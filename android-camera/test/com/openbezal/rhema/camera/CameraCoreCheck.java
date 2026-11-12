@@ -62,10 +62,10 @@ public final class CameraCoreCheck {
 
         // #209: sending is not on air, and the light names the Program.
         check("tally: sending, on no Program", CamAction.resolve(true, true, true, 0).status.equals("SENDING") && !CamAction.onAir(CamAction.resolve(true, true, true, 0)));
-        check("tally: online", CamAction.resolve(true, true, true, CamAction.ONLINE).status.equals("ON AIR · ONLINE"));
+        check("tally: OBS program", CamAction.resolve(true, true, true, CamAction.ONLINE).status.equals("ON AIR · OBS"));
         check("tally: congregation", CamAction.resolve(true, true, true, CamAction.CONGREGATION).status.equals("ON AIR · CONGREGATION"));
         CamAction.State both = CamAction.resolve(true, true, true, CamAction.ONLINE | CamAction.CONGREGATION);
-        check("tally: both", both.status.equals("ON AIR · ONLINE + CONGREGATION") && CamAction.onAir(both));
+        check("tally: both", both.status.equals("ON AIR · OBS, CONGREGATION") && CamAction.onAir(both));
         check("tally: not yet connected is never on air", CamAction.resolve(true, true, false, CamAction.ONLINE).status.equals("CONNECTING"));
         check("tally: not sending is never on air", CamAction.resolve(true, false, false, CamAction.ONLINE).status.equals("NOT SENDING"));
 
@@ -73,7 +73,7 @@ public final class CameraCoreCheck {
         check("receiving: Rhema says it gets the picture", CamAction.resolve(true, true, true, 0, CamAction.RECEIVED).status.equals(CamAction.RECEIVING));
         check("receiving: Rhema says it does not (yet)", CamAction.resolve(true, true, true, 0, CamAction.NOT_RECEIVED).status.equals(CamAction.NOT_RECEIVED_YET));
         check("receiving: an older Rhema says neither", CamAction.resolve(true, true, true, 0, CamAction.RECEIVING_UNKNOWN).status.equals("SENDING"));
-        check("receiving: on air outranks receiving", CamAction.resolve(true, true, true, CamAction.ONLINE, CamAction.RECEIVED).status.equals("ON AIR · ONLINE"));
+        check("receiving: on air outranks receiving", CamAction.resolve(true, true, true, CamAction.ONLINE, CamAction.RECEIVED).status.equals("ON AIR · OBS"));
         check("receiving: never claimed before the phone's own connection is up", CamAction.resolve(true, true, false, 0, CamAction.RECEIVED).status.equals("CONNECTING"));
         check("receiving: never claimed with no tally", CamAction.resolve(true, true, true, CamAction.TALLY_UNKNOWN, CamAction.RECEIVED).status.equals("SENDING · NO TALLY"));
         check("receiving: not sending", CamAction.resolve(true, false, false, 0, CamAction.RECEIVED).status.equals("NOT SENDING"));

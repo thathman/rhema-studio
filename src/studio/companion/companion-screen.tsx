@@ -13,6 +13,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { JoinForm } from "@/studio/production/join-form"
 import { certificateWords, type PairedHost } from "@/lib/host-certificate"
 import { roleLabel } from "@/lib/remote-roles"
+import { LEAVE_MAIN_COMPUTER, OBS_SCREEN, PAIR_PATH, onAir } from "@/lib/wording"
 import { hostWords, obsWords, type Tone as ToneKind } from "@/studio/companion/companion-status"
 import { Overlays } from "@/studio/companion/companion-overlays"
 
@@ -114,29 +115,29 @@ function HostCard({ secure }: { secure: boolean }) {
   // Which side failed and why (#842): host unreachable, its certificate, or another failure; a refusal is a revoked key.
   const words = hostWords(status, error, address ?? "")
   return (
-    <Card kicker="The main Rhema Studio computer" title={church || address || "The host"}>
+    <Card kicker="The main Rhema Studio computer" title={church || address || "The main computer"}>
       <div className="flex flex-wrap items-center gap-2">
-        <span role="status" aria-label="Host connection status"><Tone tone={words.tone}>{words.label}</Tone></span>
+        <span role="status" aria-label="Main computer connection status"><Tone tone={words.tone}>{words.label}</Tone></span>
         <span className="text-muted-foreground">{address}{me ? ` · this computer is "${me.name}"` : ""}</span>
       </div>
-      {words.detail && status !== "connected" && <p role="alert" aria-label="Why the host is not connected" className="text-destructive">{words.detail}</p>}
-      {wrongRole && <p role="alert" className="font-semibold">The host has this computer as {roleLabel(me.role)}. On the host: Settings → Remote control, set "{me.name}" to OBS companion, so it may read the cameras.</p>}
+      {words.detail && status !== "connected" && <p role="alert" aria-label="Why the main computer is not connected" className="text-destructive">{words.detail}</p>}
+      {wrongRole && <p role="alert" className="font-semibold">The main computer has this computer as {roleLabel(me.role)}. On the main computer: Permissions, set "{me.name}" to OBS companion, so it may read the cameras.</p>}
       {!wrongRole && hostError && <p role="alert" className="font-semibold">{hostError}</p>}
-      {status === "connected" && heard && !hostError && !router && <p className="font-semibold">The camera router is off on the host. Turn it on there: Live → Production tools → Cameras.</p>}
+      {status === "connected" && heard && !hostError && !router && <p className="font-semibold">The camera router is off on the main computer. Turn it on there: Live → Production tools → Cameras.</p>}
       {secure && <PinnedCertificate />}
       {leaving ? (
         // Leaving forgets the pairing (#831 S7): asked first, since joining again needs a new code from the host.
-        <div role="alertdialog" aria-label="Leave this host?" className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-3">
-          <p className="font-semibold">Leave this host?</p>
-          <p className="text-muted-foreground">This computer forgets the host and its key. The cameras and overlays already in OBS stay, but their addresses are no longer kept current and the host gets no tally from this OBS. Joining again needs a new pairing code from the host (Settings → Remote control → Pair a device).</p>
+        <div role="alertdialog" aria-label={`${LEAVE_MAIN_COMPUTER}?`} className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-3">
+          <p className="font-semibold">{LEAVE_MAIN_COMPUTER}?</p>
+          <p className="text-muted-foreground">This computer forgets the main computer and its key. The cameras and overlays already in OBS stay, but their addresses are no longer kept current and the main computer gets no tally from this OBS. Joining again needs a new pairing code from the main computer ({PAIR_PATH}).</p>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="destructive" onClick={() => { setLeaving(false); void useJoin.getState().leave(true) }}>Leave and forget the host</Button>
+            <Button size="sm" variant="destructive" onClick={() => { setLeaving(false); void useJoin.getState().leave(true) }}>Leave and forget the main computer</Button>
             <Button size="sm" variant="outline" autoFocus onClick={() => setLeaving(false)}>Stay joined</Button>
           </div>
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => setLeaving(true)}>Leave this host</Button>
+          <Button size="sm" variant="outline" onClick={() => setLeaving(true)}>{LEAVE_MAIN_COMPUTER}</Button>
           {/* A revoked key is not tried again: only pairing again helps (the words above say how). */}
           {status === "reconnecting" && <Button size="sm" variant="ghost" onClick={() => void useJoin.getState().connect()}>Try again</Button>}
         </div>
@@ -155,7 +156,7 @@ function PinnedCertificate() {
   return (
     <p className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
       <ShieldCheckIcon aria-hidden className="size-3.5 text-primary-text" />
-      Secure link, host's certificate <code className="rounded bg-muted px-1.5 py-0.5 font-mono tracking-wide text-foreground">{certificateWords(paired.certificate)}</code>
+      Secure link, main computer's certificate <code className="rounded bg-muted px-1.5 py-0.5 font-mono tracking-wide text-foreground">{certificateWords(paired.certificate)}</code>
     </p>
   )
 }
@@ -177,19 +178,19 @@ function Cameras() {
   }
   const canAdd = obsStatus === "connected" && !!srt
   return (
-    <Card kicker="From the host's camera router" title="Cameras">
+    <Card kicker="From the main computer's camera router" title="Cameras">
       {status !== "connected" ? (
         <p className="text-muted-foreground">Join the main Rhema Studio computer above to see its cameras.</p>
       ) : cameras.length === 0 && hostError ? (
         // Not "none": the host is not answering for them now (the error is above). OBS keeps what it has.
-        <p className="text-muted-foreground">The host's camera list cannot be read right now. Cameras already in OBS stay as they are.</p>
+        <p className="text-muted-foreground">The main computer's camera list cannot be read right now. Cameras already in OBS stay as they are.</p>
       ) : cameras.length === 0 ? (
-        <p className="text-muted-foreground">No cameras on the host yet. They are added there: Live → Production tools → Cameras.</p>
+        <p className="text-muted-foreground">No cameras on the main computer yet. They are added there: Live → Production tools → Cameras.</p>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
             <p className="min-w-0 flex-1 text-muted-foreground">
-              {obsStatus !== "connected" ? "Connect to OBS above to add cameras to it." : !srt ? "Waiting for the host's camera router." : `Add to OBS puts the camera in a new scene named after it, or in a scene you pick. ${mine.length} of ${cameras.length} in this OBS${here > 0 ? `, about ${here.toFixed(1)} Mbit/s to this computer` : ""}.`}
+              {obsStatus !== "connected" ? "Connect to OBS above to add cameras to it." : !srt ? "Waiting for the main computer's camera router." : `Add to OBS puts the camera in a new scene named after it, or in a scene you pick. ${mine.length} of ${cameras.length} in this OBS${here > 0 ? `, about ${here.toFixed(1)} Mbit/s to this computer` : ""}.`}
             </p>
             {missing.length > 1 && <Button size="sm" variant="outline" disabled={!canAdd} onClick={() => void addAll()}><PlusIcon /> Add all to OBS</Button>}
           </div>
@@ -227,7 +228,7 @@ function CameraRow({ name, canAdd, scenes }: { name: string; canAdd: boolean; sc
     <li className="flex flex-col gap-2 px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-sm font-semibold">{label}</span>
-        {onProgram && <Tone tone="live">On OBS program</Tone>}
+        {onProgram && <Tone tone="live">{onAir([OBS_SCREEN])}</Tone>}
         {onPreview && !onProgram && <Tone tone="ok">In OBS preview</Tone>}
         <Tone tone={cam.live ? "ok" : "warn"}>{cam.live ? "Sending" : "Not sending"}</Tone>
       </div>

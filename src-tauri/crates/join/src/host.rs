@@ -11,7 +11,7 @@ use tokio::sync::watch;
 /// `host:port` only: a name or address and a port, no scheme or path.
 pub fn base_url(address: &str) -> Result<String, String> {
     let a = address.trim();
-    let (host, port) = a.rsplit_once(':').ok_or("Give the host's address and port, e.g. 192.168.1.20:8080")?;
+    let (host, port) = a.rsplit_once(':').ok_or("Give the main computer's address and port, e.g. 192.168.1.20:8080")?;
     let port: u16 = port.parse().map_err(|_| "The port must be a number, e.g. 8080")?;
     let host_ok = !host.is_empty() && host.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '[' | ']' | ':'));
     if !host_ok || port == 0 {
@@ -105,7 +105,7 @@ impl Host {
         if crate::pin::refused_certificate(e) {
             return crate::pin::NOT_THE_PAIRED_HOST.into();
         }
-        format!("Could not reach the host: {e}")
+        format!("Could not reach the main computer: {e}")
     }
 }
 
@@ -132,10 +132,10 @@ pub async fn pair(host: &Host, code: &str, name: &str, role: Option<&str>) -> Re
         .map_err(|e| host.unreachable(&e))?
         .json()
         .await
-        .map_err(|e| format!("The host's answer was not understood: {e}"))?;
+        .map_err(|e| format!("The main computer's answer was not understood: {e}"))?;
     match (reply.success, reply.token) {
         (true, Some(token)) => Ok(token),
-        _ => Err(reply.error.unwrap_or_else(|| "The host refused".into())),
+        _ => Err(reply.error.unwrap_or_else(|| "The main computer refused".into())),
     }
 }
 
@@ -143,7 +143,7 @@ pub async fn pair(host: &Host, code: &str, name: &str, role: Option<&str>) -> Re
 pub async fn me(host: &Host, token: &str) -> Result<serde_json::Value, String> {
     let r = host.client(Some(Duration::from_secs(10)))?.get(host.url("/api/v1/me")).header("X-Rhema-Key", token).send().await.map_err(|e| host.unreachable(&e))?;
     if !r.status().is_success() {
-        return Err(if r.status().as_u16() == 401 { "The host no longer knows this computer: pair again".into() } else { format!("The host answered {}", r.status()) });
+        return Err(if r.status().as_u16() == 401 { "The main computer no longer knows this computer: pair again".into() } else { format!("The main computer answered {}", r.status()) });
     }
     r.json().await.map_err(|e| e.to_string())
 }
@@ -170,7 +170,7 @@ async fn companion_get(host: &Host, token: &str, path: &str) -> Result<serde_jso
     if (200..300).contains(&status) {
         return Ok(v);
     }
-    let why = v.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from);
+    let why = v.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The main computer answered {status}"), String::from);
     Err(if status == 423 { format!("paused: {why}") } else { why })
 }
 
@@ -184,9 +184,9 @@ pub async fn lookup(host: &Host, token: &str, asked: &serde_json::Value) -> Resu
         return Ok(v);
     }
     if status == 404 {
-        return Err("The host is an older Rhema Studio that cannot be searched from here: update it".into());
+        return Err("The main computer is an older Rhema Studio that cannot be searched from here: update it".into());
     }
-    Err(v.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from))
+    Err(v.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The main computer answered {status}"), String::from))
 }
 
 /// Read only this paired desk's durable approval requests from the host.
@@ -196,12 +196,12 @@ pub async fn requests(host: &Host, token: &str) -> Result<serde_json::Value, Str
     let body = r.json::<serde_json::Value>().await.unwrap_or_default();
     if (200..300).contains(&status) {
         if body.get("requests").and_then(serde_json::Value::as_array).is_some() { return Ok(body); }
-        return Err("The host returned an invalid request list.".into());
+        return Err("The main computer returned an invalid request list.".into());
     }
-    let why = body.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from);
+    let why = body.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The main computer answered {status}"), String::from);
     Err(match status {
-        401 => "The host no longer knows this computer: pair again".into(),
-        404 => "The host is an older Rhema Studio that does not share approval request status: update it".into(),
+        401 => "The main computer no longer knows this computer: pair again".into(),
+        404 => "The main computer is an older Rhema Studio that does not share approval request status: update it".into(),
         423 => format!("paused: {why}"),
         _ => why,
     })
@@ -217,10 +217,10 @@ pub async fn withdraw_request(host: &Host, token: &str, id: &str) -> Result<serd
     let status = r.status().as_u16();
     let body = r.json::<serde_json::Value>().await.unwrap_or_default();
     if (200..300).contains(&status) { return Ok(body); }
-    let why = body.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from);
+    let why = body.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The main computer answered {status}"), String::from);
     Err(match status {
-        401 => "The host no longer knows this computer: pair again".into(),
-        404 => "The host no longer has that request. Refresh the list.".into(),
+        401 => "The main computer no longer knows this computer: pair again".into(),
+        404 => "The main computer no longer has that request. Refresh the list.".into(),
         409 => format!("stale: {why}"),
         423 => format!("paused: {why}"),
         _ => why,
@@ -237,11 +237,11 @@ fn plan_id_ok(id: &str) -> bool {
 /// `paused:` (423), `missing:` (404), `conflict:<actual revision>:` (409, someone saved since this
 /// desk opened it) and `refused:` (409 without a revision). Anything else is said as it is.
 fn plan_failure(status: u16, body: &serde_json::Value) -> String {
-    let why = body.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from);
+    let why = body.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The main computer answered {status}"), String::from);
     match status {
-        401 => "The host no longer knows this computer: pair again".into(),
+        401 => "The main computer no longer knows this computer: pair again".into(),
         403 => format!("forbidden: {why}"),
-        404 => "missing: The host has no such service plan (or is an older Rhema Studio that does not share plans): refresh the list".into(),
+        404 => "missing: The main computer has no such service plan (or is an older Rhema Studio that does not share plans): refresh the list".into(),
         409 => match body.get("actual").and_then(serde_json::Value::as_i64) {
             Some(actual) => format!("conflict:{actual}: {why}"),
             None => format!("refused: {why}"),
@@ -272,7 +272,7 @@ const NOT_A_PLAN_ID: &str = "missing: That is not a service plan id: refresh the
 /// Configure and Present desks may read them.
 pub async fn plans(host: &Host, token: &str) -> Result<serde_json::Value, String> {
     let list = plan_call(host, token, reqwest::Method::GET, "/api/v1/plans", None).await?;
-    if list.is_array() { Ok(list) } else { Err("The host returned an invalid plan list.".into()) }
+    if list.is_array() { Ok(list) } else { Err("The main computer returned an invalid plan list.".into()) }
 }
 
 /// One service plan, `{ program, items }`, with the revision a draft must be saved against.
@@ -317,7 +317,7 @@ pub async fn tally(host: &Host, token: &str, tally: &serde_json::Value) -> Resul
     }
     let status = r.status().as_u16();
     let v = r.json::<serde_json::Value>().await.unwrap_or_default();
-    Err(v.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from))
+    Err(v.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The main computer answered {status}"), String::from))
 }
 
 enum FollowError {
@@ -373,14 +373,14 @@ where
                 continue;
             }
             Err(Refused(status)) => {
-                emit("join:state", serde_json::json!({ "state": "refused", "error": format!("The host refused this computer ({status}): pair again") }).to_string());
+                emit("join:state", serde_json::json!({ "state": "refused", "error": format!("The main computer refused this computer ({status}): pair again") }).to_string());
                 return;
             }
             Ok(Ended::Closed) | Err(Lost(_)) => {
                 let closed = matches!(result, Ok(Ended::Closed));
                 let reason = match result {
                     Err(Lost(e)) => e,
-                    _ => "the host closed the connection".into(),
+                    _ => "the main computer closed the connection".into(),
                 };
                 emit("join:state", serde_json::json!({ "state": "reconnecting", "error": reason }).to_string());
                 // Closed by the host: it was there a moment ago.
@@ -422,7 +422,7 @@ async fn follow(host: &Host, token: &str, stop: &mut watch::Receiver<bool>, emit
         return Err(Refused(status));
     }
     if !r.status().is_success() {
-        return Err(Lost(format!("the host answered {status}")));
+        return Err(Lost(format!("the main computer answered {status}")));
     }
     // What the host makes of this desk now (it may have changed while it was away); an older host
     // or a slow answer leaves the desk as it was.
@@ -449,7 +449,7 @@ async fn follow(host: &Host, token: &str, stop: &mut watch::Receiver<bool>, emit
         }
         // A host that sends garbage without blank lines must not grow this without bound.
         if buf.len() > 4 * 1024 * 1024 {
-            return Err(Lost("the host sent a message too large".into()));
+            return Err(Lost("the main computer sent a message too large".into()));
         }
     }
 }
@@ -502,8 +502,8 @@ pub(crate) mod tests {
         assert_eq!(sse_data("event: live\ndata: line 1\ndata: line 2\n\n").as_deref(), Some("line 1\nline 2"));
         assert_eq!(sse_data(": keep-alive\n\n"), None);
         assert_eq!(sse_data("event: other\ndata: x\n\n"), None);
-        assert_eq!(sse_event("event: rejoin\ndata: the host changed this desk\n\n"), "rejoin");
-        assert_eq!(sse_data("event: rejoin\ndata: the host changed this desk\n\n"), None, "never taken as a Live State");
+        assert_eq!(sse_event("event: rejoin\ndata: the main computer changed this desk\n\n"), "rejoin");
+        assert_eq!(sse_data("event: rejoin\ndata: the main computer changed this desk\n\n"), None, "never taken as a Live State");
         assert_eq!(sse_event(": keep-alive\n\n"), "message");
     }
 
@@ -558,13 +558,13 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn a_paused_companion_is_told_so_and_an_unknown_key_must_pair_again() {
         let address = pretend_host(|path| match path {
-            "/api/v1/cameras/watch" | "/api/v1/overlays" => (423, r#"{"error":"The main desk has taken back control"}"#.into()),
+            "/api/v1/cameras/watch" | "/api/v1/overlays" => (423, r#"{"error":"The main computer has taken back control"}"#.into()),
             _ => (401, "{}".into()),
         })
         .await;
         let host = Host::plain(&address).unwrap();
-        assert_eq!(cameras(&host, "k").await.unwrap_err(), "paused: The main desk has taken back control");
-        assert_eq!(overlays(&host, "k").await.unwrap_err(), "paused: The main desk has taken back control");
+        assert_eq!(cameras(&host, "k").await.unwrap_err(), "paused: The main computer has taken back control");
+        assert_eq!(overlays(&host, "k").await.unwrap_err(), "paused: The main computer has taken back control");
         assert!(me(&host, "k").await.unwrap_err().contains("pair again"));
     }
 
@@ -594,7 +594,7 @@ pub(crate) mod tests {
             "/api/v1/plans/moved" | "/api/v1/plans/moved/submit" => (409, r#"{"error":"The plan changed since you opened it","expected":3,"actual":5}"#.into()),
             "/api/v1/plans/decided/submit" => (409, r#"{"error":"Already decided"}"#.into()),
             "/api/v1/plans/theirs" => (403, r#"{"error":"This desk's role does not work on the service plan"}"#.into()),
-            "/api/v1/plans/held" => (423, r#"{"error":"The main desk has taken back control"}"#.into()),
+            "/api/v1/plans/held" => (423, r#"{"error":"The main computer has taken back control"}"#.into()),
             _ => (404, String::new()),
         })
         .await;
@@ -620,7 +620,7 @@ pub(crate) mod tests {
         assert!(said(401, "{}").contains("pair again"));
         assert_eq!(said(409, r#"{"error":"moved","actual":7}"#), "conflict:7: moved");
         assert_eq!(said(422, r#"{"error":"a plan holds at most 500 items"}"#), "a plan holds at most 500 items");
-        assert_eq!(said(503, "{}"), "The host answered 503");
+        assert_eq!(said(503, "{}"), "The main computer answered 503");
     }
 
     #[tokio::test]

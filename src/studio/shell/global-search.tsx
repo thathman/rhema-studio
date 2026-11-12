@@ -29,7 +29,7 @@ const DESIGN: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["stage", "Stage display", "confidence monitor platform team timer next note band"],
   ["countdown", "Countdown display", "countdown timer red amber time up wrap up confidence monitor back of hall big clock"],
   ["brand", "Brand kit", "logo colours fonts church"],
-  ["used-on", "Used on…", "which outputs show each look theme screen output looks"],
+  ["used-on", "Where used", "which outputs show each look theme screen output looks"],
 ]
 
 /** Library's sections (#402, #447), each by the words people use for it. */
@@ -51,7 +51,7 @@ const SETTINGS: ReadonlyArray<readonly [SettingsSection, string, string]> = [
   ["audio", "Audio", "microphone input level"],
   ["speech", "Speech recognition", "listening detection transcript deepgram cloud key api keys whisper"],
   ["display", "Display", "live behaviour"],
-  ["remote", "Remote control", "osc http stream deck phone"],
+  ["remote", "Remote Control", "osc http stream deck phone"],
   ["diagnostics", "Diagnostics", "logs support export"],
   ["help", "Help", "tour shortcuts about"],
 ]

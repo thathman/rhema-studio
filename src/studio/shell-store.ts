@@ -10,12 +10,13 @@ export function canonicalWorkspace(workspace: Workspace): Workspace {
   return (WORKSPACES as readonly string[]).includes(workspace) ? workspace : "home"
 }
 /**
- * The Design page's sections: every design edit lives there. "outputs" was the old Output looks
- * table (#299 UX15-4 retired it); it is kept so old links still work and opens "used-on".
+ * The Design page's sections: every design edit lives there, grouped as Make, Style and Where used
+ * (#818, see design-groups.ts). "outputs" was the old Output looks table (#299 UX15-4 retired it);
+ * it is kept so old links still work and opens "used-on", the Where used overview.
  */
 export type DesignTab = "themes" | "library" | "my-designs" | "lower-thirds" | "ticker" | "stage" | "countdown" | "brand" | "used-on" | "outputs"
 
-/** The section a Design link really opens: the old Output looks table is now Used on… */
+/** The section a Design link really opens: the old Output looks table is now the Where used overview. */
 export function designTabOf(tab: DesignTab): DesignTab {
   return tab === "outputs" ? "used-on" : tab
 }
@@ -153,7 +154,7 @@ interface ShellState extends ShellPrefs {
   setSidebarCollapsed: (collapsed: boolean) => void
   toggleSidebar: () => void
   openOutputs: () => void
-  /** Open the outputs with this output's editor on top (Design → Used on… → Open output). A new object each time. */
+  /** Open the outputs with this output's editor on top (Design → Where used → Open output). A new object each time. */
   editOutputRequest: { id: string } | null
   editOutput: (id: string) => void
   setOutputsDialogOpen: (open: boolean) => void

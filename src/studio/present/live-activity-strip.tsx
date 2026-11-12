@@ -33,7 +33,7 @@ export function LiveActivityStrip() {
           size="xs"
           data-testid="live-approval-status"
           aria-label="Open Permissions because approval status is unavailable"
-          title="The host approval request status could not be loaded. Open Permissions to retry; the pending count is unknown."
+          title="The main computer's approval request status could not be loaded. Open Permissions to retry; the pending count is unknown."
           onClick={() => useShellStore.getState().goTo("permissions")}
         >
           <CircleAlertIcon /> Requests unavailable
@@ -46,7 +46,7 @@ export function LiveActivityStrip() {
           size="xs"
           data-testid="live-approval-status"
           aria-label={`Open ${pending} pending approval ${pending === 1 ? "request" : "requests"} in Permissions`}
-          title={`${pending} host-recorded request${pending === 1 ? "" : "s"} await review. Open Permissions to inspect the exact requests.`}
+          title={`${pending} request${pending === 1 ? "" : "s"} recorded on the main computer await review. Open Permissions to inspect the exact requests.`}
           onClick={() => useShellStore.getState().goTo("permissions")}
         >
           <ShieldCheckIcon /> Requests{" "}

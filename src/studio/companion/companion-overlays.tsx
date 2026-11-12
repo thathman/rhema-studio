@@ -61,11 +61,11 @@ function LinkInput({ label, value, onChange, placeholder }: { label: string; val
 
 /** The warning, and the explicit choice, for a link that is not shown to be for the paired host. */
 function OtherHost({ match, allowed, onAllow }: { match: ReturnType<typeof useHostMatch>; allowed: boolean; onAllow: (v: boolean) => void }) {
-  if (match === "checking") return <p role="status" className="text-muted-foreground">Checking the link is for the host this Companion joined…</p>
+  if (match === "checking") return <p role="status" className="text-muted-foreground">Checking the link is for the main computer this Companion joined…</p>
   if (match !== "other") return null
   return (
     <div role="alert" className="flex flex-col gap-1">
-      <p className="font-semibold">This link is not for the host this Companion joined. Check it was copied from the main Rhema Studio computer.</p>
+      <p className="font-semibold">This link is not for the main computer this Companion joined. Check it was copied from the main Rhema Studio computer.</p>
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={allowed} onChange={(e) => onAllow(e.target.checked)} />
         Use it anyway: I know this link is for our Rhema Studio computer
@@ -127,7 +127,7 @@ export function Overlays({ Card }: { Card: (p: { title: string; kicker: string; 
       ) : (
         <>
           <p className="text-muted-foreground">
-            Each overlay is a Browser Source showing one of the host's feeds, added on top of a scene you already have. Pick one of the feeds the host offers (on the host: Outputs → Add a ready-made feed, for example "Rhema Bible | Lower third", as a browser feed), or paste a feed's link for OBS. Your own sources in OBS are never removed, moved or hidden, and an overlay added to the scene on air comes in hidden.
+            Each overlay is a Browser Source showing one of the main computer's feeds, added on top of a scene you already have. Pick one of the feeds the main computer offers (on the main computer: Outputs → Add a ready-made feed, for example "Rhema Bible | Lower third", as a browser feed), or paste a feed's link for OBS. Your own sources in OBS are never removed, moved or hidden, and an overlay added to the scene on air comes in hidden.
           </p>
           <AddOverlay scenes={scenes} joinAddress={joinAddress} hostFeeds={host.feeds} hostError={host.error} onDone={reload} />
           <div className="flex items-center justify-between gap-2">
@@ -164,7 +164,7 @@ function useHostOverlays(): { feeds: HostOverlay[] | null; error: string | null;
       return { key, feeds: readHostOverlays(await invoke("join_overlays", { address, token }), address), error: null }
     } catch (e) {
       const why = String(e instanceof Error ? e.message : e)
-      return { key, feeds: null, error: why.startsWith("paused:") ? why.slice(7).trim() || "The main desk has taken back control" : why }
+      return { key, feeds: null, error: why.startsWith("paused:") ? why.slice(7).trim() || "The main computer has taken back control" : why }
     }
   }, [address, token, key])
   useEffect(() => {
@@ -180,14 +180,14 @@ function useHostOverlays(): { feeds: HostOverlay[] | null; error: string | null;
 
 /** The host's overlay feeds to pick from, or why there are none. */
 function HostFeedPicker({ feeds, error, picked, onPick }: { feeds: HostOverlay[] | null; error: string | null; picked: string; onPick: (f: HostOverlay | null) => void }) {
-  if (error) return <p role="alert" className="text-muted-foreground">The host's feeds cannot be listed: {error}. Paste a feed's link instead.</p>
+  if (error) return <p role="alert" className="text-muted-foreground">The main computer's feeds cannot be listed: {error}. Paste a feed's link instead.</p>
   if (!feeds) return null
-  if (!feeds.length) return <p className="text-muted-foreground">The host offers no overlay feeds yet. On the host: Outputs → Add a ready-made feed, as a browser feed (Bible, Lyrics, Name, Ticker or Clock).</p>
+  if (!feeds.length) return <p className="text-muted-foreground">The main computer offers no overlay feeds yet. On the main computer: Outputs → Add a ready-made feed, as a browser feed (Bible, Lyrics, Name, Ticker or Clock).</p>
   const label = (k: OverlayKind) => OVERLAY_KINDS.find((o) => o.id === k)!.label
   return (
     <label className="flex flex-col gap-1">
-      <span className="font-medium">Feed from the host</span>
-      <select aria-label="Feed from the host" value={picked} onChange={(e) => onPick(feeds.find((f) => f.id === e.target.value) ?? null)} className={`${field} max-w-[360px]`}>
+      <span className="font-medium">Feed from the main computer</span>
+      <select aria-label="Feed from the main computer" value={picked} onChange={(e) => onPick(feeds.find((f) => f.id === e.target.value) ?? null)} className={`${field} max-w-[360px]`}>
         <option value="">Pick a feed, or paste a link below…</option>
         {feeds.map((f) => <option key={f.id} value={f.id}>{f.name} ({label(f.kind)})</option>)}
       </select>
@@ -262,7 +262,7 @@ function AddOverlay({ scenes, joinAddress, hostFeeds, hostError, onDone }: { sce
         </label>
       </div>
       <label className="flex flex-col gap-1">
-        <span className="font-medium">Feed link from the host (meant for "{chosen.feed}")</span>
+        <span className="font-medium">Feed link from the main computer (meant for "{chosen.feed}")</span>
         <LinkInput label="Feed link" placeholder="http://192.168.1.20:8080/feed/…?k=…" value={link} onChange={(v) => { setLink(v); setPicked(""); setAllowOther(false) }} />
       </label>
       {link.trim() && !valid && <p role="alert" className="font-semibold">That is not a Rhema feed link: it looks like http://host:port/feed/…?k=…</p>}
@@ -276,7 +276,7 @@ function AddOverlay({ scenes, joinAddress, hostFeeds, hostError, onDone }: { sce
 }
 
 function testWords(t: OverlayTest): string {
-  const drawn = t.image ? "OBS draws it" : "OBS gave no picture of it: check the link and that the host is running"
+  const drawn = t.image ? "OBS draws it" : "OBS gave no picture of it: check the link and that the main computer is running"
   const shown = t.onAir ? "it is on air now" : t.showing ? "it is showing in OBS's preview or a projector" : "it is not on air"
   return `${drawn}; ${shown}${t.hidden ? "; it is hidden in this scene (left hidden)" : ""}.`
 }

@@ -100,17 +100,17 @@ describe("Rhema Studio Companion's window (#209)", () => {
     expect(host.querySelector("header svg.lucide-camera")).not.toBeNull()
   })
 
-  it("shows the host's certificate before pairing, and joins only once it is read", async () => {
+  it("shows the main computer's certificate before pairing, and joins only once it is read", async () => {
     const pair = vi.spyOn(useJoin.getState(), "pair").mockResolvedValue()
     await act(async () => root.render(<CompanionApp />))
     await settle()
-    expect(text()).toContain("talks to the host only over its secure page")
+    expect(text()).toContain("talks to the main computer only over its secure page")
     expect(button("Join")?.disabled).toBe(true)
     await act(async () => {
-      type(input("Host address"), "192.168.1.20:8080")
+      type(input("Main computer address"), "192.168.1.20:8080")
       type(input("Pairing code"), "123456")
     })
-    expect(text()).toContain("Checking the host's secure page")
+    expect(text()).toContain("Checking the main computer's secure page")
     await settle(450)
     expect(calls.filter((c) => c.cmd === "join_host_certificate").map((c) => c.args)).toEqual([{ address: "192.168.1.20:8080" }])
     expect(text()).toContain("3F2A 9C11 07BD 44E0 A1C3")
@@ -122,11 +122,11 @@ describe("Rhema Studio Companion's window (#209)", () => {
   })
 
   it("says why it cannot join a host whose secure page is off, and does not offer Join", async () => {
-    certificate = { ok: false, error: "The host's secure page is off. On the host: Settings → Remote control" }
+    certificate = { ok: false, error: "The main computer's secure page is off. On the main computer: Settings → Remote Control" }
     await act(async () => root.render(<CompanionApp />))
-    await act(async () => type(input("Host address"), "192.168.1.20:8080"))
+    await act(async () => type(input("Main computer address"), "192.168.1.20:8080"))
     await settle(450)
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain("The host's secure page is off")
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("The main computer's secure page is off")
     expect(button("Join")?.disabled).toBe(true)
   })
 
@@ -138,7 +138,7 @@ describe("Rhema Studio Companion's window (#209)", () => {
     expect(calls.some((c) => c.cmd === "join_connect")).toBe(true)
     await act(async () => useJoin.setState({ status: "connected" }))
     await settle()
-    expect(text()).toContain("Secure link, host's certificate")
+    expect(text()).toContain("Secure link, main computer's certificate")
     expect(text()).toContain("3F2A 9C11 07BD 44E0 A1C3")
   })
 

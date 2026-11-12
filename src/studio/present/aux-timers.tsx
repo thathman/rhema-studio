@@ -20,7 +20,7 @@ const OWNERS = REMOTE_ROLES.filter((r) => !["timekeeper", "present", "configure"
 
 function OwnerSelect({ value, onChange, label }: { value: string; onChange: (owner: string) => void; label: string }) {
   return (
-    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="h-8 max-w-28 rounded-md border border-input bg-card px-1 text-[0.6875rem]" title="Besides the Timekeeper and the main desk, the joined desk with this role may start, pause and reset it">
+    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="h-8 max-w-28 rounded-md border border-input bg-card px-1 text-[0.6875rem]" title="Besides the Timekeeper and the main computer, the joined desk with this role may start, pause and reset it">
       <option value="">Timekeeper</option>
       {OWNERS.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
       {value && !OWNERS.some((r) => r.id === value) && <option value={value}>{value}</option>}

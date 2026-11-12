@@ -1,6 +1,6 @@
 import { feedCameraUrl } from "@/lib/whep"
 import { describe, expect, it } from "vitest"
-import { CAMERA_QUALITIES, cameraAppLink, cameraListEntries, cameraQuality, rtmpsUrl, withCameraQuality, type RouterPorts } from "@/lib/cameras"
+import { CAMERA_QUALITIES, cameraAppLink, cameraListEntries, autoQualityNow, cameraQuality, rtmpsUrl, withCameraQuality, type RouterPorts } from "@/lib/cameras"
 
 const PORTS: RouterPorts = { webrtc: 8889, webrtcUdp: 8189, rtsp: 8554, rtsps: 8322, rtmp: 1935, srt: 8890, api: 9997 }
 const FP = "0123456789abcdef".repeat(4)
@@ -14,6 +14,17 @@ describe("Rhema Camera pairing link (#209)", () => {
     expect(Object.fromEntries(q)).toEqual({ host: "192.168.1.20", port: "8322", name: "pulpit", user: "cam-pulpit", token: CAM.token, fp: FP, label: "Pulpit & choir" })
     // Spaces as %20 and & escaped: the Android app reads it with a URL decoder.
     expect(link).toContain("label=Pulpit%20%26%20choir")
+  })
+
+  it("carries the certificate's public key pin beside its fingerprint (doc 48)", () => {
+    const KEY = "fedcba9876543210".repeat(4)
+    const q = (link: string | null) => new URL(link!.replace("rhema-camera://pair", "https://x/")).searchParams
+    expect(q(cameraAppLink("192.168.1.20", PORTS, CAM, FP, 8081, KEY)).get("key")).toBe(KEY)
+    expect(q(cameraAppLink("192.168.1.20", PORTS, CAM, FP, 8081, KEY)).get("fp")).toBe(FP)
+    // None known, or not a SHA-256: left out, and the link is as before.
+    expect(q(cameraAppLink("192.168.1.20", PORTS, CAM, FP, 8081, null)).has("key")).toBe(false)
+    expect(q(cameraAppLink("192.168.1.20", PORTS, CAM, FP, 8081, KEY.toUpperCase())).has("key")).toBe(false)
+    expect(cameraAppLink("192.168.1.20", PORTS, CAM, null, 8081, KEY)).toBeNull()
   })
 
   it("is not offered without RTSPS or a proper fingerprint", () => {
@@ -55,19 +66,36 @@ describe("rtmpsUrl", () => {
 describe("Suggested quality for Rhema Studio Cam (#838)", () => {
   const other = { name: "choir", label: "Choir", token: "f".repeat(32) }
 
-  it("leaves it to the phone until one is chosen, and ignores an unknown id", () => {
-    expect(cameraQuality(CAM)).toBe("phone")
-    expect(cameraQuality({ ...CAM, quality: "4k-ultra" } as typeof CAM)).toBe("phone")
+  it("is automatic until one is chosen, and ignores an unknown id", () => {
+    expect(cameraQuality(CAM)).toBe("auto")
+    expect(cameraQuality({ ...CAM, quality: "4k-ultra" } as typeof CAM)).toBe("auto")
     expect(CAMERA_QUALITIES.map((q) => q.id)).toEqual(["phone", "tv720", "hd1080", "light"])
   })
 
-  it("is kept on the camera it is chosen for only, and The phone decides removes it", () => {
+  it("is kept on the camera it is chosen for only; The phone decides is kept as a choice, Automatic removes it", () => {
     const set = withCameraQuality([CAM, other], "pulpit", "tv720")
     expect(cameraQuality(set[0])).toBe("tv720")
     expect(set[1]).toBe(other)
-    const back = withCameraQuality(set, "pulpit", "phone")
+    const phone = withCameraQuality(set, "pulpit", "phone")
+    expect(phone[0]).toEqual({ ...CAM, quality: "phone" })
+    expect(cameraQuality(phone[0])).toBe("phone")
+    const back = withCameraQuality(phone, "pulpit", "auto")
     expect(back[0]).toEqual(CAM)
     expect("quality" in back[0]).toBe(false)
+  })
+
+  it("tells the listener a chosen quality, The phone decides included, and nothing for Automatic (the host decides)", () => {
+    const explicit = withCameraQuality([CAM, other], "choir", "phone")
+    expect(cameraListEntries(explicit)).toEqual([
+      { name: "pulpit", token: CAM.token, label: "Pulpit & choir" },
+      { name: "choir", token: other.token, label: "Choir", quality: "phone" },
+    ])
+  })
+
+  it("says what Automatic does now from the host's status", () => {
+    expect(autoQualityNow(undefined)).toBe("the phone decides")
+    expect(autoQualityNow({ autoTv: false })).toBe("the phone decides")
+    expect(autoQualityNow({ autoTv: true })).toBe("TV-friendly 720p — a Google TV is showing it")
   })
 
   it("goes to the listener with the camera's label, and only when one is chosen", () => {
@@ -77,3 +105,4 @@ describe("Suggested quality for Rhema Studio Cam (#838)", () => {
     ])
   })
 })
+

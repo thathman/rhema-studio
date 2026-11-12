@@ -49,7 +49,7 @@ describe("AutomaticReminders", () => {
     await act(async () => save.click())
 
     expect(mockInvoke).toHaveBeenCalledWith("reminders_set_policy", { policy: { thresholdsMin: [5, 2], to: ["role:stage"], urgent: true } })
-    expect(el.textContent).toContain("Reminder rules saved on this host.")
+    expect(el.textContent).toContain("Reminder rules saved on this computer.")
   })
 
   it("shows host-load failures and does not expose controls that cannot be saved", async () => {

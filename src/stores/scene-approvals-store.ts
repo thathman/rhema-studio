@@ -185,9 +185,9 @@ export async function createSceneEditApproval(input: Omit<SceneEditApproval, "id
     const now = Date.now()
     const replaced = current.requests.filter((item) => (item.status === "pending" || item.status === "needs-review") && item.sceneId === request.sceneId && item.by === request.by)
     const replacedIds = new Set(replaced.map((item) => item.id))
-    const requests = current.requests.map((item) => replacedIds.has(item.id) ? { ...item, status: "superseded" as const, decidedAt: now, decidedBy: "Main desk", reason: "A newer request replaced it." } : item)
+    const requests = current.requests.map((item) => replacedIds.has(item.id) ? { ...item, status: "superseded" as const, decidedAt: now, decidedBy: "Main computer", reason: "A newer request replaced it." } : item)
     requests.push(request)
-    const audit = [...current.audit, ...replaced.map((item) => ({ id: crypto.randomUUID(), requestId: item.id, action: "superseded" as const, actor: "Main desk", at: now, reason: "A newer request replaced it." })), { id: crypto.randomUUID(), requestId: request.id, action: "created" as const, actor: request.by, at: request.at }]
+    const audit = [...current.audit, ...replaced.map((item) => ({ id: crypto.randomUUID(), requestId: item.id, action: "superseded" as const, actor: "Main computer", at: now, reason: "A newer request replaced it." })), { id: crypto.randomUUID(), requestId: request.id, action: "created" as const, actor: request.by, at: request.at }]
     created = request
     return { requests, audit, result: true }
   })
@@ -205,10 +205,10 @@ export async function decideSceneEditApproval(id: string, action: Exclude<SceneA
       ...item,
       status: action,
       decidedAt: at,
-      decidedBy: actor.trim().slice(0, 60) || "Main desk",
+      decidedBy: actor.trim().slice(0, 60) || "Main computer",
       ...(cleanReason ? { reason: cleanReason } : {}),
     } : item)
-    const audit = [...current.audit, { id: crypto.randomUUID(), requestId: id, action, actor: actor.trim().slice(0, 60) || "Main desk", at, ...(cleanReason ? { reason: cleanReason } : {}) }]
+    const audit = [...current.audit, { id: crypto.randomUUID(), requestId: id, action, actor: actor.trim().slice(0, 60) || "Main computer", at, ...(cleanReason ? { reason: cleanReason } : {}) }]
     return { requests, audit, result: true }
   })
 }

@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react"
-import { ChevronDownIcon, ExternalLinkIcon, Layers3Icon } from "lucide-react"
+import { useEffect, useRef, useState, type KeyboardEvent } from "react"
+import { ExternalLinkIcon, Layers3Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
 import { useBroadcastStore } from "@/stores"
 import { themeApplyPlan, themeDraftChanged, themeDraftStale } from "@/stores/broadcast-store"
 import { designDraftId } from "@/lib/design-drafts"
 import { DesignDraftActions } from "@/studio/design/design-draft-actions"
 import { SAVE_VOCABULARY } from "@/studio/design/design-vocabulary"
+import { DESIGN_GROUPS, designGroupOf, designSectionOf, type DesignGroupId } from "@/studio/design/design-groups"
 import { useShellStore, type DesignTab } from "@/studio/shell-store"
 import { ThemeLibrary } from "@/components/broadcast/theme-library"
 import { DesignCanvas } from "@/components/broadcast/design-canvas"
@@ -27,34 +27,42 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { mayLeaveDesignDocumentDraft } from "@/lib/design-document-draft"
 import { cn } from "@/lib/utils"
 
-const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
-  ["my-designs", "My Designs", "Editable church designs, private drafts and immutable versions"],
-  ["library", "Templates", "Scene templates for private, editable designs"],
-  ["themes", "Themes", "How Bible, songs, hymns, slides and pictures look"],
-  ["lower-thirds", "Lower thirds", "Names, scripture and lyrics strips"],
-  ["ticker", "News ticker", "The crawl along the screen"],
-  ["stage", "Stage", "What the team on the platform sees"],
-  ["countdown", "Countdown", "One big time that turns amber, then red, as time runs out"],
-  ["brand", "Brand kit", "Logo, colours and fonts once"],
-  ["used-on", "Used on…", "Which outputs show each look"],
-]
-const PRIMARY_TABS = TABS.filter(([id]) => id === "my-designs" || id === "library")
-const DESIGN_TOOLS = TABS.filter(([id]) => id !== "my-designs" && id !== "library")
-
 /**
- * Design studio: My Designs is the canonical editable scene workflow; the
- * specialised theme, lower-third, ticker, stage and brand tools remain nearby.
+ * Design studio: My Designs is the canonical editable scene workflow. Sections sit in three
+ * purpose groups (#818): Make, Style and Where used. Each design's and theme's own detail shows
+ * where it is used; Where used keeps the overview across every output.
  */
 export function DesignWorkspace() {
   const tab = useShellStore((s) => s.designTab)
   const setTab = useShellStore((s) => s.setDesignTab)
-  const activeTool = DESIGN_TOOLS.find(([id]) => id === (tab === "outputs" ? "used-on" : tab))
+  const section = designSectionOf(tab)
+  const group = designGroupOf(tab)
+  // The section last open in each group, so switching groups returns to it.
+  const lastInGroup = useRef<Partial<Record<DesignGroupId, DesignTab>>>({})
+  useEffect(() => { lastInGroup.current[group.id] = section.id }, [group.id, section.id])
+  const groupTabs = useRef<Array<HTMLButtonElement | null>>([])
   const [styleId, setStyleId] = useState<string>()
   const [pendingTemplate, setPendingTemplate] = useState<InitialDesignTemplate | null>(null)
   const documentRequest = useShellStore((s) => s.designDocumentRequest)
   const changeTab = async (next: DesignTab) => {
     if (next === tab || !(await mayLeaveDesignDocumentDraft())) return
     setTab(next)
+  }
+  const openGroup = (id: DesignGroupId) => {
+    const target = DESIGN_GROUPS.find((g) => g.id === id)!
+    void changeTab(lastInGroup.current[id] ?? target.sections[0].id)
+  }
+  // Tabs pattern, manual activation: arrows, Home and End move focus; Enter or Space opens.
+  const onGroupKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const last = DESIGN_GROUPS.length - 1
+    const next = event.key === "ArrowRight" ? (index === last ? 0 : index + 1)
+      : event.key === "ArrowLeft" ? (index === 0 ? last : index - 1)
+      : event.key === "Home" ? 0
+      : event.key === "End" ? last
+      : null
+    if (next === null) return
+    event.preventDefault()
+    groupTabs.current[next]?.focus()
   }
   const startTemplate = async (look: InitialDesignTemplate["look"], customize: boolean) => {
     if (!(await mayLeaveDesignDocumentDraft())) return
@@ -82,63 +90,61 @@ export function DesignWorkspace() {
           {tab === "themes" && <LiveEditSwitch />}
         </div>
       </header>
-      <nav aria-label="Design sections" className="mx-8 mb-3 flex shrink-0 flex-wrap items-center gap-1 border-b border-border max-[1200px]:mx-5">
-        {PRIMARY_TABS.map(([id, label, hint]) => (
-          <button
-            key={id}
-            type="button"
-            aria-current={tab === id ? "page" : undefined}
-            title={hint}
-            onClick={() => void changeTab(id)}
-            className={cn(
-              "-mb-px shrink-0 border-b-[3px] px-3 py-2.5 text-xs font-bold whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-              tab === id ? "border-primary text-primary-text" : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {label}
-          </button>
-        ))}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+      <div className="mx-8 mb-3 flex shrink-0 flex-wrap items-end gap-x-4 gap-y-2 border-b border-border max-[1200px]:mx-5">
+        <div role="tablist" aria-label="Design groups" className="mb-1.5 inline-flex shrink-0 gap-0.5 rounded-md bg-muted p-0.5">
+          {DESIGN_GROUPS.map((g, index) => (
             <button
+              key={g.id}
+              ref={(el) => { groupTabs.current[index] = el }}
+              id={`design-group-${g.id}`}
               type="button"
-              aria-label={activeTool ? `Design tools, ${activeTool[1]} selected` : "Design tools"}
-              aria-current={activeTool ? "page" : undefined}
-              title={activeTool ? `Design tools: ${activeTool[1]}` : "Themes, lower thirds, ticker, stage, countdown, brand kit, and usage"}
+              role="tab"
+              aria-selected={g.id === group.id}
+              aria-controls="design-section-panel"
+              tabIndex={g.id === group.id ? 0 : -1}
+              title={g.hint}
+              onClick={() => openGroup(g.id)}
+              onKeyDown={(event) => onGroupKey(event, index)}
               className={cn(
-                "-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-[3px] px-3 py-2.5 text-xs font-bold whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                activeTool ? "border-primary text-primary-text" : "border-transparent text-muted-foreground hover:text-foreground",
+                "rounded-[5px] px-3 py-1 text-xs font-bold whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                g.id === group.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
               )}
             >
-              Design tools
-              {activeTool && <span className="font-medium">· {activeTool[1]}</span>}
-              <ChevronDownIcon aria-hidden className="size-3.5" />
+              {g.label}
             </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuLabel>Specialist design tools</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={activeTool?.[0] ?? ""} onValueChange={(value) => void changeTab(value as DesignTab)}>
-              {DESIGN_TOOLS.map(([id, label, hint]) => (
-                <DropdownMenuRadioItem key={id} value={id} title={hint}>
-                  {label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </nav>
+          ))}
+        </div>
+        <nav aria-label="Design sections" className="flex min-w-0 flex-wrap items-center gap-1">
+          {group.sections.map(({ id, label, hint }) => (
+            <button
+              key={id}
+              id={section.id === id ? "design-section-current" : undefined}
+              type="button"
+              aria-current={section.id === id ? "page" : undefined}
+              title={hint}
+              onClick={() => void changeTab(id)}
+              className={cn(
+                "-mb-px shrink-0 border-b-[3px] px-3 py-2.5 text-xs font-bold whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                section.id === id ? "border-primary text-primary-text" : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      </div>
       {tab === "themes" && <div className="shrink-0 px-8 pb-3 max-[1200px]:px-5"><ThemeDraftActions /></div>}
       {tab === "themes" && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-8 pb-3 text-xs max-[1200px]:px-5" aria-label="More ways to use this look">
           <span className="font-semibold">More ways to use this look</span>
           {(["library", "lower-thirds", "ticker", "stage", "brand"] as const).map((id) => (
             <button key={id} type="button" onClick={() => void changeTab(id)} className="rounded-[5px] bg-accent px-2 py-1 text-[0.6875rem] font-bold text-accent-foreground outline-none hover:bg-accent/80 focus-visible:ring-3 focus-visible:ring-ring/50">
-              {TABS.find((t) => t[0] === id)?.[1]}
+              {designSectionOf(id).label}
             </button>
           ))}
         </div>
       )}
-      <div role="region" aria-label={TABS.find((t) => t[0] === tab)?.[1]} className="min-h-0 flex-1 px-8 pb-6 max-[1200px]:px-5">
+      <div id="design-section-panel" role="tabpanel" aria-labelledby={`design-group-${group.id} design-section-current`} className="min-h-0 flex-1 px-8 pb-6 max-[1200px]:px-5">
         {tab === "themes" ? (
           <div className="grid h-full min-h-0 grid-cols-[240px_minmax(0,1fr)_300px] overflow-hidden rounded-lg border border-border bg-card shadow-panel max-[1200px]:grid-cols-[200px_minmax(0,1fr)_280px]">
             <ThemeLibrary />
@@ -220,6 +226,7 @@ export function UsedOn() {
             : "Theme Live Edit is on, but no theme draft is open."}
         </p>
       )}
+      <p className="text-xs text-muted-foreground">Each design in My Designs and each theme also shows where it is used in its own detail; this overview covers every output at once.</p>
       <p className="text-xs text-muted-foreground">To change an output's look, open it: its main look is there, and content-specific looks are under <span className="font-semibold text-foreground">Advanced: content-specific looks</span>.</p>
       {usage.map((section) => (
         <section key={section.id} aria-labelledby={`design-usage-${section.id}`}>

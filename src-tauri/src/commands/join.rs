@@ -58,7 +58,7 @@ fn command_result(response: &serde_json::Value) -> JoinCommandResult {
 fn host_for(secure: Option<&(String, SecureLink)>, address: &str) -> Result<Host, String> {
     match secure {
         Some((a, link)) if a == address.trim() => rhema_join::pin::pinned_host(address, link.port, &link.fingerprint),
-        Some(_) => Err("The host has moved to another address: trying again there".into()),
+        Some(_) => Err("The main computer has moved to another address: trying again there".into()),
         None => Host::plain(address),
     }
 }
@@ -95,7 +95,7 @@ impl JoinRuntime {
 pub fn join_secure(state: State<'_, JoinRuntime>, address: String, secure: Option<SecureLink>) -> Result<(), String> {
     if let Some(link) = &secure {
         if link.port == 0 || !rhema_join::pin::valid_fingerprint(&link.fingerprint) {
-            return Err("This computer's record of the host's certificate is damaged: pair again".into());
+            return Err("This computer's record of the main computer's certificate is damaged: pair again".into());
         }
     }
     *state.secure.lock().map_err(|e| e.to_string())? = secure.map(|s| (address.trim().to_string(), s));
@@ -223,9 +223,9 @@ async fn receiver_report(host: &Host, token: &str) -> Result<serde_json::Value, 
         return Ok(serde_json::json!({ "outputs": [] }));
     }
     if !status.is_success() {
-        return Err(format!("The host could not report receiver status ({status})"));
+        return Err(format!("The main computer could not report receiver status ({status})"));
     }
-    response.json().await.map_err(|_| "The host returned an unreadable receiver report".to_string())
+    response.json().await.map_err(|_| "The main computer returned an unreadable receiver report".to_string())
 }
 
 /// The body of one command: a fresh `id` (a retry is harmless) and, when known, the service this
@@ -255,7 +255,7 @@ fn command_body(command: serde_json::Value, service: Option<String>) -> serde_js
 /// at a different service and refreshes, #246 C16) and "stale:" (someone changed that part of the
 /// service first: look again, #196 R7). An older host's 409 has no code and is the other service.
 fn refusal(status: u16, error: Option<String>, code: Option<&str>) -> String {
-    let msg = error.unwrap_or_else(|| "The host refused".into());
+    let msg = error.unwrap_or_else(|| "The main computer refused".into());
     match (status, code) {
         (423, _) => format!("paused: {msg}"),
         (409, Some("stale")) => format!("stale: {msg}"),
@@ -289,9 +289,9 @@ pub async fn join_voice(state: State<'_, JoinRuntime>, address: String, token: S
     let ok = r.status().is_success();
     let v = r.json::<serde_json::Value>().await.unwrap_or_default();
     if ok {
-        return v.get("sdp").and_then(|s| s.as_str()).map(String::from).ok_or_else(|| "The host sent no answer".into());
+        return v.get("sdp").and_then(|s| s.as_str()).map(String::from).ok_or_else(|| "The main computer sent no answer".into());
     }
-    Err(v.get("error").and_then(|e| e.as_str()).map_or_else(|| "The host refused the talk channel".into(), String::from))
+    Err(v.get("error").and_then(|e| e.as_str()).map_or_else(|| "The main computer refused the talk channel".into(), String::from))
 }
 
 /// Follow the host's Live State: "join:live" carries each snapshot, "join:state" the connection
@@ -374,7 +374,7 @@ struct TvChallengeReply {
 
 const OLD_RECEIVER: &str = "Update Rhema Studio Receiver on the TV (1.3 or later): this one cannot take Rhema Studio's secure link, so the feed link was not sent.";
 /// Rhema sends a TV only its https link, so the link and the page stay private on the network.
-const NO_TLS: &str = "Turn on the secure page in Settings → Remote control (Secure page for phones, https), then stop and start the listener: Rhema Studio sends a TV only its secure link. The feed link was not sent.";
+const NO_TLS: &str = "Turn on the secure page in Settings → Remote Control (Secure page for phones, https), then stop and start the listener: Rhema Studio sends a TV only its secure link. The feed link was not sent.";
 const NOT_THIS_TV: &str = "That code is not the one on this TV's screen, or this is not a real Rhema Studio Receiver. Check the code on the TV and try again; the feed link was not sent.";
 
 fn tv_unreachable(_: reqwest::Error) -> String {
@@ -397,24 +397,26 @@ async fn tv_target(address: &str) -> Result<std::net::SocketAddrV4, String> {
 #[tauri::command]
 pub async fn tv_show(http: State<'_, Mutex<super::remote::HttpRuntime>>, address: String, code: String, url: String) -> Result<String, String> {
     let pin = http.lock().map_err(|e| e.to_string())?.tv_pin();
-    let fingerprint = secure_feed(&url, pin)?;
-    show_on_tv(&address, &code, &url, &fingerprint).await
+    let (cert, key) = secure_feed(&url, pin)?;
+    show_on_tv(&address, &code, &url, (&cert, &key)).await
 }
 
-/// The certificate fingerprint to send with a feed link: only for https on the running https port
-/// (`pin` is that port and its certificate's fingerprint, None when https is off).
-fn secure_feed(url: &str, pin: Option<(u16, String)>) -> Result<String, String> {
-    let (port, fingerprint) = pin.ok_or(NO_TLS)?;
+/// The fingerprints to send with a feed link (certificate, server key): only for https on the
+/// running https port (`pin` is that port and both fingerprints, None when https is off).
+fn secure_feed(url: &str, pin: Option<(u16, String, String)>) -> Result<(String, String), String> {
+    let (port, cert, key) = pin.ok_or(NO_TLS)?;
     let u = reqwest::Url::parse(url).map_err(|_| NO_TLS)?;
     if u.scheme() != "https" || u.port() != Some(port) || !u.path().starts_with("/feed/") {
         return Err(NO_TLS.into());
     }
-    Ok(fingerprint)
+    Ok((cert, key))
 }
 
 /// First the code check (`tv_proof`): the link goes only to a TV that proved it shows this code,
-/// and travels encrypted with that check's key, with the certificate the TV must see.
-async fn show_on_tv(address: &str, code: &str, url: &str, cert_fingerprint: &str) -> Result<String, String> {
+/// and travels encrypted with that check's key, with what the TV must see: the certificate
+/// (`certFingerprint`, what every Receiver pins) and its server key (`keyFingerprint`, doc 48: the
+/// same after an address change or renewal; a Receiver from before ignores it).
+async fn show_on_tv(address: &str, code: &str, url: &str, (cert_fingerprint, key_fingerprint): (&str, &str)) -> Result<String, String> {
     if !url.starts_with("https://") {
         return Err(NO_TLS.into());
     }
@@ -435,7 +437,7 @@ async fn show_on_tv(address: &str, code: &str, url: &str, cert_fingerprint: &str
         return Err(OLD_RECEIVER.into());
     }
     let keys = desk.finish(reply.y.as_deref().unwrap_or_default(), &target, reply.proof.as_deref().unwrap_or_default()).ok_or(NOT_THIS_TV)?;
-    let sealed = keys.seal(serde_json::json!({ "url": url, "certFingerprint": cert_fingerprint }).to_string().as_bytes())?;
+    let sealed = keys.seal(serde_json::json!({ "url": url, "certFingerprint": cert_fingerprint, "keyFingerprint": key_fingerprint }).to_string().as_bytes())?;
     let r = http
         .post(format!("{base}/show"))
         .json(&sealed)
@@ -612,12 +614,12 @@ mod tests {
 
     #[test]
     fn paused_and_other_service_refusals_are_marked_for_the_desk() {
-        assert_eq!(refusal(423, Some("The main desk has taken back control".into()), None), "paused: The main desk has taken back control");
+        assert_eq!(refusal(423, Some("The main computer has taken back control".into()), None), "paused: The main computer has taken back control");
         assert_eq!(refusal(409, Some("That desk is looking at a different service; it will refresh".into()), Some("other-service")), "other-service: That desk is looking at a different service; it will refresh");
         assert_eq!(refusal(409, Some("That desk is looking at a different service; it will refresh".into()), None), "other-service: That desk is looking at a different service; it will refresh", "an older host");
         assert_eq!(refusal(409, Some("Someone changed this first \u{2014} look again".into()), Some("stale")), "stale: Someone changed this first \u{2014} look again");
         assert_eq!(refusal(403, Some("this device keeps time".into()), None), "this device keeps time");
-        assert_eq!(refusal(500, None, None), "The host refused");
+        assert_eq!(refusal(500, None, None), "The main computer refused");
     }
 
     #[test]
@@ -712,48 +714,51 @@ mod tests {
 
     const FEED: &str = "https://192.168.3.10:8081/feed/abc?k=secret";
     const PIN: &str = "abecce707af4a66a8aa18ce9624ebead97a8f362335dd688e9d5899af9428a19";
+    const KEY: &str = "5e3c9a1f0b7d2e4a6c8f1b3d5a7e9c0f2b4d6a8c0e1f3a5b7d9c2e4f6a8b0c1d";
+    const PINS: (&str, &str) = (PIN, KEY);
 
     #[tokio::test]
     async fn tv_show_sends_the_link_only_after_the_tv_proves_the_code() {
         let (address, seen) = pretend_tv(tv_answers_with("111111")).await;
-        assert_eq!(show_on_tv(&address, " 111111 ", FEED, PIN).await.unwrap(), "Hall TV");
+        assert_eq!(show_on_tv(&address, " 111111 ", FEED, PINS).await.unwrap(), "Hall TV");
         let seen = seen.lock().unwrap().clone();
         assert_eq!(seen.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>(), ["/challenge", "/show"]);
         assert!(!seen[0].1.contains("111111"), "the code itself is never sent");
         let show: serde_json::Value = serde_json::from_str(&seen[1].1).unwrap();
         assert!(show.get("url").is_none() && show.get("code").is_none() && !seen[1].1.contains("192.168"), "nothing readable: {show}");
-        // The TV opens it with the key of that exchange: the link and the certificate to insist on.
+        // The TV opens it with the key of that exchange: the link and the certificate to insist on,
+        // both as every Receiver pins it (the whole certificate) and by its server key (doc 48).
         let x = serde_json::from_str::<serde_json::Value>(&seen[0].1).unwrap()["x"].as_str().unwrap().to_string();
         let (_, _, enc) = super::super::tv_proof::tests::tv_answer(&x, "111111", &address, &tv_y()).unwrap();
         let opened = super::super::tv_proof::tests::tv_open(&enc, show["nonce"].as_str().unwrap(), show["data"].as_str().unwrap()).expect("sealed for this TV");
-        assert_eq!(serde_json::from_str::<serde_json::Value>(&opened).unwrap(), serde_json::json!({ "url": FEED, "certFingerprint": PIN }));
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&opened).unwrap(), serde_json::json!({ "url": FEED, "certFingerprint": PIN, "keyFingerprint": KEY }));
     }
 
     #[tokio::test]
     async fn tv_show_sends_only_a_secure_link() {
         let (address, seen) = pretend_tv(tv_answers_with("111111")).await;
-        assert_eq!(show_on_tv(&address, "111111", "http://192.168.3.10:8080/feed/abc?k=secret", PIN).await.unwrap_err(), NO_TLS);
+        assert_eq!(show_on_tv(&address, "111111", "http://192.168.3.10:8080/feed/abc?k=secret", PINS).await.unwrap_err(), NO_TLS);
         assert!(seen.lock().unwrap().is_empty(), "the TV was not even asked");
         // The command's check: https on the running https port, for a feed; nothing when https is off.
-        let pin = || Some((8081u16, PIN.to_string()));
-        assert_eq!(secure_feed(FEED, pin()).unwrap(), PIN);
+        let pin = || Some((8081u16, PIN.to_string(), KEY.to_string()));
+        assert_eq!(secure_feed(FEED, pin()).unwrap(), (PIN.to_string(), KEY.to_string()));
         assert_eq!(secure_feed(FEED, None).unwrap_err(), NO_TLS);
         assert_eq!(secure_feed("http://192.168.3.10:8081/feed/abc?k=secret", pin()).unwrap_err(), NO_TLS);
         assert_eq!(secure_feed("https://192.168.3.10:9443/feed/abc?k=secret", pin()).unwrap_err(), NO_TLS);
         assert_eq!(secure_feed("https://192.168.3.10:8081/remote", pin()).unwrap_err(), NO_TLS);
         assert_eq!(secure_feed("not a link", pin()).unwrap_err(), NO_TLS);
-        assert!(NO_TLS.starts_with("Turn on the secure page in Settings → Remote control"));
+        assert!(NO_TLS.starts_with("Turn on the secure page in Settings → Remote Control"));
     }
 
     #[tokio::test]
     async fn tv_show_never_sends_the_link_when_the_proof_fails() {
         // A TV with another code, or a pretend TV that accepts anything.
         let (address, seen) = pretend_tv(tv_answers_with("999999")).await;
-        assert_eq!(show_on_tv(&address, "111111", FEED, PIN).await.unwrap_err(), NOT_THIS_TV);
+        assert_eq!(show_on_tv(&address, "111111", FEED, PINS).await.unwrap_err(), NOT_THIS_TV);
         let (address2, seen2) = pretend_tv(|_, _| (200, serde_json::json!({ "ok": true, "v": 2, "y": "2", "proof": "00" }))).await;
-        assert_eq!(show_on_tv(&address2, "111111", FEED, PIN).await.unwrap_err(), NOT_THIS_TV);
+        assert_eq!(show_on_tv(&address2, "111111", FEED, PINS).await.unwrap_err(), NOT_THIS_TV);
         let (address3, seen3) = pretend_tv(|_, _| (200, serde_json::json!({ "ok": true, "v": 2 }))).await;
-        assert_eq!(show_on_tv(&address3, "111111", FEED, PIN).await.unwrap_err(), NOT_THIS_TV);
+        assert_eq!(show_on_tv(&address3, "111111", FEED, PINS).await.unwrap_err(), NOT_THIS_TV);
         for log in [seen, seen2, seen3] {
             let log = log.lock().unwrap();
             assert_eq!(log.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>(), ["/challenge"]);
@@ -764,7 +769,7 @@ mod tests {
     #[tokio::test]
     async fn tv_show_refuses_an_old_receiver_without_the_code_check() {
         let (address, seen) = pretend_tv(|_, _| (404, serde_json::json!({ "ok": false, "error": "Rhema Receiver only takes POST /show and GET /status" }))).await;
-        assert_eq!(show_on_tv(&address, "111111", FEED, PIN).await.unwrap_err(), OLD_RECEIVER);
+        assert_eq!(show_on_tv(&address, "111111", FEED, PINS).await.unwrap_err(), OLD_RECEIVER);
         assert_eq!(seen.lock().unwrap().len(), 1);
     }
 
@@ -777,7 +782,7 @@ mod tests {
             (200, serde_json::json!({ "ok": true, "y": y, "proof": proof }))
         }
         let (address, seen) = pretend_tv(answer_1_2).await;
-        assert_eq!(show_on_tv(&address, "111111", FEED, PIN).await.unwrap_err(), OLD_RECEIVER);
+        assert_eq!(show_on_tv(&address, "111111", FEED, PINS).await.unwrap_err(), OLD_RECEIVER);
         assert_eq!(seen.lock().unwrap().iter().map(|(p, _)| p.clone()).collect::<Vec<_>>(), ["/challenge"]);
     }
 
@@ -807,7 +812,7 @@ mod tests {
     #[test]
     #[ignore = "uses the real network"]
     fn announced_host_is_found_then_gone() {
-        let plan = super::super::host_advert::host_advert("0.0.0.0", 18_080, Some(18_081), "Rhema Test Church", "test").unwrap();
+        let plan = super::super::host_advert::host_advert("0.0.0.0", 18_080, Some(18_081), None, "Rhema Test Church", "test").unwrap();
         let ad = super::super::host_advert::start(plan).unwrap();
         let seen = browse(super::super::host_advert::HOST_SERVICE, Duration::from_millis(3000), "hosts").unwrap();
         let hosts = found_hosts(seen);
@@ -849,7 +854,7 @@ mod tests {
         let paired = join_pair(address.clone(), code, "Ade".into(), None).await.unwrap();
         let secure = paired.secure.clone().expect("paired over https");
         assert_eq!(Some(secure.port), r.tls_port);
-        assert_eq!(secure.fingerprint, rhema_api::tls::fingerprint(&ca).unwrap(), "the host's CA, as its Settings shows it");
+        assert_eq!(secure.fingerprint, rhema_api::tls::fingerprint(&ca).unwrap(), "the main computer's CA, as its Settings shows it");
         let rt = JoinRuntime::default();
         *rt.secure.lock().unwrap() = Some((address.clone(), secure.clone()));
         let pinned = rt.host(&address).unwrap();
@@ -899,7 +904,7 @@ mod tests {
         let host = JoinRuntime::default().host(&address).unwrap();
 
         let report = receiver_report(&host, token).await.unwrap();
-        assert_eq!(report["outputs"].as_array().unwrap().len(), 1, "the host enforces this desk's output scope: {report}");
+        assert_eq!(report["outputs"].as_array().unwrap().len(), 1, "the main computer enforces this desk's output scope: {report}");
         assert_eq!(report["outputs"][0], serde_json::json!({
             "id": "tv", "feed": true, "watching": 0, "seq": 0, "acked": 0,
             "confirmed": false, "ackedAgoMs": null, "tvsWatching": 0

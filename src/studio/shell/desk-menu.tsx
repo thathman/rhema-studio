@@ -19,9 +19,9 @@ import { roleLabel, rolePermits } from "@/lib/remote-roles"
 
 /** What this desk is, honestly: the main desk on its own, or the role a host gave it while joined. */
 function deskRole(status: JoinStatus, me: { role: string } | null, host: string): string {
-  if (status === "connected" && me) return `${roleLabel(me.role)} desk · joined ${host || "a host"}`
-  if ((status === "connecting" || status === "reconnecting") && host) return `Main desk · joining ${host}…`
-  return "Main desk"
+  if (status === "connected" && me) return `${roleLabel(me.role)} desk · joined ${host || "a main computer"}`
+  if ((status === "connecting" || status === "reconnecting") && host) return `Main computer · joining ${host}…`
+  return "Main computer"
 }
 
 function initials(name: string): string {
@@ -225,7 +225,7 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
               className="h-7 w-full min-w-0 rounded-md border border-input bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             />
             <p id="desk-device-hint" className="text-[0.6875rem] text-muted-foreground">
-              Tells desks apart when this one joins a host.{deviceId ? <> Desk ID <span className="font-mono tabular-nums">{shortDeviceId(deviceId)}</span>.</> : null}
+              Tells desks apart when this one joins a main computer.{deviceId ? <> Desk ID <span className="font-mono tabular-nums">{shortDeviceId(deviceId)}</span>.</> : null}
             </p>
           </div>
 
@@ -237,13 +237,13 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {joined || status !== "off" ? (
                 <>
-                  <Button size="xs" variant="outline" onClick={() => run(() => void useJoin.getState().leave())}>Leave this host</Button>
+                  <Button size="xs" variant="outline" onClick={() => run(() => void useJoin.getState().leave())}>Leave this main computer</Button>
                   <Button size="xs" variant="ghost" onClick={() => run(openConnectionsHub)}><UsersRoundIcon /> Connections</Button>
                 </>
               ) : (
                 <>
                   <Button size="xs" variant="outline" onClick={() => run(openConnectionsHub)}><UsersRoundIcon /> See joined desks</Button>
-                  <Button size="xs" variant="ghost" onClick={() => run(openConnectionsHub)}>Join another host</Button>
+                  <Button size="xs" variant="ghost" onClick={() => run(openConnectionsHub)}>Join another main computer</Button>
                 </>
               )}
             </div>

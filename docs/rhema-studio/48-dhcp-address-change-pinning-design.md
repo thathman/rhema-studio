@@ -77,3 +77,9 @@ Open questions for the owner: OK to keep one server key for the life of the CA (
 ## Decision (12 Nov 2026)
 
 The owner delegated this decision. Accepted: option (a), one stable server key for the life of the local CA, pinned by SPKI. Migration needs no taps: the devices accept the legacy leaf hash once and upgrade to the SPKI pin over the verified connection. Rediscovery uses `_rhema-host._tcp` with the `k=` TXT hint. Re-pairing (c) stays as the fallback message. Both open questions: yes. Build order: host, Receiver, Cam, one PR each.
+
+### As built on the host (milestone 1)
+
+- The server key is `tls/rhema-server-key.pem` (0600, written to a private temporary file and renamed into place, like the CA key; both are made private again whenever they are read).
+- **Adoption happens once.** At the first start after the upgrade (no `tls/rhema-server-key.made` marker yet), the key of the certificate Rhema serves (`rhema-server.key`) is adopted, and only when its public key matches `rhema-server.pem`. After that, a missing or unreadable server key is replaced by a **new** key (paired TVs and cameras pair again), never re-adopted from a certificate's key file, which may be the one that leaked.
+- **"Reset https keys"** is the host command `reset_https_keys` (main desk only, `window_acl`). It removes `rhema-ca.*`, the server key and every `rhema-server*` certificate, makes a new CA, server key and certificate, and restarts https for phone pages and the camera router when they were on. Every Receiver, Rhema Cam and Companion must pair again, and the result says so. The Settings button that calls it is left to the UI owner.

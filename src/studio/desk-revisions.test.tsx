@@ -97,8 +97,8 @@ describe("a refusal stays on the joined desk until its next command", () => {
     handlers.get("join:live")!({ payload: JSON.stringify(served({ "output:main": 2 })) })
     expect(useJoin.getState().error).toBe("this device runs the congregation screens: it may take and release scenes only")
     // The connection drops and comes back: its reason was about the connection, and goes.
-    handlers.get("join:state")!({ payload: JSON.stringify({ state: "reconnecting", error: "the host closed the connection" }) })
-    expect(useJoin.getState()).toMatchObject({ status: "reconnecting", error: "the host closed the connection" })
+    handlers.get("join:state")!({ payload: JSON.stringify({ state: "reconnecting", error: "the main computer closed the connection" }) })
+    expect(useJoin.getState()).toMatchObject({ status: "reconnecting", error: "the main computer closed the connection" })
     handlers.get("join:live")!({ payload: JSON.stringify(served({ "output:main": 2 })) })
     expect(useJoin.getState()).toMatchObject({ status: "connected", error: null })
   })
@@ -106,7 +106,7 @@ describe("a refusal stays on the joined desk until its next command", () => {
 
 describe("why a request could not be done reaches whoever sent it (Comms, #251)", () => {
   it("an Unable answer keeps its reason; other answers have none", () => {
-    const n = useNotices.getState().send({ from: "Main desk", fromId: "host", to: "bible", text: "Show John 3:16", action: { kind: "bible", value: "John 3:16" } })!
+    const n = useNotices.getState().send({ from: "Main computer", fromId: "host", to: "bible", text: "Show John 3:16", action: { kind: "bible", value: "John 3:16" } })!
     useNotices.getState().answer(n.id, "Ade", "unable", "  “Show John 3:16”:\n that verse was not found ")
     useNotices.getState().answer(n.id, "Femi", "ready", "ignored")
     expect(useNotices.getState().notices[0].answers).toEqual([
@@ -124,7 +124,7 @@ describe("why a request could not be done reaches whoever sent it (Comms, #251)"
   })
 
   it("the recipient's failed action answers Unable with why; the sender's panel shows it", async () => {
-    const n = useNotices.getState().send({ from: "Main desk", fromId: "host", to: "bible", text: "Please", action: { kind: "bible", value: "Hezekiah 1:1" } })!
+    const n = useNotices.getState().send({ from: "Main computer", fromId: "host", to: "bible", text: "Please", action: { kind: "bible", value: "Hezekiah 1:1" } })!
     const onAnswer = vi.fn()
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const el = document.createElement("div")
@@ -135,7 +135,7 @@ describe("why a request could not be done reaches whoever sent it (Comms, #251)"
     expect(onAnswer).toHaveBeenCalledWith(n.id, "unable", "“Show Hezekiah 1:1”: that is not a Bible reference")
     // The host's side: the answer arrives with its reason, and the main desk (the sender) sees it.
     useNotices.getState().answer(n.id, "Ade", "unable", onAnswer.mock.calls[0][2])
-    await act(async () => root.render(<NoticesPanel notices={useNotices.getState().notices} role="host" me="Main desk" onSend={vi.fn()} onAnswer={vi.fn()} onAction={vi.fn()} />))
+    await act(async () => root.render(<NoticesPanel notices={useNotices.getState().notices} role="host" me="Main computer" onSend={vi.fn()} onAnswer={vi.fn()} onAction={vi.fn()} />))
     expect(el.querySelector('[role="alert"]')?.textContent).toBe("Ade could not do it: “Show Hezekiah 1:1”: that is not a Bible reference")
     await act(async () => root.unmount())
     el.remove()

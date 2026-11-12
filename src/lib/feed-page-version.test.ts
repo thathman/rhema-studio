@@ -14,7 +14,7 @@ describe("feed page after a host update", () => {
     expect(feedPageOutdated(preloadFirst, running)).toBe(false)
   })
 
-  it("is out of date only when the host serves another build", () => {
+  it("is out of date only when the main computer serves another build", () => {
     expect(feedPageOutdated(page("feed-NW1eyKrK.js"), running)).toBe(false)
     expect(feedPageOutdated(page("feed-D532YLXl.js"), running)).toBe(true)
   })

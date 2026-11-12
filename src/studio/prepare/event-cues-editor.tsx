@@ -84,7 +84,7 @@ function EventCuesEditorSession({ eventId }: { eventId: string }) {
     const freshHeader = useQueueStore.getState().headers.find((candidate) => candidate.id === eventId)
     const freshCue = freshHeader?.event?.cues?.find((cue) => cue.id === review?.cueId)
     if (!review || !freshCue || armedCueId !== freshCue.id || !canRunFromHost(eventId)) {
-      setError("This event is no longer active on the main desk. Review the cue again when it is current.")
+      setError("This event is no longer active on the main computer. Review the cue again when it is current.")
       return
     }
     if (JSON.stringify(freshCue.steps) !== JSON.stringify(review.steps)) {
@@ -109,7 +109,7 @@ function EventCuesEditorSession({ eventId }: { eventId: string }) {
     <section aria-labelledby={`event-signals-${eventId}`} className="space-y-3">
       <div>
         <h3 id={`event-signals-${eventId}`} className="text-sm font-semibold">Event cues</h3>
-        <p className="mt-1 text-xs text-muted-foreground">Manual only. A cue never runs because the event starts, its timer advances, or its planned length ends. When this event is current, the main desk must arm the cue and confirm its effects before it runs.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Manual only. A cue never runs because the event starts, its timer advances, or its planned length ends. When this event is current, the main computer must arm the cue and confirm its effects before it runs.</p>
       </div>
 
       {cues.length > 0 ? (
@@ -186,7 +186,7 @@ function EventCuesEditorSession({ eventId }: { eventId: string }) {
               {impacts.length > 0 && <p className="text-xs text-muted-foreground">It may: {impacts.join(" · ")}</p>}
             </div>
           )}
-          {!hostMayRun && <p role="alert" className="text-xs text-destructive">This event is no longer active on the main desk.</p>}
+          {!hostMayRun && <p role="alert" className="text-xs text-destructive">This event is no longer active on the main computer.</p>}
           <DialogFooter>
             <Button variant="outline" disabled={running} onClick={() => setReview(null)}>Cancel</Button>
             <Button aria-label="Run event cue now" disabled={running || !hostMayRun || !confirmCue || hasUnknownSteps || confirmSteps.length === 0} onClick={() => void runConfirmedCue()}>

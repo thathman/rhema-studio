@@ -59,7 +59,7 @@ afterEach(async () => {
 })
 
 describe("joined Editor plan draft (#847)", () => {
-  it("loads the host's plan and saves the draft at the revision it opened", async () => {
+  it("loads the main computer's plan and saves the draft at the revision it opened", async () => {
     expect(calls("join_plan")[0]![1]).toMatchObject({ id: "p1" })
     expect(element.textContent).toContain("Revision 3 · approved 2 · saved")
     expect(button("Save draft").disabled).toBe(true)
@@ -77,7 +77,7 @@ describe("joined Editor plan draft (#847)", () => {
     expect(element.textContent).toContain("Revision 4 · approved 2 · saved")
   })
 
-  it("on a 409 offers reload or keep mine, and keeping mine saves over the host's new revision", async () => {
+  it("on a 409 offers reload or keep mine, and keeping mine saves over the main computer's new revision", async () => {
     mockInvoke.mockImplementation(async (command: string, args: { expectedRevision?: number }) => {
       if (command === "join_plans") return [program(hostRevision)]
       if (command === "join_plan") return plan(hostRevision)
@@ -91,7 +91,7 @@ describe("joined Editor plan draft (#847)", () => {
     hostRevision = 5
     await click(button("Save draft"))
     const conflict = element.querySelector("[aria-label='Plan conflict']")!
-    expect(conflict.textContent).toContain("The plan changed on the host since you opened it")
+    expect(conflict.textContent).toContain("The plan changed on the main computer since you opened it")
     expect(conflict.textContent).toContain("revision 5")
     expect(button("Save draft").disabled).toBe(true)
     await click(button("Keep my draft"))
@@ -100,13 +100,13 @@ describe("joined Editor plan draft (#847)", () => {
     const before = calls("join_save_plan").length
     await click(button("Save draft"))
     expect(calls("join_save_plan").length).toBe(before)
-    expect(element.querySelector(`[aria-label="Replace the host's changes"]`)?.textContent).toContain("replaces the host's revision 5")
+    expect(element.querySelector(`[aria-label="Replace the main computer's changes"]`)?.textContent).toContain("replaces the main computer's revision 5")
     await click(button("Replace with my draft"))
     expect(calls("join_save_plan").at(-1)![1]).toMatchObject({ expectedRevision: 5 })
     expect(result()).toContain("Draft saved as revision 6")
   })
 
-  it("before saving over the host's newer plan, says how many items and which ones disappear", async () => {
+  it("before saving over the main computer's newer plan, says how many items and which ones disappear", async () => {
     mockInvoke.mockImplementation(async (command: string, args: { expectedRevision?: number }) => {
       if (command === "join_plans") return [program(hostRevision)]
       if (command === "join_plan") {
@@ -125,8 +125,8 @@ describe("joined Editor plan draft (#847)", () => {
     await click(button("Save draft"))
     await click(button("Keep my draft"))
     await click(button("Save draft"))
-    const warning = element.querySelector(`[aria-label="Replace the host's changes"]`)!.textContent!
-    expect(warning).toContain("The host's plan has 3 items; yours has 1")
+    const warning = element.querySelector(`[aria-label="Replace the main computer's changes"]`)!.textContent!
+    expect(warning).toContain("The main computer's plan has 3 items; yours has 1")
     expect(warning).toContain("These items will disappear: Welcome, Offering.")
     await click(button("Cancel"))
     expect(calls("join_save_plan").filter(([, a]) => (a as { expectedRevision: number }).expectedRevision === 5)).toEqual([])
@@ -141,7 +141,7 @@ describe("joined Editor plan draft (#847)", () => {
     })
     await click(button("Submit for review"))
     const banner = element.querySelector("[aria-label='Plan conflict']")!.textContent!
-    expect(banner).toContain("Your revision 3 is still saved on the host, but it was not submitted for review")
+    expect(banner).toContain("Your revision 3 is still saved on the main computer, but it was not submitted for review")
     expect(banner).not.toContain("not saved")
   })
 
@@ -156,7 +156,7 @@ describe("joined Editor plan draft (#847)", () => {
     await type(element.querySelector("[aria-label='Notes for item 1']") as HTMLTextAreaElement, "first")
     await click(button("Save draft"))
     expect((element.querySelector("[aria-label='Draft editing']") as HTMLFieldSetElement).disabled).toBe(true)
-    expect(element.textContent).toContain("editing is paused until the host answers")
+    expect(element.textContent).toContain("editing is paused until the main computer answers")
     await act(async () => answer(plan(4, "first")))
     expect((element.querySelector("[aria-label='Draft editing']") as HTMLFieldSetElement).disabled).toBe(false)
     expect((element.querySelector("[aria-label='Notes for item 1']") as HTMLTextAreaElement).value).toBe("first")
@@ -189,7 +189,7 @@ describe("joined Editor plan draft (#847)", () => {
     expect(element.textContent).toContain("Revision 1")
   })
 
-  it("on a 409, reloading takes the host's plan and drops the unsaved change", async () => {
+  it("on a 409, reloading takes the main computer's plan and drops the unsaved change", async () => {
     mockInvoke.mockImplementation(async (command: string) => {
       if (command === "join_plans") return [program(3)]
       if (command === "join_plan") return plan(hostRevision)
@@ -199,7 +199,7 @@ describe("joined Editor plan draft (#847)", () => {
     await type(element.querySelector("[aria-label='Notes for item 1']") as HTMLTextAreaElement, "mine")
     hostRevision = 4
     await click(button("Save draft"))
-    await click(button("Reload the host's plan"))
+    await click(button("Reload the main computer's plan"))
     expect((element.querySelector("[aria-label='Notes for item 1']") as HTMLTextAreaElement).value).toBe("")
     expect(element.textContent).toContain("Revision 4 · approved 2 · saved")
   })
@@ -208,7 +208,7 @@ describe("joined Editor plan draft (#847)", () => {
     await type(element.querySelector("[aria-label='Note for the reviewer']") as HTMLInputElement, "ready for Sunday")
     await click(button("Submit for review"))
     expect(calls("join_submit_plan")[0]![1]).toMatchObject({ id: "p1", revision: 3, note: "ready for Sunday" })
-    expect(result()).toContain("Revision 3 is with the main desk for review")
+    expect(result()).toContain("Revision 3 is with the main computer for review")
     expect(result()).toContain("not approved")
   })
 
@@ -223,7 +223,7 @@ describe("joined Editor plan draft (#847)", () => {
     expect(element.querySelector("[role='alert']")?.textContent).toBe(FORBIDDEN_WORDS)
   })
 
-  it("keeps Save and Submit off while the main desk has paused this desk", async () => {
+  it("keeps Save and Submit off while the main computer has paused this desk", async () => {
     canSend.value = false
     await act(async () => root!.render(<EditorPlanDraft />))
     expect(button("Save draft").disabled).toBe(true)

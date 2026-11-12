@@ -23,7 +23,7 @@ export function sceneReleaseApprovalBlockReason(
   if (rehearsal) return null
   if (!current) return null
   if (current.approved_revision !== null && current.approved_revision !== undefined) {
-    return "This service has an approved scene appearance. Use a host-checked Take to change it."
+    return "This service has an approved scene appearance. Use a Take the main computer checks to change it."
   }
   if (requireApproval) return "Approve this service before changing a scene on Program."
   return null
@@ -37,7 +37,7 @@ export function deskSceneTakeApprovalBlockReason(
 ): string | null {
   if (rehearsal || !current) return null
   if (current.approved_revision === undefined) {
-    return "The host has not shared this service's approval status. Refresh the desk before taking a scene."
+    return "The main computer has not shared this service's approval status. Refresh the desk before taking a scene."
   }
   return sceneTakeApprovalBlockReason(rehearsal, current, requireApproval)
 }
@@ -50,7 +50,7 @@ export function deskSceneReleaseApprovalBlockReason(
 ): string | null {
   if (rehearsal || !current) return null
   if (current.approved_revision === undefined) {
-    return "The host has not shared this service's approval status. Refresh the desk before changing its scene."
+    return "The main computer has not shared this service's approval status. Refresh the desk before changing its scene."
   }
   return sceneReleaseApprovalBlockReason(rehearsal, current, requireApproval)
 }

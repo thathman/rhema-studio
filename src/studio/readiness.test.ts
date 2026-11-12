@@ -253,7 +253,7 @@ describe("preflight: timers, the countdown display and TV overscan (#213)", () =
   it("an extra timer whose desk is not connected names the timer and the desk", () => {
     const one = computeReadiness({ ...base, timersOwnerAway: [{ timer: "Communion prep", role: "Worship" }] }).checks
     expect(byId(one, "timers-owner-away")?.label).toBe("Extra timer “Communion prep”: no Worship desk is connected")
-    expect(byId(one, "timers-owner-away")?.detail).toContain("The main desk and the Timekeeper desk can still run it")
+    expect(byId(one, "timers-owner-away")?.detail).toContain("The main computer and the Timekeeper desk can still run it")
     const two = computeReadiness({ ...base, timersOwnerAway: [{ timer: "Communion prep", role: "Worship" }, { timer: "Interpreter", role: "Stage" }] }).checks
     expect(byId(two, "timers-owner-away")?.label).toBe("2 extra timers have no desk connected to run them")
     expect(byId(computeReadiness({ ...base, timersOwnerAway: [] }).checks, "timers-owner-away")).toBeUndefined()

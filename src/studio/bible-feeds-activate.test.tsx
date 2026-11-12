@@ -63,7 +63,7 @@ beforeEach(() => {
   useJournalStore.setState({ entries: [] })
 })
 
-describe("Activate on Bible feeds (main desk)", () => {
+describe("Activate on Bible feeds (main computer)", () => {
   it("changes the Bible source and the Bible feeds; the projector keeps the hymn", async () => {
     useBroadcastStore.getState().setLiveVerse(hymn, null, { goLive: true })
     expect(await activateOnBibleFeeds(verse(45, 8, 28))).toBe("presented")

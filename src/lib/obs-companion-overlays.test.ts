@@ -106,7 +106,7 @@ const order = (items: Item[]) => items.map((i) => i.sourceName)
 const writes = (o: ReturnType<typeof fakeObs>) => o.requests.filter((q) => !q.type.startsWith("Get"))
 
 describe("feed links (#848)", () => {
-  it("reads the host's feed links and refuses anything else", () => {
+  it("reads the main computer's feed links and refuses anything else", () => {
     expect(readFeedLink(LINK)).toMatchObject({ host: "192.168.1.20", port: 8080, id: "out-bible", token: "0123456789abcdef", secure: false })
     expect(readFeedLink(TICKER)).toMatchObject({ port: 8081, secure: true, id: "out-ticker" })
     expect(readFeedLink("http://192.168.1.20:8080/feed/a%20b?k=x")?.id).toBe("a b")
@@ -263,7 +263,7 @@ describe("testing an overlay (#848)", () => {
   })
 })
 
-describe("the host's overlay feeds (#848 G4)", () => {
+describe("the main computer's overlay feeds (#848 G4)", () => {
   const answer = {
     httpPort: 8080,
     feeds: [

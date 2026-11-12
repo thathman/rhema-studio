@@ -144,7 +144,7 @@ export function asTarget(to: unknown): NoticeTarget {
 export function targetName(to: NoticeTarget): string {
   return typeof to === "object" ? to.name : TARGET_NAMES[to]
 }
-export const TARGET_NAMES: Record<NoticeTo, string> = { all: "Everyone", host: "The main desk", timekeeper: "Timekeeper", bible: "Bible", worship: "Worship", screens: "Screens", stage: "Stage", camera: "Camera", obs: "OBS director", present: "Present desks" }
+export const TARGET_NAMES: Record<NoticeTo, string> = { all: "Everyone", host: "The main computer", timekeeper: "Timekeeper", bible: "Bible", worship: "Worship", screens: "Screens", stage: "Stage", camera: "Camera", obs: "OBS director", present: "Present desks" }
 
 /**
  * Whether a notice is for a desk with this role ("host" for the main desk) and, for one sent to a

@@ -29,5 +29,5 @@ export const useTimeChange = create<TimeChangeState>((set) => ({
 /** "+5 min by Desk A at 10:42 (3 min ago)" — `hhmm` formats the time on the church's clock. */
 export function timeChangeWords(c: TimeChange, now: number, hhmm: (ms: number) => string): string {
   const ago = Math.max(0, Math.round((now - c.at) / 60_000))
-  return `${c.what} · by ${c.by ?? "the main desk"} at ${hhmm(c.at)}${ago >= 1 ? ` (${ago} min ago)` : " (just now)"}`
+  return `${c.what} · by ${c.by ?? "the main computer"} at ${hhmm(c.at)}${ago >= 1 ? ` (${ago} min ago)` : " (just now)"}`
 }

@@ -147,18 +147,18 @@ describe("Live's named scene Take", () => {
     expect(api.read).toHaveBeenCalledTimes(2)
   })
 
-  it("keeps an approved service fail-closed when the host cannot find a complete pinned appearance", async () => {
+  it("keeps an approved service fail-closed when the main computer cannot find a complete pinned appearance", async () => {
     useServiceStore.setState({ current: { id: "service", title: "Sunday", approved_revision: 3 } as Program })
     api.read.mockResolvedValue({ ok: false, refusal: { code: "not-approved", message: "This scene is not pinned for that output" } })
     await render(<LiveSceneTakeAction selection={selection} />)
 
     expect(button("Take scene Welcome to Sanctuary Main").disabled).toBe(true)
     expect(element.textContent).toContain("This scene is not pinned for that output")
-    expect(button("Retry host review for Welcome on Sanctuary Main")).toBeTruthy()
+    expect(button("Retry main computer review for Welcome on Sanctuary Main")).toBeTruthy()
     expect(api.take).not.toHaveBeenCalled()
   })
 
-  it("keeps rehearsal Takes local and restores the real output without contacting the host", async () => {
+  it("keeps rehearsal Takes local and restores the real output without contacting the main computer", async () => {
     const scene = { ...newScene("Welcome"), id: "welcome" }
     useBroadcastStore.setState((state) => ({ scenes: [...state.scenes.filter((saved) => saved.id !== scene.id), scene] }))
     const before = useBroadcastStore.getState().outputs.find((output) => output.id === MAIN_OUTPUT_ID)!

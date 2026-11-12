@@ -431,7 +431,7 @@ export class OverlayOnAirError extends Error {
   }
 }
 
-const NOT_A_FEED = "That is not a Rhema feed link. On the host, copy the feed's link for OBS and paste it here."
+const NOT_A_FEED = "That is not a Rhema feed link. On the main computer, copy the feed's link for OBS and paste it here."
 
 export interface OverlayResult {
   inputName: string

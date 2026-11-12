@@ -38,12 +38,12 @@ describe("plans client (#847)", () => {
     }))
   })
 
-  it("turns a 409 into a conflict with the host's revision now", async () => {
+  it("turns a 409 into a conflict with the main computer's revision now", async () => {
     mockInvoke.mockRejectedValueOnce("conflict:5: The plan changed since you opened it")
-    expect(await saveHostPlanDraft("p1", 3, [])).toEqual({ ok: false, failure: { kind: "conflict", actual: 5, message: "The plan changed on the host since you opened it." } })
+    expect(await saveHostPlanDraft("p1", 3, [])).toEqual({ ok: false, failure: { kind: "conflict", actual: 5, message: "The plan changed on the main computer since you opened it." } })
   })
 
-  it("submits a revision for review and returns the host's approval request", async () => {
+  it("submits a revision for review and returns the main computer's approval request", async () => {
     mockInvoke.mockResolvedValueOnce({ id: "request-1", kind: "plan_approve", baseRevision: 4, state: "submitted" })
     const submitted = await submitHostPlan("p1", 4, "  ready for Sunday  ")
     expect(submitted).toEqual({ ok: true, value: { id: "request-1", kind: "plan_approve", baseRevision: 4, state: "submitted" } })
@@ -54,10 +54,10 @@ describe("plans client (#847)", () => {
     mockInvoke.mockRejectedValueOnce("forbidden: This desk's role does not work on the service plan")
     expect(await submitHostPlan("p1", 4)).toEqual({ ok: false, failure: { kind: "forbidden", message: FORBIDDEN_WORDS } })
     expect(readPlanFailure("paused: taken back").kind).toBe("paused")
-    expect(readPlanFailure("The host no longer knows this computer: pair again")).toEqual({ kind: "unpaired", message: UNPAIRED_WORDS })
+    expect(readPlanFailure("The main computer no longer knows this computer: pair again")).toEqual({ kind: "unpaired", message: UNPAIRED_WORDS })
     expect(readPlanFailure("missing: no such plan")).toEqual({ kind: "missing", message: "no such plan" })
     expect(readPlanFailure("refused: Already decided")).toEqual({ kind: "refused", message: "Already decided" })
-    expect(readPlanFailure("Could not reach the host: timed out")).toEqual({ kind: "error", message: "Could not reach the host: timed out" })
+    expect(readPlanFailure("Could not reach the main computer: timed out")).toEqual({ kind: "error", message: "Could not reach the main computer: timed out" })
   })
 
   it("refuses a malformed host answer instead of trusting it", async () => {

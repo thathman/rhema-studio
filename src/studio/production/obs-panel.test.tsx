@@ -430,7 +430,7 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     const { useJoin } = await import("@/stores/join-store")
     useJoin.setState({ status: "connected" })
     const { el, button } = await render()
-    expect(el.textContent).toContain("changed from the main desk")
+    expect(el.textContent).toContain("changed from the main computer")
     expect(button("Switch OBS to this scene")).toBeUndefined()
   })
 })

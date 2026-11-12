@@ -409,6 +409,6 @@ describe("Production control", () => {
     const panel = el.querySelector('[role="tabpanel"]')!
     expect(panel.textContent).toContain("OBS program")
     expect(panel.textContent).toContain("separate from Rhema Studio's congregation scenes")
-    expect(panel.textContent).toContain("Open Remote control") // OBS off: where to turn it on
+    expect(panel.textContent).toContain("Open Remote Control") // OBS off: where to turn it on
   })
 })

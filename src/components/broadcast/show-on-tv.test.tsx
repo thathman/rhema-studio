@@ -69,7 +69,7 @@ describe("Show on a Google TV without the secure page", () => {
     invoke.mockReset()
     invoke.mockResolvedValue([{ name: "Hall TV", address: "192.168.3.37:8095" }])
     const { el, root, tvs } = await open(null)
-    expect(el.textContent).toContain("Turn on the secure page in Settings → Remote control")
+    expect(el.textContent).toContain("Turn on the secure page in Settings → Remote Control")
     await act(async () => tvs()[0].click())
     const button = [...el.querySelectorAll("button")].find((b) => b.textContent === "Show on TV")!
     expect(button.disabled).toBe(true)

@@ -20,7 +20,8 @@ const hashPng = (dataUrl) => {
   return (hash >>> 0).toString(16).padStart(8, "0")
 }
 const sampleProgramCanvas = () => {
-  const canvas = document.querySelector("canvas")
+  // The Program canvas itself (broadcast-output marks it; a rebuilt one replaces it), not any other canvas.
+  const canvas = document.querySelector("canvas[data-output-surface=program]") ?? document.querySelector("canvas")
   if (!canvas || canvas.width <= 0 || canvas.height <= 0) return null
   const context = canvas.getContext("2d")
   if (!context) return null

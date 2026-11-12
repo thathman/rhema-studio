@@ -45,13 +45,13 @@ describe("open mode (#839 S15)", () => {
     expect(isOpenMode({ running: true, lan: true }, null, null)).toBe(false)
   })
 
-  it("stands in Live's header with no way to dismiss it, and opens Remote control settings", async () => {
+  it("stands in Live's header with no way to dismiss it, and opens Remote Control settings", async () => {
     await act(async () => root.render(<OpenModeWarning />))
     const warning = element.querySelector<HTMLElement>('[data-testid="open-mode-warning"]')!
     expect(warning.getAttribute("role")).toBe("alert")
     expect(warning.textContent).toContain("Remote keys are off on the network")
     const buttons = [...warning.querySelectorAll("button")]
-    expect(buttons.map((b) => b.textContent)).toEqual(["Open Remote control settings"])
+    expect(buttons.map((b) => b.textContent)).toEqual(["Open Remote Control settings"])
     await act(async () => buttons[0].click())
     expect(openSettingsMock).toHaveBeenCalledWith("remote")
     // Still there afterwards: only turning keys on or stopping the LAN listener ends it.
