@@ -265,7 +265,7 @@ mod tests {
     fn migration_0019_creates_empty_collection_tables() {
         let db = ContentDb::open_in_memory().unwrap();
         assert!(db.applied_migrations().unwrap().contains(&"0019_library_collections".to_string()));
-        assert!(db.list_collections().unwrap().is_empty());
+        assert_eq!(db.list_collections().unwrap().len(), 0);
     }
 
     #[test]
