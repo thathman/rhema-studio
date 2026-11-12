@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.0.0.6 · 11 Nov 2026 · main `7bf26370`**
+**Version 1.1.0.0 · 12 Nov 2026 · main `1718135a`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -30,13 +30,14 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | CI on GitHub Ubuntu runners | AUTOMATED TESTED | #789 adds an apt fallback: retry once, then the image index and kept packages, only for an unresolvable mirror. On 11 Nov the runners could not resolve `*.ubuntu.com` for hours. |
 | Open PR discipline (≤ 2) | MERGED | #787, #788 and #789 merged 11 Nov at their exact heads. |
 | This tracker | MERGED | #791. Rows still marked NOT YET AUDITED need checking against doc 32. |
+| Whole-app review (every route) | MERGED | 11 Nov review filed as #800–#859. Fixes merged 11–12 Nov in #860–#871, each after an independent review and green CI at its exact head. Open from it: the Companion feed list route, renderer rotation, My Designs archive, a host-side stale check (owner decision). Device checks of the new Receiver 1.7 and Rhema Cam 1.4 behaviour wait for the next QA host build. |
 
 ### Phase B — Operator experience
 
 | Area | Status | Evidence / next |
 | --- | --- | --- |
 | Six destinations, Prepare, Preview/Take, Library, Design, History | AUTOMATED TESTED | All native journeys passed on the Intel Mac host against a release build of `b390ef8b` with a fresh profile, 11 Nov: Home, hymn (Prepare add, edit, save, reopen, Send to Live Preview, with Live untouched), scene save, failed Take, and the Live empty, configured and Find states. Also green in CI on each PR. Not yet done: a full throwaway service run by hand with roles, LAN browser desks and the clicker. |
-| LAN browser operator desks and role permissions | NOT YET AUDITED | — |
+| LAN browser operator desks and role permissions | IN PR | #872 (`/desk`, milestone 1). Security review 12 Nov: no blockers; its two should-fix items are fixed (pairing turned off keeps the desk's key; the pause comes from the host's `/me`). Not yet run in a phone browser. |
 | NDI stall warning on every screen | AUTOMATED TESTED | #788 |
 
 ### Phase C — Connected production
@@ -76,6 +77,7 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | Recorder ready check: unplugged input | AUTOMATED TESTED | #797. Preflight now flags a chosen sound input that is not connected (before this, only Start refused it). Disk-full during a recording is NOT TESTED; a start below 2 GB free is refused. |
 | Phone remote when the host stops answering | AUTOMATED TESTED | #798. It says "Not updating" after two missed answers, holds every command button, and shows the host's refusal reasons. Device check waits for the next host build. |
 | Physical clicker | NOT TESTED | Computer-use access to the QA app was declined; unit tests cover held-key and focus behaviour. |
+| Hidden output window goes blank | IN PR | #873: a hidden output's canvas can go fully transparent and stay so (seen in CI since 3 Nov). The fix rebuilds the canvas and reports it as output health. |
 | Backup and restore safety | MERGED | #786 (refuses backups from newer versions; restore blocked while on air). |
 
 ### Phase E — Supervised church rehearsal
