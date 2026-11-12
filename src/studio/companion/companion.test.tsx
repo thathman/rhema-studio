@@ -9,12 +9,18 @@ vi.hoisted(() => {
 const calls: Array<{ cmd: string; args?: Record<string, unknown> }> = []
 let hostAnswer: unknown = null
 let hostRefusal: string | null = null
+let overlaysAnswer: unknown = { httpPort: 8080, feeds: [] }
+let overlaysRefusal: string | null = null
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string, args?: Record<string, unknown>) => {
     calls.push({ cmd, args })
     if (cmd === "join_cameras") {
       if (hostRefusal) throw hostRefusal
       return hostAnswer
+    }
+    if (cmd === "join_overlays") {
+      if (overlaysRefusal) throw overlaysRefusal
+      return overlaysAnswer
     }
     if (cmd === "host_discover") return []
     return null
@@ -71,6 +77,8 @@ const view = (pass = SRT.pass) => ({ router: true, srt: { ...SRT, pass }, camera
 beforeEach(() => {
   calls.length = 0
   hostRefusal = null
+  overlaysRefusal = null
+  overlaysAnswer = { httpPort: 8080, feeds: [] }
   hostAnswer = view()
   obs.inputs.clear()
   obs.scenes.clear()
@@ -259,6 +267,45 @@ describe("OBS companion screen (#209)", () => {
     await act(async () => set(form.querySelector<HTMLInputElement>('input[aria-label="Feed link"]')!, "http://192.168.1.20:8080/feed/out-bible?k=0123456789abcdef"))
     expect(form.textContent).not.toContain("not for the host this Companion joined")
     expect(add().disabled).toBe(false)
+  })
+
+  it("offers the host's overlay feeds: picking one fills the overlay and its link for the paired host (#848 G4)", async () => {
+    overlaysAnswer = { httpPort: 8080, feeds: [{ id: "out-clock", name: "Rhema Clock", kind: "timer", path: "/feed/out-clock?k=0123456789abcdef" }] }
+    useSettingsStore.setState({ companionMode: true, joinAddress: "192.168.1.20:8443" })
+    const { useObsStore } = await import("@/stores/obs-store")
+    useObsStore.setState({ status: "connected", error: null })
+    await act(async () => root.render(<App />))
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+    expect(calls.find((c) => c.cmd === "join_overlays")?.args).toEqual({ address: "192.168.1.20:8443", token: "tok" })
+    const form = host.querySelector('form[aria-label="Add an overlay"]')!
+    const pick = form.querySelector<HTMLSelectElement>('select[aria-label="Feed from the host"]')!
+    expect([...pick.options].map((o) => o.textContent)).toEqual(["Pick a feed, or paste a link below…", "Rhema Clock (Timer)"])
+    const set = (el: HTMLSelectElement, v: string) => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(el, v)
+      el.dispatchEvent(new Event("change", { bubbles: true }))
+    }
+    await act(async () => {
+      set(pick, "out-clock")
+      set(form.querySelector<HTMLSelectElement>('select[aria-label="OBS scene for the overlay"]')!, "Wide")
+    })
+    expect(form.querySelector<HTMLSelectElement>('select[aria-label="Overlay"]')!.value).toBe("timer")
+    // The key stays hidden on screen; the link is the paired host's own, so no warning.
+    expect(form.querySelector<HTMLInputElement>('input[aria-label="Feed link"]')!.value).toBe("http://192.168.1.20:8080/feed/out-clock?k=••••cdef")
+    expect(form.textContent).not.toContain("not for the host this Companion joined")
+    expect([...form.querySelectorAll("button")].find((b) => b.textContent?.includes("Add to the scene"))!.disabled).toBe(false)
+  })
+
+  it("says why the host's feeds cannot be listed, and keeps pasting a link possible", async () => {
+    overlaysRefusal = "paused: The main desk has taken back control"
+    useSettingsStore.setState({ companionMode: true })
+    const { useObsStore } = await import("@/stores/obs-store")
+    useObsStore.setState({ status: "connected", error: null })
+    await act(async () => root.render(<App />))
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+    const form = host.querySelector('form[aria-label="Add an overlay"]')!
+    expect(form.textContent).toContain("The host's feeds cannot be listed: The main desk has taken back control")
+    expect(form.querySelector('select[aria-label="Feed from the host"]')).toBeNull()
+    expect(form.querySelector('input[aria-label="Feed link"]')).not.toBeNull()
   })
 
   it("tells the operator when the host gave this computer another role", async () => {

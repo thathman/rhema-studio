@@ -148,6 +148,12 @@ pub async fn join_cameras(state: State<'_, JoinRuntime>, address: String, token:
     rhema_join::host::cameras(&state.host(&address)?, &token).await
 }
 
+/// The host's feeds an OBS companion may add to its OBS scenes as overlays (#848 G4). Read only.
+#[tauri::command]
+pub async fn join_overlays(state: State<'_, JoinRuntime>, address: String, token: String) -> Result<serde_json::Value, String> {
+    rhema_join::host::overlays(&state.host(&address)?, &token).await
+}
+
 /// An OBS companion's tally to its host: the cameras on its OBS program and preview, and those its
 /// OBS plays, for the host's Production → Cameras.
 #[tauri::command]

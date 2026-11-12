@@ -10,6 +10,7 @@ import { useJournalStore } from "@/stores/journal-store"
 import type { PageVideo } from "@/lib/camera-playback"
 import { tvKeys } from "@/lib/feed-receivers"
 import { sceneForOutput } from "@/lib/scenes"
+import { overlayKindOf } from "@/lib/feed-presets"
 import type { BroadcastOutput } from "@/types/broadcast-output"
 
 /**
@@ -26,7 +27,14 @@ function sync(): Promise<unknown> {
   const b = useBroadcastStore.getState()
   for (const o of b.outputs) if (o.type === "browser" && !o.feedToken) b.updateOutput(o.id, { feedToken: newFeedToken() })
   // Each paired TV's own key goes with its feed (#198): removing one revokes that TV alone.
-  const feeds = useBroadcastStore.getState().outputs.filter((o) => o.type === "browser" && o.feedToken).map((o) => ({ id: o.id, token: o.feedToken!, tvs: [...tvKeys(o.tvs), ...(pending.get(o.id) ?? [])] }))
+  // A feed an OBS companion may add as an overlay (#848 G4) also says its name and kind; the host
+  // lists only those to a companion.
+  const { outputs, scenes } = useBroadcastStore.getState()
+  const feeds = outputs.filter((o) => o.type === "browser" && o.feedToken).map((o) => {
+    const keys = { id: o.id, token: o.feedToken!, tvs: [...tvKeys(o.tvs), ...(pending.get(o.id) ?? [])] }
+    const kind = overlayKindOf(o, scenes)
+    return kind ? { ...keys, name: o.name, kind } : keys
+  })
   const key = JSON.stringify(feeds)
   if (key === last) return sent
   last = key
@@ -72,7 +80,8 @@ export function startBrowserFeeds(): () => void {
   // Said, not only logged (shown once the shell is up, so the toast is seen): the outputs here are defaults.
   if (savedOutputsUnread()) toast.error("Saved outputs and looks could not be read", { description: "Rhema Studio is showing its defaults. TVs keep the feeds they have until you change the outputs. Restart Rhema Studio before the service.", duration: Infinity })
   void sync()
-  const stop = useBroadcastStore.subscribe((s, p) => { if (s.outputs !== p.outputs) void sync() })
+  // Scenes too: the timer feed is known by its scene's clock (an overlay kind, #848 G4).
+  const stop = useBroadcastStore.subscribe((s, p) => { if (s.outputs !== p.outputs || s.scenes !== p.scenes) void sync() })
   // The first page to draw a new frame (crates/api http.rs ack): which screen showed what, and how soon.
   let alive = true
   let unlisten: (() => void) | undefined
