@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ask } from "@tauri-apps/plugin-dialog"
-import { ArrowLeftIcon, CheckIcon, FilePlus2Icon, Layers3Icon, PaletteIcon, PencilIcon, Trash2Icon, XIcon } from "lucide-react"
+import { ArchiveIcon, ArchiveRestoreIcon, ArrowLeftIcon, CheckIcon, FilePlus2Icon, Layers3Icon, PaletteIcon, PencilIcon, Trash2Icon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { designStore, type DesignDocument, type DesignSummary, type DesignVersion } from "@/design-engine/design-store"
 import { createBlankRhemaDesign, pinnedSceneForVersion } from "@/design-engine/design-document-utils"
 import { designPages, outputCoverPictures, sceneToDesign } from "@/design-engine/rhema-scene"
@@ -16,6 +17,7 @@ import { LookLibraryView } from "@/studio/design/look-library-view"
 import { TEMPLATE_LABELS } from "@/studio/design/design-vocabulary"
 import { DesignDocumentEditor } from "@/studio/design/design-document-editor"
 import { DesignUsagePanel } from "@/studio/design/design-usage-panel"
+import { designDeleteRefusal } from "@/studio/design/design-delete-guard"
 import { hydrateDesignSceneMedia } from "@/lib/design-media"
 import { renderSceneToCanvas } from "@/vendor/avnac/renderer/offscreen-render"
 import type { Scene } from "@/types/scene"
@@ -52,6 +54,7 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
   const [error, setError] = useState("")
   const [reloadToken, setReloadToken] = useState(0)
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
   const handledInitialTemplate = useRef<InitialDesignTemplate | null>(null)
   const handledInitialDesign = useRef<string | null>(null)
   const mainRef = useRef<HTMLElement>(null)
@@ -263,10 +266,42 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
       setError("The design could not be renamed: " + messageOf(failure))
     }
   }
-  /** Delete from the list, after asking (#851 G7). Designs with versions are kept by the host. */
+  /** Archive (hidden from the list and the Prepare picker, kept whole) or restore (#851 G7). */
+  const archiveDesign = async (item: DesignSummary, archived: boolean) => {
+    try {
+      const saved = await designStore.setArchived(item.id, archived)
+      setDocuments((items) => items.map((candidate) => candidate.id === item.id ? { ...candidate, archivedAt: saved.archivedAt ?? null } : candidate))
+      if (active?.id === item.id) setActive({ ...active, archivedAt: saved.archivedAt ?? null })
+      setError("")
+      toast.success(archived ? "Design archived" : "Design restored", {
+        description: archived
+          ? `“${item.title}” is hidden from My Designs. Services and scenes that use it keep working; turn on Show archived to restore it.`
+          : `“${item.title}” is back in My Designs.`,
+      })
+    } catch (failure) {
+      setError(`The design was not ${archived ? "archived" : "restored"}: ` + messageOf(failure))
+    }
+  }
+  /**
+   * Delete from the list, after asking (#851 G7). Refused, with the reason, while a service, a
+   * saved scene or an output's look uses it, or it has versions (which the host keeps).
+   */
   const deleteDesign = async (item: DesignSummary) => {
     if (active?.id === item.id && activeDirty) {
       setError("Save or discard the changes to the open design before deleting it.")
+      return
+    }
+    let uses
+    try {
+      uses = await designStore.usedOn(item.id)
+    } catch (failure) {
+      setError("The design was not deleted: what uses it could not be checked: " + messageOf(failure))
+      return
+    }
+    const { scenes, outputs } = useBroadcastStore.getState()
+    const refusal = designDeleteRefusal(item, uses, scenes, outputs)
+    if (refusal) {
+      setError(refusal)
       return
     }
     let confirmed = false
@@ -296,6 +331,8 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
       setError("The design was not deleted: " + messageOf(failure))
     }
   }
+  const archivedCount = documents.filter((item) => item.archivedAt).length
+  const listed = showArchived ? documents : documents.filter((item) => !item.archivedAt)
   const onSaved = (saved: DesignDocument) => {
     setActive(saved)
     setChosenDesign(null)
@@ -323,8 +360,8 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {loading && <p className="px-2 py-3 text-xs text-muted-foreground">Loading saved designs…</p>}
-          {!loading && documents.length === 0 && <p className="px-2 py-3 text-xs text-muted-foreground">No saved designs match this search. Create a blank design or start from a scene template.</p>}
-          {documents.map((item) => renaming?.id === item.id ? (
+          {!loading && listed.length === 0 && <p className="px-2 py-3 text-xs text-muted-foreground">{archivedCount && !showArchived ? `No designs in the list match this search; ${archivedCount} archived ${archivedCount === 1 ? "design is" : "designs are"} hidden.` : "No saved designs match this search. Create a blank design or start from a scene template."}</p>}
+          {listed.map((item) => renaming?.id === item.id ? (
             <form key={item.id} className="mb-1 flex flex-wrap items-center gap-1 rounded-md border border-primary px-1.5 py-1.5" onSubmit={(event) => { event.preventDefault(); void renameDesign(item.id, renaming.title) }}>
               <Input autoFocus aria-label={`New name for ${item.title}`} value={renaming.title} maxLength={200} onChange={(event) => setRenaming({ id: item.id, title: event.currentTarget.value })} onKeyDown={(event) => { if (event.key === "Escape") setRenaming(null) }} className="h-7 min-w-0 flex-1 text-xs" />
               <Button type="submit" size="icon-xs" variant="ghost" aria-label={`Save name for ${item.title}`} disabled={!renaming.title.trim()}><CheckIcon /></Button>
@@ -335,18 +372,20 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
             <div key={item.id} className={cn("mb-1 flex items-start gap-1 rounded-md border", active?.id === item.id ? "border-primary bg-accent" : "border-transparent hover:bg-accent/60")}>
               <button type="button" onClick={() => void open(item.id)} className="flex min-w-0 flex-1 flex-col rounded-md px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <span className="truncate text-xs font-semibold">{item.title}</span>
-                <span className="mt-0.5 text-[0.6875rem] text-muted-foreground">{item.kind}{item.latestVersion ? " · v" + item.latestVersion : " · draft only"}</span>
+                <span className="mt-0.5 text-[0.6875rem] text-muted-foreground">{item.kind}{item.latestVersion ? " · v" + item.latestVersion : " · draft only"}{item.archivedAt ? " · archived" : ""}</span>
               </button>
               {item.kind !== "template" && (
                 <div className="flex shrink-0 items-center gap-0.5 py-1.5 pr-1">
                   <Button type="button" size="icon-xs" variant="ghost" aria-label={`Rename ${item.title}`} title="Rename" onClick={() => setRenaming({ id: item.id, title: item.title })}><PencilIcon /></Button>
+                  {item.archivedAt
+                    ? <Button type="button" size="icon-xs" variant="ghost" aria-label={`Restore ${item.title}`} title="Restore to My Designs" onClick={() => void archiveDesign(item, false)}><ArchiveRestoreIcon /></Button>
+                    : <Button type="button" size="icon-xs" variant="ghost" aria-label={`Archive ${item.title}`} title="Archive: hide from My Designs, keep everything" onClick={() => void archiveDesign(item, true)}><ArchiveIcon /></Button>}
                   <Button
                     type="button"
                     size="icon-xs"
                     variant="ghost"
                     aria-label={`Delete ${item.title}`}
-                    title={item.latestVersion ? "Kept: this design has versions a service may use" : "Delete"}
-                    disabled={!!item.latestVersion}
+                    title={item.latestVersion ? "Delete (kept while it has versions; archive it instead)" : "Delete"}
                     onClick={() => void deleteDesign(item)}
                   ><Trash2Icon /></Button>
                 </div>
@@ -354,6 +393,12 @@ export function DesignDocumentsWorkspace({ initialTemplate = null, onInitialTemp
             </div>
           ))}
         </div>
+        {archivedCount > 0 && (
+          <label className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-[0.6875rem] text-muted-foreground">
+            <span>Show archived ({archivedCount})</span>
+            <Switch aria-label="Show archived designs" checked={showArchived} onCheckedChange={setShowArchived} />
+          </label>
+        )}
         {active && <DesignUsagePanel designId={active.id} />}
       </aside>
       <main ref={mainRef} className="flex min-h-0 min-w-0 flex-col">
@@ -433,6 +478,7 @@ function summaryOf(document: DesignDocument): DesignSummary {
     revision: document.revision,
     latestVersion: document.latestVersion,
     updatedAt: document.updatedAt,
+    archivedAt: document.archivedAt ?? null,
   }
 }
 
@@ -521,7 +567,8 @@ export function DesignVersionPicker({ onUse, onDirtyChange, useLabel, initialDes
     let cancelled = false
     void designStore.list().then((items) => {
       if (cancelled) return
-      const usable = items.filter((item) => item.kind !== "template")
+      // An archived design is not offered for new moments; one asked for by id still opens.
+      const usable = items.filter((item) => item.kind !== "template" && (!item.archivedAt || item.id === initialDesignId))
       setDocuments(usable)
       setSelectedId(usable.find((item) => item.id === initialDesignId)?.id ?? usable[0]?.id ?? "")
     }).catch((failure) => {

@@ -12,6 +12,7 @@ import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import { NO_SIGNALS } from "@/types/scene"
 import type { Scene, SceneBox, SceneCrop, SceneLayer, SceneLayerKind } from "@/types"
 import { keepHostGradients } from "@/lib/scene-gradient"
+import { layerRotation, layerTurns } from "@/lib/scene-rotation"
 
 /**
  * Scenes made and changed from joined desks (#243 SC.16, SC.17). The host publishes each scene's
@@ -111,6 +112,8 @@ function deskLayer(raw: unknown, had: SceneLayer | undefined, cameras: Set<strin
   const cameraUrl = typeof l.cameraUrl === "string" && (cameras.has(l.cameraUrl) || l.cameraUrl === had?.cameraUrl) ? l.cameraUrl : undefined
   const themeId = typeof l.themeId === "string" && themes.has(l.themeId) ? l.themeId : undefined
   const fadeMs = num(l.fadeMs, 0, 3000)
+  // A desk may turn a layer (#851 G7); one that does not say keeps the host's turn.
+  const rotation = !layerTurns(kind) ? undefined : "rotation" in l ? layerRotation(l.rotation) : had?.kind === kind ? had.rotation : undefined
   const until = typeof l.until === "string" && /^\d{1,2}:\d{2}$/.test(l.until) ? l.until : undefined
   const layer: SceneLayer = {
     id,
@@ -144,6 +147,7 @@ function deskLayer(raw: unknown, had: SceneLayer | undefined, cameras: Set<strin
     } : {}),
     ...(kind === "feed" && pick(l.language, ["both", "first", "second"] as const) ? { language: pick(l.language, ["both", "first", "second"] as const) } : {}),
     ...(fadeMs ? { fadeMs } : {}),
+    ...(rotation !== undefined ? { rotation } : {}),
   }
   // Media is the host's: a layer keeps its own picture, video and held copy, a new one has none.
   if (had && had.kind === kind) for (const k of ["mediaId", "mediaFile", "imageDraw", ...HOST_ONLY] as const) if (had[k] !== undefined) Object.assign(layer, { [k]: had[k] })

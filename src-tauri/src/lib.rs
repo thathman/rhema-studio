@@ -313,6 +313,7 @@ pub fn run() {
             commands::content::design_list_versions,
             commands::content::design_duplicate,
             commands::content::design_used_on,
+            commands::content::design_set_archived,
             commands::content::design_delete,
             commands::content::content_list_hymnbooks,
             commands::content::content_upsert_hymnbook,

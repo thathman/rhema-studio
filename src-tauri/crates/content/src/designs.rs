@@ -27,6 +27,9 @@ pub struct DesignDocument {
     pub latest_version: Option<i64>,
     pub created_at: String,
     pub updated_at: String,
+    /// When it was archived from My Designs (migration 0021); `None` while it is in the list.
+    #[serde(default)]
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -38,6 +41,9 @@ pub struct DesignSummary {
     pub revision: i64,
     pub latest_version: Option<i64>,
     pub updated_at: String,
+    /// When it was archived from My Designs (migration 0021); `None` while it is in the list.
+    #[serde(default)]
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -84,16 +90,18 @@ fn default_kind() -> String {
 
 impl ContentDb {
     /// Designs by title (no documents: a list of hundreds stays light), newest change first.
+    /// Archived designs are listed too, with `archived_at` set, after every design still in the
+    /// list, so a limit never lets archived ones crowd out active ones: the caller chooses what to show.
     pub fn list_designs(&self, query: Option<&str>, kind: Option<&str>, limit: usize) -> Result<Vec<DesignSummary>> {
         let conn = self.lock()?;
         let mut stmt = conn.prepare(
-            "SELECT id, title, kind, revision, (SELECT MAX(version) FROM design_versions v WHERE v.design_id = d.id), updated_at
+            "SELECT id, title, kind, revision, (SELECT MAX(version) FROM design_versions v WHERE v.design_id = d.id), updated_at, archived_at
              FROM design_documents d WHERE (?1 = '' OR instr(lower(title), lower(?1)) > 0) AND (?2 = '' OR kind = ?2)
-             ORDER BY updated_at DESC, id LIMIT ?3",
+             ORDER BY archived_at IS NOT NULL, updated_at DESC, id LIMIT ?3",
         )?;
         let rows = stmt.query_map(
             params![query.unwrap_or_default().trim(), kind.unwrap_or_default(), i64::try_from(limit.min(5000)).unwrap_or(5000)],
-            |r| Ok(DesignSummary { id: r.get(0)?, title: r.get(1)?, kind: r.get(2)?, revision: r.get(3)?, latest_version: r.get(4)?, updated_at: r.get(5)? }),
+            |r| Ok(DesignSummary { id: r.get(0)?, title: r.get(1)?, kind: r.get(2)?, revision: r.get(3)?, latest_version: r.get(4)?, updated_at: r.get(5)?, archived_at: r.get(6)? }),
         )?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
@@ -214,6 +222,27 @@ impl ContentDb {
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 
+    /// Archive a design (hidden from My Designs and the Prepare picker) or put it back (#851 G7).
+    /// Nothing is removed: its draft, versions and every pin on them stay, so a service or scene
+    /// made from it shows exactly as before. Not an edit: the draft revision does not change, so a
+    /// desk with it open can still save.
+    pub fn set_design_archived(&self, id: &str, archived: bool) -> Result<DesignSummary> {
+        let mut conn = self.lock()?;
+        let tx = conn.transaction()?;
+        let sql = if archived {
+            "UPDATE design_documents SET archived_at = COALESCE(archived_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) WHERE id = ?1"
+        } else {
+            "UPDATE design_documents SET archived_at = NULL WHERE id = ?1"
+        };
+        if tx.execute(sql, params![id])? == 0 {
+            return Err(ContentError::NotFound(id.to_string()));
+        }
+        audit(&tx, "design", id, if archived { "archive" } else { "restore" }, &serde_json::json!({ "archived": archived }))?;
+        let saved = load_design(&tx, id)?.ok_or_else(|| ContentError::NotFound(id.to_string()))?;
+        tx.commit()?;
+        Ok(DesignSummary { id: saved.id, title: saved.title, kind: saved.kind, revision: saved.revision, latest_version: saved.latest_version, updated_at: saved.updated_at, archived_at: saved.archived_at })
+    }
+
     /// Only a design nobody can have pinned: one with versions stays (they are immutable).
     pub fn delete_design(&self, id: &str, expected_revision: i64) -> Result<()> {
         let mut conn = self.lock()?;
@@ -303,7 +332,7 @@ fn check_tree(nodes: &serde_json::Map<String, serde_json::Value>, root: &str) ->
 }
 
 const DESIGN_COLUMNS: &str =
-    "id, title, kind, document, revision, (SELECT MAX(version) FROM design_versions v WHERE v.design_id = d.id), created_at, updated_at";
+    "id, title, kind, document, revision, (SELECT MAX(version) FROM design_versions v WHERE v.design_id = d.id), created_at, updated_at, archived_at";
 const VERSION_COLUMNS: &str = "design_id, version, from_revision, title, document, note, saved_by, created_at";
 
 fn json(text: &str) -> serde_json::Value {
@@ -313,7 +342,7 @@ fn json(text: &str) -> serde_json::Value {
 fn load_design(conn: &Connection, id: &str) -> Result<Option<DesignDocument>> {
     Ok(conn
         .query_row(&format!("SELECT {DESIGN_COLUMNS} FROM design_documents d WHERE id = ?1"), params![id], |r| {
-            Ok(DesignDocument { id: r.get(0)?, title: r.get(1)?, kind: r.get(2)?, document: json(&r.get::<_, String>(3)?), revision: r.get(4)?, latest_version: r.get(5)?, created_at: r.get(6)?, updated_at: r.get(7)? })
+            Ok(DesignDocument { id: r.get(0)?, title: r.get(1)?, kind: r.get(2)?, document: json(&r.get::<_, String>(3)?), revision: r.get(4)?, latest_version: r.get(5)?, created_at: r.get(6)?, updated_at: r.get(7)?, archived_at: r.get(8)? })
         })
         .optional()?)
 }
@@ -401,6 +430,37 @@ mod tests {
         assert_eq!(copy.document, doc("look"));
         db.delete_design(&copy.id, 1).unwrap();
         assert!(db.get_design(&copy.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn archiving_hides_nothing_it_only_marks_and_restores() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let d = db.create_design(&input("one")).unwrap();
+        assert_eq!(d.archived_at, None);
+        db.create_design_version(&d.id, 1, None, "").unwrap();
+        let archived = db.set_design_archived(&d.id, true).unwrap();
+        let stamp = archived.archived_at.clone().unwrap();
+        // Not an edit: the draft revision is unchanged, so an open editor can still save.
+        assert_eq!(archived.revision, 1);
+        db.save_design_draft(&d.id, 1, &input("two")).unwrap();
+        // Archiving again keeps the first time it was archived.
+        assert_eq!(db.set_design_archived(&d.id, true).unwrap().archived_at, Some(stamp));
+        let listed = db.list_designs(None, None, 10).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].archived_at.is_some());
+        // Its versions still open for every service and scene that pins them.
+        assert_eq!(db.get_design_version(&d.id, 1).unwrap().unwrap().document, doc("one"));
+        let restored = db.set_design_archived(&d.id, false).unwrap();
+        assert_eq!((restored.archived_at, restored.revision), (None, 2));
+        assert_eq!(db.get_design(&d.id).unwrap().unwrap().archived_at, None);
+        assert!(matches!(db.set_design_archived("missing", true), Err(ContentError::NotFound(_))));
+        // Archived designs come after active ones, so a short list is all active designs.
+        let other = db.create_design(&input("other")).unwrap();
+        db.set_design_archived(&d.id, true).unwrap();
+        db.save_design_draft(&d.id, 2, &input("newest edit")).unwrap();
+        let first = db.list_designs(None, None, 1).unwrap();
+        assert_eq!(first.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), vec![other.id.as_str()]);
+        assert_eq!(db.list_designs(None, None, 10).unwrap().last().map(|s| s.id.clone()), Some(d.id.clone()));
     }
 
     #[test]

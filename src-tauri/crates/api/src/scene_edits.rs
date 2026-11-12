@@ -62,7 +62,7 @@ struct CameraFeed {
 /// The fields a desk may send for a scene and for each of its layers; anything else is dropped
 /// (`strip`). Pictures, videos and held copies are not among them: they stay on the host.
 const SCENE_FIELDS: &[&str] = &["id", "name", "background", "layers", "fadeMs"];
-const LAYER_FIELDS: &[&str] = &["id", "name", "kind", "shows", "cameraUrl", "cameraFallback", "noSignal", "noSignalName", "clockShows", "until", "countdownTo", "themeId", "color", "text", "fontFamily", "fontSize", "fontWeight", "fontStyle", "textAlign", "lineHeight", "textColor", "underline", "mediaId", "mediaFile", "language", "fadeMs", "box", "crop", "opacity", "visible"];
+const LAYER_FIELDS: &[&str] = &["id", "name", "kind", "shows", "cameraUrl", "cameraFallback", "noSignal", "noSignalName", "clockShows", "until", "countdownTo", "themeId", "color", "text", "fontFamily", "fontSize", "fontWeight", "fontStyle", "textAlign", "lineHeight", "textColor", "underline", "mediaId", "mediaFile", "language", "fadeMs", "rotation", "box", "crop", "opacity", "visible"];
 const KINDS: &[&str] = &["feed", "color", "ellipse", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo", "text"];
 /// What a camera's box may show while the camera is not sending.
 const NO_SIGNALS: &[&str] = &["bars", "static", "words", "none"];
@@ -122,6 +122,7 @@ fn unsafe_scene(scene: &serde_json::Value, current: Option<&serde_json::Value>, 
                 ("box" | "crop", serde_json::Value::Object(b)) if b.values().all(serde_json::Value::is_number) => {}
                 ("box" | "crop", _) => return Some(format!("A layer's {k} is numbers only")),
                 ("opacity" | "fadeMs", v) if !v.is_number() => return Some(format!("A layer's {k} is a number")),
+                ("rotation", v) if v.as_f64().is_none_or(|n| !(-360.0..=360.0).contains(&n)) => return Some("A layer's rotation is between -360 and 360 degrees".into()),
                 ("visible", v) if !v.is_boolean() => return Some("A layer's visible is true or false".into()),
                 ("noSignalName", v) if !v.is_boolean() => return Some("A layer's noSignalName is true or false".into()),
                 ("noSignal", v) if !v.as_str().is_some_and(|m| NO_SIGNALS.contains(&m)) => return Some("A camera without a signal shows bars, static, words or none".into()),
@@ -136,7 +137,7 @@ fn unsafe_scene(scene: &serde_json::Value, current: Option<&serde_json::Value>, 
                 ("textAlign", v) if !v.as_str().is_some_and(|align| ["left", "center", "right"].contains(&align)) => return Some("Static text alignment is left, center or right".into()),
                 ("fontFamily", serde_json::Value::String(family)) if !safe_font_family(family) => return Some("Static text font family contains unsupported characters".into()),
                 ("underline", v) if !v.is_boolean() => return Some("Static text underline is true or false".into()),
-                ("opacity" | "fadeMs" | "visible" | "color" | "textColor" | "fontSize" | "lineHeight" | "fontWeight" | "fontStyle" | "textAlign" | "underline" | "noSignal" | "noSignalName", _) => {}
+                ("opacity" | "fadeMs" | "rotation" | "visible" | "color" | "textColor" | "fontSize" | "lineHeight" | "fontWeight" | "fontStyle" | "textAlign" | "underline" | "noSignal" | "noSignalName", _) => {}
                 (field, serde_json::Value::String(t)) if t.chars().count() > longest(field) => return Some(format!("A layer's {field} is at most {} characters", longest(field))),
                 (_, serde_json::Value::String(_)) => {}
                 (field, _) => return Some(format!("A layer's {field} is words")),
@@ -355,6 +356,8 @@ mod tests {
             serde_json::json!({ "kind": "camera", "noSignal": "snow" }),
             serde_json::json!({ "kind": "camera", "noSignal": true }),
             serde_json::json!({ "kind": "camera", "noSignalName": "yes" }),
+            serde_json::json!({ "rotation": "a lot" }),
+            serde_json::json!({ "rotation": 9000 }),
         ] {
             assert_eq!(refused(layer(bad.clone())), Err((400, "bad-scene")), "{bad}");
         }
@@ -362,6 +365,11 @@ mod tests {
         for mode in NO_SIGNALS {
             assert!(refused(layer(serde_json::json!({ "kind": "camera", "noSignal": mode, "noSignalName": true }))).is_ok(), "{mode}");
         }
+        // A desk may turn a layer (#851 G7); the host keeps the number.
+        let mut turned = layer(serde_json::json!({ "kind": "color", "color": "#202040", "rotation": -30.5 }));
+        assert!(refused(turned.clone()).is_ok(), "a turned layer");
+        strip(&mut turned);
+        assert_eq!(turned["layers"][0]["rotation"].as_f64(), Some(-30.5), "kept by strip");
         let mut bars = layer(serde_json::json!({ "kind": "camera", "noSignal": "static", "noSignalName": false }));
         strip(&mut bars);
         assert_eq!((bars["layers"][0]["noSignal"].as_str(), bars["layers"][0]["noSignalName"].as_bool()), (Some("static"), Some(false)), "kept by strip");

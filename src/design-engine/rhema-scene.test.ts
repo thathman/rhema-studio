@@ -126,7 +126,8 @@ describe("Rhema scenes in the Avnac engine", () => {
     const clip = applyCommand(design.scene, { type: "SET_NODE_CLIP_PATH", id: "oval", clipPath: { type: "ellipse", x: 0, y: 0, width: 100, height: 100 } })
     expect(designToScene({ ...design, scene: clip }).issues).toContainEqual({ nodeId: "oval", message: "Ellipse stroke and clipping cannot be saved into a Rhema scene yet" })
     const rotated = applyCommand(design.scene, { type: "ROTATE_NODE", id: "oval", rotation: 12 })
-    expect(designToScene({ ...design, scene: rotated }).issues).toContainEqual({ nodeId: "oval", message: "Layer rotation cannot be saved into a Rhema scene yet" })
+    // A turned layer saves its turn (#851 G7): outputs turn it about its box's centre.
+    expect(designToScene({ ...design, scene: rotated })).toMatchObject({ issues: [], scene: { layers: [{ id: "oval", rotation: 12 }] } })
     const flipped = designToScene({ ...design, scene: { ...design.scene, nodes: { ...design.scene.nodes, oval: { ...oval, scaleX: -1 } } } })
     expect(flipped.issues).toContainEqual({ nodeId: "oval", message: "Ellipse must keep a positive, finite scale for Rhema scene output" })
   })
@@ -225,13 +226,14 @@ describe("Rhema scenes in the Avnac engine", () => {
     ]))
   })
 
-  it("blocks saves that would drop layer rotation, and keeps the picture's crop", () => {
+  it("saves a turned, cropped picture with its turn and its crop (#851 G7)", () => {
     const design = sceneToDesign(sermon)
     let scene = design.scene
     scene = applyCommand(scene, { type: "ROTATE_NODE", id: "pic", rotation: 20 })
     scene = applyCommand(scene, { type: "SET_IMAGE_CROP", id: "pic", cropX: 12, cropY: 8, cropWidth: 180, cropHeight: 120 })
     const { issues, scene: saved } = designToScene({ ...design, scene })
-    expect(issues).toEqual([{ nodeId: "pic", message: "Layer rotation cannot be saved into a Rhema scene yet" }])
+    expect(issues).toEqual([])
+    expect(saved.layers.find((l) => l.id === "pic")?.rotation).toBe(20)
     expect(saved.layers.find((l) => l.id === "pic")?.imageDraw).toMatchObject({ cropX: 12, cropY: 8, cropWidth: 180, cropHeight: 120 })
   })
 })
