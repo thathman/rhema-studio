@@ -7,7 +7,7 @@ everything else is in Settings. It sends to the camera router that comes with Rh
 encrypted, on the church network only. Rhema's scenes and TVs and OBS take it from there as they take
 any camera.
 
-Version 1.4.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) and newer · target API 34.
+Version 1.6.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) and newer · target API 34.
 
 ## Using it
 
@@ -63,6 +63,25 @@ Version 1.4.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) an
   over the size and bitrate set on the phone. A lower bitrate applies at once; a smaller size restarts
   the stream, so it waits until Rhema says the camera is on no Program (not online, not on a TV).
   Settings → Picture shows it and has **Follow Rhema Studio's suggested quality** (on).
+
+## When Rhema Studio's address changes (1.6, doc 48)
+
+- **Pinned by Rhema's server key.** A pairing link from Rhema Studio with doc 48 carries `key=`, the
+  SHA-256 of Rhema's server key (SubjectPublicKeyInfo); the camera then trusts only that key, for the
+  picture (RTSPS) and the battery, heat and tally (https). The key stays the same when Rhema's address
+  changes or its certificate is renewed. A link from before (`fp=` only) trusts that one certificate
+  until it first completes a connection, then keeps its key (the saved link gains `key=`); nobody
+  has to scan again. A malformed `key=` is refused.
+- **Finding Rhema again.** While the camera should be sending and Rhema's camera router has not
+  answered for about 10 s, it browses the network for `_rhema-host._tcp` for 30 s, skips any Rhema
+  whose `k=` hint is not the start of its key pin, and checks each IPv4 address left (at most two per
+  announced name, the last-known one first) with a full TLS handshake on the camera router's port
+  that only the pinned key completes (4 s in all per check). Only then does it change the saved
+  address (nothing else in the link) and connect there as the same camera. Between browses it rests
+  15 s, 30 s, 60 s, then 120 s. It stops when it sends again or sending stops. After 2 minutes of
+  looking the status says "Rhema Studio may have moved; scan the camera link again if this
+  continues". A camera still holding only a certificate pin cannot look (its certificate does not
+  say its key until it has connected once at the old address).
 
 ## The look
 
