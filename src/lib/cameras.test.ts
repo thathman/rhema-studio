@@ -16,6 +16,17 @@ describe("Rhema Camera pairing link (#209)", () => {
     expect(link).toContain("label=Pulpit%20%26%20choir")
   })
 
+  it("carries the certificate's public key pin beside its fingerprint (doc 48)", () => {
+    const KEY = "fedcba9876543210".repeat(4)
+    const q = (link: string | null) => new URL(link!.replace("rhema-camera://pair", "https://x/")).searchParams
+    expect(q(cameraAppLink("192.168.1.20", PORTS, CAM, FP, 8081, KEY)).get("key")).toBe(KEY)
+    expect(q(cameraAppLink("192.168.1.20", PORTS, CAM, FP, 8081, KEY)).get("fp")).toBe(FP)
+    // None known, or not a SHA-256: left out, and the link is as before.
+    expect(q(cameraAppLink("192.168.1.20", PORTS, CAM, FP, 8081, null)).has("key")).toBe(false)
+    expect(q(cameraAppLink("192.168.1.20", PORTS, CAM, FP, 8081, KEY.toUpperCase())).has("key")).toBe(false)
+    expect(cameraAppLink("192.168.1.20", PORTS, CAM, null, 8081, KEY)).toBeNull()
+  })
+
   it("is not offered without RTSPS or a proper fingerprint", () => {
     expect(cameraAppLink("192.168.1.20", { ...PORTS, rtsps: undefined }, CAM, FP)).toBeNull()
     expect(cameraAppLink("192.168.1.20", PORTS, CAM, null)).toBeNull()

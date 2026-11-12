@@ -9,7 +9,8 @@ use std::time::Duration;
 pub use rhema_join::discover::HOST_SERVICE;
 
 /// What this computer would announce: the name people see, the network host name, the http port
-/// and the TXT record (`v=1`, and `tls=<port>` when https for phone pages is on).
+/// and the TXT record (`v=1`, and `tls=<port>` when https for phone pages is on, with `k=<the first
+/// 16 hex of the server key pin>` beside it, doc 48).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HostAdvert {
     pub instance: String,
@@ -18,10 +19,13 @@ pub struct HostAdvert {
     pub txt: Vec<(String, String)>,
 }
 
+/// How many hex digits of the server key pin (`rhema_api::tls::spki_fingerprint`) the `k=` hint carries.
+pub const KEY_HINT: usize = 16;
+
 /// The announcement for a listener bound to `bind_host`, or None when nobody else could reach it:
 /// a listener on this computer only (127.0.0.1) is never announced. The name is the church's
-/// (Brand Kit), else "Rhema · <this computer>".
-pub fn host_advert(bind_host: &str, port: u16, tls_port: Option<u16>, church: &str, computer: &str) -> Option<HostAdvert> {
+/// (Brand Kit), else "Rhema · <this computer>". `key_pin` is the server key's SHA-256 (hex), while https runs.
+pub fn host_advert(bind_host: &str, port: u16, tls_port: Option<u16>, key_pin: Option<&str>, church: &str, computer: &str) -> Option<HostAdvert> {
     let loopback = bind_host.eq_ignore_ascii_case("localhost") || bind_host.parse::<IpAddr>().map_or(true, |ip| ip.is_loopback());
     if loopback || port == 0 {
         return None;
@@ -42,6 +46,11 @@ pub fn host_advert(bind_host: &str, port: u16, tls_port: Option<u16>, church: &s
     let mut txt = vec![("v".to_string(), "1".to_string())];
     if let Some(t) = tls_port.filter(|t| *t != 0) {
         txt.push(("tls".to_string(), t.to_string()));
+        // Only a hint for skipping other Rhema hosts on the network: a Receiver or Rhema Cam still
+        // insists on the whole pin over TLS, and the key is served to anyone who connects anyway.
+        if let Some(k) = key_pin.filter(|k| k.len() >= KEY_HINT && k.bytes().all(|b| b.is_ascii_hexdigit())) {
+            txt.push(("k".to_string(), k[..KEY_HINT].to_ascii_lowercase()));
+        }
     }
     Some(HostAdvert { instance: shorten(&instance, 63), host, port, txt })
 }
@@ -102,16 +111,16 @@ mod tests {
     #[test]
     fn a_listener_on_this_computer_only_is_never_announced() {
         for host in ["127.0.0.1", "127.0.0.2", "::1", "localhost", "LOCALHOST", "not an address", ""] {
-            assert_eq!(host_advert(host, 8080, None, "CAC Ibadan", "studio"), None, "{host}");
+            assert_eq!(host_advert(host, 8080, None, None, "CAC Ibadan", "studio"), None, "{host}");
         }
-        assert_eq!(host_advert("0.0.0.0", 0, None, "CAC", "studio"), None, "no port, nothing to find");
-        assert!(host_advert("0.0.0.0", 8080, None, "CAC", "studio").is_some());
-        assert!(host_advert("192.168.1.20", 8080, None, "CAC", "studio").is_some());
+        assert_eq!(host_advert("0.0.0.0", 0, None, None, "CAC", "studio"), None, "no port, nothing to find");
+        assert!(host_advert("0.0.0.0", 8080, None, None, "CAC", "studio").is_some());
+        assert!(host_advert("192.168.1.20", 8080, None, None, "CAC", "studio").is_some());
     }
 
     #[test]
     fn the_church_name_is_used_else_rhema_and_this_computer() {
-        let name = |church: &str, computer: &str| host_advert("0.0.0.0", 8080, None, church, computer).unwrap().instance;
+        let name = |church: &str, computer: &str| host_advert("0.0.0.0", 8080, None, None, church, computer).unwrap().instance;
         assert_eq!(name("  CAC   Ibadan ", "Studio-Mac.local"), "CAC Ibadan");
         assert_eq!(name("St. Mary's", "x"), "St Mary's", "no dots in a network name");
         assert_eq!(name("", "Studio-Mac.local"), "Rhema · Studio-Mac");
@@ -123,11 +132,23 @@ mod tests {
 
     #[test]
     fn the_announcement_carries_the_port_version_and_https_port() {
-        let ad = host_advert("0.0.0.0", 8080, Some(8081), "CAC", "Studio Mac.local").unwrap();
+        let ad = host_advert("0.0.0.0", 8080, Some(8081), None, "CAC", "Studio Mac.local").unwrap();
         assert_eq!(ad.port, 8080);
         assert_eq!(ad.txt, vec![("v".into(), "1".into()), ("tls".into(), "8081".into())]);
         assert_eq!(ad.host, "rhema-studio-mac.local.", "its own host name, not the computer's");
-        assert_eq!(host_advert("0.0.0.0", 9000, None, "CAC", "").unwrap().txt, vec![("v".into(), "1".into())]);
-        assert_eq!(host_advert("0.0.0.0", 9000, None, "CAC", "").unwrap().host, "rhema-host.local.");
+        assert_eq!(host_advert("0.0.0.0", 9000, None, None, "CAC", "").unwrap().txt, vec![("v".into(), "1".into())]);
+        assert_eq!(host_advert("0.0.0.0", 9000, None, None, "CAC", "").unwrap().host, "rhema-host.local.");
+    }
+
+    #[test]
+    fn with_https_the_announcement_hints_the_server_key_pin() {
+        let pin = "5E3C9A1F0B7D2E4A6c8f1b3d5a7e9c0f2b4d6a8c0e1f3a5b7d9c2e4f6a8b0c1d";
+        let ad = host_advert("0.0.0.0", 8080, Some(8081), Some(pin), "CAC", "studio").unwrap();
+        assert_eq!(ad.txt, vec![("v".into(), "1".into()), ("tls".into(), "8081".into()), ("k".into(), "5e3c9a1f0b7d2e4a".into())]);
+        // No https, no hint; nothing that is not a pin either.
+        assert_eq!(host_advert("0.0.0.0", 8080, None, Some(pin), "CAC", "studio").unwrap().txt, vec![("v".into(), "1".into())]);
+        for odd in ["", "5e3c9a1f", "not a hex pin at all, no"] {
+            assert_eq!(host_advert("0.0.0.0", 8080, Some(8081), Some(odd), "CAC", "studio").unwrap().txt.len(), 2, "{odd:?}");
+        }
     }
 }

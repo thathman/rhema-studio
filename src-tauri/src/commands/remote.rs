@@ -603,6 +603,9 @@ pub struct HttpRuntime {
     tls_port: Option<u16>,
     /// SHA-256 of the https certificate, sent to a Rhema Receiver TV with a feed's https link (#198).
     tls_fingerprint: Option<String>,
+    /// SHA-256 of the server key's public key (doc 48): the same for every address and renewal; sent
+    /// beside `tls_fingerprint` for a Receiver or Rhema Cam to pin instead, and hinted in the advert.
+    tls_key_fingerprint: Option<String>,
     /// While https runs: certificates for addresses this computer moved to (`follow_address`).
     tls_leaves: Option<rhema_api::TlsLeaves>,
     /// SHA-256 of this computer's local CA, which Rhema Studio Companion pins when it pairs (#209).
@@ -624,6 +627,7 @@ impl HttpRuntime {
             bound_port: None,
             tls_port: None,
             tls_fingerprint: None,
+            tls_key_fingerprint: None,
             tls_leaves: None,
             tls_ca_fingerprint: None,
             lan: false,
@@ -642,7 +646,7 @@ impl HttpRuntime {
     /// renamed → announced again; stopped or on this computer only → no longer announced.
     fn refresh_advert(&mut self) {
         let bind = if self.lan { "0.0.0.0" } else { "127.0.0.1" };
-        let plan = self.bound_port.and_then(|port| super::host_advert::host_advert(bind, port, self.tls_port, &self.church, &super::host_advert::computer_name()));
+        let plan = self.bound_port.and_then(|port| super::host_advert::host_advert(bind, port, self.tls_port, self.tls_key_fingerprint.as_deref(), &self.church, &super::host_advert::computer_name()));
         if self.advert.as_ref().map(|a| &a.plan) == plan.as_ref() {
             return;
         }
@@ -674,10 +678,11 @@ impl HttpRuntime {
         self.status.clone()
     }
 
-    /// The https port and its certificate's fingerprint, while https runs: what Show on a Google
-    /// TV needs (#198); None means a TV cannot be sent a feed.
-    pub fn tv_pin(&self) -> Option<(u16, String)> {
-        self.tls_port.zip(self.tls_fingerprint.clone())
+    /// The https port, its certificate's fingerprint and its server key's (doc 48), while https runs:
+    /// what Show on a Google TV needs (#198); None means a TV cannot be sent a feed.
+    pub fn tv_pin(&self) -> Option<(u16, String, String)> {
+        let (port, cert) = self.tls_port.zip(self.tls_fingerprint.clone())?;
+        Some((port, cert, self.tls_key_fingerprint.clone()?))
     }
 }
 
@@ -767,6 +772,7 @@ pub async fn start_http(
     };
     let leaves = tls.as_ref().map(|t| t.leaves.clone());
     let fingerprint = tls.as_ref().and_then(|t| rhema_api::tls::fingerprint(&t.server).ok());
+    let key_fingerprint = tls.as_ref().and_then(|t| rhema_api::tls::spki_fingerprint(&t.server).ok());
     let ca_fingerprint = tls.as_ref().and_then(|t| rhema_api::tls::fingerprint(&rhema_api::tls::Pem { cert: t.ca_cert.clone(), key: String::new() }).ok());
     let config = HttpConfig {
         port,
@@ -794,6 +800,7 @@ pub async fn start_http(
         runtime.bound_port = Some(bound_port);
         runtime.tls_port = result.tls_port;
         runtime.tls_fingerprint = result.tls_port.and(fingerprint);
+        runtime.tls_key_fingerprint = result.tls_port.and(key_fingerprint);
         runtime.tls_leaves = result.tls_port.and(leaves.clone());
         runtime.tls_ca_fingerprint = result.tls_port.and(ca_fingerprint);
         runtime.lan = bind_host(lan) != "127.0.0.1";
@@ -818,6 +825,7 @@ pub async fn stop_http(state: State<'_, Mutex<HttpRuntime>>) -> Result<(), Strin
             runtime.bound_port = None;
             runtime.tls_port = None;
             runtime.tls_fingerprint = None;
+            runtime.tls_key_fingerprint = None;
             runtime.tls_leaves = None;
             runtime.tls_ca_fingerprint = None;
             runtime.presence.clear();
@@ -993,14 +1001,49 @@ fn now_secs() -> u64 {
 
 const SERVER_CERT: &str = "rhema-server";
 
-/// A certificate kept in `dir` as `<stem>.pem/.key/.txt`, if it is for exactly these names and not old.
-fn read_cert(dir: &std::path::Path, stem: &str, names: &[String], now: u64) -> Option<rhema_api::tls::Pem> {
+/// The server key every https certificate is made over (doc 48), kept beside the CA's key and, like
+/// it, readable only by this user. Made once for the life of the local CA, so a Receiver or Rhema Cam
+/// that pinned its public key still opens Rhema after the address changes or a certificate is renewed.
+const SERVER_KEY: &str = "rhema-server-key.pem";
+
+/// The server key (private PEM) and the SHA-256 of its public key, as devices pin it.
+struct ServerKey {
+    pem: String,
+    pin: String,
+}
+
+/// The kept server key. An install from before it existed adopts the key of the certificate it
+/// serves now, so a device pinned to that certificate keeps opening it; a new CA gets a new key.
+fn server_key(dir: &std::path::Path, new_ca: bool) -> Result<ServerKey, String> {
+    let readable = |path: std::path::PathBuf| {
+        let pem = std::fs::read_to_string(path).ok()?;
+        rhema_api::tls::key_fingerprint(&pem).ok().map(|pin| ServerKey { pem, pin })
+    };
+    let path = dir.join(SERVER_KEY);
+    if let Some(kept) = readable(path.clone()).filter(|_| !new_ca) {
+        return Ok(kept);
+    }
+    let key = if let Some(adopted) = readable(dir.join(format!("{SERVER_CERT}.key"))).filter(|_| !new_ca) {
+        adopted
+    } else {
+        let pem = rhema_api::tls::make_server_key()?;
+        let pin = rhema_api::tls::key_fingerprint(&pem)?;
+        ServerKey { pem, pin }
+    };
+    // Not kept would mean another key at the next start, and every pinned device lost: refuse instead.
+    write_private(&path, &key.pem)?;
+    Ok(key)
+}
+
+/// A certificate kept in `dir` as `<stem>.pem/.txt`, if it is for exactly these names, not old, and
+/// over the server key (one made over an older key is replaced, so every address has the same pin).
+fn read_cert(dir: &std::path::Path, stem: &str, names: &[String], now: u64, key: &ServerKey) -> Option<rhema_api::tls::Pem> {
     let cert = std::fs::read_to_string(dir.join(format!("{stem}.pem"))).ok()?;
-    let key = std::fs::read_to_string(dir.join(format!("{stem}.key"))).ok()?;
     // "<made at, unix seconds>\n<names, one per line>"
     let saved = std::fs::read_to_string(dir.join(format!("{stem}.txt"))).ok()?;
     let made = saved.lines().next()?.trim().parse::<u64>().ok().filter(|m| *m <= now && now - m < SERVER_CERT_DAYS * 86_400)?;
-    (saved == format!("{made}\n{}", names.join("\n")) && rhema_api::tls::fingerprint(&rhema_api::tls::Pem { cert: cert.clone(), key: String::new() }).is_ok()).then_some(rhema_api::tls::Pem { cert, key })
+    let server = rhema_api::tls::Pem { cert, key: key.pem.clone() };
+    (saved == format!("{made}\n{}", names.join("\n")) && rhema_api::tls::spki_fingerprint(&server).is_ok_and(|pin| pin == key.pin)).then_some(server)
 }
 
 fn write_cert(dir: &std::path::Path, stem: &str, names: &[String], now: u64, server: &rhema_api::tls::Pem) {
@@ -1020,16 +1063,17 @@ fn address_stem(ip: &str) -> Option<String> {
 
 /// The certificate for an address this computer moved to while running, with the one Rhema started
 /// with (which the camera router also serves) left as it is. The same address again gets the same
-/// certificate, so what was pinned to it still opens.
+/// certificate, so what was pinned to it still opens; every one is over the same server key.
 fn address_cert(dir: &std::path::Path, ca: &rhema_api::tls::Pem, names: &[String], now: u64) -> Result<rhema_api::tls::Pem, String> {
-    if let Some(same) = read_cert(dir, SERVER_CERT, names, now) {
+    let key = server_key(dir, false)?;
+    if let Some(same) = read_cert(dir, SERVER_CERT, names, now, &key) {
         return Ok(same);
     }
     let stem = names.first().and_then(|ip| address_stem(ip)).ok_or("not a network address")?;
-    if let Some(kept) = read_cert(dir, &stem, names, now) {
+    if let Some(kept) = read_cert(dir, &stem, names, now, &key) {
         return Ok(kept);
     }
-    let server = rhema_api::tls::make_server(ca, names)?;
+    let server = rhema_api::tls::make_server_with_key(ca, names, &key.pem)?;
     write_cert(dir, &stem, names, now, &server);
     Ok(server)
 }
@@ -1038,17 +1082,21 @@ fn address_cert(dir: &std::path::Path, ca: &rhema_api::tls::Pem, names: &[String
 /// was sent its fingerprint with its feed (#198) still opens it after Rhema restarts or the address
 /// comes back, and a phone that accepted the warning once is not asked again. An address never seen,
 /// a new CA or an old certificate gets a new one (a TV then needs its feed sent again; so does its
-/// link, which has the address in it).
+/// link, which has the address in it). A Receiver or Rhema Cam that pins the server key instead
+/// (doc 48) is not affected by any of these but a new CA.
 fn server_cert(dir: &std::path::Path, ca: &rhema_api::tls::Pem, names: &[String], new_ca: bool, now: u64) -> Result<rhema_api::tls::Pem, String> {
     if new_ca {
-        // Nothing the old CA signed stays.
+        // Nothing the old CA signed stays, nor the server key (`rhema-server-key.pem`).
         for f in std::fs::read_dir(dir).map_err(|e| e.to_string())?.flatten() {
             if f.file_name().to_string_lossy().starts_with(&format!("{SERVER_CERT}-")) {
                 let _ = std::fs::remove_file(f.path());
             }
         }
-    } else {
-        if let Some(same) = read_cert(dir, SERVER_CERT, names, now) {
+    }
+    // Before anything below replaces `rhema-server.key`, which an older install adopts.
+    let key = server_key(dir, new_ca)?;
+    if !new_ca {
+        if let Some(same) = read_cert(dir, SERVER_CERT, names, now, &key) {
             return Ok(same);
         }
         // Another address's certificate is about to be replaced: keep it for when that address returns.
@@ -1059,10 +1107,10 @@ fn server_cert(dir: &std::path::Path, ca: &rhema_api::tls::Pem, names: &[String]
             }
         }
     }
-    let kept = if new_ca { None } else { names.first().and_then(|ip| address_stem(ip)).and_then(|stem| read_cert(dir, &stem, names, now)) };
+    let kept = if new_ca { None } else { names.first().and_then(|ip| address_stem(ip)).and_then(|stem| read_cert(dir, &stem, names, now, &key)) };
     let server = match kept {
         Some(server) => server,
-        None => rhema_api::tls::make_server(ca, names)?,
+        None => rhema_api::tls::make_server_with_key(ca, names, &key.pem)?,
     };
     write_cert(dir, SERVER_CERT, names, now, &server);
     Ok(server)
@@ -1919,6 +1967,83 @@ mod tests {
         // A clock set back before it was made: a new one, never one "from the future".
         let now = server_cert(&dir, &ca, &names, false, t0 + 900 * day).unwrap();
         assert_ne!(fp(&server_cert(&dir, &ca, &names, false, t0).unwrap()), fp(&now));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn tls_test_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("rhema-tls-{name}-{}-{}", std::process::id(), now_secs()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn every_https_certificate_is_over_one_kept_server_key() {
+        use rhema_api::tls::{fingerprint, spki_fingerprint};
+        let dir = tls_test_dir("key");
+        let ca = rhema_api::tls::make_ca().unwrap();
+        let (day, t0) = (86_400, 1_800_000_000);
+        let names = |ip: &str| vec![ip.to_string(), "127.0.0.1".into(), "localhost".into()];
+        let first = server_cert(&dir, &ca, &names("192.168.1.20"), true, t0).unwrap();
+        let pin = spki_fingerprint(&first).unwrap();
+        // Kept beside the CA's key, readable only by this user, and never the CA's key.
+        let kept = std::fs::read_to_string(dir.join(SERVER_KEY)).unwrap();
+        assert_eq!(rhema_api::tls::key_fingerprint(&kept).unwrap(), pin);
+        assert_ne!(kept, ca.key);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(dir.join(SERVER_KEY)).unwrap().permissions().mode() & 0o777, 0o600);
+        }
+        // Another address (at start or while running), a restart, a renewal: other certificates, one pin.
+        let moved = server_cert(&dir, &ca, &names("192.168.1.21"), false, t0 + day).unwrap();
+        let running = address_cert(&dir, &ca, &names("10.0.0.7"), t0 + day).unwrap();
+        let renewed = server_cert(&dir, &ca, &names("192.168.1.21"), false, t0 + day + SERVER_CERT_DAYS * day).unwrap();
+        for server in [&moved, &running, &renewed] {
+            assert_ne!(fingerprint(server).unwrap(), fingerprint(&first).unwrap());
+            assert_eq!(spki_fingerprint(server).unwrap(), pin);
+            assert_eq!(server.key, kept, "served with the kept key");
+            assert!(rhema_api::tls::server_config(server, &ca.cert).is_ok());
+        }
+        // The camera router serves `rhema-server.pem/.key`: the same key.
+        assert_eq!(std::fs::read_to_string(dir.join(format!("{SERVER_CERT}.key"))).unwrap(), kept);
+        // A new CA ("Reset https keys", or its files lost): a new key, and every device pairs again.
+        let reset = server_cert(&dir, &ca, &names("192.168.1.21"), true, t0 + 2 * day).unwrap();
+        assert_ne!(spki_fingerprint(&reset).unwrap(), pin);
+        assert_eq!(spki_fingerprint(&server_cert(&dir, &ca, &names("10.0.0.9"), false, t0 + 2 * day).unwrap()).unwrap(), spki_fingerprint(&reset).unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_install_from_before_adopts_the_key_of_the_certificate_it_serves() {
+        use rhema_api::tls::{fingerprint, spki_fingerprint};
+        let dir = tls_test_dir("adopt");
+        let ca = rhema_api::tls::make_ca().unwrap();
+        let (day, t0) = (86_400, 1_800_000_000);
+        let here = vec!["192.168.1.20".to_string(), "127.0.0.1".into(), "localhost".into()];
+        let there = vec!["10.0.0.7".to_string(), "127.0.0.1".into(), "localhost".into()];
+        // What an older Rhema left: its certificate for this address and one kept for another, each
+        // over a key of its own, and no server key.
+        let old = rhema_api::tls::make_server(&ca, &here).unwrap();
+        write_cert(&dir, SERVER_CERT, &here, t0, &old);
+        let old_there = rhema_api::tls::make_server(&ca, &there).unwrap();
+        write_cert(&dir, &address_stem("10.0.0.7").unwrap(), &there, t0, &old_there);
+        assert!(!dir.join(SERVER_KEY).exists());
+        // Restarted after the upgrade: the very certificate a TV or camera pinned, and its key is kept.
+        let again = server_cert(&dir, &ca, &here, false, t0 + day).unwrap();
+        assert_eq!(fingerprint(&again).unwrap(), fingerprint(&old).unwrap(), "what was pinned still opens");
+        assert_eq!(std::fs::read_to_string(dir.join(SERVER_KEY)).unwrap(), old.key);
+        let pin = spki_fingerprint(&old).unwrap();
+        // The other address's old certificate is over another key: replaced, so the pin holds there too.
+        let moved = address_cert(&dir, &ca, &there, t0 + day).unwrap();
+        assert_ne!(fingerprint(&moved).unwrap(), fingerprint(&old_there).unwrap());
+        assert_eq!(spki_fingerprint(&moved).unwrap(), pin);
+        // Kept from now on, across restarts and addresses.
+        assert_eq!(spki_fingerprint(&server_cert(&dir, &ca, &there, false, t0 + 2 * day).unwrap()).unwrap(), pin);
+        assert_eq!(spki_fingerprint(&server_cert(&dir, &ca, &here, false, t0 + 3 * day).unwrap()).unwrap(), pin);
+        // An unreadable server key file: the certificate's key is adopted again, not a new one made.
+        std::fs::write(dir.join(SERVER_KEY), "nonsense").unwrap();
+        assert_eq!(spki_fingerprint(&server_cert(&dir, &ca, &here, false, t0 + 4 * day).unwrap()).unwrap(), pin);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

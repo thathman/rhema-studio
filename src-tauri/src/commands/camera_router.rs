@@ -75,6 +75,13 @@ pub fn rtsps_fingerprint(tls: &RtspsCert) -> Option<String> {
     rhema_api::tls::fingerprint(&rhema_api::tls::Pem { cert, key: String::new() }).ok()
 }
 
+/// SHA-256 of the public key of the certificate the router serves for RTSPS (doc 48): the Rhema Cam
+/// link's `key`, which stays the same when Rhema moves to another address or renews the certificate.
+pub fn rtsps_key_fingerprint(tls: &RtspsCert) -> Option<String> {
+    let cert = std::fs::read_to_string(&tls.cert).ok()?;
+    rhema_api::tls::spki_fingerprint(&rhema_api::tls::Pem { cert, key: String::new() }).ok()
+}
+
 /// The router's settings with RTSPS added after the RTSP lines (#209): with Rhema's certificate,
 /// RTSP is also offered over TLS for the Rhema Camera app, while plain RTSP stays for OBS as
 /// before, and RTMP likewise for a camera app that can send over TLS; without it (or with a path
@@ -619,6 +626,8 @@ pub struct RouterStatus {
     pub ports: Ports,
     /// SHA-256 of the certificate the router serves for RTSPS, while it does (the Rhema Camera link's `fp`).
     pub rtsps_fingerprint: Option<String>,
+    /// SHA-256 of that certificate's public key, while the router serves it (the link's `key`, doc 48).
+    pub rtsps_key_fingerprint: Option<String>,
     pub restarts: u32,
     pub error: Option<String>,
     pub paths: Vec<RouterPath>,
@@ -797,9 +806,10 @@ pub async fn camera_router_status(router: State<'_, CameraRouter>, http: State<'
     };
     // Read from the file each time: the router follows a renewed certificate by itself.
     let rtsps_fingerprint = if running { tls.as_ref().and_then(rtsps_fingerprint) } else { None };
+    let rtsps_key_fingerprint = if running { tls.as_ref().and_then(rtsps_key_fingerprint) } else { None };
     // The router's last answer (it is asked every two seconds while it runs; see look_regularly).
     let paths = if running { http.lock().map_err(|e| e.to_string())?.cameras().watch() } else { Vec::new() };
-    Ok(RouterStatus { installed: locate().is_some(), running, wanted, lan_address: super::remote::remote_lan_address(), ports: PORTS, rtsps_fingerprint, restarts, error, paths })
+    Ok(RouterStatus { installed: locate().is_some(), running, wanted, lan_address: super::remote::remote_lan_address(), ports: PORTS, rtsps_fingerprint, rtsps_key_fingerprint, restarts, error, paths })
 }
 
 #[derive(serde::Deserialize)]
@@ -946,8 +956,11 @@ mod tests {
         assert_eq!(tls.key, dir.join("rhema-server.key"));
         // The same fingerprint a Google TV is sent (#198): the leaf certificate's SHA-256.
         assert_eq!(rtsps_fingerprint(&tls), Some(rhema_api::tls::fingerprint(&server).unwrap()));
+        // And its server key's, which the link carries beside it (doc 48).
+        assert_eq!(rtsps_key_fingerprint(&tls), Some(rhema_api::tls::key_fingerprint(&server.key).unwrap()));
         std::fs::write(dir.join("rhema-server.pem"), "nonsense").unwrap();
         assert_eq!(rtsps_fingerprint(&tls), None);
+        assert_eq!(rtsps_key_fingerprint(&tls), None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
