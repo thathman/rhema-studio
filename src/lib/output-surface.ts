@@ -299,6 +299,24 @@ export function createSurfaceWatch(opts: SurfaceWatchOptions): SurfaceWatch {
   }
 }
 
+/** At most one "rebuilt" notice (toast / health event) per output this often (ms); each rebuild is still logged. */
+export const SURFACE_REBUILT_NOTICE_MS = 10 * 60_000
+
+/**
+ * Whether an output's surface event goes to the host (a toast, the health status). WebKit can keep
+ * dropping an idle hidden canvas: each drop is rebuilt and logged, but the operator is told at most
+ * once per SURFACE_REBUILT_NOTICE_MS. A failure, a recovery and "unchecked" always go.
+ */
+export function createSurfaceNoticeGate(intervalMs = SURFACE_REBUILT_NOTICE_MS): (event: SurfaceEvent) => boolean {
+  let lastRebuiltNotice = -Infinity
+  return (event) => {
+    if (event.kind !== "rebuilt") return true
+    if (event.at - lastRebuiltNotice < intervalMs) return false
+    lastRebuiltNotice = event.at
+    return true
+  }
+}
+
 function clock(at: number): string {
   const d = new Date(at)
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`

@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   colourOpaque,
+  createSurfaceNoticeGate,
   createSurfaceWatch,
   frameMustBeOpaque,
   surfaceHealthAction,
@@ -11,6 +12,7 @@ import {
   SURFACE_CHECK_MS,
   SURFACE_HELD_CHECK_MS,
   SURFACE_MAX_STRIKES,
+  SURFACE_REBUILT_NOTICE_MS,
   type SurfaceEvent,
 } from "./output-surface"
 
@@ -378,6 +380,21 @@ describe("createSurfaceWatch", () => {
     h.watch.afterDraw(h.live.canvas, true)
     h.watch.dispose()
     expect(h.timers.every((x) => x.cleared)).toBe(true)
+  })
+})
+
+describe("createSurfaceNoticeGate", () => {
+  it("tells the operator about a rebuild at most once per 10 minutes; failures and recoveries always", () => {
+    const gate = createSurfaceNoticeGate()
+    const t0 = 1_000_000
+    expect(gate({ kind: "rebuilt", reason: "blank", at: t0 })).toBe(true)
+    // WebKit keeps dropping the idle canvas: rebuilt every few seconds, told once.
+    for (let i = 1; i < 100; i++) expect(gate({ kind: "rebuilt", reason: "blank", at: t0 + i * 5000 })).toBe(false)
+    expect(gate({ kind: "failed", reason: "blank", at: t0 + 1, retryInMs: 5000 })).toBe(true)
+    expect(gate({ kind: "recovered", at: t0 + 2 })).toBe(true)
+    expect(gate({ kind: "unchecked", at: t0 + 3 })).toBe(true)
+    expect(gate({ kind: "rebuilt", reason: "context-lost", at: t0 + SURFACE_REBUILT_NOTICE_MS - 1 })).toBe(false)
+    expect(gate({ kind: "rebuilt", reason: "context-lost", at: t0 + SURFACE_REBUILT_NOTICE_MS })).toBe(true)
   })
 })
 
