@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { ask } from "@tauri-apps/plugin-dialog"
 import { CopyIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -129,11 +130,12 @@ export function LowerThirdDesigner({ initialId }: { initialId?: string } = {}) {
             <div className="mt-2 flex flex-wrap gap-1">
               <Button size="xs" variant="outline" onClick={() => add(DEFAULT_LOWER_THIRD_STYLE)}><PlusIcon /> New</Button>
               <Button size="xs" variant="outline" onClick={() => add(style)}><CopyIcon /> Duplicate</Button>
-              <Button size="xs" variant="ghost" disabled={styles.length < 2 || draft.dirty} title={draft.dirty ? "Save or discard the draft before deleting this style" : "Delete style"} onClick={() => {
+              <Button size="xs" variant="ghost" disabled={styles.length < 2 || draft.dirty} title={draft.dirty ? "Save or discard the draft before deleting this style" : "Delete style"} onClick={() => void confirmDeleteStyle(style.name).then((ok) => {
+                if (!ok) return
                 useBroadcastStore.getState().deleteDesignDraft(designDraftId("lower-third", style.id))
                 useBroadcastStore.getState().deleteLowerThirdStyle(style.id)
                 pick(styles.find((x) => x.id !== style.id)?.id ?? "")
-              }} aria-label="Delete style"><Trash2Icon /></Button>
+              })} aria-label="Delete style"><Trash2Icon /></Button>
             </div>
           </div>
 <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,26rem)]">
@@ -250,4 +252,13 @@ export function LowerThirdDesigner({ initialId }: { initialId?: string } = {}) {
         </div>
     </div>
   )
+}
+
+/** Deleting a lower-third style cannot be undone, so it is asked first (#831 S7). */
+async function confirmDeleteStyle(name: string): Promise<boolean> {
+  try {
+    return await ask(`Delete the lower-third style “${name}”? Its saved draft goes too. This cannot be undone.`, { title: "Delete lower-third style?", kind: "warning", okLabel: "Delete", cancelLabel: "Keep style" })
+  } catch {
+    return false
+  }
 }

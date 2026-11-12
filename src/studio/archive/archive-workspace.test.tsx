@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("@/studio/more/song-usage-block", () => ({ SongUsageBlock: () => null }))
-vi.mock("@/studio/library/library-blocks", () => ({
-  JournalBlock: () => null,
+vi.mock("@/studio/archive/song-usage-block", () => ({ SongUsageBlock: () => null }))
+vi.mock("@/studio/archive/service-runs", () => ({
+  JournalBlock: ({ onOpenRun }: { onOpenRun?: (id: string) => void }) => <button type="button" onClick={() => onOpenRun?.("run-1")}>Open run-1</button>,
 }))
+vi.mock("@/studio/archive/run-chronology", () => ({ RunChronologyPage: ({ runId, onBack }: { runId: string; onBack: () => void }) => <section aria-label="Service run chronology">{runId}<button type="button" onClick={onBack}>Back to History</button></section> }))
 vi.mock("@/studio/archive/recorder-archive", () => ({ RecorderArchive: () => <section aria-label="Rhema-native recordings" /> }))
 
 import { act } from "react"
@@ -68,7 +69,7 @@ describe("Archive calendar dates", () => {
     expect(serviceCount?.nextElementSibling?.textContent).toBe("1")
     expect(serviceCount?.nextElementSibling?.nextElementSibling?.textContent).toBe("2 items in all")
     expect(host.textContent).toContain("History and records.")
-    expect(host.textContent).toContain("private and read-only")
+    expect(host.textContent).toContain("Reviewing a run never changes an output or restores a service.")
     expect(host.querySelector('[aria-label="Rhema-native recordings"]')).not.toBeNull()
     expect(host.textContent).not.toContain("Backups")
     expect(host.textContent).not.toContain("Church folder")
@@ -108,5 +109,24 @@ describe("Archive calendar dates", () => {
     const secondRow = [...secondHost.querySelectorAll("li")].find((node) => node.textContent?.includes("October 31 service"))!
     expect(secondHost.querySelector('[aria-label="At a glance"]')?.textContent).toContain("October at a glance")
     expect(secondRow.textContent).toBe(firstLabel)
+  })
+
+  it("does not call History read-only while it offers Keep, Start a new log and delete (#824 F13)", async () => {
+    const host = await renderArchive()
+    expect(host.textContent).not.toContain("read-only")
+    expect(host.textContent).toContain("Reviewing a run never changes an output or restores a service.")
+    expect(host.textContent).toContain("Song usage")
+    expect(host.textContent).not.toContain("Songs sung")
+  })
+
+  it("opens one run as its own chronology page and Back returns to History (#854 G10)", async () => {
+    const host = await renderArchive()
+    const open = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Open run-1")!
+    await act(async () => open.click())
+    expect(host.querySelector("[aria-label=\"Service run chronology\"]")?.textContent).toContain("run-1")
+    expect(host.textContent).not.toContain("History and records.")
+    const back = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Back to History")!
+    await act(async () => back.click())
+    expect(host.textContent).toContain("History and records.")
   })
 })

@@ -18,7 +18,8 @@ function when(iso: string): string {
 /**
  * Every save of the open service is a snapshot. Pick one to see what a
  * restore would change, then restore it; the restore is itself a save, so
- * the state before it stays in the history.
+ * the state before it stays in Versions. Called "Versions", not "History" (#805 R6):
+ * History is the destination for what happened during a service.
  */
 export function ServiceHistory() {
   const current = useServiceStore((s) => s.current)
@@ -52,7 +53,7 @@ export function ServiceHistory() {
     const r = await useServiceStore.getState().restoreRevision(picked.revision.id)
     setBusy(false)
     if (r === "ok") {
-      toast.success(`Back to the version from ${when(picked.revision.created_at)}`, { description: "That was saved as a new version; the previous one is still in the history." })
+      toast.success(`Back to the version from ${when(picked.revision.created_at)}`, { description: "That was saved as a new version; the previous one is still in Versions." })
       setOpen(false)
     } else if (r === "unsaved") toast.warning("Save or discard your changes first")
     else if (r === "conflict") toast.error("This service changed elsewhere", { description: "Reload it, then try again." })
@@ -64,7 +65,7 @@ export function ServiceHistory() {
     <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setPicked(null) }}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" title="Earlier saved versions of this service">
-          <HistoryIcon /> History
+          <HistoryIcon /> Versions
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-96">

@@ -290,7 +290,7 @@ describe("Library workspace", () => {
     expect(button("Choose a saved version for this moment")).toBeUndefined()
   })
 
-  it("opens the canonical versioned design editor without changing the current Live output", async () => {
+  it("links to the one My Designs in Design instead of mounting a second copy, without changing the current Live output (#806)", async () => {
     await act(async () => {
       root!.render(<LibraryWorkspace />)
     })
@@ -304,7 +304,10 @@ describe("Library workspace", () => {
     })
 
     expect(document.body.textContent).toContain("My Designs")
-    expect(document.body.textContent).toContain("Choose a starting point")
+    expect(document.body.textContent).not.toContain("Choose a starting point")
+    const link = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Open My Designs in Design")!
+    await act(async () => link.click())
+    expect(useShellStore.getState().designRequest).toBe("my-designs")
     expect(useShellStore.getState().workspace).toBe("library")
     expect(useBroadcastStore.getState().isLive).toBe(true)
     expect(useBroadcastStore.getState().liveVerse).toEqual({

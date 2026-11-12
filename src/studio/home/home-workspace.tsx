@@ -20,6 +20,7 @@ import { useReadiness } from "@/studio/use-readiness"
 import { ChurchFolderCard } from "@/studio/home/church-folder-card"
 import { SetupCard } from "@/studio/setup/setup-card"
 import { TeamChanges } from "@/studio/home/team-changes"
+import { recentServices } from "@/studio/home/recent-services"
 
 function greeting(now = new Date()): string {
   const h = now.getHours()
@@ -208,7 +209,11 @@ export function HomeWorkspace() {
             <TeamChanges />
             <ChurchFolderCard />
             <section aria-labelledby="services" className="rounded-lg border border-border bg-card p-4 shadow-panel">
-            <h2 id="services" className="mb-2 text-sm font-semibold">Saved services</h2>
+            {/* #804 R5: a short recent list; History has the one full list of saved services. */}
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h2 id="services" className="text-sm font-semibold">Recent services</h2>
+              <Button size="xs" variant="ghost" onClick={() => setWorkspace("archive")}>All saved services <ChevronRightIcon /></Button>
+            </div>
             {!current && suggested && (
               <div className="mb-3 flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 p-2">
                 <span className="min-w-0 flex-1 text-sm">
@@ -224,7 +229,7 @@ export function HomeWorkspace() {
               <p className="text-xs text-muted-foreground">None yet. Create one in Prepare to keep a rundown for Sunday.</p>
             ) : (
               <ul className="divide-y divide-border">
-                {programs.filter((p) => !p.archived_at && !p.is_template).slice(0, 5).map((p) => (
+                {recentServices(programs).map((p) => (
                   <li key={p.id} className="flex items-center gap-2 py-1.5">
                     <span className="min-w-0 flex-1 truncate text-sm">
                       {p.title}

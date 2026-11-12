@@ -153,7 +153,7 @@ describe("Design → Templates (#299)", () => {
     const stage = card(el, "Classic · Calm stage")
     expect([...stage.querySelectorAll<HTMLButtonElement>("button")].some((button) => button.textContent?.includes("Add a copy"))).toBe(true)
     const scene = card(el, "Clean · Camera and scripture")
-    const choose = [...scene.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Choose template"))!
+    const choose = [...scene.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Add a copy"))!
 
     await act(async () => choose.click())
 

@@ -13,6 +13,7 @@ import type {
   BroadcastTheme,
   Verse,
   VerseRenderData, LowerThird, LowerThirdStyle, StageAux, StageClock, StageFinish, StageStyle, Ticker, TickerPreset, TickerStyle, CountdownLook, HostLostRule, ReceiverTv } from "@/types"
+import type { ContentType } from "@/types/broadcast"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -43,7 +44,7 @@ import type { ApprovedSceneTake } from "@/lib/scene-take"
 import type { CountdownTargets } from "@/lib/countdown"
 import { zoneCity } from "@/lib/stage-clock"
 import { countdownFrame, countsToTarget, DEFAULT_COUNTDOWN_LOOK, lookCounting, NO_COUNTDOWN_SOURCES, normalizeCountdownLook, type CountdownSources } from "@/lib/countdown-display"
-import { normalizeDesignDraft, normalizeDesignDrafts, type DesignDraft } from "@/lib/design-drafts"
+import { designDraftId, normalizeDesignDraft, normalizeDesignDrafts, type DesignDraft } from "@/lib/design-drafts"
 import { aspectRatioLabel, type GroupTakeHostCheck, type GroupTakeResult } from "@/lib/group-take"
 import { dropReplacedGradients } from "@/lib/scene-gradient"
 import { dropStaleImageDraws } from "@/lib/scene-image"
@@ -324,6 +325,8 @@ interface BroadcastState {
   editingThemeId: string | null
   renamingThemeId: string | null
   draftTheme: BroadcastTheme | null
+  /** The saved theme's fingerprint when the draft began (#830), to warn before applying over a newer save. */
+  draftThemeBase: string | null
   /**
    * Live edit: the Designer's unsaved draft shows on the outputs that use the theme. Off by
    * default and turned off when editing ends, so a draft never reaches a screen unasked (ADR 0001).
@@ -393,7 +396,14 @@ interface BroadcastState {
   stopEditing: () => void
   updateDraft: (updates: Partial<BroadcastTheme>) => void
   updateDraftNested: (path: string, value: unknown) => void
-  saveDraft: () => void
+  /**
+   * Apply the theme draft: the saved theme (and the outputs on it) change. Design asks first (#830).
+   * Refused (false) when the saved theme changed since the draft began, unless `overwriteNewer`.
+   */
+  saveDraft: (options?: { overwriteNewer?: boolean }) => boolean
+  /** Keep the theme draft privately (a design draft): no theme, output or Program changes. */
+  saveThemeDraft: () => void
+  /** Drop the theme draft, saved or not, and go back to the saved theme. */
   discardDraft: () => void
   setSelectedElement: (el: SelectedElement) => void
   setRenamingTheme: (id: string | null) => void
@@ -921,6 +931,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   liveDesign: false,
   renamingThemeId: null,
   draftTheme: null,
+  draftThemeBase: null,
   selectedElement: null,
 
   loadThemes: () => {
@@ -939,7 +950,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   deleteTheme: (id) => {
     const users = get().outputs.filter((o) => themeIdsOf(o).includes(id))
     if (users.length > 0) return { inUse: users.map((o) => o.name) }
-    set((s) => ({ themes: s.themes.filter((t) => t.id !== id || t.builtin) }))
+    set((s) => ({ themes: s.themes.filter((t) => t.id !== id || t.builtin), designDrafts: s.designDrafts.filter((d) => d.id !== designDraftId("theme", id) || s.themes.some((t) => t.id === id && t.builtin)) }))
     return { inUse: [] }
   },
   duplicateTheme: (id) => {
@@ -1731,7 +1742,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   setDesignerOpen: (isDesignerOpen) => {
     if (!isDesignerOpen) {
       const was = get().editingThemeId
-      set({ isDesignerOpen, editingThemeId: null, draftTheme: null, liveDesign: false, selectedElement: null })
+      set({ isDesignerOpen, editingThemeId: null, draftTheme: null, draftThemeBase: null, liveDesign: false, selectedElement: null })
       resyncThemeOutputs(was)
     } else {
       set({ isDesignerOpen })
@@ -1750,9 +1761,13 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const theme = get().themes.find((t) => t.id === themeId)
     if (!theme) return
     const was = get().editingThemeId
+    // A saved theme draft (#830) reopens where it was left; the saved theme is unchanged.
+    const saved = get().designDrafts.find((draft) => draft.id === designDraftId("theme", themeId))
     set({
       editingThemeId: themeId,
-      draftTheme: { ...theme, updatedAt: Date.now() },
+      draftTheme: saved?.kind === "theme" ? { ...saved.value, id: themeId, builtin: theme.builtin } : { ...theme, updatedAt: Date.now() },
+      // A saved draft keeps the base it began from; a fresh one begins from the theme as saved now.
+      draftThemeBase: saved?.kind === "theme" ? saved.base ?? null : themeFingerprint(theme),
       ...(was !== themeId ? { liveDesign: false } : {}),
       selectedElement: null,
     })
@@ -1764,6 +1779,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     set({
       editingThemeId: null,
       draftTheme: null,
+      draftThemeBase: null,
       liveDesign: false,
       selectedElement: null,
     })
@@ -1788,13 +1804,18 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     }))
     emitDraftToBroadcast(get())
   },
-  saveDraft: () => {
+  saveDraft: (options) => {
     const { draftTheme: edited } = get()
-    if (!edited) return
+    if (!edited) return false
+    // The saved theme changed since this draft began: applying would silently overwrite that (#830).
+    if (themeDraftStale() && !options?.overwriteNewer) return false
+    // Applied: its private draft is done with.
+    get().deleteDesignDraft(designDraftId("theme", edited.id))
     // A hand edit detaches a Brand Kit theme, so Apply never overwrites it again.
     const draftTheme = edited.brandManaged ? { ...edited, brandManaged: false } : edited
     // If editing a builtin, save as a new custom theme
     if (draftTheme.builtin) {
+      const builtin = get().themes.find((t) => t.id === draftTheme.id)
       const customTheme = {
         ...draftTheme,
         id: crypto.randomUUID(),
@@ -1803,27 +1824,37 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         createdAt: Date.now(),
         updatedAt: Date.now(),
       }
+      // What Apply will change, worked out before anything moves (the dialog showed the same plan).
+      const plan = themeApplyPlan(get(), draftTheme.id)
       set((s) => ({
         themes: [...s.themes, customTheme],
         editingThemeId: customTheme.id,
         draftTheme: customTheme,
+        draftThemeBase: themeFingerprint(customTheme),
       }))
-      // Point every output that was on the builtin at the saved copy, so the
-      // outputs and the in-app preview never disagree about what is showing.
-      for (const output of get().outputs) {
-        if (themeIdsOf(output).includes(draftTheme.id)) {
-          get().setOutputTheme(output.id, customTheme.id)
-        }
-      }
+      // The copy goes wherever the built-in was used: exactly the theme slots and saved scene
+      // layers that named it, so the outputs and the in-app preview never disagree.
+      repointTheme(draftTheme.id, customTheme.id, builtin ?? draftTheme, plan)
     } else {
       get().saveTheme(draftTheme)
       // The draft is now what was saved (a Brand Kit theme is detached in both).
-      set({ draftTheme })
+      set({ draftTheme, draftThemeBase: themeFingerprint(draftTheme) })
     }
+    return true
+  },
+  saveThemeDraft: () => {
+    const { draftTheme, editingThemeId } = get()
+    if (!draftTheme || !editingThemeId) return
+    const base = get().draftThemeBase
+    get().saveDesignDraft({ id: designDraftId("theme", editingThemeId), kind: "theme", sourceId: editingThemeId, value: draftTheme, updatedAt: Date.now(), ...(base ? { base } : {}) })
+    // The Designer now holds exactly what was kept, so it no longer reads as unsaved.
+    const kept = get().designDrafts.find((draft) => draft.id === designDraftId("theme", editingThemeId))
+    if (kept?.kind === "theme") set({ draftTheme: kept.value })
   },
   discardDraft: () => {
     const { editingThemeId } = get()
     if (editingThemeId) {
+      get().deleteDesignDraft(designDraftId("theme", editingThemeId))
       get().startEditing(editingThemeId)
       resyncThemeOutputs(editingThemeId)
     }
@@ -2122,12 +2153,107 @@ export function restoreLooksFromBackup(raw: unknown): void {
   useBroadcastStore.setState(patch)
 }
 
+/** A theme's content, without its edit time or name (a rename reaches the draft too), as a short fingerprint. */
+export function themeFingerprint(theme: BroadcastTheme): string {
+  const text = JSON.stringify({ ...theme, updatedAt: 0, name: "" })
+  let hash = 5381
+  for (let i = 0; i < text.length; i++) hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0
+  return `${text.length.toString(36)}-${hash.toString(36)}`
+}
+
+/** The saved theme changed (or cannot be checked) since the open draft began: Apply must warn first. */
+export function themeDraftStale(): boolean {
+  const { draftTheme, themes, editingThemeId, draftThemeBase } = useBroadcastStore.getState()
+  if (!draftTheme || !editingThemeId) return false
+  const theme = themes.find((t) => t.id === editingThemeId)
+  if (!theme) return false
+  return draftThemeBase !== themeFingerprint(theme)
+}
+
+/** One output a theme Apply changes, and when the change shows: now, or with the next Take of a taken scene. */
+export interface ThemeApplyChange {
+  outputId: string
+  name: string
+  when: "now" | "next-take"
+}
+
+/** What applying a draft of this theme changes: the outputs, and for a built-in, the saved scenes switching to the copy. */
+export interface ThemeApplyPlan {
+  copy: boolean
+  outputs: ThemeApplyChange[]
+  scenes: { id: string; name: string }[]
+}
+
+/**
+ * The single plan both the Apply dialog and Apply use (#830). A taken scene keeps the looks it was
+ * taken with (its appearance snapshot, or for a built-in its taken layers) until the next Take.
+ */
+export function themeApplyPlan(state: Pick<BroadcastState, "themes" | "outputs" | "scenes">, themeId: string): ThemeApplyPlan {
+  const copy = !!state.themes.find((t) => t.id === themeId)?.builtin
+  const usesTheme = (scene: Scene | undefined) => !!scene?.layers.some((layer) => layer.themeId === themeId)
+  const scenes = copy ? state.scenes.filter(usesTheme).map((scene) => ({ id: scene.id, name: scene.name })) : []
+  const outputs: ThemeApplyChange[] = []
+  for (const output of state.outputs) {
+    const slot = themeIdsOf(output).includes(themeId)
+    const shown = sceneForOutput(output, state.scenes)
+    const taken = !!shown && output.sceneSnapshot?.id === output.sceneId
+    const pinned = !!shown && !!output.sceneAppearanceSnapshot
+    let reached: boolean
+    let now: boolean
+    if (copy) {
+      const saved = state.scenes.find((scene) => scene.id === output.sceneId)
+      const layersNow = !!shown && !taken && usesTheme(shown)
+      const layersLater = taken && usesTheme(saved)
+      reached = slot || layersNow || layersLater
+      now = !pinned && (slot || layersNow)
+    } else {
+      reached = slot || usesTheme(shown)
+      now = !pinned
+    }
+    if (reached) outputs.push({ outputId: output.id, name: output.name, when: now ? "now" : "next-take" })
+  }
+  return { copy, outputs, scenes }
+}
+
+const swapThemeIn = (map: Partial<Record<ContentType, string>> | undefined, from: string, to: string) =>
+  map && Object.fromEntries(Object.entries(map).map(([kind, id]) => [kind, id === from ? to : id])) as Partial<Record<ContentType, string>>
+
+/**
+ * A built-in's Apply: every slot that named it (main, each content kind, a designed moment's way
+ * back) and every saved scene layer moves to the copy, and nothing else. A taken scene keeps the
+ * built-in's look under the copy's id in its appearance snapshot, so it changes with the next Take.
+ */
+function repointTheme(from: string, to: string, previous: BroadcastTheme, plan: ThemeApplyPlan): void {
+  const s = useBroadcastStore.getState()
+  for (const { id } of plan.scenes) {
+    const scene = s.scenes.find((candidate) => candidate.id === id)
+    if (scene) s.saveScene({ ...scene, layers: scene.layers.map((layer) => (layer.themeId === from ? { ...layer, themeId: to } : layer)) })
+  }
+  const changed = new Set(plan.outputs.map((change) => change.outputId))
+  const outputs = useBroadcastStore.getState().outputs.map((output) => {
+    if (!changed.has(output.id)) return output
+    const next: BroadcastOutput = { ...output, themeId: output.themeId === from ? to : output.themeId }
+    if (output.themeFor) next.themeFor = swapThemeIn(output.themeFor, from, to)
+    const restore = output.designedMomentRestore
+    if (restore) next.designedMomentRestore = { ...restore, themeId: restore.themeId === from ? to : restore.themeId, ...(restore.themeFor ? { themeFor: swapThemeIn(restore.themeFor, from, to) } : {}) }
+    const appearance = output.sceneAppearanceSnapshot
+    if (appearance && sceneForOutput(output, s.scenes)) next.sceneAppearanceSnapshot = { ...appearance, themes: { ...appearance.themes, [to]: appearance.themes[from] ?? previous } }
+    return next
+  })
+  const main = outputs.find((output) => output.id === MAIN_OUTPUT_ID)
+  useBroadcastStore.setState({ outputs, ...(main ? { activeThemeId: main.themeId } : {}) })
+  for (const id of changed) useBroadcastStore.getState().syncBroadcastOutputFor(id)
+}
+
 /** The theme open in the Designer has changes that are not saved. */
 export function themeDraftChanged(): boolean {
-  const { draftTheme, themes, editingThemeId } = useBroadcastStore.getState()
+  const { draftTheme, themes, editingThemeId, designDrafts } = useBroadcastStore.getState()
   if (!draftTheme) return false
-  const saved = themes.find((t) => t.id === editingThemeId)
-  if (!saved) return false // the theme was deleted: nothing left to save it over
+  const theme = themes.find((t) => t.id === editingThemeId)
+  if (!theme) return false // the theme was deleted: nothing left to save it over
+  // Against its saved draft when there is one (#830): a saved draft is kept, not unsaved.
+  const draft = designDrafts.find((d) => d.id === designDraftId("theme", theme.id))
+  const saved = draft?.kind === "theme" ? draft.value : theme
   return JSON.stringify({ ...draftTheme, updatedAt: 0 }) !== JSON.stringify({ ...saved, updatedAt: 0 })
 }
 

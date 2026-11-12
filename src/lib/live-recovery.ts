@@ -19,7 +19,7 @@ import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { elapsedMs } from "@/lib/timer"
 import type { JournalEntry } from "@/lib/journal"
 import { useNotices, type Notice } from "@/stores/notices-store"
-import { useTimingTrust, whilePuttingBack } from "@/stores/timing-trust-store"
+import { isPuttingBack, useTimingTrust, whilePuttingBack } from "@/stores/timing-trust-store"
 import type { BroadcastOutput, BroadcastTheme, Scene, SceneAppearanceSnapshot, VerseRenderData } from "@/types"
 import type { ServiceRun, ServiceRunSummary } from "@/types"
 
@@ -520,8 +520,55 @@ export function worthOffering(value: unknown, now = Date.now()): boolean {
   return !!s && now - s.at < FRESH_MS && now >= s.at && (s.isLive || s.outputsOn.length > 0)
 }
 
+/** Putting back is in progress: what it takes live is the crash's state, not a new Take (#829). */
+let puttingBackNow = 0
+
 /** Put back what was on the screens: the sources, the program, each output and its scene, the event. */
 export async function putBack(value: unknown): Promise<boolean> {
+  puttingBackNow++
+  try {
+    return await putBackInner(value)
+  } finally {
+    puttingBackNow--
+  }
+}
+
+/**
+ * Whether this change is the operator taking something new live: Program going live or moving to other
+ * content, or a congregation output taking a different scene. Rehearsal and putting back are not, and
+ * neither is leaving rehearsal, which puts back what the screens showed before it, unless the operator
+ * chose Show this live and the rehearsed Program differs from it (a real go-live).
+ */
+type TakeState = Pick<ReturnType<typeof useBroadcastStore.getState>, "isLive" | "liveVerse" | "rehearsal" | "rehearsalReturn" | "outputs">
+export function isNewTake(s: TakeState, p: TakeState): boolean {
+  if (s.rehearsal || puttingBackNow > 0 || isPuttingBack()) return false
+  if (p.rehearsal) {
+    const before = p.rehearsalReturn
+    // Leaving rehearsal: the scenes always come back as they were. Program is new only when the
+    // rehearsed one stayed (Show this live) and is not what was live before rehearsal.
+    return !!before && s.isLive && !!s.liveVerse && (!before.isLive || s.liveVerse !== before.liveVerse)
+  }
+  if (s.isLive && s.liveVerse && (!p.isLive || s.liveVerse !== p.liveVerse)) return true
+  if (s.outputs === p.outputs) return false
+  const before = new Map(p.outputs.map((o) => [o.id, o.sceneId ?? null]))
+  // Only the congregation's screens: a Stage or other role's scene is not what was offered back.
+  return s.outputs.some((o) => (o.role ?? "congregation") === "congregation" && !!o.sceneId && before.get(o.id) !== o.sceneId)
+}
+
+/**
+ * #829 (owner decision 11 Nov): an unanswered offer ends at the first new Take. Until then the banner and
+ * the Desk menu keep "Put back"; after it, the journal says so and recovery points are saved again, so a
+ * second crash offers what was on the screens since, not the first crash's state.
+ */
+export function expireOfferOnNewTake(): boolean {
+  const r = useRecovery.getState()
+  if (!r.offer || r.dismissed) return false
+  useJournalStore.getState().add({ kind: "recovery", label: "Recovery offer ended: new content was taken live, so what was on the screens before the crash is no longer offered" })
+  useRecovery.setState({ offer: null, dismissed: false, restoreError: null })
+  return true
+}
+
+async function putBackInner(value: unknown): Promise<boolean> {
   // Rehearsal screens are a sandbox: what is put back there is gone at exit, so the offer must stay.
   if (useBroadcastStore.getState().rehearsal) {
     useRecovery.setState({ dismissed: false, restoreError: "Leave rehearsal first, then put back what was on the screens." })
@@ -811,6 +858,7 @@ export async function startLiveRecovery(): Promise<() => void> {
         save(true)
         return
       }
+      if (isNewTake(s, p)) expireOfferOnNewTake()
       if (s.isLive !== p.isLive || s.liveVerse !== p.liveVerse || s.sources !== p.sources || s.outputStatus !== p.outputStatus || s.outputs !== p.outputs) soon()
     }),
     useEventClock.subscribe((s, p) => { if (s.currentId !== p.currentId || s.currentMomentId !== p.currentMomentId) soon() }),

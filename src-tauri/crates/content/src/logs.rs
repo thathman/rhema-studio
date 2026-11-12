@@ -45,7 +45,15 @@ pub struct ServiceRun {
     pub finished_at: Option<String>,
     pub status: String,
     pub checkpoint: serde_json::Value,
+    /// The team's after-action notes (migration 0020, #854 G10); the only writable part of a run.
+    #[serde(default)]
+    pub after_action_notes: Option<String>,
+    #[serde(default)]
+    pub notes_updated_at: Option<String>,
 }
+
+/// After-action notes longer than this are refused (characters).
+pub const MAX_AFTER_ACTION_NOTES: usize = 20_000;
 
 /// History row for a durable run. Large journal checkpoints are loaded only
 /// when the operator opens a specific run.
@@ -79,7 +87,7 @@ pub struct ServiceRunCheckpoint {
 }
 
 const COLS: &str = "id, program_id, title, saved_at, length(body) + length(coalesce(transcript, '')), run_id, finished_at, time_zone";
-const RUN_COLS: &str = "run_id, program_id, program_revision, service_date, title, time_zone, started_at, updated_at, finished_at, status, checkpoint_json";
+const RUN_COLS: &str = "run_id, program_id, program_revision, service_date, title, time_zone, started_at, updated_at, finished_at, status, checkpoint_json, after_action_notes, notes_updated_at";
 const RUN_SUMMARY_COLS: &str = "run_id, program_id, program_revision, service_date, title, time_zone, started_at, updated_at, finished_at, status";
 
 fn row_to_summary(r: &rusqlite::Row<'_>) -> rusqlite::Result<ServiceLogSummary> {
@@ -112,6 +120,8 @@ fn row_to_run(r: &rusqlite::Row<'_>) -> rusqlite::Result<ServiceRun> {
         finished_at: r.get(8)?,
         status: r.get(9)?,
         checkpoint,
+        after_action_notes: r.get(11)?,
+        notes_updated_at: r.get(12)?,
     })
 }
 
@@ -338,6 +348,30 @@ impl ContentDb {
         service_run_by_id(&conn, run_id)
     }
 
+    /// Write a run's after-action notes (#854 G10). Blank notes clear them. The captured context,
+    /// checkpoint, status and `updated_at` are not touched, so a note never makes an old run
+    /// look current again.
+    pub fn set_service_run_notes(&self, run_id: &str, notes: &str) -> Result<ServiceRun> {
+        let notes = notes.trim_end();
+        if notes.chars().count() > MAX_AFTER_ACTION_NOTES {
+            return Err(ContentError::Invalid(format!("after-action notes are at most {MAX_AFTER_ACTION_NOTES} characters")));
+        }
+        let notes = if notes.trim().is_empty() { None } else { Some(notes) };
+        let mut conn = self.lock()?;
+        let tx = conn.transaction()?;
+        let n = tx.execute(
+            "UPDATE service_runs SET after_action_notes = ?2, notes_updated_at = CASE WHEN ?2 IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END WHERE run_id = ?1",
+            params![run_id, notes],
+        )?;
+        if n == 0 {
+            return Err(ContentError::NotFound(run_id.to_string()));
+        }
+        audit(&tx, "service_run", run_id, "notes", &serde_json::json!({ "chars": notes.map_or(0, |n| n.chars().count()) }))?;
+        let run = service_run_by_id(&tx, run_id)?.ok_or_else(|| ContentError::NotFound(run_id.to_string()))?;
+        tx.commit()?;
+        Ok(run)
+    }
+
     /// Newest-updated first, with the checkpoint left out of each row.
     pub fn list_service_runs(&self, program_id: Option<&str>, limit: usize) -> Result<Vec<ServiceRunSummary>> {
         let conn = self.lock()?;
@@ -534,6 +568,31 @@ mod tests {
         assert_eq!(db.current_service_run(12).unwrap().map(|r| r.run_id), Some("today".into()));
         db.interrupt_service_run("today").unwrap();
         assert_eq!(db.current_service_run(12).unwrap(), None, "a stale active run is not the current service");
+    }
+
+    #[test]
+    fn after_action_notes_are_kept_with_the_run_without_touching_its_record() {
+        let db = ContentDb::open_in_memory().unwrap();
+        assert!(db.applied_migrations().unwrap().contains(&"0020_service_run_notes".to_string()));
+        let ctx = TestRunContext { program_id: None, program_revision: None, service_date: Some("2026-11-08".into()), title: "Sunday".into(), time_zone: None, started_at: "2026-11-08T09:00:00Z".into() };
+        let before = db.checkpoint_service_run(&checkpoint_input("run-1", &ctx, serde_json::json!({ "entries": [] }))).unwrap();
+        assert_eq!(before.after_action_notes, None);
+
+        let noted = db.set_service_run_notes("run-1", "The second song started late.\nNext time: cue the band earlier.  \n").unwrap();
+        assert_eq!(noted.after_action_notes.as_deref(), Some("The second song started late.\nNext time: cue the band earlier."));
+        assert!(noted.notes_updated_at.is_some());
+        // The run's own record is unchanged, and it does not become "current" again.
+        assert_eq!((noted.updated_at.as_str(), noted.status.as_str(), &noted.checkpoint), (before.updated_at.as_str(), before.status.as_str(), &before.checkpoint));
+        assert_eq!(db.get_service_run("run-1").unwrap().unwrap().after_action_notes, noted.after_action_notes);
+
+        let cleared = db.set_service_run_notes("run-1", "   ").unwrap();
+        assert_eq!((cleared.after_action_notes, cleared.notes_updated_at), (None, None));
+        assert!(matches!(db.set_service_run_notes("run-1", &"x".repeat(MAX_AFTER_ACTION_NOTES + 1)), Err(ContentError::Invalid(_))));
+        assert!(matches!(db.set_service_run_notes("no-such-run", "notes"), Err(ContentError::NotFound(_))));
+        // A later checkpoint keeps the notes.
+        db.set_service_run_notes("run-1", "Kept").unwrap();
+        let after = db.checkpoint_service_run(&checkpoint_input("run-1", &ctx, serde_json::json!({ "entries": [1] }))).unwrap();
+        assert_eq!(after.after_action_notes.as_deref(), Some("Kept"));
     }
 
     #[test]
