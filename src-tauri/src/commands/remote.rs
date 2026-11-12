@@ -610,6 +610,8 @@ pub struct HttpRuntime {
     tls_leaves: Option<rhema_api::TlsLeaves>,
     /// SHA-256 of this computer's local CA, which Rhema Studio Companion pins when it pairs (#209).
     tls_ca_fingerprint: Option<String>,
+    /// Why https for phone pages is off although it was asked for at the last start (None: it runs, or was not asked for).
+    tls_error: Option<String>,
     /// Phone cameras and the camera router (#209); kept across restarts of the listener.
     cameras: rhema_api::SharedCameras,
     /// Who is connected and when each desk was last seen (Production → Operators); cleared on stop.
@@ -630,6 +632,7 @@ impl HttpRuntime {
             tls_key_fingerprint: None,
             tls_leaves: None,
             tls_ca_fingerprint: None,
+            tls_error: None,
             lan: false,
             status: new_shared_status(),
             live: new_live_hub(),
@@ -759,16 +762,16 @@ pub async fn start_http(
 
     let port = port.unwrap_or(8080);
     // https beside it (the next port) for phone pages, when asked; a failure leaves http alone.
-    let tls = if https.unwrap_or(false) {
+    let (tls, tls_error) = if https.unwrap_or(false) {
         match phone_tls(&app, port.saturating_add(1)) {
-            Ok(t) => Some(t),
+            Ok(t) => (Some(t), None),
             Err(e) => {
                 log::warn!("https for phone pages not started: {e}");
-                None
+                (None, Some(e))
             }
         }
     } else {
-        None
+        (None, None)
     };
     let leaves = tls.as_ref().map(|t| t.leaves.clone());
     let fingerprint = tls.as_ref().and_then(|t| rhema_api::tls::fingerprint(&t.server).ok());
@@ -799,6 +802,7 @@ pub async fn start_http(
         runtime.handle = Some(result.handle);
         runtime.bound_port = Some(bound_port);
         runtime.tls_port = result.tls_port;
+        runtime.tls_error = (https.unwrap_or(false) && result.tls_port.is_none()).then(|| tls_error.unwrap_or_else(|| "its port could not be opened".into()));
         runtime.tls_fingerprint = result.tls_port.and(fingerprint);
         runtime.tls_key_fingerprint = result.tls_port.and(key_fingerprint);
         runtime.tls_leaves = result.tls_port.and(leaves.clone());
@@ -826,6 +830,7 @@ pub async fn stop_http(state: State<'_, Mutex<HttpRuntime>>) -> Result<(), Strin
             runtime.tls_port = None;
             runtime.tls_fingerprint = None;
             runtime.tls_key_fingerprint = None;
+            runtime.tls_error = None;
             runtime.tls_leaves = None;
             runtime.tls_ca_fingerprint = None;
             runtime.presence.clear();
@@ -954,6 +959,7 @@ fn cert_names(lan: Option<String>) -> Vec<String> {
 /// The local CA and a certificate for this computer's current addresses, for the https listener (#251).
 fn phone_tls(app: &AppHandle, port: u16) -> Result<rhema_api::TlsListener, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("tls");
+    let _files = tls_files();
     let (ca, new_ca) = local_ca(&dir)?;
     let server = server_cert(&dir, &ca, &cert_names(remote_lan_address()), new_ca, now_secs())?;
     Ok(rhema_api::TlsListener { port, server, ca_cert: ca.cert, leaves: rhema_api::TlsLeaves::default() })
@@ -986,18 +992,49 @@ pub async fn reset_https_keys(
     if camera_router {
         super::camera_router::camera_router_stop(router.clone(), state.clone())?;
     }
-    let rotated = rotate_tls(&dir, &cert_names(remote_lan_address()), now_secs());
+    let rotated = {
+        let _files = tls_files();
+        rotate_tls(&dir, &cert_names(remote_lan_address()), now_secs())
+    };
     // Restarted whatever happened, so a failed reset does not leave the church without them.
     let restarted = match https {
         Some((port, lan)) => start_http(app.clone(), state.clone(), remote.clone(), Some(port), Some(lan), Some(true)).await.map(|_| ()),
         None => Ok(()),
     };
+    // The listener starts even when its https half does not (`start_http`): look whether it did.
+    let secure_page = match (&https, &restarted) {
+        (Some(_), Ok(())) => Some(state.lock().map_err(|e| e.to_string()).and_then(|r| match (r.tls_port, &r.tls_error) {
+            (Some(_), _) => Ok(()),
+            (None, why) => Err(why.clone().unwrap_or_else(|| "its port could not be opened".into())),
+        })),
+        _ => None,
+    };
     let router_back = if camera_router { super::camera_router::camera_router_start(app, router, state, remote) } else { Ok(()) };
+    let done = reset_outcome(rotated, restarted, secure_page, router_back);
+    if done.is_ok() {
+        log::info!("https: new local CA and server key made; paired devices must pair again");
+    }
+    done
+}
+
+/// What `reset_https_keys` reports: done only when the new keys were made and what was on before
+/// (the listener, its secure page, the camera router) runs again with them.
+fn reset_outcome(rotated: Result<String, String>, restarted: Result<(), String>, secure_page: Option<Result<(), String>>, router: Result<(), String>) -> Result<String, String> {
     rotated?;
     restarted?;
-    router_back?;
-    log::info!("https: new local CA and server key made; paired devices must pair again");
+    if let Some(Err(why)) = secure_page {
+        return Err(format!("New keys were made but the secure page did not start: {why}"));
+    }
+    router?;
     Ok(RESET_DONE.into())
+}
+
+/// One writer at a time in the tls folder: a reset never interleaves with the start of https or with
+/// `follow_address` making a certificate for a new address.
+static TLS_FILES: Mutex<()> = Mutex::new(());
+
+fn tls_files() -> std::sync::MutexGuard<'static, ()> {
+    TLS_FILES.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// While https runs, this computer's network address is watched: a new one gets its own certificate at
@@ -1016,6 +1053,7 @@ fn follow_address(app: AppHandle, leaves: rhema_api::TlsLeaves) {
             let Some(now) = remote_lan_address().filter(|ip| was.as_ref() != Some(ip)) else { continue };
             let Ok(ip) = now.parse::<std::net::IpAddr>() else { continue };
             let made = app.path().app_data_dir().map_err(|e| e.to_string()).map(|d| d.join("tls")).and_then(|dir| {
+                let _files = tls_files();
                 let (ca, _) = local_ca(&dir)?;
                 let server = address_cert(&dir, &ca, &cert_names(Some(now.clone())), now_secs())?;
                 leaves.add(ip, &server, &ca.cert)?;
@@ -1081,6 +1119,11 @@ fn server_key(dir: &std::path::Path, new_ca: bool) -> Result<ServerKey, String> 
     if !new_ca {
         if let Some(kept) = read_key(&path) {
             keep_private(&path);
+            // A key kept without its marker (lost, or from a build before it): marked now, so a key
+            // lost later is never adopted again.
+            if !dir.join(SERVER_KEY_MADE).exists() {
+                mark_server_key(dir)?;
+            }
             return Ok(kept);
         }
     }
@@ -1097,8 +1140,12 @@ fn server_key(dir: &std::path::Path, new_ca: bool) -> Result<ServerKey, String> 
     };
     // Not kept would mean another key at the next start, and every pinned device lost: refuse instead.
     write_private(&path, &key.pem)?;
-    std::fs::write(dir.join(SERVER_KEY_MADE), format!("{}\n", now_secs())).map_err(|e| e.to_string())?;
+    mark_server_key(dir)?;
     Ok(key)
+}
+
+fn mark_server_key(dir: &std::path::Path) -> Result<(), String> {
+    std::fs::write(dir.join(SERVER_KEY_MADE), format!("{}\n", now_secs())).map_err(|e| e.to_string())
 }
 
 /// "Reset https keys": the local CA, the server key and every certificate made over them are thrown
@@ -2234,6 +2281,31 @@ mod tests {
         assert_eq!(spki_fingerprint(&served).unwrap(), pin);
         assert!(rhema_api::tls::server_config(&served, &ca2.cert).is_ok());
         assert!(RESET_DONE.contains("again"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_reset_reports_success_only_when_what_was_on_runs_again() {
+        let ok = || Ok::<(), String>(());
+        let pin = || Ok::<String, String>("ab".repeat(32));
+        assert_eq!(reset_outcome(pin(), ok(), Some(ok()), ok()).unwrap(), RESET_DONE);
+        assert_eq!(reset_outcome(pin(), ok(), None, ok()).unwrap(), RESET_DONE, "https was off: nothing to restart");
+        // The listener came back without its secure page: an error naming why, not "done".
+        let e = reset_outcome(pin(), ok(), Some(Err("the local CA key is unreadable".into())), ok()).unwrap_err();
+        assert_eq!(e, "New keys were made but the secure page did not start: the local CA key is unreadable");
+        assert_eq!(reset_outcome(Err("could not remove rhema-ca.key".into()), ok(), Some(ok()), ok()).unwrap_err(), "could not remove rhema-ca.key");
+        assert_eq!(reset_outcome(pin(), Err("port in use".into()), None, ok()).unwrap_err(), "port in use");
+        assert_eq!(reset_outcome(pin(), ok(), Some(ok()), Err("router".into())).unwrap_err(), "router");
+    }
+
+    #[test]
+    fn a_kept_server_key_without_its_marker_is_marked() {
+        let dir = tls_test_dir("marker");
+        let key = rhema_api::tls::make_server_key().unwrap();
+        write_private(&dir.join(SERVER_KEY), &key).unwrap();
+        assert!(!dir.join(SERVER_KEY_MADE).exists());
+        assert_eq!(server_key(&dir, false).unwrap().pem, key);
+        assert!(dir.join(SERVER_KEY_MADE).exists(), "a key lost from now on is never adopted again");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
