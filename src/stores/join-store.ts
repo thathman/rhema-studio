@@ -96,10 +96,45 @@ export function serviceOf(live: LiveStateV1 | null): string | undefined {
   return live.service.id
 }
 
+/**
+ * How a joined desk's requests reach the host (#845 G1). On a joined Rhema Studio they go through
+ * this app's Rust (`join_*` commands: pinned certificate, the kept key); the browser desk served at
+ * `/desk` sets its own, which calls the same host routes over HTTP from the page's origin. The host
+ * checks each one by key and role either way. A refusal is thrown as `join_command` words it
+ * ("paused: …", "stale: …", "other-service: …", or the host's own reason).
+ */
+export interface JoinTransport {
+  command: (command: Record<string, unknown>, service: string | undefined) => Promise<unknown>
+  lookup: (asked: Record<string, unknown>) => Promise<unknown>
+  receivers: () => Promise<unknown>
+  requests: () => Promise<unknown>
+  withdrawRequest: (id: string) => Promise<unknown>
+}
+
+const keptHost = () => {
+  const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
+  return { address, token }
+}
+
+/** The installed app's way: through Rust, to the host this computer joined. */
+const TAURI_TRANSPORT: JoinTransport = {
+  command: (command, service) => invoke<unknown>("join_command", { ...keptHost(), command, service }),
+  lookup: (asked) => invoke<unknown>("join_lookup", { ...keptHost(), asked }),
+  receivers: () => invoke<unknown>("join_receivers", keptHost()),
+  requests: () => invoke<unknown>("join_requests", keptHost()),
+  withdrawRequest: (id) => invoke<unknown>("join_withdraw_request", { ...keptHost(), id }),
+}
+
+let transport: JoinTransport = TAURI_TRANSPORT
+
+/** The browser desk's own transport (null: back to the installed app's). */
+export function setJoinTransport(next: JoinTransport | null): void {
+  transport = next ?? TAURI_TRANSPORT
+}
+
 /** Read receiver confirmation from the host, scoped to this paired desk's allowed outputs. */
 export async function readHostReceivers(): Promise<HostReceiverOutput[]> {
-  const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
-  const result = await invoke<unknown>("join_receivers", { address, token })
+  const result = await transport.receivers()
   if (!result || typeof result !== "object" || Array.isArray(result) || !Array.isArray((result as { outputs?: unknown }).outputs)) {
     throw new Error("The host returned a malformed receiver report.")
   }
@@ -281,11 +316,10 @@ export const useJoin = create<JoinState>((set, get) => ({
     if (forget) useSettingsStore.getState().setJoin({ joinAddress: "", joinToken: "", joinSecure: null })
   },
   send: async (command) => {
-    const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
     const { service: expectedService, ...payload } = command
     try {
       const service = expectedService !== undefined ? expectedService ?? undefined : serviceOf(get().live)
-      const response = await invoke<unknown>("join_command", { address, token, command: withWhatWasSeen(payload, get().live), service })
+      const response = await transport.command(withWhatWasSeen(payload, get().live), service)
       set({ error: null, note: null })
       const value = response && typeof response === "object" && !Array.isArray(response) ? response as Record<string, unknown> : null
       const note = typeof response === "string" ? response : typeof value?.note === "string" ? value.note : undefined
@@ -329,8 +363,7 @@ export const useCanSend = () => useJoin((s) => s.status === "connected" && !s.pa
  * Read only: nothing on the host changes.
  */
 export async function lookupOnHost<T>(asked: Record<string, unknown>): Promise<T> {
-  const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
-  return invoke<T>("join_lookup", { address, token, asked })
+  return transport.lookup(asked) as Promise<T>
 }
 
 export type DeskApprovalState = "submitted" | "approved" | "declined" | "requested_changes" | "applied" | "expired" | "withdrawn" | "superseded"
@@ -367,16 +400,14 @@ function readDeskApprovalRequest(value: unknown): DeskApprovalRequest {
 
 /** The host returns only this paired desk's own request metadata, without the request payload. */
 export async function loadMyApprovalRequests(): Promise<DeskApprovalRequest[]> {
-  const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
-  const response = await invoke<{ requests: unknown[] }>("join_requests", { address, token })
+  const response = await transport.requests() as { requests: unknown[] }
   if (!response || !Array.isArray(response.requests) || response.requests.length > 100) throw new Error("The host returned an invalid request list.")
   return response.requests.map(readDeskApprovalRequest)
 }
 
 /** Withdraw a request only while it remains undecided on the host. */
 export async function withdrawMyApprovalRequest(id: string): Promise<DeskApprovalRequest> {
-  const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
-  const request = readDeskApprovalRequest(await invoke<unknown>("join_withdraw_request", { address, token, id }))
+  const request = readDeskApprovalRequest(await transport.withdrawRequest(id))
   if (request.id !== id || request.state !== "withdrawn") throw new Error("The host did not confirm this request as withdrawn.")
   return request
 }
