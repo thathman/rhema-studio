@@ -82,4 +82,27 @@ describe("saved OBS computers (#197)", () => {
     expect((el.querySelector('input[aria-label="OBS address"]') as HTMLInputElement).value).toBe("192.168.1.31")
     expect((el.querySelector('input[aria-label="OBS port"]') as HTMLInputElement).value).toBe("4456")
   })
+
+  it("removes a saved OBS computer only after Remove; Keep leaves it (#831 S7)", async () => {
+    vi.resetModules()
+    const { useSettingsStore } = await import("@/stores/settings-store")
+    useSettingsStore.setState({ obs: { enabled: false, host: "192.168.1.30", port: 4455, password: "pw" }, obsProfiles: [{ id: "b", label: "Backup laptop", host: "192.168.1.31", port: 4456, password: "secret" }] })
+    const { ObsSettingsBlock } = await import("./obs-settings-block")
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    root = createRoot(el)
+    await act(async () => root!.render(<ObsSettingsBlock />))
+    const text = (t: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === t)
+    const labels = () => useSettingsStore.getState().obsProfiles.map((p) => p.label)
+
+    await act(async () => (el.querySelector('button[aria-label="Remove Backup laptop"]') as HTMLButtonElement).click())
+    expect(labels()).toEqual(["Backup laptop"]) // asking is not removing
+    await act(async () => text("Keep")!.click())
+    expect(labels()).toEqual(["Backup laptop"])
+    expect(text("Remove")).toBeUndefined()
+
+    await act(async () => (el.querySelector('button[aria-label="Remove Backup laptop"]') as HTMLButtonElement).click())
+    await act(async () => text("Remove")!.click())
+    expect(labels()).toEqual([])
+  })
 })
