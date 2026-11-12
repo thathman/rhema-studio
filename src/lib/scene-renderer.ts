@@ -129,6 +129,11 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, r: { x: number; y:
 
 type Rect = { x: number; y: number; w: number; h: number }
 
+/** How a text layer widens past its box, or undefined (text saved before `textWiden`: never). */
+function widening(l: SceneLayerFrame): "right" | "both" | "left" | undefined {
+  return l.textWiden === "right" || l.textWiden === "both" || l.textWiden === "left" ? l.textWiden : undefined
+}
+
 /** The frame's horizontal extent in canvas pixels (a letterboxed frame starts right of 0). */
 export type FrameSpan = { x: number; w: number }
 
@@ -170,8 +175,8 @@ function staticTextLayout(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame,
     lines.push(line)
   }
   let left = r.x, width = r.w
-  const grow = layer.textWiden
-  if (grow === "right" || grow === "both" || grow === "left") {
+  const grow = widening(layer)
+  if (grow) {
     const measured = Math.max(r.w, ...lines.map((line) => ctx.measureText(line).width))
     const room = { left: Math.max(0, r.x - span.x), right: Math.max(0, span.x + span.w - r.x - r.w) }
     const most = grow === "right" ? r.w + room.right : grow === "left" ? r.w + room.left : r.w + 2 * Math.min(room.left, room.right)
@@ -203,10 +208,20 @@ function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, 
   if (!layer.text) return
   const color = /^#[0-9a-f]{6}$/i.test(layer.textColor ?? "") ? layer.textColor! : "#ffffff"
   ctx.save()
+  // Text saved before `textWiden` is drawn by exactly the calls it always was: clipped to its box
+  // first. Widened text is clipped to its block, which the layout measures.
+  const widens = !!widening(layer)
+  if (!widens) {
+    ctx.beginPath()
+    ctx.rect(r.x, r.y, r.w, r.h)
+    ctx.clip()
+  }
   const { fontSize, align, step, left: x0, width: w, lines } = staticTextLayout(ctx, layer, r, frameHeight, span)
-  ctx.beginPath()
-  ctx.rect(x0, r.y, w, r.h)
-  ctx.clip()
+  if (widens) {
+    ctx.beginPath()
+    ctx.rect(x0, r.y, w, r.h)
+    ctx.clip()
+  }
   ctx.fillStyle = color
   ctx.textAlign = align
   ctx.textBaseline = "top"
@@ -422,7 +437,7 @@ const fadeRegions = new WeakMap<HTMLCanvasElement, Rect>()
  * text that widens past its box (`textWiden`), the widened block (same height).
  */
 function paintRegion(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: Rect, height: number, span: FrameSpan): Rect {
-  if (l.kind !== "text" || !l.text || !l.textWiden) return r
+  if (l.kind !== "text" || !l.text || !widening(l)) return r
   ctx.save()
   const { left, width } = staticTextLayout(ctx, l, r, height, span)
   ctx.restore()

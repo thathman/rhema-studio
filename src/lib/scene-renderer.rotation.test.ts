@@ -11,7 +11,8 @@ import { designToScene, sceneToDesign } from "@/design-engine/rhema-scene"
 import { mergeDeskScene } from "@/lib/desk-scenes"
 import { normalizeScene, sceneFrame } from "@/lib/scenes"
 import { drawScene, layerPivot, LayerFader } from "@/lib/scene-renderer"
-import { layerRotation } from "@/lib/scene-rotation"
+import { mainLayerPivot, mainPaintStaticText } from "@/lib/scene-renderer.main-text.fixture"
+import { layerRotation, turnAbout } from "@/lib/scene-rotation"
 import type { Scene, SceneLayer } from "@/types"
 
 /**
@@ -85,6 +86,31 @@ function outputPivot(scene: Scene): { x: number; y: number } {
   const l = frame.layers[0]!
   const r = { x: (l.box.x / 100) * 1920, y: (l.box.y / 100) * 1080, w: (l.box.w / 100) * 1920, h: (l.box.h / 100) * 1080 }
   return layerPivot(ctxOf(createCanvas(8, 8)), l, r, 1080, { x: 0, w: 1920 })
+}
+
+/**
+ * A canvas context that records every call and every state it is given (in order, with exact
+ * arguments) and still draws, so measuring works: a drawing compared by its calls, not its pixels,
+ * is the same on every platform and font set.
+ */
+function recording(canvas: Canvas): { ctx: CanvasRenderingContext2D; calls: string[] } {
+  const real = ctxOf(canvas)
+  const calls: string[] = []
+  const ctx = new Proxy(real, {
+    get(target, key) {
+      const v = Reflect.get(target, key, target) as unknown
+      if (typeof v !== "function") return v
+      return (...args: unknown[]) => {
+        calls.push(`${String(key)}(${args.map((a) => JSON.stringify(a)).join(", ")})`)
+        return (v as (...a: unknown[]) => unknown).apply(target, args)
+      }
+    },
+    set(target, key, value) {
+      calls.push(`${String(key)} = ${JSON.stringify(value)}`)
+      return Reflect.set(target, key, value, target)
+    },
+  })
+  return { ctx, calls }
 }
 
 /** The leftmost and rightmost bright (text) pixel columns. */
@@ -222,44 +248,34 @@ describe("layer rotation (#851 G7)", () => {
     expect(Math.hypot(still[0]!.x - still[1]!.x, still[0]!.y - still[1]!.y), "ink, upright").toBeLessThan(4)
   })
 
-  it("draws text saved before the editor's wrap width exactly as before: an over-wide word squeezed into its box", () => {
-    // An approved scene from before: no `textWiden`, a box sized by the old estimate.
-    const layer = { text: "Olúwaseun ẹ kú àbọ̀", fontSize: 120, fontWeight: "800" as const, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const, lineHeight: 1.2, box: { x: 70, y: 30, w: 15, h: 40 } }
-    for (const rotation of [undefined, 20]) {
+  it("draws text saved before the editor's wrap width with exactly main's canvas calls", () => {
+    // An approved scene from before: no `textWiden`, a box sized by the old estimate, a long
+    // Yoruba word in big bold type near the right edge, with an underline.
+    const layer = { text: "Olúwaseun ẹ kú àbọ̀ sí ilé", fontSize: 120, fontWeight: "800" as const, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const, lineHeight: 1.2, underline: true, box: { x: 70, y: 30, w: 15, h: 40 } }
+    for (const rotation of [undefined, 20, -135]) {
       const scene = bar("text", { ...layer, rotation })
       expect(normalizeScene(scene)?.layers[0]?.textWiden).toBeUndefined()
-      // What main drew: the box clipped, lines wrapped at the box and squeezed to its width.
-      const reference = createCanvas(1920, 1080)
-      const c = ctxOf(reference)
-      c.fillStyle = "#101020"
-      c.fillRect(0, 0, 1920, 1080)
+      const frame = sceneFrame({ isLive: false, liveVerse: null, sources: {} as never, themes: [] }, { themeId: "t" }, scene)
+      // Now: every call drawScene makes.
+      const now = recording(createCanvas(1920, 1080))
+      drawScene(now.ctx, 1920, 1080, frame, { image: () => null, layerCanvas: () => createCanvas(1, 1) as unknown as HTMLCanvasElement })
+      // Main: the same frame set-up, then the layer as main's drawScene drew it (copied verbatim).
+      const mainCanvas = createCanvas(1920, 1080)
+      ctxOf(mainCanvas).fillStyle = "#101020"
+      ctxOf(mainCanvas).fillRect(0, 0, 1920, 1080)
+      const main = recording(mainCanvas)
+      main.calls.push(...now.calls.slice(0, now.calls.indexOf("save()")))
+      const l = frame.layers[0]!
       const r = { x: 1344, y: 324, w: 288, h: 432 }
-      c.font = "normal 800 120px Arial"
-      const lines: string[] = []
-      let line = ""
-      for (const word of layer.text.split(" ")) {
-        const next = line ? `${line} ${word}` : word
-        if (line && c.measureText(next).width > r.w) {
-          lines.push(line)
-          line = word
-        } else line = next
-      }
-      lines.push(line)
-      const step = 120 * 1.2
-      const pivot = { x: r.x + r.w / 2, y: r.y + ((lines.length - 1) * step + 120) / 2 }
-      if (rotation) {
-        c.translate(pivot.x, pivot.y)
-        c.rotate((rotation * Math.PI) / 180)
-        c.translate(-pivot.x, -pivot.y)
-      }
-      c.beginPath()
-      c.rect(r.x, r.y, r.w, r.h)
-      c.clip()
-      c.fillStyle = "#ffffff"
-      c.textAlign = "center"
-      c.textBaseline = "top"
-      lines.forEach((l, i) => c.fillText(l, r.x + r.w / 2, r.y + i * step, r.w))
-      expect(differing(reference, drawOutput(scene)), `${rotation ?? 0}°`).toBe(0)
+      main.ctx.save()
+      if (rotation) turnAbout(main.ctx, mainLayerPivot(main.ctx, l, r, 1080), rotation)
+      main.ctx.globalAlpha = l.opacity
+      mainPaintStaticText(main.ctx, l, r, 1080)
+      main.ctx.restore()
+      expect(now.calls, `${rotation ?? 0}°`).toEqual(main.calls)
+      expect(now.calls.filter((c) => c.startsWith("fillText(")).length, "draws its lines").toBeGreaterThan(1)
+      // And the pixels: the renderer against main's code, on the same machine and fonts.
+      if (!rotation) expect(differing(mainCanvas, drawOutput(scene)), "upright pixels").toBe(0)
     }
   })
 
