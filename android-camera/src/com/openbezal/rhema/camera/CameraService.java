@@ -119,8 +119,6 @@ public final class CameraService extends Service {
     /** When to look for Rhema at a new address (main thread). */
     private final Rediscovery rediscovery = new Rediscovery();
     private HostFinder finder;
-    /** When the running browse ends (elapsedRealtime). */
-    private long browseEndsAt;
     /** Looked long enough without finding Rhema: the status says MAY_HAVE_MOVED. */
     private volatile boolean mayHaveMoved;
     /** The pairing link as last seen (main thread), to tell a kept key or a new address from a new pairing. */
@@ -1084,8 +1082,14 @@ public final class CameraService extends Service {
             lookNoMore();
             return;
         }
+        if (p != null && p.refused()) {
+            // Rhema answered at the paired address and refused (a sign-in, a busy router): it has
+            // not moved, so there is nothing to look for (doc 48).
+            lookNoMore();
+            return;
+        }
         if (p != null && p.unreachable()) rediscovery.failed(now);
-        if (rediscovery.browsing() && now >= browseEndsAt) {
+        if (rediscovery.over(now, finder.pending())) {
             finder.stop();
             rediscovery.stop(now);
         }
@@ -1093,7 +1097,6 @@ public final class CameraService extends Service {
         boolean canLook = link != null && link.keyPinned();
         if (rediscovery.start(now, canLook)) {
             if (finder.start(link.key, link.port, link.host, prefs.getString(Prefs.HOST_SERVICE, null))) {
-                browseEndsAt = now + Rediscovery.BROWSE_MS;
                 Log.i(TAG, "Rhema has not answered at " + link.host + ": looking for it on the network");
             } else {
                 rediscovery.stop(now);

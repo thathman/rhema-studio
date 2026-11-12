@@ -26,7 +26,8 @@ import javax.net.ssl.SSLSocket;
  * key=, accepting the old certificate pin once and keeping the key pin (KeyPin, Report.Pin and a real
  * Publisher connection), the network hint (TXT k=), the pairing moved to a new address (only the IP
  * changes), the TLS check at a candidate address (a wrong key is refused, a trickling host is cut off
- * at the whole deadline), when the camera looks, and which addresses get checked (ProbeQueue).
+ * at the whole deadline), when the camera looks and how long a browse runs, which addresses get
+ * checked (ProbeQueue, including ones turned away from a full queue), and the Pair dialog's words.
  */
 public final class KeyPinCheck {
     private static int failed;
@@ -166,13 +167,30 @@ public final class KeyPinCheck {
         check("probe: a wrong pin is refused at Rhema Studio too", !KeyPin.probe("127.0.0.1", rhema.getLocalPort(), PIN_B, 3_000));
         check("probe: the old certificate pin is no key pin", !KeyPin.probe("127.0.0.1", rhema.getLocalPort(), CERT_A2, 3_000));
         check("probe: no pin, no check", !KeyPin.probe("127.0.0.1", rhema.getLocalPort(), null, 3_000));
-        ServerSocket trickle = trickler();
+        // A host that trickles a byte every 300 ms (each read in time) is cut off at the whole deadline.
+        // The probe runs on its own thread with a time limit, so a missing deadline fails instead of hanging.
+        final ServerSocket trickle = trickler();
+        final boolean[] trickled = {true};
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                trickled[0] = KeyPin.probe("127.0.0.1", trickle.getLocalPort(), PIN_A, 1_500);
+            }
+        }, "keypin-check-probe");
+        t.setDaemon(true);
         long t0 = System.nanoTime();
-        boolean trickled = KeyPin.probe("127.0.0.1", trickle.getLocalPort(), PIN_A, 1_500);
+        t.start();
+        t.join(5_000);
         long tookMs = (System.nanoTime() - t0) / 1_000_000L;
-        check("probe: a trickling host is not found", !trickled);
-        check("probe: and is cut off at the whole deadline (took " + tookMs + " ms)", tookMs < 3_000);
+        boolean finished = !t.isAlive();
+        check("probe: a trickling host gives up in time (took " + tookMs + " ms)", finished && tookMs < 3_000);
+        check("probe: a trickling host is not found", finished && !trickled[0]);
         trickle.close();
+        // The late branch: a handshake done after the deadline, or on a socket the deadline closed, does not count.
+        check("probe: done in time counts", KeyPin.inTime(1_000, 2_000, false));
+        check("probe: done at or after the deadline does not", !KeyPin.inTime(2_000, 2_000, false) && !KeyPin.inTime(2_001, 2_000, false));
+        check("probe: a socket the deadline closed does not", !KeyPin.inTime(1_000, 2_000, true));
+        check("probe: in time across the nanoTime wrap", KeyPin.inTime(Long.MAX_VALUE - 5, Long.MIN_VALUE + 5, false) && !KeyPin.inTime(Long.MIN_VALUE + 5, Long.MAX_VALUE - 5, false));
         check("probe: no time, no check", !KeyPin.probe("127.0.0.1", rhema.getLocalPort(), PIN_A, 0));
 
         // A real Publisher: an old link connects over its certificate and keeps its key (zero taps);
@@ -180,6 +198,7 @@ public final class KeyPinCheck {
         SSLServerSocket rhemaOld = serve(KEY_A, a1);
         Seen s1 = publish(Pairing.parse(link("127.0.0.1", rhemaOld.getLocalPort(), CERT_A1, null)));
         check("publisher: an old link keeps the key of its certificate after the handshake", PIN_A.equals(s1.key));
+        check("publisher: a dropped connection is no refusal", !s1.refused);
         Seen s2 = publish(Pairing.parse(link("127.0.0.1", rhema.getLocalPort(), CERT_A1, PIN_A)));
         check("publisher: a kept key opens the certificate at the new address, nothing more to keep", s2.key == null && !s2.message.contains("not the Rhema"));
         Seen s3 = publish(Pairing.parse(link("127.0.0.1", rhema.getLocalPort(), CERT_A1, null)));
@@ -217,6 +236,17 @@ public final class KeyPinCheck {
         check("look: never resting more than two minutes", r.due(386_000) == 120_000);
         r.reset();
         check("look: sending again or stopped, all over", r.due(400_000) < 0 && !r.mayHaveMoved(400_000) && !r.browsing());
+        // A browse with checks still to run goes on past BROWSE_MS, never past BROWSE_MAX_MS.
+        Rediscovery b2 = new Rediscovery();
+        b2.failed(0);
+        b2.start(Rediscovery.AFTER_MS, true);
+        long s0 = Rediscovery.AFTER_MS;
+        check("browse: not over early", !b2.over(s0 + Rediscovery.BROWSE_MS - 1, false));
+        check("browse: over after its time with nothing left to check", b2.over(s0 + Rediscovery.BROWSE_MS, false));
+        check("browse: goes on while checks wait", !b2.over(s0 + Rediscovery.BROWSE_MS, true) && !b2.over(s0 + Rediscovery.BROWSE_MAX_MS - 1, true));
+        check("browse: but not past its longest", b2.over(s0 + Rediscovery.BROWSE_MAX_MS, true));
+        b2.stop(s0 + Rediscovery.BROWSE_MAX_MS);
+        check("browse: not browsing, not over", !b2.over(s0 + 10 * Rediscovery.BROWSE_MAX_MS, true));
         check("look: the words, plain and on one line", Rediscovery.MAY_HAVE_MOVED.equals("Rhema Studio may have moved; scan the camera link again if this continues"));
 
         // Which addresses get a TLS check in one browse (ProbeQueue): one announcer cannot starve the real one.
@@ -227,7 +257,7 @@ public final class KeyPinCheck {
         check("queue: no third address per service", !q.offer("fake-1", "10.0.0.68", 8322, false));
         check("queue: no address or port, nothing", !q.offer("x", null, 8322, false) && !q.offer("x", "10.0.0.9", 0, false));
         for (int i = 3; q.waiting() < ProbeQueue.MAX_WAITING; i++) q.offer("fake-" + i, "10.0.1." + i, 8322, false);
-        check("queue: a full queue turns a newcomer away, unmarked", !q.offer("CAC Ibadan", "10.0.0.5", 8322, false) && q.waiting() == ProbeQueue.MAX_WAITING);
+        check("queue: a full queue turns a newcomer away, unmarked, and keeps it aside", !q.offer("CAC Ibadan", "10.0.0.5", 8322, false) && q.waiting() == ProbeQueue.MAX_WAITING && q.later() == 1);
         check("queue: the last-known Rhema Studio makes room", q.offer("CAC Ibadan", "10.0.0.5", 8322, true) && q.waiting() == ProbeQueue.MAX_WAITING);
         ProbeQueue.Candidate first = q.next();
         check("queue: and is checked first", first != null && "10.0.0.5".equals(first.ip) && first.preferred);
@@ -250,8 +280,52 @@ public final class KeyPinCheck {
             if ("10.0.0.5".equals(fair.next().ip)) realFirst++;
         }
         check("queue: not always last (" + realFirst + "/200 first)", realFirst > 10);
+        // S1: services resolved once are not lost when the queue is full. 12 fake services fill it
+        // first (each holding a 4 s check); the real one, offered once, still gets its check.
+        ProbeQueue starve = new ProbeQueue(new java.util.Random(3));
+        for (int i = 0; i < 12; i++) starve.offer("fake-" + i, "10.0.3." + i, 8322, false);
+        check("queue: the fakes fill it, the rest aside", starve.waiting() == ProbeQueue.MAX_WAITING && starve.later() == 4 && starve.pending());
+        starve.offer("CAC Ibadan", "10.0.0.5", 8322, false);
+        boolean reached = false;
+        for (ProbeQueue.Candidate c; (c = starve.next()) != null; ) if ("10.0.0.5".equals(c.ip)) reached = true;
+        check("queue: the real one turned away is checked later in the same browse", reached && !starve.pending());
+        // A released check comes back by itself as checks are taken.
+        ProbeQueue back = new ProbeQueue(new java.util.Random(4));
+        back.offer("s1", "10.0.4.1", 8322, false);
+        back.offer("s2", "10.0.4.2", 8322, false);
+        ProbeQueue.Candidate rel = back.next();
+        back.release(rel);
+        boolean again = false;
+        for (ProbeQueue.Candidate c; (c = back.next()) != null; ) if (c.ip.equals(rel.ip)) again = true;
+        check("queue: a check that could not start comes back", again);
+        // A flood larger than what is kept aside: the real one is still checked in a fair share of browses.
+        int stayed = 0;
+        java.util.Random fl = new java.util.Random(9);
+        for (int round = 0; round < 200; round++) {
+            ProbeQueue flood = new ProbeQueue(fl);
+            for (int i = 0; i < 100; i++) flood.offer("fake-" + i, "10.1." + (i / 250) + "." + (i % 250), 8322, false);
+            flood.offer("CAC Ibadan", "10.0.0.5", 8322, false);
+            for (int i = 0; i < 100; i++) flood.offer("late-" + i, "10.2." + (i / 250) + "." + (i % 250), 8322, false);
+            boolean seen = false;
+            for (ProbeQueue.Candidate c; (c = flood.next()) != null; ) if ("10.0.0.5".equals(c.ip)) seen = true;
+            if (seen) stayed++;
+        }
+        check("queue: a flood cannot always push the real one out (" + stayed + "/200)", stayed > 10);
+        check("queue: what is kept aside is bounded", ProbeQueue.MAX_LATER == 32);
         q.clear();
-        check("queue: a new browse starts clean", q.waiting() == 0 && q.next() == null && q.offer("fake-1", "10.0.0.66", 8322, false));
+        check("queue: a new browse starts clean", q.waiting() == 0 && q.later() == 0 && !q.pending() && q.next() == null && q.offer("fake-1", "10.0.0.66", 8322, false));
+
+        // The Pair dialog says what a new link replaces.
+        Pairing here = Pairing.parse(link("192.168.1.20", 8322, CERT_A1, PIN_A));
+        Pairing choir = Pairing.parse(link("192.168.1.30", 8322, CERT_B, PIN_B).replace("label=Pulpit", "label=Choir"));
+        String words = Pairing.askWords(here, "Pulpit (Rhema)", choir);
+        check("pair dialog: says where and as what", words.startsWith("This phone will send its camera to Rhema at 192.168.1.30 as \"Choir\"."));
+        check("pair dialog: says what it replaces", words.contains("It replaces \"Pulpit (Rhema)\" at 192.168.1.20."));
+        check("pair dialog: the key is what is trusted", words.contains("Only that computer's key is accepted"));
+        check("pair dialog: nothing replaced on a first pairing", !Pairing.askWords(null, null, choir).contains("replaces"));
+        check("pair dialog: the same link replaces nothing", !Pairing.askWords(here, "Pulpit", Pairing.parse(here.link())).contains("replaces"));
+        check("pair dialog: an old link trusts a certificate, its own name when no other is known",
+                Pairing.askWords(here, "", old).contains("certificate is accepted") && Pairing.askWords(choir, "", old).contains("It replaces \"Choir\" at 192.168.1.30."));
 
         if (failed > 0) {
             System.out.println(failed + " key pin check(s) failed");
@@ -265,6 +339,7 @@ public final class KeyPinCheck {
         volatile String key;
         volatile String message = "";
         volatile boolean unreachable;
+        volatile boolean refused;
     }
 
     /** Runs a Publisher against a local server until its first try is over (the server only does TLS). */
@@ -303,6 +378,7 @@ public final class KeyPinCheck {
             done.wait(8_000);
         }
         seen.unreachable = pub.unreachable();
+        seen.refused = pub.refused();
         pub.stop();
         return seen;
     }

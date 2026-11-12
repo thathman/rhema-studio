@@ -13,12 +13,15 @@ final class Rediscovery {
     static final String MAY_HAVE_MOVED = "Rhema Studio may have moved; scan the camera link again if this continues";
     static final long AFTER_MS = 10_000;
     static final long BROWSE_MS = 30_000;
+    /** A browse with checks still to run goes on past BROWSE_MS, but never past this. */
+    static final long BROWSE_MAX_MS = 60_000;
     static final long MOVED_MS = 120_000;
     private static final long[] PAUSE_MS = {15_000, 30_000, 60_000, 120_000};
 
     private long failingSince = -1;
     private long firstBrowse = -1;
     private long nextAt = -1;
+    private long browseStarted = -1;
     private int rounds;
     private boolean browsing;
 
@@ -52,8 +55,19 @@ final class Rediscovery {
     boolean start(long now, boolean canLook) {
         if (!canLook || failingSince < 0 || browsing || now < nextAt) return false;
         browsing = true;
+        browseStarted = now;
         if (firstBrowse < 0) firstBrowse = now;
         return true;
+    }
+
+    /**
+     * Whether the running browse is over: after BROWSE_MS, unless addresses still wait for their
+     * TLS check (pending), then at the latest after BROWSE_MAX_MS.
+     */
+    boolean over(long now, boolean pending) {
+        if (!browsing) return false;
+        long ran = now - browseStarted;
+        return ran >= BROWSE_MAX_MS || (ran >= BROWSE_MS && !pending);
     }
 
     /** A browse ended without finding it (its time ran out, or sending stopped): rest first. */

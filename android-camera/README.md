@@ -73,9 +73,12 @@ Version 1.6.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) an
   until it first completes a connection, then keeps its key (the saved link gains `key=`); nobody
   has to scan again. A malformed `key=` is refused.
 - **Finding Rhema again.** While the camera should be sending and Rhema's camera router has not
-  answered for about 10 s, it browses the network for `_rhema-host._tcp` for 30 s, skips any Rhema
+  answered for about 10 s (an answer that refuses, such as a wrong password, means Rhema is still
+  there, so it does not look), it browses the network for `_rhema-host._tcp` for 30 s (up to 60 s
+  while addresses still wait for their check), skips any Rhema
   whose `k=` hint is not the start of its key pin, and checks each IPv4 address left (at most two per
-  announced name, the last-known one first) with a full TLS handshake on the camera router's port
+  announced name, the last-known one first; one turned away from a full queue is kept aside and
+  checked later in the same browse) with a full TLS handshake on the camera router's port
   that only the pinned key completes (4 s in all per check). Only then does it change the saved
   address (nothing else in the link) and connect there as the same camera. Between browses it rests
   15 s, 30 s, 60 s, then 120 s. It stops when it sends again or sending stops. After 2 minutes of

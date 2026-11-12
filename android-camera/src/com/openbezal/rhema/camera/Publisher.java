@@ -98,6 +98,8 @@ final class Publisher {
      * looks for Rhema at a new address when this lasts (Rediscovery).
      */
     private volatile boolean unreachable;
+    /** The router answered the last try and refused it (a sign-in, 400, 404, 503): it is there. */
+    private volatile boolean refused;
     private volatile long writeStartedNs;
     private boolean needKey = true;
     /** Frames are being dropped because the network could not keep up (not just waiting for a first full picture). */
@@ -142,6 +144,11 @@ final class Publisher {
 
     boolean live() {
         return live;
+    }
+
+    /** The router answered the last try and refused it: Rhema is at this address, only something else is wrong. */
+    boolean refused() {
+        return refused && !live;
     }
 
     /** Rhema's camera router has not answered since this camera last sent (see unreachable). */
@@ -265,6 +272,7 @@ final class Publisher {
                     live = true;
                 }
                 unreachable = false;
+                refused = false;
                 message = "Sending to Rhema";
                 listener.onState(true, message);
                 listener.onNeedKeyFrame();
@@ -273,7 +281,8 @@ final class Publisher {
             } catch (IOException e) {
                 if (!stopped) message = plain(e);
                 // It answered and refused (a sign-in, a busy router): it is there, only something else is wrong.
-                unreachable = !(e instanceof Refused);
+                refused = e instanceof Refused;
+                unreachable = !refused;
                 if (e instanceof SignInRefused && signInRefusedSinceNs == 0) signInRefusedSinceNs = Math.max(1, System.nanoTime());
             } finally {
                 boolean was = live;

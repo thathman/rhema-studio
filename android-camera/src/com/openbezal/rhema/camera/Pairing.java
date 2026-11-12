@@ -164,6 +164,19 @@ final class Pairing {
         return api == 0 ? null : "https://" + host + ":" + api + "/api/v1/camera/" + name + "/tally";
     }
 
+    /**
+     * What the Pair dialog says: where this phone will send and as what, what it replaces when
+     * another pairing is kept (currentTitle is what that one is called on screen), and what is trusted.
+     */
+    static String askWords(Pairing current, String currentTitle, Pairing next) {
+        StringBuilder b = new StringBuilder("This phone will send its camera to Rhema at ").append(next.host).append(" as \"").append(next.title()).append("\".");
+        if (current != null && change(current, next) != SAME) {
+            b.append("\n\nIt replaces \"").append(currentTitle == null || currentTitle.isEmpty() ? current.title() : currentTitle).append("\" at ").append(current.host).append('.');
+        }
+        b.append("\n\nOnly that computer's ").append(next.keyPinned() ? "key" : "certificate").append(" is accepted, and the picture is encrypted on the way.");
+        return b.toString();
+    }
+
     /** What to call this camera on screen. */
     String title() {
         return label.isEmpty() ? name : label;

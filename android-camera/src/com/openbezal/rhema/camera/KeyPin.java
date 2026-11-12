@@ -160,8 +160,7 @@ final class KeyPin {
             raw.setSoTimeout(timeoutMs);
             try (SSLSocket s = (SSLSocket) ctx.getSocketFactory().createSocket(raw, host, port, false)) {
                 s.startHandshake();
-                // Done in time (a handshake finished just as the deadline closed it does not count).
-                return System.nanoTime() < until && !raw.isClosed();
+                return inTime(System.nanoTime(), until, raw.isClosed());
             }
         } catch (Exception e) {
             return false;
@@ -169,6 +168,11 @@ final class KeyPin {
             if (cut != null) cut.cancel(false);
             try { raw.close(); } catch (Exception ignored) { }
         }
+    }
+
+    /** A handshake counts only when done in time: one that finished just as the deadline closed its socket does not. */
+    static boolean inTime(long nowNs, long untilNs, boolean closed) {
+        return nowNs - untilNs < 0 && !closed;
     }
 
     /** Trusts exactly one server key (the pin), whatever names or dates its certificate has. */

@@ -81,6 +81,11 @@ final class HostFinder {
         return browse != null;
     }
 
+    /** Services still to be resolved, or addresses still to be checked, in this browse. */
+    boolean pending() {
+        return browse != null && (resolving || probing || !toResolve.isEmpty() || probes.pending());
+    }
+
     /** Starts a browse for this key pin, checking the camera router's port; false when it could not start. */
     boolean start(String keyPin, int port, String lastIp, String lastService) {
         stop();
@@ -208,7 +213,8 @@ final class HostFinder {
         if (!KeyPin.hintMatches(KeyPin.txt(txt, "k"), keyPin)) return;
         String service = String.valueOf(info.getServiceName());
         boolean sameName = service.equals(lastService);
-        // Each of its IPv4 addresses (a computer on Wi-Fi and Ethernet announces both), ProbeQueue-capped.
+        // Each of its IPv4 addresses (a computer on Wi-Fi and Ethernet announces both), ProbeQueue-capped;
+        // one turned away for want of room is kept aside and offered again as checks are taken.
         for (String ip : ipv4s(info)) probes.offer(service, ip, port, sameName || ip.equals(lastIp));
         pump(g);
     }
