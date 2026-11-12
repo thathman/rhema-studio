@@ -18,4 +18,11 @@ describe("first-run tour (Studio)", () => {
     expect(presentSteps.every((s) => !("presentView" in (s.data as object)))).toBe(true)
     expect(presentSteps.some((s) => s.target === '[data-tour="live-tools"]')).toBe(true)
   })
+
+  it("teaches the Live keys as they are: Enter takes, Clear needs Esc twice (#816, #817)", () => {
+    const text = TUTORIAL_STEPS.map((s) => String(s.content)).join(" ")
+    expect(text).toContain("Take source live (Enter)")
+    expect(text).toContain("Clear (Esc twice")
+    expect(text).not.toContain("Clear (Esc)")
+  })
 })

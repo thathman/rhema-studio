@@ -166,7 +166,12 @@ describe("Present's transport bar", () => {
     expect(take.textContent).toContain("Take John 3:16")
     expect(take.textContent).toContain("To subscribed outputs")
     expect(take.title).toContain("does not limit this source Take")
+    // The keys as they are now (#816, #817): Enter takes, Clear needs Esc twice.
+    expect(take.title).toContain("(Enter)")
     expect(take.className).toContain("bg-primary")
+    await act(async () => useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "John 3:16", segments: [], content: "bible" } }))
+    expect(button("Clear").title).toContain("(Esc twice)")
+    await act(async () => useBroadcastStore.setState({ isLive: false, liveVerse: null }))
 
     await act(async () => useBroadcastStore.setState({ rehearsal: true }))
     expect(target()).toContain("Rehearsal · public outputs keep their current Program")

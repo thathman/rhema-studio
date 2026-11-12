@@ -12,6 +12,8 @@ import { SoundChip } from "@/studio/present/sound-chip"
 import { StageMessage } from "@/studio/present/stage-message"
 import { QuickFind } from "@/studio/present/quick-find"
 import { EngageHostControl } from "@/studio/engage/host-control"
+import { useEngageHost } from "@/studio/engage/host-store"
+import { useSettingsStore } from "@/stores/settings-store"
 import { liveToolsExpanded, setLiveToolsExpanded, useProductionTab, type LiveToolsTab } from "@/studio/production/production-tab"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
@@ -69,6 +71,11 @@ export function LiveToolsDrawer({
 }) {
   const isLive = useBroadcastStore((s) => s.isLive)
   const expanded = useProductionTab((s) => liveToolsExpanded(s, tab, isLive))
+  // Engage is deferred (#858 G14): hidden unless this computer turns it on. A room already open stays
+  // reachable, so it can always be ended and its data deleted.
+  const engageEnabled = useSettingsStore((s) => s.engageEnabled)
+  const engageRoomOpen = useEngageHost((s) => s.session !== null)
+  const showEngage = engageEnabled || engageRoomOpen
   return (
     // The tall panel is the same grid row grown (the console grid gives it the height): nothing is
     // covered, so Program and Take/Clear stay visible and reachable.
@@ -94,7 +101,7 @@ export function LiveToolsDrawer({
               {tab === "production"
                 ? "Timing, scenes, cameras, OBS and health tools share this Live state. Preview stays private until an explicit action."
                 : tab === "controls"
-                  ? "Open secondary cues, local sound, lower thirds, Stage messages and Engage when needed."
+                  ? `Open secondary cues, local sound, lower thirds${showEngage ? ", Stage messages and Engage" : " and Stage messages"} when needed.`
                   : tab === "listening"
                     ? "Review what the microphone heard. Choose Queue, Bible feeds, or Show live when you are ready."
                     : "Find Scripture or a hymn for private Preview. Choosing a result does not change Program."}
@@ -152,7 +159,7 @@ export function LiveToolsDrawer({
                 <SoundChip />
                 <LowerThirdControl />
                 <StageMessage />
-                <EngageHostControl />
+                {showEngage && <EngageHostControl />}
               </div>
             </section>
           </TabsContent>
