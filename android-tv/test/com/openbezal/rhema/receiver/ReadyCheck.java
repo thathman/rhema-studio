@@ -132,6 +132,8 @@ public final class ReadyCheck {
         check("the page's acknowledgement", Guard.ackOf(LINK, "POST", ACK));
         check("an encoded feed id, as the page encodes it", Guard.ackOf("https://192.168.3.10:8081/feed/a%20b?k=x", "POST", "https://192.168.3.10:8081/api/v1/feed/a%20b/ack?k=x"));
         check("a GET is not one", !Guard.ackOf(LINK, "GET", ACK));
+        check("a hidden page's (drawn, not seen; #844) is not one", !Guard.ackOf(LINK, "POST", ACK + "&hidden=1"));
+        check("nor with the mark first", !Guard.ackOf(LINK, "POST", "https://192.168.3.10:8081/api/v1/feed/l3/ack?hidden=1&k=s3cr%2Bt"));
         check("another feed's", !Guard.ackOf(LINK, "POST", ACK.replace("/l3/", "/l4/")));
         check("an old key's (a new link, or this TV revoked)", !Guard.ackOf(LINK, "POST", ACK.replace("s3cr%2Bt", "old")));
         check("no key", !Guard.ackOf(LINK, "POST", "https://192.168.3.10:8081/api/v1/feed/l3/ack"));

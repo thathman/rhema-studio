@@ -15,6 +15,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useJoin, type JoinStatus } from "@/stores/join-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useShellStore } from "@/studio/shell-store"
 import { OperatorsPanel } from "@/studio/production/operators-panel"
 import type { LiveStateV1 } from "@/lib/live-state"
 
@@ -262,6 +263,11 @@ describe("the main desk's operator list", () => {
     expect(useSettingsStore.getState().remoteDevices).toHaveLength(1)
     expect(useSettingsStore.getState().remoteDevices[0].paused).toBeUndefined()
     expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main desk gave control back to Desk C")
+    // #800 R1: the emergency pause stays here; roles, grants and revoke are managed in Permissions.
+    useShellStore.setState({ goRequest: null })
+    expect(el.querySelector('[aria-label="Revoke Desk C"]')).toBeNull()
+    await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Manage access and roles in Permissions"]')!.click())
+    expect(useShellStore.getState().goRequest).toBe("permissions")
   })
 })
 

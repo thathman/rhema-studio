@@ -11,7 +11,6 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), e
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { MoreWorkspace } from "./more-workspace"
 import { GlobalSearch } from "@/studio/shell/global-search"
 import { useShellStore } from "@/studio/shell-store"
 
@@ -30,25 +29,9 @@ async function render(node: React.ReactNode) {
   await act(async () => root!.render(node))
   return el
 }
-const button = (label: string) => [...document.querySelectorAll("button")].find((b) => b.textContent?.includes(label))
 
-describe("one place to build a service (#299)", () => {
-  it("More has no Classic layout, nothing marked planned, and sends Prepare and Signage to the real places", async () => {
-    useShellStore.setState({ presentView: "standard", goRequest: null, outputsDialogOpen: false })
-    const el = await render(<MoreWorkspace />)
-    expect(el.textContent).not.toContain("Classic layout")
-    expect(el.textContent).not.toContain("Planned")
-    for (const b of el.querySelectorAll("button")) expect(b.disabled).toBe(false)
-
-    await act(async () => button("Prepare")!.click())
-    expect(useShellStore.getState().goRequest).toBe("prepare")
-
-    await act(async () => button("Signage")!.click())
-    expect(useShellStore.getState().outputsDialogOpen).toBe(true)
-    // This action leaves the stored legacy Present preference alone.
-    expect(useShellStore.getState().presentView).toBe("standard")
-  })
-
+// Moved from the retired More tools page (#809 R10): Find anything is the way to these places now.
+describe("Find anything opens the real places", () => {
   it("Find anything: New service opens Prepare with the New service form", async () => {
     useShellStore.setState({ searchOpen: true, goRequest: null, newServiceOpen: false })
     await render(<GlobalSearch />)

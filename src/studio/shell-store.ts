@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 
-export type Workspace = "home" | "prepare" | "present" | "production" | "library" | "design" | "permissions" | "connections" | "team" | "archive" | "settings" | "more"
+export type Workspace = "home" | "prepare" | "present" | "production" | "library" | "design" | "permissions" | "connections" | "team" | "archive" | "settings"
 /** `production` is a saved-route/deep-link alias; Live is the single canonical workspace. */
 export function canonicalWorkspace(workspace: Workspace): Workspace {
   return workspace === "production" ? "present" : workspace
@@ -16,7 +16,6 @@ export type DesignTab = "themes" | "library" | "my-designs" | "lower-thirds" | "
 export function designTabOf(tab: DesignTab): DesignTab {
   return tab === "outputs" ? "used-on" : tab
 }
-export type PresentView = "standard" | "production"
 export type LibrarySection = "bible" | "songs" | "hymns" | "slides" | "designs" | "media" | "audio" | "collections" | "files"
 
 /** In-memory return path for customizing a copied Design from a Prepare event. Never persisted as a service preference. */
@@ -59,7 +58,6 @@ export interface PrepareMomentSelection extends PrepareMomentFocusRequest {
 
 export interface ShellPrefs {
   workspace: Workspace
-  presentView: PresentView
   /** The operator folded the sidebar to icons (#299). Below the narrow width it is icons anyway. */
   sidebarCollapsed: boolean
 }
@@ -67,11 +65,11 @@ export interface ShellPrefs {
 export const SHELL_PREFS_KEY = "rhema-studio.shell"
 
 // Prefs saved before the sidebar could fold have no sidebarCollapsed: they open expanded.
-const DEFAULT_PREFS: ShellPrefs = { workspace: "home", presentView: "standard", sidebarCollapsed: false }
+// Older prefs may also carry "presentView" (#809 R10: nothing read it) or the retired "more"
+// workspace; both are ignored, and the next write drops the stale field.
+const DEFAULT_PREFS: ShellPrefs = { workspace: "home", sidebarCollapsed: false }
 
-// "more" has no way in since the sidebar dropped it (#218), so it is not restored.
 const WORKSPACES: readonly Workspace[] = ["home", "prepare", "present", "production", "library", "design", "permissions", "connections", "team", "archive", "settings"]
-const VIEWS: readonly PresentView[] = ["standard", "production"]
 
 /** Minimal Storage surface so tests can pass a Map-backed fake. */
 export interface StorageLike {
@@ -90,9 +88,6 @@ export function readShellPrefs(storage: StorageLike | null): ShellPrefs {
       workspace: WORKSPACES.includes(parsed.workspace as Workspace)
         ? canonicalWorkspace(parsed.workspace as Workspace)
         : DEFAULT_PREFS.workspace,
-      presentView: VIEWS.includes(parsed.presentView as PresentView)
-        ? (parsed.presentView as PresentView)
-        : DEFAULT_PREFS.presentView,
       sidebarCollapsed: typeof parsed.sidebarCollapsed === "boolean" ? parsed.sidebarCollapsed : DEFAULT_PREFS.sidebarCollapsed,
     }
   } catch {
@@ -103,7 +98,7 @@ export function readShellPrefs(storage: StorageLike | null): ShellPrefs {
 export function writeShellPrefs(storage: StorageLike | null, prefs: ShellPrefs): void {
   if (!storage) return
   try {
-    storage.setItem(SHELL_PREFS_KEY, JSON.stringify({ ...prefs, workspace: canonicalWorkspace(prefs.workspace) }))
+    storage.setItem(SHELL_PREFS_KEY, JSON.stringify({ workspace: canonicalWorkspace(prefs.workspace), sidebarCollapsed: prefs.sidebarCollapsed }))
   } catch {
     // Private mode or quota: the preference is a convenience, not data.
   }
@@ -112,7 +107,7 @@ export function writeShellPrefs(storage: StorageLike | null, prefs: ShellPrefs):
 interface ShellState extends ShellPrefs {
   /** Monotonic in-memory identity for each visit to Library; rejects stale async Uses. */
   libraryVisitId: number
-  /** The outputs dialog is global so Home, Present and More can all open it. */
+  /** The outputs dialog is global so Home, Live and Design can all open it. */
   outputsDialogOpen: boolean
   designTab: DesignTab
   setDesignTab: (tab: DesignTab) => void
@@ -151,7 +146,6 @@ interface ShellState extends ShellPrefs {
   librarySection: LibrarySection
   setLibrarySection: (section: LibrarySection) => void
   openLibrarySection: (section: LibrarySection, prepareReturn?: PrepareLibraryReturnContext | null) => void
-  setPresentView: (view: PresentView) => void
   /** Fold the sidebar to icons or open it out again (the sidebar's button, Cmd/Ctrl+B). */
   setSidebarCollapsed: (collapsed: boolean) => void
   toggleSidebar: () => void
@@ -253,7 +247,6 @@ export const useShellStore = create<ShellState>((set) => ({
       ? { libraryVisitId: state.libraryVisitId + 1 }
       : {}),
   })),
-  setPresentView: (presentView) => set({ presentView }),
   setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   openOutputs: () => set({ outputsDialogOpen: true }),
@@ -276,7 +269,7 @@ export const useShellStore = create<ShellState>((set) => ({
 }))
 
 useShellStore.subscribe((state, prev) => {
-  if (state.workspace !== prev.workspace || state.presentView !== prev.presentView || state.sidebarCollapsed !== prev.sidebarCollapsed) {
-    writeShellPrefs(storage, { workspace: state.workspace, presentView: state.presentView, sidebarCollapsed: state.sidebarCollapsed })
+  if (state.workspace !== prev.workspace || state.sidebarCollapsed !== prev.sidebarCollapsed) {
+    writeShellPrefs(storage, { workspace: state.workspace, sidebarCollapsed: state.sidebarCollapsed })
   }
 })
