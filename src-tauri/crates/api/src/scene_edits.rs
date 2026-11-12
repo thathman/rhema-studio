@@ -267,6 +267,18 @@ mod tests {
     }
 
     #[test]
+    fn a_desk_cannot_set_how_long_words_widen() {
+        // #880: textWiden is set only by saving from the Design editor on the main computer.
+        let mut scene = serde_json::json!({ "id": "n1", "layers": [
+            { "id": "t", "kind": "text", "text": "Ìyè àìnípẹ̀kun", "textWiden": "both", "rotation": 20 },
+        ] });
+        strip(&mut scene);
+        let layer = &scene["layers"][0];
+        assert!(layer.get("textWiden").is_none(), "a desk's textWiden is dropped");
+        assert_eq!(layer["rotation"], 20, "the fields a desk may send are kept");
+    }
+
+    #[test]
     fn a_new_scene_or_one_off_screen_goes_in_and_one_on_a_screen_waits() {
         let new = save(serde_json::json!({ "id": "n1", "name": "New", "layers": [] }));
         assert_eq!(judge(Some(LIVE), Role::Screens, &new), Ok(Some(Verdict::Direct)));
