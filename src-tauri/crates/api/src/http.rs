@@ -2017,8 +2017,9 @@ fn is_step(cmd: &RemoteCommand) -> bool {
 /// takes the press, one when the screens publish it. A change from anywhere else (another desk, the
 /// main desk, a timed advance, an unchecked Bible or song show) moves the part past the ceiling, and
 /// another desk's press replaces the run, so either makes the desk's next press stale.
-// ponytail: a press whose publish changes nothing leaves one move of slack in the run; count
-// publishes per press if that ever matters.
+// ponytail: any press whose publish changes nothing (Show when already on, Next with nowhere to
+// go) leaves one move of slack, so one change from elsewhere inside 5 s can pass. Give the reserved
+// move back on the next unchanged publish if that ever matters.
 #[derive(Default)]
 struct OwnPresses(std::sync::Mutex<std::collections::HashMap<String, OwnRun>>);
 
