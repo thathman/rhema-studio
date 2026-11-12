@@ -49,3 +49,47 @@ export const pageAckClock: AckClock = {
 export function ackUrl(id: string, key: string, seen: boolean): string {
   return `/api/v1/feed/${encodeURIComponent(id)}/ack?k=${encodeURIComponent(key)}${seen ? "" : "&hidden=1"}`
 }
+
+/**
+ * What a feed page has drawn and acknowledged, by host run. The host numbers frames from 1 again
+ * each time it starts (a quit and relaunch, a crash), and a page that is not reloaded keeps its
+ * numbers from before: without a new run, every frame of the restarted host is "older" than the
+ * last one drawn, so no drawn frame is acknowledged again, and the page's beat acknowledgements name
+ * a frame the new host never sent, which it refuses.
+ *
+ * Within one host run the stream's frame numbers never go down (a reconnect starts at the frame
+ * shown now), so a lower number than the last one heard, the restarted host's `0` ("off") included,
+ * starts a new run: nothing drawn in it yet, and an acknowledgement still pending from the old run
+ * is dropped.
+ */
+export interface DrawnFrames {
+  /** The newest frame drawn in this run (what the page acknowledges); 0 before any. */
+  seq: number
+  /** Whether `seq` was seen on screen, not only drawn by a hidden page (#844). */
+  seen: boolean
+  /** The host run, counted by this page from 0. */
+  run: number
+  /** The last frame number heard on the stream, -1 before any. */
+  heard: number
+}
+
+export const drawnFrames = (): DrawnFrames => ({ seq: 0, seen: false, run: 0, heard: -1 })
+
+/** A frame numbered `seq` came on the stream: the run it belongs to (a new one when the number went down). */
+export function frameHeard(d: DrawnFrames, seq: number): number {
+  if (seq < d.heard) {
+    d.run += 1
+    d.seq = 0
+    d.seen = false
+  }
+  d.heard = seq
+  return d.run
+}
+
+/** Frame `seq` of run `run` is drawn: whether to acknowledge it (not late, not from an earlier run). */
+export function frameDrawn(d: DrawnFrames, seq: number, run: number, seen: boolean): boolean {
+  if (run !== d.run || seq < d.seq) return false
+  d.seq = seq
+  d.seen = seen
+  return true
+}
