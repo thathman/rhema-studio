@@ -126,26 +126,22 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, r: { x: number; y:
   ctx.fillText(text, r.x + r.w / 2, r.y + r.h / 2)
 }
 
-/** Literal text saved in an Avnac design, drawn by the same renderer on Preview and every output. */
-function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, frameHeight: number): void {
+type Rect = { x: number; y: number; w: number; h: number }
+
+/**
+ * How static text lays out in its box: font, wrapped lines and line step. Sets `ctx.font`. The
+ * lines are those that fit in the box (each a whole em tall), as `paintStaticText` draws them.
+ */
+function staticTextLayout(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, r: Rect, frameHeight: number) {
   const text = layer.text ?? ""
-  if (!text) return
   const fontSize = Math.max(1, Math.min(400, layer.fontSize ?? 72) * frameHeight / 1080)
   const fontFamily = (layer.fontFamily ?? "Arial").replace(/[^\p{L}\p{N}, _-]/gu, "").trim().slice(0, 120) || "Arial"
   const fontWeight = ["400", "500", "600", "700", "800", "900"].includes(layer.fontWeight ?? "") ? layer.fontWeight : "600"
   const fontStyle = layer.fontStyle === "italic" ? "italic" : "normal"
-  const align = layer.textAlign === "center" || layer.textAlign === "right" ? layer.textAlign : "left"
-  const lineHeight = Math.max(0.5, Math.min(3, layer.lineHeight ?? 1.2))
-  const color = /^#[0-9a-f]{6}$/i.test(layer.textColor ?? "") ? layer.textColor! : "#ffffff"
-  const lines: string[] = []
-  ctx.save()
-  ctx.beginPath()
-  ctx.rect(r.x, r.y, r.w, r.h)
-  ctx.clip()
+  const align: CanvasTextAlign = layer.textAlign === "center" || layer.textAlign === "right" ? layer.textAlign : "left"
+  const step = fontSize * Math.max(0.5, Math.min(3, layer.lineHeight ?? 1.2))
   ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`
-  ctx.fillStyle = color
-  ctx.textAlign = align
-  ctx.textBaseline = "top"
+  const lines: string[] = []
   for (const paragraph of text.split(/\r\n?|\n/)) {
     const words = paragraph.trim().split(/\s+/).filter(Boolean)
     if (words.length === 0) {
@@ -162,10 +158,40 @@ function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, 
     }
     lines.push(line)
   }
+  // Only whole lines that fit in the box are drawn.
+  const fit = Math.max(0, Math.floor((r.h - fontSize) / step) + 1)
+  return { fontSize, align, step, lines: lines.slice(0, fit) }
+}
+
+/**
+ * The point a turned layer turns about, in canvas pixels (#851 G7). The design editor turns text
+ * about the centre of its words (a tight block: each line a line step, the last an em tall), not
+ * about a taller box kept for clipping; every other layer about its box's centre.
+ */
+export function layerPivot(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: Rect, frameHeight: number): { x: number; y: number } {
+  const centre = { x: r.x + r.w / 2, y: r.y + r.h / 2 }
+  if (l.kind !== "text" || !l.text) return centre
+  ctx.save()
+  const { fontSize, step, lines } = staticTextLayout(ctx, l, r, frameHeight)
+  ctx.restore()
+  if (!lines.length) return centre
+  return { x: centre.x, y: r.y + ((lines.length - 1) * step + fontSize) / 2 }
+}
+
+/** Literal text saved in an Avnac design, drawn by the same renderer on Preview and every output. */
+function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, r: Rect, frameHeight: number): void {
+  if (!layer.text) return
+  const color = /^#[0-9a-f]{6}$/i.test(layer.textColor ?? "") ? layer.textColor! : "#ffffff"
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(r.x, r.y, r.w, r.h)
+  ctx.clip()
+  const { fontSize, align, step, lines } = staticTextLayout(ctx, layer, r, frameHeight)
+  ctx.fillStyle = color
+  ctx.textAlign = align
+  ctx.textBaseline = "top"
   let y = r.y
-  const step = fontSize * lineHeight
   for (const line of lines) {
-    if (y + fontSize > r.y + r.h) break
     if (line) {
       const x = align === "center" ? r.x + r.w / 2 : align === "right" ? r.x + r.w : r.x
       ctx.fillText(line, x, y, r.w)
@@ -422,8 +448,8 @@ export function drawScene(ctx: CanvasRenderingContext2D, canvasWidth: number, ca
     const box = rect(l, width, height)
     const r = { ...box, x: box.x + area.x, y: box.y + area.y }
     ctx.save()
-    // A turned layer (#851 G7) turns about its box's centre, as in the design editor.
-    if (layerTurns(l.kind)) turnAbout(ctx, r, l.rotation)
+    // A turned layer (#851 G7) turns about the point the design editor turns it about.
+    if (layerTurns(l.kind) && l.rotation) turnAbout(ctx, layerPivot(ctx, l, r, height), l.rotation)
     ctx.globalAlpha = l.opacity
     if (opts.fader && l.fadeMs && !opts.preview && !opts.cameraBelow?.(l.id)) paintFading(ctx, l, r, height, opts, opts.fader)
     else paintLayer(ctx, l, r, height, opts)

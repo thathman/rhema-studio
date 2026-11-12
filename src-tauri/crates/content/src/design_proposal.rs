@@ -92,7 +92,9 @@ fn allowed(kind: &str) -> &'static [&'static str] {
 /// Why a field outputs cannot draw is refused, in words an assistant can act on.
 fn refusal(field: &str) -> String {
     match field {
-        "rotation" | "scaleX" | "scaleY" => "rotation and flipping are not drawn on Rhema outputs yet; leave it out".into(),
+        // Outputs draw a turned layer (#851 G7, not cameras, videos or tickers), but a draft starts upright.
+        "rotation" => "rotation is set by people in the Design editor after the draft is saved; leave it out".into(),
+        "scaleX" | "scaleY" => "flipping is not drawn on Rhema outputs yet; leave it out".into(),
         "shadow" | "blur" => "shadow and blur are not drawn on Rhema outputs yet; leave it out".into(),
         "stroke" | "strokeWidth" | "radius" | "radiusX" | "radiusY" | "borderRadius" => "outlines and rounded corners are not drawn on Rhema outputs for this layer yet; leave it out".into(),
         "src" | "url" | "imageUrl" | "href" => "pictures come only from the church's media library: give its mediaId (rhema_list_media), never an address".into(),

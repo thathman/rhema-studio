@@ -90,13 +90,14 @@ fn default_kind() -> String {
 
 impl ContentDb {
     /// Designs by title (no documents: a list of hundreds stays light), newest change first.
-    /// Archived designs are listed too, with `archived_at` set: the caller chooses what to show.
+    /// Archived designs are listed too, with `archived_at` set, after every design still in the
+    /// list, so a limit never lets archived ones crowd out active ones: the caller chooses what to show.
     pub fn list_designs(&self, query: Option<&str>, kind: Option<&str>, limit: usize) -> Result<Vec<DesignSummary>> {
         let conn = self.lock()?;
         let mut stmt = conn.prepare(
             "SELECT id, title, kind, revision, (SELECT MAX(version) FROM design_versions v WHERE v.design_id = d.id), updated_at, archived_at
              FROM design_documents d WHERE (?1 = '' OR instr(lower(title), lower(?1)) > 0) AND (?2 = '' OR kind = ?2)
-             ORDER BY updated_at DESC, id LIMIT ?3",
+             ORDER BY archived_at IS NOT NULL, updated_at DESC, id LIMIT ?3",
         )?;
         let rows = stmt.query_map(
             params![query.unwrap_or_default().trim(), kind.unwrap_or_default(), i64::try_from(limit.min(5000)).unwrap_or(5000)],
@@ -453,6 +454,13 @@ mod tests {
         assert_eq!((restored.archived_at, restored.revision), (None, 2));
         assert_eq!(db.get_design(&d.id).unwrap().unwrap().archived_at, None);
         assert!(matches!(db.set_design_archived("missing", true), Err(ContentError::NotFound(_))));
+        // Archived designs come after active ones, so a short list is all active designs.
+        let other = db.create_design(&input("other")).unwrap();
+        db.set_design_archived(&d.id, true).unwrap();
+        db.save_design_draft(&d.id, 2, &input("newest edit")).unwrap();
+        let first = db.list_designs(None, None, 1).unwrap();
+        assert_eq!(first.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), vec![other.id.as_str()]);
+        assert_eq!(db.list_designs(None, None, 10).unwrap().last().map(|s| s.id.clone()), Some(d.id.clone()));
     }
 
     #[test]

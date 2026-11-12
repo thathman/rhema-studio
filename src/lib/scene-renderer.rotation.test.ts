@@ -4,10 +4,13 @@ import { beforeAll, describe, expect, it } from "vitest"
 
 import { applyCommand, buildRenderCommands } from "@/vendor/avnac/saraswati"
 import { canvas2DRendererBackend } from "@/vendor/avnac/renderer/backends/canvas2d/renderer"
+import { layoutTextLines } from "@/vendor/avnac/renderer/backends/canvas2d/text-layout"
+import { measureCanvas2DTextLineWidth } from "@/vendor/avnac/renderer/backends/canvas2d/shared"
+import type { SaraswatiTextNode } from "@/vendor/avnac/saraswati"
 import { designToScene, sceneToDesign } from "@/design-engine/rhema-scene"
 import { mergeDeskScene } from "@/lib/desk-scenes"
 import { normalizeScene, sceneFrame } from "@/lib/scenes"
-import { drawScene } from "@/lib/scene-renderer"
+import { drawScene, layerPivot } from "@/lib/scene-renderer"
 import { layerRotation } from "@/lib/scene-rotation"
 import type { Scene, SceneLayer } from "@/types"
 
@@ -61,6 +64,29 @@ async function drawEditor(scene: Scene): Promise<Canvas> {
   return canvas
 }
 
+/** The centre of the bright (text) pixels: where turned words land. */
+function inkCentre(c: Canvas): { x: number; y: number } {
+  const d = ctxOf(c).getImageData(0, 0, 1920, 1080).data
+  let n = 0, sx = 0, sy = 0
+  for (let i = 0; i < d.length; i += 4) if (d[i]! > 200 && d[i + 1]! > 200 && d[i + 2]! > 200) { const p = i / 4; sx += p % 1920; sy += Math.floor(p / 1920); n++ }
+  return { x: sx / n, y: sy / n }
+}
+
+/** Where the Avnac editor turns a text node: the centre of the box it lays the words out in. */
+function editorTextPivot(node: SaraswatiTextNode): { x: number; y: number } {
+  const ctx = ctxOf(createCanvas(8, 8))
+  const layout = layoutTextLines(node, (font, text) => measureCanvas2DTextLineWidth(ctx, font, text))
+  return { x: node.x + layout.boxWidth / 2, y: node.y + layout.boxHeight / 2 }
+}
+
+/** Where outputs turn the same layer, at 1920×1080. */
+function outputPivot(scene: Scene): { x: number; y: number } {
+  const frame = sceneFrame({ isLive: false, liveVerse: null, sources: {} as never, themes: [] }, { themeId: "t" }, scene)
+  const l = frame.layers[0]!
+  const r = { x: (l.box.x / 100) * 1920, y: (l.box.y / 100) * 1080, w: (l.box.w / 100) * 1920, h: (l.box.h / 100) * 1080 }
+  return layerPivot(ctxOf(createCanvas(8, 8)), l, r, 1080)
+}
+
 function differing(a: Canvas, b: Canvas): number {
   const x = ctxOf(a).getImageData(0, 0, 1920, 1080).data, y = ctxOf(b).getImageData(0, 0, 1920, 1080).data
   let n = 0
@@ -111,8 +137,40 @@ describe("layer rotation (#851 G7)", () => {
     delete deskLayer.rotation
     const merged = mergeDeskScene({ ...snapshot, layers: [{ ...deskLayer, box: { x: 10, y: 45, w: 40, h: 10 } }] }, snapshot)
     expect(merged?.layers[0]).toMatchObject({ rotation: 33, box: { x: 10, y: 45, w: 40, h: 10 } })
+    // A desk that turns it (the Scene composer's Rotation field) is followed; 0 stands it upright.
+    expect(mergeDeskScene({ ...snapshot, layers: [{ ...deskLayer, rotation: -12 }] }, snapshot)?.layers[0]?.rotation).toBe(-12)
+    expect(mergeDeskScene({ ...snapshot, layers: [{ ...deskLayer, rotation: 0 }] }, snapshot)?.layers[0]?.rotation).toBeUndefined()
     expect(designToScene(sceneToDesign(turned(bar("color", { color: "#dc1e1e" }), 360))).scene.layers[0]?.rotation).toBeUndefined()
     expect(normalizeScene({ ...snapshot, layers: [{ ...snapshot.layers[0], rotation: "a lot" }] })?.layers[0]?.rotation).toBeUndefined()
+  })
+
+  it("turns text about the centre of its words, where the editor turns it, not the taller clipping box", async () => {
+    const words = { text: "Welcome", fontSize: 72, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const, lineHeight: 1.2 }
+    // From the editor: a 20%-high box (216 px) holding one 72 px line, turned 90° and 30°.
+    for (const deg of [90, 30]) {
+      const design = sceneToDesign(bar("text", { ...words, box: { x: 30, y: 30, w: 40, h: 20 } }))
+      const turnedScene = applyCommand(design.scene, { type: "ROTATE_NODE", id: "bar", rotation: deg })
+      const { scene, issues } = designToScene({ ...design, scene: turnedScene })
+      expect(issues).toEqual([])
+      expect(scene.layers[0]).toMatchObject({ rotation: deg, box: { y: 30, h: 20 } })
+      const editor = editorTextPivot(turnedScene.nodes.bar as SaraswatiTextNode)
+      const output = outputPivot(scene)
+      expect(Math.abs(output.x - editor.x), `${deg}° x`).toBeLessThan(1)
+      expect(Math.abs(output.y - editor.y), `${deg}° y`).toBeLessThan(1)
+      expect(editor.y).toBeCloseTo(324 + 36, 0)
+      const ink = [inkCentre(await drawEditor(scene)), inkCentre(drawOutput(scene))]
+      expect(Math.hypot(ink[0]!.x - ink[1]!.x, ink[0]!.y - ink[1]!.y), `${deg}° ink`).toBeLessThan(4)
+    }
+    // From a scene: two lines in a tall box, turned in the Scene composer, then opened in the editor.
+    const scene = bar("text", { ...words, text: "Welcome\nhome", rotation: -40, box: { x: 30, y: 20, w: 40, h: 50 } })
+    const editor = editorTextPivot(sceneToDesign(scene).scene.nodes.bar as SaraswatiTextNode)
+    const output = outputPivot(scene)
+    expect(Math.abs(output.y - editor.y)).toBeLessThan(1)
+    expect(editor.y).toBeCloseTo(216 + (72 * 1.2 + 72) / 2, 0)
+    const ink = [inkCentre(await drawEditor(scene)), inkCentre(drawOutput(scene))]
+    expect(Math.hypot(ink[0]!.x - ink[1]!.x, ink[0]!.y - ink[1]!.y)).toBeLessThan(4)
+    // And back from the editor the box keeps its height (the clipping viewport).
+    expect(designToScene(sceneToDesign(scene)).scene.layers[0]).toMatchObject({ rotation: -40, box: { h: 50 } })
   })
 
   it("refuses to save a turned camera, video or ticker, and outputs never turn one from an older file", () => {

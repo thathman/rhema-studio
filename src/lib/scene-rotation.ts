@@ -12,14 +12,28 @@ export function layerRotation(raw: unknown): number | undefined {
   return Math.abs(deg) < 0.01 ? undefined : deg
 }
 
-/** Turn `ctx` about the centre of `r` by `rotation` degrees clockwise (nothing when upright). */
-export function turnAbout(ctx: CanvasRenderingContext2D, r: { x: number; y: number; w: number; h: number }, rotation: number | undefined): void {
+/** Turn `ctx` about `pivot` by `rotation` degrees clockwise (nothing when upright). */
+export function turnAbout(ctx: CanvasRenderingContext2D, pivot: { x: number; y: number }, rotation: number | undefined): void {
   if (!rotation) return
-  const cx = r.x + r.w / 2
-  const cy = r.y + r.h / 2
-  ctx.translate(cx, cy)
+  ctx.translate(pivot.x, pivot.y)
   ctx.rotate((rotation * Math.PI) / 180)
-  ctx.translate(-cx, -cy)
+  ctx.translate(-pivot.x, -pivot.y)
+}
+
+/**
+ * Whether a point lies in a box turned `rotation` degrees clockwise about `pivot` (all in the same
+ * pixel space): the point is turned back into the box's own space first. For hit-testing a turned
+ * layer where the canvas draws it.
+ */
+export function pointInTurnedBox(p: { x: number; y: number }, r: { x: number; y: number; w: number; h: number }, pivot: { x: number; y: number }, rotation: number | undefined): boolean {
+  let { x, y } = p
+  if (rotation) {
+    const rad = (-rotation * Math.PI) / 180
+    const dx = x - pivot.x, dy = y - pivot.y
+    x = pivot.x + dx * Math.cos(rad) - dy * Math.sin(rad)
+    y = pivot.y + dx * Math.sin(rad) + dy * Math.cos(rad)
+  }
+  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h
 }
 
 /**
