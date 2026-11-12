@@ -25,7 +25,8 @@ import javax.net.ssl.X509TrustManager;
 /**
  * Sends the camera to Rhema's camera router: RTSP over TLS (RTSPS) to the camera's own name,
  * signed in as the camera, with the picture and sound interleaved on the same connection
- * (RTP over TCP). Only the certificate whose fingerprint is in the pairing link is accepted;
+ * (RTP over TCP). Only Rhema's server key (the link's key=, doc 48) is accepted, or, for a link
+ * from before, the one certificate whose fingerprint is in it, whose key is then kept (KeyPin);
  * there is no plain-RTSP fallback. If the connection drops it connects again by itself, waiting
  * longer each time; stop() ends the session cleanly (TEARDOWN). Plain Java, no Android.
  */
@@ -39,6 +40,12 @@ final class Publisher {
 
         /** The network could not keep up and frames were dropped: send less for a while. */
         void onCongested();
+
+        /**
+         * A link from before key= connected over its pinned certificate: from now on only that
+         * certificate's server key (SubjectPublicKeyInfo SHA-256) is trusted. Keep it with the pairing.
+         */
+        void onKeyPin(String keyPin);
     }
 
     /** The clock the encoder's timestamps use, in microseconds. */
@@ -81,6 +88,18 @@ final class Publisher {
     private volatile String session;
     private volatile Auth auth;
     private volatile boolean pinFailed;
+    /** The server key this connection trusts (doc 48); null until a link from before key= first connects. */
+    private volatile String keyPin;
+    /** The key of the pinned certificate seen in this handshake, kept once the handshake completes. */
+    private volatile String keySeen;
+    /**
+     * The router has not answered as Rhema since the last time it sent (unreachable, a secure
+     * connection that failed, or another key), as opposed to answering and refusing. CameraService
+     * looks for Rhema at a new address when this lasts (Rediscovery).
+     */
+    private volatile boolean unreachable;
+    /** The router answered the last try and refused it (a sign-in, 400, 404, 503): it is there. */
+    private volatile boolean refused;
     private volatile long writeStartedNs;
     private boolean needKey = true;
     /** Frames are being dropped because the network could not keep up (not just waiting for a first full picture). */
@@ -112,6 +131,7 @@ final class Publisher {
 
     Publisher(Pairing pair, String sdp, boolean hevc, boolean audio, int audioRate, int bitrate, Listener listener, Clock clock) {
         this.pair = pair;
+        this.keyPin = pair.keyPinned() ? pair.key : null;
         this.sdp = sdp;
         this.hevc = hevc;
         this.audio = audio;
@@ -124,6 +144,16 @@ final class Publisher {
 
     boolean live() {
         return live;
+    }
+
+    /** The router answered the last try and refused it: Rhema is at this address, only something else is wrong. */
+    boolean refused() {
+        return refused && !live;
+    }
+
+    /** Rhema's camera router has not answered since this camera last sent (see unreachable). */
+    boolean unreachable() {
+        return unreachable && !live;
     }
 
     void start() {
@@ -241,6 +271,8 @@ final class Publisher {
                     congested = false;
                     live = true;
                 }
+                unreachable = false;
+                refused = false;
                 message = "Sending to Rhema";
                 listener.onState(true, message);
                 listener.onNeedKeyFrame();
@@ -248,6 +280,9 @@ final class Publisher {
                 writeLoop();
             } catch (IOException e) {
                 if (!stopped) message = plain(e);
+                // It answered and refused (a sign-in, a busy router): it is there, only something else is wrong.
+                refused = e instanceof Refused;
+                unreachable = !refused;
                 if (e instanceof SignInRefused && signInRefusedSinceNs == 0) signInRefusedSinceNs = Math.max(1, System.nanoTime());
             } finally {
                 boolean was = live;
@@ -273,6 +308,7 @@ final class Publisher {
 
     private void connect() throws IOException {
         pinFailed = false;
+        keySeen = null;
         session = null;
         auth = null;
         cseq = 0;
@@ -292,6 +328,13 @@ final class Publisher {
         s.setSoTimeout(10000);
         socket = s;
         s.startHandshake();
+        // The pinned certificate completed the handshake (its server proved it holds the key): from
+        // now on trust that key, wherever Rhema is (doc 48).
+        String kept = keySeen;
+        if (kept != null && keyPin == null) {
+            keyPin = kept;
+            listener.onKeyPin(kept);
+        }
         out = new BufferedOutputStream(s.getOutputStream(), 64 * 1024);
         reader = new RtspReader(new BufferedInputStream(s.getInputStream(), 16 * 1024));
         int base = random.nextInt();
@@ -489,7 +532,7 @@ final class Publisher {
 
     /** What went wrong, in words the person can act on (never the password). */
     private String plain(IOException e) {
-        if (pinFailed) return "This is not the Rhema this camera was paired with: its certificate does not match. Scan the camera's link in Rhema again.";
+        if (pinFailed) return "This is not the Rhema this camera was paired with: its " + (keyPin != null ? "key" : "certificate") + " does not match. Scan the camera's link in Rhema again.";
         if (e instanceof Refused) return e.getMessage();
         if (e instanceof ConnectException || e instanceof NoRouteToHostException || e instanceof SocketTimeoutException) {
             return "Cannot reach Rhema at " + pair.host + ":" + pair.port + ". Is the camera router on, and is this phone on the church Wi-Fi?";
@@ -499,7 +542,10 @@ final class Publisher {
         return m == null || m.isEmpty() ? "The connection to Rhema dropped." : m;
     }
 
-    /** Accepts only the certificate whose SHA-256 is in the pairing link. */
+    /**
+     * Accepts only Rhema's server key (KeyPin.check): the link's key=, or, until it is known, the one
+     * certificate whose SHA-256 is the link's fp (whose key is kept once the handshake completes).
+     */
     private final class Pin implements X509TrustManager {
         @Override
         public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
@@ -508,10 +554,12 @@ final class Publisher {
 
         @Override
         public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-            if (chain == null || chain.length == 0 || !Pairing.pinned(chain[0].getEncoded(), pair.fp)) {
+            int verdict = KeyPin.check(keyPin, pair.fp, chain);
+            if (verdict == KeyPin.REFUSE) {
                 pinFailed = true;
                 throw new CertificateException("Not the paired Rhema's certificate");
             }
+            if (verdict == KeyPin.UPGRADE) keySeen = KeyPin.spki(chain[0]);
         }
 
         @Override
