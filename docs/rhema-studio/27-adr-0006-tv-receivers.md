@@ -88,7 +88,7 @@ desktop, or physical access to the TV with its remote for long.
 | A TV used to operate Rhema | A feed key is read only: frames, its media files (only those its current frame names) and `/ack`. No command endpoint takes a feed key. |
 | Private stage notes on a public screen | Stage fields are sent only to outputs whose role is stage; the TV list says "Private screen (stage notes)" or "Public screen". |
 | The kept picture of a private screen | Stored only in the app's private storage, one file, replaced every minute, deleted when the TV is revoked (403) or sent another feed, and shown only for the feed it was taken of. Someone with the TV and adb debugging on could read it; the same is true of the WebView's own cache. |
-| Start with the TV abused | Off by default, the boot receiver disabled in the manifest until turned on from the code screen with the remote; it only opens the app (which shows what it showed). |
+| Start with the TV abused | Since Receiver 1.7 (#834) it turns on by itself after the first pairing, so a TV that loses power during the week shows its feed again; a person's choice (← or → on the code screen) is kept and never overridden. It only opens the app (which shows what it showed). Before 1.7 it was off by default. |
 | Denial of service on the LAN | Out of scope for a church network: a device flooding the Wi-Fi can stop any screen. The main computer's own outputs never depend on a TV. |
 
 Residual risks, accepted: a TV paired before 1.5 keeps the feed's shared key until it is sent the
