@@ -58,6 +58,27 @@ fn companion_version() -> &'static str {
     VERSION
 }
 
+/// The addresses a host name stands for, through the system's resolver (an IP gives itself, a
+/// `.local` name goes through mDNS where the system has it), so the Overlays card can tell
+/// whether a pasted feed link is for the paired host whichever way each is written (#848).
+#[tauri::command(async)]
+#[allow(clippy::needless_pass_by_value)]
+fn resolve_host(name: String) -> Vec<String> {
+    resolve(&name)
+}
+
+fn resolve(name: &str) -> Vec<String> {
+    use std::net::ToSocketAddrs;
+    let n = name.trim().trim_start_matches('[').trim_end_matches(']').trim_end_matches('.');
+    if n.is_empty() || n.len() > 253 || n.contains(['/', '?', '#', '@', ' ']) {
+        return Vec::new();
+    }
+    let mut out: Vec<String> = (n, 0).to_socket_addrs().map(|a| a.map(|s| s.ip().to_string()).collect()).unwrap_or_default();
+    out.sort();
+    out.dedup();
+    out
+}
+
 /// Start the app.
 ///
 /// # Panics
@@ -111,6 +132,7 @@ pub fn run() {
             remote_set_keys,
             join_secure,
             companion_version,
+            resolve_host,
         ])
         .build(tauri::generate_context!())
         .expect("Rhema Studio Companion could not start")
@@ -123,4 +145,17 @@ pub fn run() {
             #[cfg(not(target_os = "macos"))]
             let _ = (app, event);
         });
+}
+
+#[cfg(test)]
+mod resolve_tests {
+    use super::resolve;
+
+    #[test]
+    fn an_address_is_itself_and_nonsense_is_nothing() {
+        assert_eq!(resolve("192.168.1.20"), vec!["192.168.1.20".to_string()]);
+        assert_eq!(resolve("[::1]"), vec!["::1".to_string()]);
+        assert_eq!(resolve(""), Vec::<String>::new());
+        assert_eq!(resolve("host/../x"), Vec::<String>::new());
+    }
 }

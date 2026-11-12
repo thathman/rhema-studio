@@ -18,7 +18,8 @@ describe("the Companion registers every command it calls", () => {
     const registered = new Set([...handlers.matchAll(/(?:[a-z_]+::)?([a-z_]+),/g)].map((m) => m[1]))
     const join = read("src/stores/join-store.ts")
     const connect = join.slice(join.indexOf("  connect: async"), join.indexOf("\n  },", join.indexOf("  connect: async")))
-    const needed = [...invoked(connect), ...invoked(read("src/stores/companion-store.ts"))]
+    const needed = [...invoked(connect), ...invoked(read("src/stores/companion-store.ts")), ...invoked(read("src/studio/companion/companion-overlays.tsx"))]
+    expect(needed).toContain("resolve_host")
     expect(needed.length).toBeGreaterThan(2)
     expect(needed.filter((name) => !registered.has(name))).toEqual([])
   })

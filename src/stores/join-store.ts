@@ -249,7 +249,9 @@ export const useJoin = create<JoinState>((set, get) => ({
       // Left (or connected again) meanwhile: this attempt's failure is old news.
       if (run !== connectRun) return
       const message = String(e)
-      if (message.includes("pair again")) {
+      // A certificate or pin problem (rhema-join pin.rs) also says "pair again", but the key was
+      // not revoked: the computer answering may not be the host. Kept apart from a refusal (#865).
+      if (message.includes("pair again") && !/certificate/i.test(message)) {
         gaps = []
         set({ status: "refused", error: message, me: null, live: null, paused: false, note: null, receivedAt: 0, clockSkewMs: null })
       } else {
