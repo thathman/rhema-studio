@@ -277,10 +277,9 @@ fn spawn_status_beat(app: AppHandle, session_id: Option<String>) {
         let Some(host) = app.try_state::<RecorderHost>() else { return };
         let Some(recorder) = host.0.get() else { return };
         // The disk filled and the file was closed: end the session as Stop does, telling the
-        // output's window to stop sending before another recording can start.
-        let output = recorder.pinned_output();
-        if let Some(ended) = recorder.end_if_disk_full_then(|| {
-            if let Some(label) = output.and_then(|o| window_label(&o).ok()) {
+        // output's window (the ended session's own) to stop sending before another can start.
+        if let Some(ended) = recorder.end_if_disk_full_then(|ended| {
+            if let Some(label) = ended.output_id.as_deref().and_then(|o| window_label(o).ok()) {
                 let _ = app.emit_to(tauri::EventTarget::webview_window(label.as_str()), "broadcast:record-tee", tee(false, 0, 0, 0));
             }
         }) {

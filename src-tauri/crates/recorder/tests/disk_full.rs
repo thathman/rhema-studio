@@ -128,11 +128,11 @@ fn a_disk_filling_mid_recording_closes_a_playable_file_and_says_so() {
             std::thread::sleep(Duration::from_secs(1));
             let state = rec.status().state;
             assert!(matches!(state, RecorderState::Recording | RecorderState::Finalizing), "never shown as failed: {state:?}");
-            ended = rec.end_if_disk_full_then(|| told = true);
+            ended = rec.end_if_disk_full_then(|ended| told = ended.output_id.as_deref() == Some("sanctuary"));
         }
         std::thread::sleep(Duration::from_secs(3));
         pushing.store(false, Ordering::Relaxed);
-        assert!(told, "the output window is told to stop sending");
+        assert!(told, "the recorded output's window is told to stop sending");
         (filler, ended.expect("the recording ended on its own once the disk filled"))
     });
 
