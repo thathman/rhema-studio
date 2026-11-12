@@ -16,6 +16,8 @@ export interface DesignDocument {
   latestVersion: number | null
   createdAt: string
   updatedAt: string
+  /** When it was archived from My Designs (#851 G7); null or absent while it is listed. */
+  archivedAt?: string | null
 }
 
 export type DesignSummary = Omit<DesignDocument, "document" | "createdAt">
@@ -68,5 +70,7 @@ export const designStore = {
   listVersions: (id: string) => invoke<DesignVersion[]>("design_list_versions", { id }),
   duplicate: (id: string, version?: number, title?: string) => invoke<DesignDocument>("design_duplicate", { id, version, title }),
   usedOn: (id: string) => invoke<DesignUse[]>("design_used_on", { id }),
+  /** Archive (hide from My Designs and the Prepare picker) or restore; nothing is removed or re-versioned. */
+  setArchived: (id: string, archived: boolean) => invoke<DesignSummary>("design_set_archived", { id, archived }),
   remove: (id: string, expectedRevision: number) => invoke<void>("design_delete", { id, expectedRevision }),
 }

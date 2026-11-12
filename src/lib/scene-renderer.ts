@@ -4,6 +4,7 @@ import { clockText } from "@/lib/scenes"
 import { drawTicker } from "@/lib/ticker-draw"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { drawBars, drawStatic, noSignalOf } from "@/lib/no-signal"
+import { layerTurns, turnAbout } from "@/lib/scene-rotation"
 import { applyCanvas2DClipPath, paintCanvas2DStyle, roundedCanvas2DRectPath } from "@/vendor/avnac/renderer/backends/canvas2d/shared"
 import type { ImageDraw, LowerThird, SceneFrame, SceneGradient, SceneLayerFrame, Ticker } from "@/types"
 
@@ -421,6 +422,8 @@ export function drawScene(ctx: CanvasRenderingContext2D, canvasWidth: number, ca
     const box = rect(l, width, height)
     const r = { ...box, x: box.x + area.x, y: box.y + area.y }
     ctx.save()
+    // A turned layer (#851 G7) turns about its box's centre, as in the design editor.
+    if (layerTurns(l.kind)) turnAbout(ctx, r, l.rotation)
     ctx.globalAlpha = l.opacity
     if (opts.fader && l.fadeMs && !opts.preview && !opts.cameraBelow?.(l.id)) paintFading(ctx, l, r, height, opts, opts.fader)
     else paintLayer(ctx, l, r, height, opts)

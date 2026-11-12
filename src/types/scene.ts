@@ -141,6 +141,11 @@ export interface SceneLayer {
   /** How this layer changes when what it shows changes (a new verse, picture or video): a cut, or a cross-fade of this many ms. Absent: a cut. */
   fadeMs?: number
   box: SceneBox
+  /**
+   * Degrees clockwise about the box's centre, as the design editor turns it (#851 G7). `box` is
+   * the layer's unturned box. Absent or 0: upright. Cameras and videos are never turned.
+   */
+  rotation?: number
   crop?: SceneCrop
   /** 0–1 */
   opacity: number
@@ -189,6 +194,8 @@ export interface SceneLayerFrame {
   id: string
   kind: SceneLayerKind
   box: SceneBox
+  /** Degrees clockwise about the box's centre (absent: upright); see `SceneLayer.rotation`. */
+  rotation?: number
   crop?: SceneCrop
   opacity: number
   theme?: BroadcastTheme
