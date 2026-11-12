@@ -91,44 +91,69 @@ describe("Design → Templates (#299)", () => {
     mockAsk.mockReset().mockResolvedValue(false)
     const el = await renderDesignWorkspace("library")
     useUnsavedStore.getState().setDesignEditor("First design")
-    const tools = el.querySelector<HTMLButtonElement>('button[aria-label^="Design tools"]')!
-    await act(async () => tools.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })))
-    const brand = [...document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find((item) => item.textContent?.trim() === "Brand kit")!
-    await act(async () => brand.click())
+    const style = el.querySelector<HTMLButtonElement>('[role="tab"]#design-group-style')!
+    await act(async () => style.click())
 
     expect(mockAsk).toHaveBeenCalledWith("Your changes to ‘First design’ are not saved. Discard them?", expect.any(Object))
     expect(useShellStore.getState().designTab).toBe("library")
   })
 
-  it("keeps My Designs and Templates primary, with specialist tools grouped accessibly", async () => {
+  it("shows Make, Style and Where used as accessible groups, each with its own sections (#818)", async () => {
     const el = await renderDesignWorkspace()
-    const nav = el.querySelector<HTMLElement>('nav[aria-label="Design sections"]')!
-    const destinations = [...nav.querySelectorAll<HTMLButtonElement>("button")]
-    expect(destinations.map((button) => button.textContent?.replace(/\s+/g, " ").trim())).toEqual([
-      "My Designs",
-      "Templates",
-      "Design tools",
-    ])
-    expect(destinations.find((button) => button.textContent?.includes("Templates"))?.getAttribute("aria-current")).toBe("page")
+    const tabs = [...el.querySelectorAll<HTMLButtonElement>('[role="tablist"][aria-label="Design groups"] [role="tab"]')]
+    expect(tabs.map((tab) => tab.textContent?.trim())).toEqual(["Make", "Style", "Where used"])
+    expect(tabs.map((tab) => tab.getAttribute("aria-selected"))).toEqual(["true", "false", "false"])
+    expect(tabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1])
+    const sections = () => [...el.querySelectorAll<HTMLButtonElement>('nav[aria-label="Design sections"] button')]
+    expect(sections().map((button) => button.textContent?.trim())).toEqual(["My Designs", "Templates", "Lower thirds", "News ticker", "Countdown", "Stage"])
+    expect(sections().find((button) => button.textContent === "Templates")?.getAttribute("aria-current")).toBe("page")
+    expect(el.querySelector("button[aria-label^='Design tools']")).toBeNull()
 
-    const tools = nav.querySelector<HTMLButtonElement>('button[aria-label^="Design tools"]')!
-    await act(async () => tools.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })))
-    const toolItems = [...document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
-    expect(toolItems.map((item) => item.textContent?.trim())).toEqual([
-      "Themes",
-      "Lower thirds",
-      "News ticker",
-      "Stage",
-      "Countdown",
-      "Brand kit",
-      "Used on…",
-    ])
+    // Arrow keys move focus between groups without opening one; Enter (a click) opens it.
+    tabs[0].focus()
+    await act(async () => tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })))
+    expect(document.activeElement).toBe(tabs[1])
+    expect(useShellStore.getState().designTab).toBe("library")
+    await act(async () => tabs[1].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })))
+    expect(document.activeElement).toBe(tabs[0])
+    await act(async () => tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })))
+    expect(document.activeElement).toBe(tabs[2])
 
-    const brand = toolItems.find((item) => item.textContent?.trim() === "Brand kit")!
-    await act(async () => brand.click())
+    await act(async () => tabs[1].click())
+    expect(useShellStore.getState().designTab).toBe("themes")
+    expect(sections().map((button) => button.textContent?.trim())).toEqual(["Themes", "Brand kit"])
+    await act(async () => sections()[1].click())
     expect(useShellStore.getState().designTab).toBe("brand")
-    expect(tools.getAttribute("aria-current")).toBe("page")
-    expect(tools.getAttribute("aria-label")).toBe("Design tools, Brand kit selected")
+
+    await act(async () => tabs[2].click())
+    expect(useShellStore.getState().designTab).toBe("used-on")
+    expect(sections().map((button) => button.textContent?.trim())).toEqual(["Outputs overview"])
+    expect(el.querySelector('[role="tabpanel"]')?.getAttribute("aria-label")).toBe("Outputs overview")
+
+    // Back to a group returns to the section last open in it.
+    await act(async () => tabs[0].click())
+    expect(useShellStore.getState().designTab).toBe("library")
+    await act(async () => tabs[1].click())
+    expect(useShellStore.getState().designTab).toBe("brand")
+  })
+
+  it.each([
+    ["my-designs", "Make", "My Designs"],
+    ["library", "Make", "Templates"],
+    ["lower-thirds", "Make", "Lower thirds"],
+    ["ticker", "Make", "News ticker"],
+    ["countdown", "Make", "Countdown"],
+    ["stage", "Make", "Stage"],
+    ["themes", "Style", "Themes"],
+    ["brand", "Style", "Brand kit"],
+    ["used-on", "Where used", "Outputs overview"],
+    ["outputs", "Where used", "Outputs overview"],
+  ] as const)("opens the former %s tab in %s → %s (#818)", async (tab, group, section) => {
+    const el = await renderDesignWorkspace(tab)
+    expect(el.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(group)
+    expect(el.querySelector('nav[aria-label="Design sections"] [aria-current="page"]')?.textContent).toBe(section)
+    expect(el.querySelector('[role="tabpanel"]')?.getAttribute("aria-label")).toBe(section)
+    if (section === "Outputs overview") expect(el.textContent).toContain("this overview covers every output at once")
   })
 
   it("starts primary Templates from a canonical private design instead of a legacy scene", async () => {
