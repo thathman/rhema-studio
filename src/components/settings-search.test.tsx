@@ -98,6 +98,17 @@ describe("Settings page search", () => {
     expect(headings).toEqual(["Church and profile", "Audio and speech", "Connections", "AI and MCP", "Data and sync", "Preferences", "Diagnostics and about"])
   })
 
+  it("names the Outputs section Outputs on its page too, and its button opens the Outputs dialog (#803)", async () => {
+    const outputs = [...host.querySelectorAll<HTMLButtonElement>('nav[aria-label="Settings sections"] button')].find((b) => b.textContent === "Outputs")!
+    await act(async () => outputs.click())
+    const page = host.querySelector('section[aria-label="Outputs"]')!
+    expect(page.querySelector("h2")?.textContent).toBe("Outputs")
+    expect(host.textContent).not.toContain("Screens and NDI")
+    useShellStore.setState({ outputsDialogOpen: false })
+    await act(async () => [...page.querySelectorAll("button")].find((b) => b.textContent?.includes("Open outputs"))!.click())
+    expect(useShellStore.getState().outputsDialogOpen).toBe(true)
+  })
+
   it("finds the church's name and the operator's in Church and profile", async () => {
     await type("church name")
     expect(sections()).toEqual(["Church and profile"])
@@ -155,6 +166,20 @@ describe("Settings page search", () => {
     await press("Escape")
     expect(search().value).toBe("")
     expect(sections()).toHaveLength(12)
+  })
+
+  it("sends an \"ask before\" search to Permissions, where the approval switch is, and closes Settings (#815)", async () => {
+    useSettingsDialogStore.setState({ isOpen: true })
+    useShellStore.setState({ goRequest: null })
+    await type("ask before")
+    const row = [...host.querySelectorAll<HTMLButtonElement>('[aria-label="Elsewhere in Rhema Studio"] button')].find((button) => button.textContent?.includes("Approvals before a service goes live"))!
+    expect(row.textContent).toContain("Permissions → Before a service goes live")
+    expect(host.textContent).not.toContain("Team → Approvals")
+
+    await act(async () => row.click())
+
+    expect(useShellStore.getState().goRequest).toBe("permissions")
+    expect(useSettingsDialogStore.getState().isOpen).toBe(false)
   })
 
   it("routes paired-device access searches to Permissions", async () => {

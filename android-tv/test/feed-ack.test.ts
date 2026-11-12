@@ -84,6 +84,33 @@ describe("the feed page acknowledges only what it drew (#604)", () => {
     expect(acks()).toEqual([])
   })
 
+  it("a hidden page (no animation frames: an OBS source off the scene, a TV after Home) acknowledges marked hidden, never as seen (#844)", async () => {
+    vi.stubGlobal("requestAnimationFrame", () => 0)
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" })
+    try {
+      FakeEvents.last.send("frame", JSON.stringify({ off: false, verse: null }), "9")
+      await nextFrame()
+      expect(acks()).toEqual([{ url: "/api/v1/feed/l3/ack?k=s3cr%2Bt&hidden=1", body: { seq: 9, hidden: true } }])
+      // Its heartbeat acknowledgements stay marked: the frame was never seen.
+      FakeEvents.last.send("beat", String(Date.now()))
+      await nextFrame()
+      expect(acks().map((a) => a.url.endsWith("&hidden=1"))).toEqual([true, true])
+    } finally {
+      Reflect.deleteProperty(document, "visibilityState")
+    }
+  })
+
+  it("tells the Receiver an output is off, even before anything is published (#835), and its own overscan (#849)", async () => {
+    FakeEvents.last.send("frame", JSON.stringify({ off: true }), "0")
+    expect(document.documentElement.dataset.off).toBe("true")
+    expect(document.documentElement.dataset.overscan).toBe("0")
+    FakeEvents.last.send("frame", JSON.stringify({ off: false, verse: null, overscan: 3.2 }), "2")
+    expect(document.documentElement.dataset.off).toBe("false")
+    expect(document.documentElement.dataset.overscan).toBe("3")
+    await nextFrame()
+    expect(acks().map((a) => a.body.seq)).toEqual([2])
+  })
+
   it("keeps acknowledging while it hears beats after drawing (the heartbeat)", async () => {
     FakeEvents.last.send("frame", JSON.stringify({ off: true }), "5")
     await nextFrame()

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ChevronRightIcon, InfoIcon, SearchIcon, SlidersHorizontalIcon } from "lucide-react"
+import { ChevronRightIcon, InfoIcon, LayoutPanelLeftIcon, SearchIcon, SlidersHorizontalIcon } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useShellStore } from "@/studio/shell-store"
 import { ShortcutsDialog } from "@/studio/shell/shortcuts-dialog"
@@ -9,6 +9,7 @@ import { hostTalk, setHostChannels, setHostLevel, setVoiceVolume, speakerName, u
 import { RuntimeSourceBadge } from "@/studio/shell/runtime-source-badge"
 import { RecorderStatusIndicator } from "@/studio/shell/recorder-status-indicator"
 import type { Workspace } from "@/studio/shell-store"
+import { useJoin } from "@/stores/join-store"
 
 const ICON = "flex size-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4"
 
@@ -32,6 +33,7 @@ export function TopBar({ title, workspace }: { title: string; workspace: Workspa
           <span className="max-[600px]:sr-only">Find anything…</span>
           <kbd className="ml-auto rounded-[5px] border border-border bg-muted px-[5px] py-px font-sans text-[0.6875rem] max-[600px]:hidden">⌘ K</kbd>
         </button>
+        <OpenYourDesk workspace={workspace} />
         <RecorderStatusIndicator workspace={workspace} />
         <button type="button" className={ICON} aria-label="Keyboard shortcuts" title="Keyboard shortcuts" onClick={() => setShortcuts(true)}><InfoIcon /></button>
         <HostTalk />
@@ -40,6 +42,23 @@ export function TopBar({ title, workspace }: { title: string; workspace: Workspa
       </div>
       <ShortcutsDialog open={shortcuts} onOpenChange={setShortcuts} />
     </header>
+  )
+}
+
+/** Back to this computer's joined desk (#813 F2) from its own Live console. */
+function OpenYourDesk({ workspace }: { workspace: Workspace }) {
+  const joined = useJoin((s) => s.status === "connected" || s.status === "reconnecting")
+  const onDesk = useShellStore((s) => s.joinedDeskView === "desk")
+  if (!joined || onDesk || (workspace !== "present" && workspace !== "production")) return null
+  return (
+    <button
+      type="button"
+      className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.6875rem] font-semibold outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4"
+      title="This computer is joined to a host: show your role's desk"
+      onClick={() => useShellStore.getState().setJoinedDeskView("desk")}
+    >
+      <LayoutPanelLeftIcon aria-hidden /> Your desk
+    </button>
   )
 }
 

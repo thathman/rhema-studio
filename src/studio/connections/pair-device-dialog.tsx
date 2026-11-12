@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useShellStore } from "@/studio/shell-store"
+import { openProductionTab } from "@/studio/production/production-tab"
 
 interface HttpStatus {
   running: boolean
@@ -19,10 +21,47 @@ interface PairQr {
   image: string
 }
 
+/**
+ * One "Pair a device" entry (#823 F12). Each kind keeps its own security protocol (a TV's code is
+ * typed here, a camera phone uses its QR link, a phone or computer types this computer's code);
+ * only the explanation is shared: the same three steps, in the same words, for every device.
+ */
+type DeviceKind = "phone" | "computer" | "obs" | "tv" | "camera"
+const DEVICE_KINDS: ReadonlyArray<{ id: DeviceKind; label: string; steps: readonly [string, string, string] }> = [
+  { id: "phone", label: "Phone remote", steps: [
+    "On the phone: join the church Wi-Fi, then scan the QR code below or open its address.",
+    "On this computer: choose Show pairing code, then type the code on the phone within two minutes.",
+    "Then: give the phone its role in Permissions.",
+  ] },
+  { id: "computer", label: "Volunteer computer", steps: [
+    "On the volunteer computer: open Rhema Studio → Connections → Find nearby devices, then choose this computer (or Join by address).",
+    "On this computer: choose Show pairing code, then type the code on the volunteer computer within two minutes and check its certificate words match this computer's.",
+    "Then: give the computer its role in Permissions; its desk opens as its Live page.",
+  ] },
+  { id: "obs", label: "OBS computer", steps: [
+    "On the OBS computer: open Rhema Studio Companion and its Join form, then pick this computer (or type its address).",
+    "On this computer: choose Show pairing code, then type the code on the OBS computer within two minutes and check its certificate words match this computer's.",
+    "Then: give the OBS computer its role in Permissions.",
+  ] },
+  { id: "tv", label: "TV screen", steps: [
+    "On the TV: open Rhema Studio Receiver; it shows its name, address and a code.",
+    "On this computer: open Outputs, choose the TV's output, pick the TV with the same address, then type the code the TV shows.",
+    "Then: the TV shows that output; check it in Connections → Screens and TVs.",
+  ] },
+  { id: "camera", label: "Camera phone", steps: [
+    "On the camera phone: join the church Wi-Fi and install Rhema Studio Cam (or use the phone's browser).",
+    "On this computer: open Cameras and add a camera, then scan its QR link with the camera phone.",
+    "Then: the camera appears in Cameras; put it on a screen with a scene Take.",
+  ] },
+]
+const usesHostCode = (kind: DeviceKind) => kind === "phone" || kind === "computer" || kind === "obs"
+
 /** The existing LAN pairing code, shared by Connections and the advanced Remote settings page. */
 export function PairDeviceDialog({ label = "Pair a device" }: { label?: string }) {
   const devices = useSettingsStore((s) => s.remoteDevices)
   const [open, setOpen] = useState(false)
+  const [kind, setKind] = useState<DeviceKind>("phone")
+  const chosen = DEVICE_KINDS.find((item) => item.id === kind) ?? DEVICE_KINDS[0]
   const [http, setHttp] = useState<HttpStatus | null>(null)
   const [pairCode, setPairCode] = useState<string | null>(null)
   const [pairStartedAt, setPairStartedAt] = useState("")
@@ -111,10 +150,36 @@ export function PairDeviceDialog({ label = "Pair a device" }: { label?: string }
       <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) void cancelPairing() }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Pair a phone or computer</DialogTitle>
-            <DialogDescription>Pair on the church network with a short-lived code. The device is added only after it answers correctly.</DialogDescription>
+            <DialogTitle>Pair a device</DialogTitle>
+            <DialogDescription>Pair on the church network. Choose the device; the steps are the same three for each, and a device is added only after it answers correctly.</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 text-xs">
+            <div role="radiogroup" aria-label="Device to pair" className="flex flex-wrap gap-1.5">
+              {DEVICE_KINDS.map((item) => (
+                <Button
+                  key={item.id}
+                  type="button"
+                  size="xs"
+                  role="radio"
+                  aria-checked={kind === item.id}
+                  variant={kind === item.id ? "secondary" : "outline"}
+                  disabled={pairCode !== null && item.id !== kind}
+                  onClick={() => setKind(item.id)}
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </div>
+            <ol aria-label={`Steps to pair a ${chosen.label.toLowerCase()}`} className="flex list-decimal flex-col gap-1 rounded-md border border-border p-3 pl-7">
+              {chosen.steps.map((step) => <li key={step}>{step}</li>)}
+            </ol>
+            {!usesHostCode(kind) ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {kind === "tv"
+                  ? <Button size="sm" onClick={() => { setOpen(false); useShellStore.getState().openOutputs() }}>Open Outputs</Button>
+                  : <Button size="sm" onClick={() => { setOpen(false); openProductionTab("cameras") }}>Open Cameras</Button>}
+              </div>
+            ) : <>
             {!http?.running ? (
               <div className="rounded-md border border-border bg-muted/40 p-3">
                 <p>The network listener is off. Start it before pairing; the main computer still runs the service on its own.</p>
@@ -149,7 +214,7 @@ export function PairDeviceDialog({ label = "Pair a device" }: { label?: string }
                   <div className="mb-3 flex items-start gap-3">
                     {pairQr.image && <img src={pairQr.image} alt="Pairing link QR code" className="size-32 shrink-0 rounded bg-white p-1" />}
                     <div className="flex min-w-0 flex-col gap-2 text-muted-foreground">
-                      <p>{pairQr.image ? "Scan on a phone on the same Wi-Fi to open the remote page." : "No network address was found. Enter an address the other device can reach to make a QR code."} For an OBS Companion computer, enter this host address and code in its Join form.</p>
+                      <p>{pairQr.image ? "Scan on a phone on the same Wi-Fi to open the remote page." : "No network address was found. Enter an address the other device can reach to make a QR code."} A volunteer computer or OBS Companion computer types this address and the code in its Join form.</p>
                       <label className="flex flex-wrap items-center gap-1.5">This computer's network address
                         <Input aria-label="This computer's address for pairing" defaultValue={pairQr.host} placeholder="192.168.1.20" className="h-7 w-36 text-xs" onBlur={(event) => { const nextHost = event.currentTarget.value.trim(); if (nextHost && nextHost !== pairQr.host) void changeAddress(nextHost) }} />
                       </label>
@@ -167,11 +232,12 @@ export function PairDeviceDialog({ label = "Pair a device" }: { label?: string }
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" disabled={!http?.running || !http.lan || pairCode !== null} onClick={() => void startPairing()}>Show pairing code</Button>
                 {message && <span role="status" className="text-muted-foreground">{message}</span>}
-                {pairedInWindow && <span role="status" className="text-muted-foreground">Device paired. Review its role in Settings → Remote control.</span>}
+                {pairedInWindow && <span role="status" className="text-muted-foreground">Device paired. Review its role in Permissions.</span>}
               </div>
             )}
             {error && <p role="alert" className="text-destructive">{error}</p>}
-            <p className="text-muted-foreground">The paired device starts with Present permission. Choose a narrower role or revoke it later in Settings → Remote control. Internet pairing is not enabled.</p>
+            <p className="text-muted-foreground">The paired device starts with Present permission. Choose a narrower role, take back control or revoke it later in Permissions. Internet pairing is not enabled.</p>
+            </>}
           </div>
         </DialogContent>
       </Dialog>

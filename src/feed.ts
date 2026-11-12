@@ -18,6 +18,7 @@ import {
 } from "@/lib/feed-freshness"
 import { insetArea, lostView, overscanPct, type FeedLost } from "@/lib/feed-receivers"
 import { feedPageOutdated } from "@/lib/feed-page-version"
+import { ackUrl, afterDrawn, pageAckClock } from "@/lib/feed-ack"
 import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
@@ -329,6 +330,11 @@ let lastFade = 0
 
 function show(next: Frame) {
   if (typeof next.hostNow === "number") offset = next.hostNow - Date.now()
+  // Read by Rhema Studio Receiver (#835 S11, #849 G5): an output switched off in Rhema Studio shows
+  // the TV's calm hold instead of a black or "no picture" screen, and a TV-side edge inset applies
+  // only when the output has none of its own. A plain browser or OBS ignores both.
+  document.documentElement.dataset.off = String(next.off === true)
+  document.documentElement.dataset.overscan = String(overscanPct(next.overscan))
   lagClock.show(next.latencyClock === true && !next.off)
   // A Take or release fades when the scene says so; Black and Logo always cut.
   const key = next.off ? "off" : next.scene?.sceneId ?? (next.verse?.screen ? "screen" : "own")
@@ -385,14 +391,24 @@ const id = decodeURIComponent(location.pathname.split("/").pop() ?? "")
 const key = new URLSearchParams(location.search).get("k") ?? ""
 /** The newest frame this page drew (what it acknowledged). */
 let drawnSeq = 0
-const ack = (body: object) => fetch(`/api/v1/feed/${encodeURIComponent(id)}/ack?k=${encodeURIComponent(key)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {})
+/** Whether drawnSeq was seen on screen (an animation frame came), not only drawn by a hidden page (#844). */
+let drawnSeen = false
+/**
+ * An acknowledgement. One that cannot say the frame is visibly up (a hidden page, or no animation
+ * frame) is marked hidden, in the address and the body: Rhema Studio Receiver and the host must not
+ * count it as shown.
+ */
+const ack = (body: object, seen: boolean) =>
+  fetch(ackUrl(id, key, seen), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(seen ? body : { ...body, hidden: true }) }).catch(() => {})
+/** Whether what this page last drew is on screen now. */
+const seenNow = () => drawnSeen && !pageAckClock.hidden()
 /**
  * While the scene plays cameras, tell the host every 2 s how they really play here (#213): frames a
  * second, decoded and dropped, the last new frame's age. Measured on this screen, sent with the
  * acknowledgement of the frame drawn last.
  */
 setInterval(() => {
-  if (drawnSeq > 0 && cameras.size > 0) void ack({ seq: drawnSeq, video: cameraReports(cameras) })
+  if (drawnSeq > 0 && cameras.size > 0) void ack({ seq: drawnSeq, video: cameraReports(cameras) }, seenNow())
 }, 2000)
 // EventSource retries explicit errors; the watchdog below also handles a silent, stuck network path.
 const feedEventsUrl = `/api/v1/feed/${encodeURIComponent(id)}/events?k=${encodeURIComponent(key)}`
@@ -509,7 +525,7 @@ function listen(source: EventSource) {
     offset = hostNow - Date.now()
     freshness = feedReceivedBeat(freshness, performance.now())
     checkStale()
-    if (drawnSeq > 0 && beatCount++ % 2 === 0) void ack({ seq: drawnSeq, clock: pageClockSkew(hostNow, Date.now()) })
+    if (drawnSeq > 0 && beatCount++ % 2 === 0) void ack({ seq: drawnSeq, clock: pageClockSkew(hostNow, Date.now()) }, seenNow())
   })
   source.addEventListener("frame", (e) => {
     if (source !== events) return
@@ -524,11 +540,16 @@ function listen(source: EventSource) {
     checkStale()
     // Tell the host this frame is on this screen (receiver trust), after it is drawn.
     const seq = Number(ev.lastEventId)
+    // A hidden page (an OBS source off the scene) gets no animation frames: afterDrawn falls back to a
+    // timer, and that acknowledgement is marked hidden (#844): drawn, not seen.
     if (Number.isFinite(seq) && seq > 0) {
-      requestAnimationFrame(() => {
+      afterDrawn((seen) => {
+        // A newer frame already acknowledged: this one's late word changes nothing.
+        if (seq < drawnSeq) return
         drawnSeq = seq
-        void ack({ seq })
-      })
+        drawnSeen = seen
+        void ack({ seq }, seen)
+      }, pageAckClock)
     }
   })
 }

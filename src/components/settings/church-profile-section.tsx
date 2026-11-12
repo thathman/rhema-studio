@@ -5,7 +5,8 @@ import { openConnectionsHub } from "@/studio/connections/navigation"
 /**
  * Church and profile (#447): who the church is and who is at this desk, the same fields the
  * first-install setup fills in (#298), so a church can correct them later without running setup
- * again. Nothing here changes what is on the screens.
+ * again. Nothing here changes what is on the screens. The operator's name is shown, not edited: its
+ * one editor is the Desk menu (#802).
  */
 export function ChurchProfileSection() {
   const joinAnother = () => {
@@ -21,7 +22,7 @@ export function ChurchProfileSection() {
       </section>
       <section aria-label="You and this computer" className="flex flex-col gap-3">
         <h3 className="text-sm font-semibold">You and this computer</h3>
-        <OperatorStep error={null} onJoin={joinAnother} idPrefix="settings" />
+        <OperatorStep error={null} onJoin={joinAnother} idPrefix="settings" nameInDeskMenu />
       </section>
     </div>
   )
