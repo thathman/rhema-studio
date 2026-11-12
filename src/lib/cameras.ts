@@ -44,6 +44,10 @@ export interface RouterPath {
   obs?: { desk: string; program: boolean; preview: boolean; receiving: boolean }[]
   /** The phone's battery and heat, as Rhema Studio Cam last reported them (#213); absent when it has not lately. */
   phone?: PhoneReport
+  /** The quality id the host suggests to its phone now (absent: the phone's own, #838). */
+  suggest?: string
+  /** An automatic camera is TV-friendly now because a paired Google TV shows it (or did within a minute). */
+  autoTv?: boolean
 }
 
 /** Rhema Studio Cam's report of its phone, every 30 s while it sends (#213). */
@@ -295,7 +299,8 @@ let lastSent = ""
 
 /**
  * What the host suggests Rhema Studio Cam sends for one camera (#838): a ceiling over the phone's own
- * size and bitrate. "phone" (or absent) leaves it to the phone. The host's listener knows the same
+ * size and bitrate. "phone" leaves it to the phone; a camera with none chosen is automatic (the
+ * host suggests TV-friendly while a paired Google TV plays it). The host's listener knows the same
  * ids (`rhema_api::cameras::quality_suggestion`) and tells the phone in its tally reply.
  */
 export type CameraQuality = "phone" | "tv720" | "hd1080" | "light"
@@ -307,32 +312,50 @@ export const CAMERA_QUALITIES: readonly { id: CameraQuality; label: string; deta
   { id: "light", label: "Light 720p for a busy network", detail: "At most 720p and 2 Mbit/s: when the Wi-Fi is crowded." },
 ]
 
-/** A camera as kept in settings, with the quality suggested for it (kept alongside, absent until chosen). */
+/**
+ * What the operator chose for a camera: one of the qualities, kept on the camera even when it is
+ * "phone" (an explicit The phone decides is never overridden), or "auto" when nothing was chosen.
+ */
+export type CameraQualityChoice = CameraQuality | "auto"
+
+/** In words, what Automatic does (the panel adds what it does now). */
+export const AUTO_QUALITY_DETAIL = "TV-friendly 720p once a Google TV has shown this camera for a couple of seconds (a high bitrate there makes the TV stutter), back to the phone's own a minute after no TV shows it."
+
+/** A camera as kept in settings, with the quality chosen for it (absent until chosen: automatic). */
 export type CameraWithQuality = CameraSource & { quality?: CameraQuality }
 
-/** The quality suggested for a camera ("phone" when none or an unknown id was kept). */
-export function cameraQuality(cam: CameraSource): CameraQuality {
+/** The quality chosen for a camera, or "auto" when none (or an unknown id) was kept. */
+export function cameraQuality(cam: CameraSource): CameraQualityChoice {
   const q = (cam as CameraWithQuality).quality
-  return CAMERA_QUALITIES.some((x) => x.id === q) ? (q as CameraQuality) : "phone"
+  return CAMERA_QUALITIES.some((x) => x.id === q) ? (q as CameraQuality) : "auto"
 }
 
-/** The same cameras with one camera's suggested quality changed ("phone" removes it). */
-export function withCameraQuality(cameras: CameraSource[], name: string, quality: CameraQuality): CameraSource[] {
+/** The same cameras with one camera's quality chosen ("auto" removes the choice; "phone" is kept). */
+export function withCameraQuality(cameras: CameraSource[], name: string, quality: CameraQualityChoice): CameraSource[] {
   return cameras.map((c) => {
     if (c.name !== name) return c
     const next: CameraWithQuality = { ...c }
-    if (quality === "phone") delete next.quality
+    if (quality === "auto") delete next.quality
     else next.quality = quality
     return next
   })
 }
 
-/** What the listener is told about each camera: name and secret, and for Rhema Studio Cam its label and suggested quality. */
-export function cameraListEntries(cameras: CameraSource[]): { name: string; token: string; label: string; quality?: Exclude<CameraQuality, "phone"> }[] {
+/**
+ * What the listener is told about each camera: name and secret, and for Rhema Studio Cam its label
+ * and the quality chosen ("phone" included). None chosen: the host decides (automatic), TV-friendly
+ * 720p while a paired Google TV plays it (`rhema_api::cameras::TvHold`).
+ */
+export function cameraListEntries(cameras: CameraSource[]): { name: string; token: string; label: string; quality?: CameraQuality }[] {
   return cameras.map((c) => {
     const q = cameraQuality(c)
-    return q === "phone" ? { name: c.name, token: c.token, label: c.label } : { name: c.name, token: c.token, label: c.label, quality: q }
+    return q === "auto" ? { name: c.name, token: c.token, label: c.label } : { name: c.name, token: c.token, label: c.label, quality: q }
   })
+}
+
+/** What an automatic camera does now, from the router status the host gives: in the panel's words. */
+export function autoQualityNow(path: Pick<RouterPath, "autoTv"> | undefined): string {
+  return path?.autoTv ? "TV-friendly 720p — a Google TV is showing it" : "the phone decides"
 }
 
 /**

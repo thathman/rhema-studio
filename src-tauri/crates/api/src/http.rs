@@ -2933,9 +2933,12 @@ async fn camera_tally_handler<S: CommandSink + 'static>(
     if !state.cameras.knows(&name, token) {
         return StatusCode::FORBIDDEN.into_response();
     }
+    // A paired TV's page plays it: an automatic camera is suggested TV-friendly (held, #838).
+    let on_tv = state.feeds.on_tv(&name);
+    state.cameras.note_on_tv(&name, on_tv, std::time::Instant::now());
     let mut answer = state.cameras.phone_answer(&name);
     answer.insert("online".into(), state.cameras.on_program(&name).into());
-    answer.insert("congregation".into(), state.feeds.on_tv(&name).into());
+    answer.insert("congregation".into(), on_tv.into());
     ([(axum::http::header::CACHE_CONTROL, "no-store")], Json(serde_json::Value::Object(answer))).into_response()
 }
 
