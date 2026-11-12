@@ -133,7 +133,7 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
   }
   return (
     <div className="flex flex-col gap-2 text-xs">
-      {!allowCommunications && <p role="status" className="text-muted-foreground">Sending and acknowledgements resume when the host connection is current.</p>}
+      {!allowCommunications && <p role="status" className="text-muted-foreground">Sending and acknowledgements resume when the connection to the main computer is current.</p>}
       <form
         className="flex flex-col gap-1.5"
         onSubmit={(e) => {
@@ -223,7 +223,7 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
                 <div role="group" aria-label={`Answer ${n.from}`} className="flex flex-wrap gap-1">
                   {allowProductionActions && n.action && n.action.kind !== "camera" && <Button size="xs" disabled={!allowCommunications || busy === n.id} onClick={() => void act(n, "show")}>{actionName(n.action)}</Button>}
                   {/* Preview only: the main desk's Preview, nothing goes live. */}
-                  {allowProductionActions && n.action && canPreview(n.action) && <Button size="xs" variant="outline" disabled={!allowCommunications || busy === n.id} aria-label={`Preview ${n.action.value}`} title="Put it in the main desk's Preview only: nothing goes live" onClick={() => void act(n, "preview")}>Preview</Button>}
+                  {allowProductionActions && n.action && canPreview(n.action) && <Button size="xs" variant="outline" disabled={!allowCommunications || busy === n.id} aria-label={`Preview ${n.action.value}`} title="Put it in the main computer's Preview only: nothing goes live" onClick={() => void act(n, "preview")}>Preview</Button>}
                   {/* Queue: into the run of show for later; nothing is shown. */}
                   {allowProductionActions && n.action && onQueue && canQueue(n.action) && <Button size="xs" variant="outline" disabled={!allowCommunications || busy === n.id} aria-label={`Queue ${n.action.value}`} title="Add it to the run of show for later: nothing is shown" onClick={() => void act(n, "queue")}>Queue</Button>}
                   {/* A scene change is accepted with its own button (above) or declined: no bare Ready. */}

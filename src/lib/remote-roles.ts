@@ -7,16 +7,16 @@ import type { RemoteRole } from "@/stores/settings-store"
  */
 export const REMOTE_ROLES: readonly { id: RemoteRole; name: string; may: string }[] = [
   { id: "timekeeper", name: "Timekeeper", may: "Moves the event clock and the service timer, and holds or resumes the service. Never a screen." },
-  { id: "bible", name: "Bible", may: "Activates, steps through and takes off the Bible only." },
-  { id: "worship", name: "Worship", may: "Shows or previews songs and hymns from the host's library, changes today's temporary song order, and takes the lyrics off and back." },
-  { id: "screens", name: "Screens", may: "Takes and releases only host-assigned congregation outputs, one output at a time; controls the shared ticker and lower third; and makes or changes scenes. Group Take is unavailable; a change to an on-screen scene waits for the main desk." },
+  { id: "bible", name: "Bible", may: "Activates, steps through, clears and restores the Bible only." },
+  { id: "worship", name: "Worship", may: "Shows or previews songs and hymns from the main computer's library, changes today's temporary song order, and clears and restores the lyrics." },
+  { id: "screens", name: "Screens", may: "Takes and releases only the congregation outputs the main computer assigned it, one output at a time; controls the shared ticker and lower third; and makes or changes scenes. Group Take is unavailable; a change to an on-screen scene waits for the main computer." },
   { id: "stage", name: "Stage", may: "Writes the stage message or sends a private message to an assigned Stage display. Nothing the congregation sees." },
   { id: "camera", name: "Camera", may: "Answers camera-ready requests, hides a camera from scenes or shows it again, and changes the camera boxes in scenes." },
-  { id: "obs", name: "OBS director", may: "Switches OBS scenes through the host's own OBS connection (Preview, Take or switch). Never in rehearsal." },
+  { id: "obs", name: "OBS director", may: "Switches OBS scenes through the main computer's own OBS connection (Preview, Take or switch). Never in rehearsal." },
   { id: "obs-companion", name: "OBS companion", may: "A computer that runs OBS only: reads the church's cameras into its own OBS (encrypted, its own sign-in) and says which are on its program. Sends nothing to the service." },
-  { id: "editor", name: "Editor", may: "Prepares without going live: puts a verse or a song in the main desk's Preview, adds to the queue, and makes or changes scenes (a change to a scene on a screen waits for the main desk). Shows nothing itself." },
+  { id: "editor", name: "Editor", may: "Prepares without going live: puts a verse or a song in the main computer's Preview, adds to the queue, and makes or changes scenes (a change to a scene on a screen waits for the main computer). Shows nothing itself." },
   { id: "viewer", name: "View only", may: "Follows the service and the run of show, and can use Talk and notices. Changes nothing." },
-  { id: "present", name: "Present only", may: "Moves through the service, shows and hides the Bible, songs and scenes, controls the shared ticker and lower third, and runs the event clock. Not settings." },
+  { id: "present", name: "Present only", may: "Moves through the service, shows, clears and restores the Bible, songs and scenes, controls the shared ticker and lower third, and runs the event clock. Not settings." },
   { id: "configure", name: "Present and change settings", may: "Everything Present does, plus looks, the on-air switch, and making or changing scenes." },
 ]
 
@@ -33,7 +33,7 @@ export function roleLabel(role: string): string {
 
 /** What a role lets its desk do, in plain words (the Desk menu, Operators); a role this build does not know says so. */
 export function rolePermits(role: string): string {
-  return REMOTE_ROLES.find((x) => x.id === role)?.may ?? "What the host allows."
+  return REMOTE_ROLES.find((x) => x.id === role)?.may ?? "What the main computer allows."
 }
 
 /** Whether a desk with this role may make or change scenes (Screens, settings, Editor; a camera desk its camera boxes). */

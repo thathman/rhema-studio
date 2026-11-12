@@ -819,7 +819,7 @@ fn validate_scene_take_live(live_json: Option<&str>, take: &crate::command::Scen
     let Some(live) = live_json.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()) else { return Ok(()) };
     if let Some(outputs) = live.get("outputs").and_then(serde_json::Value::as_array) {
         let Some(output) = outputs.iter().find(|o| o.get("id").and_then(serde_json::Value::as_str) == Some(take.output.as_str())) else {
-            return Err((StatusCode::CONFLICT, "That output is no longer on the host; refresh before Take", Some("stale")));
+            return Err((StatusCode::CONFLICT, "That output is no longer on the main computer; refresh before Take", Some("stale")));
         };
         if output.get("role").and_then(serde_json::Value::as_str).unwrap_or("congregation") != "congregation" {
             return Err((StatusCode::FORBIDDEN, "Scene Take is limited to congregation outputs", Some("not-congregation")));
@@ -854,13 +854,13 @@ fn validate_group_take_live(
     let Some(live_json) = live_json else {
         return Err((
             StatusCode::CONFLICT,
-            "The host Live State is not ready; refresh before a group Take",
+            "The main computer's Live State is not ready; refresh before a group Take",
         ));
     };
     let Ok(live) = serde_json::from_str::<serde_json::Value>(live_json) else {
         return Err((
             StatusCode::CONFLICT,
-            "The host Live State could not be checked; refresh before a group Take",
+            "The main computer's Live State could not be checked; refresh before a group Take",
         ));
     };
     let live_service = live
@@ -870,7 +870,7 @@ fn validate_group_take_live(
     if take.service.as_deref() != Some(live_service) {
         return Err((
             StatusCode::CONFLICT,
-            "The host has changed services; refresh before a group Take",
+            "The main computer has changed services; refresh before a group Take",
         ));
     }
     if live
@@ -943,7 +943,7 @@ fn stage_target_live(live_json: Option<&str>, target: &str) -> Result<(), (Statu
     }
     let Some(outputs) = live.get("outputs").and_then(serde_json::Value::as_array) else { return Ok(()) };
     match outputs.iter().find(|o| o.get("id").and_then(serde_json::Value::as_str) == Some(target)) {
-        None => Err((StatusCode::CONFLICT, "That stage display is no longer on the host; refresh")),
+        None => Err((StatusCode::CONFLICT, "That stage display is no longer on the main computer; refresh")),
         Some(o) if o.get("role").and_then(serde_json::Value::as_str) != Some("stage") => Err((StatusCode::FORBIDDEN, "Stage messages go only to stage displays")),
         Some(_) => Ok(()),
     }
@@ -1117,9 +1117,9 @@ pub struct SceneTakeRefusal {
 
 impl SceneTakeRefusal {
     pub const STALE: Self = Self { code: "stale", message: "That output or scene changed since you looked; check Preview and Take again" };
-    pub const UNAVAILABLE: Self = Self { code: "unavailable", message: "The host is not ready to check this Take yet; try again in a moment" };
+    pub const UNAVAILABLE: Self = Self { code: "unavailable", message: "The main computer is not ready to check this Take yet; try again in a moment" };
     pub const INVALID: Self = Self { code: "invalid", message: "Choose a valid output and scene" };
-    pub const NOT_MAIN_DESK: Self = Self { code: "not-main-desk", message: "Scenes are taken from the main desk" };
+    pub const NOT_MAIN_DESK: Self = Self { code: "not-main-desk", message: "Scenes are taken from the main computer" };
     /// The open service is approved, and this scene or output has no usable pinned snapshot in it.
     pub const NOT_APPROVED: Self = Self { code: "not-approved", message: "This scene is not pinned for that output in the approved service; refresh the approval before taking it" };
 
@@ -2400,7 +2400,7 @@ async fn live_events_handler<S: CommandSink + 'static>(
                     Ok(json) => {
                         // Checked here too: a state published just after a revoke or demotion must not go out as the old role.
                         if !still_reads(&s.keys, &s.entry) {
-                            return Some((Ok(Event::default().event("rejoin").data("the host changed this desk")), None));
+                            return Some((Ok(Event::default().event("rejoin").data("the main computer changed this desk")), None));
                         }
                         let data = shape(&json, &s.keys, &s.presence);
                         return Some((Ok(Event::default().event("live").data(data)), Some(s)));
@@ -2413,7 +2413,7 @@ async fn live_events_handler<S: CommandSink + 'static>(
                     if !still_reads(&s.keys, &s.entry) {
                         log::info!("Live State stream for {} ended: its key changed", s.entry.name);
                         // The last message; the stream (and the desk's place in Operators) ends with it.
-                        return Some((Ok(Event::default().event("rejoin").data("the host changed this desk")), None));
+                        return Some((Ok(Event::default().event("rejoin").data("the main computer changed this desk")), None));
                     }
                 }
             }
@@ -2580,10 +2580,10 @@ fn companion_key<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers:
         state.presence.saw(e, peer.ip());
     }
     match key {
-        Ok(Some(e)) if e.role != crate::keys::Role::ObsCompanion => Err((StatusCode::FORBIDDEN, "This computer is not an OBS companion of this host. On the host: Settings → Remote control, set its role to OBS companion.")),
+        Ok(Some(e)) if e.role != crate::keys::Role::ObsCompanion => Err((StatusCode::FORBIDDEN, "This computer is not an OBS companion of the main computer. On the main computer: Permissions, set its role to OBS companion.")),
         Ok(Some(e)) if e.paused => Err((StatusCode::LOCKED, crate::keys::PAUSED_MESSAGE)),
         Ok(Some(e)) => Ok(e),
-        Ok(None) | Err(_) => Err((StatusCode::UNAUTHORIZED, "The host no longer knows this computer: pair again")),
+        Ok(None) | Err(_) => Err((StatusCode::UNAUTHORIZED, "The main computer no longer knows this computer: pair again")),
     }
 }
 
@@ -2611,13 +2611,13 @@ async fn companion_tally_handler<S: CommandSink + 'static>(
     match companion_key(&state, peer, &headers) {
         Ok(e) if state.cameras.set_tally(&e.hash, tally) => StatusCode::NO_CONTENT.into_response(),
         // Paired a moment ago: the app has not made its reader yet.
-        Ok(_) => (StatusCode::CONFLICT, Json(serde_json::json!({ "error": "The host is still setting this computer up; try again in a moment" }))).into_response(),
+        Ok(_) => (StatusCode::CONFLICT, Json(serde_json::json!({ "error": "The main computer is still setting this computer up; try again in a moment" }))).into_response(),
         Err((code, why)) => (code, Json(serde_json::json!({ "error": why }))).into_response(),
     }
 }
 
 /// What a paused OBS companion's overlay page is told (#877 review): the link is fine.
-const PAUSED_OVERLAY: &str = "Paused by the main desk; this overlay comes back when control is given back.";
+const PAUSED_OVERLAY: &str = "Paused by the main computer; this overlay comes back when control is given back.";
 
 /// `GET /api/v1/overlays`: the host's feeds an OBS companion may add to its scenes as overlays
 /// (#848 G4), each with its link path, and the http port to open them on. Only for a paired,
@@ -2994,7 +2994,7 @@ async fn voice_handler<S: CommandSink + 'static>(
         Ok(Ok(sdp)) => Json(serde_json::json!({ "sdp": sdp })).into_response(),
         _ => {
             state.voice.forget(&id);
-            (StatusCode::GATEWAY_TIMEOUT, Json(serde_json::json!({ "error": "The host did not answer. Is Rhema Studio open there?" }))).into_response()
+            (StatusCode::GATEWAY_TIMEOUT, Json(serde_json::json!({ "error": "The main computer did not answer. Is Rhema Studio open there?" }))).into_response()
         }
     }
 }
@@ -3202,7 +3202,7 @@ async fn command_handler<S: CommandSink + 'static>(
     }
     let by = match entry.clone() {
         Some(entry) if entry.paused_for(&request.command) => {
-            log::info!("HTTP command refused for {}: the main desk has taken back control", entry.name);
+            log::info!("HTTP command refused for {}: the main computer has taken back control", entry.name);
             return (StatusCode::LOCKED, CommandResponse::refused(crate::keys::PAUSED_MESSAGE));
         }
         // A Stage desk's message for a stage display it is not assigned (doc 35, page 6): not refused,
@@ -3227,7 +3227,7 @@ async fn command_handler<S: CommandSink + 'static>(
             let fingerprint = command_fingerprint(&request.command, &entry.name, Some(entry.hash.as_str()), request.service.as_deref(), request.seen.as_ref(), request.why.as_deref());
             if let Some(id) = request.id.as_deref() {
                 match state.recent.status(id, &fingerprint) {
-                    RecentIdStatus::Replay => return (StatusCode::ACCEPTED, Json(CommandResponse { success: true, note: Some("Already sent to the main desk to approve".into()), ..Default::default() })),
+                    RecentIdStatus::Replay => return (StatusCode::ACCEPTED, Json(CommandResponse { success: true, note: Some("Already sent to the main computer to approve".into()), ..Default::default() })),
                     RecentIdStatus::Conflict => return (StatusCode::CONFLICT, CommandResponse::refused("This command id was already used for a different request")),
                     RecentIdStatus::New => {}
                 }
@@ -3239,17 +3239,17 @@ async fn command_handler<S: CommandSink + 'static>(
                     if let Some(id) = request.id.as_deref() {
                         state.recent.record(id, &fingerprint);
                     }
-                    log::info!("Stage message from {} for unassigned display {} sent to the main desk", entry.name, send.target);
-                    (StatusCode::ACCEPTED, Json(CommandResponse { success: true, note: Some("Sent to the main desk to approve: this stage display is not assigned to this desk".into()), ..Default::default() }))
+                    log::info!("Stage message from {} for unassigned display {} sent to the main computer", entry.name, send.target);
+                    (StatusCode::ACCEPTED, Json(CommandResponse { success: true, note: Some("Sent to the main computer to approve: this stage display is not assigned to this desk".into()), ..Default::default() }))
                 }
                 Err(e) => (StatusCode::SERVICE_UNAVAILABLE, CommandResponse::refused(e.to_string())),
             };
         }
         Some(entry) if !entry.allows(&request.command) => {
             let why = if matches!(&request.command, RemoteCommand::GroupTakeScene(_)) {
-                "The host has not granted group Take for all selected outputs"
+                "The main computer has not granted group Take for all selected outputs"
             } else if entry.role.allows(&request.command) {
-                "This output is not assigned to this Screens desk by the host"
+                "This output is not assigned to this Screens desk by the main computer"
             } else {
                 refusal_for(entry.role, &request.command)
             };
@@ -3291,13 +3291,13 @@ async fn command_handler<S: CommandSink + 'static>(
             return (
                 StatusCode::FORBIDDEN,
                 CommandResponse::refused(
-                    "Group Take requires a paired Screens desk and a separate host grant",
+                    "Group Take requires a paired Screens desk and a separate main computer grant",
                 ),
             );
         }
         // Rhema's own recorder needs a desk the host granted it (doc 42): never an open remote.
         None if matches!(&request.command, RemoteCommand::Record(_)) => {
-            return (StatusCode::FORBIDDEN, CommandResponse::refused("Recording needs a paired desk the main desk granted the recorder"));
+            return (StatusCode::FORBIDDEN, CommandResponse::refused("Recording needs a paired desk the main computer granted the recorder"));
         }
         // An open remote (no keys) may do everything, as before, except group Take and the recorder need an identified grant.
         None => (
@@ -3424,7 +3424,7 @@ async fn command_handler<S: CommandSink + 'static>(
             return (
                 StatusCode::FORBIDDEN,
                 CommandResponse::refused(
-                    "Group Take requires a paired Screens desk and a separate host grant",
+                    "Group Take requires a paired Screens desk and a separate main computer grant",
                 ),
             );
         }
@@ -3557,7 +3557,7 @@ async fn command_handler<S: CommandSink + 'static>(
     if let RemoteCommand::SaveScene(sc) = &mut command {
         crate::scene_edits::strip(&mut sc.scene);
     }
-    let mut note = group_take.then(|| "The host accepted this request for processing. Receiver delivery is not confirmed.".to_string());
+    let mut note = group_take.then(|| "The main computer accepted this request for processing. Receiver delivery is not confirmed.".to_string());
     let mut waits = false;
     match crate::scene_edits::judge(state.live.current().as_deref(), role, &command) {
         Err(r) => {
@@ -3581,7 +3581,7 @@ async fn command_handler<S: CommandSink + 'static>(
                 _ => {}
             }
             waits = true;
-            note = Some(format!("Sent to the main desk to accept, because {why}"));
+            note = Some(format!("Sent to the main computer to accept, because {why}"));
         }
         Ok(_) => {}
     }
@@ -3673,7 +3673,7 @@ fn refusal_for(role: crate::keys::Role, cmd: &RemoteCommand) -> &'static str {
     use crate::keys::Role;
     // Rhema's own recorder is a separate grant, whatever the role (doc 42).
     if matches!(cmd, RemoteCommand::Record(_)) {
-        return "Rhema's recorder needs a separate grant from the main desk (Permissions); no role includes it";
+        return "Rhema's recorder needs a separate grant from the main computer (Permissions); no role includes it";
     }
     match role {
         Role::Timekeeper => "this device keeps time: it may move the event clock, not the screens",
@@ -3684,10 +3684,10 @@ fn refusal_for(role: crate::keys::Role, cmd: &RemoteCommand) -> &'static str {
         Role::Camera => "this device runs the cameras: it may hide or show a camera and change the camera boxes in scenes only",
         Role::Obs => "this device is the OBS director: it may switch OBS scenes, choose the transition and start, stop and mark the recording only",
         Role::ObsCompanion => "this computer is an OBS companion: it reads the church's cameras into its own OBS and sends no commands",
-        Role::Editor => "this device prepares: it may put a verse or a song in the main desk's Preview, add to the queue and make or change scenes, never what is live",
+        Role::Editor => "this device prepares: it may put a verse or a song in the main computer's Preview, add to the queue and make or change scenes, never what is live",
         Role::Viewer => "this device is view only: it follows the service and may use Talk and notices, nothing else",
-        _ if matches!(cmd, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsTakeScene(_) | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsTransition(_)) => "only a desk the main desk made OBS director may switch OBS",
-        _ if matches!(cmd, RemoteCommand::ObsRecord(_)) => "only a desk the main desk made OBS director may start or stop OBS's recording",
+        _ if matches!(cmd, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsTakeScene(_) | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsTransition(_)) => "only a desk the main computer made OBS director may switch OBS",
+        _ if matches!(cmd, RemoteCommand::ObsRecord(_)) => "only a desk the main computer made OBS director may start or stop OBS's recording",
         _ if matches!(cmd, RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_)) => "this device may present but not make or change scenes",
         _ => "this device may present but not change settings",
     }
@@ -3946,7 +3946,7 @@ mod tests {
 
         fn lookup(&self, q: &crate::lookup::Lookup) -> Result<serde_json::Value, String> {
             match q {
-                crate::lookup::Lookup::Songs { query } if query == "broken" => Err("Songs are unavailable on the host".into()),
+                crate::lookup::Lookup::Songs { query } if query == "broken" => Err("Songs are unavailable on the main computer".into()),
                 _ => Ok(serde_json::json!({ "asked": format!("{q:?}") })),
             }
         }
@@ -4182,12 +4182,12 @@ mod tests {
     }
 
     const NOTICES: &str = r#"{"v":1,"notices":[
-        {"id":"all","from":"Tolu (main desk)","fromId":"host","to":"all","text":"Doors open"},
-        {"id":"tk","from":"Tolu (main desk)","fromId":"host","to":"timekeeper","text":"Pastor has 5 minutes"},
-        {"id":"bb","from":"Tolu (main desk)","fromId":"host","to":"bible","text":"Romans next"},
-        {"id":"pr","from":"Tolu (main desk)","fromId":"host","to":"present","text":"Slides ready?"},
+        {"id":"all","from":"Tolu (main computer)","fromId":"host","to":"all","text":"Doors open"},
+        {"id":"tk","from":"Tolu (main computer)","fromId":"host","to":"timekeeper","text":"Pastor has 5 minutes"},
+        {"id":"bb","from":"Tolu (main computer)","fromId":"host","to":"bible","text":"Romans next"},
+        {"id":"pr","from":"Tolu (main computer)","fromId":"host","to":"present","text":"Slides ready?"},
         {"id":"host","from":"Femi","fromId":"h-femi","to":"host","text":"Running late"},
-        {"id":"ade","from":"Tolu (main desk)","fromId":"host","to":{"name":"Ade's phone"},"toId":"h-ade","text":"Mic 2 is yours"},
+        {"id":"ade","from":"Tolu (main computer)","fromId":"host","to":{"name":"Ade's phone"},"toId":"h-ade","text":"Mic 2 is yours"},
         {"id":"mine","from":"Ade's phone","fromId":"h-ade","to":"host","text":"Ready"}
     ]}"#;
 
@@ -4203,10 +4203,10 @@ mod tests {
         assert_eq!(ids(&notices_for(NOTICES, Some(&desk("Femi", Role::Timekeeper)))), ["all", "tk", "host"], "its role's, and what it sent");
         assert_eq!(ids(&notices_for(NOTICES, Some(&desk("Laptop", Role::Configure)))), ["all", "pr"], "Present and settings also gets the Present desks'");
         assert_eq!(ids(&notices_for(NOTICES, Some(&desk("ade's PHONE", Role::Screens)))), ["all", "ade", "mine"], "by its key, whatever its role");
-        assert_eq!(ids(&notices_for(NOTICES, None)).len(), 7, "the main desk sees every notice");
+        assert_eq!(ids(&notices_for(NOTICES, None)).len(), 7, "the main computer sees every notice");
         // The key ids never reach a desk.
         assert!(!notices_for(NOTICES, Some(&desk("Ade's phone", Role::Bible))).contains("h-ade"));
-        assert!(notices_for(NOTICES, None).contains("fromId"), "the main desk's own copy is as published");
+        assert!(notices_for(NOTICES, None).contains("fromId"), "the main computer's own copy is as published");
         // Nothing else in the state changes; a state without notices goes out as it is.
         let v: serde_json::Value = serde_json::from_str(&notices_for(NOTICES, Some(&desk("x", Role::Bible)))).unwrap();
         assert_eq!(v["v"], 1);
@@ -4219,7 +4219,7 @@ mod tests {
         // Paired before names were checked, or named to look like it: matched by key, not name.
         let mimic = KeyEntry {
             hash: "h-mimic".into(),
-            name: "Tolu (main desk)".into(),
+            name: "Tolu (main computer)".into(),
             role: Role::Screens,
             paused: false,
             output_scope: Vec::new(),
@@ -4271,7 +4271,7 @@ mod tests {
             ["all", "ade", "mine"]
         );
         // Notices from before ids: only their group; a name alone reaches no one.
-        let old = r#"{"v":1,"notices":[{"id":"o1","from":"Ade's phone","to":"host","text":"x"},{"id":"o2","from":"Main desk","to":{"name":"Ade's phone"},"text":"y"},{"id":"o3","from":"Main desk","to":"screens","text":"z"}]}"#;
+        let old = r#"{"v":1,"notices":[{"id":"o1","from":"Ade's phone","to":"host","text":"x"},{"id":"o2","from":"Main computer","to":{"name":"Ade's phone"},"text":"y"},{"id":"o3","from":"Main computer","to":"screens","text":"z"}]}"#;
         assert_eq!(ids(&notices_for(old, Some(&renamed))), ["o3"]);
     }
 
@@ -4328,7 +4328,7 @@ mod tests {
             String::from_utf8_lossy(&out).into_owned()
         });
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-        live.publish(r#"{"v":1,"notices":[{"id":"t2","from":"Main desk","to":"timekeeper","text":"Wrap up now"},{"id":"b2","from":"Main desk","to":"bible","text":"Psalm 23 next"}]}"#.into());
+        live.publish(r#"{"v":1,"notices":[{"id":"t2","from":"Main computer","to":"timekeeper","text":"Wrap up now"},{"id":"b2","from":"Main computer","to":"bible","text":"Psalm 23 next"}]}"#.into());
         let stream = handle.await.unwrap();
         assert!(stream.contains("Romans next") && stream.contains("Psalm 23 next"), "{stream}");
         assert!(!stream.contains("Pastor has 5 minutes") && !stream.contains("Wrap up now"), "a Bible key never receives the Timekeeper's notices: {stream}");
@@ -4654,12 +4654,12 @@ mod tests {
         let mut ask = send("choir");
         ask["id"] = "ask-choir-1".into();
         let (status, body) = press(port, "stg", ask.clone()).await;
-        assert_eq!(status, 202, "a stage display not assigned to this desk is asked of the main desk: {body}");
+        assert_eq!(status, 202, "a stage display not assigned to this desk is asked of the main computer: {body}");
         assert!(body.contains("approve"), "{body}");
         assert_eq!(press(port, "stg", ask).await.0, 202, "a retry is answered, not asked again");
         assert_eq!(press(port, "stg", send("main")).await.0, 403, "never a congregation screen");
         assert_eq!(press(port, "pres", send("main")).await.0, 403, "a presenter too: stage messages go only to stage displays");
-        assert_eq!(press(port, "pres", send("gone")).await.0, 409, "a display the host no longer has");
+        assert_eq!(press(port, "pres", send("gone")).await.0, 409, "a display the main computer no longer has");
         assert_eq!(press(port, "pres", send("choir")).await.0, 200, "the presenter may send to any stage display");
         let events = sink.0.lock().unwrap().clone();
         let sends: Vec<_> = events.iter().filter(|(e, _)| e == "remote:stage_send").map(|(_, p)| serde_json::from_str::<serde_json::Value>(p).unwrap()).collect();
@@ -4769,7 +4769,7 @@ mod tests {
         assert!(withdraw("ed", "r2").await.contains("409"), "a decided request stays as decided");
         assert!(withdraw("ed", "missing").await.contains("404"));
         assert!(withdraw("ed", "has%20space").await.contains("422"));
-        assert!(withdraw("held", "r1").await.contains("423"), "a desk the main desk took back cannot change requests");
+        assert!(withdraw("held", "r1").await.contains("423"), "a desk the main computer took back cannot change requests");
         let ok = withdraw("ed", "r1").await;
         assert!(ok.contains("200 OK") && ok.contains(r#""state":"withdrawn""#), "{ok}");
         let mut handle = result.handle;
@@ -4916,7 +4916,7 @@ mod tests {
         };
         assert!(stream.contains("event: frame"), "{stream}");
         let beat = stream.split("event: beat\ndata: ").nth(1).and_then(|r| r.lines().next()).and_then(|n| n.trim().parse::<i64>().ok());
-        assert!(beat.is_some_and(|ms| ms >= before && ms - before < 10_000), "a beat with the host's clock: {stream}");
+        assert!(beat.is_some_and(|ms| ms >= before && ms - before < 10_000), "a beat with the main computer's clock: {stream}");
         let mut h = result.handle;
         h.stop();
     }
@@ -5744,7 +5744,7 @@ mod tests {
         assert!(get_with(port, &format!("/feed/l3?k={scoped_bible}"), "", None).await.contains("403"), "never a feed outside its scope");
         keys.write().unwrap().entries[0].paused = true;
         let paused = get_with(port, &bible, "", None).await;
-        assert!(paused.contains("423") && paused.contains("Paused by the main desk"), "paused: its links stop, saying why: {paused}");
+        assert!(paused.contains("423") && paused.contains("Paused by the main computer"), "paused: its links stop, saying why: {paused}");
         let wrong = get_with(port, &format!("/feed/l3?k={}", "f".repeat(64)), "", None).await;
         assert!(wrong.contains("403") && !wrong.contains("Paused"), "a wrong key is still just not valid: {wrong}");
         keys.write().unwrap().entries[0].paused = false;
@@ -5888,7 +5888,7 @@ mod tests {
 
         keys.write().unwrap().entries[0].paused = true;
         let refused = raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"event_next"}"#), key).await;
-        assert!(refused.contains("423") && refused.contains("The main desk has taken back control"), "{refused}");
+        assert!(refused.contains("423") && refused.contains("The main computer has taken back control"), "{refused}");
         let me = get_with(port, "/api/v1/me", key, None).await;
         assert!(me.contains(r#""paused":true"#), "{me}");
         let read = get_with(port, "/api/v1/live", key, None).await;
@@ -5968,10 +5968,10 @@ mod tests {
         // The main desk saving the scene moves its revision too.
         live.publish(state("Welcome 3"));
         let now = live.revision("scene:off").unwrap();
-        assert!(now > off + 1, "the server's accept and the host's change");
+        assert!(now > off + 1, "the server's accept and the main computer's change");
 
         let waits = send(format!(r#"{{"command":"save_scene","value":{{"scene":{{"id":"on","name":"Sermon","layers":[]}},"request":false}},"seen":{{"scene:on":{on}}}}}"#), scr).await;
-        assert!(waits.contains("200 OK") && waits.contains("Sent to the main desk to accept, because that scene is on a screen"), "{waits}");
+        assert!(waits.contains("200 OK") && waits.contains("Sent to the main computer to accept, because that scene is on a screen"), "{waits}");
         let sent: serde_json::Value = serde_json::from_str(sink.scene.lock().unwrap().as_deref().unwrap()).unwrap();
         assert_eq!(sent["request"].as_bool(), Some(true), "a desk cannot say it needs no approval");
         assert_eq!(sent["baseRevision"].as_u64(), Some(on), "the request is pinned to the revision the server tracks");
@@ -6018,7 +6018,7 @@ mod tests {
         let port = result.bound_port;
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         let send = |body: &'static str| async move { raw_http_request(port, "POST", "/api/v1/command", Some(body)).await };
-        assert!(send(r#"{"command":"next","service":"s9"}"#).await.contains("200 OK"), "before the host has said which service, nothing is refused");
+        assert!(send(r#"{"command":"next","service":"s9"}"#).await.contains("200 OK"), "before the main computer has said which service, nothing is refused");
 
         live.publish(r#"{"v":1,"service":{"id":"s11","title":"11 AM","revision":4}}"#.into());
         let other = send(r#"{"command":"next","service":"s9"}"#).await;
@@ -6265,7 +6265,7 @@ mod tests {
         let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
         let port = result.bound_port;
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        live.publish(r#"{"v":1,"program":{"onAir":true,"reference":"John 3:16","rehearsal":false},"notices":[{"id":"n1","from":"Main desk","to":"timekeeper","text":"Pastor has 5 minutes"}]}"#.into());
+        live.publish(r#"{"v":1,"program":{"onAir":true,"reference":"John 3:16","rehearsal":false},"notices":[{"id":"n1","from":"Main computer","to":"timekeeper","text":"Pastor has 5 minutes"}]}"#.into());
         // Every call the desk page makes carries its own origin and the key it paired with.
         let read = |path: &str, key: &str| {
             let request = format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{{port}}\r\nOrigin: http://127.0.0.1:{{port}}\r\n{key}Connection: close\r\n\r\n");
@@ -6437,7 +6437,7 @@ mod tests {
         assert_eq!(after_bump["revisions"]["hold"].as_u64(), live.revision("hold"), "accepted revisions are immediately visible in the Live State");
         assert_eq!(live.revision("camera:nowhere"), None);
         live.bump("camera:nowhere");
-        assert_eq!(live.revision("camera:nowhere"), None, "a part the host never showed is not checked");
+        assert_eq!(live.revision("camera:nowhere"), None, "a part the main computer never showed is not checked");
         // Not JSON (a test, a broken build): passed on as it is.
         live.publish("not json".into());
         assert_eq!(live.current().as_deref(), Some("not json"));
@@ -6899,7 +6899,7 @@ mod tests {
         assert_eq!(status, 403, "{body}");
         assert!(body.contains(r#""code":"not-congregation""#), "{body}");
         let (status, body) = press(port, "ka", take("lobby", "sermon", &seen)).await;
-        assert!(status == 409 && body.contains(r#""code":"stale""#), "an output the host no longer has: {status} {body}");
+        assert!(status == 409 && body.contains(r#""code":"stale""#), "an output the main computer no longer has: {status} {body}");
         let (status, body) = press(port, "ka", take("main", "gone", &seen)).await;
         assert!(status == 409 && body.contains(r#""code":"stale""#), "a deleted scene: {status} {body}");
         // Someone edits the scene after this desk previewed it.
@@ -6955,7 +6955,7 @@ mod tests {
         let (overflow, stage, scene) = (before("output:overflow"), before("output:stage"), before("scene:sermon"));
 
         assert_eq!(live.accept_scene_take(&scene_take("stage", "sermon"), seen).map_err(|r| r.code), Err("not-congregation"));
-        assert_eq!(live.accept_scene_take(&scene_take("lobby", "sermon"), seen), Err(SceneTakeRefusal { code: "stale", message: "That output is no longer on the host; refresh before Take" }));
+        assert_eq!(live.accept_scene_take(&scene_take("lobby", "sermon"), seen), Err(SceneTakeRefusal { code: "stale", message: "That output is no longer on the main computer; refresh before Take" }));
         assert_eq!(live.accept_scene_take(&scene_take("main", "gone"), seen).map_err(|r| r.code), Err("stale"));
         assert_eq!(live.revision("output:main"), Some(seen.output), "refused Takes change no revision");
 
@@ -6999,13 +6999,13 @@ mod tests {
         let desk_saw = read_revisions(port, "ka").await;
 
         let seen = live.scene_take_revisions(&scene_take("main", "sermon")).unwrap();
-        live.accept_scene_take(&scene_take("main", "sermon"), seen).expect("the main desk's Take");
+        live.accept_scene_take(&scene_take("main", "sermon"), seen).expect("the main computer's Take");
 
         let (status, body) = press(port, "ka", take("main", &desk_saw)).await;
         assert!(status == 409 && body.contains(r#""code":"stale""#), "{status} {body}");
         assert_eq!(sink.command_count(), 0);
         let (status, body) = press(port, "ka", take("overflow", &desk_saw)).await;
-        assert_eq!(status, 200, "another output is untouched by the main desk's Take: {body}");
+        assert_eq!(status, 200, "another output is untouched by the main computer's Take: {body}");
         let mut handle = result.handle;
         handle.stop();
     }
@@ -8096,7 +8096,7 @@ mod tests {
         let present_plan = req("GET", "/api/v1/plans/p1", None, "pre").await;
         assert!(
             present_plan.contains("200 OK") && present_plan.contains(r#""role":"present""#),
-            "the authenticated Present role reaches the host for response redaction: {present_plan}"
+            "the authenticated Present role reaches the main computer for response redaction: {present_plan}"
         );
         assert!(req("GET", "/api/v1/plans/p1", None, "vie").await.contains("403"), "view only does not read the plan");
         assert!(req("GET", "/api/v1/plans/nope", None, "edi").await.contains("404"));

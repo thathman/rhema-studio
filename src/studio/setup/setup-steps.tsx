@@ -138,7 +138,7 @@ export function OperatorStep({ error, onJoin, idPrefix: p = "setup", nameInDeskM
         <Input id={`${p}-device-name`} value={deviceName} placeholder="e.g. Sanctuary desk" onChange={(e) => useSettingsStore.getState().setSetup({ deviceName: e.target.value })} aria-describedby={`${p}-device-name-hint`} />
       </Field>
       <div className="rounded-lg border border-border bg-card p-4">
-        <p className="text-sm font-semibold">Main desk, on its own</p>
+        <p className="text-sm font-semibold">Main computer, on its own</p>
         <p className="mt-1 text-xs text-muted-foreground">
           This computer runs the service with every control. Volunteers, phones and other computers are optional: they can join it later from Live → Production tools → Operators, and if one drops out nothing here changes.
         </p>
@@ -324,7 +324,7 @@ export function ConnectionsStep({ onLeave, onJoin }: { onLeave: Leave; onJoin: (
       <ul className="divide-y divide-border rounded-lg border border-border bg-card px-4">
         <StatusRow label="Phones and other computers" detail={remote.detail} state={remote.state}>
           <Button size="sm" variant="outline" onClick={() => onLeave(openConnectionsHub)}>Connections</Button>
-          <Button size="sm" variant="ghost" onClick={onJoin}>Join a host</Button>
+          <Button size="sm" variant="ghost" onClick={onJoin}>Join a main computer</Button>
         </StatusRow>
         <StatusRow label="OBS" detail={obs.detail} state={obs.state}>
           <Button size="sm" variant="outline" onClick={() => onLeave(openConnectionsHub)}>Connect OBS</Button>

@@ -43,7 +43,7 @@ function ThisApp() {
         Start Rhema Studio Companion with the computer
       </label>
       <p className="text-muted-foreground">
-        It then waits in {trayName()} and joins the host by itself. Closing this window keeps it running there, so OBS's cameras stay current; quit it from its icon.
+        It then waits in {trayName()} and joins the main computer by itself. Closing this window keeps it running there, so OBS's cameras stay current; quit it from its icon.
       </p>
       {version && <p className="text-muted-foreground">Rhema Studio Companion {version}</p>}
     </section>

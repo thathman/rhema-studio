@@ -63,7 +63,7 @@ beforeEach(async () => {
   await reloadSceneApprovals()
   useSceneApprovalsStore.setState({ requests: [], audit: [], hydrated: true, error: null })
   useJoin.setState({ status: "off", me: null, live: null })
-  useSettingsStore.setState({ operatorName: "Main desk", remoteDevices: [] })
+  useSettingsStore.setState({ operatorName: "Main computer", remoteDevices: [] })
   useJournalStore.setState({ entries: [], startItemIds: null, added: 0, keptAt: 0 })
   useBroadcastStore.setState({ scenes: [], outputs: [], rehearsal: false, rehearsalReturn: null })
   useShellStore.setState({ workspace: "permissions", prepareProgramRequest: null })
@@ -75,7 +75,7 @@ beforeEach(async () => {
 })
 
 describe("Permissions workspace", () => {
-  it("shows role-less paired devices as read-only Viewer until the host assigns a role", async () => {
+  it("shows role-less paired devices as read-only Viewer until the main computer assigns a role", async () => {
     useSettingsStore.setState({ remoteDevices: [{ hash: "legacy-hash", name: "Legacy phone", paired_at: "2026-10-01T00:00:00Z" }] })
     const el = await mount()
 
@@ -92,15 +92,15 @@ describe("Permissions workspace", () => {
     await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Take back control from Desk C"]')!.click())
     expect(useSettingsStore.getState().remoteDevices[0].paused).toBe(true)
     expect(el.textContent).toContain("control paused")
-    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main desk took back control from Desk C")
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main computer took back control from Desk C")
     await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Give control back to Desk C"]')!.click())
     expect(useSettingsStore.getState().remoteDevices).toHaveLength(1)
     expect(useSettingsStore.getState().remoteDevices[0].paused).toBeUndefined()
-    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main desk gave control back to Desk C")
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Main computer gave control back to Desk C")
     await act(async () => root.unmount())
   })
 
-  it("shows a joined desk the host's durable approval status and lets it withdraw only its own pending request", async () => {
+  it("shows a joined desk the main computer's durable approval status and lets it withdraw only its own pending request", async () => {
     const pending = { id: "request-1", kind: "scene_save", targetId: "scene-1", baseRevision: 4, state: "submitted", reason: "Use this for Sunday", createdAt: "2026-11-02T10:00:00Z", expiresAt: "2026-11-03T10:00:00Z", decidedBy: null, decidedAt: null, decisionNote: null }
     useJoin.setState({ status: "connected", me: { name: "Stage desk", role: "stage" }, live: null, paused: false })
     tauri.invoke.mockImplementation(async (command: string, args?: unknown) => {
@@ -113,7 +113,7 @@ describe("Permissions workspace", () => {
     })
     const el = await mount()
     expect(el.textContent).toContain("My approval requests")
-    expect(el.textContent).toContain("Waiting for the host")
+    expect(el.textContent).toContain("Waiting for the main computer")
     expect(el.textContent).toContain("Use this for Sunday")
     const withdraw = [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Withdraw request")) as HTMLButtonElement
     await act(async () => { withdraw.click(); await Promise.resolve(); await Promise.resolve() })
@@ -125,7 +125,7 @@ describe("Permissions workspace", () => {
   it("shows host decisions, requested changes and load failures in the joined request tracker", async () => {
     const request = (id: string, state: string, decisionNote: string | null = null) => ({
       id, kind: "scene_save", targetId: `scene-${id}`, baseRevision: 4, state, reason: "Prepare this scene",
-      createdAt: "2026-11-02T10:00:00Z", expiresAt: "2026-11-03T10:00:00Z", decidedBy: state === "submitted" ? null : "Main desk",
+      createdAt: "2026-11-02T10:00:00Z", expiresAt: "2026-11-03T10:00:00Z", decidedBy: state === "submitted" ? null : "Main computer",
       decidedAt: state === "submitted" ? null : "2026-11-02T11:00:00Z", decisionNote,
     })
     useJoin.setState({ status: "connected", me: { name: "Stage desk", role: "stage" }, live: null, paused: false })
@@ -138,8 +138,8 @@ describe("Permissions workspace", () => {
     expect(el.textContent).toContain("Approved")
     expect(el.textContent).toContain("Declined")
     expect(el.textContent).toContain("Changes requested")
-    expect(el.textContent).toContain("Host note: Use the approved welcome design")
-    expect(el.textContent).toContain("Host note: Please adjust the title")
+    expect(el.textContent).toContain("Main computer note: Use the approved welcome design")
+    expect(el.textContent).toContain("Main computer note: Please adjust the title")
     await act(async () => root.unmount())
 
     useJoin.setState({ status: "connected", me: { name: "Stage desk", role: "stage" }, live: null, paused: false })
@@ -153,7 +153,7 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
-  it("saves Recorder grant changes only after host confirmation and hides the host roster on joined desks", async () => {
+  it("saves Recorder grant changes only after host confirmation and hides the main computer roster on joined desks", async () => {
     useSettingsStore.setState({ remoteDevices: [{ hash: "phone-hash", name: "Phone", paired_at: "2026-10-01T00:00:00Z", role: "viewer" }] })
     let acknowledge!: () => void
     tauri.invoke.mockImplementation((command: string, args?: unknown) => {
@@ -180,7 +180,7 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
-  it("shows an inline error and preserves the Recorder grant when the host rejects it", async () => {
+  it("shows an inline error and preserves the Recorder grant when the main computer rejects it", async () => {
     useSettingsStore.setState({ remoteDevices: [{ hash: "phone-hash", name: "Phone", paired_at: "2026-10-01T00:00:00Z", role: "viewer" }] })
     tauri.invoke.mockImplementation(async (command: string) => {
       if (command === "remote_set_keys") throw new Error("host unavailable")
@@ -190,7 +190,7 @@ describe("Permissions workspace", () => {
 
     await act(async () => { el.querySelector<HTMLInputElement>('input[aria-label="Rhema Recorder access for Phone"]')!.click(); await Promise.resolve(); await Promise.resolve() })
     expect(useSettingsStore.getState().remoteDevices[0]?.record).toBeUndefined()
-    expect(el.textContent).toContain("host did not confirm the Recorder access change")
+    expect(el.textContent).toContain("main computer did not confirm the Recorder access change")
     await act(async () => root.unmount())
   })
 
@@ -242,7 +242,7 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
-  it("accepts a saved request on the host and applies the scene without taking it live", async () => {
+  it("accepts a saved request on the main computer and applies the scene without taking it live", async () => {
     await createSceneEditApproval({
       scene: { id: "remote-scene", name: "Remote scene", background: "#000000", createdAt: 1, updatedAt: 2, layers: [] },
       sceneId: "remote-scene", name: "Remote scene", savedAt: null, by: "Screens desk", at: 10,
@@ -251,13 +251,13 @@ describe("Permissions workspace", () => {
 
     await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Accept"))!.click())
 
-    expect(useSceneApprovalsStore.getState().requests).toMatchObject([{ status: "approved", decidedBy: "Main desk" }])
+    expect(useSceneApprovalsStore.getState().requests).toMatchObject([{ status: "approved", decidedBy: "Main computer" }])
     expect(useBroadcastStore.getState().scenes.map((scene) => scene.id)).toEqual(["remote-scene"])
     expect(useBroadcastStore.getState().outputs).toEqual([])
     await act(async () => root.unmount())
   })
 
-  it("decides the exact host request ID without applying a scene or changing outputs", async () => {
+  it("decides the exact main computer request ID without applying a scene or changing outputs", async () => {
     const request = {
       id: "host-request-uuid", kind: "scene_save", targetId: "remote-scene", baseRevision: null,
       requester: { id: "desk-key", name: "Screens desk" },
@@ -277,7 +277,7 @@ describe("Permissions workspace", () => {
     const el = await mount()
 
     expect(el.textContent).toContain("Approval Requests")
-    expect(el.textContent).toContain("New scene · no prior host revision")
+    expect(el.textContent).toContain("New scene · no prior main computer revision")
     expect(el.textContent).toContain("Approved scenes need an explicit Apply and never Take to Program")
     expect(el.textContent).toContain("Remote scene")
     expect(el.textContent).toContain("Blank composition · no visual layers")
@@ -359,13 +359,13 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
-  it("confirms an approved plan request through the host's revision check", async () => {
+  it("confirms an approved plan request through the main computer's revision check", async () => {
     const request = {
       id: "plan-request-uuid", kind: "plan_approve", targetId: "service-1", baseRevision: 4,
       requester: { id: "editor-key", name: "Editor desk" },
       payload: { title: "Sunday service", revision: 4, items: 6 },
       reason: "Please review the updated order", state: "approved", createdAt: "2026-10-30T09:00:00Z",
-      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main computer" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     }
     tauri.invoke.mockImplementation(async (command: string) => {
@@ -403,8 +403,8 @@ describe("Permissions workspace", () => {
     }
     tauri.invoke.mockImplementation(async (command: string) => {
       if (command === "approvals_list") return [request]
-      if (command === "approvals_decide") return { ...request, state: "approved", decidedBy: { id: "main-desk", name: "Main desk" }, decidedAt: "2026-11-02T09:01:00Z" }
-      if (command === "approvals_apply") return { ...request, state: "applied", decidedBy: { id: "main-desk", name: "Main desk" }, decidedAt: "2026-11-02T09:01:00Z" }
+      if (command === "approvals_decide") return { ...request, state: "approved", decidedBy: { id: "main-desk", name: "Main computer" }, decidedAt: "2026-11-02T09:01:00Z" }
+      if (command === "approvals_apply") return { ...request, state: "applied", decidedBy: { id: "main-desk", name: "Main computer" }, decidedAt: "2026-11-02T09:01:00Z" }
       return null
     })
     resetApprovalRequests()
@@ -413,7 +413,7 @@ describe("Permissions workspace", () => {
     const el = await mount()
     expect(el.textContent).toContain("Private Stage message to stage-east")
     expect(el.textContent).toContain("Choir enters now")
-    expect(el.textContent).toContain("It is not sent until the host applies this approval")
+    expect(el.textContent).toContain("It is not sent until the main computer applies this approval")
 
     await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Approve"))!.click())
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ kind: "stage_send", state: "approved" }])
@@ -432,18 +432,18 @@ describe("Permissions workspace", () => {
       id: "stage-request-uuid", kind: "stage_send", targetId: "stage-east", baseRevision: null,
       requester: { id: "stage-key", name: "Stage desk" }, payload: { target: "stage-east", text: "Choir enters now" },
       reason: null, state: "approved", createdAt: "2026-11-02T09:00:00Z", expiresAt: "2026-11-02T09:10:00Z",
-      decidedBy: { id: "main-desk", name: "Main desk" }, decidedAt: "2026-11-02T09:01:00Z", decisionNote: null,
+      decidedBy: { id: "main-desk", name: "Main computer" }, decidedAt: "2026-11-02T09:01:00Z", decisionNote: null,
     }
     tauri.invoke.mockImplementation(async (command: string) => {
       if (command === "approvals_list") return [request]
-      if (command === "approvals_apply") throw new Error("That stage display is no longer on the host.")
+      if (command === "approvals_apply") throw new Error("That stage display is no longer on the main computer.")
       return null
     })
     resetApprovalRequests()
     await reloadApprovalRequests()
     const el = await mount()
     await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Send approved Stage message"))!.click())
-    expect(el.querySelector('[role="alert"]')?.textContent).toContain("no longer on the host")
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("no longer on the main computer")
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ kind: "stage_send", state: "approved" }])
     await act(async () => root.unmount())
   })
@@ -454,7 +454,7 @@ describe("Permissions workspace", () => {
       requester: { id: "editor-key", name: "Editor desk" },
       payload: { title: "Sunday service", revision: 4, items: 6 },
       reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
-      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main computer" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     }
     tauri.invoke.mockImplementation(async (command: string) => {
@@ -476,13 +476,13 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
-  it("applies an approved scene through the host check and saves it without changing outputs", async () => {
+  it("applies an approved scene through the main computer check and saves it without changing outputs", async () => {
     const request = {
       id: "scene-request-uuid", kind: "scene_save", targetId: "scene-1", baseRevision: 7,
       requester: { id: "screens-key", name: "Screens desk" },
       payload: { scene: { id: "scene-1", name: "Welcome", background: "#000000", layers: [] } },
       reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
-      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main computer" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     }
     tauri.invoke.mockImplementation(async (command: string) => {
@@ -501,13 +501,13 @@ describe("Permissions workspace", () => {
     const outputsBefore = useBroadcastStore.getState().outputs
     const el = await mount()
 
-    expect(el.textContent).toContain("Apply checks the scene revision and current output assignment on this host")
+    expect(el.textContent).toContain("Apply checks the scene revision and current output assignment on this computer")
     await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Apply approved scene change"]')!.click())
 
     expect(tauri.invoke).toHaveBeenCalledWith("approvals_apply", { id: "scene-request-uuid" })
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "scene-request-uuid", state: "applied" }])
     expect(el.textContent).toContain("Applied by host · no Live change")
-    expect(el.textContent).toContain("Saved in the local scene library after host approval")
+    expect(el.textContent).toContain("Saved in the local scene library after the main computer approved it")
     expect(useBroadcastStore.getState().scenes).toEqual(expect.arrayContaining([expect.objectContaining({ id: "scene-1", name: "Welcome" })]))
     expect(useBroadcastStore.getState().outputs).toBe(outputsBefore)
     expect(sceneForOutput(useBroadcastStore.getState().outputs[0], useBroadcastStore.getState().scenes)?.name).toBe("Welcome · taken revision")
@@ -515,13 +515,13 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
-  it("refreshes a stale scene request from the host and leaves the library unchanged", async () => {
+  it("refreshes a stale scene request from the main computer and leaves the library unchanged", async () => {
     const approved = {
       id: "scene-request-uuid", kind: "scene_save", targetId: "scene-1", baseRevision: 7,
       requester: { id: "screens-key", name: "Screens desk" },
       payload: { scene: { id: "scene-1", name: "Welcome", background: "#000000", layers: [] } },
       reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
-      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main computer" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     }
     let hostRequest = approved
@@ -586,12 +586,12 @@ describe("Permissions workspace", () => {
       requester: { id: "screens-key", name: "Screens desk" },
       payload: { scene: { id: "scene-1", name: "Welcome", background: "#000000", layers: [] } },
       reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
-      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main computer" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     }
     tauri.invoke.mockImplementation(async (command: string) => {
       if (command === "approvals_list") return [request]
-      if (command === "approvals_apply") throw new Error("The host has not shared its scenes yet; try again in a moment.")
+      if (command === "approvals_apply") throw new Error("The main computer has not shared its scenes yet; try again in a moment.")
       return null
     })
     resetApprovalRequests()
@@ -602,19 +602,19 @@ describe("Permissions workspace", () => {
     await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Apply approved scene change"]')!.click())
 
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "scene-request-uuid", state: "approved" }])
-    expect(el.textContent).toContain("The host has not shared its scenes yet; try again in a moment.")
+    expect(el.textContent).toContain("The main computer has not shared its scenes yet; try again in a moment.")
     expect(useBroadcastStore.getState().scenes).toBe(sceneStateBefore)
     await act(async () => root.unmount())
   })
 
-  it("recovers an applied scene after local persistence fails without applying it at the host twice", async () => {
+  it("recovers an applied scene after local persistence fails without applying it at the main computer twice", async () => {
     const original = { id: "scene-1", name: "Before approval", background: "#111111", createdAt: 1, updatedAt: 7, layers: [] }
     const approved = {
       id: "scene-request-uuid", kind: "scene_save", targetId: "scene-1", baseRevision: 7,
       requester: { id: "screens-key", name: "Screens desk" },
       payload: { scene: { id: "scene-1", name: "Welcome", background: "#000000", layers: [] } },
       reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
-      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main computer" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     }
     let hostRequest = approved
@@ -680,7 +680,7 @@ describe("Permissions workspace", () => {
       requester: { id: "screens-key", name: "Screens desk" },
       payload: { scene: { id: "scene-1", name: "Welcome", background: "#000000", layers: [] } },
       reason: null, state: "applied", createdAt: "2026-10-30T09:00:00Z",
-      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main computer" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     }
     disk.values.set("scenes", [original])
@@ -700,14 +700,14 @@ describe("Permissions workspace", () => {
     expect(disk.values.get("sceneApprovalRecovery:scene-restart-request")).toBeNull()
   })
 
-  it("keeps the recovery marker when the host applies but the response is lost", async () => {
+  it("keeps the recovery marker when the main computer applies but the response is lost", async () => {
     const original = { id: "scene-1", name: "Before approval", background: "#111111", createdAt: 1, updatedAt: 7, layers: [] }
     const approved = {
       id: "scene-lost-response", kind: "scene_save", targetId: "scene-1", baseRevision: 7,
       requester: { id: "screens-key", name: "Screens desk" },
       payload: { scene: { id: "scene-1", name: "Welcome", background: "#000000", layers: [] } },
       reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
-      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main computer" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     }
     let hostRequest = approved
@@ -715,7 +715,7 @@ describe("Permissions workspace", () => {
       if (command === "approvals_list") return [hostRequest]
       if (command === "approvals_apply") {
         hostRequest = { ...approved, state: "applied" }
-        throw new Error("The host committed the approval but the response was interrupted.")
+        throw new Error("The main computer committed the approval but the response was interrupted.")
       }
       return null
     })
@@ -741,14 +741,14 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
-  it("retains recovery when the host applies but both response and immediate refresh fail", async () => {
+  it("retains recovery when the main computer applies but both response and immediate refresh fail", async () => {
     const original = { id: "scene-1", name: "Before approval", background: "#111111", createdAt: 1, updatedAt: 7, layers: [] }
     const approved = {
       id: "scene-refresh-recovery", kind: "scene_save", targetId: "scene-1", baseRevision: 7,
       requester: { id: "screens-key", name: "Screens desk" },
       payload: { scene: { id: "scene-1", name: "Welcome", background: "#000000", layers: [] } },
       reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
-      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main computer" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     }
     let hostRequest = approved
@@ -764,7 +764,7 @@ describe("Permissions workspace", () => {
       if (command === "approvals_apply") {
         hostRequest = { ...approved, state: "applied" }
         failedListCalls = 1
-        throw new Error("The host committed the approval but the response was interrupted.")
+        throw new Error("The main computer committed the approval but the response was interrupted.")
       }
       return null
     })
@@ -784,7 +784,7 @@ describe("Permissions workspace", () => {
     expect(el.querySelector('[aria-label="Apply approved scene change"]')).toBeNull()
 
     await act(async () => {
-      [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Refresh host status")!.click()
+      [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Refresh main computer status")!.click()
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: approved.id, state: "applied" }])
@@ -806,7 +806,7 @@ describe("Permissions workspace", () => {
       requester: { id: "screens-key", name: "Screens desk" },
       payload: { scene: { id: "scene-1", name: "Welcome", background: "#000000", layers: [] } },
       reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
-      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main computer" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     }
     let hostRequest = approved
@@ -848,7 +848,7 @@ describe("Permissions workspace", () => {
       requester: { id: "screens-key", name: "Screens desk" },
       payload: { scene: { id, name, background: "#000000", layers: [] } },
       reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
-      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main computer" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     })
     const first = request("scene-first", "Fail local save")
@@ -885,7 +885,7 @@ describe("Permissions workspace", () => {
       id: "scene-delete-request", kind: "scene_delete", targetId: "scene-1", baseRevision: 7,
       requester: { id: "screens-key", name: "Screens desk" },
       payload: { id: "scene-1" }, reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
-      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main computer" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     }
     tauri.invoke.mockImplementation(async (command: string) => command === "approvals_list" ? [request] : null)
@@ -910,7 +910,7 @@ describe("Permissions workspace", () => {
       id: "scene-delete-request", kind: "scene_delete", targetId: "scene-1", baseRevision: 7,
       requester: { id: "screens-key", name: "Screens desk" },
       payload: { id: "scene-1" }, reason: null, state: "approved", createdAt: "2026-10-30T09:00:00Z",
-      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main desk" },
+      expiresAt: "2026-10-31T09:00:00Z", decidedBy: { id: "main-desk", name: "Main computer" },
       decidedAt: "2026-10-30T10:00:00Z", decisionNote: null,
     }
     tauri.invoke.mockImplementation(async (command: string) => {
@@ -943,8 +943,8 @@ describe("Permissions workspace", () => {
   })
 
   it.each([
-    ["declined", "The host declined this deletion. The scene remains in the library."],
-    ["requested_changes", "The host requested changes. The scene remains in the library"],
+    ["declined", "The main computer declined this deletion. The scene remains in the library."],
+    ["requested_changes", "The main computer's requested changes. The scene remains in the library"],
     ["expired", "This deletion request expired. The scene remains in the library."],
     ["withdrawn", "This deletion request was withdrawn. The scene remains in the library."],
     ["superseded", "This deletion request is stale. The scene remains in the library"],
@@ -962,7 +962,7 @@ describe("Permissions workspace", () => {
     const el = await mount()
 
     expect(el.textContent).toContain(notice)
-    expect(el.textContent).not.toContain("The scene will be removed from the library only after explicit host Apply.")
+    expect(el.textContent).not.toContain("The scene will be removed from the library only after an explicit Apply on the main computer.")
     expect(el.querySelector('[aria-label="Apply approved scene deletion"]')).toBeNull()
     expect(tauri.invoke.mock.calls.some(([command]) => command === "approvals_apply")).toBe(false)
     await act(async () => root.unmount())
@@ -989,7 +989,7 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
-  it("holds the Ask before showing an unapproved service switch on the host (#815)", async () => {
+  it("holds the Ask before showing an unapproved service switch on the main computer (#815)", async () => {
     useSettingsStore.setState({ requireApproval: false })
     const el = await mount()
     const box = [...el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) => input.closest("label")?.textContent?.includes("Ask before showing an unapproved service"))!
@@ -1000,22 +1000,22 @@ describe("Permissions workspace", () => {
     await act(async () => root.unmount())
   })
 
-  it("shows a joined desk the host's approval rule from Live State, read-only, not its own local copy", async () => {
+  it("shows a joined desk the main computer's approval rule from Live State, read-only, not its own local copy", async () => {
     useSettingsStore.setState({ requireApproval: true })
     useJoin.setState({ status: "connected", me: { name: "Viewer desk", role: "viewer", outputScope: [], groupTakeScope: [] }, live: { requireApproval: false } as never })
     const el = await mount()
     const box = [...el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) => input.closest("label")?.textContent?.includes("Ask before showing an unapproved service"))!
     expect(box.disabled).toBe(true)
     expect(box.checked).toBe(false)
-    expect(el.textContent).toContain("Shown as the main host applies it (off)")
+    expect(el.textContent).toContain("Shown as the main computer applies it (off)")
 
     await act(async () => useJoin.setState({ live: { requireApproval: true } as never }))
     expect(box.checked).toBe(true)
-    expect(el.textContent).toContain("Shown as the main host applies it (on)")
+    expect(el.textContent).toContain("Shown as the main computer applies it (on)")
 
     await act(async () => useJoin.setState({ live: null }))
     expect(box.checked).toBe(false)
-    expect(el.textContent).toContain("The main host has not shared this setting yet.")
+    expect(el.textContent).toContain("The main computer has not shared this setting yet.")
     expect(useSettingsStore.getState().requireApproval).toBe(true)
     await act(async () => root.unmount())
   })
@@ -1024,7 +1024,7 @@ describe("Permissions workspace", () => {
     await createSceneEditApproval({ scene: null, sceneId: "old-1", name: "Old banner", savedAt: 1, by: "Old desk", at: 10 })
     const decided = await createSceneEditApproval({ scene: null, sceneId: "old-2", name: "Old title", savedAt: 1, by: "Old desk", at: 5 })
     const { decideSceneEditApproval } = await import("@/stores/scene-approvals-store")
-    await decideSceneEditApproval(decided.id, "declined", "Main desk")
+    await decideSceneEditApproval(decided.id, "declined", "Main computer")
     const el = await mount()
 
     expect(el.textContent).not.toContain("Legacy local scene requests")

@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest"
 import { SseParser } from "@/desk/sse"
 
 describe("SseParser", () => {
-  it("reads whole events from chunks split anywhere, as the host's stream arrives", () => {
+  it("reads whole events from chunks split anywhere, as the main computer's stream arrives", () => {
     const p = new SseParser()
-    const text = 'event: live\ndata: {"v":1,"at":1}\n\n: keep-alive\n\nevent: rejoin\ndata: the host changed this desk\n\n'
+    const text = 'event: live\ndata: {"v":1,"at":1}\n\n: keep-alive\n\nevent: rejoin\ndata: the main computer changed this desk\n\n'
     const out = []
     for (let i = 0; i < text.length; i += 5) out.push(...p.push(text.slice(i, i + 5)))
     expect(out).toEqual([
       { event: "live", data: '{"v":1,"at":1}' },
-      { event: "rejoin", data: "the host changed this desk" },
+      { event: "rejoin", data: "the main computer changed this desk" },
     ])
   })
 

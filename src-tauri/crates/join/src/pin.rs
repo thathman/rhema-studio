@@ -19,9 +19,9 @@ use sha2::{Digest, Sha256};
 use crate::host::{base_url, Host};
 
 /// What the operator is told when the host shows a certificate this computer did not pair with.
-pub const NOT_THE_PAIRED_HOST: &str = "The host's certificate is not the one this computer paired with, so nothing was sent: pair again if the host computer was reinstalled (Leave this host, then join with a new code). Otherwise another computer may be pretending to be the host.";
+pub const NOT_THE_PAIRED_HOST: &str = "The main computer's certificate is not the one this computer paired with, so nothing was sent: pair again if the main computer was reinstalled (Leave this main computer, then join with a new code). Otherwise another computer may be pretending to be the main computer.";
 /// What the operator is told when the host does not have its secure page on.
-pub const NO_SECURE_PAGE: &str = "The host's secure page is off. On the host: Settings → Remote control → turn on \"Secure page for phones (https)\", then stop and start the listener. Rhema Studio Companion talks to the host only over its secure page.";
+pub const NO_SECURE_PAGE: &str = "The main computer's secure page is off. On the main computer: Settings → Remote Control → turn on \"Secure page for phones (https)\", then stop and start the listener. Rhema Studio Companion talks to the main computer only over its secure page.";
 /// Marks a refusal by this module in an error chain.
 const REFUSED: &str = "rhema-companion: not the pinned certificate";
 
@@ -110,7 +110,7 @@ fn verifier(pin: Option<String>) -> Arc<Pinned> {
 /// with this fingerprint.
 pub fn pinned_host(address: &str, tls_port: u16, ca_fingerprint: &str) -> Result<Host, String> {
     if !valid_fingerprint(ca_fingerprint) {
-        return Err("This computer's record of the host's certificate is damaged: pair again".into());
+        return Err("This computer's record of the main computer's certificate is damaged: pair again".into());
     }
     Host::https(address, tls_port, tls(verifier(Some(ca_fingerprint.to_string())))?)
 }
@@ -157,14 +157,14 @@ pub async fn read_host_ca(address: &str, tls_port: u16) -> Result<String, String
     let host = Host::https(address, tls_port, tls(v.clone())?)?;
     let tried = host.client(Some(Duration::from_secs(6)))?.get(host.url("/api/v1/health")).send().await;
     match tried {
-        Ok(_) => v.seen.lock().ok().and_then(|s| s.clone()).ok_or_else(|| "The host's certificate could not be read".into()),
-        Err(e) if refused_certificate(&e) => Err("The host's secure page shows a certificate that is not Rhema's: check the address".into()),
+        Ok(_) => v.seen.lock().ok().and_then(|s| s.clone()).ok_or_else(|| "The main computer's certificate could not be read".into()),
+        Err(e) if refused_certificate(&e) => Err("The main computer's secure page shows a certificate that is not Rhema's: check the address".into()),
         Err(_) => {
             // No secure page there: say whether the host itself answers.
             let plain = Host::plain(address)?;
             match plain.client(Some(Duration::from_secs(5)))?.get(plain.url("/api/v1/health")).send().await {
                 Ok(r) if r.status().is_success() => Err(NO_SECURE_PAGE.into()),
-                _ => Err(format!("Could not reach the host at {}: is Rhema open there, with Remote control on the network, on the same network as this computer?", address.trim())),
+                _ => Err(format!("Could not reach the main computer at {}: is Rhema open there, with Remote Control on the network, on the same network as this computer?", address.trim())),
             }
         }
     }
@@ -229,7 +229,7 @@ mod moved_tests {
         // Nothing where the old address was; a wrong key opens nothing; the current address is no move.
         assert!(moved_to(&[address.clone()], "10.0.0.1:8080", tls_port, &print, "wrong").await.is_none());
         assert!(moved_to(&[address.clone()], &address, tls_port, &print, "desk").await.is_none());
-        let (found, host) = moved_to(&["192.0.2.1:8080".into(), address.clone()], "10.0.0.1:8080", tls_port, &print, "desk").await.expect("the host, moved");
+        let (found, host) = moved_to(&["192.0.2.1:8080".into(), address.clone()], "10.0.0.1:8080", tls_port, &print, "desk").await.expect("the main computer, moved");
         assert_eq!(found, address);
         assert!(host.is_secure());
         handle.stop();
@@ -400,7 +400,7 @@ mod tests {
         // Nothing listens on the port after it (taken and let go again).
         let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
         assert_eq!(read_host_ca(&address, closed).await.unwrap_err(), NO_SECURE_PAGE);
-        assert!(read_host_ca(&format!("127.0.0.1:{closed}"), closed).await.unwrap_err().starts_with("Could not reach the host at 127.0.0.1:"));
+        assert!(read_host_ca(&format!("127.0.0.1:{closed}"), closed).await.unwrap_err().starts_with("Could not reach the main computer at 127.0.0.1:"));
     }
 
     #[test]

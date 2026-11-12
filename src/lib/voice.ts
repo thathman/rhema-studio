@@ -23,7 +23,7 @@ export const PRIORITY = "priority"
 const DUCKED = DEFAULT_TALK_RULES.duck
 
 /** Where a voice goes: "all", a channel id, or "to:<name>" (one person; "to:host" for the main desk). */
-export function talkName(talk: string, hostName = "Main desk"): string {
+export function talkName(talk: string, hostName = "Main computer"): string {
   if (talk === "all") return "All crew"
   if (talk === PRIORITY) return "All crew (priority)"
   if (talk.startsWith("to:")) return talk === `to:${HOST}` ? hostName : talk.slice(3)

@@ -28,7 +28,7 @@ beforeEach(() => {
   useBroadcastStore.setState({ rehearsal: true })
 })
 
-describe("a desk's refused Hold reaches the main desk (#411)", () => {
+describe("a desk's refused Hold reaches the main computer (#411)", () => {
   it("says the hold was not made, by whom and why", async () => {
     const root = createRoot(document.createElement("div"))
     function Host() {

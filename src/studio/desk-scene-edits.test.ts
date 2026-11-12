@@ -48,7 +48,7 @@ beforeEach(async () => {
   await reloadSceneApprovals()
 })
 
-describe("what the host shares with a desk", () => {
+describe("what the main computer shares with a desk", () => {
   it("keeps private service comments out of the shared Live State", () => {
     useQueueStore.setState({ items: [{ id: "i1", reference: "John 3:16", planned_minutes: 10, comments: [{ id: "c1", by: "Ade", at: "2026-10-21T10:00:00Z", text: "private team comment" }] }] as never })
     const live = buildLiveState()
@@ -78,7 +78,7 @@ describe("what the host shares with a desk", () => {
     useRouterHealth.setState({ status: null, checked: false })
   })
 
-  it("keeps the host's pictures and held copies when a desk's change comes back, and takes none from a desk", () => {
+  it("keeps the main computer's pictures and held copies when a desk's change comes back, and takes none from a desk", () => {
     const fromDesk = { ...sceneForDesk(scene("off"), false), name: "Welcome", layers: [...sceneForDesk(scene("off"), false).layers, { id: "new", name: "Mine", kind: "picture", imageUrl: "data:image/png;base64,BBBB", videoUrl: "file:///etc/passwd", box, opacity: 1, visible: true }] }
     const merged = mergeDeskScene(fromDesk, scene("off"))!
     expect(merged.layers[0].imageUrl).toBe("data:image/png;base64,AAAA")
@@ -89,7 +89,7 @@ describe("what the host shares with a desk", () => {
     expect(mergeDeskScene({ name: "no id" }, undefined)).toBeNull()
   })
 
-  it("keeps the host's text widening on a desk's edit and never takes one from a desk", () => {
+  it("keeps the main computer's text widening on a desk's edit and never takes one from a desk", () => {
     const words = { name: "Title", kind: "text" as const, text: "Welcome", box: { x: 10, y: 10, w: 30, h: 20 }, opacity: 1, visible: true }
     const host = scene("off", { layers: [{ id: "marked", ...words, textWiden: "right" }, { id: "older", ...words }] })
     for (const sent of ["left", "both", undefined, "sideways", 7]) {
@@ -100,7 +100,7 @@ describe("what the host shares with a desk", () => {
       ] }, host)!
       const of = (id: string) => merged.layers.find((l) => l.id === id)
       expect(of("marked")?.text, String(sent)).toBe("Welcome home")
-      expect(of("marked")?.textWiden, `${String(sent)}: the host's value`).toBe("right")
+      expect(of("marked")?.textWiden, `${String(sent)}: the main computer's value`).toBe("right")
       expect(of("older")?.textWiden, `${String(sent)}: an unmarked layer stays unmarked`).toBeUndefined()
       expect(of("fresh")?.textWiden, `${String(sent)}: a desk's new layer has none`).toBeUndefined()
     }
@@ -128,7 +128,7 @@ describe("the approval rule (the default until the owner chooses another)", () =
     expect(useJournalStore.getState().entries.map((e) => e.label)).toEqual(["Scene off changed changed by Ade screens", "Scene Fresh made by Ade screens"])
   })
 
-  it("a change to a scene on a screen waits for the main desk; Accept puts it in", async () => {
+  it("a change to a scene on a screen waits for the main computer; Accept puts it in", async () => {
     await send("on")
     expect(useBroadcastStore.getState().scenes.find((s) => s.id === "on")?.name).toBe("on")
     const n = useNotices.getState().notices[0]
@@ -173,7 +173,7 @@ describe("the approval rule (the default until the owner chooses another)", () =
     expect(useNotices.getState().notices[0].text).toContain("on a screen")
   })
 
-  it("the host's server asking for approval is never overruled here", async () => {
+  it("the main computer's server asking for approval is never overruled here", async () => {
     await send("off", { request: true })
     expect(useBroadcastStore.getState().scenes.find((s) => s.id === "off")?.name).toBe("off")
     expect(useSceneRequests.getState().requests).toHaveLength(1)
@@ -220,9 +220,9 @@ describe("the approval rule (the default until the owner chooses another)", () =
   it("a waiting change is not put in once the scene changed here", async () => {
     await send("on")
     const req = useNotices.getState().notices[0].action!.value
-    useBroadcastStore.getState().saveScene({ ...scene("on"), name: "changed on the main desk" })
+    useBroadcastStore.getState().saveScene({ ...scene("on"), name: "changed on the main computer" })
     expect(await acceptSceneRequest(req)).toContain("changed here since")
-    expect(useBroadcastStore.getState().scenes.find((s) => s.id === "on")?.name).toBe("changed on the main desk")
+    expect(useBroadcastStore.getState().scenes.find((s) => s.id === "on")?.name).toBe("changed on the main computer")
     expect(useSceneRequests.getState().requests).toMatchObject([{ id: req, status: "needs-review" }])
   })
 
@@ -236,12 +236,12 @@ describe("the approval rule (the default until the owner chooses another)", () =
     expect(useSceneRequests.getState().requests).toMatchObject([{ id: req, status: "pending" }])
   })
 
-  it("allows only the main host to approve or decline a persisted scene request", async () => {
+  it("allows only the main computer to approve or decline a persisted scene request", async () => {
     await send("on")
     const req = useNotices.getState().notices[0].action!.value
     useJoin.setState({ status: "connected" })
 
-    expect(await acceptSceneRequest(req)).toContain("only the main host")
+    expect(await acceptSceneRequest(req)).toContain("only the main computer")
     expect(await declineSceneRequest(req)).toBe(false)
     expect(useSceneRequests.getState().requests).toMatchObject([{ id: req, status: "pending" }])
   })
@@ -323,7 +323,7 @@ describe("what a desk may put in a scene (security review)", () => {
     expect(merge({ id: "s", layers: [layer({ noSignal: "static", noSignalName: true })] })!.layers[0]).not.toHaveProperty("noSignal")
   })
 
-  it("a desk's unsafe scene never reaches the host's scenes", () => {
+  it("a desk's unsafe scene never reaches the main computer's scenes", () => {
     receiveDeskScene({ scene: { id: "bad", background: "url(http://x)", layers: [] }, by: "Ade screens" })
     expect(useBroadcastStore.getState().scenes.some((s) => s.id === "bad")).toBe(false)
   })

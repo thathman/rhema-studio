@@ -49,7 +49,7 @@ export const useCompanion = create<CompanionState>((set, get) => ({
   add: async (cam, scene) => {
     const url = urlFor(cam.name)
     if (!url) {
-      toast.error(`${cam.label} was not added`, { description: "The host's camera router is off, or the host has not said how to read its cameras yet." })
+      toast.error(`${cam.label} was not added`, { description: "The main computer's camera router is off, or the main computer has not said how to read its cameras yet." })
       return null
     }
     set({ adding: cam.name })
@@ -116,7 +116,7 @@ async function askHost(): Promise<void> {
   } catch (e) {
     const msg = String(e instanceof Error ? e.message : e)
     // Not current any more (#411): the old rows kept saying Sending, with old bitrates, under the error.
-    useCompanion.setState({ hostError: msg.startsWith("paused:") ? msg.slice(7).trim() || "The main desk has taken back control" : msg, srt: null, cameras: [] })
+    useCompanion.setState({ hostError: msg.startsWith("paused:") ? msg.slice(7).trim() || "The main computer has taken back control" : msg, srt: null, cameras: [] })
   }
 }
 

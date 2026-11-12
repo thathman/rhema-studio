@@ -6,11 +6,11 @@ const textOnly = (html: string) => html.replace(/<[^>]*>/g, "")
 
 describe("Take attempt status", () => {
   it("announces a pending Take separately from the on-air program", () => {
-    const html = renderToStaticMarkup(<TakeAttemptNotice attempts={[{ id: 1, reference: "Psalm 23", status: "pending", by: "Main desk" }]} />)
+    const html = renderToStaticMarkup(<TakeAttemptNotice attempts={[{ id: 1, reference: "Psalm 23", status: "pending", by: "Main computer" }]} />)
 
     expect(html).toContain('role="status"')
     expect(html).toContain('aria-live="polite"')
-    expect(textOnly(html)).toContain("Take pending: Psalm 23 · by Main desk")
+    expect(textOnly(html)).toContain("Take pending: Psalm 23 · by Main computer")
   })
 
   it("makes failed, succeeded and superseded results explicit", () => {

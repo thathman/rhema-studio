@@ -67,7 +67,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe("Hold / Resume from a joined desk (the host)", () => {
+describe("Hold / Resume from a joined desk (the main computer)", () => {
   it("holds with the desk's reason and name, shows it in the Live State, and resumes as the desk", async () => {
     const el = document.createElement("div")
     const r = createRoot(el)
@@ -97,7 +97,7 @@ describe("Hold / Resume from a joined desk (the host)", () => {
 })
 
 describe("Hold / Resume on the joined clock desk", () => {
-  it("sends hold with the reason typed, then shows the host's hold with Resume", async () => {
+  it("sends hold with the reason typed, then shows the main computer's hold with Resume", async () => {
     const el = await renderDesk(base)
     const input = el.querySelector<HTMLInputElement>('input[aria-label="Reason for the hold"]')!
     await act(async () => {
@@ -127,7 +127,7 @@ describe("Hold / Resume on the joined clock desk", () => {
 })
 
 describe("a joined desk whose view may be out of date", () => {
-  it("after 5 s with no word from the host: last update N s ago, the timer dimmed and marked", async () => {
+  it("after 5 s with no word from the main computer: last update N s ago, the timer dimmed and marked", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date", "performance"] })
     const el = await renderDesk(base)
     expect(el.textContent).not.toContain("Last update")
@@ -156,7 +156,7 @@ describe("a joined desk whose view may be out of date", () => {
     expect(el.textContent).toContain("Last update 60 s ago")
   })
 
-  it("warns when this computer's clock and the host's differ by more than 2 s, from the freshest arrival", async () => {
+  it("warns when this computer's clock and the main computer's differ by more than 2 s, from the freshest arrival", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date", "performance"] })
     vi.setSystemTime(new Date(2026, 9, 25, 10, 0, 0))
     useJoin.setState({ status: "off", me: null, live: null })
@@ -167,7 +167,7 @@ describe("a joined desk whose view may be out of date", () => {
     arrive(Date.now() - 3000)
     expect(useJoin.getState().clockSkewMs).toBe(3000)
     const el = await renderDesk(useJoin.getState().live!, { clockSkewMs: useJoin.getState().clockSkewMs })
-    expect(el.textContent).toContain("This computer's clock is 3 s ahead of the host's")
+    expect(el.textContent).toContain("This computer's clock is 3 s ahead of the main computer's")
     await act(async () => useJoin.setState({ clockSkewMs: 1500 }))
     expect(el.textContent).not.toContain("This computer's clock")
   })

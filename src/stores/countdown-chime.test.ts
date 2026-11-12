@@ -44,7 +44,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe("countdown targets on the host", () => {
+describe("countdown targets on the main computer", () => {
   it("the next item's expected start, worked out from the run of show", () => {
     expect(useBroadcastStore.getState().countdowns?.next).toEqual({ label: "Worship", at: at(10, 25) })
     expect(useBroadcastStore.getState().countdowns?.end).toEqual({ label: "End of the main service", at: at(10, 45) })

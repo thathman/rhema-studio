@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { loadMyApprovalRequests, useCanSend, useJoin, withdrawMyApprovalRequest, type DeskApprovalRequest, type DeskApprovalState } from "@/stores/join-store"
 
 const STATE_WORDS: Record<DeskApprovalState, string> = {
-  submitted: "Waiting for the host",
+  submitted: "Waiting for the main computer",
   approved: "Approved",
   declined: "Declined",
   requested_changes: "Changes requested",
@@ -77,16 +77,16 @@ export function MyApprovalRequests() {
       <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
         <div className="min-w-0 flex-1">
           <h2 id="my-approval-requests-title" className="font-semibold">My approval requests</h2>
-          <p className="text-xs text-muted-foreground">Status comes from the host. Only the host can approve or reject a request; you can withdraw your own while it is waiting.</p>
+          <p className="text-xs text-muted-foreground">Status comes from the main computer. Only the main computer can approve or reject a request; you can withdraw your own while it is waiting.</p>
         </div>
         <Button size="sm" variant="outline" aria-label="Refresh my approval requests" disabled={loading || status !== "connected"} onClick={() => void reload()}><RefreshCwIcon /> Refresh</Button>
       </header>
       <div className="p-4">
-        {paused && <p role="status" className="mb-3 rounded-md border border-border bg-muted/40 p-2.5 text-sm">The host paused this desk's controls. Request status is read-only until control is restored.</p>}
-        {status !== "connected" && <p role="status" className="text-sm text-muted-foreground">Reconnect to the host to see the latest request status.</p>}
+        {paused && <p role="status" className="mb-3 rounded-md border border-border bg-muted/40 p-2.5 text-sm">The main computer paused this desk's controls. Request status is read-only until control is restored.</p>}
+        {status !== "connected" && <p role="status" className="text-sm text-muted-foreground">Reconnect to the main computer to see the latest request status.</p>}
         {error && <p role="alert" className="mb-3 flex items-start gap-2 text-sm text-destructive"><CircleAlertIcon className="mt-0.5 size-4 shrink-0" />Requests could not be loaded: {error}</p>}
-        {status === "connected" && loading && !error && <p role="status" className="text-sm text-muted-foreground">Loading your host requests…</p>}
-        {status === "connected" && !loading && !error && requests.length === 0 && <p className="text-sm text-muted-foreground">No host-recorded requests from this desk.</p>}
+        {status === "connected" && loading && !error && <p role="status" className="text-sm text-muted-foreground">Loading your requests on the main computer…</p>}
+        {status === "connected" && !loading && !error && requests.length === 0 && <p className="text-sm text-muted-foreground">No requests recorded on the main computer from this desk.</p>}
         {status === "connected" && !loading && !error && requests.length > 0 && <ul className="divide-y divide-border">
           {requests.map((request) => (
             <li key={request.id} className="flex flex-wrap items-start gap-3 py-3 first:pt-0 last:pb-0">
@@ -97,7 +97,7 @@ export function MyApprovalRequests() {
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Sent {dateWords(request.createdAt)}{request.baseRevision !== null ? ` · revision ${request.baseRevision}` : ""}{request.decidedBy ? ` · decided by ${request.decidedBy}` : ""}{request.decidedAt ? ` · ${dateWords(request.decidedAt)}` : ""}</p>
                 {request.reason && <p className="mt-1 text-sm">{request.reason}</p>}
-                {request.decisionNote && <p className="mt-1 text-sm text-muted-foreground">Host note: {request.decisionNote}</p>}
+                {request.decisionNote && <p className="mt-1 text-sm text-muted-foreground">Main computer note: {request.decisionNote}</p>}
                 {rowErrors[request.id] && <p role="alert" className="mt-2 text-xs text-destructive">{rowErrors[request.id]}</p>}
               </div>
               {request.state === "submitted" && <Button size="sm" variant="outline" disabled={!canWithdraw || busyId === request.id} onClick={() => void withdraw(request)}>{busyId === request.id ? "Withdrawing…" : "Withdraw request"}</Button>}

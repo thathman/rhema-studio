@@ -50,7 +50,7 @@ export function TimingPanel() {
   const main = clockHeaders.find((h) => h.type === "phase" && h.role === "main") ?? clockHeaders.find((h) => h.type === "phase" && h.rule === "manual")
   const total = formatMinutes(clockItems.reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0) * 60_000)
   const { timing, first, onAir } = useServiceTiming()
-  const me = useSettingsStore((s) => s.operatorName.trim()) || "Main desk"
+  const me = useSettingsStore((s) => s.operatorName.trim()) || "Main computer"
   const range = main ? phaseRange(clockItems.length, clockHeaders, main.id) : null
   const began = range ? Math.min(...clockItems.slice(range.start, range.end).map((item) => first.get(item.id) ?? Infinity)) : Infinity
   const plannedStart = clockMinutes(main?.starts_at)

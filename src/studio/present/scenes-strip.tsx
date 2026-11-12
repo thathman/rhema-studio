@@ -139,7 +139,7 @@ function ScenePicker({ output, scenes, planned, open, controlsId, onTakeSelectio
         return
       }
       if (observed.seen.service !== service.id || observed.seen.approved === null) {
-        setApprovedPreview({ key: previewKey, status: "error", message: "The host is not reporting this service's approved revision." })
+        setApprovedPreview({ key: previewKey, status: "error", message: "The main computer is not reporting this service's approved revision." })
         return
       }
       const checked = await sceneTakeApproval(picked.id, [output.id])
@@ -169,7 +169,7 @@ function ScenePicker({ output, scenes, planned, open, controlsId, onTakeSelectio
   const previewScene = approvalPreviewRequired ? approvedPin?.scene ?? null : picked
   const approvalPreviewReason = approvalPreviewRequired
     ? currentApprovedPreview.status === "loading"
-      ? "Checking the approved scene and this output's appearance with the host."
+      ? "Checking the approved scene and this output's appearance with the main computer."
       : currentApprovedPreview.status === "error"
         ? `Approved Preview could not be verified: ${currentApprovedPreview.message}`
         : null
@@ -314,7 +314,7 @@ function ScenePicker({ output, scenes, planned, open, controlsId, onTakeSelectio
       {approvalPreviewRequired && picked && (
         <p role={currentApprovedPreview.status === "error" ? "alert" : "status"} aria-live="polite" className="text-xs text-muted-foreground">
           {currentApprovedPreview.status === "loading"
-            ? "Checking the approved scene and output appearance with the host. No output changes."
+            ? "Checking the approved scene and output appearance with the main computer. No output changes."
             : currentApprovedPreview.status === "error"
               ? `${currentApprovedPreview.message} This scene cannot be taken until the approved Preview is verified.`
               : currentApprovedPreview.status === "ready"

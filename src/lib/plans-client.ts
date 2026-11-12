@@ -72,10 +72,10 @@ export type PlanFailure =
 
 export type PlanResult<T> = { ok: true; value: T } | { ok: false; failure: PlanFailure }
 
-export const FORBIDDEN_WORDS = "This desk is not allowed to work on the service plan. Ask the main desk to pair this computer as an Editor."
-export const PAUSED_WORDS = "The main desk has paused this desk. Your draft stays here; save it when control comes back."
-export const CONFLICT_WORDS = "The plan changed on the host since you opened it."
-export const UNPAIRED_WORDS = "This desk must pair with the host again: the host no longer knows this computer's key. Your draft stays here until you do."
+export const FORBIDDEN_WORDS = "This desk is not allowed to work on the service plan. Ask the main computer to pair this computer as an Editor."
+export const PAUSED_WORDS = "The main computer has paused this desk. Your draft stays here; save it when control comes back."
+export const CONFLICT_WORDS = "The plan changed on the main computer since you opened it."
+export const UNPAIRED_WORDS = "This desk must pair with the main computer again: the main computer no longer knows this computer's key. Your draft stays here until you do."
 
 /** The join crate's refusal (`rhema_join::host::plan_failure`) as a typed failure. */
 export function readPlanFailure(error: unknown): PlanFailure {
@@ -94,7 +94,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 const isInt = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v)
 
 function readSummary(v: unknown): HostPlanSummary {
-  if (!isRecord(v) || typeof v.id !== "string" || typeof v.title !== "string" || !isInt(v.revision)) throw new Error("The host returned a malformed service plan.")
+  if (!isRecord(v) || typeof v.id !== "string" || typeof v.title !== "string" || !isInt(v.revision)) throw new Error("The main computer returned a malformed service plan.")
   return {
     id: v.id,
     title: v.title,
@@ -109,9 +109,9 @@ const text = (v: unknown) => (typeof v === "string" ? v : null)
 const int = (v: unknown) => (isInt(v) ? v : null)
 
 function readPlan(v: unknown): HostPlan {
-  if (!isRecord(v) || !Array.isArray(v.items)) throw new Error("The host returned a malformed service plan.")
+  if (!isRecord(v) || !Array.isArray(v.items)) throw new Error("The main computer returned a malformed service plan.")
   const items = v.items.map((item, i): HostPlanItem => {
-    if (!isRecord(item) || typeof item.id !== "string" || typeof item.reference !== "string") throw new Error("The host returned a malformed plan item.")
+    if (!isRecord(item) || typeof item.id !== "string" || typeof item.reference !== "string") throw new Error("The main computer returned a malformed plan item.")
     return {
       id: item.id, position: int(item.position) ?? i, kind: typeof item.kind === "string" ? item.kind : "verse", reference: item.reference,
       book_number: int(item.book_number), chapter: int(item.chapter), verse: int(item.verse),
@@ -122,7 +122,7 @@ function readPlan(v: unknown): HostPlan {
 }
 
 function readRequest(v: unknown): PlanReviewRequest {
-  if (!isRecord(v) || typeof v.id !== "string" || typeof v.state !== "string") throw new Error("The host did not confirm the review request.")
+  if (!isRecord(v) || typeof v.id !== "string" || typeof v.state !== "string") throw new Error("The main computer did not confirm the review request.")
   return { id: v.id, kind: typeof v.kind === "string" ? v.kind : "plan_approve", baseRevision: int(v.baseRevision), state: v.state }
 }
 
@@ -149,7 +149,7 @@ export function toItemInput(item: HostPlanItem | PlanItemInput): PlanItemInput {
 /** The service plans in use on the host. */
 export function listHostPlans(): Promise<PlanResult<HostPlanSummary[]>> {
   return call("join_plans", {}, (v) => {
-    if (!Array.isArray(v)) throw new Error("The host returned an invalid plan list.")
+    if (!Array.isArray(v)) throw new Error("The main computer returned an invalid plan list.")
     return v.map(readSummary)
   })
 }

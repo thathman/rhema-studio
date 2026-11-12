@@ -443,6 +443,6 @@ function stateSourceRows(): LiveStateV1["sources"] {
 function voiceCrew(): VoicePerson[] {
   const v = useVoice.getState()
   const operator = useSettingsStore.getState().operatorName.trim()
-  const host = v.hostTalking || v.hostSpeaking ? [{ name: operator ? `${operator} (main desk)` : "Main desk", talk: v.hostTalkTo, talking: v.hostTalking, speaking: v.hostSpeaking }] : []
+  const host = v.hostTalking || v.hostSpeaking ? [{ name: operator ? `${operator} (main computer)` : "Main computer", talk: v.hostTalkTo, talking: v.hostTalking, speaking: v.hostSpeaking }] : []
   return [...host, ...v.peers.map((p) => ({ name: p.name, ...(p.role ? { role: p.role } : {}), talk: p.talk, talking: p.talking, speaking: p.speaking }))]
 }

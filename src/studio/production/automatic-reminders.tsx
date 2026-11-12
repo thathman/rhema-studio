@@ -42,7 +42,7 @@ export function AutomaticReminders() {
     let current = true
     void invoke<unknown>("reminders_policy").then((value) => {
       const policy = policyFrom(value)
-      if (!policy) throw new Error("The host returned an invalid reminder policy.")
+      if (!policy) throw new Error("The main computer returned an invalid reminder policy.")
       if (current) {
         setThresholdsText(policy.thresholdsMin.join(", "))
         setTargets(policy.to)
@@ -70,13 +70,13 @@ export function AutomaticReminders() {
     setSaved(false)
     try {
       const result = policyFrom(await invoke<unknown>("reminders_set_policy", { policy: { thresholdsMin: parsed, to: targets, urgent } }))
-      if (!result) throw new Error("The host did not confirm the saved reminder policy.")
+      if (!result) throw new Error("The main computer did not confirm the saved reminder policy.")
       setThresholdsText(result.thresholdsMin.join(", "))
       setTargets(result.to)
       setUrgent(result.urgent)
       setSaved(true)
     } catch (error) {
-      setSaveError(`The host did not save these reminder rules: ${errorWords(error)}`)
+      setSaveError(`The main computer did not save these reminder rules: ${errorWords(error)}`)
     } finally {
       setSaving(false)
     }
@@ -85,11 +85,11 @@ export function AutomaticReminders() {
   return (
     <section aria-label="Automatic Timekeeper reminders" className="flex flex-col gap-3 rounded-lg border border-border bg-card p-[15px]">
       <div>
-        <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Private Comms · host clock</p>
+        <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Private Comms · main computer clock</p>
         <h2 className="mt-1 text-sm font-bold">Automatic reminders</h2>
-        <p className="mt-1 text-xs text-muted-foreground">The host sends each selected reminder once as an event approaches. It pauses on Hold and never appears on a congregation screen or Stage display.</p>
+        <p className="mt-1 text-xs text-muted-foreground">The main computer sends each selected reminder once as an event approaches. It pauses on Hold and never appears on a congregation screen or Stage display.</p>
       </div>
-      {loading ? <p role="status" className="text-xs text-muted-foreground">Loading the host’s saved reminder rules…</p> : loadError ? <p role="alert" className="text-xs text-destructive">{loadError}</p> : <>
+      {loading ? <p role="status" className="text-xs text-muted-foreground">Loading the main computer’s saved reminder rules…</p> : loadError ? <p role="alert" className="text-xs text-destructive">{loadError}</p> : <>
         <label className="flex flex-col gap-1 text-xs">
           <span className="font-semibold">Minutes left</span>
           <input aria-label="Automatic reminder thresholds in minutes" value={thresholdsText} onChange={(event) => { setThresholdsText(event.currentTarget.value); setSaved(false) }} placeholder="10, 5, 2" inputMode="numeric" className="h-9 rounded-md border border-input bg-transparent px-2" />
@@ -120,7 +120,7 @@ export function AutomaticReminders() {
           <span><b>Urgent</b> · show a prominent priority in Comms</span>
         </label>
         {saveError && <p role="alert" className="text-xs text-destructive">{saveError}</p>}
-        {saved && <p role="status" className="text-xs font-semibold text-confidence-high">Reminder rules saved on this host.</p>}
+        {saved && <p role="status" className="text-xs font-semibold text-confidence-high">Reminder rules saved on this computer.</p>}
         <div><Button size="sm" variant="outline" disabled={saving || parsed === null || targets.length > 8} onClick={() => void save()}>{saving ? "Saving rules…" : "Save reminder rules"}</Button></div>
       </>}
     </section>

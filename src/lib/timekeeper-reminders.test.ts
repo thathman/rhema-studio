@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { automaticReminderNotices, parseReminderThresholds } from "./timekeeper-reminders"
 
 describe("automatic Timekeeper reminders", () => {
-  it("validates and orders the host's short threshold list", () => {
+  it("validates and orders the main computer's short threshold list", () => {
     expect(parseReminderThresholds("10, 5; 2 5")).toEqual([10, 5, 2])
     expect(parseReminderThresholds("")).toEqual([])
     expect(parseReminderThresholds("0, 5")).toBeNull()

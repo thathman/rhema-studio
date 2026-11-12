@@ -3,6 +3,7 @@ import { EyeOffIcon, PauseIcon, PlayIcon, RotateCcwIcon, XIcon } from "lucide-re
 import { Button } from "@/components/ui/button"
 import type { BroadcastOutput } from "@/types"
 import type { Scene } from "@/types/scene"
+import { CLEAR, HIDE_CAMERA, RESTORE, SHOW_CAMERA } from "@/lib/wording"
 import { cameraSending, useRouterHealth, watchRouter } from "@/lib/cameras"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { activatedLabel, cameraPathOf, followerCount, followsLowerThird, followsTicker, lowerThirdWords, tickerWords, timerWords, type AnySourceId } from "@/lib/live-sources"
@@ -147,7 +148,7 @@ export function LiveSourcesStrip() {
           || currentImpact.signature !== cameraConfirmation.impactSignature
         const affectedScenes = currentImpact.scenes.map((scene) => scene.name)
         const affectedOutputs = currentImpact.outputs.map((output) => `${output.name} (${output.sceneName})`)
-        const verb = cameraConfirmation.command === "hide" ? "Hide" : "Show"
+        const verb = cameraConfirmation.command === "hide" ? HIDE_CAMERA : SHOW_CAMERA
         return (
           <div role="alertdialog" aria-label={`${verb} ${cameraConfirmation.name} across scenes?`} className="flex min-w-full flex-col gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 p-3 text-xs sm:min-w-96">
             <p className="font-semibold">Review camera impact</p>
@@ -167,7 +168,7 @@ export function LiveSourcesStrip() {
                 if (cameraConfirmation.command === "hide") latest.clearSource(cameraConfirmation.id)
                 else latest.restoreSource(cameraConfirmation.id)
                 setCameraConfirmation(null)
-              }}>{cameraConfirmation.command === "hide" ? "Hide in all listed scenes" : "Restore in all listed scenes"}</Button>
+              }}>{cameraConfirmation.command === "hide" ? "Hide from all listed scenes" : "Show in all listed scenes"}</Button>
               <Button size="sm" variant="ghost" onClick={() => setCameraConfirmation(null)}>Cancel</Button>
             </div>
           </div>
@@ -226,8 +227,8 @@ function IconButton({ disabled, onClick, label, title, children }: { disabled: b
 function SourceButton({ id, on, disabled, label }: { id: AnySourceId; on: boolean; disabled: boolean; label: string }) {
   const b = useBroadcastStore.getState()
   return on ? (
-    <IconButton disabled={disabled} onClick={() => b.clearSource(id)} label={`Take ${label} off its feeds`} title="Take it off the feeds that follow it (Restore brings it back)"><XIcon /></IconButton>
+    <IconButton disabled={disabled} onClick={() => b.clearSource(id)} label={`${CLEAR} ${label} from its feeds`} title={`${CLEAR} it from the feeds that follow it (${RESTORE} brings it back)`}><XIcon /></IconButton>
   ) : (
-    <IconButton disabled={disabled} onClick={() => b.restoreSource(id)} label={`Restore ${label} on its feeds`} title="Put it back on the feeds that follow it"><RotateCcwIcon /></IconButton>
+    <IconButton disabled={disabled} onClick={() => b.restoreSource(id)} label={`${RESTORE} ${label} on its feeds`} title={`${RESTORE} it on the feeds that follow it`}><RotateCcwIcon /></IconButton>
   )
 }

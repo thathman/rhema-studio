@@ -895,7 +895,7 @@ describe("live recovery", () => {
 
   it("keeps the last 100 notices with their answers and brings them back once after a crash (Comms)", async () => {
     const now = Date.now()
-    const notice = (id: string, at: number) => ({ id, from: "Main desk", to: "bible" as const, priority: "normal" as const, text: `Notice ${id}`, event: null, action: null, at, answers: [{ by: "Ade", state: "ready" as const, at }] })
+    const notice = (id: string, at: number) => ({ id, from: "Main computer", to: "bible" as const, priority: "normal" as const, text: `Notice ${id}`, event: null, action: null, at, answers: [{ by: "Ade", state: "ready" as const, at }] })
     const before = { v: 1 as const, at: now - 60_000, notices: [notice("b", now - 90_000), notice("a", now - 120_000)], read: ["a"] }
     // Never an old one or an empty one.
     expect(restoreNotices({ ...before, at: now - 7 * 3_600_000 }, now)).toBe(false)

@@ -66,7 +66,7 @@ function normalizeRequestedScene(request: ApprovalRequest, currentScene: Scene |
     }
     ids.add(layer.id)
     if (typeof layer.kind !== "string" || !SCENE_LAYER_KINDS.has(layer.kind)) {
-      return { scene: null, error: "The request contains a layer that this host cannot review safely." }
+      return { scene: null, error: "The request contains a layer that this computer cannot review safely." }
     }
     if (typeof layer.name !== "string" || !layer.name.trim() || layer.name.length > 80 || !validBox(layer.box)) {
       return { scene: null, error: "The request contains a layer with incomplete name or layout data." }
@@ -83,14 +83,14 @@ function normalizeRequestedScene(request: ApprovalRequest, currentScene: Scene |
     if (layer.kind === "picture" || layer.kind === "video" || layer.kind === "logo") {
       const existingLayer = currentScene?.layers.find((candidate) => candidate.id === layer.id && candidate.kind === layer.kind)
       if (!hasHostMedia(existingLayer)) {
-        return { scene: null, error: "A requested media layer is not available in this host's scene library. Keep the current scene and ask for a new request." }
+        return { scene: null, error: "A requested media layer is not available in this computer's scene library. Keep the current scene and ask for a new request." }
       }
     }
   }
 
   const scene = mergeDeskScene(rawScene, currentScene)
   if (!scene || scene.id !== request.targetId || scene.layers.length !== rawScene.layers.length) {
-    return { scene: null, error: "One or more requested layers cannot be reproduced on this host. Ask the operator to submit a complete scene." }
+    return { scene: null, error: "One or more requested layers cannot be reproduced on this computer. Ask the operator to submit a complete scene." }
   }
   const unappliedChanges = requestedGradientChanges(rawScene, currentScene)
   const error = unappliedChanges.length
@@ -204,7 +204,7 @@ export function sceneLayerReviewSummary(layer: SceneLayer, cameraLabelForUrl?: C
     if (layer.until) details.push(`until ${layer.until}`)
     if (layer.themeId) details.push(`theme ${reviewedValue("themeId", layer.themeId)}`)
   }
-  if ((layer.kind === "picture" || layer.kind === "video" || layer.kind === "logo") && hasHostMedia(layer)) details.push("host media attached")
+  if ((layer.kind === "picture" || layer.kind === "video" || layer.kind === "logo") && hasHostMedia(layer)) details.push("main computer media attached")
   return `${layer.name} (${layer.kind}) · ${details.join(" · ")}`
 }
 
@@ -336,7 +336,7 @@ function sceneChanges(before: Scene | null, after: Scene | null, kind: string, c
     changes.push(`Layer order: ${after.layers.map((layer) => sceneLayerReviewSummary(layer, cameraLabelForUrl)).join(" → ")}.`)
   }
   if (!changes.length && JSON.stringify(sceneContent(before)) === JSON.stringify(sceneContent(after))) {
-    return ["No composition differences from this local reference. The host still checks the submitted base revision before Apply."]
+    return ["No composition differences from this local reference. The main computer still checks the submitted base revision before Apply."]
   }
   if (!changes.length) return ["The request normalizes to the same visible scene composition as this local reference."]
   return changes
@@ -360,7 +360,7 @@ export function sceneRequestReviewModel(
     ? validRecovery
       ? validRecovery.beforeScene ? "Scene before local Apply" : "No existing scene before local Apply"
       : "Original scene before Apply is unavailable"
-    : currentScene ? "Current local scene (review only; not a pinned host snapshot)" : "No current local scene"
+    : currentScene ? "Current local scene (review only; not a pinned main computer snapshot)" : "No current local scene"
 
   let requestedScene: Scene | null = null
   let blockReason: string | null = null
@@ -376,9 +376,9 @@ export function sceneRequestReviewModel(
     if (!applied && !currentScene && request.baseRevision !== null) {
       const missingLocalScene = "The target scene is missing from this local library. Refresh the scene library before reviewing this revision."
       if (request.state === "submitted") blockReason = missingLocalScene
-      else if (request.state === "approved") reviewNotice = "No matching scene is available in this local library for comparison. The approved request can still be checked against the authoritative host revision before Apply."
+      else if (request.state === "approved") reviewNotice = "No matching scene is available in this local library for comparison. The approved request can still be checked against the main computer's authoritative revision before Apply."
     } else if (currentScene && request.baseRevision === null && !(applied && validRecovery && validRecovery.beforeScene === null)) {
-      const missingRevision = "This scene update has no host base revision. Ask the operator to submit a fresh request before approving it."
+      const missingRevision = "This scene update has no main computer base revision. Ask the operator to submit a fresh request before approving it."
       blockReason = missingRevision
       applyBlockReason = missingRevision
     }
@@ -386,10 +386,10 @@ export function sceneRequestReviewModel(
     if (!applied && !currentScene) {
       const missingLocalScene = "The target scene is missing from this local library. Refresh the scene library before reviewing its deletion."
       if (request.state === "submitted") blockReason = missingLocalScene
-      else if (request.state === "approved") reviewNotice = "No matching scene is available in this local library. The approved deletion can still be checked against the authoritative host revision before Apply."
+      else if (request.state === "approved") reviewNotice = "No matching scene is available in this local library. The approved deletion can still be checked against the main computer's authoritative revision before Apply."
     }
     if (request.baseRevision === null) {
-      const missingRevision = "This deletion has no host base revision. Ask the operator to submit a fresh request before approving it."
+      const missingRevision = "This deletion has no main computer base revision. Ask the operator to submit a fresh request before approving it."
       blockReason = missingRevision
       applyBlockReason = missingRevision
     }
@@ -399,13 +399,13 @@ export function sceneRequestReviewModel(
   }
 
   const requestedLabel = request.kind === "scene_delete"
-    ? applied ? "After host approval" : "Requested change"
+    ? applied ? "After the main computer approved it" : "Requested change"
     : applied ? "Approved scene version" : "Requested scene version"
   const baseRevisionLabel = request.baseRevision === null
-    ? request.kind === "scene_save" && !currentScene ? "New scene · no prior host revision" : "Host base revision missing"
-    : `Submitted against host revision ${request.baseRevision}`
+    ? request.kind === "scene_save" && !currentScene ? "New scene · no prior main computer revision" : "Main computer base revision missing"
+    : `Submitted against main computer revision ${request.baseRevision}`
   const sceneDiff = request.kind === "scene_save" && !beforeScene && request.baseRevision !== null
-    ? ["No trustworthy before snapshot is available for this host revision."]
+    ? ["No trustworthy before snapshot is available for this main computer revision."]
     : sceneChanges(beforeScene, request.kind === "scene_delete" ? null : requestedScene, request.kind, cameraLabelForUrl)
   const changes = [...sceneDiff, ...unappliedAppearanceChanges]
   const requestedAppearanceScene = request.kind === "scene_save" ? submittedAppearancePreview(request, requestedScene) : requestedScene

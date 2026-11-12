@@ -76,9 +76,9 @@ afterEach(async () => {
 })
 
 describe("the browser desk", () => {
-  it("pairs with the code from the host, then follows it as this desk", async () => {
+  it("pairs with the code from the main computer, then follows it as this desk", async () => {
     writeToken(null)
-    useDeskSession.setState({ phase: "pair", reason: "This device is no longer paired with the host" })
+    useDeskSession.setState({ phase: "pair", reason: "This device is no longer paired with the main computer" })
     answer = (url) => url === "/api/v1/pair" ? json(200, { success: true, token: "fresh", name: "Media laptop" }) : url === "/api/v1/me" ? json(200, { name: "Media laptop", role: "bible" }) : json(503, {})
     await render()
     expect(text()).toContain("Pair this device")
@@ -97,7 +97,7 @@ describe("the browser desk", () => {
     expect(readToken()).toBe("fresh")
   })
 
-  it("gives the Bible role its own page, and its commands go to the host with its key", async () => {
+  it("gives the Bible role its own page, and its commands go to the main computer with its key", async () => {
     deskAs("bible")
     await render()
     expect(host.querySelector('[data-desk-page="bible"]')).not.toBeNull()
@@ -115,13 +115,13 @@ describe("the browser desk", () => {
     expect(JSON.parse(String(sent.init.body))).toMatchObject({ command: "verse_next", service: "svc-1", seen: { event: 1 } })
   })
 
-  it("gives the Timekeeper the host's clock, and holds its controls while it is not updating", async () => {
+  it("gives the Timekeeper the main computer's clock, and holds its controls while it is not updating", async () => {
     deskAs("timekeeper", {}, "reconnecting")
     await render()
     expect(text()).toContain("Timekeeper")
     expect(host.querySelector('[aria-label="Event clock desk"]')).not.toBeNull()
     expect(text()).toContain("Not updating")
-    expect(host.querySelector('[role="alert"]')?.textContent).toMatch(/controls wait until the host answers/)
+    expect(host.querySelector('[role="alert"]')?.textContent).toMatch(/controls wait until the main computer answers/)
     expect(button("Start Sermon")?.disabled).toBe(true)
     expect(button("Start")?.disabled).toBe(true)
     await act(async () => useJoin.setState({ status: "connected", receivedAt: performance.now() }))
@@ -130,11 +130,11 @@ describe("the browser desk", () => {
     expect(JSON.parse(String(calls.find((c) => c.url === "/api/v1/command")!.init.body))).toMatchObject({ command: "event_next" })
   })
 
-  it("holds the controls while the main desk has taken back control", async () => {
+  it("holds the controls while the main computer has taken back control", async () => {
     deskAs("timekeeper")
     useJoin.setState({ paused: true })
     await render()
-    expect(text()).toContain("Paused by the main desk")
+    expect(text()).toContain("Paused by the main computer")
     expect(button("Start Sermon")?.disabled).toBe(true)
   })
 

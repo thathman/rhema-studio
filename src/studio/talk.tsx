@@ -142,7 +142,7 @@ export function TalkRulesSettings() {
         </fieldset>
       ))}
       <label className="flex items-center gap-2">
-        <span className="text-muted-foreground">Others while the main desk talks with priority</span>
+        <span className="text-muted-foreground">Others while the main computer talks with priority</span>
         <input type="range" min={0.05} max={0.8} step={0.05} value={rules.duck} onChange={(e) => set({ duck: Number(e.target.value) })} aria-label="How loud the others stay under priority" className="w-28 accent-primary" />
         <span className="w-9 tabular-nums">{Math.round(rules.duck * 100)}%</span>
       </label>
@@ -244,7 +244,7 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
       setState("off")
       setTalking(false)
       setStatus(null)
-      setError("The main desk could not be reached. Join the talk channel again when it is back.")
+      setError("The main computer could not be reached. Join the talk channel again when it is back.")
       return
     }
     setStatus(s)
@@ -267,7 +267,7 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
     client.current?.channels(hear, talkTo, levels)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allowed])
-  const isHost = (name: string) => /\(main desk\)$|^Main desk$/.test(name)
+  const isHost = (name: string) => /\(main (computer|desk)\)$|^Main (computer|desk)$/.test(name)
   const others = people.filter((p) => !isHost(p.name))
   const join = async () => {
     const { joinAddress, joinToken } = useSettingsStore.getState()
@@ -295,7 +295,7 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
         {state === "on" ? (
           <>
             <TalkButton talking={talking} disabled={status === "dropped"} onTalk={(on) => { if (on && client.current?.dropping) return; client.current?.talk(on); setTalking(on) }} />
-            <TalkTo value={talkTo} onChange={(t) => route(listen, t)} channels={channels} people={[{ key: HOST, name: "The main desk" }, ...others.map((p) => ({ key: p.name, name: p.name }))]} />
+            <TalkTo value={talkTo} onChange={(t) => route(listen, t)} channels={channels} people={[{ key: HOST, name: "The main computer" }, ...others.map((p) => ({ key: p.name, name: p.name }))]} />
             <Button size="sm" variant="ghost" onClick={() => { client.current?.leave(); client.current = null; setState("off"); setTalking(false); setStatus(null) }}>Leave the talk channel</Button>
           </>
         ) : (
@@ -321,7 +321,7 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
         <details className="text-xs">
           <summary className="cursor-pointer text-muted-foreground">Each person's volume</summary>
           <div className="pt-1.5">
-            <PersonLevels people={[{ key: HOST_LEVEL, name: "The main desk" }, ...others.map((p) => ({ key: p.name, name: p.name, role: p.role }))]} levels={levels} onChange={(k, l) => route(listen, talk, { ...levels, [k]: l })} />
+            <PersonLevels people={[{ key: HOST_LEVEL, name: "The main computer" }, ...others.map((p) => ({ key: p.name, name: p.name, role: p.role }))]} levels={levels} onChange={(k, l) => route(listen, talk, { ...levels, [k]: l })} />
           </div>
         </details>
       )}

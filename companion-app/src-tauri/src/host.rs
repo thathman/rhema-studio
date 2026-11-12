@@ -251,7 +251,7 @@ mod tests {
         // Nothing listens there at all.
         let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
         let err = read_certificate(&format!("127.0.0.1:{closed}")).await.unwrap_err();
-        assert!(err.starts_with("Could not reach the host"), "{err}");
+        assert!(err.starts_with("Could not reach the main computer"), "{err}");
         assert!(read_certificate("not an address").await.is_err());
     }
 

@@ -139,7 +139,7 @@ describe("Test camera (#209)", () => {
   })
 })
 
-describe("the phone's battery and heat on the host (#213)", () => {
+describe("the phone's battery and heat on the main computer (#213)", () => {
   const phone = (extra = {}) => ({ battery: 54, charging: true, temperature: 33.5, thermal: 0, cooling: false, agoMs: 1000, ...extra })
 
   it("in words, warning on a low battery not charging and on heat", () => {

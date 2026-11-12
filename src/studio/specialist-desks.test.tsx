@@ -93,7 +93,7 @@ describe("each specialist desk sees only its part", () => {
       program: { onAir: true, reference: "Welcome slide", rehearsal: false },
       event: { mode: "own", currentId: "event-welcome" },
       rundown: [{ id: "event-welcome", reference: "Welcome", plannedMinutes: 5 }],
-      takeAttempts: [{ id: 9, itemId: "sermon", reference: "Psalm 23", status: "pending", startedAt: 10_000, by: "Main desk" }],
+      takeAttempts: [{ id: 9, itemId: "sermon", reference: "Psalm 23", status: "pending", startedAt: 10_000, by: "Main computer" }],
     }
     const el = await render("viewer", state)
 
@@ -113,17 +113,17 @@ describe("each specialist desk sees only its part", () => {
     expect(await seen("present")).toEqual(["Event clock desk", "Bible desk", "Worship desk", "Scenes desk", "Stage desk"])
   })
 
-  it("a worship desk finds a song in the host's library, shows it and takes the lyrics off", async () => {
+  it("a worship desk finds a song in the main computer's library, shows it and takes the lyrics off", async () => {
     const el = await render("worship")
     await type(el.querySelector<HTMLInputElement>('[aria-label="Song title, words or hymn number"]')!, "CAC 12")
     await click(button(el, "Find"))
     expect(el.textContent).toContain("CAC 12")
     await click(button(el, "Show"))
-    await click(button(el, "Take it off"))
+    await click(button(el, "Clear"))
     expect(sent).toEqual([{ command: "song_show", value: "Great Is Thy Faithfulness" }, { command: "clear_source", value: "song" }])
   })
 
-  it("Worship changes the temporary order through the host, without changing the saved plan", async () => {
+  it("Worship changes the temporary order through the main computer, without changing the saved plan", async () => {
     const state: LiveStateV1 = {
       ...live,
       service: { id: "service-1", title: "Sunday" },
@@ -161,7 +161,7 @@ describe("each specialist desk sees only its part", () => {
     expect([...el.querySelectorAll("button")].some((item) => item.getAttribute("aria-label") === "Clear private message from Stage East")).toBe(false)
   })
 
-  it("requires a fresh recipient choice after the host changes Stage assignments", async () => {
+  it("requires a fresh recipient choice after the main computer changes Stage assignments", async () => {
     const initial: LiveStateV1 = {
       ...live,
       outputs: [...live.outputs.filter((output) => output.id === "main"),
@@ -205,11 +205,11 @@ describe("each specialist desk sees only its part", () => {
     const el = await render("stage", state)
     expect(el.querySelector('[aria-label="Shared Stage cue"]')?.textContent).toContain("5 minutes left")
     expect(el.querySelector('[aria-label="Message to stage"]')).toBeNull()
-    expect([...el.querySelectorAll("button")].some((item) => item.textContent?.trim() === "Take it off")).toBe(false)
+    expect([...el.querySelectorAll("button")].some((item) => item.textContent?.trim() === "Clear")).toBe(false)
     expect(sent).toEqual([])
   })
 
-  it("does not offer a send control when the host has assigned no Stage displays", async () => {
+  it("does not offer a send control when the main computer has assigned no Stage displays", async () => {
     const el = await render("stage")
     expect(el.querySelector('[aria-label="Assigned Stage display"]')).toBeNull()
     expect(el.querySelector('[aria-label="Private message text"]')).toBeNull()
@@ -218,7 +218,7 @@ describe("each specialist desk sees only its part", () => {
     expect(sent).toEqual([])
   })
 
-  it("shows the host service clock read only and does not claim the Stage display received a cue", async () => {
+  it("shows the main computer service clock read only and does not claim the Stage display received a cue", async () => {
     const state: LiveStateV1 = {
       ...live,
       timer: { durationMs: 600_000, elapsedMs: 120_000, running: false },
@@ -226,23 +226,23 @@ describe("each specialist desk sees only its part", () => {
       rundown: [{ id: "sermon", reference: "Sermon", plannedMinutes: 10 }],
     }
     const el = await render("stage", state)
-    const clock = el.querySelector('[aria-label="Host service clock"]')!
+    const clock = el.querySelector('[aria-label="Main computer service clock"]')!
     expect(clock.querySelector('[role="timer"]')?.textContent).toBe("8:00")
     expect(clock.textContent).toContain("Current event: Sermon")
 
     const receiver = el.querySelector('[aria-label="Stage receiver status"]')!
     expect(receiver.textContent).toContain("Display not confirmed")
     expect(receiver.textContent).toContain("does not currently send Stage display receipts")
-    expect(receiver.textContent).toContain("Host connection: current")
+    expect(receiver.textContent).toContain("Main computer connection: current")
     expect([...el.querySelectorAll("button")].map((item) => item.textContent?.trim())).not.toContain("Pause")
   })
 
-  it("an OBS director previews and takes on the host's OBS, and not in rehearsal", async () => {
+  it("an OBS director previews and takes on the main computer's OBS, and not in rehearsal", async () => {
     const el = await render("obs")
     await click(button(el, "Preview Pulpit"))
     expect(sent).toEqual([{ command: "obs_preview", value: "Pulpit" }])
     const rehearsing = await render("obs", { ...live, program: { ...live.program, rehearsal: true }, obs: { ...live.obs!, preview: "Pulpit" } })
-    expect(rehearsing.textContent).toContain("Rehearsal is on at the host")
+    expect(rehearsing.textContent).toContain("Rehearsal is on at the main computer")
     expect(button(rehearsing, "Take Pulpit to the stream").disabled).toBe(true)
   })
 
@@ -308,7 +308,7 @@ describe("editing a scene from a Screens desk", () => {
 
     await click(button(el, "Take Welcome"))
     expect(sent).toEqual([{ command: "take_scene", value: { output: "overflow", scene: "welcome" }, seen: { "output:overflow": 3 } }])
-    expect(el.textContent).toContain("The host accepted Welcome for Overflow; waiting for Current Program to confirm.")
+    expect(el.textContent).toContain("The main computer accepted Welcome for Overflow; waiting for Current Program to confirm.")
 
     const applied: LiveStateV1 = {
       ...state,
@@ -319,7 +319,7 @@ describe("editing a scene from a Screens desk", () => {
       useJoin.setState({ live: applied })
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
-    expect(el.textContent).toContain("Host applied Welcome to Overflow.")
+    expect(el.textContent).toContain("The main computer applied Welcome to Overflow.")
     expect(el.textContent).toContain("Receiver confirms the new Program frame on Overflow was drawn.")
 
     await act(async () => useJoin.setState({
@@ -353,12 +353,12 @@ describe("editing a scene from a Screens desk", () => {
   it("shows an approval request as pending without claiming Program changed", async () => {
     const state: LiveStateV1 = { ...live, outputs: [{ id: "main", name: "Sanctuary", sceneId: "split", sceneRevision: 5 }] }
     const el = await render("screens", state, ["main"])
-    answer = { note: "Sent to the main desk to accept, because approvals are required" }
+    answer = { note: "Sent to the main computer to accept, because approvals are required" }
     await click(button(el, "Take Welcome"))
     expect(el.textContent).toContain("Approval request sent for Welcome on Sanctuary.")
-    expect(el.textContent).toContain("Current Program is unchanged until the host approves it.")
+    expect(el.textContent).toContain("Current Program is unchanged until the main computer approves it.")
     expect(el.textContent).toContain("Current Program on Sanctuary: Sermon split")
-    expect(el.textContent).not.toContain("Host applied Welcome")
+    expect(el.textContent).not.toContain("The main computer applied Welcome")
   })
 
   it("keeps stale Take refusals visible without claiming the receiver confirmed a frame", async () => {
@@ -369,17 +369,17 @@ describe("editing a scene from a Screens desk", () => {
     await click(button(el, "Take Welcome"))
     const alerts = [...el.querySelectorAll('[role="alert"]')].map((alert) => alert.textContent).join(" ")
     expect(alerts).toContain("Someone changed this first")
-    expect(alerts).toContain("The host did not apply Welcome")
-    expect(el.textContent).not.toContain("Host applied Welcome to Sanctuary")
+    expect(alerts).toContain("The main computer did not apply Welcome")
+    expect(el.textContent).not.toContain("The main computer applied Welcome to Sanctuary")
   })
 
-  it("reports receiver errors after the host applies the selected-output Take", async () => {
+  it("reports receiver errors after the main computer applies the selected-output Take", async () => {
     receiverReport = { outputs: [{ id: "main", feed: true, watching: 1, seq: 1, acked: 1, confirmed: true }] }
     const state: LiveStateV1 = { ...live, revisions: { "output:main": 3 }, outputs: [{ id: "main", name: "Sanctuary", sceneId: "split", sceneRevision: 5 }] }
     const el = await render("screens", state, ["main"])
     answer = { revision: 4 }
     await click(button(el, "Take Welcome"))
-    receiverError = "The host could not report receiver status (401 Unauthorized)"
+    receiverError = "The main computer could not report receiver status (401 Unauthorized)"
     await act(async () => {
       useJoin.setState({ live: { ...state, revisions: { "output:main": 4 }, outputs: [{ id: "main", name: "Sanctuary", sceneId: "welcome", sceneRevision: 6 }] } })
       await new Promise((resolve) => setTimeout(resolve, 0))
@@ -388,7 +388,7 @@ describe("editing a scene from a Screens desk", () => {
   })
 
   it("does not block an explicit Take when the receiver baseline is unavailable", async () => {
-    receiverError = "The host could not report receiver status (401 Unauthorized)"
+    receiverError = "The main computer could not report receiver status (401 Unauthorized)"
     const state: LiveStateV1 = { ...live, revisions: { "output:main": 3 }, outputs: [{ id: "main", name: "Sanctuary", sceneId: "split", sceneRevision: 5 }] }
     const el = await render("screens", state, ["main"])
     answer = { revision: 4 }
@@ -396,10 +396,10 @@ describe("editing a scene from a Screens desk", () => {
     expect(sent).toContainEqual({ command: "take_scene", value: { output: "main", scene: "welcome" }, seen: { "output:main": 3 } })
     await act(async () => useJoin.setState({ live: { ...state, revisions: { "output:main": 4 }, outputs: [{ id: "main", name: "Sanctuary", sceneId: "welcome", sceneRevision: 6 }] } }))
     expect(el.textContent).toContain("Receiver confirmation is unavailable for this Take")
-    expect(el.textContent).toContain("The host can still apply the Take.")
+    expect(el.textContent).toContain("The main computer can still apply the Take.")
   })
 
-  it("explains when the host no longer reports the selected output", async () => {
+  it("explains when the main computer no longer reports the selected output", async () => {
     receiverReport = { outputs: [{ id: "main", feed: true, watching: 1, seq: 1, acked: 1, confirmed: true }] }
     receiverReadQueue = [
       { outputs: [{ id: "main", feed: true, watching: 1, seq: 1, acked: 1, confirmed: true }] },
@@ -413,44 +413,44 @@ describe("editing a scene from a Screens desk", () => {
       useJoin.setState({ live: { ...state, revisions: { "output:main": 4 }, outputs: [{ id: "main", name: "Sanctuary", sceneId: "welcome", sceneRevision: 6 }] } })
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
-    expect(el.querySelector('[role="alert"]')?.textContent).toContain("The host did not report this output")
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("The main computer did not report this output")
     expect(el.querySelector('[role="alert"]')?.textContent).toContain("Confirm it is still assigned and connected")
   })
 
-  it("saves through the host with the revision it started from, and says when it waits for the main desk", async () => {
+  it("saves through the main computer with the revision it started from, and says when it waits for the main computer", async () => {
     const el = await render("screens")
     await click(button(el, "Edit Sermon split"))
     expect(el.textContent).toContain("This scene is on a screen")
     await type(el.querySelector<HTMLInputElement>('[aria-label="Scene name"]')!, "Sermon wide")
-    answer = { note: "Sent to the main desk to accept, because that scene is on a screen" }
-    await click(button(el, "Save on the host"))
+    answer = { note: "Sent to the main computer to accept, because that scene is on a screen" }
+    await click(button(el, "Save on the main computer"))
     expect(sent[0]).toMatchObject({ command: "save_scene", value: { scene: { id: "split", name: "Sermon wide" } } })
-    expect(el.textContent).toContain("Sent to the main desk to accept, because that scene is on a screen.")
+    expect(el.textContent).toContain("Sent to the main computer to accept, because that scene is on a screen.")
     expect(has(el, "Edit Sermon split")).toBe(true)
     expect(el.querySelector('[aria-label="Scene name"]')).toBeNull()
   })
 
-  it("sends the scene's revision from when it opened; refused as stale, it starts again from the host's version", async () => {
+  it("sends the scene's revision from when it opened; refused as stale, it starts again from the main computer's version", async () => {
     const el = await render("screens", { ...live, revisions: { "scene:welcome": 4, event: 9 } })
     await click(button(el, "Edit Welcome"))
     // The host's Live State moves on while the editor is open (another desk changed the scene).
-    await act(async () => useJoin.setState({ live: { ...live, revisions: { "scene:welcome": 5, event: 9 }, scenes: live.scenes.map((x) => (x.id === "welcome" ? { ...x, name: "Welcome (main desk)" } : x)) } }))
+    await act(async () => useJoin.setState({ live: { ...live, revisions: { "scene:welcome": 5, event: 9 }, scenes: live.scenes.map((x) => (x.id === "welcome" ? { ...x, name: "Welcome (main computer)" } : x)) } }))
     await type(el.querySelector<HTMLInputElement>('[aria-label="Scene name"]')!, "Mine")
     answer = { refuse: "stale: Someone changed this first — look again" }
-    await click(button(el, "Save on the host"))
+    await click(button(el, "Save on the main computer"))
     expect(sent[0].seen).toEqual({ "scene:welcome": 4, event: 9 })
     expect(el.textContent).toContain("Someone changed this first")
-    expect(el.querySelector<HTMLInputElement>('[aria-label="Scene name"]')!.value).toBe("Welcome (main desk)")
-    await click(button(el, "Save on the host"))
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Scene name"]')!.value).toBe("Welcome (main computer)")
+    await click(button(el, "Save on the main computer"))
     expect(sent[1].seen).toEqual({ "scene:welcome": 5, event: 9 })
   })
 
   it("makes a new scene from a ready-made arrangement, and deletes one", async () => {
     const el = await render("screens")
     await click(button(el, "New scene…"))
-    await click(button(el, "Add on the host"))
+    await click(button(el, "Add on the main computer"))
     expect(sent[0]).toMatchObject({ command: "save_scene" })
-    expect(el.textContent).toContain("New scene added on the host.")
+    expect(el.textContent).toContain("New scene added on the main computer.")
     await click(button(el, "Edit Welcome"))
     await click(button(el, "Delete scene…"))
     await click(button(el, "Delete Welcome for everyone"))
@@ -465,7 +465,7 @@ describe("editing a scene from a Screens desk", () => {
     expect(button(el, "Delete scene…")).toBeUndefined()
     await click(button(el, "Pulpit camera · camera"))
     await type(el.querySelector<HTMLSelectElement>('[aria-label="Camera"]')!, "choir")
-    await click(button(el, "Save on the host"))
+    await click(button(el, "Save on the main computer"))
     const saved = (sent[0].value as { scene: { layers: { cameraUrl?: string }[] } }).scene
     expect(saved.layers[0].cameraUrl).toBe("http://192.168.1.20:8889/choir/whep")
   })
@@ -477,7 +477,7 @@ describe("editing a scene from a Screens desk", () => {
     expect(el.textContent).not.toContain("New scene…")
   })
 
-  it("sends a selected scene Take to the host for pinned-appearance validation when approved", async () => {
+  it("sends a selected scene Take to the main computer for pinned-appearance validation when approved", async () => {
     const approved: LiveStateV1 = {
       ...live,
       service: { id: "svc-1", title: "Sunday", revision: 4, approved_revision: 4 },
@@ -517,7 +517,7 @@ describe("editing a scene from a Screens desk", () => {
   })
 })
 
-describe("a desk's scene change on the main desk", () => {
+describe("a desk's scene change on the main computer", () => {
   it("is answered Accept or Decline, and the desk reads Accepted or Declined", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const n: Notice = { id: "n1", from: "Ade screens", to: "host", priority: "normal", text: "Asks to change the scene “Sermon split”, because that scene is on a screen.", action: { kind: "sceneEdit", value: "r1" }, at: 0, answers: [] }
@@ -526,14 +526,14 @@ describe("a desk's scene change on the main desk", () => {
     const el = document.createElement("div")
     const root = createRoot(el)
     roots.push(root)
-    await act(async () => root.render(<NoticesPanel notices={[n]} role="host" me="Main desk" onSend={() => {}} onAnswer={onAnswer} onAction={onAction} />))
+    await act(async () => root.render(<NoticesPanel notices={[n]} role="host" me="Main computer" onSend={() => {}} onAnswer={onAnswer} onAction={onAction} />))
     expect([...el.querySelectorAll('[aria-label="Answer Ade screens"] button')].map((b) => b.textContent)).toEqual(["Accept the scene change", "Decline"])
     await click(button(el, "Accept the scene change"))
     expect(onAction).toHaveBeenCalledWith({ kind: "sceneEdit", value: "r1" }, "show")
     expect(onAnswer).toHaveBeenCalledWith("n1", "ready")
-    const answered = { ...n, answers: [{ by: "Main desk", state: "ready" as const, at: 1 }] }
-    await act(async () => root.render(<NoticesPanel notices={[answered]} role="host" me="Main desk" onSend={() => {}} onAnswer={onAnswer} onAction={onAction} />))
+    const answered = { ...n, answers: [{ by: "Main computer", state: "ready" as const, at: 1 }] }
+    await act(async () => root.render(<NoticesPanel notices={[answered]} role="host" me="Main computer" onSend={() => {}} onAnswer={onAnswer} onAction={onAction} />))
     expect(el.querySelector('[aria-label="Answer Ade screens"]')).toBeNull()
-    expect(el.textContent).toContain("Main desk: Accepted")
+    expect(el.textContent).toContain("Main computer: Accepted")
   })
 })
