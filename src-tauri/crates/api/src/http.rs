@@ -180,6 +180,9 @@ struct Feed {
     /// The newest frame a page said it drew, and when (receiver trust, #246 item 9).
     acked: u64,
     acked_at: Option<std::time::Instant>,
+    /// The newest frame a page received but did not visibly draw (hidden page, or no animation
+    /// frame within 1 s), and when (#844 S20): health only, never a confirmed frame.
+    seen_hidden: Option<(u64, std::time::Instant)>,
     /// When the newest frame was published, for how long it took a page to draw it (#246 C17).
     published_at: Option<std::time::Instant>,
     /// What its pages last said about the cameras they play (#213).
@@ -197,6 +200,12 @@ pub struct FeedStatus {
     pub acked: u64,
     /// Milliseconds since a page last said it drew a frame; None if none has.
     pub acked_ago_ms: Option<u64>,
+    /// The newest frame a page received while hidden (not drawn where anyone could see it), and
+    /// how long ago (#844 S20). Never counted in `acked`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seen_hidden: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seen_hidden_ago_ms: Option<u64>,
     /// Each page that reported lately: the cameras it plays, frames shown and dropped (#213).
     pub video: Vec<crate::feed_video::PageVideo>,
     /// A page's clock minus the host's (ms), when one said so in the last half minute (#196).
@@ -208,7 +217,7 @@ pub struct FeedStatus {
 
 impl Feed {
     fn new(token: String) -> Self {
-        Self { token, tvs: Vec::new(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None, published_at: None, video: crate::feed_video::FeedVideo::default(), clock: None }
+        Self { token, tvs: Vec::new(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None, seen_hidden: None, published_at: None, video: crate::feed_video::FeedVideo::default(), clock: None }
     }
 
     /// Whether a key opens this feed: the feed's own (`Some(None)`) or a paired TV's (`Some(Some(tv))`).
@@ -286,16 +295,32 @@ impl FeedHub {
 
     /// A page drew frame `seq` (only with the feed's secret; never ahead of what was sent). Err: refused.
     /// `Ok(Some(ms))`: the first page to draw the newest frame, `ms` after it was published (#246 C17).
+    #[cfg(test)]
     fn ack(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>, clock: Option<i64>) -> Result<Option<u64>, ()> {
+        self.ack_shown(id, token, seq, video, clock, false)
+    }
+
+    /// `ack`, saying whether the page drew the frame where it could be seen (#844 S20). A `hidden`
+    /// ack (a hidden page, or no animation frame within 1 s) is kept for health as seen hidden: it
+    /// never advances `acked` nor counts as the first draw, so the host never calls it confirmed.
+    fn ack_shown(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>, clock: Option<i64>, hidden: bool) -> Result<Option<u64>, ()> {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
         let f = feeds.get_mut(id).filter(|f| f.admits(token).is_some()).ok_or(())?;
         let mut first = None;
-        if seq <= f.seq && seq >= f.acked {
+        if hidden {
+            if seq <= f.seq && !matches!(f.seen_hidden, Some((old, _)) if seq < old) {
+                f.seen_hidden = Some((seq, std::time::Instant::now()));
+            }
+        } else if seq <= f.seq && seq >= f.acked {
             if seq == f.seq && seq > f.acked {
                 first = f.published_at.map(|t| u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX));
             }
             f.acked = seq;
             f.acked_at = Some(std::time::Instant::now());
+            // Drawn where it can be seen: an older hidden report no longer says anything.
+            if f.seen_hidden.is_some_and(|(hidden, _)| hidden <= seq) {
+                f.seen_hidden = None;
+            }
         }
         if let Some((from, cameras)) = video {
             let tv = f.admits(token).flatten().map(|t| t.id.clone());
@@ -327,6 +352,8 @@ impl FeedHub {
             seq: f.seq,
             acked: f.acked,
             acked_ago_ms: f.acked_at.map(|t| u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX)),
+            seen_hidden: f.seen_hidden.map(|(seq, _)| seq),
+            seen_hidden_ago_ms: f.seen_hidden.map(|(_, t)| u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX)),
             video: f.video.pages(std::time::Instant::now()),
             clock_skew_ms: f.clock.filter(|(_, at)| at.elapsed() < CLOCK_REPORT_FOR).map(|(ms, _)| ms),
             tvs: f.tvs.iter().map(|t| TvWatching { id: t.id.clone(), watching: t.watching.load(std::sync::atomic::Ordering::Relaxed) }).collect(),
@@ -1419,8 +1446,6 @@ where
         .route("/api/v1/feed/{id}/camera/{name}/whep", post(feed_camera_handler::<S>))
         .route("/api/v1/cameras/watch", get(companion_cameras_handler::<S>))
         .route("/api/v1/cameras/tally", post(companion_tally_handler::<S>))
-        // Undocumented alias for the path the code shipped with before #146.
-        .route("/api/v1/control", post(command_handler::<S>))
         // Rhema's own pages are served from here (same origin) and its windows call through Rust, so
         // no other web page may use this API from a browser on the network (see `same_origin_only`).
         .layer(app_cors())
@@ -1895,7 +1920,6 @@ fn lyrics_up(live: Option<&str>) -> bool {
     live.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()).is_some_and(|v| v.get("lyrics").is_some_and(|l| l.is_object()))
 }
 
-const OPACITY_MESSAGE: &str = "Opacity is not available in Rhema Studio yet: the screens do not change";
 const NO_LYRICS_MESSAGE: &str = "No song or hymn is on the screens";
 
 /// What an OBS director is told in rehearsal: OBS is the online stream (the host's own wording).
@@ -2029,6 +2053,20 @@ async fn me_handler<S: CommandSink + 'static>(
     }
 }
 
+/// What `/api/v1/status` adds to the Live State's `program` (11 Nov review R11), so a page reads
+/// one place: `waitingForApproval` (the main computer is asking whether to show this service) and
+/// `shown` (what the screens show in words, including a picture's item name), each only as the
+/// key's role may read it (`status_for`). A Live State without a `program` is left as it is.
+fn with_status(data: String, status: &StatusSnapshot) -> String {
+    let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&data) else { return data };
+    let Some(program) = v.get_mut("program").and_then(serde_json::Value::as_object_mut) else { return data };
+    program.insert("waitingForApproval".into(), status.waiting_for_approval.into());
+    if let Some(shown) = &status.live_verse {
+        program.insert("shown".into(), shown.clone().into());
+    }
+    v.to_string()
+}
+
 /// `GET /api/v1/live`: the host's Live State now (204 before the app has published one).
 async fn live_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
@@ -2045,6 +2083,7 @@ async fn live_handler<S: CommandSink + 'static>(
             if sees_crew(reader.as_ref()) {
                 data = with_crew(data, crew_rows(&state.keys, &state.presence));
             }
+            data = with_status(data, &status_for(&*state.status.read().await, reader.as_ref()));
             ([(axum::http::header::CONTENT_TYPE, "application/json"), (axum::http::header::CACHE_CONTROL, "no-store")], data).into_response()
         }
         None => StatusCode::NO_CONTENT.into_response(),
@@ -2740,6 +2779,10 @@ struct FeedAck {
     /// The page's clock minus the host's (ms), from the host's beats (#196); absent from older pages.
     #[serde(default)]
     clock: Option<i64>,
+    /// The page received the frame but did not visibly draw it (#844 S20; also `&hidden=1` in the
+    /// query). Absent from older pages: drawn, as before.
+    #[serde(default)]
+    hidden: bool,
 }
 
 /// `POST /api/v1/feed/{id}/ack?k=<secret>`: the page drew frame `seq` (receiver trust).
@@ -2753,7 +2796,8 @@ async fn feed_ack_handler<S: CommandSink + 'static>(
     if !state.rate.allow(peer.ip()) {
         return StatusCode::TOO_MANY_REQUESTS;
     }
-    match state.feeds.ack(&id, q.get("k").map_or("", String::as_str), ack.seq, ack.video.map(|v| (peer.ip(), v)), ack.clock.map(|c| c.clamp(-86_400_000, 86_400_000))) {
+    let hidden = ack.hidden || q.get("hidden").is_some_and(|h| h == "1" || h == "true");
+    match state.feeds.ack_shown(&id, q.get("k").map_or("", String::as_str), ack.seq, ack.video.map(|v| (peer.ip(), v)), ack.clock.map(|c| c.clamp(-86_400_000, 86_400_000)), hidden) {
         Err(()) => StatusCode::FORBIDDEN,
         Ok(first) => {
             // The first page to draw a new frame: the app logs which screen showed what, and how soon
@@ -3080,10 +3124,6 @@ async fn command_handler<S: CommandSink + 'static>(
             log::info!("HTTP stage message from {by} refused: {why}");
             return (status, CommandResponse::refused(why));
         }
-    }
-    // Not available (#411): refused before the desk waits its turn, as "cannot do that", not a server fault.
-    if matches!(command, RemoteCommand::Opacity(_)) {
-        return (StatusCode::UNPROCESSABLE_ENTITY, CommandResponse::refused(OPACITY_MESSAGE));
     }
     if matches!(command, RemoteCommand::SongSection(_)) && !lyrics_up(state.live.current().as_deref()) {
         return (StatusCode::UNPROCESSABLE_ENTITY, CommandResponse::refused(NO_LYRICS_MESSAGE));
@@ -3820,6 +3860,42 @@ mod tests {
 
         let mut h = result.handle;
         h.stop();
+    }
+
+    #[tokio::test]
+    async fn the_live_state_carries_what_status_said_so_a_phone_reads_one_place() {
+        let entry = |hash: &str, role| crate::keys::KeyEntry { hash: crate::keys::hash_key(hash), name: hash.into(), role, paused: false, output_scope: Vec::new(), group_take_scope: Vec::new(), record: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(crate::keys::Keys {
+            require_auth: true,
+            entries: vec![entry("tk", crate::keys::Role::Timekeeper), entry("view", crate::keys::Role::Viewer)],
+        }));
+        let live = new_live_hub();
+        let status = new_shared_status();
+        *status.write().await = StatusSnapshot { on_air: true, live_verse: Some("Welcome slide".into()), waiting_for_approval: true, ..StatusSnapshot::default() };
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), status).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        live.publish(r#"{"v":1,"program":{"onAir":true,"reference":null,"rehearsal":false}}"#.into());
+        let body = |raw: String| serde_json::from_str::<serde_json::Value>(raw.split("\r\n\r\n").nth(1).unwrap_or("")).unwrap_or_default();
+        let tk = body(get_with(port, "/api/v1/live", "Authorization: Bearer tk\r\n", None).await);
+        assert_eq!(tk["program"]["waitingForApproval"], true, "{tk}");
+        assert_eq!(tk["program"]["shown"], "Welcome slide", "{tk}");
+        // View only never read the words on the screens from /status, nor here.
+        let view = body(get_with(port, "/api/v1/live", "Authorization: Bearer view\r\n", None).await);
+        assert_eq!(view["program"]["waitingForApproval"], true, "{view}");
+        assert!(view["program"].get("shown").is_none(), "{view}");
+        // /status itself is unchanged for anything else that reads it.
+        assert!(get_with(port, "/api/v1/status", "Authorization: Bearer tk\r\n", None).await.contains("\"live_verse\":\"Welcome slide\""));
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[test]
+    fn with_status_leaves_a_live_state_without_a_program_alone() {
+        let status = StatusSnapshot { waiting_for_approval: true, ..StatusSnapshot::default() };
+        assert_eq!(with_status(r#"{"v":1}"#.into(), &status), r#"{"v":1}"#);
+        assert_eq!(with_status("not json".into(), &status), "not json");
     }
 
     /// A paired key; its hash is its id (here a short stand-in per desk).
@@ -4574,6 +4650,68 @@ mod tests {
         assert!(stream.contains("event: frame"), "{stream}");
         let beat = stream.split("event: beat\ndata: ").nth(1).and_then(|r| r.lines().next()).and_then(|n| n.trim().parse::<i64>().ok());
         assert!(beat.is_some_and(|ms| ms >= before && ms - before < 10_000), "a beat with the host's clock: {stream}");
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[test]
+    fn a_hidden_ack_is_seen_hidden_never_a_confirmed_frame() {
+        let feeds = new_feed_hub();
+        feeds.set(&[("tv".into(), "s3cret".into())]);
+        feeds.publish("tv", "{}".into());
+        // Received while hidden (#844 S20): kept for health, not counted as drawn, not the first draw.
+        assert_eq!(feeds.ack_shown("tv", "s3cret", 1, None, None, true), Ok(None));
+        let st = feeds.status("tv").unwrap();
+        assert_eq!((st.seq, st.acked, st.seen_hidden), (1, 0, Some(1)));
+        assert!(st.acked_ago_ms.is_none() && st.seen_hidden_ago_ms.is_some());
+        assert_eq!(feeds.ack_shown("tv", "wrong", 1, None, None, true), Err(()), "still only with the secret");
+        // Drawn where it can be seen: counted, and the first draw.
+        assert!(matches!(feeds.ack_shown("tv", "s3cret", 1, None, None, false), Ok(Some(_))));
+        let st = feeds.status("tv").unwrap();
+        assert_eq!((st.acked, st.seen_hidden, st.seen_hidden_ago_ms), (1, None, None), "a visible draw clears the hidden report");
+        // A newer frame seen hidden stays reported after an older frame's visible ack.
+        feeds.publish("tv", "{}".into());
+        assert_eq!(feeds.ack_shown("tv", "s3cret", 2, None, None, true), Ok(None));
+        assert_eq!(feeds.ack_shown("tv", "s3cret", 1, None, None, false), Ok(None));
+        assert_eq!(feeds.status("tv").unwrap().seen_hidden, Some(2));
+    }
+
+    /// Records each event the app would get.
+    struct EventSink(Mutex<Vec<String>>);
+
+    impl CommandSink for EventSink {
+        fn emit_event(&self, event: &str, _payload: &str) -> Result<(), CommandError> {
+            self.0.lock().unwrap().push(event.to_string());
+            Ok(())
+        }
+
+        fn invoke_backend(&self, _action: &str, _args: &str) -> Result<(), CommandError> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn a_feed_page_ack_marked_hidden_is_not_confirmed_and_a_normal_one_is() {
+        let feeds = new_feed_hub();
+        feeds.set(&[("tv".into(), "s3cret".into())]);
+        feeds.publish("tv", "{}".into());
+        let sink = Arc::new(EventSink(Mutex::new(Vec::new())));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds: feeds.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let acked = || sink.0.lock().unwrap().iter().filter(|e| *e == "feed:acked").count();
+        // PR #860's page: `&hidden=1` in the query and `"hidden": true` in the body; either is enough.
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/tv/ack?k=s3cret&hidden=1", Some(r#"{"seq":1,"hidden":true}"#), "").await.contains("204"));
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/tv/ack?k=s3cret", Some(r#"{"seq":1,"hidden":true}"#), "").await.contains("204"));
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/tv/ack?k=s3cret&hidden=1", Some(r#"{"seq":1}"#), "").await.contains("204"));
+        let st = feeds.status("tv").unwrap();
+        assert_eq!((st.acked, st.seen_hidden), (0, Some(1)), "a hidden ack is not a visibly confirmed frame");
+        assert_eq!(acked(), 0, "no feed:acked for a hidden ack");
+        // An older page never sends the field: drawn, as before.
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/tv/ack?k=s3cret", Some(r#"{"seq":1}"#), "").await.contains("204"));
+        assert_eq!(feeds.status("tv").unwrap().acked, 1);
+        assert_eq!(acked(), 1);
         let mut h = result.handle;
         h.stop();
     }
@@ -5474,14 +5612,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn opacity_is_refused_as_not_available_not_answered_as_done() {
+    async fn opacity_is_not_a_command_and_reaches_nothing() {
+        // Removed (11 Nov review G12): an unknown command, never answered as done.
         let sink = Arc::new(MockSink::new());
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), ..Default::default() };
         let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
         let port = result.bound_port;
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         let answer = raw_http_request(port, "POST", "/api/v1/command", Some(r#"{"command":"opacity","value":0.75}"#)).await;
-        assert!(answer.contains("422") && answer.contains("not available"), "{answer}");
+        assert!(answer.contains("422"), "{answer}");
+        assert!(!answer.contains("\"success\":true"), "{answer}");
         assert_eq!(sink.command_count(), 0);
         let mut handle = result.handle;
         handle.stop();
@@ -5606,7 +5746,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn control_alias_still_dispatches() {
+    async fn the_old_control_alias_is_gone() {
         let sink = Arc::new(MockSink::new());
         let status = new_shared_status();
         let config = HttpConfig {
@@ -5623,9 +5763,10 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         let body = r#"{"command":"next"}"#;
+        // No client used it (11 Nov review R10): only /api/v1/command carries commands.
         let resp = raw_http_request(port, "POST", "/api/v1/control", Some(body)).await;
-        assert!(resp.contains("200 OK"), "Expected 200, got: {resp}");
-        assert!(resp.contains("\"success\":true"));
+        assert!(resp.contains("404"), "Expected 404, got: {resp}");
+        assert_eq!(sink.command_count(), 0);
 
         let mut handle = result.handle;
         handle.stop();

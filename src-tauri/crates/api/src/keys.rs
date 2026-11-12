@@ -133,7 +133,7 @@ impl Role {
             // Rhema's own recorder: no role grants it (see `KeyEntry::record`).
             RemoteCommand::Record(_) => false,
             _ if !matches!(self, Role::Present | Role::Configure) => false,
-            RemoteCommand::Theme(_) | RemoteCommand::Opacity(_) | RemoteCommand::Confidence(_) | RemoteCommand::OnAir(_) => self == Role::Configure,
+            RemoteCommand::Theme(_) | RemoteCommand::Confidence(_) | RemoteCommand::OnAir(_) => self == Role::Configure,
             RemoteCommand::Next
             | RemoteCommand::Prev
             | RemoteCommand::Show

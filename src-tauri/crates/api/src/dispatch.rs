@@ -3,7 +3,7 @@ use crate::error::CommandError;
 
 /// Trait abstracting how commands reach the application.
 ///
-/// Frontend-bound commands (queue navigation, theme, opacity, on-air) go through
+/// Frontend-bound commands (queue navigation, theme, on-air) go through
 /// `emit_event` which maps to Tauri event emission. Backend-bound commands
 /// (show/hide broadcast windows, confidence threshold) go through `invoke_backend`.
 ///
@@ -80,7 +80,7 @@ impl CommandSink for Signed<'_> {
 
 /// Routes `RemoteCommand` variants to the correct sink method.
 ///
-/// Frontend-bound (`emit_event`): Next, Prev, Theme, Opacity, `OnAir`,
+/// Frontend-bound (`emit_event`): Next, Prev, Theme, `OnAir`,
 /// `SendToLive`, `BibleNext`, `BiblePrev`, `AddToQueue`
 /// Backend-bound (`invoke_backend`): Show, Hide, Confidence
 pub struct CommandDispatcher;
@@ -164,9 +164,6 @@ impl CommandDispatcher {
                 let payload = serde_json::json!({ "name": name }).to_string();
                 sink.emit_event("remote:theme", &payload)
             }
-            // Nothing on the screens takes it yet (#411 remote hunt: it answered success and did
-            // nothing, so a Stream Deck fader looked like it worked). Refused, plainly, until it is.
-            RemoteCommand::Opacity(_) => Err(CommandError::DispatchFailed("Opacity is not available in Rhema Studio yet: the screens do not change".into())),
             RemoteCommand::OnAir(active) => {
                 let payload = serde_json::json!({ "active": active }).to_string();
                 sink.emit_event("remote:on_air", &payload)
@@ -323,15 +320,6 @@ mod tests {
         let (event, payload) = sink.last_event();
         assert_eq!(event, "remote:theme");
         assert!(payload.contains("Dark Mode"));
-    }
-
-    #[test]
-    fn opacity_is_refused_not_answered_as_done() {
-        let sink = MockSink::new();
-        let refused = CommandDispatcher::dispatch(&RemoteCommand::Opacity(0.75), &sink).unwrap_err();
-        assert!(refused.to_string().contains("not available"), "{refused}");
-        assert_eq!(sink.event_count(), 0);
-        assert_eq!(sink.backend_count(), 0);
     }
 
     #[test]
