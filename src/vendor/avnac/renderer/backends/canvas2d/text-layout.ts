@@ -7,6 +7,8 @@
  * planner use it; the engine's spatial bounds use a pure deterministic
  * estimate instead (see saraswati/spatial).
  */
+import { textLineHeight } from "../../../saraswati/utils/text";
+
 export type TextLayoutInput = {
   text: string;
   fontSize: number;
@@ -123,10 +125,11 @@ export function layoutTextLines(
   const font = textFontString(input);
   const maxWidth = Math.max(1, input.width);
   const fontSizePx = Math.max(1, Math.round(input.fontSize));
-  const lineHeightPx = fontSizePx * Math.max(1, input.lineHeight);
+  const lineHeightPx = fontSizePx * textLineHeight(input.lineHeight);
   const measureFn = measure ?? getSharedTextMeasure();
   const source = measureFn ? "measure" : "raw";
-  const key = layoutCacheKey(source, font, maxWidth, input.text);
+  // The box height depends on the line height, so it is part of the key (Rhema change).
+  const key = layoutCacheKey(source, font, maxWidth, `${lineHeightPx}\0${input.text}`);
   const hit = layoutCache.get(key);
   if (hit) return hit;
 

@@ -89,6 +89,23 @@ describe("what the host shares with a desk", () => {
     expect(mergeDeskScene({ name: "no id" }, undefined)).toBeNull()
   })
 
+  it("keeps the host's text widening on a desk's edit and never takes one from a desk", () => {
+    const words = { name: "Title", kind: "text" as const, text: "Welcome", box: { x: 10, y: 10, w: 30, h: 20 }, opacity: 1, visible: true }
+    const host = scene("off", { layers: [{ id: "marked", ...words, textWiden: "right" }, { id: "older", ...words }] })
+    for (const sent of ["left", "both", undefined, "sideways", 7]) {
+      const merged = mergeDeskScene({ ...host, layers: [
+        { id: "marked", ...words, text: "Welcome home", textWiden: sent },
+        { id: "older", ...words, textWiden: sent },
+        { id: "fresh", ...words, textWiden: sent },
+      ] }, host)!
+      const of = (id: string) => merged.layers.find((l) => l.id === id)
+      expect(of("marked")?.text, String(sent)).toBe("Welcome home")
+      expect(of("marked")?.textWiden, `${String(sent)}: the host's value`).toBe("right")
+      expect(of("older")?.textWiden, `${String(sent)}: an unmarked layer stays unmarked`).toBeUndefined()
+      expect(of("fresh")?.textWiden, `${String(sent)}: a desk's new layer has none`).toBeUndefined()
+    }
+  })
+
   it("keeps a desk ellipse's hex fill and replaces an unsafe fill with the default", () => {
     const raw = {
       id: "ellipse-scene", name: "Welcome", background: "#000000",

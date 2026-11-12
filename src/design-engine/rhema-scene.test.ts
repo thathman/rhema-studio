@@ -12,7 +12,7 @@ const sermon: Scene = {
   id: "sermon", name: "Sermon", background: "#101020", fadeMs: 400, createdAt: 1, updatedAt: 2, updatedBy: "Femi",
   layers: [
     layer("bg", "color", { color: "#202040", box: { x: 0, y: 0, w: 100, h: 100 } }),
-    layer("title", "text", { text: "Sunday worship", fontFamily: "Geist Variable", fontSize: 64, fontWeight: "700", fontStyle: "italic", textAlign: "center", lineHeight: 1.15, textColor: "#ffffff", underline: true, box: { x: 10, y: 12, w: 80, h: 20 } }),
+    layer("title", "text", { text: "Sunday worship", fontFamily: "Geist Variable", fontSize: 64, fontWeight: "700", fontStyle: "italic", textAlign: "center", lineHeight: 1.15, textColor: "#ffffff", underline: true, textWiden: "right", box: { x: 10, y: 12, w: 80, h: 20 } }),
     layer("pic", "picture", { mediaId: "m1", imageUrl: "data:image/png;base64,AAAA" }),
     layer("cam", "camera", { cameraUrl: "http://192.168.1.10:8889/pulpit/whep", noSignal: "bars", noSignalName: true }),
     layer("verse", "feed", { shows: ["bible"], themeId: "t1", language: "both", fadeMs: 300, crop: { l: 1, t: 2, r: 3, b: 4 } }),
@@ -29,6 +29,12 @@ describe("Rhema scenes in the Avnac engine", () => {
     const { scene, issues } = designToScene(sceneToDesign(sermon))
     expect(issues).toEqual([])
     expect(scene).toEqual(sermon)
+  })
+
+  it("marks text saved from the editor so outputs widen an over-wide word as the editor does", () => {
+    const older = { ...sermon, layers: sermon.layers.map((l) => (l.kind === "text" ? { ...l, textWiden: undefined } : l)) }
+    const text = designToScene(sceneToDesign(older)).scene.layers.find((l) => l.kind === "text")
+    expect(text).toMatchObject({ textWiden: "right", box: { x: 10, w: 80 } })
   })
 
   it("requires a valid fixed time before a clock layer can be used in Prepare", () => {

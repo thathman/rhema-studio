@@ -10,8 +10,9 @@ import type { SaraswatiTextNode } from "@/vendor/avnac/saraswati"
 import { designToScene, sceneToDesign } from "@/design-engine/rhema-scene"
 import { mergeDeskScene } from "@/lib/desk-scenes"
 import { normalizeScene, sceneFrame } from "@/lib/scenes"
-import { drawScene, layerPivot } from "@/lib/scene-renderer"
-import { layerRotation } from "@/lib/scene-rotation"
+import { drawScene, layerPivot, LayerFader } from "@/lib/scene-renderer"
+import { mainLayerPivot, mainPaintStaticText } from "@/lib/scene-renderer.main-text.fixture"
+import { layerRotation, turnAbout } from "@/lib/scene-rotation"
 import type { Scene, SceneLayer } from "@/types"
 
 /**
@@ -84,7 +85,40 @@ function outputPivot(scene: Scene): { x: number; y: number } {
   const frame = sceneFrame({ isLive: false, liveVerse: null, sources: {} as never, themes: [] }, { themeId: "t" }, scene)
   const l = frame.layers[0]!
   const r = { x: (l.box.x / 100) * 1920, y: (l.box.y / 100) * 1080, w: (l.box.w / 100) * 1920, h: (l.box.h / 100) * 1080 }
-  return layerPivot(ctxOf(createCanvas(8, 8)), l, r, 1080)
+  return layerPivot(ctxOf(createCanvas(8, 8)), l, r, 1080, { x: 0, w: 1920 })
+}
+
+/**
+ * A canvas context that records every call and every state it is given (in order, with exact
+ * arguments) and still draws, so measuring works: a drawing compared by its calls, not its pixels,
+ * is the same on every platform and font set.
+ */
+function recording(canvas: Canvas): { ctx: CanvasRenderingContext2D; calls: string[] } {
+  const real = ctxOf(canvas)
+  const calls: string[] = []
+  const ctx = new Proxy(real, {
+    get(target, key) {
+      const v = Reflect.get(target, key, target) as unknown
+      if (typeof v !== "function") return v
+      return (...args: unknown[]) => {
+        calls.push(`${String(key)}(${args.map((a) => JSON.stringify(a)).join(", ")})`)
+        return (v as (...a: unknown[]) => unknown).apply(target, args)
+      }
+    },
+    set(target, key, value) {
+      calls.push(`${String(key)} = ${JSON.stringify(value)}`)
+      return Reflect.set(target, key, value, target)
+    },
+  })
+  return { ctx, calls }
+}
+
+/** The leftmost and rightmost bright (text) pixel columns. */
+function inkSpan(c: Canvas): { min: number; max: number } {
+  const d = ctxOf(c).getImageData(0, 0, 1920, 1080).data
+  let min = Infinity, max = -Infinity
+  for (let i = 0; i < d.length; i += 4) if (d[i]! > 200 && d[i + 1]! > 200 && d[i + 2]! > 200) { const x = (i / 4) % 1920; min = Math.min(min, x); max = Math.max(max, x) }
+  return { min, max }
 }
 
 function differing(a: Canvas, b: Canvas): number {
@@ -171,6 +205,154 @@ describe("layer rotation (#851 G7)", () => {
     expect(Math.hypot(ink[0]!.x - ink[1]!.x, ink[0]!.y - ink[1]!.y)).toBeLessThan(4)
     // And back from the editor the box keeps its height (the clipping viewport).
     expect(designToScene(sceneToDesign(scene)).scene.layers[0]).toMatchObject({ rotation: -40, box: { h: 50 } })
+  })
+
+  it("spaces lines below a line height of 1 the same in the editor and on outputs", async () => {
+    const lines = { text: "Welcome\nhome\nagain", fontSize: 72, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const }
+    for (const lineHeight of [0.5, 0.7, 1.4]) {
+      const scene = bar("text", { ...lines, lineHeight, box: { x: 30, y: 20, w: 40, h: 50 } })
+      const node = sceneToDesign(scene).scene.nodes.bar as SaraswatiTextNode
+      expect(node.lineHeight).toBe(lineHeight)
+      // The editor's tight block: two line steps plus the last em.
+      expect(editorTextPivot(node).y, `${lineHeight} editor`).toBeCloseTo(216 + (2 * 72 * lineHeight + 72) / 2, 0)
+      expect(Math.abs(outputPivot(scene).y - editorTextPivot(node).y), `${lineHeight} pivot`).toBeLessThan(1)
+      const ink = [inkCentre(await drawEditor(scene)), inkCentre(drawOutput(scene))]
+      expect(Math.abs(ink[0]!.y - ink[1]!.y), `${lineHeight} ink, upright`).toBeLessThan(1.5)
+      // Saved from the editor, the value comes back unchanged.
+      expect(designToScene(sceneToDesign(scene)).scene.layers[0]).toMatchObject({ lineHeight })
+    }
+  })
+
+  it("wraps a word wider than the box where the editor does, and turns it about the same point", async () => {
+    const words = { text: "Hallelujah! Supercalifragilistic praise", fontSize: 72, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const, lineHeight: 1.2 }
+    // 15% of 1920 = 288 px: "Supercalifragilistic" alone is far wider.
+    const design = sceneToDesign(bar("text", { ...words, box: { x: 20, y: 30, w: 15, h: 40 } }))
+    const turnedScene = applyCommand(design.scene, { type: "ROTATE_NODE", id: "bar", rotation: 30 })
+    const node = turnedScene.nodes.bar as SaraswatiTextNode
+    const ctx = ctxOf(createCanvas(8, 8))
+    const layout = layoutTextLines(node, (font, text) => measureCanvas2DTextLineWidth(ctx, font, text))
+    expect(layout.lines).toEqual(["Hallelujah!", "Supercalifragilistic", "praise"])
+    expect(layout.boxWidth).toBeGreaterThan(288 * 1.5)
+    const { scene, issues } = designToScene({ ...design, scene: turnedScene })
+    expect(issues).toEqual([])
+    // The saved box is the width the editor wraps at, not an estimate stretched by the long word.
+    expect(scene.layers[0]).toMatchObject({ rotation: 30, box: { x: 20, w: 15 }, textWiden: "right" })
+    const editor = editorTextPivot(node)
+    const output = outputPivot(scene)
+    expect(Math.abs(output.x - editor.x), "pivot x").toBeLessThan(1)
+    expect(Math.abs(output.y - editor.y), "pivot y").toBeLessThan(1)
+    const ink = [inkCentre(await drawEditor(scene)), inkCentre(drawOutput(scene))]
+    expect(Math.hypot(ink[0]!.x - ink[1]!.x, ink[0]!.y - ink[1]!.y), "ink, turned").toBeLessThan(4)
+    const upright = { ...scene, layers: [{ ...scene.layers[0]!, rotation: undefined }] }
+    const still = [inkCentre(await drawEditor(upright)), inkCentre(drawOutput(upright))]
+    expect(Math.hypot(still[0]!.x - still[1]!.x, still[0]!.y - still[1]!.y), "ink, upright").toBeLessThan(4)
+  })
+
+  it("draws text saved before the editor's wrap width with exactly main's canvas calls", () => {
+    // An approved scene from before: no `textWiden`, a box sized by the old estimate, a long
+    // Yoruba word in big bold type near the right edge, with an underline.
+    const layer = { text: "Olúwaseun ẹ kú àbọ̀ sí ilé", fontSize: 120, fontWeight: "800" as const, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const, lineHeight: 1.2, underline: true, box: { x: 70, y: 30, w: 15, h: 40 } }
+    for (const rotation of [undefined, 20, -135]) {
+      const scene = bar("text", { ...layer, rotation })
+      expect(normalizeScene(scene)?.layers[0]?.textWiden).toBeUndefined()
+      const frame = sceneFrame({ isLive: false, liveVerse: null, sources: {} as never, themes: [] }, { themeId: "t" }, scene)
+      // Now: every call drawScene makes.
+      const now = recording(createCanvas(1920, 1080))
+      drawScene(now.ctx, 1920, 1080, frame, { image: () => null, layerCanvas: () => createCanvas(1, 1) as unknown as HTMLCanvasElement })
+      // Main: the same frame set-up, then the layer as main's drawScene drew it (copied verbatim).
+      const mainCanvas = createCanvas(1920, 1080)
+      ctxOf(mainCanvas).fillStyle = "#101020"
+      ctxOf(mainCanvas).fillRect(0, 0, 1920, 1080)
+      const main = recording(mainCanvas)
+      main.calls.push(...now.calls.slice(0, now.calls.indexOf("save()")))
+      const l = frame.layers[0]!
+      const r = { x: 1344, y: 324, w: 288, h: 432 }
+      main.ctx.save()
+      if (rotation) turnAbout(main.ctx, mainLayerPivot(main.ctx, l, r, 1080), rotation)
+      main.ctx.globalAlpha = l.opacity
+      mainPaintStaticText(main.ctx, l, r, 1080)
+      main.ctx.restore()
+      expect(now.calls, `${rotation ?? 0}°`).toEqual(main.calls)
+      expect(now.calls.filter((c) => c.startsWith("fillText(")).length, "draws its lines").toBeGreaterThan(1)
+      // And the pixels: the renderer against main's code, on the same machine and fonts.
+      if (!rotation) expect(differing(mainCanvas, drawOutput(scene)), "upright pixels").toBe(0)
+    }
+  })
+
+  it("widens text saved by the editor, from its origin edge, but never past the frame", async () => {
+    const words = { text: "Supercalifragilistic", fontSize: 120, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const, lineHeight: 1.2 }
+    // Left origin, near the right edge: the word grows right and stops at the frame's edge.
+    const edge = bar("text", { ...words, textWiden: "right", box: { x: 80, y: 30, w: 15, h: 40 } })
+    const out = drawOutput(edge)
+    const ink = inkSpan(out)
+    expect(ink.min).toBeGreaterThanOrEqual(1536 - 1)
+    expect(ink.max).toBeLessThanOrEqual(1920)
+    expect(ink.max, "wider than the 288 px box").toBeGreaterThan(1536 + 288 + 50)
+    expect(outputPivot(edge).x, "turns about the capped block's centre").toBeCloseTo(1536 + (1920 - 1536) / 2, 0)
+    // Mid-frame it widens to the measured word, as the editor draws it.
+    const free = bar("text", { ...words, textWiden: "right", box: { x: 10, y: 30, w: 15, h: 40 } })
+    const both = [inkCentre(await drawEditor(free)), inkCentre(drawOutput(free))]
+    expect(Math.abs(both[0]!.x - both[1]!.x)).toBeLessThan(4)
+    // A centred-origin node (an imported Avnac design) widens both ways, as the editor does.
+    const design = sceneToDesign(bar("text", { ...words, box: { x: 40, y: 30, w: 15, h: 40 } }))
+    const node = design.scene.nodes.bar as SaraswatiTextNode
+    const centred = { ...design, scene: { ...design.scene, nodes: { ...design.scene.nodes, bar: { ...node, originX: "center" as const, x: node.x + node.width / 2 } } } }
+    const { scene, issues } = designToScene(centred)
+    expect(issues).toEqual([])
+    expect(scene.layers[0]).toMatchObject({ textWiden: "both", box: { x: 40, w: 15 } })
+    const turnedCentred = designToScene({ ...centred, scene: applyCommand(centred.scene, { type: "ROTATE_NODE", id: "bar", rotation: 25 }) }).scene
+    for (const s of [scene, turnedCentred]) {
+      const editorInk = inkCentre(await drawEditor(s)), outputInk = inkCentre(drawOutput(s))
+      expect(Math.hypot(editorInk.x - outputInk.x, editorInk.y - outputInk.y), `${s.layers[0]!.rotation ?? 0}°`).toBeLessThan(4)
+    }
+    expect(outputPivot(scene).x).toBeCloseTo(768 + 144, 0)
+  })
+
+  it("caps widening at the edges of a letterboxed frame, not the canvas", () => {
+    // A 4:3 frame letterboxed in a 1920×1080 canvas: the frame runs 240–1680 px across.
+    const words = { text: "Supercalifragilistic", fontSize: 120, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const, lineHeight: 1.2 }
+    const right = bar("text", { ...words, textWiden: "right", box: { x: 80, y: 30, w: 15, h: 40 } })
+    const both = bar("text", { ...words, textWiden: "both", box: { x: 5, y: 30, w: 15, h: 40 } })
+    for (const s of [right, both]) {
+      const canvas = createCanvas(1920, 1080)
+      const frame = { ...sceneFrame({ isLive: false, liveVerse: null, sources: {} as never, themes: [] }, { themeId: "t" }, s), aspect: 4 / 3 }
+      drawScene(ctxOf(canvas), 1920, 1080, frame, { image: () => null, layerCanvas: () => createCanvas(1, 1) as unknown as HTMLCanvasElement })
+      const ink = inkSpan(canvas)
+      expect(ink.min, s.layers[0]!.textWiden).toBeGreaterThanOrEqual(240)
+      expect(ink.max, s.layers[0]!.textWiden).toBeLessThanOrEqual(1680)
+    }
+    // The pivot follows the same cap (frame 1440 px wide starting at 240).
+    const l = sceneFrame({ isLive: false, liveVerse: null, sources: {} as never, themes: [] }, { themeId: "t" }, right).layers[0]!
+    const r = { x: 240 + 0.8 * 1440, y: 324, w: 0.15 * 1440, h: 432 }
+    expect(layerPivot(ctxOf(createCanvas(8, 8)), l, r, 1080, { x: 240, w: 1440 }).x).toBeCloseTo(r.x + (1680 - r.x) / 2, 0)
+  })
+
+  it("fades widened text whole: nothing past its box is cut off on outputs", () => {
+    const words = { text: "Supercalifragilistic", fontSize: 120, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const, lineHeight: 1.2, textWiden: "right" as const, fadeMs: 400 }
+    for (const rotation of [undefined, 20]) {
+      const s = bar("text", { ...words, rotation, box: { x: 10, y: 30, w: 15, h: 40 } })
+      const draw = (fader?: LayerFader) => {
+        const canvas = createCanvas(1920, 1080)
+        const frame = sceneFrame({ isLive: false, liveVerse: null, sources: {} as never, themes: [] }, { themeId: "t" }, s)
+        expect(frame.layers[0]?.fadeMs).toBe(400)
+        drawScene(ctxOf(canvas), 1920, 1080, frame, { image: () => null, layerCanvas: () => createCanvas(1, 1) as unknown as HTMLCanvasElement, ...(fader ? { fader } : {}) })
+        return canvas
+      }
+      const fader = new LayerFader(() => createCanvas(1, 1) as unknown as HTMLCanvasElement, () => 0)
+      const faded = draw(fader), plain = draw()
+      // Upright, the word runs well past the box's right edge (192 + 288 = 480 px).
+      if (!rotation) expect(inkSpan(faded).max).toBeGreaterThan(480 + 300)
+      if (!rotation) {
+        expect(differing(faded, plain), "upright: the same pixels").toBeLessThan(0.0005)
+        continue
+      }
+      // Turned, the fade canvas is resampled as it turns, so edges differ slightly; the words are
+      // all there, in the same place (a cut-off block would lose most of its ink and move it).
+      const a = inkCentre(faded), b = inkCentre(plain)
+      expect(Math.hypot(a.x - b.x, a.y - b.y), "turned: same place").toBeLessThan(1.5)
+      const inkOf = (c: Canvas) => { const d = ctxOf(c).getImageData(0, 0, 1920, 1080).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i]! > 200 && d[i + 1]! > 200 && d[i + 2]! > 200) n++; return n }
+      expect(inkOf(faded) / inkOf(plain), "turned: all the words").toBeGreaterThan(0.9)
+    }
   })
 
   it("refuses to save a turned camera, video or ticker, and outputs never turn one from an older file", () => {
