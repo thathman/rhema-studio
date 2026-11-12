@@ -17,7 +17,7 @@ import type { BroadcastOutput, BroadcastTheme } from "@/types"
  */
 export async function deleteThemeAsked(theme: BroadcastTheme): Promise<"deleted" | "kept" | "in-use"> {
   const refuse = (inUse: string[]) => {
-    toast.error(`${theme.name} is used by ${inUse.join(", ")}`, { description: "Choose another look for those outputs first: Design → Used on… opens each one." })
+    toast.error(`${theme.name} is used by ${inUse.join(", ")}`, { description: "Choose another look for those outputs, or take a scene that does not use it, first: Design → Used on… opens each one." })
     return "in-use" as const
   }
   const usedBy = () => {
