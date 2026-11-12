@@ -6,7 +6,7 @@ import { useBroadcastStore } from "@/stores"
 import { disableOutput, enableOutput } from "@/lib/broadcast-output-control"
 import { useWindowPlayback } from "@/lib/camera-playback"
 import type { CameraPlayback } from "@/lib/whep"
-import { surfaceHealthAction, type SurfaceEvent } from "@/lib/output-surface"
+import { surfaceHealthAction } from "@/lib/output-surface"
 
 /** One automatic restart per output per minute; after that the operator decides. */
 const lastRestart = new Map<string, number>()
@@ -104,13 +104,18 @@ export function useBroadcastOutputs(): void {
     })
 
     // An output window lost its canvas's drawing surface and rebuilt it, or keeps losing it (#873).
-    const unlistenSurface = listen<{ outputId?: string } & Partial<SurfaceEvent>>("broadcast:surface-health", (event) => {
+    // The warning each output set, by output ID, so only that output's own warning is cleared.
+    const surfaceWarnings = new Map<string, string>()
+    const unlistenSurface = listen<{ outputId?: string; kind?: string; reason?: string; at?: number; retryInMs?: number }>("broadcast:surface-health", (event) => {
       const store = useBroadcastStore.getState()
-      const action = surfaceHealthAction(outputName(event.payload?.outputId), event.payload, store.presentWarning)
+      const id = event.payload?.outputId ?? ""
+      const action = surfaceHealthAction(outputName(id), event.payload, store.presentWarning, surfaceWarnings.get(id))
       if (!action) return
       if (action.toast === "warning") toast.warning(action.message)
       else if (action.toast === "error") toast.error(action.message)
       else if (action.toast === "success") toast.success(action.message)
+      if (typeof action.warning === "string") surfaceWarnings.set(id, action.warning)
+      else if (event.payload?.kind === "recovered" || event.payload?.kind === "unchecked") surfaceWarnings.delete(id)
       if (action.warning !== undefined) store.setPresentWarning(action.warning)
     })
 

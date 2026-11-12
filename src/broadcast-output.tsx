@@ -135,7 +135,7 @@ function makeOutputCanvas(): HTMLCanvasElement {
 
 /** Whether the frame on the canvas now must be opaque everywhere (so a fully transparent read means a lost surface). */
 function opaqueFrame(data: BroadcastPayload | null): boolean {
-  return frameMustBeOpaque({ stage: false, hasData: !!data, themeBackground: data?.theme.background?.type, scene: data?.scene })
+  return frameMustBeOpaque({ stage: false, hasData: !!data, theme: data?.theme, screen: data?.verse?.screen, video: !!data?.verse?.video, scene: data?.scene })
 }
 
 function BroadcastCanvas() {
@@ -215,7 +215,7 @@ function BroadcastCanvas() {
       },
       report: (event: SurfaceEvent) => {
         const line = `[surface] output ${OUTPUT_ID}: ${event.kind}${"reason" in event ? ` (${event.reason})` : ""}`
-        void (event.kind === "recovered" ? logInfoLine(line) : logWarnLine(line)).catch(() => {})
+        void (event.kind === "recovered" || event.kind === "unchecked" ? logInfoLine(line) : logWarnLine(line)).catch(() => {})
         void emitTo("main", "broadcast:surface-health", { outputId: OUTPUT_ID, ...event }).catch(() => {})
       },
     })
@@ -229,6 +229,7 @@ function BroadcastCanvas() {
     return () => {
       detachSurfaceRef.current?.()
       detachSurfaceRef.current = null
+      watch.dispose()
       surfaceRef.current = null
       canvasRef.current?.remove()
     }
