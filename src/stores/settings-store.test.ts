@@ -268,7 +268,7 @@ describe("settings store", () => {
     expect([s.talkInputId, s.talkOutputId]).toEqual(["headset-mic", "headset-ears"])
   })
 
-  it("treats a saved device without a role as Viewer until the host assigns one", async () => {
+  it("treats a saved device without a role as Viewer until the main computer assigns one", async () => {
     const device = { hash: "a".repeat(64), name: "Legacy phone", paired_at: "2026-10-20T20:00:00Z" }
     mockGet.mockImplementation(async (key: string) => key === "remoteDevices" ? [device] : undefined)
 
@@ -347,7 +347,7 @@ describe("settings store", () => {
     expect(useSettingsStore.getState().remoteAuthRequired).toBe(true)
   })
 
-  it("does not show a remote role change as applied until the host acknowledges it", async () => {
+  it("does not show a remote role change as applied until the main computer acknowledges it", async () => {
     const { hasPendingRemotePolicyUpdate, useSettingsStore } = await import("./settings-store")
     const device = { hash: "device-hash", name: "Graphics tablet", paired_at: "2026-10-27T10:00:00Z", role: "viewer" as const, outputScope: ["sanctuary"] }
     useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
@@ -371,7 +371,7 @@ describe("settings store", () => {
     expect(useSettingsStore.getState().remoteDevices[0]?.outputScope).toEqual([])
   })
 
-  it("applies a Screens output scope only after the host acknowledges it", async () => {
+  it("applies a Screens output scope only after the main computer acknowledges it", async () => {
     const { useSettingsStore } = await import("./settings-store")
     const device = { hash: "device-hash", name: "Graphics tablet", paired_at: "2026-10-27T10:00:00Z", role: "screens" as const }
     useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
@@ -509,7 +509,7 @@ describe("settings store", () => {
     })
   })
 
-  it("leaves the Recorder grant unchanged when the host rejects a grant or revoke", async () => {
+  it("leaves the Recorder grant unchanged when the main computer rejects a grant or revoke", async () => {
     const { useSettingsStore } = await import("./settings-store")
     const device = { hash: "device-hash", name: "Phone", paired_at: "2026-10-27T10:00:00Z", role: "viewer" as const }
     useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
@@ -523,7 +523,7 @@ describe("settings store", () => {
     expect(useSettingsStore.getState().remoteDevices).toEqual([{ ...device, record: true }])
   })
 
-  it("keeps role, pause and revoke state unchanged when the host rejects access updates", async () => {
+  it("keeps role, pause and revoke state unchanged when the main computer rejects access updates", async () => {
     const { hasPendingRemotePolicyUpdate, useSettingsStore } = await import("./settings-store")
     const device = { hash: "device-hash", name: "Graphics tablet", paired_at: "2026-10-27T10:00:00Z", role: "viewer" as const }
     useSettingsStore.setState({ remoteDevices: [device], remoteAuthRequired: true })
@@ -595,7 +595,7 @@ describe("settings store", () => {
     })
     const { hydrateSettings, useSettingsStore } = await import("./settings-store")
     await hydrateSettings()
-    useSettingsStore.getState().setJoin({ joinAddress: "192.168.1.10:8080", joinName: "Main desk", joinToken: "t" })
+    useSettingsStore.getState().setJoin({ joinAddress: "192.168.1.10:8080", joinName: "Main computer", joinToken: "t" })
     const s = useSettingsStore.getState()
     expect(s.joinAddress).toBe("192.168.1.10:8080")
     expect(s.operatorName).toBe("Tolu")

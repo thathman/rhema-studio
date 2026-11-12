@@ -76,7 +76,7 @@ export function TeamWorkspace() {
             </p>
             {/* The switch itself lives in Permissions (#815); Team says how it is set and links there. */}
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <p id="team-approval-policy" className="text-sm">Ask before showing an unapproved service: <span className="font-semibold">{requireApproval === undefined ? "not shared by the main host yet" : requireApproval ? "on" : "off"}</span>{joined && requireApproval !== undefined ? <span className="text-muted-foreground"> (the main host’s setting)</span> : null}</p>
+              <p id="team-approval-policy" className="text-sm">Ask before showing an unapproved service: <span className="font-semibold">{requireApproval === undefined ? "not shared by the main computer yet" : requireApproval ? "on" : "off"}</span>{joined && requireApproval !== undefined ? <span className="text-muted-foreground"> (the main computer’s setting)</span> : null}</p>
               <Button size="sm" variant="outline" aria-describedby="team-approval-policy" onClick={openPermissions}><ShieldCheckIcon /> Change in Permissions</Button>
             </div>
           </section>

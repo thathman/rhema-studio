@@ -62,7 +62,7 @@ afterEach(async () => {
 
 describe("the Desk menu", () => {
   it("asks for a name once and saves it in place on Enter, with no trip to Settings", async () => {
-    expect(trigger().getAttribute("aria-label")).toBe("Your desk: Add your name, Main desk")
+    expect(trigger().getAttribute("aria-label")).toBe("Your desk: Add your name, Main computer")
     await openMenu()
     const name = document.getElementById("desk-name") as HTMLInputElement
     expect(document.activeElement).toBe(name)
@@ -70,7 +70,7 @@ describe("the Desk menu", () => {
     await act(async () => { name.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })) })
     expect(useSettingsStore.getState().operatorName).toBe("Tolu Adeyemi")
     expect(trigger().textContent).toContain("TA")
-    expect(trigger().getAttribute("aria-label")).toBe("Your desk: Tolu Adeyemi, Main desk")
+    expect(trigger().getAttribute("aria-label")).toBe("Your desk: Tolu Adeyemi, Main computer")
     expect(onSettings).not.toHaveBeenCalled()
   })
 
@@ -117,14 +117,14 @@ describe("the Desk menu", () => {
     expect(document.documentElement.classList.contains("light")).toBe(true)
   })
 
-  it("says honestly what this desk is when it has joined a host", async () => {
+  it("says honestly what this desk is when it has joined a main computer", async () => {
     await act(async () => {
       useSettingsStore.setState({ joinAddress: "192.168.1.20:7878" })
       useJoin.setState({ status: "connected", me: { name: "Ade", role: "bible" } })
     })
     expect(trigger().getAttribute("aria-label")).toContain("Bible desk · joined 192.168.1.20:7878")
     await act(async () => useJoin.setState({ status: "off", me: null }))
-    expect(trigger().getAttribute("aria-label")).toContain("Main desk")
+    expect(trigger().getAttribute("aria-label")).toContain("Main computer")
   })
 
   it("opens when another page asks (Settings search → Appearance), on the Appearance choice", async () => {
@@ -136,7 +136,7 @@ describe("the Desk menu", () => {
 
   it("shows and edits this computer's name, with its desk id (#299 1.8, #298 S2.3)", async () => {
     await act(async () => useSettingsStore.getState().setSetup({ deviceName: "Sanctuary desk", deviceId: "3f2a91c0-1111-4222-8333-944455556666" }))
-    expect(trigger().getAttribute("aria-label")).toBe("Your desk: Add your name, Sanctuary desk · Main desk")
+    expect(trigger().getAttribute("aria-label")).toBe("Your desk: Add your name, Sanctuary desk · Main computer")
     await openMenu()
     const device = document.getElementById("desk-device") as HTMLInputElement
     expect(device.value).toBe("Sanctuary desk")
@@ -161,12 +161,12 @@ describe("the Desk menu", () => {
     expect(document.getElementById("desk-name")).toBeNull()
   })
 
-  it("a joined desk sees what its role permits and can leave the host", async () => {
+  it("a joined desk sees what its role permits and can leave the main computer", async () => {
     const leave = vi.fn(async () => {})
     await act(async () => useJoin.setState({ status: "connected", me: { name: "Ade", role: "timekeeper" }, leave }))
     await openMenu()
     expect(document.body.textContent).toContain("Moves the event clock")
-    await act(async () => row("Leave this host").click())
+    await act(async () => row("Leave this main computer").click())
     expect(leave).toHaveBeenCalledTimes(1)
   })
 
@@ -176,12 +176,12 @@ describe("the Desk menu", () => {
       expect(trigger().getAttribute("aria-label")).toContain(`${r.name} desk · joined`)
       await openMenu()
       expect(document.body.textContent).toContain(r.may)
-      expect(document.body.textContent).not.toContain("What the host allows.")
+      expect(document.body.textContent).not.toContain("What the main computer allows.")
       await openMenu()
     }
     await act(async () => useJoin.setState({ status: "connected", me: { name: "Ade", role: "future-role" } }))
     await openMenu()
-    expect(document.body.textContent).toContain("What the host allows.")
+    expect(document.body.textContent).toContain("What the main computer allows.")
   })
 
   it("keeps the last session's screens after Not now, and puts them back only after a second click (#299 1.18)", async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { ArrowDownIcon, ArrowUpIcon, EyeIcon, EyeOffIcon, TrashIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { CLEAR, RESTORE } from "@/lib/wording"
 import { cn } from "@/lib/utils"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { activatedLabel } from "@/lib/live-sources"
@@ -42,7 +43,7 @@ export function SongsDesk({ live }: { live: LiveStateV1 }) {
   const send = async (command: { command: string; value?: string | number | Record<string, unknown> }) => setResult(await useJoin.getState().send(command))
   const setOrder = async (change: { op: "move" | "skip" | "repeat" | "insert"; item: string; before?: string; song?: string }) => {
     const response = await useJoin.getState().send({ command: "worship_set", value: change })
-    setResult(response.ok ? { ok: true, note: "Sent to the host; waiting for today's temporary order to update." } : response)
+    setResult(response.ok ? { ok: true, note: "Sent to the main computer; waiting for today's temporary order to update." } : response)
   }
   const lyrics = live.sources.filter((s) => s.id === "song" || s.id === "hymn")
   const worshipSet = live.worshipSet ?? []
@@ -81,7 +82,7 @@ export function SongsDesk({ live }: { live: LiveStateV1 }) {
           {lyrics.map((s) => (
             <li key={s.id} className="flex flex-wrap items-center gap-2">
               <span className="min-w-0 flex-1 truncate">{s.id === "song" ? "Song" : "Hymn"} · {[s.reference, activatedLabel(s)].filter(Boolean).join(" · ")}{s.on ? "" : " (off)"}</span>
-              <Button size="xs" variant="ghost" disabled={!ok} onClick={() => void send({ command: s.on ? "clear_source" : "restore_source", value: s.id })}>{s.on ? "Take it off" : "Put it back"}</Button>
+              <Button size="xs" variant="ghost" disabled={!ok} onClick={() => void send({ command: s.on ? "clear_source" : "restore_source", value: s.id })}>{s.on ? CLEAR : RESTORE}</Button>
             </li>
           ))}
         </ul>
@@ -131,9 +132,9 @@ function StageDeskAssignedView({ live, stale, stageOutputs }: { live: LiveStateV
       <section aria-label="Assigned Stage recipient" className="flex flex-col gap-2 rounded-md border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Assigned Stage display</p>
-          <p className="mt-1 text-sm text-muted-foreground">Recipients are assigned by the host. Choose the display before preparing a private cue.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Recipients are assigned by the main computer. Choose the display before preparing a private cue.</p>
         </div>
-        {stageOutputs.length === 0 ? <p role="status" className="text-sm font-semibold">No Stage display is assigned to this desk. Ask the host to assign one in Permissions.</p> : (
+        {stageOutputs.length === 0 ? <p role="status" className="text-sm font-semibold">No Stage display is assigned to this desk. Ask the main computer to assign one in Permissions.</p> : (
           <select aria-label="Assigned Stage display" value={selectedTarget} onChange={(event) => setTarget(event.currentTarget.value)} className={cn(field, "w-full sm:max-w-64")}>
             <option value="" disabled>Choose an assigned Stage display</option>
             {stageOutputs.map((output) => <option key={output.id} value={output.id}>{output.name}</option>)}
@@ -141,29 +142,29 @@ function StageDeskAssignedView({ live, stale, stageOutputs }: { live: LiveStateV
         )}
       </section>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <section aria-label="Host service clock" className="flex min-h-24 flex-col justify-center rounded-md bg-[#16242b] p-3 text-[#d6e2df]">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#9fb2b0]">Host service clock</p>
+        <section aria-label="Main computer service clock" className="flex min-h-24 flex-col justify-center rounded-md bg-[#16242b] p-3 text-[#d6e2df]">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#9fb2b0]">Main computer service clock</p>
           {timer && elapsed !== null ? <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
-            <span role="timer" aria-label="Host service timer" className={cn("font-mono text-3xl font-semibold tabular-nums", left !== null && left < 0 && "text-destructive", left !== null && left >= 0 && left <= 120_000 && "text-confidence-mid", stale && "opacity-70")}>
+            <span role="timer" aria-label="Main computer service timer" className={cn("font-mono text-3xl font-semibold tabular-nums", left !== null && left < 0 && "text-destructive", left !== null && left >= 0 && left <= 120_000 && "text-confidence-mid", stale && "opacity-70")}>
               {left === null ? formatMs(elapsed) : left < 0 ? `+${formatMs(-left)}` : formatMs(left)}
             </span>
             <span className="text-sm text-[#9fb2b0]">{left === null ? "elapsed" : left < 0 ? "over" : "left"}{timer.running ? "" : " · paused"}</span>
-          </div> : <p className="mt-1 text-sm">The host has not supplied service timer data.</p>}
+          </div> : <p className="mt-1 text-sm">The main computer has not supplied service timer data.</p>}
           {currentEvent && <p className="mt-1 truncate text-xs text-[#9fb2b0]">Current event: {currentEvent}</p>}
-          {stale && <p role="status" className="mt-1 text-xs font-semibold text-confidence-mid">Host update may be out of date.</p>}
+          {stale && <p role="status" className="mt-1 text-xs font-semibold text-confidence-mid">Main computer update may be out of date.</p>}
         </section>
         <section aria-label="Stage receiver status" className="flex min-h-24 flex-col justify-center rounded-md border border-border p-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stage receiver status</p>
           <p className="mt-1 font-semibold">{selectedOutputName || "No display selected"} · Display not confirmed</p>
-          <p className="text-xs text-muted-foreground">The host does not currently send Stage display receipts to this desk, so it cannot confirm what a monitor shows.</p>
-          <p className="mt-1 text-xs text-muted-foreground">Host connection: {stale || connection !== "connected" ? "not current" : "current"}</p>
+          <p className="text-xs text-muted-foreground">The main computer does not currently send Stage display receipts to this desk, so it cannot confirm what a monitor shows.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Main computer connection: {stale || connection !== "connected" ? "not current" : "current"}</p>
         </section>
       </div>
       {live.stageMessage && <p aria-label="Shared Stage cue" className="rounded-md bg-muted/50 px-3 py-2 text-sm">Shared Stage cue · {live.stageMessage} <span className="text-muted-foreground">(read only in this desk)</span></p>}
       {stageOutputs.length > 0 && <section aria-label="Private Stage cue" className="flex flex-col gap-2 rounded-md border border-border p-3">
         <div>
           <p className="text-sm font-semibold">Prepare a private cue</p>
-          <p className="text-xs text-muted-foreground">This desk sends only to its host-assigned display. Receiver playback is not confirmed.</p>
+          <p className="text-xs text-muted-foreground">This desk sends only to the display the main computer assigned it. Receiver playback is not confirmed.</p>
         </div>
         <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(event) => {
           event.preventDefault()
@@ -188,7 +189,7 @@ export function CameraDesk({ live }: { live: LiveStateV1 }) {
   return (
     <section aria-label="Camera desk" className={box}>
       <p className="font-semibold">Cameras</p>
-      {cams.length === 0 && <p className="text-muted-foreground">No cameras on the host yet (Live → Production tools → Cameras there).</p>}
+      {cams.length === 0 && <p className="text-muted-foreground">No cameras on the main computer yet (Live → Production tools → Cameras there).</p>}
       <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {cams.map((c) => (
           <li key={c.id} className="flex min-w-0 flex-col gap-1 rounded-md border border-border p-2">
@@ -199,7 +200,7 @@ export function CameraDesk({ live }: { live: LiveStateV1 }) {
           </li>
         ))}
       </ul>
-      <p role="note" className="text-muted-foreground">Hiding or restoring a camera can change every scene and output that uses it. This desk does not receive the scene map needed to review that impact; ask the host to check Live → Scenes and current outputs before changing source availability from Live.</p>
+      <p role="note" className="text-muted-foreground">Hiding or showing a camera can change every scene and output that uses it. This desk does not receive the scene map needed to review that impact; ask the main computer to check Live → Scenes and current outputs before changing source availability from Live.</p>
       <p className="text-muted-foreground">“Is it framed?” requests arrive in Notices below: answer Ready or Unable. The camera boxes of each scene are under Scenes.</p>
     </section>
   )
@@ -226,15 +227,15 @@ export function ObsDesk({ live }: { live: LiveStateV1 }) {
   const takeShown = (scene: string) => send({ command: "obs_take_scene", value: scene })
   return (
     <section aria-label="OBS desk" className={box}>
-      <p className="font-semibold">OBS <span className="font-normal text-muted-foreground">· through the host's OBS connection</span></p>
+      <p className="font-semibold">OBS <span className="font-normal text-muted-foreground">· through the main computer's OBS connection</span></p>
       {!obs ? (
-        <p className="text-muted-foreground">The host is an older Rhema Studio that does not share OBS: update it to switch OBS from here.</p>
+        <p className="text-muted-foreground">The main computer is an older Rhema Studio that does not share OBS: update it to switch OBS from here.</p>
       ) : !obs.connected ? (
-        <p className="text-muted-foreground">OBS is not connected on the host (Settings → Remote control → OBS there).</p>
+        <p className="text-muted-foreground">OBS is not connected on the main computer (Settings → Remote Control → OBS there).</p>
       ) : (
         <>
           <p className="text-muted-foreground">Program: <b className="text-foreground">{obs.program ?? "unknown"}</b>{obs.studioMode ? <> · Preview: <b className="text-foreground">{obs.preview ?? "none"}</b></> : null}</p>
-          {rehearsal && <p role="status" className="font-semibold">Rehearsal is on at the host: OBS is the live stream, so it is not changed while you practise.</p>}
+          {rehearsal && <p role="status" className="font-semibold">Rehearsal is on at the main computer: OBS is the live stream, so it is not changed while you practise.</p>}
           <ul className="flex flex-wrap gap-1.5">
             {obs.scenes.map((name) => {
               const current = obs.studioMode ? obs.preview === name : obs.program === name
@@ -269,7 +270,7 @@ export function ObsDesk({ live }: { live: LiveStateV1 }) {
                 : <Button size="sm" variant="outline" disabled={!ok || rehearsal || obs.recording === null} title={obs.recording === null ? "OBS has not said whether it is recording" : undefined} onClick={() => void send({ command: "obs_record", value: { action: "start" } })}>Start recording</Button>}
               <form className="flex min-w-0 flex-1 gap-2" onSubmit={(e) => { e.preventDefault(); void send({ command: "obs_record", value: { action: "marker", ...(marker.trim() ? { label: marker.trim() } : {}) } }); setMarker("") }}>
                 <input aria-label="Marker name" value={marker} onChange={(e) => setMarker(e.target.value)} placeholder="Sermon starts" maxLength={60} className={cn(field, "min-w-24 flex-1")} />
-                <Button size="sm" type="submit" variant="outline" disabled={!ok || rehearsal || obs.recording !== true} title="A chapter in the recording where OBS has them, and a line in the host's service log">Add marker</Button>
+                <Button size="sm" type="submit" variant="outline" disabled={!ok || rehearsal || obs.recording !== true} title="A chapter in the recording where OBS has them, and a line in the main computer's service log">Add marker</Button>
               </form>
             </div>
           )}
@@ -338,8 +339,8 @@ export function DeskSceneEditor({ live, scene, cameraOnly = false, onDone }: { l
       setSeen(seenOf(live, now))
     }
   }
-  const save = () => void send({ command: "save_scene", value: { scene: draft } }, scene ? `${draft.name} saved on the host.` : `${draft.name} added on the host.`)
-  const remove = () => void send({ command: "delete_scene", value: { id: draft.id } }, `${draft.name} deleted on the host.`)
+  const save = () => void send({ command: "save_scene", value: { scene: draft } }, scene ? `${draft.name} saved on the main computer.` : `${draft.name} added on the main computer.`)
+  const remove = () => void send({ command: "delete_scene", value: { id: draft.id } }, `${draft.name} deleted on the main computer.`)
   const num = (label: string, value: number, set: (n: number) => void) => (
     <label className="flex items-center gap-1">
       <span className="w-4 text-muted-foreground">{label}</span>
@@ -418,11 +419,11 @@ export function DeskSceneEditor({ live, scene, cameraOnly = false, onDone }: { l
               <NoSignalChoice layer={layer} onChange={(p) => patch(layer.id, p)} />
             </>
           )}
-          {(layer.kind === "picture" || layer.kind === "video" || layer.kind === "clock") && <p className="text-muted-foreground">Its picture, video or clock settings are changed on the main desk; here you can place, size and hide it.</p>}
+          {(layer.kind === "picture" || layer.kind === "video" || layer.kind === "clock") && <p className="text-muted-foreground">Its picture, video or clock settings are changed on the main computer; here you can place, size and hide it.</p>}
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={!ok || !draft.name.trim()} onClick={save}>{scene ? "Save on the host" : "Add on the host"}</Button>
+        <Button size="sm" disabled={!ok || !draft.name.trim()} onClick={save}>{scene ? "Save on the main computer" : "Add on the main computer"}</Button>
         <Button size="sm" variant="ghost" onClick={() => onDone("")}>Cancel</Button>
         <span className="flex-1" />
         {scene && !cameraOnly && (sure
@@ -430,7 +431,7 @@ export function DeskSceneEditor({ live, scene, cameraOnly = false, onDone }: { l
           : <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setSure(true)}>Delete scene…</Button>)}
       </div>
       <Result result={result} />
-      <p className="text-muted-foreground">{scene?.onScreen ? "This scene is on a screen: the main desk accepts the change before the congregation sees it." : live.requireApproval ? "Approvals are on at the host: the main desk accepts each change first." : "Not on a screen: a change goes in at once. Pictures and videos are added on the main desk."}</p>
+      <p className="text-muted-foreground">{scene?.onScreen ? "This scene is on a screen: the main computer accepts the change before the congregation sees it." : live.requireApproval ? "Approvals are on at the main computer: the main computer accepts each change first." : "Not on a screen: a change goes in at once. Pictures and videos are added on the main computer."}</p>
     </div>
   )
 }

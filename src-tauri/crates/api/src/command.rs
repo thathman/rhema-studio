@@ -948,7 +948,7 @@ mod tests {
         let RemoteCommand::SaveScene(ref s) = save else { panic!("save_scene") };
         assert_eq!((s.id(), s.request), ("s1", false));
         let asked: RemoteCommand = serde_json::from_str(r#"{"command":"save_scene","value":{"scene":{"id":"s1"},"request":true}}"#).unwrap();
-        assert!(matches!(asked, RemoteCommand::SaveScene(SceneSave { request: false, .. })), "only the host's server sets request");
+        assert!(matches!(asked, RemoteCommand::SaveScene(SceneSave { request: false, .. })), "only the main computer's server sets request");
         assert_eq!(save.to_string(), "save_scene(s1)");
         let del: RemoteCommand = serde_json::from_str(r#"{"command":"delete_scene","value":{"id":"s1"}}"#).unwrap();
         assert_eq!(del, RemoteCommand::DeleteScene(SceneDelete { id: "s1".into(), request: false, base_revision: None }));

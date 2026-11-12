@@ -50,7 +50,7 @@ describe("main-desk scene Take", () => {
     expect(["main", "overflow", "stage"].map(sceneOf)).toEqual([undefined, undefined, undefined])
   })
 
-  it("takes the scene on the named output only, once the host accepts it", async () => {
+  it("takes the scene on the named output only, once the main computer accepts it", async () => {
     host = (cmd, args) => (cmd === "local_scene_take" ? (expect(args).toEqual({ output: "main", scene: scene.id, seen }), { revision: 8, approved: null }) : null)
     const result = await takeSceneOnOutput("main", scene.id, seen)
     expect(result).toEqual({ ok: true, acceptedRevision: 8, receiver: { kind: "none" } })
@@ -58,7 +58,7 @@ describe("main-desk scene Take", () => {
     expect(calls).toEqual(["publish", "local_scene_take"])
   })
 
-  it("does not apply a Take after the operator moves to a newer Preview while the host is checking", async () => {
+  it("does not apply a Take after the operator moves to a newer Preview while the main computer is checking", async () => {
     let release!: (accepted: { revision: number; approved: null }) => void
     host = (cmd) => cmd === "local_scene_take" ? new Promise((resolve) => { release = resolve }) : null
     let current = true
@@ -75,7 +75,7 @@ describe("main-desk scene Take", () => {
     expect(sceneOf("main")).toBeUndefined()
   })
 
-  it("does not overwrite a manual Program action made while the host is checking", async () => {
+  it("does not overwrite a manual Program action made while the main computer is checking", async () => {
     let release!: (accepted: { revision: number; approved: null }) => void
     host = (cmd) => cmd === "local_scene_take" ? new Promise((resolve) => { release = resolve }) : null
     const pending = takeSceneOnOutput("main", scene.id, seen)
@@ -121,14 +121,14 @@ describe("main-desk scene Take", () => {
     expect(sceneOf("main")).toBeUndefined()
   })
 
-  it.each(["stale", "not-congregation", "not-approved", "unavailable", "not-main-desk"])("changes no output when the host refuses (%s)", async (code) => {
+  it.each(["stale", "not-congregation", "not-approved", "unavailable", "not-main-desk"])("changes no output when the main computer refuses (%s)", async (code) => {
     host = (cmd) => (cmd === "local_scene_take" ? refuse(code)() : null)
     const result = await takeSceneOnOutput("main", scene.id, seen)
     expect(result).toEqual({ ok: false, refusal: { code, message: `refused: ${code}` } })
     expect(["main", "overflow", "stage"].map(sceneOf)).toEqual([undefined, undefined, undefined])
   })
 
-  it("never puts a scene on a stage display, even if the host accepted it, and says it was not applied", async () => {
+  it("never puts a scene on a stage display, even if the main computer accepted it, and says it was not applied", async () => {
     host = (cmd) => (cmd === "local_scene_take" ? { revision: 8, approved: null } : null)
     const result = await takeSceneOnOutput("stage", scene.id, seen)
     expect(result).toMatchObject({ ok: false, acceptedRevision: 8, refusal: { code: "not-applied" } })

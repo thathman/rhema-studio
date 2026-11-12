@@ -116,11 +116,11 @@ describe("the read-only backstage run of show on a joined desk", () => {
     expect(view!.querySelector('[aria-label="Fixed start"]')).not.toBeNull()
   })
 
-  it("says so when the host sends no times (no start time, or an older host)", async () => {
+  it("says so when the main computer sends no times (no start time, or an older host)", async () => {
     const live = buildLiveState(at(10, 12))
     const old: LiveStateV1 = { ...live, event: { mode: live.event.mode, currentId: live.event.currentId }, rundown: live.rundown.map(({ id, reference, plannedMinutes }) => ({ id, reference, plannedMinutes })) }
     const view = await renderDesk(old, "bible")
-    expect(view?.textContent).toContain("No times from the host yet")
+    expect(view?.textContent).toContain("No times from the main computer yet")
     expect(view!.querySelectorAll("button")).toHaveLength(0)
   })
 })

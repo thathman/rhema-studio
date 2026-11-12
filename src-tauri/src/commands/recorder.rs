@@ -27,7 +27,7 @@ fn main_desk_only(window: &WebviewWindow) -> Res<()> {
     if window.label() == "main" {
         Ok(())
     } else {
-        Err(RecorderProblem::new(ProblemCode::NotAllowed, "Recording is started and stopped from the main desk."))
+        Err(RecorderProblem::new(ProblemCode::NotAllowed, "Recording is started and stopped from the main computer."))
     }
 }
 
@@ -211,7 +211,7 @@ pub fn remote(app: &AppHandle, args: &str) -> Res<()> {
         Some("start") => {
             let host = app.state::<RecorderHost>();
             let request = recorder(&host)?.last_request().ok_or_else(|| {
-                RecorderProblem::new(ProblemCode::NotRecording, "Start the first recording at the main desk: a desk reuses its screen and sound choices.")
+                RecorderProblem::new(ProblemCode::NotRecording, "Start the first recording at the main computer: a desk reuses its screen and sound choices.")
             })?;
             // The last setup's service may be last week's: this recording files under the service running now.
             let request = RecorderStartRequest { service_run_id: None, program_id: None, ..request };
@@ -235,7 +235,7 @@ pub fn remote(app: &AppHandle, args: &str) -> Res<()> {
 pub fn recorder_marker(app: AppHandle, window: WebviewWindow, host: State<'_, RecorderHost>, label: String, service_run_id: Option<String>, item_id: Option<String>) -> Res<RecorderMarker> {
     main_desk_only(&window)?;
     let service_run_id = service_run_id.or_else(|| current_run(&app).map(|r| r.0));
-    recorder(&host)?.marker(&label, "main desk", service_run_id, item_id)
+    recorder(&host)?.marker(&label, "main computer", service_run_id, item_id)
 }
 
 #[tauri::command]

@@ -61,11 +61,11 @@ export function JoinForm({ asCompanion = false, checkCertificate = false }: { as
     codeInput.current?.focus()
   }
   return (
-    <Card kicker="Another computer" title="Join a host">
+    <Card kicker="Another computer" title="Join a main computer">
       <p className="text-muted-foreground">
-        {asCompanion ? "Pair with the Rhema Studio that runs the service, to take its cameras into OBS here." : "Follow the Rhema Studio that runs the service and help from here, as its host allows."} On the host: Settings → Remote control → Pair a device. Then pick the host below (check its address matches the one on its screen) or type its address, and type its code.
+        {asCompanion ? "Pair with the Rhema Studio that runs the service, to take its cameras into OBS here." : "Follow the Rhema Studio that runs the service and help from here, as its main computer allows."} On the main computer: Connections → Pair a device. Then pick the main computer below (check its address matches the one on its screen) or type its address, and type its code.
       </p>
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Rhema Studio hosts on this network">
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Rhema Studio main computers on this network">
         {hosts?.map((h) => (
           <Button key={h.address} type="button" size="sm" variant={form.address.trim() === h.address ? "secondary" : "outline"} aria-pressed={form.address.trim() === h.address} onClick={() => pick(h)} title={h.address}>
             <MonitorIcon aria-hidden />
@@ -84,11 +84,11 @@ export function JoinForm({ asCompanion = false, checkCertificate = false }: { as
           }}
         >
           <SearchIcon aria-hidden />
-          {finding ? "Looking for hosts…" : "Find hosts"}
+          {finding ? "Looking for main computers…" : "Find main computers"}
         </Button>
       </div>
-      {!finding && hosts?.length === 0 && !findError && <p className="text-muted-foreground">No host found. Is Remote control on at the host, accepting other devices, on the same network? You can also type its address.</p>}
-      {findError && <p className="text-muted-foreground">{findError}. You can type the host's address.</p>}
+      {!finding && hosts?.length === 0 && !findError && <p className="text-muted-foreground">No main computer found. Is Remote Control on at the main computer, accepting other devices, on the same network? You can also type its address.</p>}
+      {findError && <p className="text-muted-foreground">{findError}. You can type the main computer's address.</p>}
       <form
         className="flex flex-col gap-2"
         onSubmit={(e) => {
@@ -97,7 +97,7 @@ export function JoinForm({ asCompanion = false, checkCertificate = false }: { as
         }}
       >
         <label className="flex flex-col gap-0.5">
-          <span className="text-xs text-muted-foreground">Host address and port</span>
+          <span className="text-xs text-muted-foreground">Main computer address and port</span>
           <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="192.168.1.20:8080" required className="h-8 rounded-md border border-input bg-transparent px-2" />
         </label>
         {checkCertificate && <CertificateLine {...cert} />}
@@ -151,15 +151,15 @@ function useHostCertificate(address: string | null) {
 }
 
 function CertificateLine({ checking, certificate, error, complete }: ReturnType<typeof useHostCertificate>) {
-  if (!complete) return <p className="text-muted-foreground">Rhema Studio Companion talks to the host only over its secure page, and shows the host's certificate here before you join.</p>
-  if (checking) return <p role="status" className="text-muted-foreground">Checking the host's secure page…</p>
+  if (!complete) return <p className="text-muted-foreground">Rhema Studio Companion talks to the main computer only over its secure page, and shows the main computer's certificate here before you join.</p>
+  if (checking) return <p role="status" className="text-muted-foreground">Checking the main computer's secure page…</p>
   if (error) return <p role="alert" className="font-semibold">{error}</p>
   return (
     <p role="status" className="flex flex-wrap items-center gap-1.5">
       <ShieldCheckIcon aria-hidden className="size-3.5 text-primary-text" />
-      <span>Host's certificate</span>
+      <span>Main computer's certificate</span>
       <code className="rounded bg-muted px-1.5 py-0.5 font-mono tracking-wide">{certificateWords(certificate ?? "")}</code>
-      <span className="text-muted-foreground">The host shows the same in Settings → Remote control. If they differ, do not join.</span>
+      <span className="text-muted-foreground">The main computer shows the same in Settings → Remote Control. If they differ, do not join.</span>
     </p>
   )
 }

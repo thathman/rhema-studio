@@ -22,7 +22,7 @@ const state = vi.hoisted(() => {
     state: "approved",
     createdAt: "2026-11-01T09:00:00Z",
     expiresAt: "2026-11-02T09:00:00Z",
-    decidedBy: { id: "host-1", name: "Main desk" },
+    decidedBy: { id: "host-1", name: "Main computer" },
     decidedAt: "2026-11-01T10:00:00Z",
     decisionNote: null,
   }
@@ -234,7 +234,7 @@ beforeEach(() => {
   useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null, translations: [{ id: 1, title: "King James Version", abbreviation: "KJV", language: "en", is_copyrighted: false, is_downloaded: true }], activeTranslationId: 1, secondaryTranslationId: null })
   useBroadcastStore.setState({ outputs: [], outputStatus: {}, isLive: true, liveVerse: previousProgram as never, liveSourceVerse: null, liveSlide: null, liveItemId: "previous-item", rehearsal: false, scenes: [] })
   useServiceStore.setState({ programs: [program], current: program, dirty: false, loading: false, saving: false, error: null, conflict: null, unsupportedItems: [], corruptItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: 4, approvedDesignsError: null })
-  useSettingsStore.setState({ operatorName: "Main desk", remoteDevices: [] })
+  useSettingsStore.setState({ operatorName: "Main computer", remoteDevices: [] })
   useSlideStore.setState({ slides: [], loading: false, error: null, query: "", pendingSourceId: null })
   useAddDialog.getState().close()
   useRundownSelection.setState({ focusId: null })

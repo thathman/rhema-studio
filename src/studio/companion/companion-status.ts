@@ -1,4 +1,5 @@
 import type { JoinStatus } from "@/stores/join-store"
+import { LEAVE_MAIN_COMPUTER, PAIR_PATH } from "@/lib/wording"
 
 /**
  * What the Companion says about its two links (#842 S18): the host and OBS. "Reconnecting…" alone
@@ -22,20 +23,20 @@ export interface LinkWords {
 export type HostFailure = "certificate" | "pin-damaged" | "secure-page" | "unreachable" | "other"
 
 // The network library's and the join crate's words for "nothing answered there" (and only those).
-const UNREACHABLE = /could not reach the host|error sending request|connection refused|connection reset|timed out|no route to host|network is unreachable|host is down|dns error|failed to lookup address|the host closed the connection/
+const UNREACHABLE = /could not reach the (?:main computer|host)|error sending request|connection refused|connection reset|timed out|no route to host|network is unreachable|host is down|dns error|failed to lookup address|the (?:main computer|host) closed the connection/
 
 /** Which kind of failure a reason is (the shared join crate's words, or the network library's). */
 export function hostFailure(reason: string | null | undefined): HostFailure {
   const r = (reason ?? "").toLowerCase()
   // Checked first: these also say "pair again", but the key was not revoked.
-  if (r.includes("record of the host's certificate is damaged")) return "pin-damaged"
+  if (/record of the (?:main computer|host)'s certificate is damaged/.test(r)) return "pin-damaged"
   if (r.includes("certificate")) return "certificate"
   if (r.includes("secure page is off")) return "secure-page"
   if (UNREACHABLE.test(r)) return "unreachable"
   return "other"
 }
 
-const PAIR_AGAIN = "To pair again: press Leave this host below, then on the host open Settings → Remote control → Pair a device, and join here with the new code."
+const PAIR_AGAIN = `To pair again: press ${LEAVE_MAIN_COMPUTER} below, then on the main computer open ${PAIR_PATH}, and join here with the new code.`
 
 /** The host link in words, from the join status and its reason. */
 export function hostWords(status: JoinStatus, error: string | null, address: string): LinkWords {
@@ -45,10 +46,10 @@ export function hostWords(status: JoinStatus, error: string | null, address: str
   // A certificate problem comes first, whatever the status: it is a security warning, not a revoked key.
   const failure = hostFailure(error)
   if (status !== "off" && failure === "certificate") {
-    return { label: "Host certificate changed: this may not be your Rhema computer", tone: "warn", detail: `${error} Nothing is sent to it. Only if you know the host computer was reinstalled: press Leave this host below, then pair again with a new code from the host (Settings → Remote control → Pair a device).` }
+    return { label: "Main computer certificate changed: this may not be your Rhema computer", tone: "warn", detail: `${error} Nothing is sent to it. Only if you know the main computer was reinstalled: press ${LEAVE_MAIN_COMPUTER} below, then pair again with a new code from the main computer (${PAIR_PATH}).` }
   }
   if (status !== "off" && failure === "pin-damaged") {
-    return { label: "Saved host certificate damaged", tone: "warn", detail: `This computer's saved record of the host's certificate cannot be read, so nothing is sent. ${PAIR_AGAIN}` }
+    return { label: "Saved main computer certificate damaged", tone: "warn", detail: `This computer's saved record of the main computer's certificate cannot be read, so nothing is sent. ${PAIR_AGAIN}` }
   }
   switch (status) {
     case "off":
@@ -57,13 +58,13 @@ export function hostWords(status: JoinStatus, error: string | null, address: str
       return {
         label: "Key revoked",
         tone: "warn",
-        detail: `The host no longer accepts this computer's key: it was removed on the host (Settings → Remote control), or the host was set up again. Nothing is sent to it until this computer pairs again. ${PAIR_AGAIN}${error ? ` (The host said: ${error}.)` : ""}`,
+        detail: `The main computer no longer accepts this computer's key: it was removed on the main computer (Connections), or the main computer was set up again. Nothing is sent to it until this computer pairs again. ${PAIR_AGAIN}${error ? ` (The main computer said: ${error}.)` : ""}`,
       }
     case "reconnecting": {
       const why = error ? ` (${error})` : ""
-      if (failure === "unreachable") return { label: "Host unreachable", tone: "warn", detail: `This computer cannot reach the host at ${where}. Check that Rhema Studio is open there with Remote control on, and that both computers are on the same network. It keeps trying by itself${why}.` }
-      if (failure === "secure-page") return { label: "Host's secure page off", tone: "warn", detail: error }
-      return { label: "Host connection failed", tone: "warn", detail: `The link to the host failed. It keeps trying by itself${why}.` }
+      if (failure === "unreachable") return { label: "Main computer unreachable", tone: "warn", detail: `This computer cannot reach the main computer at ${where}. Check that Rhema Studio is open there with Remote Control on, and that both computers are on the same network. It keeps trying by itself${why}.` }
+      if (failure === "secure-page") return { label: "Main computer's secure page off", tone: "warn", detail: error }
+      return { label: "Main computer connection failed", tone: "warn", detail: `The link to the main computer failed. It keeps trying by itself${why}.` }
     }
   }
 }

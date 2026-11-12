@@ -25,7 +25,8 @@ final class CamAction {
 
     /**
      * Sending is not on air (#209): ON AIR, red, only when Rhema says a Program shows this camera,
-     * naming which (online through OBS, congregation on a TV); SENDING otherwise, and SENDING · NO
+     * naming which as Rhema Studio and its Companion do (#822): "ON AIR · OBS" for OBS's program,
+     * "ON AIR · CONGREGATION" for a congregation TV, both as "ON AIR · OBS, CONGREGATION"; SENDING otherwise, and SENDING · NO
      * TALLY when Rhema has not said, so a camera is never told it is off air when nobody knows.
      */
     static State resolve(boolean paired, boolean sending, boolean live, int tally) {
@@ -36,6 +37,9 @@ final class CamAction {
     static final int RECEIVING_UNKNOWN = -1;
     static final int NOT_RECEIVED = 0;
     static final int RECEIVED = 1;
+
+    /** The tally's words, as on Rhema Studio and its Companion: ON AIR · then the screen (#822). */
+    static final String ON_AIR = "ON AIR · ";
 
     /** Shown while Rhema confirms it is getting the picture, on no Program (#850). */
     static final String RECEIVING = "RHEMA RECEIVING";
@@ -52,9 +56,9 @@ final class CamAction {
         if (!live) return new State("CONNECTING", "");
         if (tally < 0) return new State("SENDING · NO TALLY", "");
         boolean online = (tally & ONLINE) != 0, room = (tally & CONGREGATION) != 0;
-        if (online && room) return new State("ON AIR · ONLINE + CONGREGATION", "");
-        if (online) return new State("ON AIR · ONLINE", "");
-        if (room) return new State("ON AIR · CONGREGATION", "");
+        if (online && room) return new State(ON_AIR + "OBS, CONGREGATION", "");
+        if (online) return new State(ON_AIR + "OBS", "");
+        if (room) return new State(ON_AIR + "CONGREGATION", "");
         if (receiving == RECEIVED) return new State(RECEIVING, "");
         if (receiving == NOT_RECEIVED) return new State(NOT_RECEIVED_YET, "");
         return new State("SENDING", "");

@@ -55,7 +55,7 @@ beforeEach(() => {
   refuseNext = null
 })
 
-describe("the host's Live State", () => {
+describe("the main computer's Live State", () => {
   it("carries what joined computers need, never a secret", () => {
     const s = buildLiveState(1000)
     expect(s).toMatchObject({ v: 1, program: { onAir: true, reference: "Romans 8:28", rehearsal: false }, event: { mode: "screens", currentId: "Welcome" }, stageMessage: "Wrap up" })
@@ -143,10 +143,10 @@ describe("joining a host", () => {
     expect(calls.at(-1)).toEqual({ cmd: "join_command", args: { address: "192.168.1.20:8080", token: "token-123", command: { command: "event_next" }, service: "" } })
   })
 
-  it("a refusal says to pair again; leaving can forget the host", async () => {
+  it("a refusal says to pair again; leaving can forget the main computer", async () => {
     useSettingsStore.setState({ joinAddress: "h:1", joinToken: "t" })
     await useJoin.getState().connect()
-    handlers.get("join:state")!({ payload: JSON.stringify({ state: "refused", error: "The host refused this computer (401): pair again" }) })
+    handlers.get("join:state")!({ payload: JSON.stringify({ state: "refused", error: "The main computer refused this computer (401): pair again" }) })
     expect(useJoin.getState().status).toBe("refused")
     await useJoin.getState().leave(true)
     expect(useSettingsStore.getState()).toMatchObject({ joinAddress: "", joinToken: "" })
@@ -154,7 +154,7 @@ describe("joining a host", () => {
   })
 })
 
-describe("the main desk takes back control (#243)", () => {
+describe("the main computer takes back control (#243)", () => {
   const device = { hash: "a".repeat(64), name: "Desk C", paired_at: "2026-10-23T09:00:00Z", role: "bible" as const }
 
   it("the toggle persists, reaches the backend and is logged; giving back leaves the entry as before", async () => {
@@ -166,14 +166,14 @@ describe("the main desk takes back control (#243)", () => {
     expect(pushed).toEqual([{ hash: device.hash, name: "Desk C", role: "bible", paused: true, output_scope: [], group_take_scope: [], record: false }])
     expect(buildLiveState().paused).toEqual(["Desk C"])
     await setDeskControl(device.hash, true)
-    expect(useJournalStore.getState().entries.map((e) => e.label)).toEqual(["Main desk took back control from Desk C"])
+    expect(useJournalStore.getState().entries.map((e) => e.label)).toEqual(["Main computer took back control from Desk C"])
 
     await setDeskControl(device.hash, false)
     expect(useSettingsStore.getState().remoteDevices[0]).toEqual(device)
     await pushRemoteKeys()
     expect((calls.filter((c) => c.cmd === "remote_set_keys").at(-1)!.args.devices as { paused: boolean }[])[0].paused).toBe(false)
     expect(buildLiveState().paused).toEqual([])
-    expect(useJournalStore.getState().entries.at(-1)).toMatchObject({ kind: "remote", label: "Main desk gave control back to Desk C" })
+    expect(useJournalStore.getState().entries.at(-1)).toMatchObject({ kind: "remote", label: "Main computer gave control back to Desk C" })
   })
 
   it("does not change local access or log a host reclaim when the backend rejects it", async () => {
@@ -186,15 +186,15 @@ describe("the main desk takes back control (#243)", () => {
     expect(useJournalStore.getState().entries).toEqual([])
   })
 
-  it("a joined desk shows it is paused instead of an error, and follows the host when given back", async () => {
+  it("a joined desk shows it is paused instead of an error, and follows the main computer when given back", async () => {
     useSettingsStore.setState({ joinAddress: "h:1", joinToken: "t" })
     await useJoin.getState().connect()
     const live = { ...buildLiveState(), paused: ["Femi's laptop"] }
     handlers.get("join:live")!({ payload: JSON.stringify(live) })
     expect(useJoin.getState().paused).toBe(true)
-    refuseNext = "paused: The main desk has taken back control"
+    refuseNext = "paused: The main computer has taken back control"
     // Each send says whether the host did it, and if not, why in the host's words (Comms: Ready only on success).
-    expect(await useJoin.getState().send({ command: "event_next" })).toEqual({ ok: false, error: "The main desk has taken back control" })
+    expect(await useJoin.getState().send({ command: "event_next" })).toEqual({ ok: false, error: "The main computer has taken back control" })
     expect(useJoin.getState()).toMatchObject({ paused: true, error: null })
     handlers.get("join:live")!({ payload: JSON.stringify({ ...live, paused: [] }) })
     expect(useJoin.getState().paused).toBe(false)

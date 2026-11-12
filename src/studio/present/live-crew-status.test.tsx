@@ -70,7 +70,7 @@ describe("Live crew status", () => {
     expect(useShellStore.getState().goRequest).toBe("present")
   })
 
-  it("reports an unavailable host status instead of showing a false zero", async () => {
+  it("reports an unavailable main computer status instead of showing a false zero", async () => {
     useSettingsStore.setState({ remoteDevices: pairedDevices })
     invokeHost.mockRejectedValue(new Error("Host status unavailable"))
     await renderStatus()

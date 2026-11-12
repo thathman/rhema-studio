@@ -210,7 +210,7 @@ fn handle_message_from_live(msg: &OscMessage, sink: &dyn CommandSink, keys: &Key
                     return;
                 }
                 if !e.allows(&cmd) {
-                    let why = if e.role.allows(&cmd) { "output is outside the host-assigned Screens scope" } else { "role may present but not change settings" };
+                    let why = if e.role.allows(&cmd) { "output is outside the Screens scope the main computer assigned" } else { "role may present but not change settings" };
                     log::warn!("OSC command refused for {}: {} ({})", msg.addr, e.name, why);
                     return;
                 }

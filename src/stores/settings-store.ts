@@ -129,7 +129,7 @@ function updateRemotePolicy(change: (current: SettingsState) => RemotePolicyPatc
     } catch (e) {
       if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
         toast.error("Remote access was not changed", {
-          description: `The host did not confirm the update. The device may still have its previous access. ${e instanceof Error ? e.message : String(e)}`,
+          description: `The main computer did not confirm the update. The device may still have its previous access. ${e instanceof Error ? e.message : String(e)}`,
         })
       }
       return false

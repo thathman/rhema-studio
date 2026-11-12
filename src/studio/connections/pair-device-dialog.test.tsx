@@ -52,7 +52,7 @@ describe("one Pair a device entry (#823 F12)", () => {
     }
   })
 
-  it("keeps the host code for phones and computers, and sends TVs and cameras to their own secure flows", async () => {
+  it("keeps the main computer code for phones and computers, and sends TVs and cameras to their own secure flows", async () => {
     await openDialog()
     const showCode = () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Show pairing code")
     expect(showCode()).toBeTruthy()

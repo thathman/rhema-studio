@@ -16,7 +16,7 @@ import { queueRequest } from "@/lib/queue-request"
 import { NoticesPanel } from "./notices-panel"
 
 const buttonNamed = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === text)
-const notice = (action: Notice["action"], to: Notice["to"] = "all"): Notice => ({ id: "n1", from: "Main desk", to, priority: "normal", text: "Five minutes", action, at: 0, answers: [] })
+const notice = (action: Notice["action"], to: Notice["to"] = "all"): Notice => ({ id: "n1", from: "Main computer", to, priority: "normal", text: "Five minutes", action, at: 0, answers: [] })
 
 async function panel(props: Partial<React.ComponentProps<typeof NoticesPanel>> & { notices: Notice[]; role: string }) {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -35,7 +35,7 @@ beforeEach(() => {
 
 /** Rhema Comms requests (#251 R1, C2): a wrap-up warning for the stage and Queue for later. */
 describe("a wrap-up warning", () => {
-  it("is a request kind of its own, with a default line, kept through the host", () => {
+  it("is a request kind of its own, with a default line, kept through the main computer", () => {
     expect(asAction({ kind: "wrap", value: "  Wrap up in two  " })).toEqual({ kind: "wrap", value: "Wrap up in two" })
     expect(WRAP_UP_LINE).toBe("Please start wrapping up")
   })
@@ -55,7 +55,7 @@ describe("a wrap-up warning", () => {
     expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ action: { kind: "wrap", value: WRAP_UP_LINE } }))
   })
 
-  it("on a joined desk goes to the host's stage display as that desk's stage message, and answers Ready", async () => {
+  it("on a joined desk goes to the main computer's stage display as that desk's stage message, and answers Ready", async () => {
     const send = vi.fn(async () => ({ ok: true as const }))
     useJoin.setState({ send } as never)
     const onAction = vi.fn(async () => "should not be asked")
@@ -66,14 +66,14 @@ describe("a wrap-up warning", () => {
     expect(onAnswer).toHaveBeenCalledWith("n1", "ready")
   })
 
-  it("refused by the host (a role that may not change the stage) answers Unable with the reason", async () => {
+  it("refused by the main computer (a role that may not change the stage) answers Unable with the reason", async () => {
     useJoin.setState({ send: vi.fn(async () => ({ ok: false as const, error: "this device runs the Bible" })) } as never)
     const { el, onAnswer } = await panel({ notices: [notice({ kind: "wrap", value: "Wrap up now" }, "bible")], role: "bible" })
     await act(async () => buttonNamed(el, "Put “Wrap up now” on the stage")!.click())
     expect(onAnswer).toHaveBeenCalledWith("n1", "unable", "“Put “Wrap up now” on the stage”: this device runs the Bible")
   })
 
-  it("on the main desk is the main desk's own action", async () => {
+  it("on the main computer is the main computer's own action", async () => {
     const onAction = vi.fn(async () => null)
     const { el } = await panel({ notices: [notice({ kind: "wrap", value: "Wrap up now" }, "host")], role: "host", onAction })
     await act(async () => buttonNamed(el, "Put “Wrap up now” on the stage")!.click())

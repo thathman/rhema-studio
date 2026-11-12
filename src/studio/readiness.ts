@@ -115,7 +115,7 @@ export function preflightChecks(i: ReadinessInput): ReadinessCheck[] {
   const out: ReadinessCheck[] = []
   if (i.obs) {
     const o = i.obs
-    if (!o.enabled) out.push({ id: "obs", status: "info", label: "OBS is not connected (optional)", detail: "Rhema Studio runs the service without OBS. Connect it in Settings → Remote control to see its scenes, stream and recording here.", fix: "obs", fixLabel: "Open OBS" })
+    if (!o.enabled) out.push({ id: "obs", status: "info", label: "OBS is not connected (optional)", detail: "Rhema Studio runs the service without OBS. Connect it in Settings → Remote Control to see its scenes, stream and recording here.", fix: "obs", fixLabel: "Open OBS" })
     else if (o.status === "connected") {
       const on = `${o.label ? ` (${o.label})` : ""}`
       const live = o.stream?.active === true
@@ -163,7 +163,7 @@ export function preflightChecks(i: ReadinessInput): ReadinessCheck[] {
   for (const c of i.countdownIdle ?? []) out.push({ id: `countdown-idle:${c.output}`, status: soon, label: `${c.output}: the countdown has nothing to count`, detail: `${c.why}. Until then it shows a dash. Or choose what it counts in Design → Countdown.`, fix: "outputs", fixLabel: "Open outputs" })
   if (i.timersOwnerAway?.length) {
     const t = i.timersOwnerAway
-    out.push({ id: "timers-owner-away", status: soon, label: t.length === 1 ? `Extra timer “${t[0].timer}”: no ${t[0].role} desk is connected` : `${t.length} extra timers have no desk connected to run them`, detail: `${t.map((x) => `“${x.timer}” belongs to the ${x.role} desk`).join("; ")}. The main desk and the Timekeeper desk can still run ${t.length === 1 ? "it" : "them"}, in Live → Production tools → Timekeeper.` })
+    out.push({ id: "timers-owner-away", status: soon, label: t.length === 1 ? `Extra timer “${t[0].timer}”: no ${t[0].role} desk is connected` : `${t.length} extra timers have no desk connected to run them`, detail: `${t.map((x) => `“${x.timer}” belongs to the ${x.role} desk`).join("; ")}. The main computer and the Timekeeper desk can still run ${t.length === 1 ? "it" : "them"}, in Live → Production tools → Timekeeper.` })
   }
   if (i.overscan?.outputs.length) out.push({ id: "overscan", status: "info", label: `${i.overscan.outputs.join(", ")}: if the TV cuts off the edges, set Overscan in this output's settings (Edit output → Overscan)`, fix: "outputs", fixLabel: "Open outputs", dismiss: i.overscan.dismiss })
   if (i.internet) out.push({ id: "internet", status: "ok", label: "Works without the internet", detail: `The service runs on the church network alone: unplugging the router's internet is fine. Only OBS's stream to YouTube${i.internet.cloudSpeech ? " and cloud speech need" : " needs"} it.` })

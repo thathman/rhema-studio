@@ -172,7 +172,7 @@ beforeEach(() => {
     if (command === "recorder_preflight") return preflight
     if (command === "recorder_start") return recordingStatus
     if (command === "recorder_marker")
-      return { atMs: 8_000, label: "Sermon begins", actor: "main desk" }
+      return { atMs: 8_000, label: "Sermon begins", actor: "main computer" }
     return null
   })
   useRecorderAlertStore.getState().reset()
@@ -667,7 +667,7 @@ describe("Live's Rhema recording dock", () => {
       command === "recorder_status"
         ? recordingStatus
         : command === "recorder_marker"
-          ? { atMs: 8_000, label: "Sermon begins", actor: "main desk" }
+          ? { atMs: 8_000, label: "Sermon begins", actor: "main computer" }
           : null
     )
     useQueueStore.setState({
@@ -724,7 +724,7 @@ describe("Live's Rhema recording dock", () => {
       command === "recorder_status"
         ? recordingStatus
         : command === "recorder_marker"
-          ? { atMs: 8_000, label: "Sermon begins", actor: "main desk" }
+          ? { atMs: 8_000, label: "Sermon begins", actor: "main computer" }
           : null
     )
     await renderDock()
@@ -856,7 +856,7 @@ describe("Live's Rhema recording dock", () => {
     expect(host.textContent).toContain("Not recording")
   })
 
-  it("keeps an active failed recorder session locked and lets the host close it", async () => {
+  it("keeps an active failed recorder session locked and lets the main computer close it", async () => {
     const failedStatus = {
       ...recordingStatus,
       state: "failed" as const,

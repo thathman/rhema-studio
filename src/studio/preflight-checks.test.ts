@@ -59,8 +59,8 @@ describe("preflight: OBS, network address, screens, Yorùbá fonts, clock, inter
 
   it("checks the clock against a joined host, says a plainly wrong year, and otherwise skips it", () => {
     expect(check(computeReadiness({ ...good, clock: { year: 2026, skewMs: null, reference: null } }), "clock")).toBeUndefined()
-    expect(check(computeReadiness({ ...good, clock: { year: 2026, skewMs: 400, reference: "the host's" } }), "clock")).toMatchObject({ status: "ok", label: "Clock matches the host's" })
-    expect(check(computeReadiness({ ...good, clock: { year: 2026, skewMs: 75_000, reference: "the host's" } }), "clock")?.label).toBe("This computer's clock is 1 min 15 s ahead of the host's")
+    expect(check(computeReadiness({ ...good, clock: { year: 2026, skewMs: 400, reference: "the main computer's" } }), "clock")).toMatchObject({ status: "ok", label: "Clock matches the main computer's" })
+    expect(check(computeReadiness({ ...good, clock: { year: 2026, skewMs: 75_000, reference: "the main computer's" } }), "clock")?.label).toBe("This computer's clock is 1 min 15 s ahead of the main computer's")
     expect(check(computeReadiness({ ...good, clock: { year: 2001, skewMs: null, reference: null } }), "clock")?.status).toBe("warn")
   })
 })
