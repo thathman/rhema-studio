@@ -91,13 +91,66 @@ pub fn quality_suggestion(id: &str) -> Option<QualitySuggestion> {
 pub struct CameraInfo {
     pub label: String,
     pub quality: Option<QualitySuggestion>,
+    /// No quality was chosen (the app sent none): TV-friendly while a paired Google TV plays the
+    /// camera (`TvHold`), otherwise the phone's own. "phone" is a choice, never automatic.
+    pub auto: bool,
 }
 
 impl CameraInfo {
-    /// The label (at most 40 characters, no control characters) and a known quality id, or none.
+    /// The label (at most 40 characters, no control characters) and a known quality id, or none;
+    /// no id at all is automatic.
     #[must_use]
     pub fn new(label: &str, quality: Option<&str>) -> Self {
-        Self { label: label.chars().filter(|c| !c.is_control()).take(40).collect::<String>().trim().to_string(), quality: quality.and_then(quality_suggestion) }
+        Self { label: label.chars().filter(|c| !c.is_control()).take(40).collect::<String>().trim().to_string(), quality: quality.and_then(quality_suggestion), auto: quality.is_none() }
+    }
+}
+
+/// How long a paired Google TV must keep playing an automatic camera before it is suggested
+/// TV-friendly 720p (a quick cut through its scene changes nothing).
+pub const TV_QUALITY_AFTER: Duration = Duration::from_secs(2);
+/// How long after the last TV stops playing it the camera goes back to the phone's own quality.
+/// Long, so a cut away and back does not restart the phone's stream twice (it changes size only
+/// while on no Program, and a size change restarts its stream).
+pub const TV_QUALITY_HOLD: Duration = Duration::from_secs(60);
+/// Longer than this between two "on" notes (the phone asks every 2 s) is a break, not a run.
+pub const TV_QUALITY_GAP: Duration = Duration::from_secs(5);
+
+/// Whether an automatic camera is TV-friendly now: on after `TV_QUALITY_AFTER` on a TV, off only
+/// `TV_QUALITY_HOLD` after it was last on one (#838, 12 Nov: a TV fell to 5-9 fps at the phone's
+/// 1080p 14 Mbit/s and held 28-29.5 fps at 720p 4 Mbit/s).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TvHold {
+    /// Since when a TV has played it without a break.
+    on_since: Option<Instant>,
+    /// When a TV last played it.
+    last_on: Option<Instant>,
+    /// TV-friendly was reached and not yet let go.
+    active: bool,
+}
+
+impl TvHold {
+    /// A TV plays the camera now (`on`), or not, at `now`.
+    pub fn note(&mut self, on: bool, now: Instant) {
+        if on {
+            // A gap in the polls (the phone stopped, then came back): the TV's run starts again.
+            if self.last_on.is_none_or(|t| now.saturating_duration_since(t) > TV_QUALITY_GAP) {
+                self.on_since = None;
+            }
+            let since = *self.on_since.get_or_insert(now);
+            self.last_on = Some(now);
+            if now.saturating_duration_since(since) >= TV_QUALITY_AFTER {
+                self.active = true;
+            }
+        } else {
+            self.on_since = None;
+        }
+        self.active = self.on(now);
+    }
+
+    /// TV-friendly at `now`.
+    #[must_use]
+    pub fn on(&self, now: Instant) -> bool {
+        self.active && self.last_on.is_some_and(|t| now.saturating_duration_since(t) < TV_QUALITY_HOLD)
     }
 }
 
@@ -179,6 +232,12 @@ pub struct CameraWatch {
     /// when it has not reported lately (another camera app, an older Cam, or it went quiet).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub phone: Option<PhoneReport>,
+    /// The quality id the host suggests to its phone now ("tv720"; None: the phone's own, #838).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggest: Option<&'static str>,
+    /// An automatic camera is TV-friendly now because a paired Google TV plays it (or did, within
+    /// `TV_QUALITY_HOLD`).
+    pub auto_tv: bool,
 }
 
 /// What Rhema Studio Cam says about its phone (`POST /api/v1/camera/<name>/status`).
@@ -289,6 +348,8 @@ pub struct CameraHub {
     phones: RwLock<HashMap<String, (Instant, PhoneStatus)>>,
     /// Each camera's label and suggested quality, by name (#838, #850).
     info: RwLock<HashMap<String, CameraInfo>>,
+    /// Whether each camera is on a Google TV, held against flapping (automatic quality).
+    tv_holds: RwLock<HashMap<String, TvHold>>,
     /// The app has given the camera list at least once since Rhema started: until then an unknown
     /// camera may only not be loaded yet, so a phone is not told it was removed (#836).
     loaded: std::sync::atomic::AtomicBool,
@@ -323,6 +384,7 @@ impl CameraHub {
         let map: HashMap<String, String> = list.iter().filter(|(n, t)| valid_camera_name(n) && t.len() >= 16).cloned().collect();
         // A removed camera's phone report goes with it.
         self.phones.write().unwrap_or_else(PoisonError::into_inner).retain(|n, _| map.contains_key(n));
+        self.tv_holds.write().unwrap_or_else(PoisonError::into_inner).retain(|n, _| map.contains_key(n));
         *self.cameras.write().unwrap_or_else(PoisonError::into_inner) = map;
         self.loaded.store(true, std::sync::atomic::Ordering::Release);
     }
@@ -345,6 +407,26 @@ impl CameraHub {
         self.router().is_some() && self.watch.read().unwrap_or_else(PoisonError::into_inner).iter().any(|w| w.name == name && w.live && !w.frozen)
     }
 
+    /// The quality suggested for a camera now: the operator's choice, or for an automatic camera
+    /// TV-friendly 720p while its `TvHold` is on (none: the phone's own).
+    #[must_use]
+    pub fn suggestion(&self, name: &str, now: Instant) -> Option<QualitySuggestion> {
+        let info = self.info.read().unwrap_or_else(PoisonError::into_inner).get(name).cloned().unwrap_or_default();
+        if !info.auto {
+            return info.quality;
+        }
+        let on_tv = self.tv_holds.read().unwrap_or_else(PoisonError::into_inner).get(name).is_some_and(|h| h.on(now));
+        if on_tv { quality_suggestion("tv720") } else { None }
+    }
+
+    /// Whether a paired Google TV plays this camera now (`FeedHub::on_tv`), noted at each tally.
+    pub fn note_on_tv(&self, name: &str, on: bool, now: Instant) {
+        if !valid_camera_name(name) {
+            return;
+        }
+        self.tv_holds.write().unwrap_or_else(PoisonError::into_inner).entry(name.to_string()).or_default().note(on, now);
+    }
+
     /// What the phone is told about itself besides its tally (#838, #850): the host's name for it,
     /// whether Rhema receives its picture, and the quality the host suggests (absent: the phone's
     /// own). Old Cams read only the tally's two fields, so these are extra and optional.
@@ -356,7 +438,7 @@ impl CameraHub {
             o.insert("name".into(), info.label.into());
         }
         o.insert("receiving".into(), self.receiving(name).into());
-        if let Some(q) = info.quality {
+        if let Some(q) = self.suggestion(name, Instant::now()) {
             o.insert("suggest".into(), serde_json::json!({ "id": q.id, "height": q.height, "mbps": q.mbps, "words": q.words }));
         }
         o
@@ -434,8 +516,11 @@ impl CameraHub {
         let tallies = self.tallies.read().unwrap_or_else(PoisonError::into_inner);
         let mut fresh: Vec<&(String, Instant, Tally)> = tallies.values().filter(|(_, at, _)| at.elapsed() < TALLY_FRESH).collect();
         fresh.sort_by(|a, b| a.0.cmp(&b.0));
+        let now = Instant::now();
         for cam in &mut list {
             cam.phone = self.phone(&cam.name);
+            cam.suggest = self.suggestion(&cam.name, now).map(|q| q.id);
+            cam.auto_tv = self.info.read().unwrap_or_else(PoisonError::into_inner).get(&cam.name).is_some_and(|i| i.auto) && cam.suggest.is_some();
             cam.obs = fresh
                 .iter()
                 .filter_map(|(desk, _, t)| {
@@ -850,6 +935,79 @@ mod tests {
         assert!(!hub.receiving("choir"), "connected but nothing arriving is not receiving");
         assert_eq!(hub.phone_answer("pulpit")["receiving"], true);
         assert_eq!(CameraInfo::new(&"x".repeat(60), None).label.len(), 40);
+    }
+
+    #[test]
+    fn an_automatic_camera_is_tv_friendly_after_two_seconds_on_a_tv_and_for_a_minute_after() {
+        let hub = CameraHub::default();
+        hub.set_info(vec![
+            ("pulpit".into(), CameraInfo::new("Pulpit", None)),
+            ("choir".into(), CameraInfo::new("Choir", Some("phone"))),
+            ("wide".into(), CameraInfo::new("Wide", Some("hd1080"))),
+        ]);
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        assert_eq!(hub.suggestion("pulpit", t0), None, "automatic, on no TV: the phone's own");
+        for name in ["pulpit", "choir", "wide"] {
+            hub.note_on_tv(name, true, t0);
+        }
+        assert_eq!(hub.suggestion("pulpit", at(1)), None, "not yet: a quick cut changes nothing");
+        for name in ["pulpit", "choir", "wide"] {
+            hub.note_on_tv(name, true, at(2));
+        }
+        assert_eq!(hub.suggestion("pulpit", at(2)).map(|q| q.id), Some("tv720"));
+        assert_eq!(hub.suggestion("choir", at(2)), None, "The phone decides, chosen: never overridden");
+        assert_eq!(hub.suggestion("wide", at(2)).map(|q| q.id), Some("hd1080"), "a chosen quality wins");
+        // The TV cuts away: held for a minute, so the phone does not restart twice.
+        hub.note_on_tv("pulpit", false, at(4));
+        assert_eq!(hub.suggestion("pulpit", at(61)).map(|q| q.id), Some("tv720"));
+        hub.note_on_tv("pulpit", false, at(62));
+        assert_eq!(hub.suggestion("pulpit", at(62)), None, "off TVs for a minute: back to the phone's own");
+    }
+
+    #[test]
+    fn a_tv_coming_back_within_the_minute_keeps_it_and_a_short_glimpse_never_turns_it_on() {
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        let mut h = TvHold::default();
+        h.note(true, t0);
+        h.note(false, at(1));
+        h.note(true, at(2));
+        assert!(!h.on(at(3)), "on, off, on: the two seconds start again");
+        h.note(true, at(4));
+        assert!(h.on(at(4)));
+        h.note(false, at(30));
+        h.note(true, at(50));
+        h.note(false, at(52));
+        assert!(h.on(at(100)), "back on a TV within the minute: the minute counts from then");
+        assert!(!h.on(at(112)));
+        assert!(!TvHold::default().on(t0), "no TV ever: never");
+    }
+
+    #[test]
+    fn a_gap_in_the_polls_starts_the_two_seconds_again() {
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        let mut h = TvHold::default();
+        h.note(true, t0);
+        // The phone stopped asking, and comes back while a TV plays it.
+        h.note(true, at(10));
+        assert!(!h.on(at(10)), "no wait skipped after a gap");
+        h.note(true, at(12));
+        assert!(h.on(at(12)), "two seconds of a TV since it came back");
+    }
+
+    #[test]
+    fn the_panel_is_told_the_suggestion_and_whether_a_tv_made_it() {
+        let hub = CameraHub::default();
+        hub.set_info(vec![("pulpit".into(), CameraInfo::new("Pulpit", None)), ("wide".into(), CameraInfo::new("Wide", Some("light")))]);
+        hub.set_watch(vec![CameraWatch { name: "pulpit".into(), ..CameraWatch::default() }, CameraWatch { name: "wide".into(), ..CameraWatch::default() }]);
+        let now = Instant::now();
+        hub.note_on_tv("pulpit", true, now.checked_sub(Duration::from_secs(3)).unwrap_or(now));
+        hub.note_on_tv("pulpit", true, now);
+        let w = hub.watch();
+        assert_eq!((w[0].suggest, w[0].auto_tv), (Some("tv720"), true));
+        assert_eq!((w[1].suggest, w[1].auto_tv), (Some("light"), false));
     }
 
     #[test]
