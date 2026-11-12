@@ -155,9 +155,22 @@ async function runScenario() {
       () => normal(document.querySelector('nav[aria-label="Design sections"] button[aria-current="page"]')?.textContent) === "My Designs",
       "My Designs section",
     )
+    // My Designs → Templates opens Design's one Templates section (#806 R7), which lists every
+    // look; narrow it to dark camera scenes so the copy is a scene design, not a theme.
     await clickWithin('aside[aria-label="My designs"]', "Templates")
+    await waitFor(
+      () => normal(document.querySelector('nav[aria-label="Design sections"] button[aria-current="page"]')?.textContent) === "Templates",
+      "Templates section",
+    )
+    await clickWithin('[role="radiogroup"][aria-label="Layout"]', "Camera scene")
     await clickWithin('[role="radiogroup"][aria-label="Background"]', "Dark")
-    await clickButton("Customize a copy")
+    const sceneCard = await waitFor(
+      () => [...document.querySelectorAll("li")].find((card) =>
+        normal(card.textContent).includes("Camera scene ·") &&
+        [...card.querySelectorAll("button")].some((button) => normal(button.textContent) === "Customize a copy")),
+      "dark camera scene template",
+    )
+    await activateButton([...sceneCard.querySelectorAll("button")].find((button) => normal(button.textContent) === "Customize a copy"), "Customize a copy")
     await waitFor(() => document.querySelector('input#design-document-title'), "editable design template copy")
     await setInput("input#design-document-title", "QA Approved Design")
     await setLabeledColor("Artboard background solid colour", "#123456")
