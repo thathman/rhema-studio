@@ -21,7 +21,7 @@ import javax.net.ssl.X509TrustManager;
 /**
  * The phone's battery and heat, told to Rhema every 30 s while sending (#213), so the operator sees
  * a phone about to run flat or slowing down before its picture stops. Sent over https to Rhema's
- * secure listener, trusting only the paired certificate (as the picture does), signed in with the
+ * secure listener, trusting only the paired server key (as the picture does, KeyPin), signed in with the
  * camera's own secret in a header (never in the address, which can end up in logs). Plain Java
  * (no Android), so build.sh can test it.
  */
@@ -51,11 +51,24 @@ final class Report {
         return "Bearer " + p.token;
     }
 
-    /** Only the paired Rhema's certificate. */
-    static final class Pin implements X509TrustManager {
-        private final String fp;
+    /** Keeps the server key of a link from before key= once its pinned certificate answered (doc 48). */
+    interface Keeper {
+        /** The certificate the link's fp names answered: trust its server key keyPin from now on. */
+        void keep(String fp, String keyPin);
+    }
 
-        Pin(String fp) {
+    /**
+     * Only the paired Rhema (KeyPin.check): its server key, or, for a link from before key=, the one
+     * certificate the link names, whose key is noted (seen) to be kept once Rhema has answered.
+     */
+    static final class Pin implements X509TrustManager {
+        private final String keyPin;
+        private final String fp;
+        /** The key of the pinned certificate (a link without key=), or null. */
+        volatile String seen;
+
+        Pin(String keyPin, String fp) {
+            this.keyPin = keyPin;
             this.fp = fp;
         }
 
@@ -66,7 +79,9 @@ final class Report {
 
         @Override
         public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-            if (chain == null || chain.length == 0 || !Pairing.pinned(chain[0].getEncoded(), fp)) throw new CertificateException("Not the paired Rhema's certificate");
+            int verdict = KeyPin.check(keyPin, fp, chain);
+            if (verdict == KeyPin.REFUSE) throw new CertificateException("Not the paired Rhema's certificate");
+            if (verdict == KeyPin.UPGRADE) seen = KeyPin.spki(chain[0]);
         }
 
         @Override
@@ -80,9 +95,15 @@ final class Report {
      * not be reached. Nothing happens for a link without a report port (an older Rhema).
      */
     static int send(Pairing p, String body) throws IOException {
+        return send(p, body, null);
+    }
+
+    /** send(), keeping the server key of a link from before key= once Rhema answered (keeper may be null). */
+    static int send(Pairing p, String body, Keeper keeper) throws IOException {
         String url = p.statusUrl();
         if (url == null) return 0;
-        HttpsURLConnection c = open(p, url);
+        Pin pin = pin(p);
+        HttpsURLConnection c = open(p, url, pin);
         try {
             c.setRequestMethod("POST");
             c.setDoOutput(true);
@@ -96,6 +117,7 @@ final class Report {
                 out.close();
             }
             int code = c.getResponseCode();
+            kept(p, pin, keeper);
             InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
             if (in != null) in.close();
             return code;
@@ -163,12 +185,19 @@ final class Report {
      * reached. Same pinned https and header sign-in as the report.
      */
     static Answer ask(Pairing p) throws IOException {
+        return ask(p, null);
+    }
+
+    /** ask(), keeping the server key of a link from before key= once Rhema answered (keeper may be null). */
+    static Answer ask(Pairing p, Keeper keeper) throws IOException {
         String url = p.tallyUrl();
         if (url == null) return new Answer(0, CamAction.TALLY_UNKNOWN, CamAction.RECEIVING_UNKNOWN, "", null);
-        HttpsURLConnection c = open(p, url);
+        Pin pin = pin(p);
+        HttpsURLConnection c = open(p, url, pin);
         try {
             c.setRequestMethod("GET");
             int code = c.getResponseCode();
+            kept(p, pin, keeper);
             InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
             byte[] buf = new byte[4096];
             int n = 0;
@@ -229,12 +258,23 @@ final class Report {
         return b.toString().trim();
     }
 
-    /** A connection to the paired Rhema only (its pinned certificate), signed in with the camera's secret. */
-    private static HttpsURLConnection open(Pairing p, String url) throws IOException {
+    /** The pin check for this pairing: its server key, else (a link from before key=) its certificate. */
+    static Pin pin(Pairing p) {
+        return new Pin(p.keyPinned() ? p.key : null, p.fp);
+    }
+
+    /** Rhema answered over the pinned certificate (the handshake completed): hand its server key to the keeper. */
+    static void kept(Pairing p, Pin pin, Keeper keeper) {
+        String seen = pin.seen;
+        if (keeper != null && seen != null && !p.keyPinned()) keeper.keep(p.fp, seen);
+    }
+
+    /** A connection to the paired Rhema only (its pinned key or certificate), signed in with the camera's secret. */
+    private static HttpsURLConnection open(Pairing p, String url, Pin pin) throws IOException {
         SSLContext ctx;
         try {
             ctx = SSLContext.getInstance("TLS");
-            ctx.init(null, new TrustManager[] {new Pin(p.fp)}, null);
+            ctx.init(null, new TrustManager[] {pin}, null);
         } catch (GeneralSecurityException e) {
             throw new IOException("This phone cannot make a secure connection", e);
         }

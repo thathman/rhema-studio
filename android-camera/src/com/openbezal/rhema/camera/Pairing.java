@@ -10,12 +10,14 @@ import java.util.Map;
 
 /**
  * A camera's pairing link from Rhema's Cameras card:
- * rhema-camera://pair?host=192.168.1.20&port=8322&name=pulpit&user=cam-pulpit&token=…&fp=…&api=8081
+ * rhema-camera://pair?host=192.168.1.20&port=8322&name=pulpit&user=cam-pulpit&token=…&fp=…&key=…&api=8081
  * It says where Rhema's camera router is, which camera this phone is, the camera's own password
- * (its link's secret) and the SHA-256 fingerprint of Rhema's certificate, which is the only
- * certificate this phone will send to; and (from Rhema Studio 1.x with this app 1.2) the port of
- * Rhema's secure listener, where the app reports its battery and heat (same certificate). Plain
- * Java (no Android), so build.sh can test it.
+ * (its link's secret) and the SHA-256 fingerprint of Rhema's certificate; (from this app 1.2) the
+ * port of Rhema's secure listener, where the app reports its battery and heat (same certificate);
+ * and (from this app 1.6, doc 48) key=, the SHA-256 of Rhema's server key (SubjectPublicKeyInfo),
+ * which stays the same when Rhema's address changes. With key= only that key is trusted; a link
+ * without it trusts that one certificate until it first connects, then keeps its key (KeyPin).
+ * Plain Java (no Android), so build.sh can test it.
  */
 final class Pairing {
     final String host;
@@ -23,20 +25,23 @@ final class Pairing {
     final String name;
     final String user;
     final String token;
-    /** Lower-case hex SHA-256 of the router's certificate (DER). */
+    /** Lower-case hex SHA-256 of the router's certificate (DER): trusted only until key is known. */
     final String fp;
+    /** Lower-case hex SHA-256 of Rhema's server key (SubjectPublicKeyInfo DER); empty when not known yet. */
+    final String key;
     /** What the operator called the camera ("Pulpit"); may be empty. */
     final String label;
     /** Rhema's secure listener (https, the same certificate), for the battery and heat report; 0 when the link has none. */
     final int api;
 
-    private Pairing(String host, int port, String name, String user, String token, String fp, String label, int api) {
+    private Pairing(String host, int port, String name, String user, String token, String fp, String key, String label, int api) {
         this.host = host;
         this.port = port;
         this.name = name;
         this.user = user;
         this.token = token;
         this.fp = fp;
+        this.key = key;
         this.label = label;
         this.api = api;
     }
@@ -74,6 +79,9 @@ final class Pairing {
         if (!secret(token)) throw new IllegalArgumentException("The link's password is not one Rhema makes");
         String fp = need(q, "fp").replace(":", "").toLowerCase(java.util.Locale.ROOT);
         if (!hex64(fp)) throw new IllegalArgumentException("The link's certificate fingerprint is not a SHA-256 fingerprint");
+        // Optional (doc 48): a link from an older Rhema has none. When it is there it must be right.
+        String key = q.containsKey("key") ? q.get("key").replace(":", "").toLowerCase(java.util.Locale.ROOT) : "";
+        if (!key.isEmpty() && !hex64(key)) throw new IllegalArgumentException("The link's key fingerprint is not a SHA-256 fingerprint");
         String label = q.containsKey("label") ? q.get("label") : "";
         if (label.length() > 40) label = label.substring(0, 40);
         int api = 0;
@@ -85,7 +93,54 @@ final class Pairing {
             }
             if (api < 1 || api > 65535) throw new IllegalArgumentException("The link's report port is out of range");
         }
-        return new Pairing(host, port, name, user, token, fp, label, api);
+        return new Pairing(host, port, name, user, token, fp, key, label, api);
+    }
+
+    /** Whether this camera trusts Rhema by its server key (else, until the first connection, by its certificate). */
+    boolean keyPinned() {
+        return hex64(key);
+    }
+
+    /**
+     * The same pairing, trusting from now on the server key of the certificate the link's fp named,
+     * once that certificate completed a connection (KeyPin.UPGRADE). Null when there is nothing to do
+     * (a key is already kept, or that is no key pin).
+     */
+    Pairing withKey(String spki) {
+        if (keyPinned() || spki == null || !hex64(spki)) return null;
+        return new Pairing(host, port, name, user, token, fp, spki, label, api);
+    }
+
+    /**
+     * The same pairing at Rhema's new address (found on the network and proved by its key, doc 48):
+     * only the IPv4 address changes; ports, camera, password and pins stay. Null when the address is
+     * not an IPv4 address, or this pairing has no key pin to have proved it by.
+     */
+    Pairing movedTo(String ipv4) {
+        if (!keyPinned() || ipv4 == null || !ipv4(ipv4)) return null;
+        return new Pairing(ipv4, port, name, user, token, fp, key, label, api);
+    }
+
+    /** change(): another camera, another Rhema, or nothing before: start again and forget what Rhema said. */
+    static final int OTHER = 0;
+    /** change(): the very same link. */
+    static final int SAME = 1;
+    /** change(): only the server key was added (KeyPin.UPGRADE): nothing has to start again. */
+    static final int KEY_KEPT = 2;
+    /** change(): only Rhema's address changed (rediscovery): connect there, the same camera. */
+    static final int MOVED = 3;
+
+    /** What changed between the kept pairing and a new one. */
+    static int change(Pairing before, Pairing after) {
+        if (before == null || after == null) return OTHER;
+        boolean camera = before.port == after.port && before.name.equals(after.name) && before.user.equals(after.user) && before.token.equals(after.token)
+                && before.fp.equals(after.fp) && before.label.equals(after.label) && before.api == after.api;
+        if (!camera) return OTHER;
+        boolean sameHost = before.host.equals(after.host);
+        if (sameHost && before.key.equals(after.key)) return SAME;
+        if (sameHost && before.key.isEmpty() && after.keyPinned()) return KEY_KEPT;
+        if (!sameHost && before.keyPinned() && before.key.equals(after.key)) return MOVED;
+        return OTHER;
     }
 
     /** Where this camera publishes: always RTSP over TLS, never plain RTSP. */
@@ -95,7 +150,7 @@ final class Pairing {
 
     /** The link again (what Settings keeps). */
     String link() {
-        return "rhema-camera://pair?host=" + host + "&port=" + port + "&name=" + name + "&user=" + user + "&token=" + token + "&fp=" + fp
+        return "rhema-camera://pair?host=" + host + "&port=" + port + "&name=" + name + "&user=" + user + "&token=" + token + "&fp=" + fp + (key.isEmpty() ? "" : "&key=" + key)
                 + (label.isEmpty() ? "" : "&label=" + encode(label)) + (api == 0 ? "" : "&api=" + api);
     }
 
@@ -120,7 +175,7 @@ final class Pairing {
         return "Pairing(" + host + ":" + port + "/" + name + ")";
     }
 
-    /** Whether a certificate (its DER bytes) is the one this link names. */
+    /** Whether a certificate (its DER bytes) is the one this link's fp names (the pin of links from before key=). */
     static boolean pinned(byte[] der, String fp) {
         if (der == null || fp == null || !hex64(fp)) return false;
         byte[] want = unhex(fp);

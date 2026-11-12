@@ -9,7 +9,11 @@
 # looks' colour maths (the same as the GPU shader's), .cube tables, the film shutter's meter and
 # the GPU's step-down when it is short of time, the battery and heat report, Rhema's tally reply
 # (name, receiving, suggested quality), the heat and battery badge, and resuming after a restart or
-# stopping when removed; a failure stops the build.
+# stopping when removed; then KeyPinCheck (1.6, doc 48): Rhema's server key pin and the link's key=,
+# the old certificate pin accepted once and upgraded (also over a real Publisher connection), the
+# network hint, the pairing moved to a new address (only its IP), the TLS check at a candidate
+# address (a wrong key refused, the whole deadline kept), when it looks, and which addresses it
+# checks. A failure stops the build.
 set -euo pipefail
 cd "$(dirname "$0")"
 SDK=${ANDROID_HOME:?set ANDROID_HOME to the Android SDK}
@@ -19,8 +23,9 @@ J=${JAVA_HOME:+$JAVA_HOME/bin/}
 P=src/com/openbezal/rhema/camera
 rm -rf build && mkdir -p build/classes build/dex build/gen build/check
 # Plain Java parts only (no Android), checked with the computer's own Java.
-"${J}javac" --release 8 -Xlint:-options -d build/check $P/CamAction.java $P/Pairing.java $P/Rtp.java $P/Sdp.java $P/Auth.java $P/RtspReader.java $P/Plan.java $P/Kelvin.java $P/Looks.java $P/Lut.java $P/Exposure.java $P/Pace.java $P/Publisher.java $P/Report.java $P/Json.java $P/Health.java $P/Lifecycle.java $(find test -name '*.java')
+"${J}javac" --release 8 -Xlint:-options -d build/check $P/CamAction.java $P/Pairing.java $P/Rtp.java $P/Sdp.java $P/Auth.java $P/RtspReader.java $P/Plan.java $P/Kelvin.java $P/Looks.java $P/Lut.java $P/Exposure.java $P/Pace.java $P/Publisher.java $P/Report.java $P/Json.java $P/Health.java $P/Lifecycle.java $P/KeyPin.java $P/Rediscovery.java $P/ProbeQueue.java $(find test -name '*.java')
 "${J}java" -cp build/check com.openbezal.rhema.camera.CameraCoreCheck
+"${J}java" -cp build/check com.openbezal.rhema.camera.KeyPinCheck
 "$BT/aapt2" compile --dir res -o build/res.zip
 "$BT/aapt2" link ${CAMERA_DEBUG:+--debug-mode} -o build/base.apk -I "$JAR" --manifest AndroidManifest.xml --java build/gen build/res.zip
 # Java 8 without lambdas: this android.jar has no LambdaMetafactory for javac's output.

@@ -59,6 +59,8 @@ final class Prefs {
     static final String SUGGEST_WORDS = "host_suggest_words";
     /** What Rhema Studio calls this camera, as it last said (#850). */
     static final String HOST_NAME = "host_camera_name";
+    /** The name Rhema Studio was last found under on the network (doc 48): tried first when it is looked for again. */
+    static final String HOST_SERVICE = "host_service";
     /** White-balance measurements per camera (see Kelvin.Anchor). */
     static final String ANCHORS = "wb_anchors_";
 
