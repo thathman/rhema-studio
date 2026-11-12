@@ -10,7 +10,7 @@ import type { SaraswatiTextNode } from "@/vendor/avnac/saraswati"
 import { designToScene, sceneToDesign } from "@/design-engine/rhema-scene"
 import { mergeDeskScene } from "@/lib/desk-scenes"
 import { normalizeScene, sceneFrame } from "@/lib/scenes"
-import { drawScene, layerPivot } from "@/lib/scene-renderer"
+import { drawScene, layerPivot, LayerFader } from "@/lib/scene-renderer"
 import { layerRotation } from "@/lib/scene-rotation"
 import type { Scene, SceneLayer } from "@/types"
 
@@ -290,6 +290,53 @@ describe("layer rotation (#851 G7)", () => {
       expect(Math.hypot(editorInk.x - outputInk.x, editorInk.y - outputInk.y), `${s.layers[0]!.rotation ?? 0}°`).toBeLessThan(4)
     }
     expect(outputPivot(scene).x).toBeCloseTo(768 + 144, 0)
+  })
+
+  it("caps widening at the edges of a letterboxed frame, not the canvas", () => {
+    // A 4:3 frame letterboxed in a 1920×1080 canvas: the frame runs 240–1680 px across.
+    const words = { text: "Supercalifragilistic", fontSize: 120, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const, lineHeight: 1.2 }
+    const right = bar("text", { ...words, textWiden: "right", box: { x: 80, y: 30, w: 15, h: 40 } })
+    const both = bar("text", { ...words, textWiden: "both", box: { x: 5, y: 30, w: 15, h: 40 } })
+    for (const s of [right, both]) {
+      const canvas = createCanvas(1920, 1080)
+      const frame = { ...sceneFrame({ isLive: false, liveVerse: null, sources: {} as never, themes: [] }, { themeId: "t" }, s), aspect: 4 / 3 }
+      drawScene(ctxOf(canvas), 1920, 1080, frame, { image: () => null, layerCanvas: () => createCanvas(1, 1) as unknown as HTMLCanvasElement })
+      const ink = inkSpan(canvas)
+      expect(ink.min, s.layers[0]!.textWiden).toBeGreaterThanOrEqual(240)
+      expect(ink.max, s.layers[0]!.textWiden).toBeLessThanOrEqual(1680)
+    }
+    // The pivot follows the same cap (frame 1440 px wide starting at 240).
+    const l = sceneFrame({ isLive: false, liveVerse: null, sources: {} as never, themes: [] }, { themeId: "t" }, right).layers[0]!
+    const r = { x: 240 + 0.8 * 1440, y: 324, w: 0.15 * 1440, h: 432 }
+    expect(layerPivot(ctxOf(createCanvas(8, 8)), l, r, 1080, { x: 240, w: 1440 }).x).toBeCloseTo(r.x + (1680 - r.x) / 2, 0)
+  })
+
+  it("fades widened text whole: nothing past its box is cut off on outputs", () => {
+    const words = { text: "Supercalifragilistic", fontSize: 120, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const, lineHeight: 1.2, textWiden: "right" as const, fadeMs: 400 }
+    for (const rotation of [undefined, 20]) {
+      const s = bar("text", { ...words, rotation, box: { x: 10, y: 30, w: 15, h: 40 } })
+      const draw = (fader?: LayerFader) => {
+        const canvas = createCanvas(1920, 1080)
+        const frame = sceneFrame({ isLive: false, liveVerse: null, sources: {} as never, themes: [] }, { themeId: "t" }, s)
+        expect(frame.layers[0]?.fadeMs).toBe(400)
+        drawScene(ctxOf(canvas), 1920, 1080, frame, { image: () => null, layerCanvas: () => createCanvas(1, 1) as unknown as HTMLCanvasElement, ...(fader ? { fader } : {}) })
+        return canvas
+      }
+      const fader = new LayerFader(() => createCanvas(1, 1) as unknown as HTMLCanvasElement, () => 0)
+      const faded = draw(fader), plain = draw()
+      // Upright, the word runs well past the box's right edge (192 + 288 = 480 px).
+      if (!rotation) expect(inkSpan(faded).max).toBeGreaterThan(480 + 300)
+      if (!rotation) {
+        expect(differing(faded, plain), "upright: the same pixels").toBeLessThan(0.0005)
+        continue
+      }
+      // Turned, the fade canvas is resampled as it turns, so edges differ slightly; the words are
+      // all there, in the same place (a cut-off block would lose most of its ink and move it).
+      const a = inkCentre(faded), b = inkCentre(plain)
+      expect(Math.hypot(a.x - b.x, a.y - b.y), "turned: same place").toBeLessThan(1.5)
+      const inkOf = (c: Canvas) => { const d = ctxOf(c).getImageData(0, 0, 1920, 1080).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i]! > 200 && d[i + 1]! > 200 && d[i + 2]! > 200) n++; return n }
+      expect(inkOf(faded) / inkOf(plain), "turned: all the words").toBeGreaterThan(0.9)
+    }
   })
 
   it("refuses to save a turned camera, video or ticker, and outputs never turn one from an older file", () => {

@@ -414,26 +414,48 @@ function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: n
   }
 }
 
+/** Where each fade canvas was painted from (its region of the frame), so old content goes back there. */
+const fadeRegions = new WeakMap<HTMLCanvasElement, Rect>()
+
+/**
+ * The part of the frame a layer paints into, in the layer's own (unturned) space: its box, or for
+ * text that widens past its box (`textWiden`), the widened block (same height).
+ */
+function paintRegion(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: Rect, height: number, span: FrameSpan): Rect {
+  if (l.kind !== "text" || !l.text || !l.textWiden) return r
+  ctx.save()
+  const { left, width } = staticTextLayout(ctx, l, r, height, span)
+  ctx.restore()
+  // Whole pixels across, so the fade canvas is placed 1:1 and the words are not resampled.
+  const x0 = Math.floor(left), x1 = Math.ceil(left + width)
+  return { x: x0, y: r.y, w: x1 - x0, h: r.h }
+}
+
 /**
  * A layer with a fade: its content painted into a canvas of its own and placed over the old
  * content fading out. A camera or video the page shows under the canvas cannot fade there: it cuts.
+ * The canvas covers everything the layer paints (a widened text block too), in the layer's own
+ * space, so a turned layer is turned by the caller as a whole.
  */
 function paintFading(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions, fader: LayerFader, span: FrameSpan): void {
-  const w = Math.max(1, Math.round(r.w)), h = Math.max(1, Math.round(r.h))
+  const region = paintRegion(ctx, l, r, height, span)
+  const w = Math.max(1, Math.round(region.w)), h = Math.max(1, Math.round(region.h))
   const { canvas, from, p } = fader.begin(l.id, l.key ?? "", l.fadeMs ?? 0, w, h)
   const c = canvas.getContext("2d")
   if (!c) return paintLayer(ctx, l, r, height, opts, span)
   c.save()
   c.clearRect(0, 0, w, h)
-  c.translate(-r.x, -r.y)
+  c.translate(-region.x, -region.y)
   paintLayer(c, { ...l, opacity: 1 }, r, height, opts, span)
   c.restore()
+  fadeRegions.set(canvas, region)
   if (from) {
+    const was = fadeRegions.get(from) ?? r
     ctx.globalAlpha = l.opacity * (1 - p)
-    ctx.drawImage(from, r.x, r.y, r.w, r.h)
+    ctx.drawImage(from, was.x, was.y, was.w, was.h)
   }
   ctx.globalAlpha = l.opacity * p
-  ctx.drawImage(canvas, r.x, r.y, r.w, r.h)
+  ctx.drawImage(canvas, region.x, region.y, region.w, region.h)
 }
 
 /**
