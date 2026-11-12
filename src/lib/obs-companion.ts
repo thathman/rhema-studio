@@ -519,3 +519,32 @@ export async function testOverlay(request: ObsRequest, inputName: string, sceneN
   return { image: typeof shot?.imageData === "string" && shot.imageData ? shot.imageData : null, showing: active?.videoShowing === true, onAir: active?.videoActive === true, hidden: sceneItemEnabled === false }
 }
 
+/** One of the host's feeds this companion may add as an overlay (`GET /api/v1/overlays`, #848 G4). */
+export interface HostOverlay {
+  id: string
+  name: string
+  kind: OverlayKind
+  /** The feed's link: `http://<the paired host>:<its http port>/feed/<id>?k=<the feed's key>`. */
+  url: string
+}
+
+/**
+ * The host's answer to `join_overlays`, as links this companion's OBS can open: the paired host's
+ * address (from `joinAddress`) with the http port and feed path the host gave. Anything that is not a
+ * known overlay kind or a feed path is left out; no port, nothing.
+ */
+export function readHostOverlays(v: unknown, joinAddress: string): HostOverlay[] {
+  const o = (v ?? {}) as { httpPort?: unknown; feeds?: unknown }
+  const port = o.httpPort
+  const host = hostOf(joinAddress)
+  if (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535 || !host || !Array.isArray(o.feeds)) return []
+  const out: HostOverlay[] = []
+  for (const f of o.feeds as Record<string, unknown>[]) {
+    const kind = OVERLAY_KINDS.find((k) => k.id === f?.kind)?.id
+    if (!kind || typeof f.id !== "string" || typeof f.name !== "string" || typeof f.path !== "string" || !f.path.startsWith("/feed/")) continue
+    const link = readFeedLink(`http://${host}:${port}${f.path}`)
+    if (link && link.id === f.id) out.push({ id: f.id, name: f.name, kind, url: link.url })
+  }
+  return out
+}
+
