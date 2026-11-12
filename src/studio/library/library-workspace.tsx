@@ -286,7 +286,8 @@ export function LibraryWorkspace() {
       openTargetChooser(item, invocation)
       return
     }
-    addItemAtTarget(item, invocation, target, context, true)
+    // Only a real choice is remembered; the single destination is used without being stored as one.
+    addItemAtTarget(item, invocation, target, context, rememberedDestinationIsValid(targetKey, currentChoices))
   }
   // The same handler, named for what it does (the Library preview's Add to service).
   const addToService = useItem

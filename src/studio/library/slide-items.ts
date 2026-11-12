@@ -1,3 +1,4 @@
+import { create } from "zustand"
 import { slideLabel } from "@/stores/service-store"
 import type { ReusableSlide, ReusableSlideInput, SlideQueueItem } from "@/types"
 
@@ -11,6 +12,16 @@ export function reusableSlideQueueItem(slide: ReusableSlide, media: ReadonlyArra
     ...(bg ? { background: { media_id: bg, name: media.find((asset) => asset.id === bg)?.name ?? "" } } : {}),
   }
 }
+
+/**
+ * The reusable slide form, kept while the app is open (#833 S9): switching Library section or
+ * leaving Library unmounts the form, and this brings its unsaved words back. In memory only.
+ */
+export const useSlideDraft = create<{ selectedId: string | null; form: ReusableSlideInput | null; editing: ReusableSlide | null }>(() => ({
+  selectedId: null,
+  form: null,
+  editing: null,
+}))
 
 /** True when the form holds words that are not saved in the library (#833 S9). */
 export function slideFormIsDirty(form: ReusableSlideInput, editing: ReusableSlide | null): boolean {
