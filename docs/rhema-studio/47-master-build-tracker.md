@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.1.0.1 · 12 Nov 2026 · main `0e2e4068`**
+**Version 1.1.0.1 · 12 Nov 2026 · main `35a31c44`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -66,6 +66,7 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | Phone camera: Stop/Start and tally | PHYSICAL TESTED | Vsmart, 11 Nov. The notification's Stop sending tears the stream down cleanly within 1 s, and SEND republishes in about 1 s. The tally shows ON AIR · CONGREGATION once a TV shows the camera on its own key (sent from the output editor's Show on TV form), and clears within about 4 s after release. A TV sent only the feed's shared link is not counted (by design: OBS or a browser). |
 | Phone camera: battery and heat warnings | AUTOMATED TESTED | The host received the phone's report (12%, unplugged, simulated with `dumpsys battery`) within 6 s, which triggers "Battery low… plug the phone in". The real phone ran at 51 °C battery temperature with Android thermal status 0, and Rhema warns only from thermal 2. Owner decision: also warn on battery temperature? |
 | Two phone cameras | BLOCKED | Only one phone is available. |
+| Companion overlay feeds from the host | MERGED | #877, 12 Nov: the host lists Bible, Lyrics, Name, Ticker and Timer feeds to a paired Companion with its own revocable key per feed (HMAC); unpair, pause or scope change cuts the overlay within about 2 s. Security review twice; a lock-order deadlock found and fixed with a test that hangs on the old code. Not yet run against a real OBS. |
 | Rhema Studio Companion on a separate OBS computer | BLOCKED | Needs the church's OBS machine. |
 
 ### Phase D — Recording, recovery and data
