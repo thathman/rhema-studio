@@ -66,7 +66,7 @@ import { useBibleStore } from "@/stores/bible-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useSongStore } from "@/stores/song-store"
-import { HymnBook } from "./hymn-book"
+import { HymnBook } from "@/studio/library/hymn-book"
 
 let root: Root | null = null
 

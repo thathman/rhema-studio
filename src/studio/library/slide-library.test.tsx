@@ -13,6 +13,7 @@ import { CustomSlideEditor } from "@/studio/prepare/item-editor-parts"
 import { isCurrentPrepareLibraryReturn } from "@/studio/prepare/library-return"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { SlideLibrary } from "./slide-library"
+import { slideFormIsDirty, useSlideDraft } from "@/studio/library/slide-items"
 
 const mockInvoke = vi.fn()
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args), convertFileSrc: (p: string) => p }))
@@ -49,6 +50,7 @@ beforeEach(() => {
     throw new Error(`Unexpected command ${command}`)
   })
   useSlideStore.setState({ slides: [], loading: false, error: null, query: "", pendingSourceId: null })
+  useSlideDraft.setState({ selectedId: null, form: null, editing: null })
   useQueueStore.setState({ items: [], headers: [], activeIndex: null, addTarget: null })
   useBibleStore.setState({ selectedSlide: null, selectedQueueItemId: null })
   useRundownSelection.setState({ focusId: null })
@@ -398,5 +400,100 @@ describe("reusable slide library workflow (#395)", () => {
 
     expect(useQueueStore.getState().items).toEqual([])
     expect(useShellStore.getState().workspace).toBe("library")
+  })
+})
+
+describe("reusable slide form dirty check (#833 S9)", () => {
+  const welcome: Row = { id: "source-1", kind: "slide", title: "Welcome", body: "Old words", link: null, background_media_id: null, revision: 1, created_at: "", updated_at: "" }
+  const offering: Row = { id: "source-2", kind: "slide", title: "Offering", body: "Give as the Lord leads", link: null, background_media_id: null, revision: 1, created_at: "", updated_at: "" }
+  const field = (label: string) => document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[aria-label="${label}"]`)!.value
+  const prompt = () => document.querySelector('[aria-label="Unsaved slide changes"]')
+  const promptButton = (label: string) => [...prompt()!.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label)!
+
+  async function editWelcome() {
+    rows.set(welcome.id, welcome)
+    rows.set(offering.id, offering)
+    useSlideStore.setState({ slides: [welcome, offering] })
+    await render()
+    await vi.waitFor(() => expect(button("Welcome")).toBeTruthy())
+    await act(async () => button("Welcome").click())
+    await setValue("Reusable slide text", "Edited words")
+  }
+
+  it("selecting another slide with unsaved edits asks first, and Cancel keeps the edits", async () => {
+    await editWelcome()
+    await act(async () => button("Offering").click())
+    expect(prompt()).not.toBeNull()
+    expect(field("Reusable slide text")).toBe("Edited words")
+    await act(async () => promptButton("Cancel").click())
+    expect(prompt()).toBeNull()
+    expect(field("Reusable slide title")).toBe("Welcome")
+    expect(field("Reusable slide text")).toBe("Edited words")
+  })
+
+  it("Discard drops the edits and opens the other slide; the source is unchanged", async () => {
+    await editWelcome()
+    await act(async () => button("Offering").click())
+    await act(async () => promptButton("Discard").click())
+    expect(field("Reusable slide title")).toBe("Offering")
+    expect(rows.get(welcome.id)).toEqual(welcome)
+  })
+
+  it("Save keeps the edits in the library, then opens the other slide", async () => {
+    await editWelcome()
+    await act(async () => button("Offering").click())
+    await act(async () => { promptButton("Save").click(); await new Promise((resolve) => setTimeout(resolve, 0)) })
+    await vi.waitFor(() => expect(field("Reusable slide title")).toBe("Offering"))
+    expect(rows.get(welcome.id)).toMatchObject({ body: "Edited words", revision: 2 })
+  })
+
+  it("New and Clear ask too when a new slide has unsaved words; a clean form switches at once", async () => {
+    await render()
+    await setValue("Reusable slide title", "Draft notice")
+    await act(async () => button("Clear").click())
+    expect(prompt()).not.toBeNull()
+    expect(field("Reusable slide title")).toBe("Draft notice")
+    await act(async () => promptButton("Discard").click())
+    expect(field("Reusable slide title")).toBe("")
+    // Nothing typed: no question.
+    await act(async () => button("New").click())
+    expect(prompt()).toBeNull()
+  })
+
+  it("the page head's New slide asks instead of throwing the form away", async () => {
+    await act(async () => { root!.render(<SlideLibrary newRequest={0} />) })
+    await setValue("Reusable slide title", "Unsaved")
+    await act(async () => { root!.render(<SlideLibrary newRequest={1} />) })
+    expect(prompt()).not.toBeNull()
+    expect(field("Reusable slide title")).toBe("Unsaved")
+  })
+
+  it("Reload library asks before replacing unsaved edits with the saved source", async () => {
+    await editWelcome()
+    rows.set(welcome.id, { ...welcome, body: "Changed elsewhere", revision: 2 })
+    await act(async () => useSlideStore.setState({ error: "This slide changed elsewhere" }))
+    await act(async () => { button("Reload library").click(); await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(prompt()).not.toBeNull()
+    expect(field("Reusable slide text")).toBe("Edited words")
+    await act(async () => promptButton("Discard").click())
+    expect(field("Reusable slide text")).toBe("Changed elsewhere")
+  })
+
+  it("leaving the section and coming back keeps the unsaved words", async () => {
+    await editWelcome()
+    await act(async () => root!.render(<div />))
+    await render()
+    expect(field("Reusable slide title")).toBe("Welcome")
+    expect(field("Reusable slide text")).toBe("Edited words")
+    await act(async () => button("Offering").click())
+    expect(prompt()).not.toBeNull()
+  })
+
+  it("slideFormIsDirty compares with the saved source, or with an empty form for a new slide", () => {
+    const form = { kind: welcome.kind, title: welcome.title, body: welcome.body, link: null, background_media_id: null }
+    expect(slideFormIsDirty(form, welcome as never)).toBe(false)
+    expect(slideFormIsDirty({ ...form, body: "x" }, welcome as never)).toBe(true)
+    expect(slideFormIsDirty({ kind: "slide", title: "", body: "  ", link: null, background_media_id: null }, null)).toBe(false)
+    expect(slideFormIsDirty({ kind: "slide", title: "", body: "", link: "https://x.example", background_media_id: null }, null)).toBe(true)
   })
 })

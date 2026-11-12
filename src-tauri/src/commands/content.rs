@@ -10,7 +10,7 @@ use rhema_content::{
     ContentDb, ContentError, Hymnbook, HymnbookInput, ImportMode, ImportReport, ItemInput, Program, ProgramWithItems,
     Revision, RevisionSummary, SongExport, SongInput, SongSummary, SongWithSections, SongUsage, ServiceLog, ServiceLogSummary, ServiceRun,
     ServiceRunCheckpoint, ServiceRunSummary, MediaAsset,
-    ReusableSlide, ReusableSlideInput,
+    ReusableSlide, ReusableSlideInput, Collection, CollectionSummary,
 };
 
 /// The content database is opened in `setup`; `None` means it failed to open
@@ -344,6 +344,43 @@ pub fn content_update_reusable_slide(state: State<'_, ContentState>, id: String,
 #[tauri::command]
 pub fn content_delete_reusable_slide(state: State<'_, ContentState>, id: String, expected_revision: i64) -> CmdResult<()> {
     with_db(&state, |db| db.delete_reusable_slide(&id, expected_revision))
+}
+
+// Library collections (#853 G9): groups of library items by reference. Never a Take.
+
+#[tauri::command]
+pub fn content_list_collections(state: State<'_, ContentState>) -> CmdResult<Vec<CollectionSummary>> {
+    with_db(&state, ContentDb::list_collections)
+}
+
+#[tauri::command]
+pub fn content_get_collection(state: State<'_, ContentState>, id: String) -> CmdResult<Option<Collection>> {
+    with_db(&state, |db| db.get_collection(&id))
+}
+
+#[tauri::command]
+pub fn content_create_collection(state: State<'_, ContentState>, name: String) -> CmdResult<CollectionSummary> {
+    with_db(&state, |db| db.create_collection(&name))
+}
+
+#[tauri::command]
+pub fn content_rename_collection(state: State<'_, ContentState>, id: String, name: String) -> CmdResult<CollectionSummary> {
+    with_db(&state, |db| db.rename_collection(&id, &name))
+}
+
+#[tauri::command]
+pub fn content_delete_collection(state: State<'_, ContentState>, id: String) -> CmdResult<()> {
+    with_db(&state, |db| db.delete_collection(&id))
+}
+
+#[tauri::command]
+pub fn content_add_to_collection(state: State<'_, ContentState>, id: String, kind: String, item_id: String) -> CmdResult<Collection> {
+    with_db(&state, |db| db.add_to_collection(&id, &kind, &item_id))
+}
+
+#[tauri::command]
+pub fn content_remove_from_collection(state: State<'_, ContentState>, id: String, kind: String, item_id: String) -> CmdResult<Collection> {
+    with_db(&state, |db| db.remove_from_collection(&id, &kind, &item_id))
 }
 
 // Avnac design documents (C2, docs/contracts/design-documents-v1.md). Saving is never a Take.
