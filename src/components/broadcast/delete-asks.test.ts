@@ -58,8 +58,38 @@ describe("Deleting a theme is asked first (#831 S7)", () => {
     useBroadcastStore.setState({ scenes: [{ ...scene, layers: scene.layers.map((layer, i) => (i === 0 ? { ...layer, themeId: spare.id } : layer)) }] })
     ask.mockResolvedValueOnce(true)
     expect(await deleteThemeAsked(spare)).toBe("deleted")
-    expect(String(ask.mock.calls[0]![0])).toContain("Scenes that use it: Welcome.")
+    expect(String(ask.mock.calls[0]![0])).toContain("Scenes that use it (Welcome) will show in each output's own look.")
     expect(themeIds()).not.toContain(spare.id)
+  })
+
+  it("says the draft goes only when there is one", async () => {
+    await deleteThemeAsked(spare)
+    expect(String(ask.mock.calls[0]![0])).not.toContain("draft")
+    useBroadcastStore.setState({ editingThemeId: spare.id })
+    await deleteThemeAsked(spare)
+    expect(String(ask.mock.calls[1]![0])).toContain("Its unsaved draft goes too.")
+  })
+
+  it("refuses one a shown scene uses without asking, so nothing on air changes look", async () => {
+    const scene = newScene("Welcome", SCENE_PRESETS[0])
+    const shown = { ...scene, layers: scene.layers.map((layer, i) => (i === 0 ? { ...layer, themeId: spare.id } : layer)) }
+    const s = useBroadcastStore.getState()
+    useBroadcastStore.setState({ scenes: [shown], outputs: s.outputs.map((o) => (o.id === "overflow" ? { ...o, sceneId: shown.id } : o)) })
+    expect(await deleteThemeAsked(spare)).toBe("in-use")
+    expect(ask).not.toHaveBeenCalled()
+    expect(themeIds()).toContain(spare.id)
+  })
+
+  it("checks again after the answer: an output that took it meanwhile keeps it", async () => {
+    ask.mockImplementationOnce(async () => {
+      const s = useBroadcastStore.getState()
+      const scene = newScene("Late", SCENE_PRESETS[0])
+      const shown = { ...scene, layers: scene.layers.map((layer, i) => (i === 0 ? { ...layer, themeId: spare.id } : layer)) }
+      useBroadcastStore.setState({ scenes: [shown], outputs: s.outputs.map((o) => (o.id === "overflow" ? { ...o, sceneId: shown.id } : o)) })
+      return true
+    })
+    expect(await deleteThemeAsked(spare)).toBe("in-use")
+    expect(themeIds()).toContain(spare.id)
   })
 
   it("refuses one an output uses without asking", async () => {
@@ -75,6 +105,17 @@ describe("Removing an output is asked first (#831 S7)", () => {
     expect(await removeOutputAsked(overflow)).toBe("kept")
     expect(ask).toHaveBeenCalledTimes(1)
     expect(ask.mock.calls[0]![1]?.title).toContain("“Overflow hall”")
+    expect(disableOutput).not.toHaveBeenCalled()
+    expect(outputIds()).toEqual(["main", "overflow"])
+  })
+
+  it("does nothing when the output was removed or edited while asked", async () => {
+    const overflow = useBroadcastStore.getState().outputs[1]!
+    ask.mockImplementationOnce(async () => {
+      useBroadcastStore.getState().renameOutput("overflow", "Annexe")
+      return true
+    })
+    expect(await removeOutputAsked(overflow)).toBe("kept")
     expect(disableOutput).not.toHaveBeenCalled()
     expect(outputIds()).toEqual(["main", "overflow"])
   })
