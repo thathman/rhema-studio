@@ -4,6 +4,7 @@ import {
   type SaraswatiScene,
 } from "../scene";
 import { anchorToCenter } from "../transform/anchor";
+import { textLineHeight } from "../utils/text";
 
 export type SaraswatiPoint = { x: number; y: number };
 export type SaraswatiBounds = {
@@ -75,7 +76,7 @@ export function getTextNodeVisualHeight(
   lineHeight: number,
 ): number {
   const lineCount = Math.max(1, text.split(/\r?\n/).length);
-  return Math.max(1, fontSize * Math.max(1, lineHeight) * lineCount);
+  return Math.max(1, fontSize * textLineHeight(lineHeight) * lineCount);
 }
 
 /**
@@ -96,7 +97,7 @@ export function estimateTextNodeBox(
   node: Extract<SaraswatiRenderableNode, { type: "text" }>,
 ): { width: number; height: number } {
   const fontSize = Math.max(1, node.fontSize);
-  const lineHeight = Math.max(1, node.lineHeight);
+  const lineHeight = textLineHeight(node.lineHeight);
   const maxWidth = Math.max(1, node.width);
   // Average glyph advance ≈ 0.5em. A rough but deterministic model.
   const avgCharWidth = fontSize * 0.5;

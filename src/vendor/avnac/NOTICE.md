@@ -58,6 +58,12 @@ the small helpers they import. The editor UI, routing, storage, AI, MCP, Wails b
   offline and never fetches fonts from Google; fonts resolve from the computer and Rhema's bundled fonts.
 - `renderer/dirty-regions.ts`: `let merged` became `const merged` (lint).
 - `saraswati/spatial/index.ts`: a lint exception on the deprecated no-op `setSaraswatiInteractionScale`.
-- Added `avnac-engine.test.ts` (Rhema's compatibility tests). Nothing else in these files is changed.
+- Added `avnac-engine.test.ts` (Rhema's compatibility tests).
+- Text line height (12 November 2026): `saraswati/utils/text.ts` gains `textLineHeight`, which keeps a
+  text node's line height to 0.5–3 (the range Rhema saves and its outputs draw). `text.ts`,
+  `text-layout.ts` and `saraswati/spatial/index.ts` use it where upstream raised anything below 1 to 1,
+  and `text-layout.ts` adds the line height to its layout cache key, since the box height depends on it.
+
+Nothing else in these files is changed.
 
 When updating from upstream, keep this file and repeat the changes above.

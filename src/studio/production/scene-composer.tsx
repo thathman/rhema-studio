@@ -1,6 +1,6 @@
 import { liveLanguage } from "@/lib/output-language"
 import { useTimerStore, monotonicNow } from "@/stores/timer-store"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ArrowDownIcon, ArrowUpIcon, BookmarkPlusIcon, CopyIcon, EyeIcon, EyeOffIcon, PencilIcon, PinIcon, PinOffIcon, PlusIcon, SaveIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -21,7 +21,7 @@ import { useMediaStore } from "@/stores/media-store"
 import { dropReplacedGradients, gradientCss } from "@/lib/scene-gradient"
 import { dropStaleImageDraws } from "@/lib/scene-image"
 import { layerRotation, layerTurns } from "@/lib/scene-rotation"
-import { framePivot, layerAt, unturnDelta } from "@/studio/production/scene-hit"
+import { framePivot, layerAt, resizeTurned, unturnDelta } from "@/studio/production/scene-hit"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { CountdownSelect } from "@/studio/production/countdown-select"
 import { useProductionTab } from "@/studio/production/production-tab"
@@ -436,11 +436,12 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
   // Where each turned layer turns (#851 G7), as the canvas draws it: the selection ring and the
   // pointer follow the turn, so a turned layer is grabbed where it shows.
   const [measure] = useState(() => (typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d")))
-  const pivots = new Map(sceneFrame(live, output, scene, true).layers.map((f) => [f.id, framePivot(measure, f, W, H)]))
+  const frames = new Map(sceneFrame(live, output, scene, true).layers.map((f) => [f.id, f]))
+  const pivots = new Map([...frames.values()].map((f) => [f.id, framePivot(measure, f, W, H)]))
   const turnOf = (l: SceneLayer) => (layerTurns(l.kind) ? l.rotation : undefined)
 
   const box = useRef<HTMLDivElement>(null)
-  const drag = useCallback((e: React.PointerEvent, l: SceneLayer, mode: "move" | "size") => {
+  const drag = (e: React.PointerEvent, l: SceneLayer, mode: "move" | "size") => {
     e.preventDefault()
     e.stopPropagation()
     onSelect(l.id)
@@ -450,6 +451,9 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
     const el = e.currentTarget as HTMLElement
     el.setPointerCapture?.(e.pointerId)
     const turn = layerTurns(l.kind) ? l.rotation : undefined
+    // Where the layer turns for a given box, so a resize keeps its far corner still on screen.
+    const frame = frames.get(l.id)
+    const pivotOf = (b: SceneBox) => (frame ? framePivot(measure, { ...frame, box: b }, W, H) : { x: b.x + b.w / 2, y: b.y + b.h / 2 })
     const move = (ev: PointerEvent) => {
       // A resize follows the layer's own (turned) edges.
       const d = mode === "size" ? unturnDelta(ev.clientX - start.x, ev.clientY - start.y, turn) : { dx: ev.clientX - start.x, dy: ev.clientY - start.y }
@@ -458,7 +462,7 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
       const b = start.b
       const next = mode === "move"
         ? { ...b, x: clamp(b.x + dx, 0, 100 - b.w), y: clamp(b.y + dy, 0, 100 - b.h) }
-        : { ...b, w: clamp(b.w + dx, 2, 100 - b.x), h: clamp(b.h + dy, 2, 100 - b.y) }
+        : resizeTurned(b, { w: clamp(b.w + dx, 2, 100), h: clamp(b.h + dy, 2, 100) }, turn, W, H, pivotOf)
       onMove(l.id, round(next))
     }
     const up = () => {
@@ -467,7 +471,7 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
     }
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", up)
-  }, [onMove, onSelect])
+  }
 
   /** Pick the topmost layer under the pointer where it is drawn (turned or not) and drag it. */
   const pick = (e: React.PointerEvent) => {

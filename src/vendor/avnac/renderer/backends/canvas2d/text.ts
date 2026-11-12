@@ -1,4 +1,5 @@
 import type { SaraswatiRenderTextCommand } from "../../../saraswati/render/commands";
+import { textLineHeight } from "../../../saraswati/utils/text";
 import { layoutTextLines, textFontString } from "./text-layout";
 import {
   applyCanvas2DClipPaths,
@@ -39,7 +40,7 @@ export function renderCanvas2DTextCommand(
   const box = centeredCanvas2DBox(layout.boxWidth, layout.boxHeight);
   const align = normalizeCanvas2DTextAlign(command.textAlign);
   const lineHeightPx =
-    Math.max(1, Math.round(command.fontSize)) * Math.max(1, command.lineHeight);
+    Math.max(1, Math.round(command.fontSize)) * textLineHeight(command.lineHeight);
 
   withCanvas2DTransform(ctx, command, box.width, box.height, () => {
     applyCanvas2DClipPaths(ctx, command.clipPathStack, command.clipPath);

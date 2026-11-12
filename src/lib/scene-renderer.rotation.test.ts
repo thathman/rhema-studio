@@ -173,6 +173,47 @@ describe("layer rotation (#851 G7)", () => {
     expect(designToScene(sceneToDesign(scene)).scene.layers[0]).toMatchObject({ rotation: -40, box: { h: 50 } })
   })
 
+  it("spaces lines below a line height of 1 the same in the editor and on outputs", async () => {
+    const lines = { text: "Welcome\nhome\nagain", fontSize: 72, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const }
+    for (const lineHeight of [0.5, 0.7, 1.4]) {
+      const scene = bar("text", { ...lines, lineHeight, box: { x: 30, y: 20, w: 40, h: 50 } })
+      const node = sceneToDesign(scene).scene.nodes.bar as SaraswatiTextNode
+      expect(node.lineHeight).toBe(lineHeight)
+      // The editor's tight block: two line steps plus the last em.
+      expect(editorTextPivot(node).y, `${lineHeight} editor`).toBeCloseTo(216 + (2 * 72 * lineHeight + 72) / 2, 0)
+      expect(Math.abs(outputPivot(scene).y - editorTextPivot(node).y), `${lineHeight} pivot`).toBeLessThan(1)
+      const ink = [inkCentre(await drawEditor(scene)), inkCentre(drawOutput(scene))]
+      expect(Math.abs(ink[0]!.y - ink[1]!.y), `${lineHeight} ink, upright`).toBeLessThan(1.5)
+      // Saved from the editor, the value comes back unchanged.
+      expect(designToScene(sceneToDesign(scene)).scene.layers[0]).toMatchObject({ lineHeight })
+    }
+  })
+
+  it("wraps a word wider than the box where the editor does, and turns it about the same point", async () => {
+    const words = { text: "Hallelujah! Supercalifragilistic praise", fontSize: 72, textColor: "#ffffff", fontFamily: "Arial", textAlign: "center" as const, lineHeight: 1.2 }
+    // 15% of 1920 = 288 px: "Supercalifragilistic" alone is far wider.
+    const design = sceneToDesign(bar("text", { ...words, box: { x: 20, y: 30, w: 15, h: 40 } }))
+    const turnedScene = applyCommand(design.scene, { type: "ROTATE_NODE", id: "bar", rotation: 30 })
+    const node = turnedScene.nodes.bar as SaraswatiTextNode
+    const ctx = ctxOf(createCanvas(8, 8))
+    const layout = layoutTextLines(node, (font, text) => measureCanvas2DTextLineWidth(ctx, font, text))
+    expect(layout.lines).toEqual(["Hallelujah!", "Supercalifragilistic", "praise"])
+    expect(layout.boxWidth).toBeGreaterThan(288 * 1.5)
+    const { scene, issues } = designToScene({ ...design, scene: turnedScene })
+    expect(issues).toEqual([])
+    // The saved box is the width the editor wraps at, not an estimate stretched by the long word.
+    expect(scene.layers[0]).toMatchObject({ rotation: 30, box: { x: 20, w: 15 } })
+    const editor = editorTextPivot(node)
+    const output = outputPivot(scene)
+    expect(Math.abs(output.x - editor.x), "pivot x").toBeLessThan(1)
+    expect(Math.abs(output.y - editor.y), "pivot y").toBeLessThan(1)
+    const ink = [inkCentre(await drawEditor(scene)), inkCentre(drawOutput(scene))]
+    expect(Math.hypot(ink[0]!.x - ink[1]!.x, ink[0]!.y - ink[1]!.y), "ink, turned").toBeLessThan(4)
+    const upright = { ...scene, layers: [{ ...scene.layers[0]!, rotation: undefined }] }
+    const still = [inkCentre(await drawEditor(upright)), inkCentre(drawOutput(upright))]
+    expect(Math.hypot(still[0]!.x - still[1]!.x, still[0]!.y - still[1]!.y), "ink, upright").toBeLessThan(4)
+  })
+
   it("refuses to save a turned camera, video or ticker, and outputs never turn one from an older file", () => {
     for (const [kind, extra] of [
       ["camera", { cameraUrl: "http://192.168.1.10:8889/pulpit/whep" }],

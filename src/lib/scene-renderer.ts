@@ -6,6 +6,7 @@ import { entranceProgress } from "@/lib/lower-third-style"
 import { drawBars, drawStatic, noSignalOf } from "@/lib/no-signal"
 import { layerTurns, turnAbout } from "@/lib/scene-rotation"
 import { applyCanvas2DClipPath, paintCanvas2DStyle, roundedCanvas2DRectPath } from "@/vendor/avnac/renderer/backends/canvas2d/shared"
+import { textLineHeight } from "@/vendor/avnac/saraswati/utils/text"
 import type { ImageDraw, LowerThird, SceneFrame, SceneGradient, SceneLayerFrame, Ticker } from "@/types"
 
 export interface SceneDrawOptions {
@@ -129,8 +130,10 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, r: { x: number; y:
 type Rect = { x: number; y: number; w: number; h: number }
 
 /**
- * How static text lays out in its box: font, wrapped lines and line step. Sets `ctx.font`. The
- * lines are those that fit in the box (each a whole em tall), as `paintStaticText` draws them.
+ * How static text lays out in its box: font, wrapped lines, line step and width. Sets `ctx.font`.
+ * The lines are those that fit in the box (each a whole em tall), as `paintStaticText` draws them.
+ * As in the design editor, the words wrap at the box's width (the editor's text width) and a word
+ * wider than that widens the block to its measured width rather than being squeezed.
  */
 function staticTextLayout(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, r: Rect, frameHeight: number) {
   const text = layer.text ?? ""
@@ -139,7 +142,8 @@ function staticTextLayout(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame,
   const fontWeight = ["400", "500", "600", "700", "800", "900"].includes(layer.fontWeight ?? "") ? layer.fontWeight : "600"
   const fontStyle = layer.fontStyle === "italic" ? "italic" : "normal"
   const align: CanvasTextAlign = layer.textAlign === "center" || layer.textAlign === "right" ? layer.textAlign : "left"
-  const step = fontSize * Math.max(0.5, Math.min(3, layer.lineHeight ?? 1.2))
+  // One line-height rule with the design editor (0.5–3).
+  const step = fontSize * textLineHeight(layer.lineHeight)
   ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`
   const lines: string[] = []
   for (const paragraph of text.split(/\r\n?|\n/)) {
@@ -158,9 +162,10 @@ function staticTextLayout(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame,
     }
     lines.push(line)
   }
+  const width = Math.max(r.w, ...lines.map((line) => ctx.measureText(line).width))
   // Only whole lines that fit in the box are drawn.
   const fit = Math.max(0, Math.floor((r.h - fontSize) / step) + 1)
-  return { fontSize, align, step, lines: lines.slice(0, fit) }
+  return { fontSize, align, step, width, lines: lines.slice(0, fit) }
 }
 
 /**
@@ -172,10 +177,10 @@ export function layerPivot(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r:
   const centre = { x: r.x + r.w / 2, y: r.y + r.h / 2 }
   if (l.kind !== "text" || !l.text) return centre
   ctx.save()
-  const { fontSize, step, lines } = staticTextLayout(ctx, l, r, frameHeight)
+  const { fontSize, step, width, lines } = staticTextLayout(ctx, l, r, frameHeight)
   ctx.restore()
   if (!lines.length) return centre
-  return { x: centre.x, y: r.y + ((lines.length - 1) * step + fontSize) / 2 }
+  return { x: r.x + width / 2, y: r.y + ((lines.length - 1) * step + fontSize) / 2 }
 }
 
 /** Literal text saved in an Avnac design, drawn by the same renderer on Preview and every output. */
@@ -183,21 +188,21 @@ function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, 
   if (!layer.text) return
   const color = /^#[0-9a-f]{6}$/i.test(layer.textColor ?? "") ? layer.textColor! : "#ffffff"
   ctx.save()
+  const { fontSize, align, step, width: w, lines } = staticTextLayout(ctx, layer, r, frameHeight)
   ctx.beginPath()
-  ctx.rect(r.x, r.y, r.w, r.h)
+  ctx.rect(r.x, r.y, w, r.h)
   ctx.clip()
-  const { fontSize, align, step, lines } = staticTextLayout(ctx, layer, r, frameHeight)
   ctx.fillStyle = color
   ctx.textAlign = align
   ctx.textBaseline = "top"
   let y = r.y
   for (const line of lines) {
     if (line) {
-      const x = align === "center" ? r.x + r.w / 2 : align === "right" ? r.x + r.w : r.x
-      ctx.fillText(line, x, y, r.w)
+      const x = align === "center" ? r.x + w / 2 : align === "right" ? r.x + w : r.x
+      ctx.fillText(line, x, y, w)
       if (layer.underline) {
-        const width = Math.min(r.w, ctx.measureText(line).width)
-        const left = align === "center" ? r.x + (r.w - width) / 2 : align === "right" ? r.x + r.w - width : r.x
+        const width = Math.min(w, ctx.measureText(line).width)
+        const left = align === "center" ? r.x + (w - width) / 2 : align === "right" ? r.x + w - width : r.x
         const underlineY = y + fontSize * 1.04
         ctx.beginPath()
         ctx.moveTo(left, underlineY)
