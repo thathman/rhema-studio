@@ -38,6 +38,7 @@ import { useProductionTab } from "@/studio/production/production-tab"
 import { CARD_ORDER, deskPageFor, type DeskBlock } from "@/studio/production/desk-pages"
 import { validAspectRatioLabel } from "@/lib/group-take"
 import { EditorLibraryPreview } from "@/studio/production/editor-library-preview"
+import { EditorPlanDraft } from "@/studio/production/editor-plan-draft"
 import { deskSceneReleaseApprovalBlockReason, deskSceneTakeApprovalBlockReason } from "@/studio/present/scene-take-policy"
 
 // The join form has its own module so Rhema Studio Companion (#209) shows it without the studio's desks.
@@ -318,7 +319,7 @@ export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"
     ...(role === "screens" ? { upcoming: <UpcomingGraphics queue={live.graphicsQueue} stale={fresh.stale} /> } : {}),
     ...(desks.includes("director") ? { director: <DirectorBoard readiness={live.readiness} crew={live.presence} /> } : {}),
     ...(desks.includes("clock") ? { clock: <ClockDesk live={live} stale={fresh.stale} /> } : {}),
-    ...(desks.includes("prepare") ? { prepare: <EditorLibraryPreview /> } : {}),
+    ...(desks.includes("prepare") ? { prepare: <Fragment><EditorPlanDraft /><EditorLibraryPreview /></Fragment> } : {}),
     ...(desks.includes("bible") ? { bible: <BibleConsole live={live} /> } : {}),
     ...(desks.includes("songs") ? { songs: <SongsDesk live={live} /> } : {}),
     ...(desks.includes("cameras") ? { cameras: <CameraDesk live={live} /> } : {}),
