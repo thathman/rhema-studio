@@ -2,9 +2,11 @@ import { normalizeCountdownLook } from "@/lib/countdown-display"
 import { normalizeLowerThirdStyle } from "@/lib/lower-third-style"
 import { normalizeStageStyle } from "@/lib/stage-style"
 import { normalizeTickerStyle } from "@/lib/ticker"
-import type { CountdownLook, LowerThirdStyle, StageStyle, TickerStyle } from "@/types"
+import { normalizeTheme } from "@/lib/theme-migrations"
+import type { BroadcastTheme, CountdownLook, LowerThirdStyle, StageStyle, TickerStyle } from "@/types"
 
-export type DesignDraftKind = "lower-third" | "ticker" | "stage" | "countdown"
+/** "theme" is a Designer theme draft (#830): saved privately, applied to outputs only by Apply. */
+export type DesignDraftKind = "lower-third" | "ticker" | "stage" | "countdown" | "theme"
 
 interface DesignDraftBase<K extends DesignDraftKind, V> {
   id: string
@@ -13,6 +15,8 @@ interface DesignDraftBase<K extends DesignDraftKind, V> {
   sourceId: string
   value: V
   updatedAt: number
+  /** What the saved design looked like when this draft began (a fingerprint), to spot a newer save before Apply. */
+  base?: string
 }
 
 export type DesignDraft =
@@ -20,6 +24,7 @@ export type DesignDraft =
   | DesignDraftBase<"ticker", TickerStyle>
   | DesignDraftBase<"stage", StageStyle>
   | DesignDraftBase<"countdown", CountdownLook>
+  | DesignDraftBase<"theme", BroadcastTheme>
 
 export function designDraftId(kind: DesignDraftKind, sourceId: string): string {
   return `${kind}:${sourceId}`
@@ -42,6 +47,11 @@ export function normalizeDesignDraft(raw: unknown): DesignDraft | null {
       return { id: draft.id, kind: draft.kind, sourceId: draft.sourceId, value: normalizeStageStyle(draft.value as Partial<StageStyle>), updatedAt }
     case "countdown":
       return { id: draft.id, kind: draft.kind, sourceId: draft.sourceId, value: normalizeCountdownLook(draft.value as Partial<CountdownLook>), updatedAt }
+    case "theme": {
+      const value = draft.value as BroadcastTheme | undefined
+      if (typeof value !== "object" || value === null || typeof value.name !== "string" || typeof value.layout !== "object" || value.layout === null) return null
+      return { id: draft.id, kind: draft.kind, sourceId: draft.sourceId, value: normalizeTheme({ ...value, id: draft.sourceId }), updatedAt, ...(typeof draft.base === "string" ? { base: draft.base } : {}) }
+    }
     default:
       return null
   }
