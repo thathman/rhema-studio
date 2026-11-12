@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.1.0.2 · 12 Nov 2026 · main `c40b693b`**
+**Version 1.1.0.3 · 12 Nov 2026 · main `c01a8534`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -54,6 +54,7 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | TV feed reassignment and per-output language | PHYSICAL TESTED | Onn, 11 Nov. The TV was moved from `onn-tv` to a Yorùbá-only feed: the old feed's watcher dropped to 0, and John 3:16 showed in Yorùbá only on the new one (acknowledged). |
 | Receiver 1.7: off screen and coming on by itself | PHYSICAL TESTED | Onn, Receiver 1.7.0.0 built from main, host `c79cb16e`, real Wi-Fi, 12 Nov: with the output off the TV says "This screen is off in Rhema Studio. It comes on by itself when the output is turned on." Turning the Yorùbá feed on: first frame acknowledged 257 ms later, theme background drawn. John 3:16 then showed in Yorùbá only, acknowledged 356 ms after Present. |
 | Receiver 1.7: identify and status | PHYSICAL TESTED | Onn, real Wi-Fi, 12 Nov, from the host computer. POST /identify showed the TV's name and address in a large band over the live picture; a second one straight after got 429; GET /identify got 404. GET /status reports the feed id (never its link), 1920×1080 and 59.94 Hz. The 403 for a computer that is not the feed's host was not tried from a second computer. |
+| Receiver 1.7: edge inset and Start with the TV | PHYSICAL TESTED | Onn (Android 14), 12 Nov. On the code screen ↑ ↓ change the edge inset by 1%; at 2% the picture shrank inside a black border, and it was set back to 0%. Start with the TV shows On, and the code screen says the last boot start was blocked until "Display over other apps" is allowed (Settings → Apps → Special app access): Android 14 refuses the boot launch without it. Granting it is an owner action on the TV; a real power-cut boot is not yet tested. |
 | TV display-mode change without restart | PHYSICAL TESTED | Onn, Receiver 1.6.3.2, 11 Nov. With the screen density changed 320→300→320, the Receiver kept the same process and activity and the feed never lost its watcher. The Onn has only one display mode (1920×1080 at 59.94 Hz), so a refresh-rate switch cannot be tested on it. |
 | Stale picture never kept as the TV's start picture | PHYSICAL TESTED | Onn, host built at `5b816a1f`, 11 Nov. During a 145 s host freeze the TV showed "Not updating" and saved no picture; saving resumed after. Before the fix, the same test saved stale pictures. |
 | Host restart → TV reconnects | PHYSICAL TESTED | Onn, 11 Nov: the TV acknowledged the current frame 22 s after the host's LAN port opened. Feeds stay off after a restart until an operator or Live recovery turns them on (by design). |
