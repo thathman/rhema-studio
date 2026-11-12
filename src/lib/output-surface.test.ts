@@ -249,6 +249,19 @@ describe("createSurfaceWatch", () => {
     expect(h.redraw).toHaveBeenCalledTimes(SURFACE_MAX_STRIKES + 1)
   })
 
+  it("still retries when the timer fires a little early (or the clock stepped back)", () => {
+    const h = harness({ alpha: 0, freshAlpha: 0 })
+    for (let i = 0; i <= SURFACE_MAX_STRIKES; i++) {
+      h.watch.afterDraw(h.live.canvas, true)
+      h.advance(SURFACE_CHECK_MS)
+    }
+    const timer = h.timers.find((x) => !x.cleared)!
+    h.advance(SURFACE_BACKOFF_MS - 5)
+    timer.cleared = true
+    timer.fn()
+    expect(h.rebuild).toHaveBeenCalledTimes(SURFACE_MAX_STRIKES + 1)
+  })
+
   it("backs off when the rebuild itself fails", () => {
     const h = harness({ alpha: 0, rebuildOk: false })
     h.watch.afterDraw(h.live.canvas, true)

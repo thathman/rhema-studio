@@ -206,6 +206,8 @@ export function createSurfaceWatch(opts: SurfaceWatchOptions): SurfaceWatch {
         stopRetry()
         retryTimer = setTimer(() => {
           retryTimer = null
+          // The wait is over: a timer firing a hair early, or a clock stepped back, must not drop the retry.
+          retryAt = -Infinity
           recover(reason)
         }, backoffMs)
         if (!failing) {
