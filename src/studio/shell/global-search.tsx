@@ -29,7 +29,7 @@ const DESIGN: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["stage", "Stage display", "confidence monitor platform team timer next note band"],
   ["countdown", "Countdown display", "countdown timer red amber time up wrap up confidence monitor back of hall big clock"],
   ["brand", "Brand kit", "logo colours fonts church"],
-  ["used-on", "Used on…", "which outputs show each look theme screen output looks"],
+  ["used-on", "Where used", "which outputs show each look theme screen output looks"],
 ]
 
 /** Library's sections (#402, #447), each by the words people use for it. */

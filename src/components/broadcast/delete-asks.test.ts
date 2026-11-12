@@ -12,6 +12,8 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.f
 import { BUILTIN_THEMES } from "@/lib/builtin-themes"
 import { newScene, SCENE_PRESETS } from "@/lib/scenes"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { designPathOf } from "@/studio/design/design-groups"
+import { toast } from "sonner"
 import type { BroadcastTheme } from "@/types"
 import { deleteThemeAsked, removeOutputAsked } from "./delete-asks"
 
@@ -96,6 +98,15 @@ describe("Deleting a theme is asked first (#831 S7)", () => {
     expect(await deleteThemeAsked(custom)).toBe("in-use")
     expect(ask).not.toHaveBeenCalled()
     expect(themeIds()).toContain(custom.id)
+  })
+
+  it("points the refusal at Design → Where used, where each output opens (#818)", async () => {
+    vi.mocked(toast.error).mockClear()
+    expect(await deleteThemeAsked(custom)).toBe("in-use")
+    const description = (vi.mocked(toast.error).mock.calls[0]?.[1] as { description?: string } | undefined)?.description ?? ""
+    expect(designPathOf("used-on")).toBe("Design → Where used")
+    expect(description).toContain("Design → Where used opens each one.")
+    expect(description).not.toContain("Used on…")
   })
 })
 
