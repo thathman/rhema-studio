@@ -29,7 +29,7 @@ import { LiveToolsDrawer, type LiveToolsTab } from "@/studio/present/live-tools-
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { LiveActivityStrip } from "@/studio/present/live-activity-strip"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
-import { useProductionTab } from "@/studio/production/production-tab"
+import { liveToolsExpanded, useProductionTab } from "@/studio/production/production-tab"
 import { usePreviewLabel } from "@/hooks/use-preview-label"
 import { nextVisibleItem, orderCounts, plannedTimes, runOfShowClockRows } from "@/lib/run-of-show"
 import type { EventTiming } from "@/lib/timing-engine"
@@ -328,7 +328,11 @@ function LiveConsoleSurface({
   const outputs = useBroadcastStore((s) => s.outputs)
   const emptyRundown = count === 0 && headers.length === 0
   const preview = usePreviewLabel()
-  const bottomRow = toolsOpen
+  // #812 F1: the tall Live tools panel takes most of the height; Preview, Program and the transport stay in view.
+  const toolsTall = useProductionTab((s) => s.open && liveToolsExpanded(s, s.liveToolsTab, isLive))
+  const bottomRow = toolsTall
+    ? "grid-rows-[minmax(11rem,1fr)_auto_minmax(0,2fr)]"
+    : toolsOpen
     ? "grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,14.5rem)]"
     : "grid-rows-[minmax(6rem,1fr)_auto_minmax(0,10.75rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,10.75rem)]"
 
@@ -425,9 +429,13 @@ function LiveConsoleSurface({
       <TransportBar hasSelectedOutputSceneTake={selectedOutputSceneTake !== null} className="col-span-2 min-[1201px]:col-start-2 max-[1200px]:shrink-0 max-[1023px]:col-span-1" />
 
       {toolsOpen ? (
-        <div className="col-span-2 min-[1201px]:col-start-2 min-h-0 overflow-hidden max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">
-          <LiveToolsDrawer tab={toolsTab} onTabChange={onToolsTabChange} onClose={onCloseTools} />
-        </div>
+        // The strip under Program, or (#812 F1) a full-height sheet over this grid: the drawer decides.
+        <LiveToolsDrawer
+          tab={toolsTab}
+          onTabChange={onToolsTabChange}
+          onClose={onCloseTools}
+          stripClassName="col-span-2 min-[1201px]:col-start-2 min-h-0 overflow-hidden max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1"
+        />
       ) : (
         <div className="col-span-2 min-[1201px]:col-start-2 min-h-0 max-[1200px]:h-[10.75rem] max-[1200px]:shrink-0 max-[1023px]:col-span-1">
           <section className="flex h-full min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card p-3" role="group" aria-label="Quick screens" aria-describedby="live-quick-screen-scope">

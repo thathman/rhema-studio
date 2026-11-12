@@ -110,7 +110,7 @@ export interface LiveStateV1 {
   paused?: string[]
   /** A hold in the service (#196 R3): its reason, since when (host wall ms) and which desk held it. Null when not held; absent from older hosts. */
   hold?: { reason: string; since: number; by?: string } | null
-  /** Approvals is on (Team → Approvals; #243 SC.17): every scene change from a desk then waits for the main desk. Absent from older hosts. */
+  /** Approvals is on (Permissions → Before a service goes live; #243 SC.17): every scene change from a desk then waits for the main desk. Absent from older hosts. */
   requireApproval?: boolean
   /**
    * OBS as the host sees it, for an OBS director desk: connected, Studio Mode, its scenes, program
