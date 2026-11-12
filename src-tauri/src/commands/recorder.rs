@@ -274,8 +274,21 @@ fn tee(active: bool, width: u32, height: u32, fps: u32) -> serde_json::Value {
 fn spawn_status_beat(app: AppHandle, session_id: Option<String>) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(1));
-        let Some(rec) = app.try_state::<RecorderHost>().and_then(|h| h.0.get().map(|r| r.status())) else { return };
-        if rec.session_id != session_id || !matches!(rec.state, RecorderState::Recording | RecorderState::Failed) || app.get_webview_window("main").is_none() {
+        let Some(host) = app.try_state::<RecorderHost>() else { return };
+        let Some(recorder) = host.0.get() else { return };
+        // The disk filled and the file was closed: end the session as Stop does, telling the
+        // output's window (the ended session's own) to stop sending before another can start.
+        if let Some(ended) = recorder.end_if_disk_full_then(|ended| {
+            if let Some(label) = ended.output_id.as_deref().and_then(|o| window_label(o).ok()) {
+                let _ = app.emit_to(tauri::EventTarget::webview_window(label.as_str()), "broadcast:record-tee", tee(false, 0, 0, 0));
+            }
+        }) {
+            log::warn!("recorder: the disk filled; the recording was closed: {:?} {}", ended.state, ended.file.path.as_deref().unwrap_or(""));
+            let _ = app.emit_to("main", "recorder:status", &ended);
+            return;
+        }
+        let rec = recorder.status();
+        if rec.session_id != session_id || !matches!(rec.state, RecorderState::Recording | RecorderState::Finalizing | RecorderState::Failed) || app.get_webview_window("main").is_none() {
             return;
         }
         let _ = app.emit_to("main", "recorder:status", &rec);

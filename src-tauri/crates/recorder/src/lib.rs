@@ -93,6 +93,11 @@ struct Shared {
     problem: Mutex<Option<RecorderProblem>>,
     /// The writer takes nothing more (it failed, or closed the file on a full disk).
     writer_gone: AtomicBool,
+    /// The writer closed the file itself because the disk was nearly full: the file is complete.
+    disk_full: AtomicBool,
+    /// How much the writer had written when it stopped by itself (ms, plus one; 0 = it did not):
+    /// the file's length, which a Stop pressed later (or a busy encoder's backlog) must not stretch.
+    ended_ms: AtomicU64,
     /// The sound input stopped; `AudioInput` tries it again.
     audio_lost: AtomicBool,
 }
@@ -113,6 +118,23 @@ impl Shared {
 
     fn problem(&self) -> Option<RecorderProblem> {
         self.problem.lock().unwrap_or_else(PoisonError::into_inner).clone()
+    }
+
+    /// The writer stopped taking pictures `at` into the session, by itself.
+    fn ended_at(&self, at: Duration) {
+        let _ = self.ended_ms.compare_exchange(0, u64::try_from(at.as_millis()).unwrap_or(u64::MAX - 1) + 1, Ordering::Relaxed, Ordering::Relaxed);
+    }
+}
+
+fn disk_full_problem() -> RecorderProblem {
+    RecorderProblem::new(ProblemCode::DiskFull, "The disk is nearly full: the recording was closed and saved up to here.")
+}
+
+/// Holds `Phase::Stopping` while a session is being closed; back to idle when dropped.
+struct Stopping<'a>(&'a Recorder);
+impl Drop for Stopping<'_> {
+    fn drop(&mut self) {
+        self.0.state().phase = Phase::Idle;
     }
 }
 
@@ -601,12 +623,6 @@ impl Recorder {
     /// `stop`, with `closed` run once the file is closed and before another start can begin, so what
     /// it tells the output's window cannot land on the next recording.
     pub fn stop_then(&self, closed: impl FnOnce()) -> Result<RecorderStatus, RecorderProblem> {
-        struct Stopping<'a>(&'a Recorder);
-        impl Drop for Stopping<'_> {
-            fn drop(&mut self) {
-                self.0.state().phase = Phase::Idle;
-            }
-        }
         // A start under way is let through first (one refused at once if a session is running),
         // so it can't pass its checks on the session this is about to take.
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -635,6 +651,26 @@ impl Recorder {
         Ok(status)
     }
 
+    /// The writer closed the file by itself on a full disk: end the session as Stop would (saved,
+    /// "disk full" kept as its problem, `closed` run with the ended status, its output included, before another start can begin), so the desk
+    /// is not left on a recording nothing is written to and History lists it as saved, not as an
+    /// interrupted one. `None` when the running session (if any) did not end that way.
+    pub fn end_if_disk_full_then(&self, closed: impl FnOnce(&RecorderStatus)) -> Option<RecorderStatus> {
+        {
+            let mut state = self.state();
+            let ended = self.lock().as_ref().is_some_and(|s| s.shared.disk_full.load(Ordering::Relaxed) && s.writer.is_finished());
+            if state.phase != Phase::Idle || !ended {
+                return None;
+            }
+            state.phase = Phase::Stopping;
+        }
+        let _stopping = Stopping(self);
+        let s = self.lock().take()?;
+        let status = self.finish(s);
+        closed(&status);
+        Some(status)
+    }
+
     /// Close a session's file and record how it ended.
     fn finish(&self, s: Session) -> RecorderStatus {
         let Session { dir, mut manifest, t0, tx, shared, writer, width, height, fps, audio, .. } = s;
@@ -645,10 +681,12 @@ impl Recorder {
         // Longer than the writer's own limits (3 s of backlog, 60 s to close).
         let result = join_within(writer, Duration::from_secs(70));
         manifest.stopped_at = Some(iso_utc(SystemTime::now()));
-        manifest.duration_ms = Some(t0.elapsed().as_millis() as u64);
+        let ended = shared.ended_ms.load(Ordering::Relaxed);
+        manifest.duration_ms = Some(if ended > 0 { ended - 1 } else { u64::try_from(t0.elapsed().as_millis()).unwrap_or(u64::MAX) });
         manifest.frames_written = shared.frames_written.load(Ordering::Relaxed);
         manifest.frames_dropped = shared.frames_dropped.load(Ordering::Relaxed);
-        manifest.problem = shared.problem();
+        // A later warning (a lost sound input) must not hide why the recording ended.
+        manifest.problem = if shared.disk_full.load(Ordering::Relaxed) { Some(disk_full_problem()) } else { shared.problem() };
         let file = dir.join(FILE_NAME);
         manifest.state = match result {
             Ok(()) => RecorderState::Saved,
@@ -784,7 +822,12 @@ fn status_of(s: &Session, folder: &Path) -> RecorderStatus {
     }
     let gone = sh.writer_gone.load(Ordering::Relaxed);
     RecorderStatus {
-        state: if gone { RecorderState::Failed } else { RecorderState::Recording },
+        // A full disk closes a complete file: it is finishing, not failed (`end_if_disk_full_then`).
+        state: match (gone, sh.disk_full.load(Ordering::Relaxed)) {
+            (false, _) => RecorderState::Recording,
+            (true, true) => RecorderState::Finalizing,
+            (true, false) => RecorderState::Failed,
+        },
         session_active: true,
         session_id: Some(s.manifest.session_id.clone()),
         output_id: Some(s.manifest.output_id.clone()),
@@ -833,7 +876,7 @@ fn run_writer(
             return Err(e);
         }
     };
-    write_loop(writer, t0, fps, rx, shared, folder)
+    write_loop(writer, t0, fps, rx, shared, &DiskWatch::of(folder))
 }
 
 /// What the writer loop drives: the platform's encoder (`backend::Writer`), a fake in tests.
@@ -861,10 +904,24 @@ impl FrameSink for backend::Writer {
     }
 }
 
+/// How the writer watches the recordings disk: how often it looks, and how much is free.
+struct DiskWatch<'a> {
+    every: Duration,
+    free: Box<dyn Fn() -> Option<u64> + 'a>,
+}
+
+impl<'a> DiskWatch<'a> {
+    /// The volume holding `folder`, every 5 s.
+    #[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
+    fn of(folder: &'a Path) -> Self {
+        Self { every: Duration::from_secs(5), free: Box::new(move || disk_free(folder)) }
+    }
+}
+
 /// Write the session's file at a constant frame rate until Stop, a full disk or a write error. On
 /// a write error the file is closed at once with what was recorded, never left open until Stop.
 #[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
-fn write_loop<W: FrameSink>(mut writer: W, t0: Instant, fps: u32, rx: &Receiver<Msg>, shared: &Shared, folder: &Path) -> Result<(), String> {
+fn write_loop<W: FrameSink>(mut writer: W, t0: Instant, fps: u32, rx: &Receiver<Msg>, shared: &Shared, disk: &DiskWatch) -> Result<(), String> {
     let mut failed: Option<String> = None;
     let mut last_disk_check = Instant::now();
     // Constant frame rate: each tick, written `AV_DELAY` after its moment, shows the newest picture
@@ -926,15 +983,18 @@ fn write_loop<W: FrameSink>(mut writer: W, t0: Instant, fps: u32, rx: &Receiver<
             }
         }
         if let Some(e) = &failed {
+            shared.ended_at(Duration::from_micros(u64::try_from(tick * period_us).unwrap_or(0)));
             if !shared.writer_gone.swap(true, Ordering::Relaxed) {
                 shared.set_problem(RecorderProblem::new(ProblemCode::EncoderFailed, format!("Recording stopped writing ({e}). The file was closed with what was recorded so far.")));
             }
             break;
-        } else if last_disk_check.elapsed() >= Duration::from_secs(5) {
+        } else if last_disk_check.elapsed() >= disk.every {
             last_disk_check = Instant::now();
-            if disk_free(folder).is_some_and(|f| f < DISK_FULL) {
+            if (disk.free)().is_some_and(|f| f < DISK_FULL) {
+                shared.ended_at(Duration::from_micros(u64::try_from(tick * period_us).unwrap_or(0)));
+                shared.disk_full.store(true, Ordering::Relaxed);
                 shared.writer_gone.store(true, Ordering::Relaxed);
-                shared.set_problem(RecorderProblem::new(ProblemCode::DiskFull, "The disk is nearly full: the recording was closed and saved up to here."));
+                shared.set_problem(disk_full_problem());
                 break;
             }
         }
@@ -1849,7 +1909,7 @@ mod tests {
         let folder = tempfile::tempdir().unwrap();
         let t0 = Instant::now();
         std::thread::scope(|scope| {
-            scope.spawn(|| write_loop(writer, t0, 10, &rx, &shared, folder.path()));
+            scope.spawn(|| write_loop(writer, t0, 10, &rx, &shared, &DiskWatch::of(folder.path())));
             for &(id, drawn_ms, arrives_ms) in pictures {
                 std::thread::sleep((t0 + Duration::from_millis(arrives_ms)).saturating_duration_since(Instant::now()));
                 shared.video_queued.fetch_add(1, Ordering::Relaxed);
@@ -1930,7 +1990,7 @@ mod tests {
             // The encoder lives on its own thread, as in a session.
             let looped = scope.spawn(|| {
                 let writer = backend::Writer::start(&t.path().join(FILE_NAME), 320, 180, 30, 1_000_000, None).expect("encoder starts");
-                write_loop(writer, t0, 30, &rx, &shared, t.path())
+                write_loop(writer, t0, 30, &rx, &shared, &DiskWatch::of(t.path()))
             });
             for i in 0u32..60 {
                 std::thread::sleep((t0 + Duration::from_millis(40 + u64::from(i) * 33)).saturating_duration_since(Instant::now()));
@@ -1970,6 +2030,40 @@ mod tests {
         }
     }
 
+    /// The writer itself, as the disk fills: it closes the file without waiting for Stop, says
+    /// "disk full", and records the length it wrote (what `end_if_disk_full_then` saves).
+    #[test]
+    fn the_writer_closes_the_file_by_itself_when_the_disk_fills() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let writer = TickLog { current: None, log: log.clone() };
+        let (tx, rx) = crossbeam_channel::unbounded::<Msg>();
+        let shared = Shared::default();
+        let full = AtomicBool::new(false);
+        let (done_tx, done_rx) = crossbeam_channel::bounded(1);
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                let disk = DiskWatch { every: Duration::from_millis(20), free: Box::new(|| Some(if full.load(Ordering::Relaxed) { DISK_FULL - 1 } else { DISK_START_MIN })) };
+                let _ = done_tx.send(write_loop(writer, Instant::now(), 10, &rx, &shared, &disk));
+            });
+            shared.video_queued.fetch_add(1, Ordering::Relaxed);
+            tx.send(Msg::Video(vec![7; 4], 0)).unwrap();
+            std::thread::sleep(Duration::from_millis(700));
+            assert!(!shared.disk_full.load(Ordering::Relaxed), "plenty free: still recording");
+            full.store(true, Ordering::Relaxed);
+            // Nobody pressed Stop (the sender is still open): the loop ends by itself.
+            let result = done_rx.recv_timeout(Duration::from_secs(5)).expect("the loop ends without waiting for Stop");
+            assert_eq!(result, Ok(()), "the file closed properly");
+        });
+        drop(tx);
+        assert!(shared.disk_full.load(Ordering::Relaxed));
+        assert!(shared.writer_gone.load(Ordering::Relaxed));
+        assert_eq!(shared.problem().map(|p| p.code), Some(ProblemCode::DiskFull));
+        let written = shared.frames_written.load(Ordering::Relaxed);
+        assert_eq!(written, log.lock().unwrap().len() as u64);
+        assert!(written >= 3, "{written}");
+        assert_eq!(shared.ended_ms.load(Ordering::Relaxed), written * 100 + 1, "the length written at 10 fps");
+    }
+
     #[test]
     fn a_write_error_closes_the_file_at_once_not_at_stop() {
         let t = tempfile::tempdir().unwrap();
@@ -1981,7 +2075,7 @@ mod tests {
         let folder = t.path().to_path_buf();
         std::thread::scope(|scope| {
             scope.spawn(|| {
-                let _ = done_tx.send(write_loop(writer, Instant::now(), 30, &rx, &shared, &folder));
+                let _ = done_tx.send(write_loop(writer, Instant::now(), 30, &rx, &shared, &DiskWatch::of(&folder)));
             });
             // Nobody pressed Stop (the sender is still open): the loop ends by itself.
             let result = done_rx.recv_timeout(Duration::from_secs(5)).expect("the loop ends without waiting for Stop");
@@ -2050,6 +2144,51 @@ mod tests {
         let status = status_of(&session, t.path());
         assert_eq!(status.state, RecorderState::Failed);
         assert!(status.session_active, "Stop still needs to remove this live Session");
+    }
+
+    /// A full disk closes a complete file: the session ends as a saved recording on its own, with
+    /// the length the file plays, and its output's window is told to stop sending.
+    #[test]
+    fn a_session_whose_file_closed_on_a_full_disk_ends_saved() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        let mut session = stub_session(&t.path().join("failed-session"));
+        session.t0 = Instant::now().checked_sub(Duration::from_secs(60)).expect("60 s after boot");
+        session.shared.frames_written.store(900, Ordering::Relaxed);
+        session.shared.ended_at(Duration::from_secs(30));
+        session.shared.disk_full.store(true, Ordering::Relaxed);
+        session.shared.writer_gone.store(true, Ordering::Relaxed);
+        session.shared.set_problem(disk_full_problem());
+        // A sound input lost afterwards must not hide why the recording ended.
+        session.shared.set_problem(RecorderProblem::new(ProblemCode::AudioDeviceLost, "sound lost"));
+        while !session.writer.is_finished() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(status_of(&session, t.path()).state, RecorderState::Finalizing);
+        *rec.lock() = Some(session);
+
+        let mut told = false;
+        let status = rec.end_if_disk_full_then(|ended| told = ended.output_id.as_deref() == Some("sanctuary")).expect("ended");
+        assert!(told);
+        assert_eq!((status.state, status.session_active), (RecorderState::Saved, false));
+        assert_eq!(status.problem.map(|p| p.code), Some(ProblemCode::DiskFull));
+        assert_eq!(rec.status().state, RecorderState::Saved);
+        let m = manifest::read(&t.path().join("failed-session")).unwrap();
+        assert_eq!((m.state, m.duration_ms, m.frames_written), (RecorderState::Saved, Some(30_000), 900));
+        assert_eq!(m.problem.map(|p| p.code), Some(ProblemCode::DiskFull));
+        assert!(rec.end_if_disk_full_then(|_| panic!("nothing left to end")).is_none());
+    }
+
+    #[test]
+    fn a_failed_writer_is_not_ended_as_a_full_disk() {
+        let t = tempfile::tempdir().unwrap();
+        let rec = Recorder::new(t.path().to_path_buf());
+        let session = stub_session(t.path());
+        session.shared.writer_gone.store(true, Ordering::Relaxed);
+        session.shared.set_problem(RecorderProblem::new(ProblemCode::EncoderFailed, "writer stopped"));
+        *rec.lock() = Some(session);
+        assert!(rec.end_if_disk_full_then(|_| panic!("not a full disk")).is_none());
+        assert!(rec.status().session_active, "Stop closes it");
     }
 }
 
