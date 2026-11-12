@@ -150,13 +150,32 @@ describe("Cameras panel (#209)", () => {
     await flush()
     const el = await mount()
     const select = el.querySelector(`[aria-label="Quality suggested to Pulpit's Rhema Studio Cam"]`) as HTMLSelectElement
-    expect(select.value).toBe("phone")
+    expect(select.value).toBe("auto")
     await act(async () => {
       select.value = "tv720"
       select.dispatchEvent(new Event("change", { bubbles: true }))
     })
     expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "pulpit", token: "a".repeat(32), label: "Pulpit", quality: "tv720" }] })
     expect(el.textContent).toContain("At most 720p and 4 Mbit/s")
+    stop()
+  })
+
+  it("Automatic is the default and says what the host does now; The phone decides is kept and sent as a choice", async () => {
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "a".repeat(32) }] })
+    answers.camera_router_status = router({ paths: [{ name: "pulpit", live: true, source: "rtspSession", readers: 1, tracks: ["H264"], suggest: "tv720", autoTv: true }] })
+    const stop = startCameras()
+    await flush()
+    const el = await mount()
+    const select = el.querySelector(`[aria-label="Quality suggested to Pulpit's Rhema Studio Cam"]`) as HTMLSelectElement
+    expect(select.value).toBe("auto")
+    expect(el.textContent).toContain("Now: TV-friendly 720p — a Google TV is showing it.")
+    expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "pulpit", token: "a".repeat(32), label: "Pulpit" }] })
+    await act(async () => {
+      select.value = "phone"
+      select.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    expect(useSettingsStore.getState().cameras[0]).toMatchObject({ quality: "phone" })
+    expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "pulpit", token: "a".repeat(32), label: "Pulpit", quality: "phone" }] })
     stop()
   })
 
