@@ -374,7 +374,7 @@ fn layer(
                     }
                 }
             }
-            let url = found.map(|p| p.url).unwrap_or_default();
+            let url = found.map_or_default(|p| p.url);
             node.extend([
                 ("type".into(), json!("image")),
                 ("width".into(), json!(width)),
@@ -540,8 +540,7 @@ pub fn build(
     let title = p
         .get("title")
         .and_then(Value::as_str)
-        .map(str::trim)
-        .unwrap_or_default()
+        .map_or_default(str::trim)
         .to_string();
     if title.is_empty() || title.chars().count() > 200 {
         ctx.err("title", "a design needs a title of up to 200 characters");
@@ -569,8 +568,7 @@ pub fn build(
     let pages = p
         .get("pages")
         .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .unwrap_or_default();
+        .map_or_default(Vec::as_slice);
     if pages.is_empty() || pages.len() > MAX_PAGES {
         ctx.err("pages", format!("a design has 1 to {MAX_PAGES} pages"));
     }
@@ -605,8 +603,7 @@ pub fn build(
         let page_title = pg
             .get("title")
             .and_then(Value::as_str)
-            .map(str::trim)
-            .unwrap_or_default()
+            .map_or_default(str::trim)
             .to_string();
         if page_title.is_empty()
             || js_len(&page_title) > 80
@@ -622,8 +619,7 @@ pub fn build(
         let layers = pg
             .get("layers")
             .and_then(Value::as_array)
-            .map(Vec::as_slice)
-            .unwrap_or_default();
+            .map_or_default(Vec::as_slice);
         if layers.is_empty() || layers.len() > MAX_LAYERS_PER_PAGE {
             ctx.err(
                 &format!("{path}.layers"),
