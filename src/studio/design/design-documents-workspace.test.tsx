@@ -46,6 +46,8 @@ import { useUnsavedStore } from "@/stores/unsaved-store"
 import { mayLeaveDesignDocumentDraft } from "@/lib/design-document-draft"
 import type { DesignDocument, DesignSummary, DesignVersion } from "@/design-engine/design-store"
 import { createBlankRhemaDesign } from "@/design-engine/design-document-utils"
+import { libraryLooks } from "@/lib/design-packs"
+import type { LibraryLook } from "@/lib/look-library"
 import { VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rhema-scene"
 import type { Scene } from "@/types/scene"
 import { useMediaStore } from "@/stores/media-store"
@@ -124,7 +126,7 @@ describe("My Designs workspace", () => {
     const host = document.createElement("div")
     document.body.appendChild(host)
     root = createRoot(host)
-    await act(async () => root!.render(<DesignDocumentsWorkspace initialDesignId={design.id} onInitialDesignHandled={handled} />))
+    await act(async () => root!.render(<DesignDocumentsWorkspace onBrowseTemplates={() => {}} initialDesignId={design.id} onInitialDesignHandled={handled} />))
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
 
     expect(store.get).toHaveBeenCalledWith("design-pinned-scene")
@@ -148,7 +150,7 @@ describe("My Designs workspace", () => {
     const host = document.createElement("div")
     document.body.appendChild(host)
     root = createRoot(host)
-    await act(async () => root!.render(<DesignDocumentsWorkspace />))
+    await act(async () => root!.render(<DesignDocumentsWorkspace onBrowseTemplates={() => {}} />))
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
 
     await act(async () => { [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("First design"))!.click() })
@@ -178,14 +180,6 @@ describe("My Designs workspace", () => {
     }
     store.create.mockResolvedValue(created)
     store.get.mockResolvedValue(created)
-    const host = document.createElement("div")
-    document.body.appendChild(host)
-    root = createRoot(host)
-    await act(async () => root!.render(<DesignDocumentsWorkspace />))
-    await act(async () => { await Promise.resolve() })
-    expect(host.textContent).toContain("Choose a starting point")
-    expect(host.textContent).toContain("3 · Use in Prepare")
-
     const before = useBroadcastStore.getState()
     const liveBefore = {
       outputs: before.outputs,
@@ -195,12 +189,15 @@ describe("My Designs workspace", () => {
       liveSlide: before.liveSlide,
       sceneTakes: before.sceneTakes,
     }
-    const browse = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse scene templates"))!
-    await act(async () => browse.click())
-    const card = [...host.querySelectorAll("li")].find((item) => item.querySelector("h4")?.textContent === "Clean · Camera and scripture")!
-    const choose = [...card.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add a copy")!
-
-    await act(async () => { choose.click(); await Promise.resolve() })
+    // Design's Templates section hands the chosen look over as initialTemplate (#809 R10: My Designs has no browser of its own).
+    const look = libraryLooks().find((item): item is Extract<LibraryLook, { kind: "scene" }> => item.kind === "scene" && item.name === "Clean · Camera and scripture")!
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => {
+      root!.render(<DesignDocumentsWorkspace onBrowseTemplates={() => {}} initialTemplate={{ look, customize: false }} />)
+      await Promise.resolve()
+    })
 
     expect(store.create).toHaveBeenCalledWith(expect.objectContaining({ kind: "design", title: "Clean · Camera and scripture" }))
     expect(host.textContent).toContain("Added to My Designs")
@@ -519,7 +516,7 @@ describe("My Designs workspace", () => {
     const host = document.createElement("div")
     document.body.appendChild(host)
     root = createRoot(host)
-    await act(async () => root!.render(<DesignDocumentsWorkspace />))
+    await act(async () => root!.render(<DesignDocumentsWorkspace onBrowseTemplates={() => {}} />))
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
 
     const firstButton = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("First design"))!
@@ -549,7 +546,7 @@ describe("My Designs list actions (#851 G7)", () => {
     document.body.appendChild(host)
     root = createRoot(host)
     await act(async () => {
-      root!.render(<DesignDocumentsWorkspace />)
+      root!.render(<DesignDocumentsWorkspace onBrowseTemplates={() => {}} />)
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
     return host
@@ -687,5 +684,14 @@ describe("My Designs list actions (#851 G7)", () => {
     })
     expect(onBrowseTemplates).toHaveBeenCalledTimes(1)
     expect(host.textContent).not.toContain("Back to My Designs")
+    expect(host.textContent).not.toContain("Search scene designs")
+
+    // The empty state's own buttons go to the same one Templates section.
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse scene templates"))!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(onBrowseTemplates).toHaveBeenCalledTimes(2)
+    expect(host.textContent).toContain("Choose a starting point")
   })
 })
