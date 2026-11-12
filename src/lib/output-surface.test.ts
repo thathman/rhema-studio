@@ -9,6 +9,7 @@ import {
   surfaceProblem,
   SURFACE_BACKOFF_MS,
   SURFACE_CHECK_MS,
+  SURFACE_HELD_CHECK_MS,
   SURFACE_MAX_STRIKES,
   type SurfaceEvent,
 } from "./output-surface"
@@ -36,7 +37,9 @@ function fakeCanvas(opts: { alpha?: number; context?: boolean; lost?: boolean; r
 /** A window around the watch: the live canvas, its rebuilds, its redraws, its timer and what it reported. */
 function harness(opts: { alpha?: number; rebuildOk?: boolean; freshAlpha?: number; redrawChecks?: boolean } = {}) {
   let t = 1_000_000
-  const first = fakeCanvas({ alpha: opts.alpha })
+  // Mutable: a test can drop the first canvas's backing store later (alpha 0), as WebKit does to an idle hidden one.
+  const firstOpts: { alpha?: number } = { alpha: opts.alpha }
+  const first = fakeCanvas(firstOpts)
   const host = document.createElement("div")
   host.appendChild(first.canvas)
   const live = { canvas: first.canvas }
@@ -60,7 +63,7 @@ function harness(opts: { alpha?: number; rebuildOk?: boolean; freshAlpha?: numbe
     clearTimer: (id) => { (id as { cleared: boolean }).cleared = true },
   })
   return {
-    watch, live, host, reports, redraw, rebuild, check, first, timers,
+    watch, live, host, reports, redraw, rebuild, check, first, firstOpts, timers,
     advance: (ms: number) => { t += ms },
     /** Run the timers that are due. */
     runTimers: () => { for (const tm of timers.filter((x) => !x.cleared && x.at <= t)) { tm.cleared = true; tm.fn() } },
@@ -300,6 +303,74 @@ describe("createSurfaceWatch", () => {
     // Said once.
     h.watch.afterDraw(h.live.canvas, false)
     expect(h.reports.filter((e) => e.kind === "unchecked")).toHaveLength(1)
+  })
+
+  // CI run 43297534893 (#873 again after #874): Main drew its baseline scene, then sat still in its
+  // hidden window for ~35 s while Design was used; its canvas then read [0,0,0,0] (hash c84a4cca) and
+  // nothing was rebuilt, because the check only ran after a draw and a held scene never redraws.
+  it("checks a held opaque frame with no redraw, and rebuilds it when its backing store is dropped", () => {
+    const h = harness()
+    h.watch.afterDraw(h.live.canvas, true)
+    expect(h.check).toHaveBeenCalledTimes(1)
+    // Held: nothing draws. The surface is fine for a while...
+    for (let i = 0; i < 5; i++) {
+      h.advance(SURFACE_HELD_CHECK_MS)
+      h.watch.whileHeld(h.live.canvas)
+    }
+    expect(h.rebuild).not.toHaveBeenCalled()
+    // ...then WebKit drops the idle canvas. The next held check notices, with no draw at all.
+    h.firstOpts.alpha = 0
+    h.advance(SURFACE_HELD_CHECK_MS)
+    h.watch.whileHeld(h.live.canvas)
+    expect(h.rebuild).toHaveBeenCalledWith("blank")
+    expect(h.redraw).toHaveBeenCalledTimes(1)
+    expect(h.ndiSource()).not.toBe(h.first.canvas)
+    expect(h.reports).toEqual([{ kind: "rebuilt", reason: "blank", at: expect.any(Number) }])
+    // The rebuilt canvas holds: later held checks pass and nothing more is rebuilt.
+    h.advance(SURFACE_HELD_CHECK_MS)
+    h.watch.whileHeld(h.live.canvas)
+    expect(h.rebuild).toHaveBeenCalledTimes(1)
+  })
+
+  it("never checks a held frame that may be transparent, or before anything is drawn", () => {
+    const h = harness({ alpha: 0 })
+    h.advance(SURFACE_HELD_CHECK_MS)
+    h.watch.whileHeld(h.live.canvas)
+    h.watch.whileHeld(null)
+    expect(h.check).not.toHaveBeenCalled()
+    h.watch.afterDraw(h.live.canvas, false)
+    for (let i = 0; i < 5; i++) {
+      h.advance(SURFACE_HELD_CHECK_MS)
+      h.watch.whileHeld(h.live.canvas)
+    }
+    expect(h.check).not.toHaveBeenCalled()
+    expect(h.rebuild).not.toHaveBeenCalled()
+  })
+
+  it("adds no read-back while frames are being drawn and checked", () => {
+    const h = harness()
+    for (let i = 0; i < 120; i++) {
+      h.watch.afterDraw(h.live.canvas, true)
+      if (i % 30 === 0) h.watch.whileHeld(h.live.canvas)
+      h.advance(1000 / 30)
+    }
+    // 4 s of drawing: the draws' own once-a-second checks, no more.
+    expect(h.check.mock.calls.length).toBeLessThanOrEqual(4)
+  })
+
+  it("a held check keeps to the back-off when rebuilds do not hold", () => {
+    const h = harness({ alpha: 0, freshAlpha: 0, redrawChecks: true })
+    h.watch.afterDraw(h.live.canvas, true)
+    expect(h.reports.filter((e) => e.kind === "failed")).toHaveLength(1)
+    const rebuilds = h.rebuild.mock.calls.length
+    // Held checks during the wait read nothing and rebuild nothing.
+    h.check.mockClear()
+    for (let t = SURFACE_HELD_CHECK_MS; t < SURFACE_BACKOFF_MS; t += SURFACE_HELD_CHECK_MS) {
+      h.advance(SURFACE_HELD_CHECK_MS)
+      h.watch.whileHeld(h.live.canvas)
+    }
+    expect(h.check).not.toHaveBeenCalled()
+    expect(h.rebuild).toHaveBeenCalledTimes(rebuilds)
   })
 
   it("dispose stops a pending retry", () => {

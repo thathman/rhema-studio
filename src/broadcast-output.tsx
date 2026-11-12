@@ -30,7 +30,7 @@ import { sceneStatic } from "@/lib/no-signal"
 import { outputPace } from "@/lib/output-pace"
 import { CountdownFade } from "@/lib/countdown-display"
 import { latencyClock } from "@/lib/latency-clock"
-import { createSurfaceWatch, frameMustBeOpaque, type SurfaceEvent, type SurfaceWatch } from "@/lib/output-surface"
+import { createSurfaceWatch, frameMustBeOpaque, SURFACE_HELD_CHECK_MS, type SurfaceEvent, type SurfaceWatch } from "@/lib/output-surface"
 
 
 /** Read output ID from URL query param (?output=main or ?output=alt). Defaults to "main". */
@@ -129,6 +129,8 @@ function makeOutputCanvas(): HTMLCanvasElement {
   const c = document.createElement("canvas")
   c.width = 1920
   c.height = 1080
+  // What QA's Program probe reads (scripts/mac-qa/watch-approved-scene-output.js), also after a rebuild.
+  c.dataset.outputSurface = "program"
   Object.assign(c.style, { width: "100%", height: "100%", display: "block", objectFit: "contain" })
   return c
 }
@@ -226,7 +228,12 @@ function BroadcastCanvas() {
       host.appendChild(canvas)
       detachSurfaceRef.current = watch.attach(canvas)
     }
+    // A held frame is not redrawn (a still scene in a hidden window), so the check after each draw
+    // never runs while WebKit drops the idle canvas (#873 again, CI run 43297534893): check it on a
+    // timer too. Output windows are not throttled when hidden (background_throttling disabled).
+    const heldTimer = setInterval(() => watch.whileHeld(canvasRef.current), SURFACE_HELD_CHECK_MS)
     return () => {
+      clearInterval(heldTimer)
       detachSurfaceRef.current?.()
       detachSurfaceRef.current = null
       watch.dispose()
