@@ -30,7 +30,7 @@ import { sceneStatic } from "@/lib/no-signal"
 import { outputPace } from "@/lib/output-pace"
 import { CountdownFade } from "@/lib/countdown-display"
 import { latencyClock } from "@/lib/latency-clock"
-import { createSurfaceWatch, frameMustBeOpaque, type SurfaceEvent, type SurfaceWatch } from "@/lib/output-surface"
+import { createSurfaceNoticeGate, createSurfaceWatch, frameMustBeOpaque, SURFACE_HELD_CHECK_MS, type SurfaceEvent, type SurfaceWatch } from "@/lib/output-surface"
 
 
 /** Read output ID from URL query param (?output=main or ?output=alt). Defaults to "main". */
@@ -129,6 +129,8 @@ function makeOutputCanvas(): HTMLCanvasElement {
   const c = document.createElement("canvas")
   c.width = 1920
   c.height = 1080
+  // What QA's Program probe reads (scripts/mac-qa/watch-approved-scene-output.js), also after a rebuild.
+  c.dataset.outputSurface = "program"
   Object.assign(c.style, { width: "100%", height: "100%", display: "block", objectFit: "contain" })
   return c
 }
@@ -182,6 +184,8 @@ function BroadcastCanvas() {
   const surfaceRef = useRef<SurfaceWatch | null>(null)
   // Put the output canvas on the page and watch it (a layout effect: before the first draw below).
   useLayoutEffect(() => {
+    // Every surface event is logged; a run of "rebuilt" ones reaches the operator at most once per 10 min.
+    const notify = createSurfaceNoticeGate()
     const watch: SurfaceWatch = createSurfaceWatch({
       rebuild: (reason) => {
         const old = canvasRef.current
@@ -216,7 +220,7 @@ function BroadcastCanvas() {
       report: (event: SurfaceEvent) => {
         const line = `[surface] output ${OUTPUT_ID}: ${event.kind}${"reason" in event ? ` (${event.reason})` : ""}`
         void (event.kind === "recovered" || event.kind === "unchecked" ? logInfoLine(line) : logWarnLine(line)).catch(() => {})
-        void emitTo("main", "broadcast:surface-health", { outputId: OUTPUT_ID, ...event }).catch(() => {})
+        if (notify(event)) void emitTo("main", "broadcast:surface-health", { outputId: OUTPUT_ID, ...event }).catch(() => {})
       },
     })
     surfaceRef.current = watch
@@ -226,7 +230,14 @@ function BroadcastCanvas() {
       host.appendChild(canvas)
       detachSurfaceRef.current = watch.attach(canvas)
     }
+    // A held frame is not redrawn (a still scene in a hidden window), so the check after each draw
+    // never runs while WebKit drops the idle canvas (#873 again, CI run 43297534893): check it on a
+    // timer too. Output windows are not throttled when hidden on macOS only (background_throttling
+    // disabled in broadcast.rs is a macOS/iOS setting); elsewhere a hidden window's timers may run
+    // about once a second, which still checks a held frame every few seconds.
+    const heldTimer = setInterval(() => watch.whileHeld(canvasRef.current), SURFACE_HELD_CHECK_MS)
     return () => {
+      clearInterval(heldTimer)
       detachSurfaceRef.current?.()
       detachSurfaceRef.current = null
       watch.dispose()

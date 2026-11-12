@@ -211,8 +211,8 @@ function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
 /** The first screen: how this computer will be used. */
 function Welcome({ onMain, onJoin, onCompanion, onRestore, onLater }: { onMain: () => void; onJoin: () => void; onCompanion: () => void; onRestore: () => void; onLater: () => void }) {
   const choices = [
-    { icon: <LaptopIcon />, title: "Set up this computer as the main desk", text: "This computer runs the service with every control. Volunteers, phones and other computers can join later; nobody else is needed.", note: "Recommended", onClick: onMain },
-    { icon: <LinkIcon />, title: "Join an existing church host", text: "This computer follows another Rhema Studio at your church. Opens Live → Production tools → Operators to pair with it; nothing here is replaced.", onClick: onJoin },
+    { icon: <LaptopIcon />, title: "Set up this computer as the main computer", text: "This computer runs the service with every control. Volunteers, phones and other computers can join later; nobody else is needed.", note: "Recommended", onClick: onMain },
+    { icon: <LinkIcon />, title: "Join the church's main computer", text: "This computer follows another Rhema Studio at your church. Opens Live → Production tools → Operators to pair with it; nothing here is replaced.", onClick: onJoin },
     { icon: <CameraIcon />, title: "This computer runs OBS only (companion)", text: "For the computer that streams with OBS: it takes the church's phone cameras from the main Rhema Studio computer into OBS here. Rhema Studio shows one small screen and nothing else.", onClick: onCompanion },
     { icon: <ArchiveRestoreIcon />, title: "Bring in a previous installation", text: "Services, songs, settings and looks from a backup file, or services from a service file or the church folder. You see what comes in before anything here is replaced.", onClick: onRestore },
     { icon: <TimerIcon />, title: "Use Rhema Studio now, finish later", text: "Start with the built-in looks. Home keeps a short reminder of what is left.", onClick: onLater },

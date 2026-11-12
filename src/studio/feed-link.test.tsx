@@ -68,7 +68,7 @@ describe("the feed link", () => {
     calls.length = 0
     const el = document.createElement("div")
     await act(async () => createRoot(el).render(<FeedLink id="tv" token="abc123" onRenew={() => {}} />))
-    await vi.waitFor(() => expect(el.textContent).toContain("Turn on the secure page in Settings → Remote control"))
+    await vi.waitFor(() => expect(el.textContent).toContain("Turn on the secure page in Settings → Remote Control"))
     await act(async () => {
       type(el.querySelector<HTMLInputElement>('[aria-label="TV address"]')!, "192.168.1.40")
       type(el.querySelector<HTMLInputElement>('[aria-label="Code on the TV"]')!, "123456")

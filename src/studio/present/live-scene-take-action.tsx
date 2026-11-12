@@ -76,12 +76,12 @@ export function LiveSceneTakeAction({ selection }: {
       ? { key, phase: "ready" as const, message: "Rehearsal only. Taking this scene changes this computer, not the real screens." }
       : approvalBlock
       ? { key, phase: "blocked" as const, message: approvalBlock }
-      : { key, phase: "checking" as const, message: "Checking this scene and output with the host. Nothing changes until you Take." }
+      : { key, phase: "checking" as const, message: "Checking this scene and output with the main computer. Nothing changes until you Take." }
 
   const review = async () => {
     if (approvalBlock || rehearsal) return
     const id = ++operation.current
-    setView({ key, phase: "checking", message: "Reviewing the current scene and output with the host. Nothing changes." })
+    setView({ key, phase: "checking", message: "Reviewing the current scene and output with the main computer. Nothing changes." })
     const result = await readSceneTakeRevisions(selection.outputId, selection.sceneId)
     if (operation.current !== id || currentKey.current !== key || blockRef.current) return
     setView(result.ok
@@ -162,8 +162,8 @@ export function LiveSceneTakeAction({ selection }: {
       </div>
       {(currentView.phase === "ready" && selection.disabledReason ? selection.disabledReason : currentView.message) && <p role="status" aria-live="polite" aria-atomic="true" className="text-[0.6875rem] leading-snug text-muted-foreground">{currentView.phase === "ready" && selection.disabledReason ? selection.disabledReason : currentView.message}</p>}
       {canReview && currentView.phase !== "stale" && (
-        <Button type="button" size="xs" variant="ghost" aria-label={`Retry host review for ${selection.sceneName} on ${selection.outputName}`} onClick={() => void review()} className="min-h-9 self-start">
-          <RotateCcwIcon /> Retry host review
+        <Button type="button" size="xs" variant="ghost" aria-label={`Retry main computer review for ${selection.sceneName} on ${selection.outputName}`} onClick={() => void review()} className="min-h-9 self-start">
+          <RotateCcwIcon /> Retry main computer review
         </Button>
       )}
     </div>

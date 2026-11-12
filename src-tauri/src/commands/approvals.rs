@@ -10,14 +10,14 @@ use super::content::{with_db, CmdResult, ContentCommandError, ContentState};
 
 /// The main desk as an approver: one identity, whoever is at it (its operator name is shown).
 fn main_desk() -> Actor {
-    Actor { id: "main-desk".into(), name: "Main desk".into() }
+    Actor { id: "main-desk".into(), name: "Main computer".into() }
 }
 
 fn main_window_only(window: &WebviewWindow) -> CmdResult<()> {
     if window.label() == "main" {
         Ok(())
     } else {
-        Err(ContentCommandError::Refused { message: "Requests are decided at the main desk.".into(), code: "not-allowed" })
+        Err(ContentCommandError::Refused { message: "Requests are decided at the main computer.".into(), code: "not-allowed" })
     }
 }
 
@@ -73,7 +73,7 @@ fn request_authority(app: &AppHandle, request: &ApprovalRequest) -> CmdResult<()
 /// Deleting a scene on a screen would clear that screen, so it is refused until the screen has moved on.
 fn scene_apply_revision(kind: &str, target: &str, live: Option<&str>, revision: impl Fn(&str) -> Option<u64>) -> CmdResult<Option<i64>> {
     let Some(on_screen) = rhema_api::scene_edits::scene_on_screen(live, target) else {
-        return Err(ContentCommandError::Refused { message: "The host has not shared its scenes yet; try again in a moment.".into(), code: "no-live-state" });
+        return Err(ContentCommandError::Refused { message: "The main computer has not shared its scenes yet; try again in a moment.".into(), code: "no-live-state" });
     };
     if kind == "scene_delete" && on_screen {
         return Err(ContentCommandError::Refused { message: "That scene is still on a screen; move each output to another scene first.".into(), code: "on-screen" });
@@ -102,7 +102,7 @@ pub fn approvals_apply(app: AppHandle, window: WebviewWindow, state: State<'_, C
         // Still a stage display now, or the message goes nowhere.
         let live = super::remote::current_live_state(&app);
         if !stage_display_now(live.as_deref(), &request.target_id) {
-            return Err(ContentCommandError::Refused { message: "That stage display is no longer on the host.".into(), code: "gone" });
+            return Err(ContentCommandError::Refused { message: "That stage display is no longer on the main computer.".into(), code: "gone" });
         }
         // Rehearsal shows nothing on the real stage screens: refuse before it is recorded as applied,
         // so the approved request can still be sent once rehearsal ends (#411).
@@ -114,7 +114,7 @@ pub fn approvals_apply(app: AppHandle, window: WebviewWindow, state: State<'_, C
     if applied.kind == "stage_send" {
         // Delivered as any stage message for one display; the window shows it there.
         let p = &applied.payload;
-        let _ = app.emit_to("main", "remote:stage_send", serde_json::json!({ "target": p["target"], "text": p["text"], "by": applied.requester.name, "approvedBy": "Main desk" }).to_string());
+        let _ = app.emit_to("main", "remote:stage_send", serde_json::json!({ "target": p["target"], "text": p["text"], "by": applied.requester.name, "approvedBy": "Main computer" }).to_string());
     }
     Ok(applied)
 }
@@ -184,7 +184,7 @@ pub(super) fn record_scene_request_with(
         Ok(value) => value,
         Err(error) if matches!(event, "remote:save_scene" | "remote:delete_scene" | "remote:stage_send_request") => {
             log::warn!("approval request not recorded: invalid scene request payload: {error}");
-            return Err("The host could not read the approval request.".into());
+            return Err("The main computer could not read the approval request.".into());
         }
         Err(_) => return Ok(payload.to_string()),
     };
@@ -205,21 +205,21 @@ pub fn record_scene_request(app: &tauri::AppHandle, event: &str, payload: &str) 
             why.to_string()
         })?;
         let Some(state) = app.try_state::<ContentState>() else {
-            return Err("The host approval database is unavailable.".into());
+            return Err("The main computer's approval database is unavailable.".into());
         };
         let guard = state.0.lock().map_err(|error| {
             log::warn!("approval request not recorded: content database lock unavailable: {error}");
-            "The host could not save the approval request.".to_string()
+            "The main computer could not save the approval request.".to_string()
         })?;
         let db: &ContentDb = guard.as_ref().ok_or_else(|| {
             log::warn!("approval request not recorded: content database is not open");
-            "The host approval database is unavailable.".to_string()
+            "The main computer's approval database is unavailable.".to_string()
         })?;
         db.submit_approval_request(requester, input)
             .map(|saved| (saved.id, saved.expires_at))
             .map_err(|error| {
                 log::warn!("approval request not recorded: {error}");
-                "The host could not save the approval request.".to_string()
+                "The main computer could not save the approval request.".to_string()
             })
     })
 }
@@ -292,7 +292,7 @@ mod tests {
         let decided = db.decide_approval_request(&r.id, &main_desk(), Decision::Approve, None).unwrap();
         assert_eq!(decided.decided_by.map(|a| a.id), Some("main-desk".to_string()));
         // A forged request that claims to come from the main desk can never be approved by it.
-        let forged = serde_json::json!({ "scene": { "id": "s1" }, "request": true, "by": "Main desk", "byId": "main-desk" });
+        let forged = serde_json::json!({ "scene": { "id": "s1" }, "request": true, "by": "Main computer", "byId": "main-desk" });
         let (who, input) = scene_request("remote:save_scene", &forged).unwrap();
         let r = db.submit_approval_request(&who, &input).unwrap();
         assert!(db.decide_approval_request(&r.id, &main_desk(), Decision::Approve, None).is_err());
@@ -345,6 +345,6 @@ mod tests {
         let result = record_scene_request_with("remote:save_scene", "{", |_, _| {
             panic!("malformed requests must not reach persistence")
         });
-        assert_eq!(result, Err("The host could not read the approval request.".to_string()));
+        assert_eq!(result, Err("The main computer could not read the approval request.".to_string()));
     }
 }

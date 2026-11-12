@@ -48,7 +48,7 @@ beforeEach(() => {
   useJoin.setState({ status: "off", me: null, live: null, error: null, paused: false, note: null, secure: null })
 })
 
-describe("the host card's words", () => {
+describe("the main computer card's words", () => {
   it("says who is connected now and when the others were last seen", () => {
     const at = (ms: number) => `t${ms}`
     expect(seenWords({ connected: true, lastSeenMs: 0 }, 10_000, at)).toBe("Connected now")
@@ -92,7 +92,7 @@ describe("Live → Production tools → Operators while hosting", () => {
     expect(useSettingsStore.getState().remoteListeners.http).toBe(false)
   })
 
-  it("warns when the host has no secure link", async () => {
+  it("warns when the main computer has no secure link", async () => {
     hostStatus = { running: true, lan: true, port: 8080, tlsPort: null, caFingerprint: null, addresses: ["192.168.1.20:8080"], desks: [] }
     const el = await render()
     expect(el.textContent).toContain("No secure link")
@@ -100,7 +100,7 @@ describe("Live → Production tools → Operators while hosting", () => {
 })
 
 describe("a joined desk over https, and the new roles", () => {
-  it("pairing keeps the host's certificate and says it again before connecting", async () => {
+  it("pairing keeps the main computer's certificate and says it again before connecting", async () => {
     await useJoin.getState().pair("192.168.1.20:8080", "123456", "Ade")
     expect(useSettingsStore.getState().joinSecure).toEqual({ port: 8081, fingerprint: FP })
     expect(calls.map((c) => c.cmd)).toEqual(["join_pair", "join_secure", "join_me", "join_connect"])
@@ -137,7 +137,7 @@ describe("a joined desk over https, and the new roles", () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "God so loved")
       input.dispatchEvent(new Event("input", { bubbles: true }))
     })
-    await act(async () => ed.querySelector<HTMLFormElement>('[aria-label="Host Bible Library"] form')!.requestSubmit())
+    await act(async () => ed.querySelector<HTMLFormElement>('[aria-label="Main computer Bible Library"] form')!.requestSubmit())
     expect(ed.textContent).toContain("John 3:16")
     expect(calls.filter((c) => c.cmd === "join_command")).toEqual([])
     useJoin.setState({ me: { name: "Op", role: "viewer" } })

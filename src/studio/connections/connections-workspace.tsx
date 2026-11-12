@@ -181,11 +181,11 @@ export function ConnectionsWorkspace() {
             <Button size="sm" variant="outline" disabled={scanning} onClick={() => void findNearby()}><RefreshCwIcon /> {scanning ? "Searching…" : "Scan again"}</Button>
           </div>
           {scan.tvs === null && scan.hosts === null && !scanning ? (
-            <p className="text-xs text-muted-foreground">Find advertised Rhema hosts and Google TV Receivers. The scan stays on this network; no account or Internet connection is needed.</p>
+            <p className="text-xs text-muted-foreground">Find advertised Rhema main computers and Google TV Receivers. The scan stays on this network; no account or Internet connection is needed.</p>
           ) : scanning ? <p role="status" className="text-xs text-muted-foreground">Looking for devices that advertise on this network…</p> : (
             <div className="grid gap-4 lg:grid-cols-2">
               <DiscoveryGroup icon={<TvIcon />} title="Google TV Receivers" what="TVs" devices={scan.tvs} error={scan.tvError} empty="No TV Receiver found. Open Rhema Studio Receiver on the TV, then scan again." onChoose={useTv} action="Use this TV" />
-              <DiscoveryGroup icon={<MonitorIcon />} title="Rhema Studio hosts" what="Rhema Studio hosts" devices={scan.hosts} error={scan.hostError} empty="No host found. The main computer can still run the service alone. You can also enter its address." onChoose={useHost} action="Continue on this host" emptyAction={<Button size="xs" variant="outline" onClick={() => setJoinOpen(true)}>Join by address</Button>} />
+              <DiscoveryGroup icon={<MonitorIcon />} title="Rhema Studio main computers" what="Rhema Studio main computers" devices={scan.hosts} error={scan.hostError} empty="No main computer found. The main computer can still run the service alone. You can also enter its address." onChoose={useHost} action="Continue on this computer" emptyAction={<Button size="xs" variant="outline" onClick={() => setJoinOpen(true)}>Join by address</Button>} />
             </div>
           )}
           <div className="mt-4 grid gap-3 border-t border-border pt-3 md:grid-cols-3">
@@ -199,7 +199,7 @@ export function ConnectionsWorkspace() {
             </div>
             <div className="flex min-w-0 items-start gap-2 rounded-md border border-border bg-background p-3 text-xs leading-relaxed">
               <RadioIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1"><p className="font-semibold">OBS computers</p><p className="text-muted-foreground">{PAIR_ENTRY} → OBS computer: the same three steps, as a Companion with a host certificate check.</p></div>
+              <div className="min-w-0 flex-1"><p className="font-semibold">OBS computers</p><p className="text-muted-foreground">{PAIR_ENTRY} → OBS computer: the same three steps, as a Companion with a main computer certificate check.</p></div>
             </div>
           </div>
         </section>
@@ -235,8 +235,8 @@ export function ConnectionsWorkspace() {
             </Card>
 
             <Card title="Phones and operator computers" kicker="Paired volunteer devices" icon={<UsersIcon />} count={operators.length}>
-              {joinedStatus !== "off" && <Row title="This computer" detail={joinedAddress || "Host address not saved"} state={joinedStatus === "connected" ? "Connected to host" : joinedStatus === "reconnecting" ? "Reconnecting" : joinedStatus === "refused" ? "Host refused" : "Connecting"} tone={joinedStatus === "connected" ? "ok" : "warn"} />}
-              {operators.length === 0 ? <p className="text-muted-foreground">No phone remotes or operator computers are paired. Pairing is optional; the main desk keeps full control.</p> : (
+              {joinedStatus !== "off" && <Row title="This computer" detail={joinedAddress || "Main computer address not saved"} state={joinedStatus === "connected" ? "Connected to the main computer" : joinedStatus === "reconnecting" ? "Reconnecting" : joinedStatus === "refused" ? "Host refused" : "Connecting"} tone={joinedStatus === "connected" ? "ok" : "warn"} />}
+              {operators.length === 0 ? <p className="text-muted-foreground">No phone remotes or operator computers are paired. Pairing is optional; the main computer keeps full control.</p> : (
                 <ul aria-label="Paired phones and operators">
                   {operators.map(({ device, hash, name, seen }) => <Row key={hash} title={device?.name ?? name ?? "Shared key device"} detail={device ? roleLabel(device.role ?? "viewer") : "Shared network key"} state={hostDeviceState(host, seen, now)} tone={seen?.connected ? "ok" : hostDeviceState(host, seen, now) === "Not connected" ? "warn" : "off"}
                     stage={device ? { kind: "desk", stage: deviceStage({ paired: true, assigned: true, reporting: !!seen?.connected }), unknown: !host } : undefined}
@@ -274,7 +274,7 @@ export function ConnectionsWorkspace() {
       </div>
       <Dialog open={joinOpen} onOpenChange={setJoinOpen}>
         <DialogContent className="max-h-[85vh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader><DialogTitle>Join a Rhema Studio host</DialogTitle><DialogDescription>Enter the code shown on the main computer. It remains in control and this computer only gets the role the host assigns.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Join a Rhema Studio main computer</DialogTitle><DialogDescription>Enter the code shown on the main computer. It remains in control and this computer only gets the role the main computer assigns.</DialogDescription></DialogHeader>
           <JoinForm />
         </DialogContent>
       </Dialog>

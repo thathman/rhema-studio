@@ -52,7 +52,7 @@ describe("joined host state", () => {
 
   afterEach(() => vi.clearAllMocks())
 
-  it("clears the last host snapshot when the host refuses the desk", async () => {
+  it("clears the last host snapshot when the main computer refuses the desk", async () => {
     await useJoin.getState().connect()
     useJoin.setState({
       status: "connected",
@@ -93,7 +93,7 @@ describe("joined host state", () => {
     expect(invokeMock).toHaveBeenCalledWith("join_receivers", { address: "https://host.local", token: "paired-token" })
   })
 
-  it("preserves the host output revision from an accepted Take", async () => {
+  it("preserves the main computer output revision from an accepted Take", async () => {
     invokeMock.mockResolvedValueOnce({ note: null, revision: 17 })
     await expect(useJoin.getState().send({ command: "take_scene", value: { output: "tv", scene: "welcome" } }))
       .resolves.toEqual({ ok: true, revision: 17 })
@@ -174,8 +174,8 @@ describe("joined host state", () => {
   it("a changed or damaged host certificate is not a refusal, though the crate's words say pair again (#865)", async () => {
     // rhema-join pin.rs, verbatim.
     for (const why of [
-      "The host's certificate is not the one this computer paired with, so nothing was sent: pair again if the host computer was reinstalled (Leave this host, then join with a new code). Otherwise another computer may be pretending to be the host.",
-      "This computer's record of the host's certificate is damaged: pair again",
+      "The main computer's certificate is not the one this computer paired with, so nothing was sent: pair again if the main computer was reinstalled (Leave this main computer, then join with a new code). Otherwise another computer may be pretending to be the main computer.",
+      "This computer's record of the main computer's certificate is damaged: pair again",
     ]) {
       invokeMock.mockImplementation(async (command: string) => {
         if (command === "join_me") throw why
@@ -232,7 +232,7 @@ describe("a first connect that fails is tried again (#411 Companion hunt)", () =
     expect(useJoin.getState().status).not.toBe("reconnecting")
   })
 
-  it("Leave while the host is answering: the late answer does not connect", async () => {
+  it("Leave while the main computer is answering: the late answer does not connect", async () => {
     let answer: (v: unknown) => void = () => {}
     invokeMock.mockReset()
     invokeMock.mockImplementation(async (cmd: string) => (cmd === "join_me" ? new Promise((r) => { answer = r }) : null))

@@ -250,8 +250,8 @@ export function ObsPanel() {
         </p>
         {!enabled ? (
           <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted px-2.5 py-2">
-            <span className="min-w-0 flex-1">OBS is not connected. Turn it on and give its address and password in Settings → Remote control.</span>
-            <Button size="sm" variant="outline" onClick={() => openSettings("remote")}><SettingsIcon /> Open Remote control</Button>
+            <span className="min-w-0 flex-1">OBS is not connected. Turn it on and give its address and password in Settings → Remote Control.</span>
+            <Button size="sm" variant="outline" onClick={() => openSettings("remote")}><SettingsIcon /> Open Remote Control</Button>
           </div>
         ) : !connected ? (
           <div className="flex flex-col gap-2">
@@ -279,7 +279,7 @@ export function ObsPanel() {
                 <ArrowRightLeftIcon /> Take in OBS{preview ? `: ${preview}` : ""}
               </ObsAction>
             )}
-            {joined && <p className="rounded-md bg-muted px-2.5 py-2">This computer has joined a host: OBS's scenes are changed from the main desk. Here they are shown only.</p>}
+            {joined && <p className="rounded-md bg-muted px-2.5 py-2">This computer has joined a main computer: OBS's scenes are changed from the main computer. Here they are shown only.</p>}
             <ObsTransition held={held} reasonId={reasonId} joined={joined} />
           </>
         )}

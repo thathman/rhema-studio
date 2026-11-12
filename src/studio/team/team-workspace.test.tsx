@@ -54,11 +54,11 @@ describe("Team", () => {
     expect(useSettingsStore.getState().requireApproval).toBe(true)
   })
 
-  it("on a joined desk shows the host's approval rule from Live State, not this desk's own (#815)", async () => {
+  it("on a joined desk shows the main computer's approval rule from Live State, not this desk's own (#815)", async () => {
     await act(async () => useJoin.setState({ status: "connected", me: { name: "Bible desk", role: "viewer", outputScope: [], groupTakeScope: [] }, live: { requireApproval: false } as never }))
-    expect(host.querySelector("#team-approval-policy")?.textContent).toContain("Ask before showing an unapproved service: off (the main host’s setting)")
+    expect(host.querySelector("#team-approval-policy")?.textContent).toContain("Ask before showing an unapproved service: off (the main computer’s setting)")
     await act(async () => useJoin.setState({ live: null }))
-    expect(host.querySelector("#team-approval-policy")?.textContent).toContain("not shared by the main host yet")
+    expect(host.querySelector("#team-approval-policy")?.textContent).toContain("not shared by the main computer yet")
     await act(async () => useJoin.setState({ status: "off", me: null, live: null }))
     expect(host.querySelector("#team-approval-policy")?.textContent).toContain("Ask before showing an unapproved service: on")
   })

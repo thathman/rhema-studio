@@ -26,9 +26,9 @@ export interface DeskPage {
 export const DESK_PAGES: Record<string, DeskPage> = {
   bible: { title: "Bible operator", purpose: "Prepare Scripture privately, then send it as this desk is allowed.", main: ["bible"], side: ["program", "aux", "runOfShow"] },
   worship: { title: "Worship operator", purpose: "Today's songs: step sections and change the temporary order without rewriting the plan.", main: ["songs"], side: ["program", "aux", "runOfShow"] },
-  timekeeper: { title: "Timekeeper", purpose: "The one host clock: start events, adjust, hold and run the extra timers.", main: ["clock"], side: ["program", "aux", "runOfShow"] },
+  timekeeper: { title: "Timekeeper", purpose: "The main computer's one clock: start events, adjust, hold and run the extra timers.", main: ["clock"], side: ["program", "aux", "runOfShow"] },
   screens: { title: "Screens & graphics", purpose: "Your named outputs: what each shows, its sources and its scenes, with explicit Take.", main: ["outputs", "sources", "scenes"], side: ["program", "upcoming", "aux", "runOfShow"] },
-  stage: { title: "Stage operator", purpose: "Private cues to your assigned Stage display, beside the host clock.", main: ["stage"], side: ["program", "aux", "runOfShow"] },
+  stage: { title: "Stage operator", purpose: "Private cues to your assigned Stage display, beside the main computer's clock.", main: ["stage"], side: ["program", "aux", "runOfShow"] },
   camera: { title: "Camera operator", purpose: "Each camera's health and tally, and the camera boxes in scenes.", main: ["cameras", "scenes"], side: ["program", "aux", "runOfShow"] },
   obs: { title: "OBS director", purpose: "OBS Preview and the online Program, with explicit OBS Take. The congregation screens are read only here.", main: ["obs"], side: ["program", "aux", "runOfShow"] },
   editor: { title: "Editor", purpose: "Prepare content and scenes privately; nothing here goes live.", main: ["prepare", "scenes"], side: ["program", "runOfShow", "aux"], sideFirst: true },
@@ -39,7 +39,7 @@ export const DESK_PAGES: Record<string, DeskPage> = {
 }
 
 /** A confirmed role without its own page still sees what the Operators card showed it. */
-export const FALLBACK_PAGE: DeskPage = { title: "Operator", purpose: "Follow the host's service as your role allows.", main: ["program", "runOfShow"], side: ["aux"] }
+export const FALLBACK_PAGE: DeskPage = { title: "Operator", purpose: "Follow the main computer's service as your role allows.", main: ["program", "runOfShow"], side: ["aux"] }
 
 /** The page for this role: View only for the viewer, the fallback for any other role without one. */
 export function deskPageFor(role: string): DeskPage {

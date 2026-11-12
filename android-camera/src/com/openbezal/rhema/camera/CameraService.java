@@ -37,6 +37,9 @@ import java.util.List;
  * so) holding a partial wake lock and a Wi-Fi lock. The camera draws into the GPU's texture; the
  * GPU grades each frame into the encoder and, while the screen is on, the viewfinder. The
  * screen-off view and a locked phone detach the viewfinder: then only the encoder is drawn.
+ * From 1.6 (doc 48) it keeps Rhema's server key once a link from before key= connects, and while it
+ * should be sending but Rhema has not answered for a while, it looks for Rhema at a new address
+ * (Rediscovery, HostFinder) and moves the pairing there once Rhema proves its key.
  */
 public final class CameraService extends Service {
     static final String TAG = "RhemaCamera";
@@ -111,6 +114,16 @@ public final class CameraService extends Service {
     private long lastFrames;
     private long lastTick;
 
+    /** Said instead of the connection's own words after Rediscovery.MOVED_MS of looking for Rhema (doc 48). */
+    static final String MAY_HAVE_MOVED = Rediscovery.MAY_HAVE_MOVED;
+    /** When to look for Rhema at a new address (main thread). */
+    private final Rediscovery rediscovery = new Rediscovery();
+    private HostFinder finder;
+    /** Looked long enough without finding Rhema: the status says MAY_HAVE_MOVED. */
+    private volatile boolean mayHaveMoved;
+    /** The pairing link as last seen (main thread), to tell a kept key or a new address from a new pairing. */
+    private String pairSeen;
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -137,6 +150,18 @@ public final class CameraService extends Service {
             @Override
             public void onNote(String n) {
                 note = n;
+            }
+        });
+        pairSeen = prefs.getString(Prefs.PAIR, null);
+        finder = new HostFinder(this, main, new HostFinder.Listener() {
+            @Override
+            public void found(String ip, String service, String keyPin) {
+                foundRhema(ip, service, keyPin);
+            }
+
+            @Override
+            public void cannotBrowse() {
+                rediscovery.stop(SystemClock.elapsedRealtime());
             }
         });
         prefs.registerOnSharedPreferenceChangeListener(prefsChanged);
@@ -227,6 +252,7 @@ public final class CameraService extends Service {
     public void onDestroy() {
         prefs.unregisterOnSharedPreferenceChangeListener(prefsChanged);
         main.removeCallbacks(tick);
+        finder.shutdown();
         unwatchHeat();
         // Not a stop the person made: it was sending, so a restart resumes it.
         if (sending) stopNow();
@@ -615,10 +641,16 @@ public final class CameraService extends Service {
         if (p == null || !sending || video == null || pub != null) return;
         Plan.Shape s = shape;
         String sdp = Sdp.build(p.host, System.currentTimeMillis(), new Sdp.Video(s.hevc, vps, sps, pps, s.fps), audio == null ? null : new Sdp.Audio(AudioEncoder.RATE, 1));
+        final String fp = p.fp;
         Publisher np = new Publisher(p, sdp, s.hevc, audio != null, AudioEncoder.RATE, s.bitrate, new Publisher.Listener() {
             @Override
             public void onState(boolean live, String message) {
-                status = message;
+                status = !live && mayHaveMoved ? MAY_HAVE_MOVED : message;
+            }
+
+            @Override
+            public void onKeyPin(String keyPin) {
+                keepKey(fp, keyPin);
             }
 
             @Override
@@ -803,6 +835,21 @@ public final class CameraService extends Service {
     private final SharedPreferences.OnSharedPreferenceChangeListener prefsChanged = new SharedPreferences.OnSharedPreferenceChangeListener() {
         @Override
         public void onSharedPreferenceChanged(SharedPreferences sp, final String key) {
+            // A new pairing link: only the kept key (nothing to do), only Rhema's new address (connect
+            // there, the same camera), or another pairing (start again, forget what Rhema said).
+            final int change;
+            if (Prefs.PAIR.equals(key)) {
+                String now = prefs.getString(Prefs.PAIR, null);
+                change = Pairing.change(parse(pairSeen), parse(now));
+                pairSeen = now;
+                if (change == Pairing.OTHER) {
+                    lookNoMore();
+                    prefs.edit().remove(Prefs.HOST_SERVICE).apply();
+                }
+                if (change == Pairing.SAME || change == Pairing.KEY_KEPT) return;
+            } else {
+                change = Pairing.OTHER;
+            }
             cam.post(new Runnable() {
                 @Override
                 public void run() {
@@ -815,7 +862,8 @@ public final class CameraService extends Service {
                         grade();
                     } else if (Prefs.PAIR.equals(key)) {
                         // Another camera, or another Rhema: what the last one said no longer holds.
-                        prefs.edit().remove(Prefs.HOST_NAME).remove(Prefs.SUGGEST_HEIGHT).remove(Prefs.SUGGEST_MBPS).remove(Prefs.SUGGEST_WORDS).apply();
+                        // The same camera at Rhema's new address keeps it (doc 48).
+                        if (change != Pairing.MOVED) prefs.edit().remove(Prefs.HOST_NAME).remove(Prefs.SUGGEST_HEIGHT).remove(Prefs.SUGGEST_MBPS).remove(Prefs.SUGGEST_WORDS).apply();
                         stopReason = null;
                         rebuild();
                     } else if (Prefs.SUGGEST_HEIGHT.equals(key) || Prefs.FOLLOW_HOST.equals(key)) {
@@ -911,7 +959,7 @@ public final class CameraService extends Service {
             @Override
             public void run() {
                 try {
-                    int code = Report.send(p, body);
+                    int code = Report.send(p, body, keeper);
                     if (!Report.ok(code) && !reportFailing) Log.w(TAG, "battery report: Rhema answered " + code);
                     reportFailing = !Report.ok(code);
                 } catch (IOException e) {
@@ -943,7 +991,7 @@ public final class CameraService extends Service {
             @Override
             public void run() {
                 try {
-                    Report.Answer a = Report.ask(p);
+                    Report.Answer a = Report.ask(p, keeper);
                     tally = a.tally;
                     if (a.tally != CamAction.TALLY_UNKNOWN) tallyOkAt = SystemClock.elapsedRealtime();
                     // Only 403s running count toward "removed"; any other answer breaks the run.
@@ -986,6 +1034,118 @@ public final class CameraService extends Service {
         if (changed) e.apply();
     }
 
+    // ---- Rhema's server key and its address (doc 48) ----
+
+    private static Pairing parse(String link) {
+        if (link == null) return null;
+        try {
+            return Pairing.parse(link);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /** The report and tally keep the server key too (from the report thread). */
+    private final Report.Keeper keeper = new Report.Keeper() {
+        @Override
+        public void keep(String fp, String keyPin) {
+            keepKey(fp, keyPin);
+        }
+    };
+
+    /**
+     * The certificate a link from before key= names completed a connection: keep its server key with
+     * the pairing (the link gains key=), so Rhema is found by its key from now on, also at a new
+     * address. Only for that same pairing (the person may have paired again meanwhile). Any thread.
+     */
+    private void keepKey(final String fp, final String keyPin) {
+        main.post(new Runnable() {
+            @Override
+            public void run() {
+                Pairing now = Prefs.pairing(CameraService.this);
+                if (now == null || !now.fp.equals(fp)) return;
+                Pairing kept = now.withKey(keyPin);
+                if (kept == null) return;
+                Log.i(TAG, "keeping Rhema's server key from now on (doc 48)");
+                prefs.edit().putString(Prefs.PAIR, kept.link()).apply();
+            }
+        });
+    }
+
+    /**
+     * Once a tick (main thread): while it should be sending and Rhema's camera router has not
+     * answered at the paired address for Rediscovery.AFTER_MS, browse for Rhema (HostFinder) a while
+     * at a time, resting longer between; stop as soon as it sends, or when sending stops.
+     */
+    private void look(long now, Publisher p) {
+        if (!sending || (p != null && p.live())) {
+            lookNoMore();
+            return;
+        }
+        if (p != null && p.refused()) {
+            // Rhema answered at the paired address and refused (a sign-in, a busy router): it has
+            // not moved, so there is nothing to look for (doc 48).
+            lookNoMore();
+            return;
+        }
+        if (p != null && p.unreachable()) rediscovery.failed(now);
+        if (rediscovery.over(now, finder.pending())) {
+            finder.stop();
+            rediscovery.stop(now);
+        }
+        Pairing link = Prefs.pairing(this);
+        boolean canLook = link != null && link.keyPinned();
+        if (rediscovery.start(now, canLook)) {
+            if (finder.start(link.key, link.port, link.host, prefs.getString(Prefs.HOST_SERVICE, null))) {
+                Log.i(TAG, "Rhema has not answered at " + link.host + ": looking for it on the network");
+            } else {
+                rediscovery.stop(now);
+            }
+        }
+        boolean moved = rediscovery.mayHaveMoved(now);
+        if (moved != mayHaveMoved) {
+            mayHaveMoved = moved;
+            if (moved) status = MAY_HAVE_MOVED;
+        }
+    }
+
+    /** It sends, sending stopped, or another pairing: nothing to look for. */
+    private void lookNoMore() {
+        if (rediscovery.browsing()) finder.stop();
+        rediscovery.reset();
+        mayHaveMoved = false;
+    }
+
+    /**
+     * HostFinder: the paired Rhema proved its key at ip. Move the pairing there (only the address;
+     * CameraService connects again as the same camera) and remember the name it announced.
+     */
+    private void foundRhema(String ip, String service, String keyPin) {
+        Pairing now = Prefs.pairing(this);
+        lookNoMore();
+        if (!sending || now == null || !now.keyPinned() || !KeyPin.same(now.key, keyPin)) return;
+        SharedPreferences.Editor e = prefs.edit().putString(Prefs.HOST_SERVICE, service);
+        if (ip.equals(now.host)) {
+            // Still where it was: it answers again, so connect now rather than after the backoff.
+            e.apply();
+            cam.post(new Runnable() {
+                @Override
+                public void run() {
+                    Publisher p = pub;
+                    if (sending && (p == null || !p.live())) rebuild();
+                }
+            });
+            return;
+        }
+        Pairing moved = now.movedTo(ip);
+        if (moved == null) {
+            e.apply();
+            return;
+        }
+        Log.i(TAG, "Rhema proved its key at " + ip + " (was " + now.host + "): sending there");
+        e.putString(Prefs.PAIR, moved.link()).apply();
+    }
+
     /** The name Rhema Studio gives this camera, else the pairing link's (#850). */
     String cameraTitle() {
         return Prefs.cameraTitle(this, Prefs.pairing(this));
@@ -1010,6 +1170,7 @@ public final class CameraService extends Service {
                 lastFrames = frames;
             }
             lastTick = now;
+            look(now, p);
             if (sending && now - reportAt >= Report.EVERY_MS) {
                 reportAt = now;
                 report();

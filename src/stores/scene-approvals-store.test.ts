@@ -47,7 +47,7 @@ describe("host scene approval records", () => {
 
   it("supersedes an older pending or stale request when the same desk sends a fresh one", async () => {
     const first = await createSceneEditApproval(input)
-    expect(await decideSceneEditApproval(first.id, "needs-review", "Main desk", "The scene changed.")).toBe(true)
+    expect(await decideSceneEditApproval(first.id, "needs-review", "Main computer", "The scene changed.")).toBe(true)
     const second = await createSceneEditApproval({ ...input, at: 11 })
 
     expect(useSceneApprovalsStore.getState().requests).toMatchObject([

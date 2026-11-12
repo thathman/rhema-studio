@@ -27,7 +27,7 @@ export function DeskApp() {
   if (phase === "insecure") return <SecureFirst />
   if (phase === "pair") return <PairScreen />
   if (phase === "desk") return <BrowserDesk />
-  return <Centered><p role="status" className="text-muted-foreground">Connecting to the host…</p></Centered>
+  return <Centered><p role="status" className="text-muted-foreground">Connecting to the main computer…</p></Centered>
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
@@ -47,7 +47,7 @@ function SecureFirst() {
     <Centered>
       <Kicker>Rhema Studio · browser desk</Kicker>
       <h1 className="text-lg font-bold">Open the secure desk</h1>
-      <p className="text-muted-foreground">This address is not encrypted, so this device's key and the service would cross the Wi-Fi in plain text. The host has a secure page: use that one.</p>
+      <p className="text-muted-foreground">This address is not encrypted, so this device's key and the service would cross the Wi-Fi in plain text. The main computer has a secure page: use that one.</p>
       {url && <a className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 font-semibold text-primary-foreground" href={url}>Open the secure desk</a>}
       <p className="text-muted-foreground">If the browser warns about the certificate, install this church's certificate first: <a className="underline" href="/rhema-ca.pem">download it</a>, then open the secure desk again.</p>
     </Centered>
@@ -72,15 +72,15 @@ function PairScreen() {
     <Centered>
       <Kicker>Rhema Studio · browser desk</Kicker>
       <h1 className="text-lg font-bold">Pair this device</h1>
-      <p className="text-muted-foreground">On the main computer: Settings → Remote control → Pair a device, choose this device's role, then type the 6-digit code here. Nothing is installed; the host decides what this desk may do.</p>
+      <p className="text-muted-foreground">On the main computer: Connections → Pair a device, choose this device's role, then type the 6-digit code here. Nothing is installed; the main computer decides what this desk may do.</p>
       {reason && <p role="alert" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2">{reason}</p>}
-      {plain && <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2"><b>Not encrypted.</b> <span className="text-muted-foreground">This host has no secure page, so this device's key crosses the network in plain text. At the host: Settings → Remote control → Secure page for phones (https).</span></p>}
+      {plain && <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2"><b>Not encrypted.</b> <span className="text-muted-foreground">This main computer has no secure page, so this device's key crosses the network in plain text. At the main computer: Settings → Remote Control → Secure page for phones (https).</span></p>}
       <form
         className="flex flex-col gap-2"
         onSubmit={(e) => {
           e.preventDefault()
           if (!/^\d{6}$/.test(code.trim())) {
-            setSaid("Type the 6-digit code from the host.")
+            setSaid("Type the 6-digit code from the main computer.")
             return
           }
           setBusy(true)
@@ -217,15 +217,15 @@ function BrowserDesk() {
         onAction={async (a, mode) => {
           if (viewer) return "View only desks cannot run production actions"
           if (a.kind === "camera") return null
-          if (a.kind === "sceneEdit") return "only the main desk answers a scene change"
-          if (a.kind === "scene") return "This request did not change any output. The host must choose one output in Scenes; group Take is unavailable."
+          if (a.kind === "sceneEdit") return "only the main computer answers a scene change"
+          if (a.kind === "scene") return "This request did not change any output. The main computer must choose one output in Scenes; group Take is unavailable."
           const send = useJoin.getState().send
           const r = a.kind === "bible" ? await send({ command: mode === "preview" ? "bible_preview" : "bible_activate", value: a.value })
             : a.kind === "song" ? await send({ command: mode === "preview" ? "song_preview" : "song_show", value: a.value })
               : a.kind === "event" ? await send({ command: "event_start", value: a.value })
                 : a.kind === "wrap" ? await send({ command: "stage_message", value: a.value.slice(0, 120) })
                   : null
-          if (!r) return "this action needs the main desk"
+          if (!r) return "this action needs the main computer"
           return r.ok ? null : r.error
         }}
         onQueue={QUEUE_ROLES.has(role) ? (a) => queueOnHost(a) : undefined}
@@ -250,7 +250,7 @@ function BrowserDesk() {
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-topbar px-4 py-2.5">
         <div className="min-w-0 max-sm:basis-full">
           <Kicker>{live?.church || "Rhema Studio"} · {page.title} · browser desk</Kicker>
-          <h1 className="truncate text-base font-bold tracking-tight">{live?.service?.title ?? "The host's service"}</h1>
+          <h1 className="truncate text-base font-bold tracking-tight">{live?.service?.title ?? "The main computer's service"}</h1>
         </div>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <span role="status" aria-label="Connection" className={cn("rounded-full px-2 py-0.5 text-[0.625rem] font-bold uppercase", statusWords === "Connected" ? "bg-primary/10 text-primary-text" : statusWords === "Not updating" ? "bg-confidence-mid/15 text-confidence-mid" : "bg-muted text-muted-foreground")}>{statusWords}</span>
@@ -259,31 +259,31 @@ function BrowserDesk() {
           {live && fresh.showSince && <span role="status" className="font-semibold text-confidence-mid">Last update {Math.round(fresh.sinceMs / 1000)} s ago</span>}
           {secure === true && <span className="text-muted-foreground">Encrypted</span>}
           <span className="flex-1" />
-          <Button size="sm" variant="ghost" onClick={() => unpair("Unpaired on this device. Remove it on the host too, in Permissions.")}>Unpair this device</Button>
+          <Button size="sm" variant="ghost" onClick={() => unpair("Unpaired on this device. Remove it on the main computer too, in Connections.")}>Unpair this device</Button>
         </div>
       </header>
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3 p-4 max-[800px]:p-3">
-        <p className="text-muted-foreground">{page.purpose} The host checks every command; closing this page never stops the service.</p>
-        {secure === false && <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2"><b>Not encrypted.</b> <span className="text-muted-foreground">The service and this device's key cross the network in plain text. At the host: Settings → Remote control → Secure page for phones (https).</span></p>}
+        <p className="text-muted-foreground">{page.purpose} The main computer checks every command; closing this page never stops the service.</p>
+        {secure === false && <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2"><b>Not encrypted.</b> <span className="text-muted-foreground">The service and this device's key cross the network in plain text. At the main computer: Settings → Remote Control → Secure page for phones (https).</span></p>}
         {notUpdating && (
           <p role="alert" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2">
-            <b>Not updating.</b> <span className="text-muted-foreground">No answer from the host{lastHeard ? ` since ${hhmmss(lastHeard)}` : ""}. What is on the screens may have changed; this desk's controls wait until the host answers again.</span>
+            <b>Not updating.</b> <span className="text-muted-foreground">No answer from the main computer{lastHeard ? ` since ${hhmmss(lastHeard)}` : ""}. What is on the screens may have changed; this desk's controls wait until the main computer answers again.</span>
           </p>
         )}
         {paused && (
           <p role="status" className="rounded-md border border-border bg-muted px-2.5 py-2 font-semibold">
-            Paused by the main desk. <span className="font-normal text-muted-foreground">You still see the service and can send notices; the controls come back when the main desk gives control back.</span>
+            Paused by the main computer. <span className="font-normal text-muted-foreground">You still see the service and can send notices; the controls come back when the main computer gives control back.</span>
           </p>
         )}
         {note && <p role="status" className="text-muted-foreground">{note}</p>}
         {live && fresh.skewMs !== null && (
           <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2">
-            <b>This device's clock is {skewWords(fresh.skewMs)} the host's.</b> <span className="text-muted-foreground">Timers here follow the host, but times of day may not agree.</span>
+            <b>This device's clock is {skewWords(fresh.skewMs)} the main computer's.</b> <span className="text-muted-foreground">Timers here follow the main computer, but times of day may not agree.</span>
           </p>
         )}
         {error && <p role="alert" className="text-destructive">{error}</p>}
         {!live ? (
-          <p role="status" className="text-muted-foreground">{status === "connected" ? "The host has not started a service yet." : "Waiting for the host's service…"}</p>
+          <p role="status" className="text-muted-foreground">{status === "connected" ? "The main computer has not started a service yet." : "Waiting for the main computer's service…"}</p>
         ) : (
           <div className={cn("grid items-start gap-3", page.sideFirst ? "lg:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]" : "lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]")}>
             <section aria-label={`${page.title} desk`} className={cn("flex min-w-0 flex-col gap-3", page.mainColumns && "2xl:grid 2xl:grid-cols-2 2xl:items-start", page.sideFirst && "lg:order-2")}>

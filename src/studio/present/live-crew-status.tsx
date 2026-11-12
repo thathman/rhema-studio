@@ -87,7 +87,7 @@ export function LiveCrewStatus() {
         : !host?.running
           ? "listener off"
           : !host.lan
-            ? "host local only"
+            ? "main computer only"
             : `${connected} of ${devices.length} paired operators connected`
 
   return (
@@ -97,7 +97,7 @@ export function LiveCrewStatus() {
       size="xs"
       data-testid="live-crew-status"
       aria-label={`Review paired operators: ${accessibleStatus}`}
-      title="Connection status comes from this host. Open Operators for assigned roles and last-seen details."
+      title="Connection status comes from this computer. Open Operators for assigned roles and last-seen details."
       className="h-7 min-w-0 justify-start gap-1.5 px-1.5 text-[0.6875rem]"
       onClick={() => openProductionTab("operators")}
     >

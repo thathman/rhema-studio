@@ -343,7 +343,7 @@ fn answer_plan(app: &AppHandle, by: &rhema_api::Desk, q: &rhema_api::PlanRequest
         e @ (ContentError::InUse { .. } | ContentError::Refused { .. }) => PlanError::Invalid(e.to_string()),
         e => PlanError::Unavailable(e.to_string()),
     };
-    let unavailable = || PlanError::Unavailable("Services are not available on the host".into());
+    let unavailable = || PlanError::Unavailable("Services are not available on the main computer".into());
     let content = app.try_state::<super::content::ContentState>().ok_or_else(unavailable)?;
     let guard = content.0.lock().map_err(|_| unavailable())?;
     let db = guard.as_ref().ok_or_else(unavailable)?;
@@ -420,7 +420,7 @@ fn answer_plan(app: &AppHandle, by: &rhema_api::Desk, q: &rhema_api::PlanRequest
 fn answer_requests(app: &AppHandle, by: &rhema_api::Desk, q: &rhema_api::RequestQuery) -> Result<serde_json::Value, rhema_api::PlanError> {
     use rhema_api::{PlanError, RequestQuery};
     use rhema_content::ContentError;
-    let unavailable = || PlanError::Unavailable("Requests are not available on the host".into());
+    let unavailable = || PlanError::Unavailable("Requests are not available on the main computer".into());
     let content = app.try_state::<super::content::ContentState>().ok_or_else(unavailable)?;
     let guard = content.0.lock().map_err(|_| unavailable())?;
     let db = guard.as_ref().ok_or_else(unavailable)?;
@@ -457,9 +457,9 @@ fn answer_lookup(app: &AppHandle, q: &rhema_api::Lookup) -> Result<serde_json::V
     let json = |v: Result<serde_json::Value, serde_json::Error>| v.map_err(|e| e.to_string());
     match q {
         Lookup::Songs { query } => {
-            let content = app.try_state::<super::content::ContentState>().ok_or("Songs are not available on the host")?;
+            let content = app.try_state::<super::content::ContentState>().ok_or("Songs are not available on the main computer")?;
             let guard = content.0.lock().map_err(|e| e.to_string())?;
-            let db = guard.as_ref().ok_or("Songs are not available on the host")?;
+            let db = guard.as_ref().ok_or("Songs are not available on the main computer")?;
             let songs = db.list_songs_tagged(Some(query.as_str()).filter(|q| !q.is_empty()), MAX_RESULTS, None).map_err(|e| e.to_string())?;
             json(Ok(serde_json::json!({ "songs": songs.iter().map(|s| serde_json::json!({
                 "id": s.id, "title": s.title, "numbers": s.numbers, "firstLine": s.first_line.chars().take(120).collect::<String>(),
@@ -467,9 +467,9 @@ fn answer_lookup(app: &AppHandle, q: &rhema_api::Lookup) -> Result<serde_json::V
             })).collect::<Vec<_>>() })))
         }
         _ => {
-            let state = app.try_state::<Mutex<crate::state::AppState>>().ok_or("The Bible is not available on the host")?;
+            let state = app.try_state::<Mutex<crate::state::AppState>>().ok_or("The Bible is not available on the main computer")?;
             let app_state = state.lock().map_err(|e| e.to_string())?;
-            let db = app_state.bible_db.as_ref().ok_or("The Bible is not available on the host")?;
+            let db = app_state.bible_db.as_ref().ok_or("The Bible is not available on the main computer")?;
             let verses = |v: Vec<rhema_bible::Verse>| serde_json::json!({ "verses": v.into_iter().take(200).map(|v| serde_json::json!({ "book": v.book_number, "bookName": v.book_name, "chapter": v.chapter, "verse": v.verse, "text": v.text, "translation": v.translation_id })).collect::<Vec<_>>() });
             match q {
                 Lookup::Translations => {
@@ -659,11 +659,11 @@ impl HttpRuntime {
         if let Some(plan) = plan {
             match super::host_advert::start(plan) {
                 Ok(ad) => {
-                    log::info!("Announcing this host on the network as \"{}\"", ad.plan.instance);
+                    log::info!("Announcing this computer on the network as \"{}\"", ad.plan.instance);
                     self.advert = Some(ad);
                 }
                 // Joining computers can still type the address.
-                Err(e) => log::warn!("Could not announce this host on the network: {e}"),
+                Err(e) => log::warn!("Could not announce this computer on the network: {e}"),
             }
         }
     }
@@ -1539,25 +1539,25 @@ pub fn remote_group_take_preflight(
             .iter()
             .any(|id| !entry.output_scope.contains(id) || !entry.group_take_scope.contains(id))
         {
-            return Err("The host no longer grants group Take for every selected output".into());
+            return Err("The main computer no longer grants group Take for every selected output".into());
         }
     }
 
     let live = state.lock().map_err(|e| e.to_string())?.live.clone();
     if live.service().as_deref() != Some(service.as_str()) {
-        return Err("The host has changed services; refresh before a group Take".into());
+        return Err("The main computer has changed services; refresh before a group Take".into());
     }
     let current = live
         .current()
-        .ok_or_else(|| "The host Live State is not ready".to_string())?;
+        .ok_or_else(|| "The main computer's Live State is not ready".to_string())?;
     let value: serde_json::Value = serde_json::from_str(&current)
-        .map_err(|_| "The host Live State could not be checked".to_string())?;
+        .map_err(|_| "The main computer's Live State could not be checked".to_string())?;
     let snapshot_service = value
         .pointer("/service/id")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("");
     if snapshot_service != service {
-        return Err("The host Live State changed services; refresh before a group Take".into());
+        return Err("The main computer's Live State changed services; refresh before a group Take".into());
     }
     if value
         .pointer("/program/rehearsal")
@@ -1607,7 +1607,7 @@ pub fn remote_group_take_preflight(
     let live_outputs = value
         .get("outputs")
         .and_then(serde_json::Value::as_array)
-        .ok_or_else(|| "The host output list is unavailable; refresh before a group Take".to_string())?;
+        .ok_or_else(|| "The main computer's output list is unavailable; refresh before a group Take".to_string())?;
     let mut output_checks = std::collections::HashMap::with_capacity(outputs.len());
     for id in outputs {
         let part = format!("output:{id}");
@@ -1892,7 +1892,7 @@ mod tests {
         ] {
             assert_eq!(take(&p.id, scene, outputs), Err(SceneTakeRefusal::NOT_APPROVED), "{why}");
         }
-        assert_eq!(take("gone", "sermon", &["main"]), Err(SceneTakeRefusal::STALE), "a service this host does not have");
+        assert_eq!(take("gone", "sermon", &["main"]), Err(SceneTakeRefusal::STALE), "a service this computer does not have");
 
         let old = db.create_program("Approved before snapshots", None).unwrap();
         db.approve_program(&old.id, old.revision).unwrap();

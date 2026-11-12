@@ -99,7 +99,7 @@
     <div class="status" aria-live="polite"><span id="air" class="air">Off air</span><b id="live">Nothing on screen</b></div>
     <div class="sources" id="sources" aria-label="Live sources"></div>
     <p id="roleNote" hidden></p>
-    <p id="pausedNote" class="loadfail" role="status" hidden>Paused by the main desk: this phone's buttons wait until it gives control back. Notices and Talk still work.</p>
+    <p id="pausedNote" class="loadfail" role="status" hidden>Paused by the main computer: this phone's buttons wait until it gives control back. Notices and Talk still work.</p>
     <!-- Drawn from this phone's role (11 Nov review F10): only the buttons the main computer lets it use. -->
     <div class="grid" id="pad" aria-label="Controls"></div>
     <form id="verseForm" hidden>
@@ -336,7 +336,7 @@
     if (!ref) { say("Type a verse first, e.g. Romans 8:28.", true); return }
     await send("bible_activate", e.submitter || $("verseForm").querySelector("button[type=submit]"), ref)
   })
-  $("forget").addEventListener("click", () => { set(null); show(); say("Unpaired here. Revoke it on the main computer too, in Permissions.") })
+  $("forget").addEventListener("click", () => { set(null); show(); say("Unpaired here. Revoke it on the main computer too, in Connections.") })
 
   let timer, polling = false
   // Two missed answers in a row: what the phone shows is no longer known, so it says so and its
@@ -440,8 +440,8 @@
   // Each live source (ADR 0001): what it shows, and Clear or Restore where this phone's role may.
   // The main computer checks again.
   const NAMES = { bible: "Bible", song: "Songs", hymn: "Hymns", slide: "Slides", picture: "Pictures", quick: "Quick screen", ticker: "Ticker", timer: "Timer" }
-  // Clear pauses the timer and hides a camera from scenes.
-  const ACTIONS = { timer: ["Pause", "Resume"], camera: ["Hide", "Show"] }
+  // Clear pauses the timer; for a camera it hides it in every scene (#822: its own words, not Clear).
+  const ACTIONS = { timer: ["Pause", "Resume"], camera: ["Hide camera", "Show camera"] }
   function sources(live) {
     const box = $("sources")
     box.replaceChildren()
@@ -646,7 +646,7 @@
   const ROLE_NAMES = { timekeeper: "Timekeeper", bible: "Bible", worship: "Worship", screens: "Screens", stage: "Stage", camera: "Camera", obs: "OBS director", present: "Present only", configure: "Present and change settings", editor: "Editor", viewer: "View only" }
   // vol: each person's level here in percent (100 = full); muted wins over it.
   let talkTo = "all", listen = CHANNELS.map((c) => c[0]), muted = {}, vol = {}
-  const isHostName = (n) => /\(main desk\)$|^Main desk$/.test(n)
+  const isHostName = (n) => /\(main (computer|desk)\)$|^Main (computer|desk)$/.test(n)
   const allowedChannels = (live) => CHANNELS.filter(([id]) => { const r = live && live.talkRights && live.talkRights[id]; return !r || !me || r.includes(me.role) })
   function sendChannels() {
     if (!pc) return

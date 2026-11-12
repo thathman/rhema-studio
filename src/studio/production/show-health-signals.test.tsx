@@ -180,7 +180,7 @@ describe("Show health: cameras and Google TVs (#213)", () => {
     expect(el.querySelector('[aria-label="Needs attention"]')?.textContent).toContain('Pulpit camera is not sending; "Sermon split" on Main shows its fallback words there')
     const cam = el.querySelector('[aria-label="Camera signals"] li[aria-label="Pulpit"]')!.textContent
     expect(cam).toContain("Not sending")
-    expect(cam).toContain("on air on Main")
+    expect(cam).toContain("ON AIR · Main")
     expect(el.querySelector('[aria-label="Feed signals"] li[aria-label="Foyer TV"]')?.textContent).toContain("No screen watching")
     // The preflight says the same (Home reads it too).
     const preflight = el.querySelector('section[aria-label="Sunday preflight"]')!.textContent

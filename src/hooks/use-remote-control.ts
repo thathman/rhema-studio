@@ -204,7 +204,7 @@ export function useRemoteControl() {
           ? Object.values(songs).find((song) => song.song.title.trim().toLocaleLowerCase() === requestedSong)
           : undefined
         if (op === "insert" && !inserted) {
-          toast.warning("Today's order not changed", { description: `${byOf(p)}That song is not in the host's library. Search the library and choose a song to add.` })
+          toast.warning("Today's order not changed", { description: `${byOf(p)}That song is not in the main computer's library. Search the library and choose a song to add.` })
           return
         }
         const libraryItem = inserted ? { id: inserted.song.id, title: inserted.song.title, ...(inserted.song.key?.trim() ? { key: inserted.song.key.trim().slice(0, 12) } : {}) } : undefined
@@ -255,7 +255,7 @@ export function useRemoteControl() {
         const scene = typeof p.scene === "string" ? p.scene : ""
         const by = senderOf(p)
         if (!requestId || !Array.isArray(p.outputs) || outputIds.length < 2 || outputIds.length > 32 || new Set(outputIds).size !== outputIds.length || !scene || typeof p.byId !== "string" || typeof p.service !== "string" || !p.seen || typeof p.seen !== "object" || Array.isArray(p.seen)) {
-          if (requestId) useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds.slice(0, 32), scene, "The host could not verify this group Take request.", by)
+          if (requestId) useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds.slice(0, 32), scene, "The main computer could not verify this group Take request.", by)
           return
         }
         const seen = p.seen as Record<string, unknown>
@@ -281,7 +281,7 @@ export function useRemoteControl() {
               return
             }
             const applied = useBroadcastStore.getState().takeGroupScene(requestId, outputIds, scene, p.byId as string, check, revisions, by, approval.approved)
-            if (!applied) useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds, scene, "Host state changed after review; nothing was applied.", by)
+            if (!applied) useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds, scene, "Main computer state changed after review; nothing was applied.", by)
           } catch (error) {
             useBroadcastStore.getState().recordGroupTakeFailure(requestId, outputIds, scene, error instanceof Error ? error.message : String(error), by)
           }
@@ -333,7 +333,7 @@ export function useRemoteControl() {
           return
         }
         useJournalStore.getState().add({ kind: "remote", label: `${byOf(p)}sent a private Stage message to ${output.name}` })
-        toast.info(`Message queued for ${output.name}`, { description: "The host updated that display's frame; receiver playback is not confirmed." })
+        toast.info(`Message queued for ${output.name}`, { description: "The main computer updated that display's frame; receiver playback is not confirmed." })
       })
       // OBS from the OBS director's desk, on this computer's OBS connection; the OBS store refuses it in rehearsal.
       const obsScene = (p: Record<string, unknown>) => (typeof p.scene === "string" && useObsStore.getState().scenes.includes(p.scene) ? p.scene : null)
@@ -366,7 +366,7 @@ export function useRemoteControl() {
           if (typeof p?.hash === "string" && typeof p?.name === "string") {
             noteRemote(`${REMOTE_PAIRED_EVENT} ${p.name}`)
             useSettingsStore.getState().addRemoteDevice({ hash: p.hash, name: p.name, role: asRemoteRole(p.role) ?? "present" })
-            toast.success(`${p.name} paired`, { description: "It can now send commands. Revoke it in Settings → Remote." })
+            toast.success(`${p.name} paired`, { description: "It can now send commands. Revoke it in Connections." })
           }
         }),
       )
@@ -520,7 +520,7 @@ export async function restartRemoteListeners(): Promise<void> {
   const protectedByKey = settings.remoteAuthRequired || settings.remoteSecret.trim().length > 0 || settings.remoteDevices.length > 0
   if (lan && !protectedByKey) {
     toast.warning("Remote control was not started again", {
-      description: "It accepted any device on the network with no key. Start it in Settings → Remote, or pair your phone there so it can start by itself.",
+      description: "It accepted any device on the network with no key. Start it in Settings → Remote Control, or pair your phone there so it can start by itself.",
       duration: 15_000,
     })
     return
@@ -533,7 +533,7 @@ export async function restartRemoteListeners(): Promise<void> {
       if (status?.running) return
       await invoke<number>(cmd, cmd === "start_http" ? { port, lan, https: !!https } : { port, lan })
     } catch (e) {
-      toast.error(`${label} could not start again`, { description: `${e instanceof Error ? e.message : String(e)}. Start it in Settings → Remote.` })
+      toast.error(`${label} could not start again`, { description: `${e instanceof Error ? e.message : String(e)}. Start it in Settings → Remote Control.` })
     }
   }
   if (osc) await start("start_osc", oscPort, "OSC remote control")

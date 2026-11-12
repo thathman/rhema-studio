@@ -141,7 +141,7 @@ describe("picture crop and clipping on a real canvas", () => {
   })
 })
 
-it("a joined desk's save keeps the host's picture crop", async () => {
+it("a joined desk's save keeps the main computer's picture crop", async () => {
   const { mergeDeskScene, sceneForDesk } = await import("@/lib/desk-scenes")
   const scene = edited({ type: "SET_IMAGE_CROP", id: "pic", cropX: 100, cropY: 0, cropWidth: 100, cropHeight: 50 })
   const sent = JSON.parse(JSON.stringify(sceneForDesk(scene, false)))

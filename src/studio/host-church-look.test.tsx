@@ -36,7 +36,7 @@ async function renderDesk(live: LiveStateV1) {
   return el
 }
 const button = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent?.trim() === text)
-const offer = (el: HTMLElement) => el.querySelector('[aria-label="The host\'s church look"]')
+const offer = (el: HTMLElement) => el.querySelector('[aria-label="The main computer\'s church look"]')
 const hostLook = (kit = hostKit) => churchLookOf(kit, [...BUILTIN_THEMES, ...applyBrandKit(kit, [])])
 
 beforeEach(() => {
@@ -52,7 +52,7 @@ afterEach(() => {
   document.body.innerHTML = ""
 })
 
-describe("the host publishes its church look on the Live State", () => {
+describe("the main computer publishes its church look on the Live State", () => {
   it("with its Brand Kit, the themes made from it and a revision; never a key", () => {
     useSettingsStore.setState({ brandKit: hostKit, deepgramApiKey: "dg-host-123456" })
     useBroadcastStore.setState({ themes: [...BUILTIN_THEMES, ...applyBrandKit(hostKit, [])] })
@@ -66,20 +66,20 @@ describe("the host publishes its church look on the Live State", () => {
   })
 })
 
-describe("a joined desk and the host's church look", () => {
+describe("a joined desk and the main computer's church look", () => {
   it("is offered, and changes nothing until Use it is confirmed; then only the Brand Kit and its themes", async () => {
     const look = hostLook()
     const el = await renderDesk({ ...base, churchLook: look })
-    expect(offer(el)?.textContent).toContain("The host's church look changed")
+    expect(offer(el)?.textContent).toContain("The main computer's church look changed")
     expect(offer(el)?.textContent).toContain("Grace Chapel's Brand Kit")
     await act(async () => button(el, "Use it")!.click())
-    expect(el.querySelector('[aria-label="Use the host\'s church look?"]')).not.toBeNull()
+    expect(el.querySelector('[aria-label="Use the main computer\'s church look?"]')).not.toBeNull()
     expect(useSettingsStore.getState().brandKit).toEqual(deskKit) // not yet
     await act(async () => button(el, "Keep this computer's")!.click())
     expect(useSettingsStore.getState().brandKit).toEqual(deskKit)
 
     await act(async () => button(el, "Use it")!.click())
-    await act(async () => button(el, "Use the host's look")!.click())
+    await act(async () => button(el, "Use the main computer's look")!.click())
     const s = useSettingsStore.getState()
     expect(s.brandKit).toEqual(hostKit)
     expect(useBroadcastStore.getState().themes.find((t) => t.id === "brand-scripture")?.background).toEqual(look.themes.find((t) => t.id === "brand-scripture")?.background)
@@ -89,7 +89,7 @@ describe("a joined desk and the host's church look", () => {
     expect(offer(el)).toBeNull()
   })
 
-  it("Not now puts that revision aside; the next change on the host is offered again", async () => {
+  it("Not now puts that revision aside; the next change on the main computer is offered again", async () => {
     const el = await renderDesk({ ...base, churchLook: hostLook() })
     await act(async () => button(el, "Not now")!.click())
     expect(offer(el)).toBeNull()
@@ -106,6 +106,6 @@ describe("a joined desk and the host's church look", () => {
     await act(async () => useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "John 3:16", segments: [] } }))
     await act(async () => button(el, "Use it")!.click())
     expect(el.textContent).toContain("Something is on air on this computer")
-    expect(button(el, "Use the host's look")?.disabled).toBe(true)
+    expect(button(el, "Use the main computer's look")?.disabled).toBe(true)
   })
 })

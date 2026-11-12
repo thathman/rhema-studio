@@ -71,7 +71,7 @@ describe("extra timers saved with the service (R2.5)", () => {
     expect(mayRunAuxTimer("worship", "")).toBe(false)
   })
 
-  it("a desk's start, pause and reset (checked by the host's server) are logged with who", () => {
+  it("a desk's start, pause and reset (checked by the main computer's server) are logged with who", () => {
     useAuxTimers.getState().add("Communion prep", 5, "worship")
     const id = useAuxTimers.getState().timers[0].id
     useAuxTimers.getState().remote(id, "start", "Worship desk")
@@ -122,7 +122,7 @@ describe("joined desks get the extra timers and who changed the time (R2.5, R2.9
     const el = await renderDesk(buildLiveState(), "timekeeper")
     const line = el.querySelector('[aria-label="Last change to the time"]')
     expect(line?.textContent).toMatch(/^Last change: timer corrected by −1 min · by Femi at .+ \(just now\)$/)
-    expect(timeChangeWords({ what: "+5 min", by: null, at: 0 }, 3 * 60_000, () => "10:00")).toBe("+5 min · by the main desk at 10:00 (3 min ago)")
+    expect(timeChangeWords({ what: "+5 min", by: null, at: 0 }, 3 * 60_000, () => "10:00")).toBe("+5 min · by the main computer at 10:00 (3 min ago)")
   })
 })
 

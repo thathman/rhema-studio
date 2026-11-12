@@ -25,15 +25,15 @@ pub trait CommandSink: Send + Sync {
     /// Answer a joined desk's lookup in this computer's library (`crate::lookup`), already checked
     /// for its role. An error is said to the desk as it is.
     fn lookup(&self, _q: &crate::lookup::Lookup) -> Result<serde_json::Value, String> {
-        Err("this host cannot look that up".into())
+        Err("the main computer cannot look that up".into())
     }
     /// Answer a desk's plan request (`crate::plans`), already checked for its role and shape.
     fn plans(&self, _by: &crate::plans::Desk, _q: &crate::plans::PlanRequest) -> Result<serde_json::Value, crate::plans::PlanError> {
-        Err(crate::plans::PlanError::Unavailable("this host keeps no service plans".into()))
+        Err(crate::plans::PlanError::Unavailable("the main computer keeps no service plans".into()))
     }
     /// A desk's own approval requests (`crate::plans::RequestQuery`), for the desk named `by` only.
     fn requests(&self, _by: &crate::plans::Desk, _q: &crate::plans::RequestQuery) -> Result<serde_json::Value, crate::plans::PlanError> {
-        Err(crate::plans::PlanError::Unavailable("this host keeps no approval requests".into()))
+        Err(crate::plans::PlanError::Unavailable("the main computer keeps no approval requests".into()))
     }
     /// Whether the open service (`service`, the host's own) lets `scene` go to each of `outputs`: an
     /// approved service only with the scene and each output's look pinned in it (#410). The same
@@ -389,7 +389,7 @@ mod tests {
         assert_eq!(sink.last_event(), ("remote:hold".to_string(), r#"{"by":"Timekeeper desk","reason":""}"#.to_string()));
         CommandDispatcher::dispatch(&RemoteCommand::Resume, &sink).unwrap();
         assert_eq!(sink.last_event(), ("remote:resume".to_string(), r#"{"by":"a remote"}"#.to_string()));
-        assert_eq!(sink.event_count(), 3, "the host logs these itself: no separate audit line");
+        assert_eq!(sink.event_count(), 3, "the main computer logs these itself: no separate audit line");
     }
 
     #[test]
@@ -474,7 +474,7 @@ mod tests {
         assert_eq!(event, "remote:save_scene");
         let v: serde_json::Value = serde_json::from_str(&payload).unwrap();
         assert_eq!((v["scene"]["name"].as_str(), v["request"].as_bool(), v["by"].as_str(), v["byId"].as_str()), (Some("Sermon"), Some(true), Some("Ade screens"), Some("k1")));
-        assert_eq!(sink.event_count(), 1, "the host logs scene edits itself: no separate audit line");
+        assert_eq!(sink.event_count(), 1, "the main computer logs scene edits itself: no separate audit line");
         let del = RemoteCommand::DeleteScene(crate::command::SceneDelete { id: "s1".into(), request: false, base_revision: None });
         CommandDispatcher::dispatch(&del, &sink).unwrap();
         let v: serde_json::Value = serde_json::from_str(&sink.last_event().1).unwrap();

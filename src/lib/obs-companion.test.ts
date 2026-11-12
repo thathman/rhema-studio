@@ -118,7 +118,7 @@ describe("OBS companion: addresses (#209)", () => {
     expect(hostOf("[fe80::1]:8080")).toBe("[fe80::1]")
   })
 
-  it("takes the host's answer field by field", () => {
+  it("takes the main computer's answer field by field", () => {
     const v = readCompanionView({ router: true, srt: SRT, cameras: [{ name: "pulpit", live: true, tracks: ["H264"], width: 1280, height: 720, kbps: 2500, readers: 2, watchers: [{ kind: "companion", name: "Media desk (OBS companion)", remote: true }], obs: [] }, { name: "../bad" }, "junk"] })
     expect(v.router).toBe(true)
     expect(v.srt?.user).toBe("read-a1b2c3d4")

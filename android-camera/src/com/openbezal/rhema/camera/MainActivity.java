@@ -375,7 +375,7 @@ public final class MainActivity extends Activity {
         }
         new AlertDialog.Builder(a)
                 .setTitle("Pair with Rhema?")
-                .setMessage("This phone will send its camera to Rhema at " + p.host + " as \"" + p.title() + "\".\n\nOnly that computer's certificate is accepted, and the picture is encrypted on the way.")
+                .setMessage(Pairing.askWords(Prefs.pairing(a), Prefs.cameraTitle(a, Prefs.pairing(a)), p))
                 .setPositiveButton("Pair", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface d, int which) {

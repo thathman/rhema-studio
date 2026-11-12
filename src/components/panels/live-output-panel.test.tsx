@@ -120,7 +120,7 @@ describe("Present's Program and Preview panels", () => {
     const delivery = el.querySelector<HTMLElement>('[data-program-delivery-state="Window closed"]')!
     expect(delivery.textContent).toContain("Window closed")
     const detail = delivery.querySelector<HTMLElement>('[role="status"]')!
-    expect(detail.textContent).toContain("Host Program is off air; output window is closed")
+    expect(detail.textContent).toContain("Program is off air; output window is closed")
     expect(detail.className).not.toContain("sr-only")
   })
 
@@ -141,7 +141,7 @@ describe("Present's Program and Preview panels", () => {
     expect(el.textContent).toContain("Nothing on air")
     expect(el.textContent).toContain("Sanctuary Main")
     expect(el.querySelector('[data-program-delivery-state="Not sending"]')?.textContent).toContain("Not sending")
-    expect(el.querySelector('[role="status"]')?.textContent).toContain("Host Program is off air; host is not sending to this browser feed.")
+    expect(el.querySelector('[role="status"]')?.textContent).toContain("Program is off air; this computer is not sending to this browser feed.")
   })
 
   it("shows a disconnected receiver even when no frame is currently on air", async () => {
@@ -159,7 +159,7 @@ describe("Present's Program and Preview panels", () => {
     await render(<LiveOutputPanel outputId="foyer" />)
 
     expect(el.querySelector('[data-program-delivery-state="No receiver"]')?.textContent).toContain("No receiver")
-    expect(el.querySelector('[role="status"]')?.textContent).toContain("Host Program is off air; feed is publishing, but no receiver is connected.")
+    expect(el.querySelector('[role="status"]')?.textContent).toContain("Program is off air; feed is publishing, but no receiver is connected.")
   })
 
   it("surfaces a stopped NDI sender while Program is off air", async () => {
@@ -295,7 +295,7 @@ describe("Present's Program and Preview panels", () => {
     await render(<LiveOutputPanel outputId="foyer" />)
 
     expect(el.querySelector("[data-program-delivery-state]")?.getAttribute("data-program-delivery-state")).toBe("Not sending")
-    expect(el.querySelector('[role="status"]')?.textContent).toBe("Not sending. Host is not sending to this browser feed.")
+    expect(el.querySelector('[role="status"]')?.textContent).toBe("Not sending. This computer is not sending to this browser feed.")
   })
 
   it("reports NDI errors as errors rather than host-applied success", async () => {

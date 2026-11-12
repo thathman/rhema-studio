@@ -47,7 +47,7 @@ export function OpenModeWarning() {
         <span className="font-bold text-confidence-mid">Remote keys are off on the network.</span>{" "}
         Any device on this network can control Rhema Studio, settings included, until keys are turned on or the network listener is stopped.
       </p>
-      <Button size="xs" variant="outline" onClick={() => openSettings("remote")}>Open Remote control settings</Button>
+      <Button size="xs" variant="outline" onClick={() => openSettings("remote")}>Open Remote Control settings</Button>
     </div>
   )
 }

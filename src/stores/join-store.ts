@@ -83,7 +83,7 @@ export function withWhatWasSeen(command: { command: string; value?: unknown; see
 }
 
 /** What a desk shows when the host is on another service and the command was not sent. */
-const OTHER_SERVICE_NOTE = "The main desk is on a different service now, so that was not sent. This desk has refreshed: check what is live, then try again."
+const OTHER_SERVICE_NOTE = "The main computer is on a different service now, so that was not sent. This desk has refreshed: check what is live, then try again."
 
 /**
  * The service this desk is looking at, sent with each command (#246 C16): "" when the host has no
@@ -136,19 +136,19 @@ export function setJoinTransport(next: JoinTransport | null): void {
 export async function readHostReceivers(): Promise<HostReceiverOutput[]> {
   const result = await transport.receivers()
   if (!result || typeof result !== "object" || Array.isArray(result) || !Array.isArray((result as { outputs?: unknown }).outputs)) {
-    throw new Error("The host returned a malformed receiver report.")
+    throw new Error("The main computer returned a malformed receiver report.")
   }
   return (result as { outputs: unknown[] }).outputs.map((value) => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("The host returned a malformed receiver row.")
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("The main computer returned a malformed receiver row.")
     const row = value as Record<string, unknown>
-    if (typeof row.id !== "string" || typeof row.feed !== "boolean") throw new Error("The host returned a malformed receiver row.")
+    if (typeof row.id !== "string" || typeof row.feed !== "boolean") throw new Error("The main computer returned a malformed receiver row.")
     if (row.feed && (
       !Number.isSafeInteger(row.watching) || (row.watching as number) < 0
       || !Number.isSafeInteger(row.seq) || (row.seq as number) < 0
       || !Number.isSafeInteger(row.acked) || (row.acked as number) < 0
       || typeof row.confirmed !== "boolean"
     )) {
-      throw new Error("The host returned incomplete receiver confirmation.")
+      throw new Error("The main computer returned incomplete receiver confirmation.")
     }
     return {
       id: row.id,
@@ -330,7 +330,7 @@ export const useJoin = create<JoinState>((set, get) => ({
       // join_command marks the two refusals this desk handles itself (src-tauri/src/commands/join.rs).
       if (msg.startsWith("paused:")) {
         set({ paused: true, error: null })
-        return { ok: false, error: msg.slice("paused:".length).trim() || "The main desk has taken back control" }
+        return { ok: false, error: msg.slice("paused:".length).trim() || "The main computer has taken back control" }
       }
       // Someone changed that part of the service first (#196 R7): nothing was done; this desk's
       // view is already following the change, so the operator looks again.
@@ -342,7 +342,7 @@ export const useJoin = create<JoinState>((set, get) => ({
       if (msg.startsWith("other-service:")) {
         set({ error: null, note: OTHER_SERVICE_NOTE })
         void get().connect()
-        return { ok: false, error: "The main desk is on a different service now" }
+        return { ok: false, error: "The main computer is on a different service now" }
       }
       set({ error: msg })
       return { ok: false, error: msg }
@@ -384,7 +384,7 @@ export interface DeskApprovalRequest {
 const APPROVAL_STATES: readonly DeskApprovalState[] = ["submitted", "approved", "declined", "requested_changes", "applied", "expired", "withdrawn", "superseded"]
 
 function readDeskApprovalRequest(value: unknown): DeskApprovalRequest {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("The host returned a malformed approval request.")
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("The main computer returned a malformed approval request.")
   const row = value as Record<string, unknown>
   if (typeof row.id !== "string" || typeof row.kind !== "string" || typeof row.targetId !== "string" || !APPROVAL_STATES.includes(row.state as DeskApprovalState)
     || !(row.baseRevision === null || (typeof row.baseRevision === "number" && Number.isSafeInteger(row.baseRevision)))
@@ -393,7 +393,7 @@ function readDeskApprovalRequest(value: unknown): DeskApprovalRequest {
     || !(row.decidedBy === null || typeof row.decidedBy === "string")
     || !(row.decidedAt === null || typeof row.decidedAt === "string")
     || !(row.decisionNote === null || typeof row.decisionNote === "string")) {
-    throw new Error("The host returned a malformed approval request.")
+    throw new Error("The main computer returned a malformed approval request.")
   }
   return row as unknown as DeskApprovalRequest
 }
@@ -401,13 +401,13 @@ function readDeskApprovalRequest(value: unknown): DeskApprovalRequest {
 /** The host returns only this paired desk's own request metadata, without the request payload. */
 export async function loadMyApprovalRequests(): Promise<DeskApprovalRequest[]> {
   const response = await transport.requests() as { requests: unknown[] }
-  if (!response || !Array.isArray(response.requests) || response.requests.length > 100) throw new Error("The host returned an invalid request list.")
+  if (!response || !Array.isArray(response.requests) || response.requests.length > 100) throw new Error("The main computer returned an invalid request list.")
   return response.requests.map(readDeskApprovalRequest)
 }
 
 /** Withdraw a request only while it remains undecided on the host. */
 export async function withdrawMyApprovalRequest(id: string): Promise<DeskApprovalRequest> {
   const request = readDeskApprovalRequest(await transport.withdrawRequest(id))
-  if (request.id !== id || request.state !== "withdrawn") throw new Error("The host did not confirm this request as withdrawn.")
+  if (request.id !== id || request.state !== "withdrawn") throw new Error("The main computer did not confirm this request as withdrawn.")
   return request
 }

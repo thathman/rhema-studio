@@ -175,7 +175,7 @@ pub struct KeyEntry {
 }
 
 /// What a paused desk is told when it sends a command.
-pub const PAUSED_MESSAGE: &str = "The main desk has taken back control";
+pub const PAUSED_MESSAGE: &str = "The main computer has taken back control";
 
 impl KeyEntry {
     /// Role permission plus resource scope. A Screens role alone never grants every output.
@@ -416,21 +416,21 @@ pub fn try_pair_as(window: &PairingWindow, keys: &KeySet, code: &str, name: &str
 
 /**
  * A paired device's name, unique among the paired devices: the talk channel and the service log
- * know devices by name. "host" and "Main desk" are the main computer's, so a device asking for
- * them gets "<name> (device)"; a taken name gets " 2", " 3"…
+ * know devices by name. "host" and "Main computer" (and the older "Main desk") are the main
+ * computer's, so a device asking for them gets "<name> (device)"; a taken name gets " 2", " 3"…
  */
 fn unique_name(asked: &str, entries: &[KeyEntry]) -> String {
     let mut base: String = asked.trim().chars().take(52).collect();
     if base.is_empty() {
         base = "Paired device".into();
     }
-    // Never a name that reads as the main desk ("Main desk", "Tolu (main desk)"): a desk is told
-    // apart by its key, but people read names.
+    // Never a name that reads as the main computer ("Main computer", "Tolu (main computer)", or the
+    // older "(main desk)" wording, #822): a desk is told apart by its key, but people read names.
     let lower = base.to_lowercase();
-    if let Some(stem) = lower.strip_suffix("(main desk)") {
+    if let Some(stem) = lower.strip_suffix("(main computer)").or_else(|| lower.strip_suffix("(main desk)")) {
         let stem = base[..stem.len()].trim_end().to_string();
-        base = if stem.is_empty() { "Main desk (device)".into() } else { format!("{stem} (device)") };
-    } else if ["host", "main desk"].contains(&lower.as_str()) {
+        base = if stem.is_empty() { "Main computer (device)".into() } else { format!("{stem} (device)") };
+    } else if ["host", "main computer", "main desk"].contains(&lower.as_str()) {
         base = format!("{base} (device)");
     }
     let taken = |n: &str| entries.iter().any(|e| e.name.eq_ignore_ascii_case(n));
@@ -467,9 +467,11 @@ mod tests {
         assert_eq!(unique_name("Femi's laptop", &have), "Femi's laptop 3");
         assert_eq!(unique_name("  phone ", &have), "phone 2");
         assert_eq!(unique_name("host", &have), "host (device)");
-        assert_eq!(unique_name("Main Desk", &have), "Main Desk (device)");
-        assert_eq!(unique_name("Tolu (Main Desk)", &have), "Tolu (device)", "never the main desk's label");
-        assert_eq!(unique_name(" (main desk) ", &have), "Main desk (device)");
+        assert_eq!(unique_name("Main Computer", &have), "Main Computer (device)");
+        assert_eq!(unique_name("Tolu (Main Computer)", &have), "Tolu (device)", "never the main computer's label");
+        assert_eq!(unique_name(" (main computer) ", &have), "Main computer (device)");
+        assert_eq!(unique_name("Main desk", &have), "Main desk (device)", "the older wording is still the main computer's");
+        assert_eq!(unique_name("Tolu (main desk)", &have), "Tolu (device)");
         assert_eq!(unique_name("", &have), "Paired device");
         assert_eq!(unique_name("Ade", &have), "Ade");
     }
@@ -497,7 +499,7 @@ mod tests {
         assert!(!Role::Present.allows(&RemoteCommand::OnAir(false)));
         assert!(Role::Configure.allows(&RemoteCommand::OnAir(false)));
         let e: KeyEntry = serde_json::from_str(r#"{"hash":"h","name":"old"}"#).unwrap();
-        assert_eq!(e.role, Role::Viewer, "an entry with no role changes nothing until the main desk gives it one");
+        assert_eq!(e.role, Role::Viewer, "an entry with no role changes nothing until the main computer gives it one");
         assert!(!e.allows(&RemoteCommand::Next) && !e.allows(&RemoteCommand::OnAir(false)));
     }
 
@@ -745,7 +747,7 @@ mod tests {
         for cmd in [RemoteCommand::BiblePreview("John 3:16".into()), RemoteCommand::SongPreview("Amazing Grace".into()), RemoteCommand::AddToQueue, save, delete, notice, RemoteCommand::VoiceTalk(true)] {
             assert!(e.allows(&cmd), "{cmd}");
         }
-        assert!(e.edits_scenes(), "it gets the scenes to change; one on a screen waits for the main desk");
+        assert!(e.edits_scenes(), "it gets the scenes to change; one on a screen waits for the main computer");
         let take = RemoteCommand::TakeScene(crate::command::SceneTake { output: "main".into(), scene: "s".into() });
         let live = [
             RemoteCommand::Next, RemoteCommand::Prev, RemoteCommand::Show, RemoteCommand::Hide, RemoteCommand::SendToLive, RemoteCommand::BibleNext, RemoteCommand::VerseNext,
