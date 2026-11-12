@@ -61,6 +61,10 @@ jobs:
           workspaces: ./src-tauri
       - name: Install ONNX Runtime
         run: brew install onnxruntime
+      # ort-sys symlinks the ONNX Runtime dylibs into target/debug, debug/examples and debug/deps and
+      # panics if one is missing; a fresh build (no cache, e.g. after a Rust update) has no examples/.
+      - name: Prepare the dylib folders ort-sys links into
+        run: mkdir -p src-tauri/target/debug/examples src-tauri/target/debug/deps
       - name: Install JavaScript dependencies
         run: bun install --frozen-lockfile
       - name: Build and exercise the isolated native app
