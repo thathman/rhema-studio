@@ -1,6 +1,6 @@
 import { feedCameraUrl } from "@/lib/whep"
 import { describe, expect, it } from "vitest"
-import { CAMERA_QUALITIES, cameraAppLink, cameraListEntries, cameraQuality, camerasOnTvs, effectiveCameraQuality, rtmpsUrl, withCameraQuality, type RouterPorts } from "@/lib/cameras"
+import { CAMERA_QUALITIES, cameraAppLink, cameraListEntries, autoQualityNow, cameraQuality, rtmpsUrl, withCameraQuality, type RouterPorts } from "@/lib/cameras"
 
 const PORTS: RouterPorts = { webrtc: 8889, webrtcUdp: 8189, rtsp: 8554, rtsps: 8322, rtmp: 1935, srt: 8890, api: 9997 }
 const FP = "0123456789abcdef".repeat(4)
@@ -73,27 +73,18 @@ describe("Suggested quality for Rhema Studio Cam (#838)", () => {
     expect("quality" in back[0]).toBe(false)
   })
 
-  it("Automatic is TV-friendly only while the camera is on a Google TV; a choice always wins", () => {
-    expect(effectiveCameraQuality(CAM, undefined)).toBe("phone")
-    expect(effectiveCameraQuality(CAM, [])).toBe("phone")
-    expect(effectiveCameraQuality(CAM, ["Hall TV"])).toBe("tv720")
-    const [phone] = withCameraQuality([CAM], "pulpit", "phone")
-    expect(effectiveCameraQuality(phone, ["Hall TV"])).toBe("phone")
-    const [hd] = withCameraQuality([CAM], "pulpit", "hd1080")
-    expect(effectiveCameraQuality(hd, ["Hall TV"])).toBe("hd1080")
-    expect(effectiveCameraQuality(hd, undefined)).toBe("hd1080")
+  it("tells the listener a chosen quality, The phone decides included, and nothing for Automatic (the host decides)", () => {
+    const explicit = withCameraQuality([CAM, other], "choir", "phone")
+    expect(cameraListEntries(explicit)).toEqual([
+      { name: "pulpit", token: CAM.token, label: "Pulpit & choir" },
+      { name: "choir", token: other.token, label: "Choir", quality: "phone" },
+    ])
   })
 
-  it("tells the listener TV-friendly for an automatic camera on a Google TV, and the phone decides off it", () => {
-    const explicit = withCameraQuality([CAM, other], "choir", "phone")
-    expect(cameraListEntries(explicit, { pulpit: ["Hall TV"], choir: ["Hall TV"] })).toEqual([
-      { name: "pulpit", token: CAM.token, label: "Pulpit & choir", quality: "tv720" },
-      { name: "choir", token: other.token, label: "Choir" },
-    ])
-    expect(cameraListEntries(explicit, {})).toEqual([
-      { name: "pulpit", token: CAM.token, label: "Pulpit & choir" },
-      { name: "choir", token: other.token, label: "Choir" },
-    ])
+  it("says what Automatic does now from the host's status", () => {
+    expect(autoQualityNow(undefined)).toBe("the phone decides")
+    expect(autoQualityNow({ autoTv: false })).toBe("the phone decides")
+    expect(autoQualityNow({ autoTv: true })).toBe("TV-friendly 720p — a Google TV is showing it")
   })
 
   it("goes to the listener with the camera's label, and only when one is chosen", () => {
@@ -104,31 +95,3 @@ describe("Suggested quality for Rhema Studio Cam (#838)", () => {
   })
 })
 
-describe("Cameras shown on a Google TV", () => {
-  const cams = [{ name: "pulpit" }, { name: "choir" }]
-  const camLayer = (name: string) => ({ cameraUrl: `http://192.168.1.20:8889/${name}/whep` })
-  const hall = { name: "Hall TV", address: "192.168.3.88:8009", token: "t".repeat(32) }
-  const feed = { id: "hall", type: "browser", tvs: [hall] }
-  const on = { hall: { feedActive: true } }
-  const frames = { hall: { scene: { layers: [camLayer("pulpit"), { cameraUrl: undefined }, { cameraUrl: "http://10.0.0.9/other/whep" }] } } }
-
-  it("names the TVs watching a feed whose scene plays the camera", () => {
-    expect(camerasOnTvs(cams, [feed], on, frames, {})).toEqual({ pulpit: ["Hall TV"] })
-    // feed_status says the TV follows it.
-    expect(camerasOnTvs(cams, [feed], on, frames, { hall: { watching: 1, tvs: { [hall.address]: 1 } } })).toEqual({ pulpit: ["Hall TV"] })
-  })
-
-  it("is nothing when no TV watches, the feed is off, no TV is paired, the output is a window, or no camera is in the frame", () => {
-    expect(camerasOnTvs(cams, [feed], on, frames, { hall: { watching: 1 } })).toEqual({})
-    expect(camerasOnTvs(cams, [feed], {}, frames, {})).toEqual({})
-    expect(camerasOnTvs(cams, [{ ...feed, tvs: [] }], on, frames, {})).toEqual({})
-    expect(camerasOnTvs(cams, [{ ...feed, type: "window" }], on, frames, {})).toEqual({})
-    expect(camerasOnTvs(cams, [feed], on, { hall: {} }, {})).toEqual({})
-  })
-
-  it("counts a TV sent the shared link (no key of its own) while the feed has a page", () => {
-    const old = { ...feed, tvs: [{ name: "", address: "192.168.3.90" }] }
-    expect(camerasOnTvs(cams, [old], on, frames, { hall: { watching: 1 } })).toEqual({ pulpit: ["Google TV"] })
-    expect(camerasOnTvs(cams, [old], on, frames, { hall: { watching: 0 } })).toEqual({})
-  })
-})

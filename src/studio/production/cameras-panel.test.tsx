@@ -16,7 +16,7 @@ vi.mock("qrcode", () => ({ default: { toDataURL: vi.fn(async () => "data:image/p
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { CamerasPanel } from "./cameras-panel"
-import { cameraName, startCameras, useCamerasOnTvs } from "@/lib/cameras"
+import { cameraName, startCameras } from "@/lib/cameras"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import type { Scene } from "@/types"
@@ -46,7 +46,6 @@ beforeEach(() => {
   answers.camera_router_status = router()
   useSettingsStore.setState({ cameras: [], cameraRouterAuto: true })
   useBroadcastStore.setState({ scenes: [] })
-  useCamerasOnTvs.setState({}, true)
 })
 
 const FP = "ab".repeat(32)
@@ -161,23 +160,22 @@ describe("Cameras panel (#209)", () => {
     stop()
   })
 
-  it("Automatic is TV-friendly while the camera is on a Google TV, and says so; The phone decides is kept and wins", async () => {
+  it("Automatic is the default and says what the host does now; The phone decides is kept and sent as a choice", async () => {
     useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "a".repeat(32) }] })
+    answers.camera_router_status = router({ paths: [{ name: "pulpit", live: true, source: "rtspSession", readers: 1, tracks: ["H264"], suggest: "tv720", autoTv: true }] })
     const stop = startCameras()
     await flush()
     const el = await mount()
     const select = el.querySelector(`[aria-label="Quality suggested to Pulpit's Rhema Studio Cam"]`) as HTMLSelectElement
     expect(select.value).toBe("auto")
-    expect(el.textContent).toContain("Now: the phone decides.")
-    await act(async () => useCamerasOnTvs.setState({ pulpit: ["Hall TV"] }, true))
-    expect(el.textContent).toContain("Now: TV-friendly 720p — shown on Hall TV.")
-    expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "pulpit", token: "a".repeat(32), label: "Pulpit", quality: "tv720" }] })
+    expect(el.textContent).toContain("Now: TV-friendly 720p — a Google TV is showing it.")
+    expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "pulpit", token: "a".repeat(32), label: "Pulpit" }] })
     await act(async () => {
       select.value = "phone"
       select.dispatchEvent(new Event("change", { bubbles: true }))
     })
     expect(useSettingsStore.getState().cameras[0]).toMatchObject({ quality: "phone" })
-    expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "pulpit", token: "a".repeat(32), label: "Pulpit" }] })
+    expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "pulpit", token: "a".repeat(32), label: "Pulpit", quality: "phone" }] })
     stop()
   })
 
