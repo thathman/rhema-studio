@@ -121,3 +121,36 @@ describe("the feed page acknowledges only what it drew (#604)", () => {
     expect(acks().map((a) => a.body.seq)).toEqual([5, 5, 5])
   })
 })
+
+describe("the feed page names the host run in every acknowledgement", () => {
+  const frame = (hostRun: string, seq: number) => FakeEvents.last.send("frame", JSON.stringify({ hostRun, off: false, verse: null }), String(seq))
+
+  it("sends the run its frame came from, with the frame's acknowledgement and the heartbeat's (same address)", async () => {
+    frame("run-a", 5)
+    await nextFrame()
+    FakeEvents.last.send("beat", String(Date.now()))
+    await nextFrame()
+    expect(acks()).toEqual([
+      { url: "/api/v1/feed/l3/ack?k=s3cr%2Bt", body: { seq: 5, hostRun: "run-a" } },
+      { url: "/api/v1/feed/l3/ack?k=s3cr%2Bt", body: { seq: 5, hostRun: "run-a", clock: expect.any(Number) as number } },
+    ])
+  })
+
+  it("a late reconnect to a restarted host already past the old number: a new run, the old frames never acknowledged", async () => {
+    frame("run-a", 2)
+    await nextFrame()
+    // Frame 3 of the old host is heard but not yet drawn when the TV reconnects to the new host, which is at 9.
+    frame("run-a", 3)
+    frame("run-b", 9)
+    // A beat before the new frame is drawn: nothing drawn in the new run yet, so no heartbeat.
+    FakeEvents.last.send("beat", String(Date.now()))
+    await nextFrame()
+    FakeEvents.last.send("beat", String(Date.now()))
+    await nextFrame()
+    expect(acks().map(({ body }) => ({ seq: body.seq, hostRun: (body as { hostRun?: string }).hostRun }))).toEqual([
+      { seq: 2, hostRun: "run-a" },
+      { seq: 9, hostRun: "run-b" },
+      { seq: 9, hostRun: "run-b" },
+    ])
+  })
+})

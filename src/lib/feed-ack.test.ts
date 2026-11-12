@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { ACK_FALLBACK_MS, ackUrl, afterDrawn, drawnFrames, frameDrawn, frameHeard, type AckClock } from "@/lib/feed-ack"
+import { ACK_FALLBACK_MS, ackUrl, afterDrawn, drawnFrames, frameDrawn, frameHeard, frameHostRun, type AckClock } from "@/lib/feed-ack"
 
 function fakeClock(hidden: boolean) {
   const frames: (() => void)[] = []
@@ -106,5 +106,50 @@ describe("drawn frames across a host restart (TV acks stopped after a restart)",
     // The old frame 50's timer fires late: it must not put back a number the new host never sent.
     expect(frameDrawn(d, 50, old, false)).toBe(false)
     expect([d.seq, d.seen]).toEqual([1, true])
+  })
+})
+
+describe("drawn frames by host run id (a TV that reconnects late after a restart)", () => {
+  const show = (d: ReturnType<typeof drawnFrames>, seq: number, run?: string) => frameDrawn(d, seq, frameHeard(d, seq, run), true)
+
+  it("reads the host run id from a frame, and nothing else", () => {
+    expect(frameHostRun({ hostRun: "abc", off: true })).toBe("abc")
+    expect(frameHostRun({ off: true })).toBeUndefined()
+    expect(frameHostRun({ hostRun: 7 })).toBeUndefined()
+    expect(frameHostRun({ hostRun: "" })).toBeUndefined()
+    expect(frameHostRun(null)).toBeUndefined()
+  })
+
+  it("starts a new run when the run id changes, even though the new host's number passed the old one", () => {
+    const d = drawnFrames()
+    show(d, 2, "a")
+    // Reconnected late: the new host is already at frame 9. The numbers went up; only the id says restart.
+    const old = d.run
+    const run = frameHeard(d, 9, "b")
+    expect(run).toBe(old + 1)
+    expect([d.seq, d.seen, d.hostRun]).toEqual([0, false, "b"])
+    expect(frameDrawn(d, 9, run, true)).toBe(true)
+    expect(d.seq).toBe(9)
+  })
+
+  it("keeps the run on a reconnect to the same host run (its current frame again)", () => {
+    const d = drawnFrames()
+    show(d, 3, "a")
+    expect(show(d, 3, "a")).toBe(true)
+    expect(show(d, 4, "a")).toBe(true)
+    expect(d.run).toBe(0)
+  })
+
+  it("a host gaining or losing a run id (an update, a downgrade) is a new run too", () => {
+    const d = drawnFrames()
+    show(d, 2)
+    expect(frameHeard(d, 5, "a")).toBe(1)
+    expect(frameHeard(d, 6)).toBe(2)
+  })
+
+  it("the seq-down fallback still holds with run ids", () => {
+    const d = drawnFrames()
+    show(d, 5, "a")
+    expect(frameHeard(d, 1, "a")).toBe(1)
   })
 })
