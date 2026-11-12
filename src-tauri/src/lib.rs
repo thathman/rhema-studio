@@ -259,6 +259,8 @@ pub fn run() {
             commands::content::content_get_service_run,
             commands::content::content_list_service_logs,
             commands::content::content_song_usage,
+            commands::content::content_song_usage_shown,
+            commands::content::content_set_service_run_notes,
             commands::media::church_folder_publish,
             commands::media::church_folder_list,
             commands::media::church_folder_open,
