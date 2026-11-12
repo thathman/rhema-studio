@@ -112,6 +112,8 @@ pub const TV_QUALITY_AFTER: Duration = Duration::from_secs(2);
 /// Long, so a cut away and back does not restart the phone's stream twice (it changes size only
 /// while on no Program, and a size change restarts its stream).
 pub const TV_QUALITY_HOLD: Duration = Duration::from_secs(60);
+/// Longer than this between two "on" notes (the phone asks every 2 s) is a break, not a run.
+pub const TV_QUALITY_GAP: Duration = Duration::from_secs(5);
 
 /// Whether an automatic camera is TV-friendly now: on after `TV_QUALITY_AFTER` on a TV, off only
 /// `TV_QUALITY_HOLD` after it was last on one (#838, 12 Nov: a TV fell to 5-9 fps at the phone's
@@ -130,6 +132,10 @@ impl TvHold {
     /// A TV plays the camera now (`on`), or not, at `now`.
     pub fn note(&mut self, on: bool, now: Instant) {
         if on {
+            // A gap in the polls (the phone stopped, then came back): the TV's run starts again.
+            if self.last_on.is_none_or(|t| now.saturating_duration_since(t) > TV_QUALITY_GAP) {
+                self.on_since = None;
+            }
             let since = *self.on_since.get_or_insert(now);
             self.last_on = Some(now);
             if now.saturating_duration_since(since) >= TV_QUALITY_AFTER {
@@ -976,6 +982,19 @@ mod tests {
         assert!(h.on(at(100)), "back on a TV within the minute: the minute counts from then");
         assert!(!h.on(at(112)));
         assert!(!TvHold::default().on(t0), "no TV ever: never");
+    }
+
+    #[test]
+    fn a_gap_in_the_polls_starts_the_two_seconds_again() {
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        let mut h = TvHold::default();
+        h.note(true, t0);
+        // The phone stopped asking, and comes back while a TV plays it.
+        h.note(true, at(10));
+        assert!(!h.on(at(10)), "no wait skipped after a gap");
+        h.note(true, at(12));
+        assert!(h.on(at(12)), "two seconds of a TV since it came back");
     }
 
     #[test]
