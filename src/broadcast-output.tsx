@@ -6,7 +6,7 @@ import { MAIN_OUTPUT_ID } from "@/types/broadcast-output"
 import { emitTo } from "@tauri-apps/api/event"
 import { initialNdiHealth, pushOutcome } from "@/lib/ndi-health"
 import { createRoot } from "react-dom/client"
-import { useRef, useEffect, useCallback } from "react"
+import { useRef, useEffect, useCallback, useLayoutEffect } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { onThemeFontsLoaded, renderVerse, drawLowerThird } from "@/lib/verse-renderer"
@@ -30,6 +30,7 @@ import { sceneStatic } from "@/lib/no-signal"
 import { outputPace } from "@/lib/output-pace"
 import { CountdownFade } from "@/lib/countdown-display"
 import { latencyClock } from "@/lib/latency-clock"
+import { createSurfaceWatch, frameMustBeOpaque, type SurfaceEvent, type SurfaceWatch } from "@/lib/output-surface"
 
 
 /** Read output ID from URL query param (?output=main or ?output=alt). Defaults to "main". */
@@ -72,11 +73,13 @@ const playing = (p: VideoPlayer | null) => {
   return !!el && !el.paused && !el.ended
 }
 const latencyLog = createLatencyLog(`output ${OUTPUT_ID}`)
-// Frames are drawn here first; see paintFrame.
-const scratchCanvas = document.createElement("canvas")
+// Frames are drawn here first; see paintFrame. A new one replaces it when the output's surface is lost (#873).
+let scratchCanvas = document.createElement("canvas")
 // The last frame without the ticker, so a frame where only the ticker moved repaints just its band.
-const baseCanvas = document.createElement("canvas")
+let baseCanvas = document.createElement("canvas")
 let baseValid = false
+// NDI or a recording at another size than the canvas: the frame is scaled here first.
+let ndiScaleCanvas: HTMLCanvasElement | null = null
 // Report a drawing failure once per new screen (not every frame), and say when drawing works again.
 let frameFailing = false
 
@@ -121,8 +124,24 @@ function sceneLayerCanvas(id: string): HTMLCanvasElement {
   return c
 }
 
+/** The output's canvas. Made here, not by React, so a lost one can be swapped for a new one (#873). */
+function makeOutputCanvas(): HTMLCanvasElement {
+  const c = document.createElement("canvas")
+  c.width = 1920
+  c.height = 1080
+  Object.assign(c.style, { width: "100%", height: "100%", display: "block", objectFit: "contain" })
+  return c
+}
+
+/** Whether the frame on the canvas now must be opaque everywhere (so a fully transparent read means a lost surface). */
+function opaqueFrame(data: BroadcastPayload | null): boolean {
+  return frameMustBeOpaque({ stage: false, hasData: !!data, themeBackground: data?.theme.background?.type, scene: data?.scene })
+}
+
 function BroadcastCanvas() {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [initialCanvas] = useState(makeOutputCanvas)
+  const canvasRef = useRef<HTMLCanvasElement | null>(initialCanvas)
+  const surfaceHostRef = useRef<HTMLDivElement>(null)
   const latestData = useRef<BroadcastPayload | null>(null)
   const [stage, setStage] = useState<StagePayload | null>(null)
   // The stage, also drawn on the canvas so a stage output can go out over NDI.
@@ -143,7 +162,6 @@ function BroadcastCanvas() {
   const applySender = useCallback(() => {
     ndiConfigRef.current = ndiRawRef.current.active ? ndiRawRef.current : (recordTeeRef.current ?? ndiRawRef.current)
   }, [])
-  const ndiCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const lastPushRef = useRef(0)
   const pushingRef = useRef(false)
   // A whole frame is owed (none sent yet, or one skipped or failed): the next push sends it all, never
@@ -159,6 +177,62 @@ function BroadcastCanvas() {
   const pushNdiBurstRef = useRef<(() => void) | null>(null)
   // A scene picture that finishes loading redraws through this (draw cannot name itself).
   const redrawRef = useRef<(() => void) | null>(null)
+  // The canvas losing its drawing surface (#873): rebuild it, redraw, keep NDI and the recorder on it, tell the host.
+  const detachSurfaceRef = useRef<(() => void) | null>(null)
+  const surfaceRef = useRef<SurfaceWatch | null>(null)
+  // Put the output canvas on the page and watch it (a layout effect: before the first draw below).
+  useLayoutEffect(() => {
+    const watch: SurfaceWatch = createSurfaceWatch({
+      rebuild: (reason) => {
+        const old = canvasRef.current
+        const fresh = makeOutputCanvas()
+        const scratch = document.createElement("canvas")
+        if (!fresh.getContext("2d") || !scratch.getContext("2d")) return false
+        if (old && old.width > 0 && old.height > 0) {
+          fresh.width = old.width
+          fresh.height = old.height
+        }
+        // Every canvas this window draws through may share the loss: start them all again.
+        scratchCanvas = scratch
+        baseCanvas = document.createElement("canvas")
+        baseValid = false
+        sceneLayerCanvases.clear()
+        fadeFrom = null
+        // NDI and a recording read canvasRef at each push: the next one is a whole frame from the new canvas.
+        ndiScaleCanvas = null
+        fullOwedRef.current = true
+        detachSurfaceRef.current?.()
+        detachSurfaceRef.current = watch.attach(fresh)
+        if (old?.parentNode) old.replaceWith(fresh)
+        else surfaceHostRef.current?.appendChild(fresh)
+        canvasRef.current = fresh
+        void logWarnLine(`[surface] output ${OUTPUT_ID}: drawing surface ${reason}; rebuilt the canvas`).catch(() => {})
+        return true
+      },
+      redraw: () => {
+        redrawRef.current?.()
+        pushNdiBurstRef.current?.()
+      },
+      report: (event: SurfaceEvent) => {
+        const line = `[surface] output ${OUTPUT_ID}: ${event.kind}${"reason" in event ? ` (${event.reason})` : ""}`
+        void (event.kind === "recovered" ? logInfoLine(line) : logWarnLine(line)).catch(() => {})
+        void emitTo("main", "broadcast:surface-health", { outputId: OUTPUT_ID, ...event }).catch(() => {})
+      },
+    })
+    surfaceRef.current = watch
+    const host = surfaceHostRef.current
+    const canvas = canvasRef.current
+    if (host && canvas) {
+      host.appendChild(canvas)
+      detachSurfaceRef.current = watch.attach(canvas)
+    }
+    return () => {
+      detachSurfaceRef.current?.()
+      detachSurfaceRef.current = null
+      surfaceRef.current = null
+      canvasRef.current?.remove()
+    }
+  }, [])
 
   const logDebug = useCallback((message: string, meta?: unknown) => {
     if (!import.meta.env.DEV) return
@@ -173,14 +247,19 @@ function BroadcastCanvas() {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext("2d")
-    if (!ctx) return
+    if (!ctx) {
+      // No context at all: the surface is gone (the check rebuilds it).
+      surfaceRef.current?.afterDraw(canvas, true)
+      return
+    }
     drawnAtRef.current = Date.now()
 
     if (stageRef.current) {
       const s = stageRef.current
       // A screen on its side set to portrait in the computer's settings gets a tall picture (#196 R6).
       const { width: sw, height: sh } = stageSurface(s, window.innerWidth, window.innerHeight)
-      paintFrame(canvas, scratchCanvas, sw, sh, (fctx) => { countdownMoving.current = drawStage(fctx, sw, sh, s, { now: Date.now(), fade: countdownFade.current }).moving })
+      // A stage display always paints its whole background.
+      if (paintFrame(canvas, scratchCanvas, sw, sh, (fctx) => { countdownMoving.current = drawStage(fctx, sw, sh, s, { now: Date.now(), fade: countdownFade.current }).moving })) surfaceRef.current?.afterDraw(canvas, true)
       return
     }
     const data = latestData.current
@@ -188,6 +267,7 @@ function BroadcastCanvas() {
       // Black screen when no data
       ctx.fillStyle = "#000"
       ctx.fillRect(0, 0, canvas.width, canvas.height)
+      surfaceRef.current?.afterDraw(canvas, true)
       return
     }
 
@@ -258,6 +338,8 @@ function BroadcastCanvas() {
     })
     if (ok !== !frameFailing) void getCurrentWebviewWindow().emitTo("main", ok ? "broadcast:render-recovered" : "broadcast:render-error", { outputId: OUTPUT_ID }).catch(() => {})
     frameFailing = !ok
+    // A frame that drew: is it really on the canvas? (Rate-limited; a lost surface reads fully transparent.)
+    if (ok) surfaceRef.current?.afterDraw(canvas, opaqueFrame(data))
   }, [logDebug])
 
   useEffect(() => {
@@ -289,6 +371,7 @@ function BroadcastCanvas() {
         video: tickerPlayer?.element() ?? null,
         now: Date.now(),
       })
+      surfaceRef.current?.afterDraw(canvas, opaqueFrame(data))
     } catch (e) {
       console.error("[broadcast-output] ticker failed to draw", e)
     }
@@ -330,13 +413,13 @@ function BroadcastCanvas() {
       let sourceHeight = canvas.height
 
       if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-        const ndiCanvas = ndiCanvasRef.current ?? document.createElement("canvas")
+        const ndiCanvas = ndiScaleCanvas ?? document.createElement("canvas")
         ndiCanvas.width = targetWidth
         ndiCanvas.height = targetHeight
         const ndiCtx = ndiCanvas.getContext("2d")
         if (!ndiCtx) return
         ndiCtx.drawImage(canvas, 0, 0, targetWidth, targetHeight)
-        ndiCanvasRef.current = ndiCanvas
+        ndiScaleCanvas = ndiCanvas
         sourceCtx = ndiCtx
         sourceWidth = targetWidth
         sourceHeight = targetHeight
@@ -716,13 +799,13 @@ function BroadcastCanvas() {
       {/* A countdown display is drawn on the canvas, as it goes out over NDI. */}
       {/* So are a role's layout, a screen on its side, night colours and the clock (#196 R6). */}
       {stage && !stageOnCanvas(stage) && <ErrorBoundary name="the stage display" quiet><StageView stage={stage} /></ErrorBoundary>}
-      <canvas
-        ref={canvasRef}
+      {/* The canvas itself is put here by the page (makeOutputCanvas), so a lost one can be rebuilt (#873). */}
+      <div
+        ref={surfaceHostRef}
         style={{
           width: "100vw",
           height: "100vh",
           display: stage && !stageOnCanvas(stage) ? "none" : "block",
-          objectFit: "contain",
         }}
       />
     </>
