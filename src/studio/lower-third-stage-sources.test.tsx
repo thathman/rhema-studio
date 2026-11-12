@@ -133,7 +133,7 @@ describe("the stage message as a live source", () => {
     expect(last("stage-west")?.stage?.message).toBe("Updated shared cue")
   })
 
-  it("the host clears a message a Stage desk sent to one display, with no shared message up (#411)", () => {
+  it("the main computer clears a message a Stage desk sent to one display, with no shared message up (#411)", () => {
     useBroadcastStore.setState({ outputs: [...useBroadcastStore.getState().outputs, out({ id: "stage-east", type: "display", role: "stage" })] })
     expect(useBroadcastStore.getState().stageMessage).toBe("")
     expect(useBroadcastStore.getState().setOutputStageMessage("stage-east", "Choir enters now")).toBe(true)
@@ -148,7 +148,7 @@ describe("the stage message as a live source", () => {
     expect(useBroadcastStore.getState().stageMessagesByOutput).toEqual({})
   })
 
-  it("shares Stage display names with the host but not unrelated signage outputs", () => {
+  it("shares Stage display names with the main computer but not unrelated signage outputs", () => {
     useBroadcastStore.setState({ outputs: [
       ...useBroadcastStore.getState().outputs,
       out({ id: "stage-east", type: "display", role: "stage" }),
@@ -242,7 +242,7 @@ describe("Present's Sources strip", () => {
     expect(el.textContent).toContain("Lower third")
     expect(el.textContent).toContain("Pastor Ade Bello")
     expect(el.textContent).toContain("Stage message")
-    await act(async () => (el.querySelector('[aria-label^="Take Lower third"]') as HTMLButtonElement).click())
+    await act(async () => (el.querySelector('[aria-label^="Clear Lower third"]') as HTMLButtonElement).click())
     expect(useBroadcastStore.getState().lowerThird).toBeNull()
     await act(async () => (el.querySelector('[aria-label^="Restore Lower third"]') as HTMLButtonElement).click())
     expect(useBroadcastStore.getState().lowerThird?.line1).toBe("Pastor Ade Bello")

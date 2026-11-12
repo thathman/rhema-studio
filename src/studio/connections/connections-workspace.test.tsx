@@ -110,7 +110,7 @@ describe("Connections hub (#401)", () => {
     const scan = [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Find nearby devices"))!
     await act(async () => scan.click())
     expect(host.textContent).toContain("Could not look for TVs")
-    expect(host.textContent).toContain("No host found")
+    expect(host.textContent).toContain("No main computer found")
     expect(host.textContent).toContain("enter its address")
     expect(host.textContent).toContain("scan its QR code")
   })
@@ -130,9 +130,9 @@ describe("Connections hub (#401)", () => {
     expect(useShellStore.getState().outputsDialogOpen).toBe(true)
     expect(useBroadcastStore.getState().isLive).toBe(false)
 
-    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Continue on this host"))!.click())
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Continue on this computer"))!.click())
     expect(useSettingsStore.getState().joinAddress).toBe("192.168.1.20:8080")
-    expect(document.body.textContent).toContain("Join a Rhema Studio host")
+    expect(document.body.textContent).toContain("Join a Rhema Studio main computer")
     expect(document.body.querySelector<HTMLInputElement>('input[placeholder="192.168.1.20:8080"]')?.value).toBe("192.168.1.20:8080")
     expect(useBroadcastStore.getState().isLive).toBe(false)
   })
@@ -336,7 +336,7 @@ describe("Connections hub (#401)", () => {
     expect(useBroadcastStore.getState().isLive).toBe(false)
   })
 
-  it("does not start pairing while the host listener is off and offers the settings recovery route", async () => {
+  it("does not start pairing while the main computer listener is off and offers the settings recovery route", async () => {
     mockedInvoke.mockImplementation(async (command) => {
       if (command === "host_status") return { running: false, lan: false, port: null, tlsPort: null, addresses: [], desks: [] }
       if (command === "camera_router_status") return null

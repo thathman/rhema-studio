@@ -43,8 +43,8 @@ describe("scene approval review", () => {
   it("shows a local before/requested version diff without presenting the local scene as a host snapshot", () => {
     const model = sceneRequestReviewModel(request(), [scene("Welcome", "Welcome")])
 
-    expect(model.beforeLabel).toContain("not a pinned host snapshot")
-    expect(model.baseRevisionLabel).toBe("Submitted against host revision 7")
+    expect(model.beforeLabel).toContain("not a pinned main computer snapshot")
+    expect(model.baseRevisionLabel).toBe("Submitted against main computer revision 7")
     expect(model.requestedScene?.name).toBe("Welcome v2")
     expect(model.changes).toContain("Name: “Welcome” → “Welcome v2”.")
     expect(model.changes.join(" ")).toContain("Text: Welcome → Welcome to worship")
@@ -181,9 +181,9 @@ describe("scene approval review", () => {
     const update = sceneRequestReviewModel(request({ baseRevision: null }), [scene("Welcome")])
     const create = sceneRequestReviewModel(request({ targetId: "new-scene", baseRevision: null, payload: { scene: { id: "new-scene", name: "New scene", background: "#000000", layers: [] } } }), [])
 
-    expect(update.blockReason).toContain("no host base revision")
+    expect(update.blockReason).toContain("no main computer base revision")
     expect(create.blockReason).toBeNull()
-    expect(create.baseRevisionLabel).toBe("New scene · no prior host revision")
+    expect(create.baseRevisionLabel).toBe("New scene · no prior main computer revision")
   })
 
   it("uses the persisted pre-Apply snapshot and never labels current post-Apply state as the before version", () => {
@@ -206,7 +206,7 @@ describe("scene approval review", () => {
     expect(model.blockReason).toBeNull()
     expect(model.applyBlockReason).toBeNull()
     expect(model.reviewNotice).toContain("No matching scene is available in this local library")
-    expect(model.changes).toContain("No trustworthy before snapshot is available for this host revision.")
+    expect(model.changes).toContain("No trustworthy before snapshot is available for this main computer revision.")
   })
 
   it("finds direct scene assignments and scene Take steps in current local service events", () => {

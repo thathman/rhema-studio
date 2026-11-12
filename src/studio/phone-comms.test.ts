@@ -68,7 +68,7 @@ afterEach(async () => {
 })
 
 describe("phone remote: notices and requests", () => {
-  it("sends a notice to one person with a request, and to the main desk by default", async () => {
+  it("sends a notice to one person with a request, and to the main computer by default", async () => {
     const { commands } = start({ v: 1, notices: [], sources: [], crew: ["Ade", "Usher phone"] })
     await vi.waitFor(() => expect([...(document.getElementById("noticeTo") as HTMLSelectElement).options].map((o) => o.textContent)).toContain("Ade"))
     const to = [...(document.getElementById("noticeTo") as HTMLSelectElement).options].map((o) => o.textContent)
@@ -86,8 +86,8 @@ describe("phone remote: notices and requests", () => {
     expect((document.getElementById("noticeValue") as HTMLInputElement).value).toBe("Please start wrapping up")
   })
 
-  it("a request for this phone has its buttons; Preview runs on the main desk and answers Ready", async () => {
-    const live = { v: 1, sources: [], notices: [{ id: "n1", from: "Main desk", to: "present", priority: "normal", text: "Next reading", at: 0, answers: [], action: { kind: "bible", value: "Romans 8:28" } }] }
+  it("a request for this phone has its buttons; Preview runs on the main computer and answers Ready", async () => {
+    const live = { v: 1, sources: [], notices: [{ id: "n1", from: "Main computer", to: "present", priority: "normal", text: "Next reading", at: 0, answers: [], action: { kind: "bible", value: "Romans 8:28" } }] }
     const { commands } = start(live)
     await vi.waitFor(() => expect(button(document, "Show Romans 8:28")).toBeDefined())
     expect(button(document, "Preview")).toBeDefined()
@@ -98,8 +98,8 @@ describe("phone remote: notices and requests", () => {
     expect(commands()[1].why).toBeUndefined()
   })
 
-  it("a refused request answers Unable with the main desk's reason, and says so on the phone", async () => {
-    const live = { v: 1, sources: [], notices: [{ id: "n2", from: "Main desk", to: "all", priority: "urgent", text: "Pastor over time", at: 0, answers: [], action: { kind: "wrap", value: "Please wrap up" } }] }
+  it("a refused request answers Unable with the main computer's reason, and says so on the phone", async () => {
+    const live = { v: 1, sources: [], notices: [{ id: "n2", from: "Main computer", to: "all", priority: "urgent", text: "Pastor over time", at: 0, answers: [], action: { kind: "wrap", value: "Please wrap up" } }] }
     const { commands } = start(live, { refuse: (b) => (b.command === "stage_message" ? "this device may not change the stage" : null) })
     await vi.waitFor(() => expect(button(document, "Put “Please wrap up” on the stage")).toBeDefined())
     button(document, "Put “Please wrap up” on the stage").click()
@@ -111,7 +111,7 @@ describe("phone remote: notices and requests", () => {
 })
 
 describe("phone remote: Talk to and each person's mute", () => {
-  it("talks to a channel its role may use or one person, and mutes a person on the main desk's mix", async () => {
+  it("talks to a channel its role may use or one person, and mutes a person on the main computer's mix", async () => {
     const live = { v: 1, sources: [], notices: [], talkRights: { production: ["bible"] }, voice: [{ name: "Ade", role: "bible", talking: true, speaking: true }, { name: "Usher phone", talking: false, speaking: false }] }
     const { commands } = start(live, { secure: true })
     await vi.waitFor(() => expect((document.getElementById("talkJoin") as HTMLButtonElement).hidden).toBe(false))
@@ -135,7 +135,7 @@ describe("phone remote: Talk to and each person's mute", () => {
 })
 
 describe("phone remote: round two (#251)", () => {
-  const request = { id: "n3", from: "Main desk", to: "present", priority: "normal", text: "Next hymn", at: 0, answers: [], action: { kind: "song", value: "Amazing Grace" } }
+  const request = { id: "n3", from: "Main computer", to: "present", priority: "normal", text: "Next hymn", at: 0, answers: [], action: { kind: "song", value: "Amazing Grace" } }
 
   it("queues a requested song with the run of show it saw, and answers Ready", async () => {
     const { commands } = start({ v: 1, sources: [], notices: [request], revisions: { queue: 7 } })

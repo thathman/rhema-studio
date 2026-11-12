@@ -24,7 +24,7 @@ const serviceRecording = {
   markers: [{
     atMs: 420_000,
     label: "Sermon begins",
-    actor: "main desk",
+    actor: "main computer",
     serviceRunId: "run-1",
     itemId: "moment-1",
   }],
@@ -124,7 +124,7 @@ describe("History's native recording archive", () => {
     expect(host?.textContent).not.toContain("Sanctuary")
   })
 
-  it("opens a saved local recording through the host's archive command", async () => {
+  it("opens a saved local recording through the main computer's archive command", async () => {
     await renderArchive()
     await act(async () =>
       host

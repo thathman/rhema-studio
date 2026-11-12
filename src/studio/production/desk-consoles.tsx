@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { CheckIcon, InfoIcon, TriangleAlertIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { CLEAR, RESTORE } from "@/lib/wording"
 import { cn } from "@/lib/utils"
 import { activatedLabel } from "@/lib/live-sources"
 import { parseTypedReference } from "@/lib/quick-search"
@@ -63,7 +64,7 @@ export function BibleConsole({ live }: { live: LiveStateV1 }) {
     try {
       const r = await lookupOnHost<{ verses: HostVerse[] }>({ what: "chapter", translation, book, chapter })
       const verses = passageFrom(r?.verses ?? [], verse)
-      setError(verses.length ? null : `${bookName} ${chapter}:${verse} is not in ${abbreviation ?? "this translation"} on the host`)
+      setError(verses.length ? null : `${bookName} ${chapter}:${verse} is not in ${abbreviation ?? "this translation"} on the main computer`)
       setPassage(verses.length ? { reference: `${bookName} ${chapter}:${verse}`, verse, verses } : null)
     } catch (e) {
       setError(String(e))
@@ -118,7 +119,7 @@ export function BibleConsole({ live }: { live: LiveStateV1 }) {
           {passage.verses.map((v) => <p key={v.verse} className={cn(v.verse !== passage.verse && "text-muted-foreground")}><sup className="mr-1 tabular-nums">{v.verse}</sup>{v.text}</p>)}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" disabled={!ok} onClick={() => activate(passage.reference)}>Activate {passage.reference}</Button>
-            <Button size="sm" variant="outline" disabled={!ok} title="Into the main desk's Preview only: nothing goes live" onClick={() => void send({ command: "bible_preview", value: passage.reference })}>Main desk's Preview</Button>
+            <Button size="sm" variant="outline" disabled={!ok} title="Into the main computer's Preview only: nothing goes live" onClick={() => void send({ command: "bible_preview", value: passage.reference })}>Main computer's Preview</Button>
           </div>
         </div>
       )}
@@ -128,8 +129,8 @@ export function BibleConsole({ live }: { live: LiveStateV1 }) {
         {bible?.on ? <Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "clear_source", value: "bible" })}>Take the Bible off</Button> : bible ? <Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "restore_source", value: "bible" })}>Restore the Bible</Button> : null}
       </div>
       {live.heard && (
-        <div className="flex flex-col gap-1" role="group" aria-label="Heard at the host">
-          <p className="font-semibold">Heard <span className="font-normal text-muted-foreground">· Auto Bible on the host; nothing goes up until you Activate it</span></p>
+        <div className="flex flex-col gap-1" role="group" aria-label="Heard at the main computer">
+          <p className="font-semibold">Heard <span className="font-normal text-muted-foreground">· Auto Bible on the main computer; nothing goes up until you Activate it</span></p>
           {live.heard.length === 0 && <p className="text-muted-foreground">No verse heard yet.</p>}
           <ul className="flex flex-col gap-1">
             {live.heard.map((h) => (
@@ -161,13 +162,13 @@ export function SongLibrary({ onSend, onChooseSong, canChooseSong = true }: { on
       const r = await lookupOnHost<{ songs: HostSong[] }>({ what: "songs", query: query.trim() })
       const list = r?.songs ?? []
       setSongs(list)
-      setError(list.length ? null : `Nothing in the host's library for “${query.trim()}”`)
+      setError(list.length ? null : `Nothing in the main computer's library for “${query.trim()}”`)
     } catch (e) {
       setError(String(e))
     }
   }
   return (
-    <div className="flex flex-col gap-2" role="group" aria-label="The host's songs and hymns">
+    <div className="flex flex-col gap-2" role="group" aria-label="The main computer's songs and hymns">
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void look() }}>
         <input aria-label="Song title, words or hymn number" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Title, words or hymn number (CAC 245)" maxLength={120} className={cn(field, "flex-1")} />
         <Button size="sm" type="submit" variant="outline">Find</Button>
@@ -179,7 +180,7 @@ export function SongLibrary({ onSend, onChooseSong, canChooseSong = true }: { on
             <li key={s.id} className="flex flex-wrap items-center gap-2 px-2 py-1">
               <span className="min-w-0 flex-1 truncate"><b>{s.title}</b>{s.numbers.length > 0 && <span className="text-muted-foreground"> · {s.numbers.join(", ")}</span>}{s.firstLine && <span className="text-muted-foreground"> · {s.firstLine}</span>}</span>
               <Button size="xs" disabled={!ok} onClick={() => onSend({ command: "song_show", value: s.title })}>Show</Button>
-              <Button size="xs" variant="outline" disabled={!ok} title="Into the main desk's Preview only: nothing goes live" onClick={() => onSend({ command: "song_preview", value: s.title })}>Preview</Button>
+              <Button size="xs" variant="outline" disabled={!ok} title="Into the main computer's Preview only: nothing goes live" onClick={() => onSend({ command: "song_preview", value: s.title })}>Preview</Button>
               {onChooseSong && <Button size="xs" variant="outline" disabled={!ok || !canChooseSong} title={canChooseSong ? "Add this library song to today's temporary Worship order" : "Add at least one song to today's order first"} onClick={() => onChooseSong(s)}>Add to today's order</Button>}
             </li>
           ))}
@@ -228,7 +229,7 @@ export function OutputMap({ live }: { live: LiveStateV1 }) {
     <div role="group" aria-label="Output map" className="flex flex-col gap-1">
       <p className="font-semibold">Output map <span className="font-normal text-muted-foreground">· read only</span></p>
       <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
-        {live.outputMap.length === 0 && <li className="px-2 py-1.5 text-muted-foreground">The host has no outputs.</li>}
+        {live.outputMap.length === 0 && <li className="px-2 py-1.5 text-muted-foreground">The main computer has no outputs.</li>}
         {live.outputMap.map((o) => (
           <li key={o.id} className="flex flex-wrap items-center gap-2 px-2 py-1">
             <span className={cn("size-2 shrink-0 rounded-full", o.on ? "bg-primary" : "bg-muted-foreground/40")} aria-hidden />
@@ -259,7 +260,7 @@ export function UpcomingGraphics({ queue, stale }: { queue: UpcomingGraphicsQueu
     return (
       <section aria-label="Upcoming graphics" className={box}>
         <p className="font-semibold">Upcoming graphics</p>
-        <p role="status" className="text-muted-foreground">This host does not share the graphics queue yet. Update Rhema Studio on the host to see it.</p>
+        <p role="status" className="text-muted-foreground">The main computer does not share the graphics queue yet. Update Rhema Studio on the main computer to see it.</p>
       </section>
     )
   }
@@ -276,7 +277,7 @@ export function UpcomingGraphics({ queue, stale }: { queue: UpcomingGraphicsQueu
         </span>
         {canExpand && <Button size="sm" variant="outline" aria-expanded={expanded} aria-controls="upcoming-graphics-items" onClick={() => setExpanded((value) => !value)}>{expanded ? "Collapse" : "View all"}</Button>}
       </header>
-      {stale && <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2 py-1 text-sm">Host is out of date; this queue may have changed.</p>}
+      {stale && <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2 py-1 text-sm">The main computer is out of date; this queue may have changed.</p>}
       <p className="text-xs text-muted-foreground">Plan only. These rows never send a graphic to an output or change what is live.</p>
       <div id="upcoming-graphics-items">
         {queue.items.length === 0 ? (
@@ -305,7 +306,7 @@ export function UpcomingGraphics({ queue, stale }: { queue: UpcomingGraphicsQueu
 /** The sources a Screens desk takes off its screens and back (#197): the ticker and the lower third. */
 const SCREEN_SOURCES = [["ticker", "Ticker"], ["lowerThird", "Lower third"]] as const
 
-/** The ticker and the lower third on the host's screens: what each shows, Take off or Put back. */
+/** The ticker and the lower third on the host's screens: what each shows, Clear or Restore (#822). */
 export function ScreenSources({ live }: { live: LiveStateV1 }) {
   const ok = useCanSend()
   const [result, setResult] = useState<SendResult | null>(null)
@@ -318,31 +319,31 @@ export function ScreenSources({ live }: { live: LiveStateV1 }) {
   const sourceRevisionUnavailable = rows.some(({ s }) => typeof live.revisions?.[`source:${s.id}`] !== "number")
   const staleConfirmation = !!pending && !!confirming && (staleAtClick || pending.s.on !== confirming.expectedOn || revision !== confirming.revision)
   const confirmLabel = pending && confirming
-    ? `Confirm ${confirming.command === "clear_source" ? "take off" : "put back"} the shared ${pending.name.toLowerCase()}`
+    ? `Confirm ${(confirming.command === "clear_source" ? CLEAR : RESTORE).toLowerCase()} the shared ${pending.name.toLowerCase()}`
     : "Confirm shared source change"
   return (
     <div role="group" aria-label="Ticker and lower third" className="flex flex-col gap-1">
       <p className="font-semibold">Ticker and lower third</p>
-      {sourceRevisionUnavailable && <p role="alert" className="text-sm text-confidence-mid">This host does not provide server source revisions. Update the host before changing the shared ticker or lower third.</p>}
+      {sourceRevisionUnavailable && <p role="alert" className="text-sm text-confidence-mid">The main computer does not provide server source revisions. Update the main computer before changing the shared ticker or lower third.</p>}
       <ul className="flex flex-col gap-1">
         {rows.map(({ s, name }) => {
           const sourceRevision = live.revisions?.[`source:${s.id}`]
           return (
             <li key={s.id} className="flex flex-wrap items-center gap-2">
-              <span className="min-w-0 flex-1 truncate">{name} · host reports {s.on ? "on" : "off"}{s.reference ? <span className="text-muted-foreground"> · {s.reference}</span> : null}{activatedLabel(s) ? <span className="text-muted-foreground"> · {activatedLabel(s)}</span> : null}</span>
+              <span className="min-w-0 flex-1 truncate">{name} · main computer reports {s.on ? "on" : "off"}{s.reference ? <span className="text-muted-foreground"> · {s.reference}</span> : null}{activatedLabel(s) ? <span className="text-muted-foreground"> · {activatedLabel(s)}</span> : null}</span>
               <Button size="xs" variant="outline" disabled={!ok || typeof sourceRevision !== "number"} onClick={() => {
                 if (typeof sourceRevision !== "number") return
                 setResult(null)
                 setStaleAtClick(false)
                 setConfirming({ id: s.id, command: s.on ? "clear_source" : "restore_source", expectedOn: s.on, revision: sourceRevision })
-              }}>{s.on ? `Take off ${name.toLowerCase()}…` : `Put back ${name.toLowerCase()}…`}</Button>
+              }}>{`${s.on ? CLEAR : RESTORE} ${name.toLowerCase()}…`}</Button>
             </li>
           )
         })}
       </ul>
       {pending && confirming && (
         <div role="group" aria-label="Confirm shared source change" className="flex flex-col gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 p-2">
-          <p className="text-sm">This changes the shared {pending.name.toLowerCase()} anywhere a congregation output uses it. This desk cannot limit the change to one screen; ask the main host for an output-specific change.</p>
+          <p className="text-sm">This changes the shared {pending.name.toLowerCase()} anywhere a congregation output uses it. This desk cannot limit the change to one screen; ask the main computer for an output-specific change.</p>
           <div className="flex flex-wrap gap-2">
             {staleConfirmation
               ? <p role="alert" className="font-medium text-confidence-mid">The shared source changed while you were reviewing. Cancel, check its current state, then choose again.</p>
@@ -391,7 +392,7 @@ export function DirectorBoard({ readiness, crew }: { readiness: SharedReadiness 
       <div className="grid gap-3 md:grid-cols-2">
         <div className="flex flex-col gap-1">
           <p className={cn("font-semibold", readiness ? (readiness.ready ? "text-confidence-high" : "text-confidence-mid") : "text-muted-foreground")}>
-            {!readiness ? "The host has not shared its checks (it may be an older Rhema Studio)" : readiness.ready ? "Ready" : `${warn} to check`}
+            {!readiness ? "The main computer has not shared its checks (it may be an older Rhema Studio)" : readiness.ready ? "Ready" : `${warn} to check`}
           </p>
           {readiness && (
             <ul aria-label="Readiness checks" className="flex max-h-64 flex-col gap-1 overflow-y-auto">
@@ -405,7 +406,7 @@ export function DirectorBoard({ readiness, crew }: { readiness: SharedReadiness 
           )}
         </div>
         <div className="flex flex-col gap-1">
-          <p className="font-semibold">Team <span className="font-normal text-muted-foreground">· {crew ? `${crew.filter((c) => c.connected).length} of ${crew.length} connected` : "not shared by the host"}</span></p>
+          <p className="font-semibold">Team <span className="font-normal text-muted-foreground">· {crew ? `${crew.filter((c) => c.connected).length} of ${crew.length} connected` : "not shared by the main computer"}</span></p>
           {crew && (
             <ul aria-label="Who is connected" className="flex flex-col divide-y divide-border rounded-md border border-border">
               {crew.length === 0 && <li className="px-2 py-1.5 text-muted-foreground">No one paired yet.</li>}

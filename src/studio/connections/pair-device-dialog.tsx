@@ -101,7 +101,7 @@ export function PairDeviceDialog({ label = "Pair a device" }: { label?: string }
       const current = await invoke<HttpStatus>("get_http_status")
       setHttp(current)
       if (!current.running || !current.port) {
-        setError("Turn on the network listener in Settings → Remote control before pairing.")
+        setError("Turn on the network listener in Settings → Remote Control before pairing.")
         return
       }
       const code = await invoke<string>("remote_pair_start")
@@ -223,7 +223,7 @@ export function PairDeviceDialog({ label = "Pair a device" }: { label?: string }
                 )}
                 <p className="text-muted-foreground">Use once within two minutes. Three incorrect codes close the window.</p>
                 <p aria-label="Pairing code" className="my-1 font-mono text-3xl font-bold tracking-[0.3em]">{pairCode}</p>
-                {pairQr?.url && <p className="break-all text-muted-foreground">Host: {new URL(pairQr.url).host}</p>}
+                {pairQr?.url && <p className="break-all text-muted-foreground">Address: {new URL(pairQr.url).host}</p>}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={() => void cancelPairing()}>Cancel pairing</Button>
                 </div>

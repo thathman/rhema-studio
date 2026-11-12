@@ -42,7 +42,7 @@ describe("the Talk button", () => {
     expect(hears("to:Ade", "Ade", [], "k-ade")).toBe(false)
     expect(hears("to:Ade", "k-ade", [])).toBe(false)
     expect(hears("to:host", "host", [], "host")).toBe(true)
-    expect([talkName("all"), talkName("stage"), talkName("to:Ade"), talkName("to:host", "Tolu (main desk)")]).toEqual(["All crew", "Stage & worship", "Ade", "Tolu (main desk)"])
+    expect([talkName("all"), talkName("stage"), talkName("to:Ade"), talkName("to:host", "Tolu (main computer)")]).toEqual(["All crew", "Stage & worship", "Ade", "Tolu (main computer)"])
     // Priority (the main desk): heard by everyone, like All crew.
     expect(hears("priority", "Femi", [])).toBe(true)
     expect(talkName("priority")).toBe("All crew (priority)")
@@ -61,7 +61,7 @@ describe("the Talk button", () => {
 
   it("names the speaker with their role, and works out channel rights and levels (#251)", () => {
     expect(speakerName({ name: "Ade", role: "bible" })).toBe("Ade · Bible")
-    expect(speakerName({ name: "Pat (main desk)" })).toBe("Pat (main desk)")
+    expect(speakerName({ name: "Pat (main computer)" })).toBe("Pat (main computer)")
     const rules = { channels: { stage: ["stage", "worship"] } }
     expect([mayUseChannel(rules, "stage", "worship"), mayUseChannel(rules, "stage", "bible"), mayUseChannel(rules, "production", "bible")]).toEqual([true, false, true])
     // All crew, private calls and the main desk (no role) are never limited.

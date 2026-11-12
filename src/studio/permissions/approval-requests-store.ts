@@ -75,7 +75,7 @@ export function approvalErrorText(error: unknown): string {
   if (error instanceof Error) return error.message
   if (typeof error === "string") return error
   if (error && typeof error === "object" && "message" in error && typeof error.message === "string") return error.message
-  return "The host approval service could not be reached."
+  return "The main computer's approval service could not be reached."
 }
 
 /** Load the host's authoritative SQLite request list. This never reads the legacy local ledger. */
@@ -84,7 +84,7 @@ export async function reloadApprovalRequests(): Promise<void> {
   useApprovalRequestsStore.setState({ loading: true, error: null })
   try {
     const requests = await invoke<ApprovalRequest[]>("approvals_list")
-    if (!Array.isArray(requests)) throw new Error("The host returned an invalid approval list.")
+    if (!Array.isArray(requests)) throw new Error("The main computer returned an invalid approval list.")
     const recoveries: Record<string, SceneApprovalRecovery> = {}
     await Promise.all(requests.filter((item) => item.state === "applied" && item.kind.startsWith("scene_")).map(async (item) => {
       try {
@@ -129,7 +129,7 @@ export function resetApprovalRequests(): void {
 
 export async function decideApprovalRequest(id: string, decision: ApprovalDecision, note?: string): Promise<ApprovalRequest> {
   const request = await invoke<ApprovalRequest>("approvals_decide", { id, decision, ...(note ? { note } : {}) })
-  if (!request || request.id !== id) throw new Error("The host returned a different approval request than the one selected.")
+  if (!request || request.id !== id) throw new Error("The main computer returned a different approval request than the one selected.")
   useApprovalRequestsStore.setState((state) => ({
     requests: state.requests.some((item) => item.id === id)
       ? state.requests.map((item) => item.id === id ? request : item)
@@ -151,7 +151,7 @@ export async function confirmPlanApprovalRequest(id: string): Promise<ApprovalRe
   try {
     const request = await invoke<ApprovalRequest>("approvals_apply", { id })
     if (!request || request.id !== id || request.state !== "applied") {
-      throw new Error("The host did not confirm this plan revision as applied.")
+      throw new Error("The main computer did not confirm this plan revision as applied.")
     }
     useApprovalRequestsStore.setState((state) => ({
       requests: state.requests.map((item) => item.id === id ? request : item),
@@ -175,7 +175,7 @@ export async function applyStageSendApprovalRequest(id: string): Promise<Approva
   try {
     const request = await invoke<ApprovalRequest>("approvals_apply", { id })
     if (!request || request.id !== id || request.kind !== "stage_send" || request.targetId !== current.targetId || request.state !== "applied") {
-      throw new Error("The host did not confirm this Stage message request as applied.")
+      throw new Error("The main computer did not confirm this Stage message request as applied.")
     }
     useApprovalRequestsStore.setState((state) => ({
       requests: state.requests.map((item) => item.id === id ? request : item),
@@ -251,7 +251,7 @@ async function applyApprovedSceneLocally(request: ApprovalRequest, recovery: Sce
       throw new Error("The approved scene payload could not be restored safely on this computer.")
     }
     if (!sceneMatchesApproval(request, broadcast.scenes) && !sameSceneContent(existing ?? null, recovery.beforeScene)) {
-      throw new Error("The local scene changed after host approval, so recovery stopped to protect the newer design. Submit a fresh scene request.")
+      throw new Error("The local scene changed after the main computer approved it, so recovery stopped to protect the newer design. Submit a fresh scene request.")
     }
     const changed = !sameSceneContent(scene, recovery.beforeScene)
     const needsApply = !sceneMatchesApproval(request, broadcast.scenes)
@@ -261,7 +261,7 @@ async function applyApprovedSceneLocally(request: ApprovalRequest, recovery: Sce
       journaledSceneApprovals.add(request.id)
       useJournalStore.getState().add({
       kind: "scene",
-      label: `Scene ${scene.name} ${existing ? "changed" : "made"} by ${request.requester.name} (approved on the main desk)`,
+      label: `Scene ${scene.name} ${existing ? "changed" : "made"} by ${request.requester.name} (approved on the main computer)`,
       })
     }
     await saveSceneApprovalRecovery(request.id, null)
@@ -269,7 +269,7 @@ async function applyApprovedSceneLocally(request: ApprovalRequest, recovery: Sce
   }
 
   if (existing && !sameSceneContent(existing, recovery.beforeScene)) {
-    throw new Error("The local scene changed after host approval, so recovery stopped to protect the newer design. Submit a fresh scene request.")
+    throw new Error("The local scene changed after the main computer approved it, so recovery stopped to protect the newer design. Submit a fresh scene request.")
   }
   if (scenesOnScreen(useBroadcastStore.getState()).has(request.targetId)) {
     throw new Error("That scene is now on a real screen. Move each screen to another scene before retrying its local deletion.")
@@ -281,7 +281,7 @@ async function applyApprovedSceneLocally(request: ApprovalRequest, recovery: Sce
     journaledSceneApprovals.add(request.id)
     useJournalStore.getState().add({
       kind: "scene",
-      label: `Scene ${existing?.name ?? recovery.beforeScene?.name ?? request.targetId} deleted by ${request.requester.name} (approved on the main desk)`,
+      label: `Scene ${existing?.name ?? recovery.beforeScene?.name ?? request.targetId} deleted by ${request.requester.name} (approved on the main computer)`,
     })
   }
   await saveSceneApprovalRecovery(request.id, null)
@@ -299,11 +299,11 @@ export function applySceneApprovalRequest(id: string): Promise<ApprovalRequest> 
 /** Apply an approved remote scene request only after the host rechecks its saved revision and outputs. */
 async function applySceneApprovalRequestSerialized(id: string): Promise<ApprovalRequest> {
   if (useApprovalRequestsStore.getState().localHostStatusUnknown[id]) {
-    throw new Error("Refresh the host request status before applying this scene again.")
+    throw new Error("Refresh the main computer's request status before applying this scene again.")
   }
   let current = useApprovalRequestsStore.getState().requests.find((item) => item.id === id)
   if (!current || (current.kind !== "scene_save" && current.kind !== "scene_delete")) {
-    throw new Error("Only a host-approved scene request can be applied here.")
+    throw new Error("Only a scene request the main computer approved can be applied here.")
   }
   if (current.state !== "approved" && current.state !== "applied") throw new Error("The scene request must be approved before it can be applied.")
 
@@ -328,7 +328,7 @@ async function applySceneApprovalRequestSerialized(id: string): Promise<Approval
     if (recovery?.status === "kept_local") return current
     if (!recovery && current.state === "applied" && !sceneMatchesApproval(current, useBroadcastStore.getState().scenes)) {
       recoveryUnavailable = true
-      throw new Error("This request was applied before local recovery tracking was available. The host state is final, but the local scene changed; submit a fresh request for a safe update.")
+      throw new Error("This request was applied before local recovery tracking was available. The main computer's state is final, but the local scene changed; submit a fresh request for a safe update.")
     }
     if (!recovery) {
       const beforeScene = useBroadcastStore.getState().scenes.find((scene) => scene.id === current!.targetId) ?? null
@@ -343,7 +343,7 @@ async function applySceneApprovalRequestSerialized(id: string): Promise<Approval
       const request = await invoke<ApprovalRequest>("approvals_apply", { id })
       hostApplied = request?.id === id && request.state === "applied"
       if (!hostApplied || request.kind !== current.kind || request.targetId !== current.targetId) {
-        throw new Error("The host did not confirm this exact scene request as applied.")
+        throw new Error("The main computer did not confirm this exact scene request as applied.")
       }
       current = request
       useApprovalRequestsStore.setState((state) => ({
@@ -380,7 +380,7 @@ async function applySceneApprovalRequestSerialized(id: string): Promise<Approval
         localHostStatusUnknown: { ...state.localHostStatusUnknown, [id]: true },
         ...(recovery?.status === "pending" ? { localSceneRecoveries: { ...state.localSceneRecoveries, [id]: recovery } } : {}),
       }))
-      throw new Error(`The host response was interrupted and host status could not be refreshed. The local recovery record was kept. Refresh host status before trying again: ${detail}`)
+      throw new Error(`The main computer's response was interrupted and main computer status could not be refreshed. The local recovery record was kept. Refresh main computer status before trying again: ${detail}`)
     }
     if (hostApplied) {
       const detail = approvalErrorText(error)
@@ -389,7 +389,7 @@ async function applySceneApprovalRequestSerialized(id: string): Promise<Approval
         ...(recoveryUnavailable ? { localRecoveryUnavailable: { ...state.localRecoveryUnavailable, [id]: true } } : {}),
         ...(recovery?.status === "pending" ? { localSceneRecoveries: { ...state.localSceneRecoveries, [id]: recovery } } : {}),
       }))
-      throw new Error(`The host recorded this request as applied, but local completion needs attention: ${detail}`)
+      throw new Error(`The main computer recorded this request as applied, but local completion needs attention: ${detail}`)
     }
     if (recoverySaved) {
       await saveSceneApprovalRecovery(id, null).catch(() => {})
@@ -405,7 +405,7 @@ async function applySceneApprovalRequestSerialized(id: string): Promise<Approval
 export async function keepNewerLocalSceneAfterApproval(id: string): Promise<void> {
   const request = useApprovalRequestsStore.getState().requests.find((item) => item.id === id)
   if (!request || request.state !== "applied" || (request.kind !== "scene_save" && request.kind !== "scene_delete")) {
-    throw new Error("Only an applied host scene request can be resolved this way.")
+    throw new Error("Only a scene request the main computer applied can be resolved this way.")
   }
   const recovery = await loadSceneApprovalRecovery(id)
   if (!sceneApprovalHasNewerLocalConflict(request, useBroadcastStore.getState().scenes, recovery ?? undefined)) {
@@ -424,7 +424,7 @@ export async function keepNewerLocalSceneAfterApproval(id: string): Promise<void
 
 export async function loadApprovalHistory(id: string): Promise<ApprovalEvent[]> {
   const events = await invoke<ApprovalEvent[]>("approvals_history", { id })
-  if (!Array.isArray(events)) throw new Error("The host returned invalid approval history.")
+  if (!Array.isArray(events)) throw new Error("The main computer returned invalid approval history.")
   useApprovalRequestsStore.setState((state) => ({ histories: { ...state.histories, [id]: events } }))
   return events
 }

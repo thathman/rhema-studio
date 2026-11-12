@@ -115,7 +115,7 @@ fn unsafe_scene(scene: &serde_json::Value, current: Option<&serde_json::Value>, 
     for l in scene.get("layers").and_then(serde_json::Value::as_array).into_iter().flatten() {
         let Some(o) = l.as_object() else { return Some("A layer is not a layer".into()) };
         if !o.get("kind").and_then(serde_json::Value::as_str).is_some_and(|k| KINDS.contains(&k)) {
-            return Some("A layer of a kind this host does not know".into());
+            return Some("A layer of a kind the main computer does not know".into());
         }
         for (k, v) in o {
             match (k.as_str(), v) {
@@ -160,7 +160,7 @@ fn unsafe_scene(scene: &serde_json::Value, current: Option<&serde_json::Value>, 
         if let Some(url) = o.get("cameraUrl").and_then(serde_json::Value::as_str) {
             let kept = o.get("id").and_then(serde_json::Value::as_str).and_then(had).is_some_and(|h| h["cameraUrl"].as_str() == Some(url));
             if !kept && !cameras.contains(&url) {
-                return Some("That camera is not one of the church's cameras (Production → Cameras on the host)".into());
+                return Some("That camera is not one of the church's cameras (Production → Cameras on the main computer)".into());
             }
         }
     }
@@ -207,17 +207,17 @@ pub fn judge(live: Option<&str>, role: Role, cmd: &RemoteCommand) -> Result<Opti
     };
     if let Some(scene) = sent {
         if !scene.is_object() || id.is_empty() || id.len() > 100 {
-            return Err(refuse(400, "bad-scene", "That is not a scene this host can save"));
+            return Err(refuse(400, "bad-scene", "That is not a scene the main computer can save"));
         }
         if scene.get("layers").and_then(serde_json::Value::as_array).is_some_and(|l| l.len() > MAX_LAYERS) {
             return Err(refuse(413, "bad-scene", format!("A scene can have at most {MAX_LAYERS} layers")));
         }
         if scene.to_string().len() > MAX_SCENE_BYTES {
-            return Err(refuse(413, "bad-scene", "That scene is too big to send. Pictures and videos stay on the host: add them there"));
+            return Err(refuse(413, "bad-scene", "That scene is too big to send. Pictures and videos stay on the main computer: add them there"));
         }
     }
     let Some(host) = live.and_then(|j| serde_json::from_str::<HostScenes>(j).ok()) else {
-        return Err(refuse(503, "no-live-state", "The host has not shared its scenes yet; try again in a moment"));
+        return Err(refuse(503, "no-live-state", "The main computer has not shared its scenes yet; try again in a moment"));
     };
     let current = host.scenes.iter().find(|s| s.get("id").and_then(serde_json::Value::as_str) == Some(id.as_str()));
     if let Some(scene) = sent {
@@ -228,14 +228,14 @@ pub fn judge(live: Option<&str>, role: Role, cmd: &RemoteCommand) -> Result<Opti
     }
     match (current, sent) {
         // Deleting a scene that is no longer there: someone deleted it first.
-        (None, None) => return Err(refuse(409, "stale", "That scene is no longer on the host")),
+        (None, None) => return Err(refuse(409, "stale", "That scene is no longer on the main computer")),
         (None, Some(_)) if role == Role::Camera => return Err(refuse(403, "role", "A camera desk changes the cameras in scenes; it cannot make new scenes")),
         (Some(c), Some(s)) if role == Role::Camera && not_cameras(s) != not_cameras(c) => return Err(refuse(403, "role", "A camera desk may change only the camera boxes in a scene")),
         _ => {}
     }
     let rehearsal = host.program.is_some_and(|p| p.rehearsal);
     if host.require_approval && !rehearsal {
-        return Ok(Some(Verdict::Request("Approvals is on at the main desk (Team → Approvals)")));
+        return Ok(Some(Verdict::Request("Approvals is on at the main computer (Team → Approvals)")));
     }
     if current.is_some_and(on_screen) {
         return Ok(Some(Verdict::Request("that scene is on a screen")));
@@ -299,7 +299,7 @@ mod tests {
     fn with_approvals_on_every_change_waits_but_not_in_rehearsal() {
         let approvals = LIVE.replacen(r#""v":1,"#, r#""v":1,"requireApproval":true,"#, 1);
         let new = save(serde_json::json!({ "id": "n1", "layers": [] }));
-        assert_eq!(judge(Some(&approvals), Role::Screens, &new), Ok(Some(Verdict::Request("Approvals is on at the main desk (Team → Approvals)"))));
+        assert_eq!(judge(Some(&approvals), Role::Screens, &new), Ok(Some(Verdict::Request("Approvals is on at the main computer (Team → Approvals)"))));
         let rehearsing = approvals.replace(r#""rehearsal":false"#, r#""rehearsal":true"#);
         assert_eq!(judge(Some(&rehearsing), Role::Screens, &new), Ok(Some(Verdict::Direct)), "rehearsal changes nothing on air");
         let on = scene_in(LIVE, "on");

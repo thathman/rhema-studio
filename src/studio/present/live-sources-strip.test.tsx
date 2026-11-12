@@ -27,7 +27,7 @@ describe("Present's live sources strip", () => {
     })
     expect(el.textContent).toContain("Romans 8:28")
     expect(el.textContent).toContain("1 feed")
-    await act(async () => (el.querySelector('[aria-label^="Take Bible"]') as HTMLButtonElement).click())
+    await act(async () => (el.querySelector('[aria-label^="Clear Bible"]') as HTMLButtonElement).click())
     expect(useBroadcastStore.getState().sources.bible?.on).toBe(false)
     await act(async () => (el.querySelector('[aria-label^="Restore Bible"]') as HTMLButtonElement).click())
     expect(useBroadcastStore.getState().sources.bible?.on).toBe(true)
@@ -57,7 +57,7 @@ describe("Present's live sources strip", () => {
     const root = createRoot(el)
     await act(async () => root.render(<LiveSourcesStrip />))
 
-    await act(async () => (el.querySelector('[aria-label="Review hiding Pulpit camera from scenes"]') as HTMLButtonElement).click())
+    await act(async () => (el.querySelector('[aria-label="Review clearing Pulpit camera from scenes"]') as HTMLButtonElement).click())
     const review = el.querySelector('[role="alertdialog"]')!
     expect(review.textContent).toContain("Sermon split")
     expect(review.textContent).toContain("Wide shot")
@@ -68,10 +68,10 @@ describe("Present's live sources strip", () => {
     expect(review.textContent).not.toContain("Unused design")
     expect(useBroadcastStore.getState().stateSources["camera:pulpit"]?.on).toBe(true)
 
-    await act(async () => ([...review.querySelectorAll("button")].find((button) => button.textContent?.includes("Hide in all listed scenes")) as HTMLButtonElement).click())
+    await act(async () => ([...review.querySelectorAll("button")].find((button) => button.textContent?.includes("Clear from all listed scenes")) as HTMLButtonElement).click())
     expect(useBroadcastStore.getState().stateSources["camera:pulpit"]?.on).toBe(false)
 
-    await act(async () => (el.querySelector('[aria-label="Review showing Pulpit camera in scenes"]') as HTMLButtonElement).click())
+    await act(async () => (el.querySelector('[aria-label="Review restoring Pulpit camera in scenes"]') as HTMLButtonElement).click())
     expect(el.querySelector('[role="alertdialog"]')?.textContent).toContain("will restore this source")
     await act(async () => ([...el.querySelectorAll('[role="alertdialog"] button')].find((button) => button.textContent?.includes("Restore in all listed scenes")) as HTMLButtonElement).click())
     expect(useBroadcastStore.getState().stateSources["camera:pulpit"]?.on).toBe(true)
@@ -93,7 +93,7 @@ describe("Present's live sources strip", () => {
     const el = document.createElement("div")
     const root = createRoot(el)
     await act(async () => root.render(<LiveSourcesStrip />))
-    await act(async () => (el.querySelector('[aria-label="Review hiding Pulpit camera from scenes"]') as HTMLButtonElement).click())
+    await act(async () => (el.querySelector('[aria-label="Review clearing Pulpit camera from scenes"]') as HTMLButtonElement).click())
     const review = el.querySelector('[role="alertdialog"]')!
     expect(review.textContent).toContain("None in the saved scene list.")
     expect(review.textContent).toContain("Sanctuary (Sermon at Take)")
@@ -115,10 +115,10 @@ describe("Present's live sources strip", () => {
     const el = document.createElement("div")
     const root = createRoot(el)
     await act(async () => root.render(<LiveSourcesStrip />))
-    await act(async () => (el.querySelector('[aria-label="Review hiding Pulpit camera from scenes"]') as HTMLButtonElement).click())
+    await act(async () => (el.querySelector('[aria-label="Review clearing Pulpit camera from scenes"]') as HTMLButtonElement).click())
     await act(async () => useBroadcastStore.setState({ outputs: [{ ...main, sceneId: undefined }] }))
 
-    const confirm = [...el.querySelectorAll('[role="alertdialog"] button')].find((button) => button.textContent?.includes("Hide in all listed scenes")) as HTMLButtonElement
+    const confirm = [...el.querySelectorAll('[role="alertdialog"] button')].find((button) => button.textContent?.includes("Clear from all listed scenes")) as HTMLButtonElement
     expect(confirm.disabled).toBe(true)
     expect(el.querySelector('[role="alert"]')?.textContent).toContain("changed while you were reviewing")
     expect(useBroadcastStore.getState().stateSources["camera:pulpit"]?.on).toBe(true)

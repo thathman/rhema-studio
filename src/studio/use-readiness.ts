@@ -230,7 +230,7 @@ export function useReadiness() {
     lan: lan ? { now: lan, atLastService: lanAtService } : undefined,
     screens,
     yorubaFonts: yoruba && yoruba.key === fontKey ? { checked: lookFonts, missing: yoruba.missing } : null,
-    clock: { year: new Date(now).getFullYear(), skewMs: joinStatus === "connected" ? clockSkewMs : null, reference: joinStatus === "connected" ? "the host's" : null },
+    clock: { year: new Date(now).getFullYear(), skewMs: joinStatus === "connected" ? clockSkewMs : null, reference: joinStatus === "connected" ? "the main computer's" : null },
     countdownIdle: (() => {
       const shows = outputs.filter((o) => o.role === "stage" && o.stageLayout === "countdown" && outputOnAir(o, outputStatus[o.id]))
       if (shows.length === 0) return []

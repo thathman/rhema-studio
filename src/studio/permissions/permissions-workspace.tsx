@@ -49,12 +49,12 @@ export function PermissionsWorkspace() {
       if (action === "accept") {
         const why = await acceptSceneRequest(request.id)
         if (why) throw new Error(why)
-        const me = useSettingsStore.getState().operatorName.trim() || "Main desk"
+        const me = useSettingsStore.getState().operatorName.trim() || "Main computer"
         const notice = useNotices.getState().notices.find((item) => item.action?.kind === "sceneEdit" && item.action.value === request.id)
         if (notice) useNotices.getState().answer(notice.id, me, "ready")
       } else {
-        if (!await declineSceneRequest(request.id)) throw new Error("The decision could not be saved on this host.")
-        const me = useSettingsStore.getState().operatorName.trim() || "Main desk"
+        if (!await declineSceneRequest(request.id)) throw new Error("The decision could not be saved on this computer.")
+        const me = useSettingsStore.getState().operatorName.trim() || "Main computer"
         const notice = useNotices.getState().notices.find((item) => item.action?.kind === "sceneEdit" && item.action.value === request.id)
         if (notice) useNotices.getState().answer(notice.id, me, "unable")
       }
@@ -71,7 +71,7 @@ export function PermissionsWorkspace() {
     try {
       const applied = await useSettingsStore.getState().setRemoteDeviceRecorderGrant(hash, enabled)
       const savedGrant = useSettingsStore.getState().remoteDevices.find((device) => device.hash === hash)?.record === true
-      if (!applied && savedGrant !== enabled) throw new Error("The host did not confirm the Recorder access change. The saved grant was left unchanged.")
+      if (!applied && savedGrant !== enabled) throw new Error("The main computer did not confirm the Recorder access change. The saved grant was left unchanged.")
     } catch (error) {
       setRecorderGrantErrors((current) => ({ ...current, [hash]: error instanceof Error ? error.message : String(error) }))
     } finally {
@@ -109,7 +109,7 @@ export function PermissionsWorkspace() {
           <h3 id="local-requests-title" className="min-w-0 flex-1 text-sm font-semibold">From desks on an older version</h3>
           {loadError && <Button size="sm" variant="outline" disabled={reloading} onClick={() => { setReloading(true); void reloadSceneApprovals().catch(() => {}).finally(() => setReloading(false)) }}><RefreshCwIcon /> Try again</Button>}
         </div>
-        <p className="mt-1 mb-3 text-xs text-muted-foreground">These scene requests came without a host request ID, so this computer keeps them. Accept saves the scene here and never takes it live.</p>
+        <p className="mt-1 mb-3 text-xs text-muted-foreground">These scene requests came without a main computer request ID, so this computer keeps them. Accept saves the scene here and never takes it live.</p>
         {loadError && <p role="alert" className="mb-3 flex items-start gap-2 text-sm text-destructive"><CircleAlertIcon className="mt-0.5 size-4 shrink-0" />These requests could not be loaded: {loadError}</p>}
         {!hydrated && !loadError ? <p role="status" className="text-sm text-muted-foreground">Loading saved requests…</p> : openLocal.length === 0 ? <p className="text-sm text-muted-foreground">None waiting.</p> : <ul className="divide-y divide-border">{openLocal.map(localRow)}</ul>}
         {decidedLocal.length > 0 && <details className="mt-3 text-sm">
@@ -125,37 +125,37 @@ export function PermissionsWorkspace() {
       <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-8 pt-6 pb-16 max-[1200px]:px-5">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Your church · host decisions</p>
+            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Your church · main computer decisions</p>
             <h1 className="mt-1 text-2xl leading-tight font-bold tracking-[-0.035em]">Permissions</h1>
-            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Review changes from joined desks and manage what paired devices can do. Only this computer’s main host can approve or change access.</p>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Review changes from joined desks and manage what paired devices can do. Only the main computer can approve or change access.</p>
           </div>
         </header>
 
-        {!isHost && <p role="status" className="rounded-md border border-border bg-muted/40 p-3 text-sm">This joined desk is read-only for approvals and device access. Ask the main host to make changes.</p>}
+        {!isHost && <p role="status" className="rounded-md border border-border bg-muted/40 p-3 text-sm">This joined desk is read-only for approvals and device access. Ask the main computer to make changes.</p>}
 
         <ApprovalRequestsPanel local={localRequests} />
 
         <section aria-labelledby="approval-policy-title" className="rounded-lg border border-border bg-card shadow-panel">
           <header className="flex items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
             <ShieldCheckIcon aria-hidden className="size-4 text-muted-foreground" />
-            <div><h2 id="approval-policy-title" className="font-semibold">Before a service goes live</h2><p className="text-xs text-muted-foreground">The approval rule this host applies to Take live and to scene changes from joined desks. Approving a service itself happens in Prepare.</p></div>
+            <div><h2 id="approval-policy-title" className="font-semibold">Before a service goes live</h2><p className="text-xs text-muted-foreground">The approval rule this computer applies to Take live and to scene changes from joined desks. Approving a service itself happens in Prepare.</p></div>
           </header>
           <div className="p-4">
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" className="mt-1" aria-describedby="approval-policy-detail" disabled={!isHost} checked={requireApproval === true} onChange={(e) => useSettingsStore.getState().setRequireApproval(e.target.checked)} />
               <span>
                 Ask before showing an unapproved service
-                <span id="approval-policy-detail" className="block text-xs text-muted-foreground">When the open service is not approved, or changed after approval, the first Take live asks first. Quick screens and rehearsal are never held. While this is on, a scene change from a joined desk also waits for the main desk to accept it.</span>
+                <span id="approval-policy-detail" className="block text-xs text-muted-foreground">When the open service is not approved, or changed after approval, the first Take live asks first. Quick screens and rehearsal are never held. While this is on, a scene change from a joined desk also waits for the main computer to accept it.</span>
               </span>
             </label>
-            {!isHost && <p role="status" className="mt-2 text-xs text-muted-foreground">{requireApproval === undefined ? "The main host has not shared this setting yet." : `Shown as the main host applies it (${requireApproval ? "on" : "off"}). Only the main host can change it.`}</p>}
+            {!isHost && <p role="status" className="mt-2 text-xs text-muted-foreground">{requireApproval === undefined ? "The main computer has not shared this setting yet." : `Shown as the main computer applies it (${requireApproval ? "on" : "off"}). Only the main computer can change it.`}</p>}
           </div>
         </section>
 
         {isHost ? <section aria-labelledby="paired-access-title" className="rounded-lg border border-border bg-card shadow-panel">
           <header className="flex items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
             <KeyRoundIcon aria-hidden className="size-4 text-muted-foreground" />
-            <div><h2 id="paired-access-title" className="font-semibold">Paired device access</h2><p className="text-xs text-muted-foreground">Saved pairing records. A device is shown as paired; this list does not claim that it is online now. Individual Screens Takes remain the default. Group Take needs its own host grant and an exact target review on the desk.</p></div>
+            <div><h2 id="paired-access-title" className="font-semibold">Paired device access</h2><p className="text-xs text-muted-foreground">Saved pairing records. A device is shown as paired; this list does not claim that it is online now. Individual Screens Takes remain the default. Group Take needs its own main computer grant and an exact target review on the desk.</p></div>
           </header>
           <div className="p-4">
             {remoteDevices.length === 0 ? <p className="text-sm text-muted-foreground">No devices are paired. The studio works on this computer without them.</p> : (
@@ -183,12 +183,12 @@ export function PermissionsWorkspace() {
                   {device.role === "screens" && <fieldset className="w-full rounded-md border border-border p-3">
                     <legend className="px-1 text-xs font-semibold">Individual scene Take outputs</legend>
                     {device.outputScope === undefined
-                      ? <p role="status" className="mb-2 text-xs text-confidence-mid">Legacy Screens access needs scope review. Scene Takes are blocked until the host assigns outputs.</p>
+                      ? <p role="status" className="mb-2 text-xs text-confidence-mid">Legacy Screens access needs scope review. Scene Takes are blocked until the main computer assigns outputs.</p>
                       : device.outputScope.length === 0
                         ? <p role="status" className="mb-2 text-xs text-muted-foreground">No outputs assigned; scene Takes are blocked.</p>
                         : <p className="mb-2 text-xs text-muted-foreground">Only the selected output can be taken or released from this desk.</p>}
                     {congregationOutputs.length === 0
-                      ? <p className="text-xs text-muted-foreground">No congregation outputs are configured on this host.</p>
+                      ? <p className="text-xs text-muted-foreground">No congregation outputs are configured on this computer.</p>
                       : <div className="flex flex-wrap gap-x-4 gap-y-2">{congregationOutputs.map((output) => <label key={output.id} className="flex items-center gap-2 text-xs">
                         <input
                           type="checkbox"
@@ -203,10 +203,10 @@ export function PermissionsWorkspace() {
                   {device.role === "stage" && <fieldset className="w-full rounded-md border border-border p-3">
                     <legend className="px-1 text-xs font-semibold">Assigned Stage displays</legend>
                     {device.outputScope === undefined || device.outputScope.length === 0
-                      ? <p role="status" className="mb-2 text-xs text-confidence-mid">No Stage display is assigned; targeted messages stay blocked until the host assigns one.</p>
+                      ? <p role="status" className="mb-2 text-xs text-confidence-mid">No Stage display is assigned; targeted messages stay blocked until the main computer assigns one.</p>
                       : <p className="mb-2 text-xs text-muted-foreground">This Stage desk can send a private message to one assigned display at a time. The congregation never sees these messages.</p>}
                     {stageOutputs.length === 0
-                      ? <p className="text-xs text-muted-foreground">No Stage displays are configured on this host.</p>
+                      ? <p className="text-xs text-muted-foreground">No Stage displays are configured on this computer.</p>
                       : <div className="flex flex-wrap gap-x-4 gap-y-2">{stageOutputs.map((output) => <label key={output.id} className="flex items-center gap-2 text-xs">
                         <input
                           type="checkbox"
@@ -233,7 +233,7 @@ export function PermissionsWorkspace() {
                         />
                         <span>{output.name}</span>
                       </label>)}</div>}
-                    {device.groupTakeScope === undefined && <p role="status" className="mt-2 text-xs text-confidence-mid">No separate group Take grant is saved; group Take stays blocked until the host reviews it here.</p>}
+                    {device.groupTakeScope === undefined && <p role="status" className="mt-2 text-xs text-confidence-mid">No separate group Take grant is saved; group Take stays blocked until the main computer reviews it here.</p>}
                   </fieldset>}
                   {isHost && <>
                     <Button size="sm" variant="outline" aria-label={device.paused ? `Give control back to ${device.name}` : `Take back control from ${device.name}`} aria-pressed={device.paused === true} onClick={() => void setDeskControl(device.hash, device.paused !== true)}>{device.paused ? "Give control back" : "Take back control"}</Button>
@@ -242,7 +242,7 @@ export function PermissionsWorkspace() {
                 </li>)}
               </ul>
             )}
-            <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">Roles limit each paired device. Pausing leaves its view and team notices available. Revoking removes its saved key. Listener ports, network binding and authentication keys remain in Settings → Remote control.</p>
+            <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">Roles limit each paired device. Pausing leaves its view and team notices available. Revoking removes its saved key. Listener ports, network binding and authentication keys remain in Settings → Remote Control.</p>
             <details className="mt-3 text-xs">
               <summary className="cursor-pointer text-muted-foreground">What each role can do</summary>
               <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
@@ -256,14 +256,14 @@ export function PermissionsWorkspace() {
           <section aria-labelledby="your-access-title" className="rounded-lg border border-border bg-card shadow-panel">
           <header className="flex items-center gap-3 border-b border-border bg-surface-elevated px-4 py-3">
             <ShieldCheckIcon aria-hidden className="size-4 text-muted-foreground" />
-            <div><h2 id="your-access-title" className="font-semibold">Your access</h2><p className="text-xs text-muted-foreground">This view shows only the access the host assigned to this desk. Other paired-device names and grants are private to the main host.</p></div>
+            <div><h2 id="your-access-title" className="font-semibold">Your access</h2><p className="text-xs text-muted-foreground">This view shows only the access the main computer assigned to this desk. Other paired-device names and grants are private to the main computer.</p></div>
           </header>
           <dl className="grid gap-3 p-4 sm:grid-cols-2">
-            <div><dt className="text-xs font-semibold text-muted-foreground">This desk</dt><dd className="mt-1 text-sm">{joinedMe?.name ?? "Waiting for host confirmation"}</dd></div>
-            <div><dt className="text-xs font-semibold text-muted-foreground">Role</dt><dd className="mt-1 text-sm">{joinedMe ? roleLabel(joinedMe.role) : "Not confirmed by the host"}</dd></div>
+            <div><dt className="text-xs font-semibold text-muted-foreground">This desk</dt><dd className="mt-1 text-sm">{joinedMe?.name ?? "Waiting for main computer confirmation"}</dd></div>
+            <div><dt className="text-xs font-semibold text-muted-foreground">Role</dt><dd className="mt-1 text-sm">{joinedMe ? roleLabel(joinedMe.role) : "Not confirmed by the main computer"}</dd></div>
             <div><dt className="text-xs font-semibold text-muted-foreground">{joinedMe?.role === "stage" ? "Assigned Stage displays" : "Individual congregation outputs"}</dt><dd className="mt-1 text-sm">{joinedMe?.outputScope === undefined ? "Not shared in this view" : joinedMe.outputScope.length === 0 ? "None assigned" : `${joinedMe.outputScope.length} assigned`}</dd></div>
             <div><dt className="text-xs font-semibold text-muted-foreground">Group Take outputs</dt><dd className="mt-1 text-sm">{joinedMe?.groupTakeScope === undefined ? "Not shared in this view" : joinedMe.groupTakeScope.length === 0 ? "None assigned" : `${joinedMe.groupTakeScope.length} assigned`}</dd></div>
-            <div className="sm:col-span-2"><dt className="text-xs font-semibold text-muted-foreground">Rhema Recorder</dt><dd className="mt-1 text-sm text-muted-foreground">The Recorder grant is separate from your role and is managed by the main host. This joined view does not expose the host’s paired-device list.</dd></div>
+            <div className="sm:col-span-2"><dt className="text-xs font-semibold text-muted-foreground">Rhema Recorder</dt><dd className="mt-1 text-sm text-muted-foreground">The Recorder grant is separate from your role and is managed by the main computer. This joined view does not expose the main computer’s paired-device list.</dd></div>
           </dl>
           </section>
         </>}

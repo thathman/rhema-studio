@@ -27,13 +27,13 @@ async function open() {
   await act(async () => root.render(<OperatorsPanel />))
   const address = () => el.querySelector<HTMLInputElement>('input[placeholder="192.168.1.20:8080"]')!.value
   const code = () => el.querySelector<HTMLInputElement>('input[inputmode="numeric"]')!.value
-  const hosts = () => [...el.querySelectorAll<HTMLButtonElement>('[aria-label="Rhema Studio hosts on this network"] button[aria-pressed]')]
+  const hosts = () => [...el.querySelectorAll<HTMLButtonElement>('[aria-label="Rhema Studio main computers on this network"] button[aria-pressed]')]
   const discovers = () => invoke.mock.calls.filter(([cmd]) => cmd === "host_discover").length
   return { el, root, address, code, hosts, discovers }
 }
 
 // Host discovery (#197): the hosts on the network are listed, so nobody has to type an address.
-describe("Join a host: Find hosts", { timeout: 30_000 }, () => {
+describe("Join a main computer: Find hosts", { timeout: 30_000 }, () => {
   it("looks for hosts once when the form opens, and picking one fills only its address", async () => {
     answer([{ name: "CAC Ibadan", address: "192.168.1.20:8080" }, { name: "Rhema · Studio-Mac", address: "192.168.1.21:9000" }])
     const { root, address, code, hosts, discovers } = await open()
@@ -54,10 +54,10 @@ describe("Join a host: Find hosts", { timeout: 30_000 }, () => {
     expect(hosts().map((b) => b.textContent)).toEqual(["CAC Ibadan192.168.1.20:8080"])
     expect(address(), "one host: still the operator's choice").toBe("")
     expect(code()).toBe("")
-    const findAgain = [...el.querySelectorAll("button")].find((b) => b.textContent === "Find hosts")!
+    const findAgain = [...el.querySelectorAll("button")].find((b) => b.textContent === "Find main computers")!
     await act(async () => findAgain.click())
     expect(discovers()).toBe(2)
-    expect(el.textContent).toContain("No host found")
+    expect(el.textContent).toContain("No main computer found")
     expect(address()).toBe("")
     act(() => root.unmount())
   })
@@ -70,7 +70,7 @@ describe("Join a host: Find hosts", { timeout: 30_000 }, () => {
     })
     const { el, root, address, hosts } = await open()
     expect(hosts()).toEqual([])
-    expect(el.textContent).toContain("no network. You can type the host's address.")
+    expect(el.textContent).toContain("no network. You can type the main computer's address.")
     expect(address()).toBe("")
     act(() => root.unmount())
   })

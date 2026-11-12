@@ -54,8 +54,8 @@ beforeEach(() => {
   useSettingsStore.setState({ requireApproval: true })
 })
 
-describe("a desk's scene Take on the host follows the host's approval rule (#410)", () => {
-  it("refuses a desk's scene Take on a service never approved, as the main desk does", async () => {
+describe("a desk's scene Take on the main computer follows the main computer's approval rule (#410)", () => {
+  it("refuses a desk's scene Take on a service never approved, as the main computer does", async () => {
     const root = await mountHost()
     await act(async () => handlers.get(REMOTE_EVENTS.take_scene)!({ payload: JSON.stringify({ output: MAIN_OUTPUT_ID, scene: "cam", by: "Screens desk" }) }))
     expect(main().sceneId).toBe("lyr")

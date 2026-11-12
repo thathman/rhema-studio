@@ -47,15 +47,15 @@ afterEach(async () => {
 describe("phone remote: live sources", () => {
   it("lists each source with Clear / Restore, sending the source's command with the phone's key", async () => {
     const live = { v: 1, program: { onAir: true, reference: null, shown: "Amazing Grace · Verse 1" }, notices: [
-      { id: "n1", from: "Main desk", to: "all", priority: "urgent", text: "Five minutes over", at: 0, answers: [] },
-      { id: "n2", from: "Main desk", to: "bible", priority: "normal", text: "Not for phones", at: 0, answers: [] },
+      { id: "n1", from: "Main computer", to: "all", priority: "urgent", text: "Five minutes over", at: 0, answers: [] },
+      { id: "n2", from: "Main computer", to: "bible", priority: "normal", text: "Not for phones", at: 0, answers: [] },
     ], sources: [{ id: "bible", reference: "Romans 8:28 (KJV)", on: true, revision: 2 }, { id: "hymn", reference: "Amazing Grace · Verse 1", on: false, revision: 1 },
       // The ticker, the timer and a camera (#243): the timer pauses and resumes, a camera hides and shows.
       { id: "ticker", reference: "Prayer meeting", on: true, revision: 3, state: "running" }, { id: "timer", reference: "Paused · 12:00 left", on: false, revision: 4, state: "paused" }, { id: "camera:pulpit", reference: "Pulpit", on: true, revision: 0, state: "sending" }] }
     const { sent, commands } = host(() => live)
     await vi.waitFor(() => expect(document.querySelectorAll("#sources .src")).toHaveLength(5))
     const rows = [...document.querySelectorAll("#sources .src")].map((r) => r.textContent)
-    expect(rows).toEqual(["Bible · Romans 8:28 (KJV)Clear", "Hymns · off · Amazing Grace · Verse 1Restore", "Ticker · Prayer meetingClear", "Timer · off · Paused · 12:00 leftResume", "Camera · PulpitHide"])
+    expect(rows).toEqual(["Bible · Romans 8:28 (KJV)Clear", "Hymns · off · Amazing Grace · Verse 1Restore", "Ticker · Prayer meetingClear", "Timer · off · Paused · 12:00 leftResume", "Camera · PulpitClear"])
     expect(document.getElementById("live")!.textContent).toBe("Amazing Grace · Verse 1")
     expect(sent.find((s) => s.url === "/api/v1/live")?.auth).toBe("Bearer phone-key")
     ;(document.querySelector("#sources .src button") as HTMLButtonElement).click()
@@ -94,7 +94,7 @@ describe("phone remote: live sources", () => {
     vi.useFakeTimers()
     keyed()
     let up = true
-    const live = { v: 1, program: { onAir: true }, sources: [{ id: "bible", reference: "John 3:16", on: true, revision: 1 }], notices: [{ id: "n1", from: "Main desk", to: "all", priority: "normal", text: "Doors open", at: 0, answers: [] }] }
+    const live = { v: 1, program: { onAir: true }, sources: [{ id: "bible", reference: "John 3:16", on: true, revision: 1 }], notices: [{ id: "n1", from: "Main computer", to: "all", priority: "normal", text: "Doors open", at: 0, answers: [] }] }
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url === "/api/v1/me") return new Response(JSON.stringify({ name: "Usher phone", role: "present" }))
       return up ? new Response(JSON.stringify(live)) : new Response("", { status: 500 })
@@ -159,16 +159,16 @@ describe("phone remote: buttons by role (11 Nov review F10)", () => {
     expect(document.getElementById("roleNote")!.textContent).toBe("This phone is set up as Camera. It shows what is on the screens and your notices, and lets you clear and restore the sources below that this role may change. This role's other controls are on a joined computer.")
   })
 
-  it("a phone the main desk paused holds its controls and says so; notices still answer", async () => {
+  it("a phone the main computer paused holds its controls and says so; notices still answer", async () => {
     keyed()
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url === "/api/v1/me") return new Response(JSON.stringify({ name: "Usher phone", role: "present", paused: true }))
-      if (url === "/api/v1/live") return new Response(JSON.stringify({ ...live, notices: [{ id: "n1", from: "Main desk", to: "all", priority: "normal", text: "Hi", at: 0, answers: [] }] }))
+      if (url === "/api/v1/live") return new Response(JSON.stringify({ ...live, notices: [{ id: "n1", from: "Main computer", to: "all", priority: "normal", text: "Hi", at: 0, answers: [] }] }))
       return new Response(JSON.stringify({ success: true }))
     }))
     boot()
     await vi.waitFor(() => expect((document.getElementById("pausedNote") as HTMLElement).hidden).toBe(false))
-    expect(document.getElementById("pausedNote")!.textContent).toContain("Paused by the main desk")
+    expect(document.getElementById("pausedNote")!.textContent).toContain("Paused by the main computer")
     expect([...document.querySelectorAll<HTMLButtonElement>("#pad button")].every((b) => b.disabled)).toBe(true)
     expect([...document.querySelectorAll<HTMLButtonElement>("#sources button")].every((b) => b.disabled)).toBe(true)
     expect(button(document.getElementById("notices")!, "Ready").disabled).toBe(false)
@@ -237,7 +237,7 @@ describe("phone remote: what it saw, and what the screens show (11 Nov review S3
     host(() => ({ v: 1, program: { onAir }, sources: [], notices: [] }), {
       answer: (b) => {
         if (b.command === "hide") { setTimeout(() => { onAir = false }, 2500); return null }
-        if (b.command === "next") return new Response(JSON.stringify({ success: false, error: "The main desk has taken back control for now." }), { status: 423 })
+        if (b.command === "next") return new Response(JSON.stringify({ success: false, error: "The main computer has taken back control for now." }), { status: 423 })
         return null
       },
     })
@@ -246,9 +246,9 @@ describe("phone remote: what it saw, and what the screens show (11 Nov review S3
     await vi.waitFor(() => expect(document.getElementById("msg")!.textContent).toBe("Sent."))
     await vi.waitFor(() => expect(button(document.getElementById("pad")!, "Next ▶").disabled).toBe(false))
     button(document.getElementById("pad")!, "Next ▶").click()
-    await vi.waitFor(() => expect(document.getElementById("msg")!.textContent).toBe("The main desk has taken back control for now."))
+    await vi.waitFor(() => expect(document.getElementById("msg")!.textContent).toBe("The main computer has taken back control for now."))
     await vi.waitFor(() => expect(document.getElementById("air")!.textContent).toBe("Off air"), { timeout: 5000 })
-    expect(document.getElementById("msg")!.textContent).toBe("The main desk has taken back control for now.")
+    expect(document.getElementById("msg")!.textContent).toBe("The main computer has taken back control for now.")
   }, 8000)
 
   it("a stale refusal says so in plain words and looks again", async () => {
@@ -290,7 +290,7 @@ describe("phone remote: what it saw, and what the screens show (11 Nov review S3
 
 describe("phone remote: a scene request (11 Nov review G13)", () => {
   it("draws no Take button, says where a Take is done, and keeps the answers", async () => {
-    const request = { id: "s1", from: "Main desk", to: "present", priority: "normal", text: "Sermon look", at: 0, answers: [], action: { kind: "scene", value: "sc1" } }
+    const request = { id: "s1", from: "Main computer", to: "present", priority: "normal", text: "Sermon look", at: 0, answers: [], action: { kind: "scene", value: "sc1" } }
     host(() => ({ v: 1, program: {}, sources: [], notices: [request], scenes: [{ id: "sc1", name: "Sermon" }] }))
     await vi.waitFor(() => expect(document.querySelectorAll("#notices .notice")).toHaveLength(1))
     const card = document.querySelector("#notices .notice")!
@@ -363,13 +363,13 @@ describe("phone remote: what it shows when the main computer stops answering (11
     expect(next.disabled).toBe(true)
   })
 
-  it("says the main computer's own reason when it refuses, e.g. paused by the main desk", async () => {
+  it("says the main computer's own reason when it refuses, e.g. paused by the main computer", async () => {
     host(() => ({ v: 1, program: { onAir: false }, sources: [], notices: [] }), {
-      answer: () => new Response(JSON.stringify({ success: false, error: "The main desk has taken back control for now." }), { status: 423 }),
+      answer: () => new Response(JSON.stringify({ success: false, error: "The main computer has taken back control for now." }), { status: 423 }),
     })
     await vi.waitFor(() => expect(padWords()).toHaveLength(4))
     ;(document.querySelector('[data-cmd="next"]') as HTMLButtonElement).click()
-    await vi.waitFor(() => expect(document.getElementById("msg")!.textContent).toBe("The main desk has taken back control for now."))
+    await vi.waitFor(() => expect(document.getElementById("msg")!.textContent).toBe("The main computer has taken back control for now."))
     expect(document.getElementById("msg")!.className).toBe("err")
   })
 })

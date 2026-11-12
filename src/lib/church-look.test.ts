@@ -45,12 +45,12 @@ describe("the church look a host shares (#298 E4)", () => {
   })
 })
 
-describe("a joined desk and the host's look (#298 M12, scenario G)", () => {
+describe("a joined desk and the main computer's look (#298 M12, scenario G)", () => {
   const hostKit = kit({ colors: { ...defaultBrandKit().colors, primary: "#5a1020", accent: "#e8c170" }, logoUrl: LOGO })
   const host = churchLookOf(hostKit, applyBrandKit(hostKit, []))
   const deskKit = kit({ churchName: "Grace", logoUrl: "data:image/png;base64,DESK" })
 
-  it("is offered only when the host sent one, it differs from this desk's and was not put aside", () => {
+  it("is offered only when the main computer sent one, it differs from this desk's and was not put aside", () => {
     const deskThemes = applyBrandKit(deskKit, [own])
     expect(hostLookOffer(undefined, deskKit, deskThemes, "")).toBeNull() // an older host
     expect(hostLookOffer({ revision: 1 } as never, deskKit, deskThemes, "")).toBeNull()
@@ -60,7 +60,7 @@ describe("a joined desk and the host's look (#298 M12, scenario G)", () => {
     expect(hostLookOffer(host, hostKit, applyBrandKit(hostKit, [own]), "")).toBeNull() // already the same here
   })
 
-  it("Use it takes the host's kit and brand themes; hand-edited and other looks stay", () => {
+  it("Use it takes the main computer's kit and brand themes; hand-edited and other looks stay", () => {
     const edited: BroadcastTheme = { ...applyBrandKit(deskKit, []).find((t) => t.id === "brand-lyrics")!, brandManaged: false, name: "Lyrics (ours)" }
     const deskThemes = [own, edited, ...applyBrandKit(deskKit, []).filter((t) => t.id !== "brand-lyrics")]
     const merged = mergeHostLook(host, deskKit, deskThemes)
@@ -70,13 +70,13 @@ describe("a joined desk and the host's look (#298 M12, scenario G)", () => {
     const scripture = merged.themes.find((t) => t.id === "brand-scripture")!
     const hosts = host.themes.find((t) => t.id === "brand-scripture")!
     expect(scripture.background).toEqual(hosts.background)
-    expect(scripture.logo?.url).toBe(LOGO) // drawn again from the host's kit
+    expect(scripture.logo?.url).toBe(LOGO) // drawn again from the main computer's kit
     expect(merged.themes.filter(isBrandTheme)).toHaveLength(2)
     // Use it notes the revision, so the same look is not offered again (this desk keeps its own lyrics look).
     expect(hostLookOffer(host, merged.kit, merged.themes, host.revision)).toBeNull()
   })
 
-  it("keeps this desk's own logo when the host's was too large to send", () => {
+  it("keeps this desk's own logo when the main computer's was too large to send", () => {
     const big = "data:image/png;base64," + "A".repeat(LOOK_LOGO_MAX)
     const k = { ...hostKit, logoUrl: big }
     const look = churchLookOf(k, applyBrandKit(k, []))

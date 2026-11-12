@@ -56,8 +56,8 @@ impl Lookup {
 #[must_use]
 pub fn refusal(lookup: &Lookup) -> &'static str {
     match lookup {
-        Lookup::Songs { .. } => "this device may not look in the host's song library",
-        _ => "this device may not look in the host's Bible",
+        Lookup::Songs { .. } => "this device may not look in the main computer's song library",
+        _ => "this device may not look in the main computer's Bible",
     }
 }
 

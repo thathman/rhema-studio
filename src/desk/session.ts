@@ -59,8 +59,8 @@ export class HostRefusal extends Error {
   }
 }
 
-const UNPAIRED = "This device is no longer paired with the host: it was removed there, or the host forgot it. Pair it again with a new code."
-const NO_ANSWER = "No answer from the host. Check the screens before pressing again."
+const UNPAIRED = "This device is no longer paired with the main computer: it was removed there, or the main computer forgot it. Pair it again with a new code."
+const NO_ANSWER = "No answer from the main computer. Check the screens before pressing again."
 
 const auth = (): Record<string, string> => {
   const token = readToken()
@@ -85,7 +85,7 @@ const body = async (r: Response): Promise<Record<string, unknown>> => {
 
 /** The words for a refused command, as the installed app's `join_command` gives them (src-tauri/src/commands/join.rs `refusal`). */
 export function refusalWords(status: number, error: unknown, code: unknown): string {
-  const msg = typeof error === "string" && error ? error : status === 429 ? "Too many presses: wait a second and try again." : `The host refused (${status})`
+  const msg = typeof error === "string" && error ? error : status === 429 ? "Too many presses: wait a second and try again." : `The main computer refused (${status})`
   if (status === 423) return `paused: ${msg}`
   if (status === 409) return code === "stale" ? `stale: ${msg}` : `other-service: ${msg}`
   return msg
@@ -133,23 +133,23 @@ export const DESK_TRANSPORT: JoinTransport = {
   lookup: async (asked) => {
     const { r, j } = await call("/api/v1/lookup", { method: "POST", body: JSON.stringify(asked) }, 8_000)
     if (r.ok) return j
-    throw new HostRefusal(typeof j.error === "string" ? j.error : `The host answered ${r.status}`)
+    throw new HostRefusal(typeof j.error === "string" ? j.error : `The main computer answered ${r.status}`)
   },
   receivers: async () => {
     const { r, j } = await call("/api/v1/receivers", {}, 6_000)
     if (r.status === 204) return { outputs: [] }
     if (r.ok) return j
-    throw new HostRefusal(`The host could not report receiver status (${r.status})`)
+    throw new HostRefusal(`The main computer could not report receiver status (${r.status})`)
   },
   requests: async () => {
     const { r, j } = await call("/api/v1/requests", {}, 8_000)
     if (r.ok) return j
-    throw new HostRefusal(typeof j.error === "string" ? j.error : `The host answered ${r.status}`)
+    throw new HostRefusal(typeof j.error === "string" ? j.error : `The main computer answered ${r.status}`)
   },
   withdrawRequest: async (id) => {
     const { r, j } = await call(`/api/v1/requests/${encodeURIComponent(id)}/withdraw`, { method: "POST", body: "{}" }, 8_000)
     if (r.ok) return j
-    throw new HostRefusal(typeof j.error === "string" ? j.error : `The host answered ${r.status}`)
+    throw new HostRefusal(typeof j.error === "string" ? j.error : `The main computer answered ${r.status}`)
   },
 }
 
@@ -374,7 +374,7 @@ export function begin(): void {
 }
 
 /** Forget the key here and go back to pairing, saying why. */
-export const PAIRING_OFF = "The host is not asking devices to pair (Remote control is open on the host), so it does not share the service with a browser. Ask the main desk to turn on pairing."
+export const PAIRING_OFF = "The main computer is not asking devices to pair (Remote Control is open on the main computer), so it does not share the service with a browser. Ask the main computer to turn on pairing."
 
 export function unpair(reason: string | null): void {
   stop()
@@ -395,7 +395,7 @@ export async function pairDesk(code: string, name: string): Promise<string | nul
     }
     return typeof j.error === "string" && j.error ? j.error : `Pairing failed (${r.status})`
   } catch {
-    return "Cannot reach the host. Is this device on the church network?"
+    return "Cannot reach the main computer. Is this device on the church network?"
   }
 }
 
@@ -411,7 +411,7 @@ export async function startDesk(where: Pick<Location, "protocol" | "hostname" | 
   useJoin.setState({
     connect: async () => begin(),
     leave: async (forget = false) => {
-      if (forget) unpair("Unpaired on this device. Remove it on the host too, in Permissions.")
+      if (forget) unpair("Unpaired on this device. Remove it on the main computer too, in Permissions.")
       else {
         stop()
         resetJoin()

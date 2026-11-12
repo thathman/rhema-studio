@@ -11,7 +11,7 @@ Version 1.4.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) an
 
 ## Using it
 
-1. In Rhema: **Settings → Remote control**: turn on the network listener and **Secure page for phones
+1. In Rhema: **Settings → Remote Control**: turn on the network listener and **Secure page for phones
    (https)** (this makes Rhema's certificate, which the camera router also uses). **Live → Production
    tools → Cameras**: add a camera; its card shows **Rhema Studio Cam app (Android)** with a QR code and
    a link, and **Quality for Rhema Studio Cam** (below).
@@ -20,8 +20,8 @@ Version 1.4.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) an
    **Pair**. The app goes live at once (unless **Start sending when the app opens** is off).
 3. The viewfinder: **tap** to focus and expose there (the focus then holds), **double-tap** to follow
    the scene again, **pinch** to zoom (below 1× on phones with an ultra-wide lens, Android 11+). The
-   dot top left is the tally: **ON AIR · ONLINE** / **ON AIR · CONGREGATION** / **ON AIR · ONLINE +
-   CONGREGATION** (red: OBS has this camera in
+   dot top left is the tally, in the same words as Rhema Studio and its Companion: **ON AIR · OBS** /
+   **ON AIR · CONGREGATION** / **ON AIR · OBS, CONGREGATION** (red: OBS has this camera in
    Program / a Google TV shows it), **RHEMA RECEIVING** (teal: Rhema Studio says its camera router
    gets the picture, on no Program), **SENDING · NOT RECEIVED YET** (amber: sent, but Rhema's router
    has nothing from it yet), **SENDING** (teal: a Rhema Studio before 1.4 that does not say),

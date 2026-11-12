@@ -271,7 +271,7 @@ function AudioSection() {
         </label>
         <TalkRulesSettings />
         <p className="text-xs text-muted-foreground">
-          Set on the main desk for every joined desk and phone. Everyone is always in All crew; a role left out neither hears nor talks on that channel.
+          Set on the main computer for every joined desk and phone. Everyone is always in All crew; a role left out neither hears nor talks on that channel.
         </p>
       </div>
     </div>

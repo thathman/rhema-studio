@@ -42,9 +42,9 @@ describe("production notices", () => {
     expect(useNotices.getState().send({ from: "x", text: "   " })).toBeNull()
     expect(useNotices.getState().send({ from: "x", to: "everyone", text: "y".repeat(400) })).toMatchObject({ to: "all" })
     expect(useNotices.getState().notices[0].text).toHaveLength(280)
-    useNotices.getState().answer(n.id, "Main desk", "seen")
-    useNotices.getState().answer(n.id, "Main desk", "ready")
-    useNotices.getState().answer(n.id, "Main desk", "shrug")
+    useNotices.getState().answer(n.id, "Main computer", "seen")
+    useNotices.getState().answer(n.id, "Main computer", "ready")
+    useNotices.getState().answer(n.id, "Main computer", "shrug")
     expect(useNotices.getState().notices.find((x) => x.id === n.id)!.answers.map((a) => a.state)).toEqual(["ready"])
     for (let i = 0; i < 120; i++) useNotices.getState().send({ from: "x", text: `n${i}` })
     expect(useNotices.getState().notices).toHaveLength(100)
@@ -54,8 +54,8 @@ describe("production notices", () => {
   it("each desk sees what is for it and answers it; senders see their own", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const s = useNotices.getState()
-    s.send({ from: "Main desk", to: "bible", text: "Next reading is Psalm 100" })
-    s.send({ from: "Main desk", to: "screens", text: "Camera scene after the hymn" })
+    s.send({ from: "Main computer", to: "bible", text: "Next reading is Psalm 100" })
+    s.send({ from: "Main computer", to: "screens", text: "Camera scene after the hymn" })
     s.send({ from: "Ade (Bible)", to: "host", text: "Psalm 100 is ready" })
     expect(isFor(useNotices.getState().notices[0], "bible")).toBe(false)
     const onAnswer = vi.fn()
@@ -127,7 +127,7 @@ describe("production notices", () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     expect(asAction({ kind: "shell", value: "rm" })).toBeNull()
     expect(asAction({ kind: "bible", value: "  " })).toBeNull()
-    const n = useNotices.getState().send({ from: "Main desk", to: "bible", text: "Next reading", action: { kind: "bible", value: " Romans 8:28 " } })!
+    const n = useNotices.getState().send({ from: "Main computer", to: "bible", text: "Next reading", action: { kind: "bible", value: " Romans 8:28 " } })!
     expect(n.action).toEqual({ kind: "bible", value: "Romans 8:28" })
     const onAction = vi.fn()
     const onAnswer = vi.fn()
@@ -141,14 +141,14 @@ describe("production notices", () => {
     // A scene request switches the outputs already showing a scene, else the main output.
   })
 
-  it("a refused action request answers Unable and shows the host's reason, not Ready", async () => {
+  it("a refused action request answers Unable and shows the main computer's reason, not Ready", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-    const n = useNotices.getState().send({ from: "Main desk", to: "bible", text: "Camera after this", action: { kind: "scene", value: "split" } })!
+    const n = useNotices.getState().send({ from: "Main computer", to: "bible", text: "Camera after this", action: { kind: "scene", value: "split" } })!
     const live: LiveStateV1 = {
       v: 1, at: 0, church: "CAC", service: null, program: { onAir: false, reference: null, rehearsal: false }, sources: [], event: { mode: "own", currentId: null }, rundown: [], timing: null, stageMessage: "",
       scenes: [{ id: "split", name: "Sermon split" }], outputs: [{ id: "main", name: "Projector", sceneId: null }], notices: [n],
     }
-    const why = "This request did not change any output. The host must choose one output in Scenes; group Take is unavailable."
+    const why = "This request did not change any output. The main computer must choose one output in Scenes; group Take is unavailable."
     const sent: { command: string; value?: unknown }[] = []
     vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
       if (cmd !== "join_command") return null
@@ -178,7 +178,7 @@ describe("production notices", () => {
     const n = useNotices.getState().send({ from: "Ade screens", fromId: "paired-device", to: "host", text: "Asks to delete a scene", action: { kind: "sceneEdit", value: "request-1" } })!
     const onAnswer = vi.fn()
     const el = document.createElement("div")
-    await act(async () => createRoot(el).render(<NoticesPanel notices={[n]} role="host" me="Main desk" onSend={vi.fn()} onAnswer={onAnswer} onAction={vi.fn(async () => "that scene is still on a screen")}/>))
+    await act(async () => createRoot(el).render(<NoticesPanel notices={[n]} role="host" me="Main computer" onSend={vi.fn()} onAnswer={onAnswer} onAction={vi.fn(async () => "that scene is still on a screen")}/>))
 
     await act(async () => buttonNamed(el, "Accept the scene change").click())
 
@@ -188,22 +188,22 @@ describe("production notices", () => {
     expect([...el.querySelectorAll("button")].some((button) => button.textContent === "Decline")).toBe(true)
   })
 
-  it("can go to one person by name; only that desk (and the main desk) sees it", async () => {
+  it("can go to one person by name; only that desk (and the main computer) sees it", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     expect(asTarget({ name: "  Ade's phone " })).toEqual({ name: "Ade's phone" })
     expect(asTarget({ name: "  " })).toBe("all")
     expect(asTarget({ id: 3 })).toBe("all")
     useSettingsStore.setState({ remoteDevices: [{ hash: "h-ade", name: "Ade's phone", role: "bible", paired_at: "" }] as never })
-    const n = useNotices.getState().send({ from: "Main desk", fromId: "host", to: { name: "ade's phone" }, text: "Mic 2 is yours" })!
+    const n = useNotices.getState().send({ from: "Main computer", fromId: "host", to: { name: "ade's phone" }, text: "Mic 2 is yours" })!
     // The host's server delivers it by the device's key, found from the name now, not by the name.
     expect(n).toMatchObject({ to: { name: "ade's phone" }, toId: "h-ade", fromId: "host" })
-    expect(useNotices.getState().send({ from: "Main desk", to: { name: "Nobody" }, text: "x" })!.toId).toBeUndefined()
+    expect(useNotices.getState().send({ from: "Main computer", to: { name: "Nobody" }, text: "x" })!.toId).toBeUndefined()
     useNotices.setState({ notices: [n] })
     useSettingsStore.setState({ remoteDevices: [] })
     expect([isFor(n, "bible", "ade's phone"), isFor(n, "bible", "Femi"), isFor(n, "bible")]).toEqual([true, false, false])
     const onSend = vi.fn()
     const el = document.createElement("div")
-    await act(async () => createRoot(el).render(<NoticesPanel notices={useNotices.getState().notices} role="host" me="Main desk" people={["Ade's phone", "Femi"]} onSend={onSend} onAnswer={vi.fn()} onAction={vi.fn()} />))
+    await act(async () => createRoot(el).render(<NoticesPanel notices={useNotices.getState().notices} role="host" me="Main computer" people={["Ade's phone", "Femi"]} onSend={onSend} onAnswer={vi.fn()} onAction={vi.fn()} />))
     expect(el.textContent).toContain("→ ade's phone")
     const to = el.querySelector('[aria-label="Send to"]') as HTMLSelectElement
     expect([...to.querySelectorAll("optgroup option")].map((o) => o.textContent)).toEqual(["Ade's phone", "Femi"])

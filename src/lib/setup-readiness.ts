@@ -336,7 +336,7 @@ export function equipment(i: EquipmentInput): { items: EquipmentItem[]; notUsing
   else notUsing.push("AI assistants (MCP)")
 
   if (i.join.address.trim()) {
-    items.push(i.join.status === "connected" ? { id: "join", label: "Joined host", state: "connected", detail: i.join.address } : { id: "join", label: "Joined host", state: "configured", detail: `${i.join.address}, not connected now` })
+    items.push(i.join.status === "connected" ? { id: "join", label: "Joined main computer", state: "connected", detail: i.join.address } : { id: "join", label: "Joined main computer", state: "configured", detail: `${i.join.address}, not connected now` })
   }
   if (i.pairedDevices > 0) items.push({ id: "paired", label: "Paired phones and computers", state: "configured", detail: `${i.pairedDevices} paired` })
   if (!i.join.address.trim() && i.pairedDevices === 0) notUsing.push("Phones and other computers")
