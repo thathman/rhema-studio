@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.1.0.4 · 12 Nov 2026 · main `96dc47cf`**
+**Version 1.1.0.5 · 12 Nov 2026 · main `4ab1439a`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -84,8 +84,9 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | Output isolation: private Stage notes | PHYSICAL TESTED | 11 Nov, frames read over the LAN. A stage message appeared in the Stage feed's frame and not in the congregation TV's. |
 | Host refuses forged or out-of-scope requests (LAN) | PHYSICAL TESTED | 11 Nov, over the LAN. A missing or forged key gets 401; a wrong feed or camera key gets 403. A viewer key reads Live but is refused commands (403). A Screens desk scoped to `onn-tv` is refused a Take on `tv-yo` (403) and allowed one on `onn-tv`. A revoked key gets 401 at once. |
 | Backup | PHYSICAL TESTED | 12 Nov, host `c79cb16e`: a backup wrote in 59 ms (463 KB) and inspected back correctly (2 services, 1 song, not newer than this build). 11 Nov, Intel Mac host. A backup wrote (463 KB, 48 ms) and inspected back correctly (2 services, 1 song, settings). Restore was not run over the live QA data. |
-| Recorder ready check: unplugged input | AUTOMATED TESTED | #797. Preflight now flags a chosen sound input that is not connected (before this, only Start refused it). Disk-full during a recording is NOT TESTED; a start below 2 GB free is refused. |
+| Recorder ready check: unplugged input | AUTOMATED TESTED | #797. Preflight now flags a chosen sound input that is not connected (before this, only Start refused it). Disk-full during a recording: PHYSICAL TESTED on a dedicated 2.6 GB disk image, 12 Nov (#889). Filling it mid-recording to about 134 MB free, the recording now ends by itself as saved with "The disk is nearly full: the recording was closed and saved up to here."; the 22.2 s MP4 plays (AVFoundation: 666 frames, H.264 1280×720). Before #889 the file was fine but the session stayed active as failed until Stop, and its manifest still said recording (a crash then would have offered a complete file for recovery). A start below 2 GB free is refused. |
 | Phone remote when the host stops answering | AUTOMATED TESTED | #798. It says "Not updating" after two missed answers, holds every command button, and shows the host's refusal reasons. Device check waits for the next host build. |
+| Unknown workspace name | MERGED | #888, 12 Nov: a name that is not a workspace (found when a script asked for "live") crashed the whole main window; it now opens Home. |
 | Physical clicker | AUTOMATED TESTED | 12 Nov, QA host `4b188798`, key events sent into the running app's Live page (not a physical clicker): Page Down took the next item (John 3:16 → 3:17), a held Page Down (key repeat) did nothing, Page Down again → 3:18, Page Up → 3:17; one Esc asked first and kept Program, a second Esc cleared it. A physical clicker is still untested. |
 | Hidden output window goes blank | MERGED | #874 fixes #873, merged 12 Nov after two independent reviews: a hidden output's canvas can go fully transparent and stay so (seen in CI since 3 Nov). The fix rebuilds the canvas and reports it as output health; only full-frame opaque looks are read back, at most once a second. Not yet seen in WebKit on hardware. |
 | Backup and restore safety | MERGED | #786 (refuses backups from newer versions; restore blocked while on air). |
