@@ -9,7 +9,7 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), info: vi.fn(), warning: vi.f
 
 import { setJoinTransport, useJoin } from "@/stores/join-store"
 import type { LiveStateV1 } from "@/lib/live-state"
-import { applyLive, applyMe, begin, DESK_TRANSPORT, missedAnswer, readToken, refusalWords, resetDeskSession, startDesk, TOKEN_KEY, useDeskSession, writeToken } from "@/desk/session"
+import { applyLive, applyMe, begin, DESK_TRANSPORT, missedAnswer, PAIRING_OFF, readToken, refusalWords, resetDeskSession, startDesk, TOKEN_KEY, useDeskSession, writeToken } from "@/desk/session"
 
 type Call = { url: string; init: RequestInit }
 let calls: Call[] = []
@@ -182,6 +182,24 @@ describe("following the host", () => {
     await vi.waitFor(() => expect(useDeskSession.getState().phase).toBe("pair"))
     expect(useDeskSession.getState().reason).toMatch(/no longer paired/)
     expect(readToken()).toBeNull()
+  })
+
+  it("keeps its key and holds its controls while the host has pairing off", async () => {
+    answer = (url) => url === "/api/v1/me" ? json(403, {}) : json(403, {})
+    begin()
+    await vi.waitFor(() => expect(useJoin.getState().error).toBe(PAIRING_OFF))
+    expect(useJoin.getState().status).not.toBe("connected")
+    expect(useDeskSession.getState().phase).not.toBe("pair")
+    expect(readToken()).toBe("tok-1")
+  })
+
+  it("lets /me decide the pause; the Live State list can only pause sooner", () => {
+    applyMe({ name: "Media laptop", role: "bible", paused: true })
+    applyLive(live({ paused: [] }))
+    expect(useJoin.getState().paused).toBe(true)
+    applyMe({ name: "Media laptop", role: "bible", paused: false })
+    applyLive(live({ paused: ["Media laptop"] }))
+    expect(useJoin.getState().paused).toBe(true)
   })
 })
 

@@ -188,8 +188,9 @@ export function applyLive(live: LiveStateV1 | null): void {
   }
   if (live.v !== 1) return
   const name = was.me?.name
-  // The host lists the desks it has taken back control from.
-  const paused = Array.isArray(live.paused) && name ? live.paused.includes(name) : was.paused
+  // /me is the authority on this desk's pause. The Live State's list (matched by name) may only pause it
+  // sooner: a desk sharing a name, or a list that lags, must never make its buttons look live.
+  const paused = was.paused || (Array.isArray(live.paused) && !!name && live.paused.includes(name))
   if (typeof live.at === "number") gaps = [...gaps, Date.now() - live.at].slice(-5)
   // A command's refusal stays until the next command; a lost connection's reason goes now.
   const error = was.status === "connected" ? was.error : null
@@ -228,8 +229,10 @@ async function refreshMe(mine: number): Promise<"ok" | "missed" | "stop"> {
       return "stop"
     }
     if (r.status === 403) {
-      unpair("The host is not asking devices to pair (Remote control is open on the host), so it does not share the service with a browser. Ask the main desk to turn on pairing.")
-      return "stop"
+      // Pairing is off for now (Remote control open on the host). Keep the key: when the main desk turns
+      // pairing back on, this desk carries on without a new code. Its controls wait meanwhile.
+      useJoin.setState({ status: "reconnecting", error: PAIRING_OFF })
+      return "missed"
     }
     if (!r.ok || !applyMe(await body(r))) return "missed"
     return "ok"
@@ -371,6 +374,8 @@ export function begin(): void {
 }
 
 /** Forget the key here and go back to pairing, saying why. */
+export const PAIRING_OFF = "The host is not asking devices to pair (Remote control is open on the host), so it does not share the service with a browser. Ask the main desk to turn on pairing."
+
 export function unpair(reason: string | null): void {
   stop()
   writeToken(null)
