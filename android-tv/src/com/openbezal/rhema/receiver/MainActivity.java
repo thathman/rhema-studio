@@ -60,8 +60,17 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Rhema Studio Receiver (#198, formerly Rhema Receiver): shows one Rhema browser feed full screen and keeps showing it, across
@@ -84,6 +93,12 @@ import java.util.List;
  * an output switched off in Rhema Studio shows a calm hold, not a fault (#835); no plain http and no
  * mixed content (#840); the code screen says when a code was tried and how many tries are left
  * (#841); and (#849) Identify TV (/identify), an edge inset for TVs that crop, and 60 Hz asked for.
+ *
+ * Since 1.8 (doc 48): the TV pins Rhema Studio's server key (KeyPin), not its whole certificate, so
+ * a new certificate for a new address or a renewal still opens; a feed paired before keeps the key
+ * pin of the certificate it pinned the first time that certificate opens. When the feed has not
+ * opened for a while, the TV looks for its Rhema Studio on the network (_rhema-host._tcp, Rediscovery)
+ * and moves the feed to the new address only after that address proves it holds the pinned key.
  */
 public class MainActivity extends Activity {
     static final int PORT = 8095;
@@ -96,6 +111,10 @@ public class MainActivity extends Activity {
     private static final String REVOKED = "This screen's link no longer works (this TV was revoked, or a new link was made in Rhema Studio). Send the feed again.";
     /** Where a feed is sent to a TV in Rhema Studio (output-editor-dialog.tsx, Device tab). */
     static final String SEND_PATH = "Outputs → the feed's settings → Device → Show on a Google TV";
+    /** What Rhema Studio announces on the network (host_advert.rs): TXT tls=<https port>, k=<key pin hint>. */
+    static final String HOST_SERVICE = "_rhema-host._tcp";
+    /** Said first after Rediscovery.MOVED_MS of looking for Rhema Studio without finding it (doc 48). */
+    private static final String MAY_HAVE_MOVED = "Rhema Studio may have moved to another address: this TV keeps looking for it.";
     private static final String NOT_THAT_RHEMA = "This TV did not open the feed: the main computer answering is not the Rhema Studio that sent it, or Rhema Studio made a new certificate. Send the feed again: in Rhema Studio, " + SEND_PATH + ".";
 
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -154,6 +173,30 @@ public class MainActivity extends Activity {
     private volatile float displayHz;
     /** At this start: the last boot's launch was refused by the TV (#834). */
     private boolean bootBlocked;
+    /** When to look for Rhema Studio at a new address (1.8, doc 48); screen thread only. */
+    private final Rediscovery rediscovery = new Rediscovery();
+    /** The browse for _rhema-host._tcp now, or null. */
+    private NsdManager.DiscoveryListener browse;
+    /** Counts browses, so a late answer from one that ended is ignored. */
+    private final AtomicInteger browseGen = new AtomicInteger();
+    /** Announced services waiting to be resolved (one at a time: Android allows no more). */
+    private final ArrayDeque<NsdServiceInfo> toResolve = new ArrayDeque<NsdServiceInfo>();
+    private boolean resolving;
+    /** Services already found in this browse. */
+    private final Set<String> seenServices = new HashSet<String>();
+    /** Services whose resolve failed once in this browse (tried once more). */
+    private final Set<String> resolveRetried = new HashSet<String>();
+    /** Addresses waiting for their TLS check in this browse (ProbeQueue: capped per service, fair). */
+    private final ProbeQueue probes = new ProbeQueue(random);
+    /** A TLS check is running (they run one at a time; the next starts when it ends). */
+    private boolean probing;
+    /**
+     * Runs the TLS checks off the screen's thread. Only one is handed to it at a time (pumpProbes);
+     * the small queue only holds a check from a browse that just ended, which is skipped at its start.
+     */
+    private final ExecutorService prober = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<Runnable>(4));
+    /** The app is on screen (between onStart and onStop): only then does it look. */
+    private boolean visible;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -267,8 +310,8 @@ public class MainActivity extends Activity {
 
         newCode();
         // A feed sent by Rhema before 1.3 (a plain http link, no certificate): sent again, it comes secure.
-        if (shown() != null && (!Guard.feedLink(shown()) || !Guard.fingerprint(prefs.getString("pin", null)))) {
-            prefs.edit().remove("url").remove("pin").apply();
+        if (shown() != null && (!Guard.feedLink(shown()) || !KeyPin.paired(prefs.getString("pin", null), prefs.getString("keyPin", null)))) {
+            prefs.edit().remove("url").remove("pin").remove("keyPin").apply();
             problem = "Rhema Studio Receiver was updated and now opens only Rhema Studio's secure page. Send the feed again: in Rhema Studio, " + SEND_PATH + ".";
         }
         askFrameRate();
@@ -307,31 +350,45 @@ public class MainActivity extends Activity {
         w.setWebViewClient(new WebViewClient() {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
-                if (req.isForMainFrame()) retry(certRefused ? NOT_THAT_RHEMA : "Looking for Rhema Studio at " + Uri.parse(shown()).getAuthority() + "…");
+                if (!req.isForMainFrame()) return;
+                // Not reached, or not the paired key: after a while, look for it at a new address (doc 48).
+                lost();
+                retry(failWords(certRefused ? NOT_THAT_RHEMA : "Looking for Rhema Studio at " + Uri.parse(shown()).getAuthority() + "…"));
             }
 
             /**
              * Rhema's certificate is its own (no public authority vouches for a church computer), so
-             * WebView always asks here. Open the page only when the certificate is exactly the one
-             * Rhema sent in its encrypted /show; anything else is refused.
+             * WebView always asks here. Open the page only when the certificate carries the server
+             * key Rhema sent in its encrypted /show (1.8, KeyPin), or, for a feed paired before, is
+             * exactly the certificate Rhema sent then: that certificate's key is kept from then on.
+             * Anything else is refused.
              */
             @Override
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-                String pin = prefs.getString("pin", null);
-                String seen = fingerprint(error.getCertificate());
-                if (pin != null && seen != null && MessageDigest.isEqual(pin.getBytes(StandardCharsets.US_ASCII), seen.getBytes(StandardCharsets.US_ASCII))) {
+                String[] seen = pins(error.getCertificate());
+                int verdict = KeyPin.check(prefs.getString("keyPin", null), prefs.getString("pin", null),
+                        seen == null ? null : seen[0], seen == null ? null : seen[1]);
+                if (verdict == KeyPin.UPGRADE) {
+                    // The very certificate pinned at pairing: its key is the pin from now on (no taps).
+                    prefs.edit().putString("keyPin", seen[1]).remove("pin").apply();
+                }
+                if (verdict != KeyPin.REFUSE) {
                     handler.proceed();
                     return;
                 }
                 handler.cancel();
                 certRefused = true;
-                problem = NOT_THAT_RHEMA;
+                lost();
+                problem = failWords(NOT_THAT_RHEMA);
                 showInfo(true);
             }
 
             @Override
             public void onReceivedHttpError(WebView view, WebResourceRequest req, WebResourceResponse res) {
                 if (!req.isForMainFrame()) return;
+                // Any answer (403, 401, 404, 5xx) comes from the paired Rhema Studio (the page only
+                // loads past the key pin) at the address the TV has: it has not moved, so stop looking.
+                reachedRhema();
                 if (res.getStatusCode() == 403) {
                     // Revoked (1.5) or a new link: its kept picture goes too, and whatever it had shown.
                     forgetStill();
@@ -362,6 +419,8 @@ public class MainActivity extends Activity {
                 // Loaded is not shown (#604): the HTML can arrive without its script. The kept
                 // picture goes when the page acknowledges a frame it drew (frameDrawn).
                 if (problem == null && shown() != null) hideInfo();
+                // Opened at the address it has: no need to look for another.
+                if (problem == null && !certRefused && shown() != null) reachedRhema();
             }
 
             /**
@@ -538,6 +597,7 @@ public class MainActivity extends Activity {
     /** The page drew a frame (#604): the first time since it loaded, the kept picture gives way to it. */
     private void frameDrawn() {
         if (!ready.drew()) return;
+        reachedRhema();
         ui.removeCallbacks(noFrame);
         if (problem != null) return;
         // Drawn after the wait ran out but before its reload: the healthy page is not loaded again.
@@ -807,6 +867,8 @@ public class MainActivity extends Activity {
         if (on == pageOff && (hold.getVisibility() == View.VISIBLE) == on) return;
         pageOff = on;
         if (on) {
+            // The page hears Rhema Studio say the output is off: it is reachable where it is.
+            reachedRhema();
             hold.setVisibility(View.VISIBLE);
             note.setVisibility(View.GONE);
             // Nothing is wrong and nothing needs loading again: the output is off.
@@ -1144,6 +1206,8 @@ public class MainActivity extends Activity {
             try { nsd.unregisterService(advert); } catch (RuntimeException ignored) { }
             advert = null;
         }
+        stopBrowse();
+        prober.shutdownNow();
         server.close();
         ui.removeCallbacksAndMessages(null);
         web.destroy();
@@ -1224,16 +1288,17 @@ public class MainActivity extends Activity {
         String sent = CodeProof.open(key, nonce, data);
         if (sent == null) return "Rhema Studio's code check did not match: try again";
         final String url;
-        final String pin;
+        final String[] pins;
         try {
             if (!Guard.flatObject(sent)) return "That is not a Rhema Studio feed link";
             JSONObject o = new JSONObject(sent);
             url = o.optString("url", "");
-            pin = o.optString("certFingerprint", "");
+            // 1.8 (doc 48): the server key's pin beside the certificate's, from a Rhema Studio that has one.
+            pins = KeyPin.fromShow(o.optString("certFingerprint", ""), o.optString("keyFingerprint", ""));
         } catch (Exception e) {
             return "That is not a Rhema Studio feed link";
         }
-        if (!Guard.feedLink(url) || !Guard.fingerprint(pin)) return "That is not a Rhema Studio secure feed link (update Rhema Studio if this keeps happening)";
+        if (!Guard.feedLink(url) || pins == null) return "That is not a Rhema Studio secure feed link (update Rhema Studio if this keeps happening)";
         newCode();
         // The code worked: no "a code was tried" left on the code screen (#841; newCode clears it too).
         tries.clear();
@@ -1250,7 +1315,13 @@ public class MainActivity extends Activity {
                     still.setVisibility(View.VISIBLE);
                 }
                 // Also who sent it: only that computer may Identify this TV over its feed (#849).
-                prefs.edit().putString("url", url).putString("pin", pin).putString("host", peer).apply();
+                // One pin is kept: the server key's when Rhema Studio sent it, else (an older one) its certificate's.
+                SharedPreferences.Editor e = prefs.edit().putString("url", url).putString("host", peer).remove("hostService");
+                if (pins[1] != null) e.putString("keyPin", pins[1]).remove("pin");
+                else e.putString("pin", pins[0]).remove("keyPin");
+                e.apply();
+                // A new feed: no looking for the last one's computer.
+                reachedRhema();
                 // Paired: a TV that loses power comes back to this feed by itself (#834), unless a person chose Off.
                 if (BootStart.turnOnAfterPairing(bootChosen(), startsWithTv(), true)) setStartWithTv(true);
                 problem = null;
@@ -1264,23 +1335,331 @@ public class MainActivity extends Activity {
         return null;
     }
 
-    /** SHA-256 of a page's certificate (lowercase hex), as Rhema writes it, or null. */
-    static String fingerprint(SslCertificate cert) {
+    /**
+     * A page's certificate pins (lowercase hex, as Rhema writes them): {SHA-256 of the whole
+     * certificate, SHA-256 of its public key (SubjectPublicKeyInfo)}, or null. The WebView gives only
+     * the server's own certificate (not a chain), which is all a pin needs.
+     */
+    static String[] pins(SslCertificate cert) {
         if (cert == null) return null;
-        byte[] der = null;
         try {
             if (Build.VERSION.SDK_INT >= 29) {
                 X509Certificate x = cert.getX509Certificate();
-                if (x != null) der = x.getEncoded();
-            } else {
-                // Before Android 10 the certificate's bytes are only in its saved state.
-                Bundle b = SslCertificate.saveState(cert);
-                if (b != null) der = b.getByteArray("x509-certificate");
+                if (x == null) return null;
+                return new String[] {CodeProof.hex(CodeProof.sha256(x.getEncoded())), KeyPin.spki(x)};
             }
+            // Before Android 10 the certificate's bytes are only in its saved state.
+            Bundle b = SslCertificate.saveState(cert);
+            byte[] der = b == null ? null : b.getByteArray("x509-certificate");
+            if (der == null) return null;
+            return new String[] {CodeProof.hex(CodeProof.sha256(der)), KeyPin.spkiOfDer(der)};
         } catch (Exception e) {
             return null;
         }
-        return der == null ? null : CodeProof.hex(CodeProof.sha256(der));
+    }
+
+    // ---- Finding Rhema Studio at a new address (1.8, doc 48) ----
+
+    /** The feed did not open where it is (unreachable, or not the paired key): look after a while. */
+    private void lost() {
+        rediscovery.failed(SystemClock.elapsedRealtime());
+        scheduleLook();
+    }
+
+    /** Rhema Studio answered where the feed is (or a new feed came): stop looking. */
+    private void reachedRhema() {
+        stopBrowse();
+        rediscovery.reset();
+        ui.removeCallbacks(look);
+    }
+
+    /** What the screen says about a failure; after a while of looking, first that Rhema Studio may have moved. */
+    private String failWords(String why) {
+        return rediscovery.mayHaveMoved(SystemClock.elapsedRealtime()) ? MAY_HAVE_MOVED + "\n" + why : why;
+    }
+
+    private void scheduleLook() {
+        ui.removeCallbacks(look);
+        long due = rediscovery.due(SystemClock.elapsedRealtime());
+        if (due >= 0) ui.postDelayed(look, due);
+    }
+
+    /** Only for a feed on screen, pinned by its server key (the key is what proves the new address). */
+    private boolean canLook() {
+        if (nsd == null) nsd = (NsdManager) getSystemService(NSD_SERVICE);
+        return visible && nsd != null && shown() != null && !REVOKED.equals(problem) && Guard.fingerprint(prefs.getString("keyPin", null));
+    }
+
+    private final Runnable look = new Runnable() {
+        @Override
+        public void run() {
+            if (rediscovery.start(SystemClock.elapsedRealtime(), canLook())) startBrowse();
+        }
+    };
+
+    /**
+     * A browse's time may be over (Rediscovery.over): after BROWSE_MS, unless addresses still wait
+     * for their check or services for resolving, then at the latest after BROWSE_MAX_MS.
+     */
+    private final Runnable endBrowse = new Runnable() {
+        @Override
+        public void run() {
+            boolean pending = probes.pending() || probing || resolving || !toResolve.isEmpty();
+            if (rediscovery.over(SystemClock.elapsedRealtime(), pending)) {
+                browseOver();
+            } else {
+                ui.removeCallbacks(endBrowse);
+                ui.postDelayed(endBrowse, 2_000);
+            }
+        }
+    };
+
+    /** Ends the browse without finding it: rest, then look again (Rediscovery). */
+    private void browseOver() {
+        stopBrowse();
+        rediscovery.stop(SystemClock.elapsedRealtime());
+        scheduleLook();
+    }
+
+    /** Starts the next check shortly after one could not be started (it was kept aside, ProbeQueue). */
+    private final Runnable pumpLater = new Runnable() {
+        @Override
+        public void run() {
+            pumpProbes(browseGen.get());
+        }
+    };
+
+    /** Browses _rhema-host._tcp for Rediscovery.BROWSE_MS. */
+    private void startBrowse() {
+        final int gen = browseGen.incrementAndGet();
+        toResolve.clear();
+        resolving = false;
+        seenServices.clear();
+        probes.clear();
+        probing = false;
+        browse = new NsdManager.DiscoveryListener() {
+            @Override
+            public void onStartDiscoveryFailed(String type, int error) {
+                ui.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (gen != browseGen.get()) return;
+                        // Not this time (no network yet): rest, then again.
+                        browse = null;
+                        browseOver();
+                    }
+                });
+            }
+
+            @Override
+            public void onStopDiscoveryFailed(String type, int error) { }
+
+            @Override
+            public void onDiscoveryStarted(String type) { }
+
+            @Override
+            public void onDiscoveryStopped(String type) { }
+
+            @Override
+            public void onServiceFound(final NsdServiceInfo info) {
+                ui.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (gen != browseGen.get() || !seenServices.add(String.valueOf(info.getServiceName()))) return;
+                        toResolve.add(info);
+                        resolveNext(gen);
+                    }
+                });
+            }
+
+            @Override
+            public void onServiceLost(NsdServiceInfo info) { }
+        };
+        try {
+            nsd.discoverServices(HOST_SERVICE, NsdManager.PROTOCOL_DNS_SD, browse);
+        } catch (RuntimeException e) {
+            browse = null;
+            browseOver();
+            return;
+        }
+        ui.removeCallbacks(endBrowse);
+        ui.postDelayed(endBrowse, Rediscovery.BROWSE_MS);
+    }
+
+    /** Ends the browse now (found, a new feed, its time over, or the screen left the feed). */
+    private void stopBrowse() {
+        browseGen.incrementAndGet();
+        ui.removeCallbacks(endBrowse);
+        ui.removeCallbacks(pumpLater);
+        resolveRetried.clear();
+        if (browse != null) {
+            try { nsd.stopServiceDiscovery(browse); } catch (RuntimeException ignored) { }
+            browse = null;
+        }
+        toResolve.clear();
+        resolving = false;
+        probes.clear();
+        probing = false;
+    }
+
+    /** Resolves the next announced service (one at a time). */
+    private void resolveNext(final int gen) {
+        if (gen != browseGen.get() || resolving || toResolve.isEmpty()) return;
+        resolving = true;
+        NsdServiceInfo next = toResolve.poll();
+        try {
+            nsd.resolveService(next, new NsdManager.ResolveListener() {
+                @Override
+                public void onResolveFailed(final NsdServiceInfo info, int error) {
+                    ui.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (gen != browseGen.get()) return;
+                            resolving = false;
+                            // Found once per browse only: a failed resolve (another one was running) is tried once more, last.
+                            if (resolveRetried.add(String.valueOf(info.getServiceName()))) toResolve.add(info);
+                            resolveNext(gen);
+                        }
+                    });
+                }
+
+                @Override
+                public void onServiceResolved(final NsdServiceInfo info) {
+                    ui.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (gen != browseGen.get()) return;
+                            resolving = false;
+                            candidate(info, gen);
+                            resolveNext(gen);
+                        }
+                    });
+                }
+            });
+        } catch (RuntimeException e) {
+            // This one could not be asked: on to the next (it was taken off the queue).
+            resolving = false;
+            resolveNext(gen);
+        }
+    }
+
+    /**
+     * An announced Rhema Studio: when its hint (TXT k=) fits the key pin, check its https port over
+     * TLS for the whole key pin (KeyPin.probe), and only then move the feed there.
+     */
+    private void candidate(NsdServiceInfo info, final int gen) {
+        final String keyPin = prefs.getString("keyPin", null);
+        Map<String, byte[]> txt;
+        try {
+            txt = info.getAttributes();
+        } catch (RuntimeException e) {
+            return;
+        }
+        if (!KeyPin.hintMatches(KeyPin.txt(txt, "k"), keyPin)) return;
+        int port = KeyPin.port(KeyPin.txt(txt, "tls"));
+        String url = shown();
+        if (port < 0 || url == null) return;
+        String service = String.valueOf(info.getServiceName());
+        // The Rhema Studio this TV last reached goes first: its last address, or the name it was found under.
+        String lastIp = Uri.parse(url).getHost();
+        boolean sameName = service.equals(prefs.getString("hostService", null));
+        // Each of its IPv4 addresses (a computer on Wi-Fi and Ethernet announces both), ProbeQueue-capped.
+        for (String ip : ipv4s(info)) probes.offer(service, ip, port, sameName || ip.equals(lastIp));
+        pumpProbes(gen);
+    }
+
+    /**
+     * Starts the next TLS check (KeyPin.probe, 4 s in all) off the screen's thread when none is
+     * running; the feed moves only if it passes. When it ends, the next one starts.
+     */
+    private void pumpProbes(final int gen) {
+        final String url = shown();
+        if (probing || gen != browseGen.get() || url == null) return;
+        final ProbeQueue.Candidate c = probes.next();
+        if (c == null) return;
+        final String keyPin = prefs.getString("keyPin", null);
+        probing = true;
+        try {
+            prober.execute(new Runnable() {
+                @Override
+                public void run() {
+                    // Its browse ended while it waited: not checked at all.
+                    final boolean found = gen == browseGen.get() && KeyPin.probe(c.ip, c.port, keyPin, 4_000);
+                    ui.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (gen != browseGen.get()) return;
+                            probing = false;
+                            // Still the same feed and pin (nothing changed while it was checked).
+                            if (found && url.equals(shown()) && KeyPin.same(keyPin, prefs.getString("keyPin", null))) {
+                                moveTo(c.ip, c.port, c.service);
+                            } else {
+                                pumpProbes(gen);
+                            }
+                        }
+                    });
+                }
+            });
+        } catch (RuntimeException full) {
+            // Could not be started (checks of an ended browse still hold the queue, or shutting
+            // down): unmarked and kept aside (ProbeQueue.release), and tried again shortly.
+            probing = false;
+            probes.release(c);
+            ui.removeCallbacks(pumpLater);
+            ui.postDelayed(pumpLater, 1_000);
+        }
+    }
+
+    /** The service's IPv4 addresses (feed links name Rhema Studio by one), maybe none. */
+    private static List<String> ipv4s(NsdServiceInfo info) {
+        List<String> out = new java.util.ArrayList<String>();
+        if (Build.VERSION.SDK_INT >= 34) {
+            for (InetAddress a : info.getHostAddresses()) {
+                if (a instanceof Inet4Address && !out.contains(a.getHostAddress())) out.add(a.getHostAddress());
+            }
+        } else {
+            InetAddress a = info.getHost();
+            if (a instanceof Inet4Address) out.add(a.getHostAddress());
+        }
+        return out;
+    }
+
+    /** The paired Rhema Studio proved itself at ip:port: the feed (same path and key) opens there from now on. */
+    private void moveTo(String ip, int port, String service) {
+        String from = shown();
+        String to = KeyPin.movedTo(from, ip, port);
+        if (to == null) return;
+        reachedRhema();
+        // Also who may Identify this TV over its feed (#849): the same Rhema Studio, at its new address;
+        // and the name it announced, looked at first next time.
+        SharedPreferences.Editor e = prefs.edit().putString("url", to).putString("host", ip).putString("hostService", service);
+        // The kept picture is of the same feed: it stays until the page draws at the new address.
+        if (from.equals(prefs.getString("stillOf", null))) e.putString("stillOf", to);
+        e.apply();
+        problem = null;
+        certRefused = false;
+        ui.removeCallbacks(reload);
+        web.clearSslPreferences();
+        web.loadUrl(to);
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        visible = true;
+        scheduleLook();
+    }
+
+    /** The screen left the feed: no browsing until it is back. */
+    @Override
+    protected void onStop() {
+        visible = false;
+        ui.removeCallbacks(look);
+        if (rediscovery.browsing()) {
+            stopBrowse();
+            rediscovery.stop(SystemClock.elapsedRealtime());
+        }
+        super.onStop();
     }
 
     /** This TV's address on the church network (IPv4, as people type it). */

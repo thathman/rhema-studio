@@ -23,7 +23,8 @@ import java.util.concurrent.TimeUnit;
  * What Rhema asks a receiver (#198): POST /challenge {"x"} → {"ok","v","y","proof"} (the code
  * check, CodeProof, 1.2; "v": 2 since 1.3), then POST /show {"nonce","data"} → {"ok","name"|"error"}:
  * the feed's https link and Rhema's certificate fingerprint, encrypted with the check's key (1.3;
- * the plain {"url","proof"} of 1.2 is refused); and (#213, 1.1) GET /status →
+ * the plain {"url","proof"} of 1.2 is refused; since 1.8 also "keyFingerprint", the server key's pin,
+ * KeyPin); and (#213, 1.1) GET /status →
  * {"ok","name","feed","problem"} (and, 1.5, "width","height": the display's size): the id of the
  * feed shown, never its secret link; 1.7 adds "hz", the display's refresh rate; and (#849, 1.7)
  * POST /identify {} (JSON, like the rest) → {"ok","name"} (403 over another computer's feed, 429 when just
