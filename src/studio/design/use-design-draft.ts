@@ -3,7 +3,7 @@ import { useUnsavedStore } from "@/stores/unsaved-store"
 import { designDraftId, type DesignDraft, type DesignDraftKind } from "@/lib/design-drafts"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 
-const DRAFT_LABEL: Record<DesignDraftKind, string> = { "lower-third": "this lower third", ticker: "the news ticker", stage: "the stage display", countdown: "the countdown" }
+const DRAFT_LABEL: Record<DesignDraftKind, string> = { "lower-third": "this lower third", ticker: "the news ticker", stage: "the stage display", countdown: "the countdown", theme: "this theme" }
 
 export function useDesignDraft<T>(kind: DesignDraftKind, sourceId: string, published: T, normalize: (value: T) => T) {
   const id = designDraftId(kind, sourceId)

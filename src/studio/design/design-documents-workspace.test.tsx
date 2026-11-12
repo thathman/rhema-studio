@@ -11,6 +11,8 @@ const store = vi.hoisted(() => ({
   listVersions: vi.fn(),
   duplicate: vi.fn(),
   usedOn: vi.fn(),
+  setArchived: vi.fn(),
+  remove: vi.fn(),
 }))
 const mockAsk = vi.hoisted(() => vi.fn(async (...args: unknown[]) => { void args; return true }))
 const mockPreviewRender = vi.hoisted(() => vi.fn())
@@ -25,6 +27,8 @@ vi.mock("@/design-engine/design-store", () => ({ designStore: {
   listVersions: (...args: unknown[]) => store.listVersions(...args),
   duplicate: (...args: unknown[]) => store.duplicate(...args),
   usedOn: (...args: unknown[]) => store.usedOn(...args),
+  setArchived: (...args: unknown[]) => store.setArchived(...args),
+  remove: (...args: unknown[]) => store.remove(...args),
 } }))
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
@@ -42,6 +46,8 @@ import { useUnsavedStore } from "@/stores/unsaved-store"
 import { mayLeaveDesignDocumentDraft } from "@/lib/design-document-draft"
 import type { DesignDocument, DesignSummary, DesignVersion } from "@/design-engine/design-store"
 import { createBlankRhemaDesign } from "@/design-engine/design-document-utils"
+import { libraryLooks } from "@/lib/design-packs"
+import type { LibraryLook } from "@/lib/look-library"
 import { VIDEO_LAYER_PLACEHOLDER_COLOR } from "@/design-engine/rhema-scene"
 import type { Scene } from "@/types/scene"
 import { useMediaStore } from "@/stores/media-store"
@@ -63,6 +69,8 @@ beforeEach(() => {
   store.listVersions.mockReset().mockResolvedValue([])
   store.duplicate.mockReset()
   store.usedOn.mockReset().mockResolvedValue([])
+  store.setArchived.mockReset()
+  store.remove.mockReset().mockResolvedValue(undefined)
   mockAsk.mockReset().mockResolvedValue(true)
   mockPreviewRender.mockReset().mockResolvedValue(null)
   useBroadcastStore.setState({ themes: BUILTIN_THEMES, scenes: [], designDrafts: [] })
@@ -118,7 +126,7 @@ describe("My Designs workspace", () => {
     const host = document.createElement("div")
     document.body.appendChild(host)
     root = createRoot(host)
-    await act(async () => root!.render(<DesignDocumentsWorkspace initialDesignId={design.id} onInitialDesignHandled={handled} />))
+    await act(async () => root!.render(<DesignDocumentsWorkspace onBrowseTemplates={() => {}} initialDesignId={design.id} onInitialDesignHandled={handled} />))
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
 
     expect(store.get).toHaveBeenCalledWith("design-pinned-scene")
@@ -142,7 +150,7 @@ describe("My Designs workspace", () => {
     const host = document.createElement("div")
     document.body.appendChild(host)
     root = createRoot(host)
-    await act(async () => root!.render(<DesignDocumentsWorkspace />))
+    await act(async () => root!.render(<DesignDocumentsWorkspace onBrowseTemplates={() => {}} />))
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
 
     await act(async () => { [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("First design"))!.click() })
@@ -172,14 +180,6 @@ describe("My Designs workspace", () => {
     }
     store.create.mockResolvedValue(created)
     store.get.mockResolvedValue(created)
-    const host = document.createElement("div")
-    document.body.appendChild(host)
-    root = createRoot(host)
-    await act(async () => root!.render(<DesignDocumentsWorkspace />))
-    await act(async () => { await Promise.resolve() })
-    expect(host.textContent).toContain("Choose a starting point")
-    expect(host.textContent).toContain("3 · Use in Prepare")
-
     const before = useBroadcastStore.getState()
     const liveBefore = {
       outputs: before.outputs,
@@ -189,12 +189,15 @@ describe("My Designs workspace", () => {
       liveSlide: before.liveSlide,
       sceneTakes: before.sceneTakes,
     }
-    const browse = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse scene templates"))!
-    await act(async () => browse.click())
-    const card = [...host.querySelectorAll("li")].find((item) => item.querySelector("h4")?.textContent === "Clean · Camera and scripture")!
-    const choose = [...card.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Choose template")!
-
-    await act(async () => { choose.click(); await Promise.resolve() })
+    // Design's Templates section hands the chosen look over as initialTemplate (#809 R10: My Designs has no browser of its own).
+    const look = libraryLooks().find((item): item is Extract<LibraryLook, { kind: "scene" }> => item.kind === "scene" && item.name === "Clean · Camera and scripture")!
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => {
+      root!.render(<DesignDocumentsWorkspace onBrowseTemplates={() => {}} initialTemplate={{ look, customize: false }} />)
+      await Promise.resolve()
+    })
 
     expect(store.create).toHaveBeenCalledWith(expect.objectContaining({ kind: "design", title: "Clean · Camera and scripture" }))
     expect(host.textContent).toContain("Added to My Designs")
@@ -405,7 +408,7 @@ describe("My Designs workspace", () => {
       pageSelect.dispatchEvent(new Event("change", { bubbles: true }))
     })
     expect(mockPreviewRender.mock.calls.at(-1)?.[0]).toMatchObject({ root: "page-two-group" })
-    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use selected page in Prepare"))!.click())
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Use in Prepare"))!.click())
 
     expect(onUse).toHaveBeenCalledTimes(1)
     expect(onUse.mock.calls[0]?.[0]).toMatchObject({ design: { id: designId, version: 1, pageId: "page-two" }, layers: [expect.objectContaining({ id: "page-two-background", color: "#264060" })] })
@@ -513,7 +516,7 @@ describe("My Designs workspace", () => {
     const host = document.createElement("div")
     document.body.appendChild(host)
     root = createRoot(host)
-    await act(async () => root!.render(<DesignDocumentsWorkspace />))
+    await act(async () => root!.render(<DesignDocumentsWorkspace onBrowseTemplates={() => {}} />))
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
 
     const firstButton = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("First design"))!
@@ -531,5 +534,164 @@ describe("My Designs workspace", () => {
     expect(mockAsk).toHaveBeenCalledWith("Your design changes are not saved. Discard them?", expect.objectContaining({ kind: "warning", cancelLabel: "Keep editing" }))
     expect(host.querySelector<HTMLInputElement>("#design-document-title")?.value).toBe("Unsaved first design")
     expect(store.get).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("My Designs list actions (#851 G7)", () => {
+  const summary = (id: string, title: string, latestVersion: number | null = null): DesignSummary => ({ id, title, kind: "design", revision: 2, latestVersion, updatedAt: "2026-11-01T00:00:00Z" })
+
+  async function renderList(items: DesignSummary[]) {
+    store.list.mockResolvedValue(items)
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => {
+      root!.render(<DesignDocumentsWorkspace onBrowseTemplates={() => {}} />)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    return host
+  }
+
+  it("renames a design from the list as a draft save of the same document", async () => {
+    const saved: DesignDocument = { ...summary("d1", "Welcome"), document: createBlankRhemaDesign("Welcome"), createdAt: "2026-11-01T00:00:00Z" }
+    store.get.mockResolvedValue(saved)
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: { title: string }) => ({ ...saved, title: input.title, revision: 3 }))
+    const host = await renderList([summary("d1", "Welcome")])
+    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Rename Welcome"]')!.click())
+    const input = host.querySelector<HTMLInputElement>('input[aria-label="New name for Welcome"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Easter welcome")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('button[aria-label="Save name for Welcome"]')!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(store.saveDraft).toHaveBeenCalledWith("d1", 2, expect.objectContaining({ title: "Easter welcome", kind: "design" }))
+    expect(store.saveDraft.mock.calls[0]![2].document.meta.name).toBe("Easter welcome")
+    expect(host.textContent).toContain("Easter welcome")
+  })
+
+  it("asks before deleting a design and keeps it when the operator says no", async () => {
+    const host = await renderList([summary("d1", "Welcome")])
+    mockAsk.mockResolvedValueOnce(false)
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('button[aria-label="Delete Welcome"]')!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(mockAsk).toHaveBeenCalledWith(expect.stringContaining("This cannot be undone"), expect.objectContaining({ title: "Delete design?", okLabel: "Delete" }))
+    expect(store.remove).not.toHaveBeenCalled()
+    expect(host.textContent).toContain("Welcome")
+
+    mockAsk.mockResolvedValueOnce(true)
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('button[aria-label="Delete Welcome"]')!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(store.remove).toHaveBeenCalledWith("d1", 2)
+    expect(host.querySelector('button[aria-label="Delete Welcome"]')).toBeNull()
+  })
+
+  const click = async (host: ParentNode, label: string) => {
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+
+  it("keeps a design that has versions a service may pin, says why and offers archive", async () => {
+    const host = await renderList([summary("d2", "Sermon series", 3)])
+    await click(host, "Delete Sermon series")
+    expect(mockAsk).not.toHaveBeenCalled()
+    expect(store.remove).not.toHaveBeenCalled()
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("“Sermon series” cannot be deleted: it has saved versions")
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("Archive it instead")
+  })
+
+  it("refuses to delete a design a saved service uses, naming the service", async () => {
+    store.usedOn.mockResolvedValue([{ programId: "p1", title: "Sunday 1 November", serviceDate: "2026-11-01", revision: 4, approvedRevision: 4, itemId: "i1", reference: "Welcome", version: 1 }])
+    const host = await renderList([summary("d1", "Welcome")])
+    await click(host, "Delete Welcome")
+    expect(store.usedOn).toHaveBeenCalledWith("d1")
+    expect(mockAsk).not.toHaveBeenCalled()
+    expect(store.remove).not.toHaveBeenCalled()
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("it is used by service “Sunday 1 November”")
+    expect(host.querySelector('button[aria-label="Delete Welcome"]')).not.toBeNull()
+  })
+
+  it("refuses to delete a design an output's look is made from", async () => {
+    const scene: Scene = { id: "s1", name: "Welcome scene", background: "#000000", layers: [], createdAt: 1, updatedAt: 1, design: { id: "d1", version: 1 } }
+    useBroadcastStore.setState({ scenes: [scene], outputs: [{ ...useBroadcastStore.getState().outputs[0]!, name: "Main screen", role: "congregation", sceneId: "s1" }] })
+    const host = await renderList([summary("d1", "Welcome")])
+    await click(host, "Delete Welcome")
+    expect(store.remove).not.toHaveBeenCalled()
+    const alert = host.querySelector('[role="alert"]')?.textContent ?? ""
+    expect(alert).toContain("saved scene “Welcome scene”")
+    expect(alert).toContain("the look on output “Main screen”")
+  })
+
+  it("archives a design out of the list, shows it under Show archived and restores it", async () => {
+    store.setArchived.mockImplementation(async (id: string, archived: boolean) => ({ ...summary(id, "Welcome"), archivedAt: archived ? "2026-11-12T08:00:00Z" : null }))
+    const host = await renderList([summary("d1", "Welcome"), summary("d2", "Offering")])
+    expect(host.querySelector('[aria-label="Show archived designs"]')).toBeNull()
+    await click(host, "Archive Welcome")
+    expect(store.setArchived).toHaveBeenCalledWith("d1", true)
+    expect(store.remove).not.toHaveBeenCalled()
+    expect(host.querySelector('button[aria-label="Archive Welcome"]')).toBeNull()
+    expect(host.textContent).toContain("Offering")
+    expect(host.textContent).toContain("Show archived (1)")
+
+    await click(host, "Show archived designs")
+    expect(host.textContent).toContain("Welcome")
+    expect(host.textContent).toContain("archived")
+    await click(host, "Restore Welcome")
+    expect(store.setArchived).toHaveBeenLastCalledWith("d1", false)
+    expect(host.querySelector('button[aria-label="Archive Welcome"]')).not.toBeNull()
+    expect(host.querySelector('[aria-label="Show archived designs"]')).toBeNull()
+  })
+
+  it("lists archived designs only on request and keeps them out of the Prepare picker", async () => {
+    const archived = { ...summary("d1", "Old welcome"), archivedAt: "2026-11-12T08:00:00Z" }
+    const host = await renderList([archived])
+    expect(host.textContent).not.toContain("Old welcome")
+    expect(host.textContent).toContain("1 archived design is hidden")
+
+    act(() => root?.unmount())
+    store.list.mockResolvedValue([archived, summary("d2", "Offering", 1)])
+    const picker = document.createElement("div")
+    document.body.appendChild(picker)
+    root = createRoot(picker)
+    await act(async () => {
+      root!.render(<DesignVersionPicker onUse={() => {}} />)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(picker.textContent).toContain("Offering")
+    expect(picker.textContent).not.toContain("Old welcome")
+  })
+
+  it("sends template browsing to Design's one Templates section when it is given (#806 R7)", async () => {
+    const onBrowseTemplates = vi.fn()
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => {
+      root!.render(<DesignDocumentsWorkspace onBrowseTemplates={onBrowseTemplates} />)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Templates")!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(onBrowseTemplates).toHaveBeenCalledTimes(1)
+    expect(host.textContent).not.toContain("Back to My Designs")
+    expect(host.textContent).not.toContain("Search scene designs")
+
+    // The empty state's own buttons go to the same one Templates section.
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Browse scene templates"))!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(onBrowseTemplates).toHaveBeenCalledTimes(2)
+    expect(host.textContent).toContain("Choose a starting point")
   })
 })

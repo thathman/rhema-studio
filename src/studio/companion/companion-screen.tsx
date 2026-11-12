@@ -13,6 +13,8 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { JoinForm } from "@/studio/production/join-form"
 import { certificateWords, type PairedHost } from "@/lib/host-certificate"
 import { roleLabel } from "@/lib/remote-roles"
+import { hostWords, obsWords, type Tone as ToneKind } from "@/studio/companion/companion-status"
+import { Overlays } from "@/studio/companion/companion-overlays"
 
 const NEW_SCENE = "\u0000new"
 
@@ -37,13 +39,9 @@ export function CompanionScreen({ aside, secure = false, children }: { aside?: R
   const status = useJoin((s) => s.status)
   const obsEnabled = useSettingsStore((s) => s.obs.enabled)
   const obsStatus = useObsStore((s) => s.status)
-  const obsConnection = !obsEnabled
-    ? { label: "Off", tone: "off" as const }
-    : obsStatus === "connected"
-      ? { label: "Connected", tone: "ok" as const }
-      : obsStatus === "connecting"
-        ? { label: "Connecting", tone: "warn" as const }
-        : { label: "Not connected", tone: "warn" as const }
+  const obsError = useObsStore((s) => s.error)
+  // Which link failed and why (#842): OBS's own reason, not only "Not connected".
+  const obsConnection = obsWords(obsEnabled, obsStatus, obsError)
   return (
     <main aria-label="OBS companion" className="min-h-dvh overflow-y-auto bg-background text-foreground">
       <div className="mx-auto flex max-w-[1040px] flex-col gap-5 px-6 py-6 max-[720px]:px-4">
@@ -51,10 +49,12 @@ export function CompanionScreen({ aside, secure = false, children }: { aside?: R
         <div className="grid gap-4 min-[800px]:grid-cols-2">
           {status === "off" ? <JoinForm asCompanion checkCertificate={secure} /> : <HostCard secure={secure} />}
           <Card kicker="This computer" title="OBS" status={<span aria-label="OBS connection status" role="status"><Tone tone={obsConnection.tone}>{obsConnection.label}</Tone></span>}>
+            {obsConnection.detail && <p role="alert" aria-label="Why OBS is not connected" className="font-semibold">{obsConnection.detail}</p>}
             <ObsSettingsBlock />
           </Card>
         </div>
         <Cameras />
+        <Overlays Card={Card} />
         {children}
       </div>
     </main>
@@ -95,7 +95,7 @@ function Card({ title, kicker, children, className, status }: { title: string; k
   )
 }
 
-function Tone({ tone, children }: { tone: "ok" | "warn" | "off" | "live"; children: React.ReactNode }) {
+function Tone({ tone, children }: { tone: ToneKind; children: React.ReactNode }) {
   const cls = { ok: "bg-tone-green text-tone-green-foreground", warn: "bg-tone-amber text-tone-amber-foreground", off: "bg-tone-neutral text-tone-neutral-foreground", live: "bg-on-air text-white" }[tone]
   return <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold", cls)}>{children}</span>
 }
@@ -110,21 +110,37 @@ function HostCard({ secure }: { secure: boolean }) {
   const router = useCompanion((s) => s.router)
   const heard = useCompanion((s) => s.heard)
   const wrongRole = status === "connected" && me && me.role !== "obs-companion"
+  const [leaving, setLeaving] = useState(false)
+  // Which side failed and why (#842): host unreachable, its certificate, or another failure; a refusal is a revoked key.
+  const words = hostWords(status, error, address ?? "")
   return (
     <Card kicker="The main Rhema Studio computer" title={church || address || "The host"}>
       <div className="flex flex-wrap items-center gap-2">
-        <span role="status"><Tone tone={status === "connected" ? "ok" : "warn"}>{status === "connected" ? "Connected" : status === "reconnecting" ? "Reconnecting…" : status === "refused" ? "Refused" : "Connecting…"}</Tone></span>
+        <span role="status" aria-label="Host connection status"><Tone tone={words.tone}>{words.label}</Tone></span>
         <span className="text-muted-foreground">{address}{me ? ` · this computer is "${me.name}"` : ""}</span>
       </div>
-      {error && status !== "connected" && <p role="alert" className="text-destructive">{error}</p>}
+      {words.detail && status !== "connected" && <p role="alert" aria-label="Why the host is not connected" className="text-destructive">{words.detail}</p>}
       {wrongRole && <p role="alert" className="font-semibold">The host has this computer as {roleLabel(me.role)}. On the host: Settings → Remote control, set "{me.name}" to OBS companion, so it may read the cameras.</p>}
       {!wrongRole && hostError && <p role="alert" className="font-semibold">{hostError}</p>}
       {status === "connected" && heard && !hostError && !router && <p className="font-semibold">The camera router is off on the host. Turn it on there: Live → Production tools → Cameras.</p>}
       {secure && <PinnedCertificate />}
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" onClick={() => void useJoin.getState().leave(true)}>Leave this host</Button>
-        {(status === "refused" || status === "reconnecting") && <Button size="sm" variant="ghost" onClick={() => void useJoin.getState().connect()}>Try again</Button>}
-      </div>
+      {leaving ? (
+        // Leaving forgets the pairing (#831 S7): asked first, since joining again needs a new code from the host.
+        <div role="alertdialog" aria-label="Leave this host?" className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-3">
+          <p className="font-semibold">Leave this host?</p>
+          <p className="text-muted-foreground">This computer forgets the host and its key. The cameras and overlays already in OBS stay, but their addresses are no longer kept current and the host gets no tally from this OBS. Joining again needs a new pairing code from the host (Settings → Remote control → Pair a device).</p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="destructive" onClick={() => { setLeaving(false); void useJoin.getState().leave(true) }}>Leave and forget the host</Button>
+            <Button size="sm" variant="outline" autoFocus onClick={() => setLeaving(false)}>Stay joined</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => setLeaving(true)}>Leave this host</Button>
+          {/* A revoked key is not tried again: only pairing again helps (the words above say how). */}
+          {status === "reconnecting" && <Button size="sm" variant="ghost" onClick={() => void useJoin.getState().connect()}>Try again</Button>}
+        </div>
+      )}
     </Card>
   )
 }

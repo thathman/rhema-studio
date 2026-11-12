@@ -94,7 +94,7 @@ pub fn coerce_string(arg: &OscType) -> Result<String, CommandError> {
 /// - `/rhema/send_to_live`, `/rhema/bible_next`, `/rhema/bible_prev`,
 ///   `/rhema/add_to_queue`, `/rhema/verse_next`, `/rhema/verse_prev` (no arguments)
 /// - `/rhema/theme`, `/rhema/macro` (string argument)
-/// - `/rhema/opacity`, `/rhema/confidence` (float argument, normalized to [0.0, 1.0])
+/// - `/rhema/confidence` (float argument, normalized to [0.0, 1.0])
 /// - `/rhema/on_air` (bool argument)
 pub fn parse_osc(address: &str, args: &[OscType]) -> Result<RemoteCommand, CommandError> {
     match address {
@@ -144,13 +144,6 @@ pub fn parse_osc(address: &str, args: &[OscType]) -> Result<RemoteCommand, Comma
             })?;
             let name = coerce_string(arg)?;
             Ok(RemoteCommand::Theme(name))
-        }
-        "/rhema/opacity" => {
-            let arg = args.first().ok_or_else(|| CommandError::MissingArgument {
-                address: address.into(),
-            })?;
-            let val = coerce_f32_normalized(arg)?;
-            Ok(RemoteCommand::Opacity(val))
         }
         "/rhema/confidence" => {
             let arg = args.first().ok_or_else(|| CommandError::MissingArgument {
@@ -396,11 +389,10 @@ mod tests {
     }
 
     #[test]
-    fn parse_osc_opacity() {
-        assert_eq!(
-            parse_osc("/rhema/opacity", &[OscType::Float(0.5)]).unwrap(),
-            RemoteCommand::Opacity(0.5)
-        );
+    fn parse_osc_opacity_is_unknown() {
+        // Removed (11 Nov review G12): nothing on the screens took it.
+        let result = parse_osc("/rhema/opacity", &[OscType::Float(0.5)]);
+        assert!(result.unwrap_err().to_string().contains("Unknown OSC address"));
     }
 
     #[test]
@@ -422,16 +414,6 @@ mod tests {
         let result = parse_osc("/rhema/unknown", &[]);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Unknown OSC address"));
-    }
-
-    #[test]
-    fn parse_osc_opacity_missing_arg_errors() {
-        let result = parse_osc("/rhema/opacity", &[]);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Missing argument"));
     }
 
     #[test]
@@ -468,15 +450,6 @@ mod tests {
         assert_eq!(
             parse_osc("/rhema/on_air", &[OscType::Float(0.0)]).unwrap(),
             RemoteCommand::OnAir(false)
-        );
-    }
-
-    #[test]
-    fn parse_osc_opacity_from_int_percent() {
-        // Companion sends Int 0-100
-        assert_eq!(
-            parse_osc("/rhema/opacity", &[OscType::Int(50)]).unwrap(),
-            RemoteCommand::Opacity(0.5)
         );
     }
 

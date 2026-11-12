@@ -40,6 +40,8 @@ export default defineConfig({
         broadcast: path.resolve(__dirname, "broadcast-output.html"),
         // Browser feeds (ARCH-002): served by the LAN listener from the built app.
         feed: path.resolve(__dirname, "feed.html"),
+        // Browser operator desks (#845 G1): served by the LAN listener at /desk from the built app.
+        desk: path.resolve(__dirname, "desk.html"),
       },
     },
   },

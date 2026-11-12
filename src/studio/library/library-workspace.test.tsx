@@ -19,11 +19,13 @@ vi.mock("@tauri-apps/plugin-store", () => ({
 }))
 // What Library hands its browsers (#447: privatePreview, so browsing never reaches Live).
 const childProps = vi.hoisted(() => ({ song: null as unknown, hymn: null as unknown, media: null as unknown }))
-vi.mock("@/studio/prepare/song-library", () => ({ SongLibrary: (p: unknown) => { childProps.song = p; return null } }))
-vi.mock("@/studio/prepare/hymn-book", () => ({ HymnBook: (p: unknown) => { childProps.hymn = p; return null } }))
-vi.mock("@/studio/prepare/media-library", () => ({ MediaLibrary: (p: unknown) => { childProps.media = p; return null } }))
+vi.mock("@/studio/library/song-library", () => ({ SongLibrary: (p: unknown) => { childProps.song = p; return null } }))
+vi.mock("@/studio/library/hymn-book", () => ({ HymnBook: (p: unknown) => { childProps.hymn = p; return null } }))
+vi.mock("@/studio/library/media-library", () => ({ MediaLibrary: (p: unknown) => { childProps.media = p; return null } }))
 vi.mock("@/studio/library/library-blocks", () => ({ SongFiles: () => null }))
 vi.mock("@/studio/library/slide-library", () => ({ SlideLibrary: () => null }))
+vi.mock("@/studio/library/collections-panel", () => ({ CollectionsPanel: () => null }))
+vi.mock("@/studio/library/library-file-block", () => ({ LibraryFileBlock: () => null }))
 vi.mock("@chenglou/pretext", () => ({ clearCache: vi.fn() }))
 vi.mock("@chenglou/pretext/rich-inline", () => ({
   prepareRichInline: vi.fn(() => ({})),
@@ -288,7 +290,7 @@ describe("Library workspace", () => {
     expect(button("Choose a saved version for this moment")).toBeUndefined()
   })
 
-  it("opens the canonical versioned design editor without changing the current Live output", async () => {
+  it("links to the one My Designs in Design instead of mounting a second copy, without changing the current Live output (#806)", async () => {
     await act(async () => {
       root!.render(<LibraryWorkspace />)
     })
@@ -302,7 +304,10 @@ describe("Library workspace", () => {
     })
 
     expect(document.body.textContent).toContain("My Designs")
-    expect(document.body.textContent).toContain("Choose a starting point")
+    expect(document.body.textContent).not.toContain("Choose a starting point")
+    const link = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Open My Designs in Design")!
+    await act(async () => link.click())
+    expect(useShellStore.getState().designRequest).toBe("my-designs")
     expect(useShellStore.getState().workspace).toBe("library")
     expect(useBroadcastStore.getState().isLive).toBe(true)
     expect(useBroadcastStore.getState().liveVerse).toEqual({
@@ -488,9 +493,9 @@ describe("Library workspace", () => {
 
   it("remembers different destinations per service and restores each on A → B → A", async () => {
     await act(async () => root!.render(<LibraryWorkspace />))
-    useQueueStore.setState({
-      headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }],
-    })
+    await act(async () => useQueueStore.setState({
+      headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }, { id: "event-a2", type: "group", name: "Sermon A", at: 0, event: { schema_version: 1 } }],
+    }))
     await clickButton("Choose Library destination")
     await chooseDestination(libraryHeaderTarget("event-a"))
     await clickButton("Remember destination")
@@ -500,7 +505,7 @@ describe("Library workspace", () => {
       useServiceStore.setState({ current: { id: "service-b", title: "Sunday service B", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 0 } })
       useQueueStore.setState({
         items: [],
-        headers: [{ id: "event-b", type: "group", name: "Worship B", at: 0, event: { schema_version: 1 } }],
+        headers: [{ id: "event-b", type: "group", name: "Worship B", at: 0, event: { schema_version: 1 } }, { id: "event-b2", type: "group", name: "Sermon B", at: 0, event: { schema_version: 1 } }],
         activeIndex: null,
         addTarget: null,
       })
@@ -515,7 +520,7 @@ describe("Library workspace", () => {
       useServiceStore.setState({ current: { id: "service-a", title: "Sunday service A", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 0 } })
       useQueueStore.setState({
         items: [],
-        headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }],
+        headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }, { id: "event-a2", type: "group", name: "Sermon A", at: 0, event: { schema_version: 1 } }],
         activeIndex: null,
         addTarget: null,
       })
@@ -529,7 +534,7 @@ describe("Library workspace", () => {
     })
     useQueueStore.setState({
       items: [],
-      headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }],
+      headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }, { id: "event-a2", type: "group", name: "Sermon A", at: 0, event: { schema_version: 1 } }],
       activeIndex: null,
       addTarget: null,
     })
@@ -568,7 +573,7 @@ describe("Library workspace", () => {
     })
     useQueueStore.setState({
       items: [],
-      headers: [{ id: "event-current", type: "group", name: "Current event", at: 0, event: { schema_version: 1 } }],
+      headers: [{ id: "event-current", type: "group", name: "Current event", at: 0, event: { schema_version: 1 } }, { id: "event-other", type: "group", name: "Other event", at: 0, event: { schema_version: 1 } }],
       activeIndex: null,
       addTarget: null,
     })
@@ -601,7 +606,7 @@ describe("Library workspace", () => {
     })
     useQueueStore.setState({
       items: [],
-      headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }],
+      headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }, { id: "event-a2", type: "group", name: "Sermon A", at: 0, event: { schema_version: 1 } }],
       activeIndex: null,
       addTarget: null,
     })
@@ -658,7 +663,7 @@ describe("Library workspace", () => {
     })
     useQueueStore.setState({
       items: [],
-      headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }],
+      headers: [{ id: "event-a", type: "group", name: "Opening A", at: 0, event: { schema_version: 1 } }, { id: "event-a2", type: "group", name: "Sermon A", at: 0, event: { schema_version: 1 } }],
       activeIndex: null,
       addTarget: null,
     })
@@ -987,5 +992,75 @@ describe("Library workspace", () => {
       )
     ).toBe(false)
     expect(useBibleStore.getState().savedPassages).toEqual([])
+  })
+
+  it("adds straight to the only destination without asking, and does not store it as a choice (#820 F9)", async () => {
+    useBibleStore.setState({
+      savedPassages: [{ id: "4:43:3:16", translationId: 4, bookNumber: 43, chapter: 3, verse: 16, reference: "John 3:16" }],
+    })
+    useQueueStore.setState({
+      items: [],
+      headers: [{ id: "event-only", type: "group", name: "Opening", at: 0, event: { schema_version: 1 } }],
+      activeIndex: null,
+      addTarget: null,
+    })
+    await act(async () => root!.render(<LibraryWorkspace />))
+    // Nothing to choose: no chooser button, and the bar names where items go.
+    expect(button("Choose Library destination")).toBeUndefined()
+    expect(document.body.textContent).toContain("Library items go to End of event “Opening”.")
+    const tab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((candidate) => candidate.textContent === "Bible")!
+    await act(async () => tab.click())
+    await clickButton("Use in service")
+
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    const queue = useQueueStore.getState()
+    expect(queue.items).toHaveLength(1)
+    expect(queue.items[0]).toMatchObject({ reference: "John 3:16" })
+    expect(queue.headers[0]).toMatchObject({ id: "event-only", at: 0 })
+    expect(useLibraryTargetStore.getState().byServiceId["service-a"]).toBeUndefined()
+    expect(useShellStore.getState().workspace).toBe("prepare")
+  })
+
+  it("still asks when the run of show has more than one place an item can go (#820 F9)", async () => {
+    useBibleStore.setState({
+      savedPassages: [{ id: "4:43:3:16", translationId: 4, bookNumber: 43, chapter: 3, verse: 16, reference: "John 3:16" }],
+    })
+    useQueueStore.setState({
+      items: [],
+      headers: [
+        { id: "event-opening", type: "group", name: "Opening", at: 0, event: { schema_version: 1 } },
+        { id: "event-sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1 } },
+      ],
+      activeIndex: null,
+      addTarget: null,
+    })
+    await act(async () => root!.render(<LibraryWorkspace />))
+    const tab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((candidate) => candidate.textContent === "Bible")!
+    await act(async () => tab.click())
+    await clickButton("Use in service")
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+    expect(useQueueStore.getState().items).toEqual([])
+  })
+
+  it("offers New song only on Songs and Hymns, and New slide only on Slides (#820 F9)", async () => {
+    await act(async () => root!.render(<LibraryWorkspace />))
+    const headerButtons = () => [...document.querySelectorAll<HTMLButtonElement>("header button")].map((b) => b.textContent?.trim())
+    const open = async (label: string) => {
+      const tab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((candidate) => candidate.textContent === label)!
+      await act(async () => tab.click())
+    }
+    for (const [label, expected] of [
+      ["Songs & ministrations", "New song"],
+      ["Hymn book", "New song"],
+      ["Slides & announcements", "New slide"],
+    ] as const) {
+      await open(label)
+      expect(headerButtons()).toContain(expected)
+    }
+    for (const label of ["Bible", "Pictures & videos", "Sounds", "Import & export"]) {
+      await open(label)
+      expect(headerButtons()).not.toContain("New song")
+      expect(headerButtons()).not.toContain("New slide")
+    }
   })
 })

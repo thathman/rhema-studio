@@ -13,6 +13,7 @@ import { SongEditor } from "@/studio/prepare/song-editor"
 import { isChoir } from "@/lib/song-kind"
 import { isSongItem, type QueueItem, type SongSummary } from "@/types"
 import { captureLibraryUseInvocation, type LibraryItemUseHandler } from "@/studio/library/library-target-store"
+import { LoadFailedRow } from "@/studio/library/load-failed-row"
 
 const LICENCE_BADGE: Record<string, string> = { public_domain: "PD", ccli: "CCLI", custom: "Custom", unknown: "Licence?" }
 
@@ -39,7 +40,8 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseIte
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
   const [editing, setEditing] = useState<{ open: boolean; id: string | null; choir?: boolean }>({ open: false, id: null })
   const [kind, setKind] = useState<"all" | "songs" | "choir">("all")
-  const shown = results.filter((s) => kind === "all" || (kind === "choir") === isChoir(s.tags))
+  // A failed search lists nothing rather than the previous search's songs (#832 S8).
+  const shown = error ? [] : results.filter((s) => kind === "all" || (kind === "choir") === isChoir(s.tags))
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const search = useCallback((q: string) => {
@@ -110,7 +112,7 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseIte
         ))}
       </div>
       <ul className={cn("mt-2 min-h-0 flex-1 overflow-y-auto", cards ? "-mx-1 grid auto-rows-min grid-cols-3 gap-4 px-1 pt-2 pb-1 max-[1280px]:grid-cols-2 max-[640px]:grid-cols-1" : "flex flex-col gap-0.5")} aria-live="polite">
-        {error && <li className="px-2 py-1 text-xs text-destructive">{error}</li>}
+        {error && <LoadFailedRow as="li" what="songs" error={error} busy={searching} onRetry={() => search(query)} className={cards ? "col-span-full" : undefined} />}
         {searching && results.length === 0 && <li className="px-2 py-1 text-xs text-muted-foreground">Searching…</li>}
         {!searching && shown.length === 0 && !error && (
           <li className="px-2 py-4 text-center text-xs text-muted-foreground">

@@ -23,6 +23,7 @@ import { applyStageStyle } from "@/lib/stage-style"
 import { onThemeFontsLoaded } from "@/lib/verse-renderer"
 import { themeImageCache } from "@/lib/theme-image-cache"
 import { cn } from "@/lib/utils"
+import { TEMPLATE_LABELS } from "@/studio/design/design-vocabulary"
 import type { BroadcastTheme, LowerThird, SceneFrame, SceneLayerKind, StagePayload, Ticker, VerseRenderData } from "@/types"
 
 // Sample words for the previews: public-domain scripture and hymn text, in English and Yorùbá.
@@ -62,10 +63,8 @@ const LANGUAGES: ReadonlyArray<readonly [LookLanguage | "both" | "all", string]>
 const storage = typeof localStorage === "undefined" ? null : localStorage
 
 export interface ContextualScenePickerOptions {
-  /** Design creates a canonical document; Prepare attaches a scene copy to its selected moment. */
+  /** Prepare attaches a scene copy to its selected moment. (Design's templates use onSceneTemplate, #809 R10.) */
   onChoose: (look: Extract<LibraryLook, { kind: "scene" }>, customize: boolean) => void
-  /** In Design, a copy becomes a canonical document; in Prepare, it is attached to the current moment. */
-  purpose?: "prepare" | "design"
 }
 
 /**
@@ -120,9 +119,7 @@ export function LookLibraryView({ onOpen, scenePicker, onSceneTemplate }: {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-3xl text-sm text-muted-foreground">
-          {scenePicker?.purpose === "design"
-            ? <>Start a church-owned design from a ready-made scene. The copy is saved in My Designs; it does not change a service plan or output.</>
-            : scenePicker
+          {scenePicker
             ? <>Choose a scene for this service moment. Each choice creates a church-owned copy and updates the plan; it does not change an output.</>
             : onSceneTemplate
             ? <>Scene templates create a private, editable design in My Designs. Themes, lower thirds, tickers and stage looks remain available in their specialist tools.</>
@@ -324,18 +321,18 @@ function LookCard({ look, favourite, onFavourite, onOpen, scenePicker, onSceneTe
         <div className="mt-auto flex flex-wrap items-center gap-1 pt-1.5">
           {scenePicker && look.kind === "scene" ? (
             <>
-              <Button size="xs" onClick={() => scenePicker.onChoose(look, false)} title={scenePicker.purpose === "design" ? "Save a private editable copy in My Designs" : undefined}><PlusIcon /> {scenePicker.purpose === "design" ? "Choose template" : "Use for this moment"}</Button>
-              <Button size="xs" variant="outline" onClick={() => scenePicker.onChoose(look, true)} title={scenePicker.purpose === "design" ? "Create a canonical design copy and open it in the editor" : "Create a private design copy here. Save a draft and immutable version before adding it to this moment."}><PencilIcon /> {scenePicker.purpose === "design" ? "Customize a copy" : "Customize a copy…"}</Button>
+              <Button size="xs" onClick={() => scenePicker.onChoose(look, false)} title="Use this template for this service moment"><PlusIcon /> {TEMPLATE_LABELS.useHere}</Button>
+              <Button size="xs" variant="outline" onClick={() => scenePicker.onChoose(look, true)} title="Create a private design copy here. Save a draft and create a version before adding it to this moment."><PencilIcon /> {TEMPLATE_LABELS.customize}</Button>
             </>
           ) : onSceneTemplate && look.kind === "scene" ? (
             <>
-              <Button size="xs" onClick={() => onSceneTemplate(look, false)} title="Save a private editable copy in My Designs"><PlusIcon /> Choose template</Button>
-              <Button size="xs" variant="outline" onClick={() => onSceneTemplate(look, true)} title="Create a canonical design copy and open it in the editor"><PencilIcon /> Customize a copy</Button>
+              <Button size="xs" onClick={() => onSceneTemplate(look, false)} title="Save a private editable copy in My Designs"><PlusIcon /> {TEMPLATE_LABELS.add}</Button>
+              <Button size="xs" variant="outline" onClick={() => onSceneTemplate(look, true)} title="Create a private copy in My Designs and open it in the editor"><PencilIcon /> {TEMPLATE_LABELS.customize}</Button>
             </>
           ) : !scenePicker ? (
             <>
-              <Button size="xs" onClick={() => void addLook(look, false, onOpen)} title="Add an editable copy to your Designs"><PlusIcon /> Add a copy</Button>
-              <Button size="xs" variant="outline" onClick={() => void addLook(look, true, onOpen)} title="Create a copy and open its editor"><PencilIcon /> Customize a copy</Button>
+              <Button size="xs" onClick={() => void addLook(look, false, onOpen)} title="Add an editable copy to your Designs"><PlusIcon /> {TEMPLATE_LABELS.add}</Button>
+              <Button size="xs" variant="outline" onClick={() => void addLook(look, true, onOpen)} title="Create a copy and open its editor"><PencilIcon /> {TEMPLATE_LABELS.customize}</Button>
               {brandable(look) && <ChurchColoursButton look={look} onOpen={onOpen} />}
               {copies.length > 0 && <ResetMenu look={look} copies={copies} />}
             </>

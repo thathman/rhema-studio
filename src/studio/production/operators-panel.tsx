@@ -33,8 +33,12 @@ import { mayRunAuxTimer } from "@/stores/aux-timers-store"
 import { timeChangeWords } from "@/stores/time-change-store"
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { openPermissions } from "@/studio/permissions/navigation"
+import { useShellStore } from "@/studio/shell-store"
+import { useProductionTab } from "@/studio/production/production-tab"
+import { CARD_ORDER, deskPageFor, type DeskBlock } from "@/studio/production/desk-pages"
 import { validAspectRatioLabel } from "@/lib/group-take"
 import { EditorLibraryPreview } from "@/studio/production/editor-library-preview"
+import { EditorPlanDraft } from "@/studio/production/editor-plan-draft"
 import { deskSceneReleaseApprovalBlockReason, deskSceneTakeApprovalBlockReason } from "@/studio/present/scene-take-policy"
 
 // The join form has its own module so Rhema Studio Companion (#209) shows it without the studio's desks.
@@ -185,6 +189,7 @@ function HostCard() {
           )}
         </div>
       )}
+      {/* #800 R1: status plus the emergency pause; roles, grants and revoke are managed in Permissions. */}
       <ul aria-label="Paired operators" className="flex flex-col divide-y divide-border rounded-md border border-border">
         {rows.length === 0 && <li className="px-2.5 py-2 text-muted-foreground">No one paired yet.</li>}
         {rows.map(({ device: d, hash, name, seen }) => (
@@ -200,9 +205,9 @@ function HostCard() {
           </li>
         ))}
       </ul>
-      <p className="text-muted-foreground">Take back control stops a desk's commands at once without unpairing it; it still sees the service and stays on Talk. Give control back when it may help again.</p>
+      <p className="text-muted-foreground">Take back control stops a desk's commands at once without unpairing it; it still sees the service and stays on Talk. Roles, grants and revoking a device are in Permissions.</p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" onClick={openPermissions}>Manage access and roles…</Button>
+        <Button size="sm" variant="outline" aria-label="Manage access and roles in Permissions" onClick={openPermissions}>Manage access and roles…</Button>
         {host?.running && !confirmStop && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirmStop(true)}>Stop hosting</Button>}
         {confirmStop && (
           <span role="group" aria-label="Stop hosting?" className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 px-2 py-1">
@@ -219,12 +224,17 @@ function HostCard() {
 
 function JoinCard() {
   const status = useJoin((s) => s.status)
-  if (status !== "off") return <JoinedDesk />
+  if (status !== "off") return <JoinedDesk layout="card" />
   return <JoinForm />
 }
 
-/** A joined computer's desk: the host's service as it is now, and the controls its role allows. */
-function JoinedDesk() {
+/**
+ * A joined computer's desk: the host's service as it is now, and the controls its role allows.
+ * `card` is the block inside Operators; `page` is this computer's Live page while it is joined
+ * (#813 F2), laid out as its role's operator page (#846 G2). `menu` is the way to the rest of
+ * Rhema Studio on the page.
+ */
+export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"; menu?: React.ReactNode } = {}) {
   const status = useJoin((s) => s.status)
   const error = useJoin((s) => s.error)
   const note = useJoin((s) => s.note)
@@ -245,20 +255,32 @@ function JoinedDesk() {
     }
     : live
   const fresh = useFreshness()
-  return (
-    <Card kicker={`Joined ${live?.church || address}`} title={live?.service?.title ?? "The host's service"}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span role="status" className={cn("rounded-full px-2 py-0.5 text-[0.625rem] font-bold uppercase", status === "connected" ? "bg-primary/10 text-primary-text" : "bg-muted text-muted-foreground")}>
-          {status === "connected" ? "Connected" : status === "reconnecting" ? "Reconnecting…" : status === "refused" ? "Refused" : "Connecting…"}
-        </span>
-        {me && role !== "viewer" && <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === role)?.may}>as {me.name} · {roleLabel(role)}</span>}
-        {viewer && (!me || !REMOTE_ROLES.some((item) => item.id === me.role)) && <span role="status" className="text-muted-foreground">Role not confirmed · showing View only</span>}
-        {live && fresh.showSince && <span role="status" className="font-semibold text-confidence-mid">Last update {Math.round(fresh.sinceMs / 1000)} s ago</span>}
-        {secure === true && <span className="text-muted-foreground" title="This computer checks the host's certificate, kept when it paired: compare it with the host's card (Live → Production tools → Operators).">Encrypted{fingerprint ? ` · certificate ${certificateWords(fingerprint)}` : ""}</span>}
-        <span className="flex-1" />
-        <Button size="sm" variant="outline" onClick={() => void useJoin.getState().leave()}>Leave</Button>
-        <Button size="sm" variant="ghost" onClick={() => void useJoin.getState().leave(true)}>Forget this host</Button>
-      </div>
+  const page = deskPageFor(role)
+
+  const statusRow = (
+    <>
+      <span role="status" className={cn("rounded-full px-2 py-0.5 text-[0.625rem] font-bold uppercase", status === "connected" ? "bg-primary/10 text-primary-text" : "bg-muted text-muted-foreground")}>
+        {status === "connected" ? "Connected" : status === "reconnecting" ? "Reconnecting…" : status === "refused" ? "Refused" : "Connecting…"}
+      </span>
+      {me && role !== "viewer" && <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === role)?.may}>as {me.name} · {roleLabel(role)}</span>}
+      {viewer && (!me || !REMOTE_ROLES.some((item) => item.id === me.role)) && <span role="status" className="text-muted-foreground">Role not confirmed · showing View only</span>}
+      {live && fresh.showSince && <span role="status" className="font-semibold text-confidence-mid">Last update {Math.round(fresh.sinceMs / 1000)} s ago</span>}
+      {secure === true && <span className="text-muted-foreground" title="This computer checks the host's certificate, kept when it paired: compare it with the host's card (Live → Production tools → Operators).">Encrypted{fingerprint ? ` · certificate ${certificateWords(fingerprint)}` : ""}</span>}
+      <span className="flex-1" />
+      {layout === "card" && (
+        <Button size="sm" variant="secondary" title="Show this desk as this computer's Live page" onClick={() => {
+          useShellStore.getState().setJoinedDeskView("desk")
+          useProductionTab.setState({ open: false, requested: null })
+          useShellStore.getState().goTo("present")
+        }}>Open your desk</Button>
+      )}
+      <Button size="sm" variant="outline" onClick={() => void useJoin.getState().leave()}>Leave</Button>
+      <Button size="sm" variant="ghost" onClick={() => void useJoin.getState().leave(true)}>Forget this host</Button>
+    </>
+  )
+
+  const banners = (
+    <>
       {secure === false && status === "connected" && (
         <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2">
           <span className="font-semibold">Not encrypted.</span> <span className="text-muted-foreground">This host has no secure link, so the service and this computer's key cross the network in plain text. At the host: Settings → Remote control → Secure page for phones (https), start the listener again, then pair this computer again.</span>
@@ -277,74 +299,124 @@ function JoinedDesk() {
         </p>
       )}
       {error && <p role="alert" className="text-destructive">{error}</p>}
-      {live && (viewer ? (
-        <ViewerDesk live={viewerLiveProjection(live)} stale={fresh.stale} connected={status === "connected"} now={fresh.now} receivedAt={fresh.receivedAt} />
-      ) : (
-        <>
-          <div className="rounded-md bg-[#16242b] p-3 text-[#d6e2df]">
-            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-[#9fb2b0] uppercase">On the screens{live.program.rehearsal ? " · rehearsal" : ""}</p>
-            <p className="truncate text-sm font-semibold">{live.program.onAir ? live.program.reference ?? "On air" : "Nothing on air"}</p>
-            {live.sources.filter((s) => s.on).length > 0 && <p className="mt-1 truncate text-[0.6875rem] text-[#9fb2b0]">Live sources: {live.sources.filter((s) => s.on).map((s) => [sourceName(s.id), s.reference, activatedLabel(s)].filter(Boolean).join(" · ")).join("   ")}</p>}
-          </div>
-          <TakeAttemptNotice attempts={live.takeAttempts} />
-          {role === "screens" && <UpcomingGraphics queue={live.graphicsQueue} stale={fresh.stale} />}
-          {desks.includes("director") && <DirectorBoard readiness={live.readiness} crew={live.presence} />}
-          {desks.includes("clock") && <ClockDesk live={live} stale={fresh.stale} />}
-          {desks.includes("prepare") && <EditorLibraryPreview />}
-          {desks.includes("bible") && <BibleConsole live={live} />}
-          {desks.includes("songs") && <SongsDesk live={live} />}
-          {desks.includes("cameras") && <CameraDesk live={live} />}
-          {desks.includes("outputs") && deskLive && <OutputMap live={deskLive} />}
-          {desks.includes("outputs") && deskLive && <ScreenSources live={deskLive} />}
-          {desks.includes("scenes") && deskLive && <ScenesDesk live={deskLive} role={role} outputScope={me?.outputScope ?? []} groupTakeScope={me?.groupTakeScope ?? []} />}
-          {desks.includes("stage") && <StageDesk live={live} stale={fresh.stale} />}
-          {desks.includes("obs") && <ObsDesk live={live} />}
-          <DeskAuxTimers live={live} role={role} stale={fresh.stale} />
-          <RunOfShowView live={live} stale={fresh.stale} />
-        </>
-      ))}
-      {live && <section aria-label="Talk desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
-        <p className="font-semibold">Talk</p>
-        {viewer && fresh.stale
-          ? <p role="status" className="text-muted-foreground">Talk is paused until the host connection is current.</p>
-          : <JoinedTalk people={(live.voice ?? []).filter((p) => p.name !== me?.name)} />}
-      </section>}
-      {live && <section aria-label="Notices desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
-        <p className="font-semibold">Notices</p>
-        <NoticesPanel
-          notices={live.notices ?? []}
-          role={role}
-          me={me?.name ?? ""}
-          allowProductionActions={!viewer}
-          allowCommunications={!viewer || (status === "connected" && !fresh.stale)}
-          eventTitle={(live.event.targets ?? live.rundown).find((r) => r.id === live.event.currentId)?.reference ?? null}
-          onSend={(n) => void useJoin.getState().send({ command: "notice_send", value: { text: n.text, to: n.to, priority: n.priority, ...(live.event.currentId ? { event: live.event.currentId } : {}), ...(n.action ? { action: n.action } : {}) } })}
-          onAnswer={(id, state) => void useJoin.getState().send({ command: "notice_ack", value: { id, state } })}
-          onAction={async (a, mode) => {
-            if (viewer) return "View only desks cannot run production actions"
-            // The host checks this desk's role for each, as for its own buttons; its refusal is the
-            // reason. Preview puts a verse or a song in the main desk's Preview only.
-            if (a.kind === "camera") return null // answering is the action
-            if (a.kind === "sceneEdit") return "only the main desk answers a scene change"
-            if (a.kind === "scene") return "This request did not change any output. The host must choose one output in Scenes; group Take is unavailable."
-            const send = useJoin.getState().send
-            const results = a.kind === "bible" ? [await send({ command: mode === "preview" ? "bible_preview" : "bible_activate", value: a.value })]
-              : a.kind === "song" ? [await send({ command: mode === "preview" ? "song_preview" : "song_show", value: a.value })]
-                : a.kind === "event" ? [await send({ command: "event_start", value: a.value })]
-                  : a.kind === "wrap" ? [await send({ command: "stage_message", value: a.value.slice(0, 120) })]
-                    : []
-            if (results.length === 0) return "this action needs the main desk"
-            const refused = results.find((r) => !r.ok)
-            return refused && !refused.ok ? refused.error : null
-          }}
-          onQueue={QUEUE_ROLES.has(role) ? (a) => queueOnHost(a) : undefined}
-          scenes={viewer ? [] : live.scenes}
-          rundown={live.rundown}
-          people={live.crew ?? []}
-          cameras={viewer ? [] : live.sources.filter((s) => s.id.startsWith("camera:")).map((s) => s.reference ?? s.id.slice(7))}
-        />
-      </section>}
-    </Card>
+    </>
+  )
+
+  // Each block only when this role has it, exactly as the card showed it.
+  const blocks: Partial<Record<DeskBlock, React.ReactNode>> = !live ? {} : viewer ? {
+    viewer: <ViewerDesk live={viewerLiveProjection(live)} stale={fresh.stale} connected={status === "connected"} now={fresh.now} receivedAt={fresh.receivedAt} />,
+  } : {
+    program: (
+      <Fragment>
+        <div className="rounded-md bg-[#16242b] p-3 text-[#d6e2df]" aria-label="On the screens">
+          <p className="text-[0.625rem] font-bold tracking-[0.1em] text-[#9fb2b0] uppercase">On the screens{live.program.rehearsal ? " · rehearsal" : ""}</p>
+          <p className="truncate text-sm font-semibold">{live.program.onAir ? live.program.reference ?? "On air" : "Nothing on air"}</p>
+          {live.sources.filter((s) => s.on).length > 0 && <p className="mt-1 truncate text-[0.6875rem] text-[#9fb2b0]">Live sources: {live.sources.filter((s) => s.on).map((s) => [sourceName(s.id), s.reference, activatedLabel(s)].filter(Boolean).join(" · ")).join("   ")}</p>}
+        </div>
+        <TakeAttemptNotice attempts={live.takeAttempts} />
+      </Fragment>
+    ),
+    ...(role === "screens" ? { upcoming: <UpcomingGraphics queue={live.graphicsQueue} stale={fresh.stale} /> } : {}),
+    ...(desks.includes("director") ? { director: <DirectorBoard readiness={live.readiness} crew={live.presence} /> } : {}),
+    ...(desks.includes("clock") ? { clock: <ClockDesk live={live} stale={fresh.stale} /> } : {}),
+    ...(desks.includes("prepare") ? { prepare: <Fragment><EditorPlanDraft /><EditorLibraryPreview /></Fragment> } : {}),
+    ...(desks.includes("bible") ? { bible: <BibleConsole live={live} /> } : {}),
+    ...(desks.includes("songs") ? { songs: <SongsDesk live={live} /> } : {}),
+    ...(desks.includes("cameras") ? { cameras: <CameraDesk live={live} /> } : {}),
+    ...(desks.includes("outputs") && deskLive ? { outputs: <OutputMap live={deskLive} />, sources: <ScreenSources live={deskLive} /> } : {}),
+    ...(desks.includes("scenes") && deskLive ? { scenes: <ScenesDesk live={deskLive} role={role} outputScope={me?.outputScope ?? []} groupTakeScope={me?.groupTakeScope ?? []} /> } : {}),
+    ...(desks.includes("stage") ? { stage: <StageDesk live={live} stale={fresh.stale} /> } : {}),
+    ...(desks.includes("obs") ? { obs: <ObsDesk live={live} /> } : {}),
+    aux: <DeskAuxTimers live={live} role={role} stale={fresh.stale} />,
+    runOfShow: <RunOfShowView live={live} stale={fresh.stale} />,
+  }
+
+  const talk = live && <section aria-label="Talk desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+    <p className="font-semibold">Talk</p>
+    {viewer && fresh.stale
+      ? <p role="status" className="text-muted-foreground">Talk is paused until the host connection is current.</p>
+      : <JoinedTalk people={(live.voice ?? []).filter((p) => p.name !== me?.name)} />}
+  </section>
+  const notices = live && <section aria-label="Notices desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+    <p className="font-semibold">Notices</p>
+    <NoticesPanel
+      notices={live.notices ?? []}
+      role={role}
+      me={me?.name ?? ""}
+      allowProductionActions={!viewer}
+      allowCommunications={!viewer || (status === "connected" && !fresh.stale)}
+      eventTitle={(live.event.targets ?? live.rundown).find((r) => r.id === live.event.currentId)?.reference ?? null}
+      onSend={(n) => void useJoin.getState().send({ command: "notice_send", value: { text: n.text, to: n.to, priority: n.priority, ...(live.event.currentId ? { event: live.event.currentId } : {}), ...(n.action ? { action: n.action } : {}) } })}
+      onAnswer={(id, state) => void useJoin.getState().send({ command: "notice_ack", value: { id, state } })}
+      onAction={async (a, mode) => {
+        if (viewer) return "View only desks cannot run production actions"
+        // The host checks this desk's role for each, as for its own buttons; its refusal is the
+        // reason. Preview puts a verse or a song in the main desk's Preview only.
+        if (a.kind === "camera") return null // answering is the action
+        if (a.kind === "sceneEdit") return "only the main desk answers a scene change"
+        if (a.kind === "scene") return "This request did not change any output. The host must choose one output in Scenes; group Take is unavailable."
+        const send = useJoin.getState().send
+        const results = a.kind === "bible" ? [await send({ command: mode === "preview" ? "bible_preview" : "bible_activate", value: a.value })]
+          : a.kind === "song" ? [await send({ command: mode === "preview" ? "song_preview" : "song_show", value: a.value })]
+            : a.kind === "event" ? [await send({ command: "event_start", value: a.value })]
+              : a.kind === "wrap" ? [await send({ command: "stage_message", value: a.value.slice(0, 120) })]
+                : []
+        if (results.length === 0) return "this action needs the main desk"
+        const refused = results.find((r) => !r.ok)
+        return refused && !refused.ok ? refused.error : null
+      }}
+      onQueue={QUEUE_ROLES.has(role) ? (a) => queueOnHost(a) : undefined}
+      scenes={viewer ? [] : live.scenes}
+      rundown={live.rundown}
+      people={live.crew ?? []}
+      cameras={viewer ? [] : live.sources.filter((s) => s.id.startsWith("camera:")).map((s) => s.reference ?? s.id.slice(7))}
+    />
+  </section>
+
+  if (layout === "card") {
+    return (
+      <Card kicker={`Joined ${live?.church || address}`} title={live?.service?.title ?? "The host's service"}>
+        <div className="flex flex-wrap items-center gap-2">{statusRow}</div>
+        {banners}
+        {live && (viewer ? blocks.viewer : CARD_ORDER.map((block) => blocks[block] ? <Fragment key={block}>{blocks[block]}</Fragment> : null))}
+        {talk}
+        {notices}
+      </Card>
+    )
+  }
+
+  const show = (list: readonly DeskBlock[]) => list.map((block) => blocks[block] ? <Fragment key={block}>{blocks[block]}</Fragment> : null)
+  return (
+    <div data-desk-page={role} className="flex h-full min-h-0 flex-col text-xs">
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-topbar px-4 py-2.5">
+        {menu}
+        <div className="min-w-0">
+          <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{`Joined ${live?.church || address}`} · {page.title}</p>
+          <h1 className="truncate text-base font-bold tracking-tight">{live?.service?.title ?? "The host's service"}</h1>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{statusRow}</div>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-3 p-4 max-[800px]:p-3">
+          <p className="text-muted-foreground">{page.purpose} The host checks every command; leaving or losing this computer never stops the service.</p>
+          {banners}
+          {!live ? (
+            <p role="status" className="text-muted-foreground">{status === "refused" ? "The host refused this computer. Pair it again from the host's Connections." : "Waiting for the host's service…"}</p>
+          ) : (
+            <div className={cn("grid items-start gap-3", page.side.length > 0 || talk ? (page.sideFirst ? "lg:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]" : "lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]") : undefined)}>
+              <section aria-label={`${page.title} desk`} className={cn("flex min-w-0 flex-col gap-3", page.mainColumns && "2xl:grid 2xl:grid-cols-2 2xl:items-start", page.sideFirst && "lg:order-2")}>
+                {show(page.main)}
+              </section>
+              <aside aria-label="Service and crew" className={cn("flex min-w-0 flex-col gap-3", page.sideFirst && "lg:order-1")}>
+                {show(page.side)}
+                {talk}
+                {notices}
+              </aside>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -364,7 +436,9 @@ type ViewerLiveProjection = {
   timing?: { expectedEnd: number; timeZone?: string } | null
 }
 
-function viewerLiveProjection(live: LiveStateV1): ViewerLiveProjection {
+// Shared with the browser desk (#845 G1), so View only shows exactly this projection there too.
+// eslint-disable-next-line react-refresh/only-export-components
+export function viewerLiveProjection(live: LiveStateV1): ViewerLiveProjection {
   const row = ({ id, reference, plannedMinutes, time }: LiveStateV1["rundown"][number]): ViewerEventRow => ({
     id,
     reference,
@@ -386,7 +460,7 @@ function viewerLiveProjection(live: LiveStateV1): ViewerLiveProjection {
 }
 
 /** A View only operator follows the host's service clock and run of show without seeing production state. */
-function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: ViewerLiveProjection; stale: boolean; connected: boolean; now: number; receivedAt: number }) {
+export function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: ViewerLiveProjection; stale: boolean; connected: boolean; now: number; receivedAt: number }) {
   const [showFullOrder, setShowFullOrder] = useState(false)
   const sinceReceipt = receivedAt > 0 ? Math.max(0, now - receivedAt) : 0
   const lastTrustedElapsed = stale
@@ -482,7 +556,7 @@ function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: ViewerL
 }
 
 /** The event clock: Now, the run of show, Start / Back one, Hold / Resume (Timekeeper). `stale`: the host has not been heard from lately. */
-function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }) {
+export function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }) {
   const off = !useCanSend()
   const events = live.event.targets ?? live.rundown
   const current = events.find((r) => r.id === live.event.currentId)
@@ -532,7 +606,7 @@ const offsetText = (m: number) => (m === 0 ? "on time" : `${m > 0 ? "+" : "−"}
  * its role. Read only: nothing here starts, moves or changes anything. A fixed start has a pin, a
  * pause its own thin row (R3).
  */
-function RunOfShowView({ live, stale }: { live: LiveStateV1; stale: boolean }) {
+export function RunOfShowView({ live, stale }: { live: LiveStateV1; stale: boolean }) {
   const rows = backstageRows(live.event.targets ?? live.rundown)
   const th = "px-1.5 py-1 text-left text-[0.625rem] font-semibold tracking-wide text-muted-foreground uppercase"
   const td = "px-1.5 py-1 tabular-nums"
@@ -616,7 +690,7 @@ function DeskTimer({ live, stale }: { live: LiveStateV1; stale: boolean }) {
  * time, or whose role a timer belongs to, may start, pause and reset it; every other desk sees
  * them read only. Hidden for an older host that does not send them, and when there are none.
  */
-function DeskAuxTimers({ live, role, stale }: { live: LiveStateV1; role: string; stale: boolean }) {
+export function DeskAuxTimers({ live, role, stale }: { live: LiveStateV1; role: string; stale: boolean }) {
   const ok = useCanSend()
   const receivedAt = useJoin((s) => s.receivedAt)
   const [now, setNow] = useState(() => performance.now())
@@ -708,7 +782,7 @@ function receiverProgramFingerprint(live: LiveStateV1, outputId: string): string
   })
 }
 
-function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveStateV1; role: string; outputScope: string[]; groupTakeScope: string[] }) {
+export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: LiveStateV1; role: string; outputScope: string[]; groupTakeScope: string[] }) {
   const ok = useCanSend()
   const connectionStatus = useJoin((s) => s.status)
   const groupTakeContext = `${connectionStatus}:${live.service?.id ?? ""}`

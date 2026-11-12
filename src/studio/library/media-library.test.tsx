@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { MediaLibrary } from "./media-library"
+import { MediaLibrary } from "@/studio/library/media-library"
 import { useMediaStore } from "@/stores/media-store"
 import type { MediaAssetStatus } from "@/types/content"
 

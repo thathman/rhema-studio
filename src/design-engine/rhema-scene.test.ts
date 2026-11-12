@@ -12,7 +12,7 @@ const sermon: Scene = {
   id: "sermon", name: "Sermon", background: "#101020", fadeMs: 400, createdAt: 1, updatedAt: 2, updatedBy: "Femi",
   layers: [
     layer("bg", "color", { color: "#202040", box: { x: 0, y: 0, w: 100, h: 100 } }),
-    layer("title", "text", { text: "Sunday worship", fontFamily: "Geist Variable", fontSize: 64, fontWeight: "700", fontStyle: "italic", textAlign: "center", lineHeight: 1.15, textColor: "#ffffff", underline: true, box: { x: 10, y: 12, w: 80, h: 20 } }),
+    layer("title", "text", { text: "Sunday worship", fontFamily: "Geist Variable", fontSize: 64, fontWeight: "700", fontStyle: "italic", textAlign: "center", lineHeight: 1.15, textColor: "#ffffff", underline: true, textWiden: "right", box: { x: 10, y: 12, w: 80, h: 20 } }),
     layer("pic", "picture", { mediaId: "m1", imageUrl: "data:image/png;base64,AAAA" }),
     layer("cam", "camera", { cameraUrl: "http://192.168.1.10:8889/pulpit/whep", noSignal: "bars", noSignalName: true }),
     layer("verse", "feed", { shows: ["bible"], themeId: "t1", language: "both", fadeMs: 300, crop: { l: 1, t: 2, r: 3, b: 4 } }),
@@ -29,6 +29,12 @@ describe("Rhema scenes in the Avnac engine", () => {
     const { scene, issues } = designToScene(sceneToDesign(sermon))
     expect(issues).toEqual([])
     expect(scene).toEqual(sermon)
+  })
+
+  it("marks text saved from the editor so outputs widen an over-wide word as the editor does", () => {
+    const older = { ...sermon, layers: sermon.layers.map((l) => (l.kind === "text" ? { ...l, textWiden: undefined } : l)) }
+    const text = designToScene(sceneToDesign(older)).scene.layers.find((l) => l.kind === "text")
+    expect(text).toMatchObject({ textWiden: "right", box: { x: 10, w: 80 } })
   })
 
   it("requires a valid fixed time before a clock layer can be used in Prepare", () => {
@@ -126,7 +132,8 @@ describe("Rhema scenes in the Avnac engine", () => {
     const clip = applyCommand(design.scene, { type: "SET_NODE_CLIP_PATH", id: "oval", clipPath: { type: "ellipse", x: 0, y: 0, width: 100, height: 100 } })
     expect(designToScene({ ...design, scene: clip }).issues).toContainEqual({ nodeId: "oval", message: "Ellipse stroke and clipping cannot be saved into a Rhema scene yet" })
     const rotated = applyCommand(design.scene, { type: "ROTATE_NODE", id: "oval", rotation: 12 })
-    expect(designToScene({ ...design, scene: rotated }).issues).toContainEqual({ nodeId: "oval", message: "Layer rotation cannot be saved into a Rhema scene yet" })
+    // A turned layer saves its turn (#851 G7): outputs turn it about its box's centre.
+    expect(designToScene({ ...design, scene: rotated })).toMatchObject({ issues: [], scene: { layers: [{ id: "oval", rotation: 12 }] } })
     const flipped = designToScene({ ...design, scene: { ...design.scene, nodes: { ...design.scene.nodes, oval: { ...oval, scaleX: -1 } } } })
     expect(flipped.issues).toContainEqual({ nodeId: "oval", message: "Ellipse must keep a positive, finite scale for Rhema scene output" })
   })
@@ -225,13 +232,14 @@ describe("Rhema scenes in the Avnac engine", () => {
     ]))
   })
 
-  it("blocks saves that would drop layer rotation, and keeps the picture's crop", () => {
+  it("saves a turned, cropped picture with its turn and its crop (#851 G7)", () => {
     const design = sceneToDesign(sermon)
     let scene = design.scene
     scene = applyCommand(scene, { type: "ROTATE_NODE", id: "pic", rotation: 20 })
     scene = applyCommand(scene, { type: "SET_IMAGE_CROP", id: "pic", cropX: 12, cropY: 8, cropWidth: 180, cropHeight: 120 })
     const { issues, scene: saved } = designToScene({ ...design, scene })
-    expect(issues).toEqual([{ nodeId: "pic", message: "Layer rotation cannot be saved into a Rhema scene yet" }])
+    expect(issues).toEqual([])
+    expect(saved.layers.find((l) => l.id === "pic")?.rotation).toBe(20)
     expect(saved.layers.find((l) => l.id === "pic")?.imageDraw).toMatchObject({ cropX: 12, cropY: 8, cropWidth: 180, cropHeight: 120 })
   })
 })

@@ -5,6 +5,7 @@ import { pinnedSceneForVersion } from "@/design-engine/design-document-utils"
 import { hydrateDesignSceneMedia } from "@/lib/design-media"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useShellStore } from "@/studio/shell-store"
+import { sceneForOutput } from "@/lib/scenes"
 import type { Scene } from "@/types/scene"
 
 function messageOf(error: unknown) {
@@ -13,13 +14,19 @@ function messageOf(error: unknown) {
   return String(error)
 }
 
-/** Read-only summary of plan references and locally saved scenes pinned to a design. */
+/**
+ * Used On as a reference graph (#852 G8), shown in the design's own detail: each pinned design
+ * version, then the services and moments that pin it, and the saved scenes made from it with the
+ * outputs those scenes are on. Read-only; nothing here changes Program.
+ */
 export function DesignUsagePanel({ designId }: { designId: string }) {
   const scenes = useBroadcastStore((state) => state.scenes)
+  const outputs = useBroadcastStore((state) => state.outputs)
   const pinnedScenes = useMemo(
     () => scenes.filter((scene) => scene.design?.id === designId),
     [designId, scenes],
   )
+  const outputsForScene = (sceneId: string) => outputs.filter((output) => sceneForOutput(output, scenes)?.id === sceneId).map((output) => output.name)
   const [result, setResult] = useState<{
     designId: string
     uses: DesignUse[]
@@ -126,10 +133,13 @@ export function DesignUsagePanel({ designId }: { designId: string }) {
       {!current.loading && !current.error && current.uses.length === 0 && pinnedScenes.length === 0 && (
         <p className="mt-2 text-[0.6875rem] text-muted-foreground">No saved service or scene uses this design yet.</p>
       )}
-      {pinnedScenes.map((scene) => (
+      {usedVersions(current.uses, pinnedScenes).map((version) => [
+        <h4 key={"version:" + version} className="mt-3 text-[0.6875rem] font-semibold text-foreground">Version {version}</h4>,
+        ...pinnedScenes.filter((scene) => scene.design?.version === version).map((scene) => (
         <div key={scene.id} className="mt-2 rounded-md bg-muted/40 px-2 py-1.5">
           <p className="truncate text-[0.6875rem] font-medium">{scene.name}</p>
           <p className="text-[0.6875rem] text-muted-foreground">Saved scene · version {scene.design?.version}</p>
+          <p className="truncate text-[0.6875rem] text-muted-foreground">{outputsForScene(scene.id).length ? "On outputs: " + outputsForScene(scene.id).join(", ") : "Not on an output"}</p>
           {!versions.loading && versions.latestVersion !== null && scene.design && versions.latestVersion > scene.design.version && (
             <button
               type="button"
@@ -144,10 +154,10 @@ export function DesignUsagePanel({ designId }: { designId: string }) {
             <p role="alert" className="mt-1 text-[0.6875rem] text-destructive">{sceneUpdate.message}</p>
           )}
         </div>
-      ))}
-      {current.uses.map((use) => (
+      )),
+        ...current.uses.filter((use) => use.version === version).map((use) => (
         <div key={use.programId + ":" + use.itemId} className="mt-2 rounded-md bg-muted/40 px-2 py-1.5">
-          <p className="truncate text-[0.6875rem] font-medium">{use.title}</p>
+          <p className="truncate text-[0.6875rem] font-medium">{use.title}{use.serviceDate ? " · " + use.serviceDate : ""}</p>
           <p className="truncate text-[0.6875rem] text-muted-foreground">{use.reference} · version {use.version}</p>
           <p className="text-[0.6875rem] text-muted-foreground">
             Plan revision {use.revision} · Live approved revision {use.approvedRevision ?? "none"}
@@ -167,7 +177,16 @@ export function DesignUsagePanel({ designId }: { designId: string }) {
             Open in Prepare
           </button>
         </div>
-      ))}
+      )),
+      ])}
     </section>
   )
+}
+
+/** The design versions anything pins, newest first. */
+function usedVersions(uses: DesignUse[], scenes: Scene[]): number[] {
+  const versions = new Set<number>()
+  for (const use of uses) versions.add(use.version)
+  for (const scene of scenes) if (scene.design) versions.add(scene.design.version)
+  return [...versions].sort((a, b) => b - a)
 }

@@ -1,7 +1,9 @@
 package com.openbezal.rhema.receiver;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -22,6 +24,10 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.PixelCopy;
@@ -60,8 +66,8 @@ import java.util.List;
 /**
  * Rhema Studio Receiver (#198, formerly Rhema Receiver): shows one Rhema browser feed full screen and keeps showing it, across
  * restarts and network drops. Until it has one, it shows its address and a code; Rhema checks that
- * code with this TV (CodeProof) and only then sends the feed's link (Outputs → a browser feed → Show on
- * a Google TV), so only someone who can see this screen assigns it. OK on the remote shows the address and a new code again. It
+ * code with this TV (CodeProof) and only then sends the feed's link (Outputs → the feed's settings →
+ * Device → Show on a Google TV), so only someone who can see this screen assigns it. OK on the remote shows the address and a new code again. It
  * also tells the network it is here (mDNS/NSD), so Rhema can list it without anyone typing the address.
  *
  * Since 1.3 the link is Rhema's https page, sent encrypted with the fingerprint of Rhema's own
@@ -71,8 +77,13 @@ import java.util.List;
  * Since 1.5: the link carries this TV's own key (Rhema can revoke this TV alone; the page then
  * goes back to this code screen); GET /status says the display's size; the last picture of the
  * feed is kept (one bounded JPEG in the app's own storage) and shown at start until Rhema Studio
- * answers; and "Start with the TV" (off by default) is turned on and off on the code screen with
+ * answers; and "Start with the TV" (on after the first pairing since 1.7) is turned on and off on the code screen with
  * ← or → on the remote.
+ *
+ * Since 1.7 (the 11 Nov review): Start with the TV turns on by itself after the first pairing (#834);
+ * an output switched off in Rhema Studio shows a calm hold, not a fault (#835); no plain http and no
+ * mixed content (#840); the code screen says when a code was tried and how many tries are left
+ * (#841); and (#849) Identify TV (/identify), an edge inset for TVs that crop, and 60 Hz asked for.
  */
 public class MainActivity extends Activity {
     static final int PORT = 8095;
@@ -83,7 +94,9 @@ public class MainActivity extends Activity {
     /** How long a code still works after it leaves the screen (time to finish typing it). */
     private static final long GRACE_MS = 120_000;
     private static final String REVOKED = "This screen's link no longer works (this TV was revoked, or a new link was made in Rhema Studio). Send the feed again.";
-    private static final String NOT_THAT_RHEMA = "This TV did not open the feed: the computer answering is not the Rhema Studio that sent it, or Rhema Studio made a new certificate. Send the feed again: in Rhema Studio, Outputs → the feed → Show on a Google TV.";
+    /** Where a feed is sent to a TV in Rhema Studio (output-editor-dialog.tsx, Device tab). */
+    static final String SEND_PATH = "Outputs → the feed's settings → Device → Show on a Google TV";
+    private static final String NOT_THAT_RHEMA = "This TV did not open the feed: the main computer answering is not the Rhema Studio that sent it, or Rhema Studio made a new certificate. Send the feed again: in Rhema Studio, " + SEND_PATH + ".";
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final SecureRandom random = new SecureRandom();
@@ -123,6 +136,24 @@ public class MainActivity extends Activity {
     private final Ready ready = new Ready();
     /** Counts page loads, so an acknowledgement queued by the page before a reload is not the new one's. */
     private volatile int loads;
+    /** What the code screen says about tries of its code (#841); guarded by this. */
+    private final CodeTries tries = new CodeTries();
+    /** The calm hold for an output switched off in Rhema Studio (#835): logo and one line, full screen. */
+    private LinearLayout hold;
+    /** The page says its output is off (and it is hearing Rhema Studio). */
+    private boolean pageOff;
+    /** The output's own overscan as the page says it (#849): when set, the TV-side inset is not added. */
+    private double pageOverscan;
+    /** The inset applied around the page now (percent of each edge). */
+    private int insetShown = -1;
+    /** Identify TV (#849): the TV's name, big, for a few seconds. */
+    private TextView ident;
+    /** "Stays on this screen" after Back (BackKey). */
+    private TextView backHint;
+    /** The display's refresh rate (Hz), for GET /status. */
+    private volatile float displayHz;
+    /** At this start: the last boot's launch was refused by the TV (#834). */
+    private boolean bootBlocked;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -136,7 +167,7 @@ public class MainActivity extends Activity {
 
         info = new TextView(this);
         info.setTextColor(Color.WHITE);
-        info.setTextSize(28);
+        info.setTextSize(24);
         info.setLineSpacing(0, 1.25f);
         info.setGravity(Gravity.CENTER);
 
@@ -149,10 +180,10 @@ public class MainActivity extends Activity {
         panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setGravity(Gravity.CENTER_HORIZONTAL);
-        panel.setBackgroundColor(Color.argb(230, 0, 0, 0));
+        panel.setBackgroundColor(PANEL_BLACK);
         panel.setPadding(80, 48, 80, 60);
-        LinearLayout.LayoutParams logoSize = new LinearLayout.LayoutParams((int) (360 * dp), -2);
-        logoSize.bottomMargin = (int) (16 * dp);
+        LinearLayout.LayoutParams logoSize = new LinearLayout.LayoutParams((int) (300 * dp), -2);
+        logoSize.bottomMargin = (int) (12 * dp);
         panel.addView(logo, logoSize);
         panel.addView(info, new LinearLayout.LayoutParams(-2, -2));
 
@@ -167,24 +198,83 @@ public class MainActivity extends Activity {
         note.setPadding(24, 10, 24, 10);
         note.setVisibility(View.GONE);
 
+        // The hold for an output that is off (#835): the same logo, one calm line, no countdown or error.
+        ImageView holdLogo = new ImageView(this);
+        holdLogo.setImageResource(R.drawable.receiver_logo);
+        holdLogo.setAdjustViewBounds(true);
+        holdLogo.setAlpha(0.85f);
+        holdLogo.setContentDescription("Rhema Studio Receiver");
+        TextView holdWords = new TextView(this);
+        holdWords.setTextColor(Color.rgb(220, 220, 220));
+        holdWords.setTextSize(26);
+        holdWords.setGravity(Gravity.CENTER);
+        holdWords.setText("This screen is off in Rhema Studio\n\nIt comes on by itself when the output is turned on.");
+        hold = new LinearLayout(this);
+        hold.setOrientation(LinearLayout.VERTICAL);
+        hold.setGravity(Gravity.CENTER);
+        hold.setBackgroundColor(Color.BLACK);
+        LinearLayout.LayoutParams holdLogoSize = new LinearLayout.LayoutParams((int) (300 * dp), -2);
+        holdLogoSize.bottomMargin = (int) (24 * dp);
+        hold.addView(holdLogo, holdLogoSize);
+        hold.addView(holdWords, new LinearLayout.LayoutParams(-2, -2));
+        hold.setVisibility(View.GONE);
+
+        ident = new TextView(this);
+        ident.setTextColor(Color.WHITE);
+        ident.setTextSize(64);
+        ident.setGravity(Gravity.CENTER);
+        ident.setBackgroundColor(IDENT_BLUE);
+        ident.setPadding((int) (48 * dp), (int) (28 * dp), (int) (48 * dp), (int) (28 * dp));
+        ident.setVisibility(View.GONE);
+
         root = new FrameLayout(this);
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
         root.addView(still, new FrameLayout.LayoutParams(-1, -1));
+        root.addView(hold, new FrameLayout.LayoutParams(-1, -1));
         FrameLayout.LayoutParams corner = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
         corner.topMargin = (int) (16 * dp);
         corner.rightMargin = (int) (16 * dp);
         root.addView(note, corner);
         root.addView(panel, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+        root.addView(ident, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+        // Back on the remote (BackKey): a small line at the foot of the screen, for a few seconds.
+        backHint = new TextView(this);
+        backHint.setTextColor(Color.WHITE);
+        backHint.setTextSize(16);
+        backHint.setBackgroundColor(Color.argb(170, 0, 0, 0));
+        backHint.setPadding((int) (16 * dp), (int) (8 * dp), (int) (16 * dp), (int) (8 * dp));
+        backHint.setText("Rhema Studio Receiver stays on this screen. Press Home to leave.");
+        backHint.setVisibility(View.GONE);
+        FrameLayout.LayoutParams foot = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        foot.bottomMargin = (int) (24 * dp);
+        root.addView(backHint, foot);
         setContentView(root);
         immersive();
+        // The inset follows the screen's size (it is a share of each edge).
+        root.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(View v, int l, int t, int r, int b, int ol, int ot, int or, int ob) {
+                if (r - l != or - ol || b - t != ob - ot) {
+                    insetShown = -1;
+                    applyInset();
+                }
+            }
+        });
+
+        // Start with the TV (#834): was the last boot's launch refused? And a TV already paired turns it on.
+        bootBlocked = BootStart.launchWasBlocked(prefs.getLong("bootTriedAt", -1), SystemClock.elapsedRealtime());
+        prefs.edit().remove("bootTriedAt").apply();
 
         newCode();
         // A feed sent by Rhema before 1.3 (a plain http link, no certificate): sent again, it comes secure.
         if (shown() != null && (!Guard.feedLink(shown()) || !Guard.fingerprint(prefs.getString("pin", null)))) {
             prefs.edit().remove("url").remove("pin").apply();
-            problem = "Rhema Studio Receiver was updated and now opens only Rhema Studio's secure page. Send the feed again: in Rhema Studio, Outputs → the feed → Show on a Google TV.";
+            problem = "Rhema Studio Receiver was updated and now opens only Rhema Studio's secure page. Send the feed again: in Rhema Studio, " + SEND_PATH + ".";
         }
+        askFrameRate();
+        // After the request: /status says the rate the TV runs at (measured again on focus, once it switched).
         measureDisplay();
+        if (BootStart.turnOnAfterPairing(bootChosen(), startsWithTv(), shown() != null)) setStartWithTv(true);
         server = new ShowServer(PORT, this);
         server.start();
         advertise();
@@ -197,6 +287,7 @@ public class MainActivity extends Activity {
         } else {
             showInfo(true);
         }
+        ui.post(watchPage);
     }
 
     /** The feed page's WebView, with its checks (a new one when the renderer dies). */
@@ -208,9 +299,10 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         // Cameras in scenes are video: they start by themselves, muted (no echo in the room).
         s.setMediaPlaybackRequiresUserGesture(false);
-        // The feed page is https now, but cameras in scenes still ask the camera router over plain
-        // http (as before); nothing secret goes there, and the browser sends it no link.
-        s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        // No mixed content (#840): the feed page is https, and cameras on Rhema Studio's own router play
+        // through it (/api/v1/feed/<id>/camera/<name>/whep, src/lib/whep.ts). A camera relayed by
+        // another computer over plain http does not play here, as in any browser on the https page.
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         w.setWebChromeClient(new WebChromeClient());
         w.setWebViewClient(new WebViewClient() {
             @Override
@@ -314,6 +406,9 @@ public class MainActivity extends Activity {
         root.removeView(dead);
         dead.destroy();
         root.addView(web, 0, new FrameLayout.LayoutParams(-1, -1));
+        // The new page keeps the edge inset (#849).
+        insetShown = -1;
+        applyInset();
         // Acknowledgements queued by the dead page are not the new one's.
         loads++;
         ui.removeCallbacks(noFrame);
@@ -377,6 +472,7 @@ public class MainActivity extends Activity {
         code = new CodeProof.Code(String.format("%06d", random.nextInt(1_000_000)));
         triesLeft = MAX_TRIES;
         pending.clear();
+        tries.clear();
     }
 
     private synchronized void codeOnScreen(boolean on) {
@@ -463,7 +559,8 @@ public class MainActivity extends Activity {
     private final Runnable noFrame = new Runnable() {
         @Override
         public void run() {
-            if (shown() == null || problem != null) return;
+            // An output that is off shows its hold (#835): nothing is wrong, nothing to load again.
+            if (shown() == null || problem != null || pageOff) return;
             long wait = ready.noFrame();
             if (wait < 0) return;
             // Also what an output that is off looks like before its first change (the page acknowledges
@@ -532,7 +629,8 @@ public class MainActivity extends Activity {
 
     /** Only of a page that has drawn (#604): a loaded-but-black page is never kept. */
     private boolean stillWanted(String url) {
-        return url != null && ready.drawn() && problem == null && !certRefused && panel.getVisibility() != View.VISIBLE && still.getVisibility() != View.VISIBLE;
+        return url != null && ready.drawn() && problem == null && !certRefused && !pageOff && panel.getVisibility() != View.VISIBLE && still.getVisibility() != View.VISIBLE
+                && hold.getVisibility() != View.VISIBLE && ident.getVisibility() != View.VISIBLE && backHint.getVisibility() != View.VISIBLE;
     }
 
     private void takeStill(final String url) {
@@ -605,6 +703,7 @@ public class MainActivity extends Activity {
             Display.Mode m = d.getMode();
             displayW = m.getPhysicalWidth();
             displayH = m.getPhysicalHeight();
+            displayHz = m.getRefreshRate();
         } catch (Throwable e) {
             displayW = getResources().getDisplayMetrics().widthPixels;
             displayH = getResources().getDisplayMetrics().heightPixels;
@@ -616,14 +715,196 @@ public class MainActivity extends Activity {
         return new int[] {displayW, displayH};
     }
 
+    /** For GET /status: the display's refresh rate in Hz (0 when not known). */
+    float displayHz() {
+        return displayHz;
+    }
+
+    /**
+     * Asks for 60 Hz at the TV's present resolution when the TV runs slower (#849 G5): the page draws
+     * at the display's rate, and a TV left at 24 or 30 Hz makes lyrics and cameras stutter. Android
+     * decides (the TV may refuse, or not have the mode); nothing else changes.
+     */
+    private void askFrameRate() {
+        try {
+            Display d = getWindowManager().getDefaultDisplay();
+            Display.Mode now = d.getMode();
+            Display.Mode[] modes = d.getSupportedModes();
+            int n = modes.length;
+            int[] ids = new int[n];
+            int[] ws = new int[n];
+            int[] hs = new int[n];
+            float[] hz = new float[n];
+            for (int i = 0; i < n; i++) {
+                ids[i] = modes[i].getModeId();
+                ws[i] = modes[i].getPhysicalWidth();
+                hs[i] = modes[i].getPhysicalHeight();
+                hz[i] = modes[i].getRefreshRate();
+            }
+            int want = ScreenFit.preferredMode(now.getPhysicalWidth(), now.getPhysicalHeight(), now.getRefreshRate(), ids, ws, hs, hz);
+            if (want < 0) return;
+            WindowManager.LayoutParams a = getWindow().getAttributes();
+            a.preferredDisplayModeId = want;
+            getWindow().setAttributes(a);
+        } catch (Throwable e) {
+            // An older or unusual TV: it stays as it is.
+        }
+    }
+
+    /** The TV-side edge inset (percent of each edge), for TVs that crop when the output has none (#849). */
+    private int tvInset() {
+        return ScreenFit.tvInset(prefs.getInt("inset", 0));
+    }
+
+    /** Keeps the page inside the inset: the output's own overscan if it has one, else the TV's. */
+    private void applyInset() {
+        int pct = ScreenFit.applied(pageOverscan, tvInset());
+        int w = root.getWidth();
+        int h = root.getHeight();
+        if (pct == insetShown || w <= 0 || h <= 0) return;
+        insetShown = pct;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) web.getLayoutParams();
+        int x = w * pct / 100;
+        int y = h * pct / 100;
+        lp.setMargins(x, y, x, y);
+        web.setLayoutParams(lp);
+    }
+
+    /**
+     * Every second while a feed shows: whether the page says its output is off (#835) and the output's
+     * own overscan (#849). An older page says neither; a page that has lost Rhema Studio is not "off".
+     */
+    private final Runnable watchPage = new Runnable() {
+        @Override
+        public void run() {
+            ui.removeCallbacks(watchPage);
+            ui.postDelayed(watchPage, 1_000);
+            // No feed, or something wrong (its words show instead): no hold.
+            if (shown() == null || problem != null) {
+                showHold(false);
+                if (shown() == null) return;
+            }
+            final WebView asked = web;
+            asked.evaluateJavascript(ScreenFit.PAGE_QUERY, new ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String answer) {
+                    if (asked != web || isDestroyed()) return;
+                    int off = ScreenFit.pageOffState(answer);
+                    if (off < 0) return;
+                    double was = pageOverscan;
+                    pageOverscan = ScreenFit.pageOverscan(answer);
+                    applyInset();
+                    if (was != pageOverscan && panel.getVisibility() == View.VISIBLE) renderInfo();
+                    showHold(off == 1);
+                }
+            });
+        }
+    };
+
+    /** The calm hold on or off (only while nothing is wrong: a problem says itself). */
+    private void showHold(boolean off) {
+        boolean on = off && problem == null && shown() != null;
+        if (on == pageOff && (hold.getVisibility() == View.VISIBLE) == on) return;
+        pageOff = on;
+        if (on) {
+            hold.setVisibility(View.VISIBLE);
+            note.setVisibility(View.GONE);
+            // Nothing is wrong and nothing needs loading again: the output is off.
+            ui.removeCallbacks(noFrame);
+            ui.removeCallbacks(reload);
+        } else {
+            hold.setVisibility(View.GONE);
+            // Turned on again: the page's next frame takes the kept picture off (frameDrawn); if none comes, noFrame.
+            if (shown() != null && problem == null && !ready.drawn()) {
+                ui.removeCallbacks(noFrame);
+                ui.postDelayed(noFrame, Ready.FIRST_FRAME_MS);
+            }
+        }
+    }
+
+    /**
+     * Identify TV (#849, from the server thread): this TV's name and address, big, for a few seconds,
+     * so someone at the main computer can tell which TV in the room is which. Any device can reach
+     * this, so (IdentifyGate) a flash is never extended, is followed by a quiet spell, and each
+     * computer may ask once per 10 s; and while a feed shows, only the computer that sent it may ask,
+     * so no other device puts words over a service. The pairing code is never covered: with the code
+     * screen up, the code screen itself lights up instead. Returns the name, or null with why[0] and
+     * the HTTP status in status[0].
+     */
+    String identify(String peer, String[] why, int[] status) {
+        String from = prefs.getString("host", null);
+        // A feed sent before 1.7 kept no sender: the computer its saved link points to may.
+        String link = shown();
+        if (link != null && !IdentifyGate.mayAskOverFeed(from, Uri.parse(link).getHost(), peer)) {
+            status[0] = 403;
+            why[0] = "This TV is showing a feed: only the Rhema Studio that sent it can identify it";
+            return null;
+        }
+        if (!identifyGate.allow(peer, SystemClock.elapsedRealtime())) {
+            status[0] = 429;
+            why[0] = "This TV was just identified: try again in a few seconds";
+            return null;
+        }
+        ui.post(new Runnable() {
+            @Override
+            public void run() {
+                if (panel.getVisibility() == View.VISIBLE) {
+                    // The code screen already says the TV's name: light it up, the code stays readable.
+                    panel.setBackgroundColor(IDENT_BLUE);
+                } else {
+                    String ip = address();
+                    ident.setText(name() + (ip == null ? "" : "\n" + ip));
+                    ident.setVisibility(View.VISIBLE);
+                }
+                ui.removeCallbacks(identOff);
+                ui.postDelayed(identOff, IdentifyGate.SHOW_MS);
+            }
+        });
+        return name();
+    }
+
+    private static final int PANEL_BLACK = Color.argb(230, 0, 0, 0);
+    private static final int IDENT_BLUE = Color.argb(235, 20, 60, 140);
+    private final IdentifyGate identifyGate = new IdentifyGate();
+
+    private final Runnable identOff = new Runnable() {
+        @Override
+        public void run() {
+            ident.setVisibility(View.GONE);
+            panel.setBackgroundColor(PANEL_BLACK);
+        }
+    };
+
     /** Whether the app opens by itself when the TV starts (off unless turned on here). */
     private boolean startsWithTv() {
         return prefs.getBoolean("boot", false);
     }
 
-    /** ← or → on the code screen: Start with the TV on or off (the boot receiver with it). */
+    /**
+     * Whether a person chose Start with the TV on or off: this release marks it, and before 1.7 the
+     * "boot" setting was written only by that choice, so an Off from 1.6 is never forced On (#834).
+     */
+    private boolean bootChosen() {
+        return BootStart.chosen(prefs.getBoolean("bootChosen", false), prefs.contains("boot"));
+    }
+
+    /** ← or → on the code screen: Start with the TV on or off; the person's choice is kept (#834). */
     private void toggleStartWithTv() {
         boolean on = !startsWithTv();
+        prefs.edit().putBoolean("bootChosen", true).apply();
+        setStartWithTv(on);
+        // Turned on where the TV blocks it: its setting, where the TV has one (it comes back here after).
+        if (on && startsWithTv() && !mayOpenByItself()) {
+            try {
+                startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+            } catch (ActivityNotFoundException | SecurityException noSetting) {
+                // Google TV often hides it: the code screen says how to allow it instead.
+            }
+        }
+    }
+
+    /** Start with the TV on or off, the boot receiver with it. */
+    private void setStartWithTv(boolean on) {
         prefs.edit().putBoolean("boot", on).apply();
         try {
             getPackageManager().setComponentEnabledSetting(new ComponentName(this, BootReceiver.class),
@@ -631,6 +912,20 @@ public class MainActivity extends Activity {
         } catch (RuntimeException e) {
             prefs.edit().putBoolean("boot", false).apply();
         }
+    }
+
+    /**
+     * Whether Android lets this app open by itself after a start (#834): before Android 10 always;
+     * from Android 10 only with "Display over other apps" allowed (the background-launch exemption).
+     */
+    private boolean mayOpenByItself() {
+        return Build.VERSION.SDK_INT < 29 || Settings.canDrawOverlays(this);
+    }
+
+    /** ↑ or ↓ on the code screen: the TV-side edge inset one percent more or less (#849). */
+    private void stepInset(int by) {
+        prefs.edit().putInt("inset", ScreenFit.tvInset(tvInset() + by)).apply();
+        applyInset();
     }
 
     private final Runnable reload = new Runnable() {
@@ -651,20 +946,59 @@ public class MainActivity extends Activity {
 
     /** The address and code; kept up until there is something to show, or for a while. */
     private void showInfo(boolean stay) {
-        String ip = address();
-        StringBuilder t = new StringBuilder();
-        if (problem != null) t.append(problem).append("\n\n");
-        t.append(shown() == null ? "To show a screen here: in Rhema Studio, Outputs → a browser feed → Show on a Google TV.\n\n" : "To show another screen: in Rhema Studio, Outputs → a browser feed → Show on a Google TV.\n\n");
-        t.append("TV name   ").append(name()).append("\n");
-        t.append("TV address   ").append(ip == null ? "not on a network" : ip).append("\n");
-        t.append(triesLeft > 0 ? "Code   " + code.digits : "Too many tries: press OK for a new code").append("\n\n");
-        t.append("Start with the TV   ").append(startsWithTv() ? "On" : "Off").append("   (← or → to change)");
-        info.setText(t);
+        renderInfo();
+        // Identify TV never covers the code (#849): its overlay goes when the code screen comes up.
+        ident.setVisibility(View.GONE);
         panel.setVisibility(View.VISIBLE);
         codeOnScreen(true);
         ui.removeCallbacks(hide);
         if (!stay) ui.postDelayed(hide, INFO_MS);
     }
+
+    /** The code screen's words, as they are now. */
+    private void renderInfo() {
+        String ip = address();
+        // Fits a 1080p TV with every line present (device check, 1.7): the settings are a smaller block.
+        SpannableStringBuilder t = new SpannableStringBuilder();
+        if (problem != null) t.append(problem).append("\n\n");
+        t.append(shown() == null ? "To show a screen here: in Rhema Studio on the main computer, " : "To show another screen: in Rhema Studio on the main computer, ").append(SEND_PATH).append(".\n\n");
+        t.append("TV   ").append(name()).append("   ·   ").append(ip == null ? "not on a network" : ip).append("\n");
+        String tried;
+        long changes;
+        synchronized (this) {
+            t.append(triesLeft > 0 ? "Code   " + code.digits : "Too many tries: press OK for a new code").append("\n");
+            tried = tries.words(SystemClock.elapsedRealtime());
+            changes = tries.changesAt();
+        }
+        // A code tried in Rhema Studio (#841): said here, never what was typed.
+        if (tried != null) t.append(tried).append("\n");
+        ui.removeCallbacks(refreshInfo);
+        if (changes > SystemClock.elapsedRealtime()) ui.postAtTime(refreshInfo, changes + 50);
+        t.append("\n");
+        int small = t.length();
+        t.append("Start with the TV   ").append(startsWithTv() ? "On" : "Off").append("   (← →)");
+        if (startsWithTv() && !mayOpenByItself()) {
+            t.append("\n").append(bootBlocked ? "Blocked at the last start: " : "May be blocked: ")
+                    .append("allow \"Display over other apps\" (Settings → Apps → Special app access)");
+        }
+        double own = pageOverscan;
+        t.append("\nEdge inset   ").append(own > 0 ? "set in Rhema Studio (" + trim(own) + "%)" : tvInset() + "%   (↑ ↓, for a TV that cuts off the edges)");
+        t.setSpan(new RelativeSizeSpan(0.72f), small, t.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        t.setSpan(new ForegroundColorSpan(Color.rgb(190, 190, 190)), small, t.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        info.setText(t);
+    }
+
+    private static String trim(double v) {
+        return v == Math.rint(v) ? String.valueOf((long) v) : String.valueOf(v);
+    }
+
+    /** The code screen's words again when they change (a code check's wait running out), if it is up. */
+    private final Runnable refreshInfo = new Runnable() {
+        @Override
+        public void run() {
+            if (panel.getVisibility() == View.VISIBLE) renderInfo();
+        }
+    };
 
     /** Before the page sees it: the feed page has focus and would take OK for itself. */
     @Override
@@ -682,8 +1016,54 @@ public class MainActivity extends Activity {
             }
             return true;
         }
+        // On the code screen only: ↑ or ↓ changes the TV-side edge inset (#849).
+        if ((k == KeyEvent.KEYCODE_DPAD_UP || k == KeyEvent.KEYCODE_DPAD_DOWN) && panel.getVisibility() == View.VISIBLE) {
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                stepInset(k == KeyEvent.KEYCODE_DPAD_UP ? 1 : -1);
+                showInfo(shown() == null || problem != null);
+            }
+            return true;
+        }
+        // Back never leaves the app (device test, 1.7): the congregation would see the TV's home screen.
+        if (k == KeyEvent.KEYCODE_BACK) {
+            if (event.getAction() == KeyEvent.ACTION_UP) backPressed();
+            return true;
+        }
         return super.dispatchKeyEvent(event);
     }
+
+    /** Any other way Back arrives (a gesture, or a key the page did not pass on): the same rule. */
+    @Override
+    public void onBackPressed() {
+        backPressed();
+    }
+
+    /** Back (BackKey): the code screen gives way to the feed, as OK does; otherwise stay. */
+    private void backPressed() {
+        boolean feedReady;
+        synchronized (this) {
+            feedReady = shown() != null && problem == null && triesLeft > 0;
+        }
+        switch (BackKey.decide(panel.getVisibility() == View.VISIBLE, feedReady)) {
+            case BackKey.HIDE_PANEL:
+                hideInfo();
+                break;
+            case BackKey.STAY_HINT:
+                backHint.setVisibility(View.VISIBLE);
+                ui.removeCallbacks(backHintOff);
+                ui.postDelayed(backHintOff, BackKey.HINT_MS);
+                break;
+            default:
+                break;
+        }
+    }
+
+    private final Runnable backHintOff = new Runnable() {
+        @Override
+        public void run() {
+            backHint.setVisibility(View.GONE);
+        }
+    };
 
     /** OK: hide the address and code, or show them with a new code (also after too many wrong ones). */
     private synchronized void okPressed() {
@@ -808,6 +1188,7 @@ public class MainActivity extends Activity {
             return null;
         }
         triesLeft--;
+        tries.tried(SystemClock.elapsedRealtime(), triesLeft);
         if (triesLeft == 0) {
             ui.post(new Runnable() {
                 @Override
@@ -815,6 +1196,9 @@ public class MainActivity extends Activity {
                     showInfo(shown() == null);
                 }
             });
+        } else {
+            // Said on the code screen when it is up (#841); a TV showing its feed is not interrupted.
+            ui.post(refreshInfo);
         }
         CodeProof.Answer a;
         try {
@@ -851,6 +1235,8 @@ public class MainActivity extends Activity {
         }
         if (!Guard.feedLink(url) || !Guard.fingerprint(pin)) return "That is not a Rhema Studio secure feed link (update Rhema Studio if this keeps happening)";
         newCode();
+        // The code worked: no "a code was tried" left on the code screen (#841; newCode clears it too).
+        tries.clear();
         ui.post(new Runnable() {
             @Override
             public void run() {
@@ -863,7 +1249,10 @@ public class MainActivity extends Activity {
                     // (frameDrawn, checked against the new link and this load) takes the cover off.
                     still.setVisibility(View.VISIBLE);
                 }
-                prefs.edit().putString("url", url).putString("pin", pin).apply();
+                // Also who sent it: only that computer may Identify this TV over its feed (#849).
+                prefs.edit().putString("url", url).putString("pin", pin).putString("host", peer).apply();
+                // Paired: a TV that loses power comes back to this feed by itself (#834), unless a person chose Off.
+                if (BootStart.turnOnAfterPairing(bootChosen(), startsWithTv(), true)) setStartWithTv(true);
                 problem = null;
                 certRefused = false;
                 ui.removeCallbacks(reload);

@@ -58,6 +58,49 @@ const TALLY_FRESH: Duration = Duration::from_secs(15);
 /// A phone's battery and heat report older than this is not shown (it reports every 30 s, #213).
 const PHONE_FRESH: Duration = Duration::from_secs(95);
 
+/// A picture size and bitrate the host suggests to Rhema Studio Cam for one camera (#838): the
+/// most the phone should send, e.g. for a TV whose player is slow at a high bitrate. The phone
+/// applies it as a ceiling over its own choice (and may be told not to follow it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct QualitySuggestion {
+    /// Its id as the host's settings keep it ("tv720").
+    pub id: &'static str,
+    /// The tallest picture (720 = 1280×720).
+    pub height: u32,
+    /// The highest bitrate, Mbit/s.
+    pub mbps: u32,
+    /// In words, for the phone to show.
+    pub words: &'static str,
+}
+
+/// The qualities the host can suggest, by id (as `src/lib/cameras.ts` lists them); anything else
+/// (absent, "phone") leaves it to the phone.
+#[must_use]
+pub fn quality_suggestion(id: &str) -> Option<QualitySuggestion> {
+    Some(match id {
+        "tv720" => QualitySuggestion { id: "tv720", height: 720, mbps: 4, words: "TV-friendly 720p, lower bitrate" },
+        "hd1080" => QualitySuggestion { id: "hd1080", height: 1080, mbps: 8, words: "1080p, moderate bitrate" },
+        "light" => QualitySuggestion { id: "light", height: 720, mbps: 2, words: "Light 720p for a busy network" },
+        _ => return None,
+    })
+}
+
+/// What the host says about a camera besides its secret: the name the operator gave it, shown on the
+/// phone (#850), and the quality it suggests (#838).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CameraInfo {
+    pub label: String,
+    pub quality: Option<QualitySuggestion>,
+}
+
+impl CameraInfo {
+    /// The label (at most 40 characters, no control characters) and a known quality id, or none.
+    #[must_use]
+    pub fn new(label: &str, quality: Option<&str>) -> Self {
+        Self { label: label.chars().filter(|c| !c.is_control()).take(40).collect::<String>().trim().to_string(), quality: quality.and_then(quality_suggestion) }
+    }
+}
+
 /// Where the router listens for WHIP, and the encrypted reading link companions use.
 #[derive(Clone)]
 pub struct RouterTarget {
@@ -244,6 +287,11 @@ pub struct CameraHub {
     desks: RwLock<HashMap<IpAddr, String>>,
     /// Each phone's last battery and heat report, by camera name (#213).
     phones: RwLock<HashMap<String, (Instant, PhoneStatus)>>,
+    /// Each camera's label and suggested quality, by name (#838, #850).
+    info: RwLock<HashMap<String, CameraInfo>>,
+    /// The app has given the camera list at least once since Rhema started: until then an unknown
+    /// camera may only not be loaded yet, so a phone is not told it was removed (#836).
+    loaded: std::sync::atomic::AtomicBool,
 }
 
 // Never print a camera's secret (HttpConfig is Debug).
@@ -276,6 +324,42 @@ impl CameraHub {
         // A removed camera's phone report goes with it.
         self.phones.write().unwrap_or_else(PoisonError::into_inner).retain(|n, _| map.contains_key(n));
         *self.cameras.write().unwrap_or_else(PoisonError::into_inner) = map;
+        self.loaded.store(true, std::sync::atomic::Ordering::Release);
+    }
+
+    /// Each camera's label and suggested quality (#838, #850); bad names are dropped.
+    pub fn set_info(&self, list: Vec<(String, CameraInfo)>) {
+        *self.info.write().unwrap_or_else(PoisonError::into_inner) = list.into_iter().filter(|(n, _)| valid_camera_name(n)).collect();
+    }
+
+    /// Whether the app has given the camera list since Rhema started (#836).
+    #[must_use]
+    pub fn loaded(&self) -> bool {
+        self.loaded.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Whether the router is receiving this camera now: connected and something arrived within 3 s
+    /// (its last look, every 2 s while it runs). False while the router is off.
+    #[must_use]
+    pub fn receiving(&self, name: &str) -> bool {
+        self.router().is_some() && self.watch.read().unwrap_or_else(PoisonError::into_inner).iter().any(|w| w.name == name && w.live && !w.frozen)
+    }
+
+    /// What the phone is told about itself besides its tally (#838, #850): the host's name for it,
+    /// whether Rhema receives its picture, and the quality the host suggests (absent: the phone's
+    /// own). Old Cams read only the tally's two fields, so these are extra and optional.
+    #[must_use]
+    pub fn phone_answer(&self, name: &str) -> serde_json::Map<String, serde_json::Value> {
+        let info = self.info.read().unwrap_or_else(PoisonError::into_inner).get(name).cloned().unwrap_or_default();
+        let mut o = serde_json::Map::new();
+        if !info.label.is_empty() {
+            o.insert("name".into(), info.label.into());
+        }
+        o.insert("receiving".into(), self.receiving(name).into());
+        if let Some(q) = info.quality {
+            o.insert("suggest".into(), serde_json::json!({ "id": q.id, "height": q.height, "mbps": q.mbps, "words": q.words }));
+        }
+        o
     }
 
     /// A camera's phone reported its battery and heat, signed in with the camera's own secret
@@ -466,6 +550,12 @@ impl CameraHub {
         }
         let answer = resp.bytes().await.unwrap_or_default();
         (StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY), [(axum::http::header::CONTENT_TYPE, "application/sdp")], answer).into_response()
+    }
+
+    /// A relayed reader held by `holder`, as `relay_offer` records one (tests without a router).
+    #[cfg(test)]
+    pub(crate) fn relay_hold_for_test(&self, tag: &str, holder: RelayHolder, name: &str) {
+        self.relayed.write().unwrap_or_else(PoisonError::into_inner).insert(tag.to_string(), RelaySession { holder, name: name.to_string(), at: Instant::now() });
     }
 
     /// How many relayed readers of this camera are still allowed.
@@ -735,6 +825,31 @@ mod tests {
         // Removing the camera drops its report.
         hub.set(&[("choir".into(), "fedcba9876543210".into())]);
         assert!(hub.phone("pulpit").is_none());
+    }
+
+    #[test]
+    fn a_phone_is_told_its_name_whether_it_is_received_and_the_suggested_quality() {
+        let hub = CameraHub::default();
+        assert!(!hub.loaded(), "nothing loaded yet: an unknown camera may just not be listed yet");
+        hub.set_info(vec![
+            ("pulpit".into(), CameraInfo::new("  Pulpit\u{7} wide ", Some("tv720"))),
+            ("choir".into(), CameraInfo::new("Choir", Some("nonsense"))),
+            ("Bad".into(), CameraInfo::new("x", None)),
+        ]);
+        hub.set(&[("pulpit".into(), "0123456789abcdef".into()), ("choir".into(), "fedcba9876543210".into())]);
+        assert!(hub.loaded());
+        let a = hub.phone_answer("pulpit");
+        assert_eq!(a["name"], "Pulpit wide");
+        assert_eq!(a["suggest"], serde_json::json!({ "id": "tv720", "height": 720, "mbps": 4, "words": "TV-friendly 720p, lower bitrate" }));
+        assert_eq!(a["receiving"], false, "the router is off");
+        assert!(hub.phone_answer("choir").get("suggest").is_none(), "an unknown quality leaves it to the phone");
+        assert!(hub.phone_answer("Bad").get("name").is_none());
+        hub.set_router(Some(target()));
+        hub.set_watch(vec![CameraWatch { name: "pulpit".into(), live: true, ..CameraWatch::default() }, CameraWatch { name: "choir".into(), live: true, frozen: true, ..CameraWatch::default() }]);
+        assert!(hub.receiving("pulpit"));
+        assert!(!hub.receiving("choir"), "connected but nothing arriving is not receiving");
+        assert_eq!(hub.phone_answer("pulpit")["receiving"], true);
+        assert_eq!(CameraInfo::new(&"x".repeat(60), None).label.len(), 40);
     }
 
     #[test]

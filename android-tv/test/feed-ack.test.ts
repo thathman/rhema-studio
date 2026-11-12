@@ -84,6 +84,33 @@ describe("the feed page acknowledges only what it drew (#604)", () => {
     expect(acks()).toEqual([])
   })
 
+  it("a hidden page (no animation frames: an OBS source off the scene, a TV after Home) acknowledges marked hidden, never as seen (#844)", async () => {
+    vi.stubGlobal("requestAnimationFrame", () => 0)
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" })
+    try {
+      FakeEvents.last.send("frame", JSON.stringify({ off: false, verse: null }), "9")
+      await nextFrame()
+      expect(acks()).toEqual([{ url: "/api/v1/feed/l3/ack?k=s3cr%2Bt&hidden=1", body: { seq: 9, hidden: true } }])
+      // Its heartbeat acknowledgements stay marked: the frame was never seen.
+      FakeEvents.last.send("beat", String(Date.now()))
+      await nextFrame()
+      expect(acks().map((a) => a.url.endsWith("&hidden=1"))).toEqual([true, true])
+    } finally {
+      Reflect.deleteProperty(document, "visibilityState")
+    }
+  })
+
+  it("tells the Receiver an output is off, even before anything is published (#835), and its own overscan (#849)", async () => {
+    FakeEvents.last.send("frame", JSON.stringify({ off: true }), "0")
+    expect(document.documentElement.dataset.off).toBe("true")
+    expect(document.documentElement.dataset.overscan).toBe("0")
+    FakeEvents.last.send("frame", JSON.stringify({ off: false, verse: null, overscan: 3.2 }), "2")
+    expect(document.documentElement.dataset.off).toBe("false")
+    expect(document.documentElement.dataset.overscan).toBe("3")
+    await nextFrame()
+    expect(acks().map((a) => a.body.seq)).toEqual([2])
+  })
+
   it("keeps acknowledging while it hears beats after drawing (the heartbeat)", async () => {
     FakeEvents.last.send("frame", JSON.stringify({ off: true }), "5")
     await nextFrame()
@@ -92,5 +119,38 @@ describe("the feed page acknowledges only what it drew (#604)", () => {
     FakeEvents.last.send("beat", String(Date.now()))
     await nextFrame()
     expect(acks().map((a) => a.body.seq)).toEqual([5, 5, 5])
+  })
+})
+
+describe("the feed page names the host run in every acknowledgement", () => {
+  const frame = (hostRun: string, seq: number) => FakeEvents.last.send("frame", JSON.stringify({ hostRun, off: false, verse: null }), String(seq))
+
+  it("sends the run its frame came from, with the frame's acknowledgement and the heartbeat's (same address)", async () => {
+    frame("run-a", 5)
+    await nextFrame()
+    FakeEvents.last.send("beat", String(Date.now()))
+    await nextFrame()
+    expect(acks()).toEqual([
+      { url: "/api/v1/feed/l3/ack?k=s3cr%2Bt", body: { seq: 5, hostRun: "run-a" } },
+      { url: "/api/v1/feed/l3/ack?k=s3cr%2Bt", body: { seq: 5, hostRun: "run-a", clock: expect.any(Number) as number } },
+    ])
+  })
+
+  it("a late reconnect to a restarted host already past the old number: a new run, the old frames never acknowledged", async () => {
+    frame("run-a", 2)
+    await nextFrame()
+    // Frame 3 of the old host is heard but not yet drawn when the TV reconnects to the new host, which is at 9.
+    frame("run-a", 3)
+    frame("run-b", 9)
+    // A beat before the new frame is drawn: nothing drawn in the new run yet, so no heartbeat.
+    FakeEvents.last.send("beat", String(Date.now()))
+    await nextFrame()
+    FakeEvents.last.send("beat", String(Date.now()))
+    await nextFrame()
+    expect(acks().map(({ body }) => ({ seq: body.seq, hostRun: (body as { hostRun?: string }).hostRun }))).toEqual([
+      { seq: 2, hostRun: "run-a" },
+      { seq: 9, hostRun: "run-b" },
+      { seq: 9, hostRun: "run-b" },
+    ])
   })
 })

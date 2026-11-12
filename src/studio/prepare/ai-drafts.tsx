@@ -12,6 +12,8 @@ import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { describeError } from "@/studio/library/content-actions"
+import { LoadFailedRow } from "@/studio/library/load-failed-row"
 
 /**
  * Prepare → AI drafts (Rhema MCP, #252): services an assistant proposed, waiting for review.
@@ -38,11 +40,17 @@ export function AiDrafts() {
   const cameras = useSettingsStore((s) => s.cameras)
   const names: DraftNames = { looks, scenes, cameras }
   const waiting = drafts.filter((d) => !isOpened(d)).length
-  const load = useCallback(() => invoke<AiDraft[]>("ai_drafts_list").then(setDrafts).catch(() => setDrafts([])), [])
+  // A failed load says so (#832 S8); it never reads as "None waiting".
+  const [loadError, setLoadError] = useState<string | null>(null)
+  // The draft whose Remove is waiting for a second press (#831 S7).
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
+  const load = useCallback(() => invoke<AiDraft[]>("ai_drafts_list")
+    .then((list) => { setDrafts(list); setLoadError(null) })
+    .catch((e: unknown) => { setDrafts([]); setLoadError(describeError(e)) }), [])
   useEffect(() => {
     void load()
   }, [load, open])
-  if (!enabled && drafts.length === 0) return null
+  if (!enabled && drafts.length === 0 && !loadError) return null
 
   const outOf = (d: AiDraft) => (picking?.id === d.id ? picking.out : new Set<string>())
   const openDraft = (d: AiDraft, discard = false) => {
@@ -61,7 +69,12 @@ export function AiDrafts() {
     toast.success(`${d.title} is now the rundown in Prepare`, { description: `Unsaved: check every item, source anything marked Missing${suggestions ? `, accept the ${suggestions} ${suggestions === 1 ? "slide" : "slides"} marked AI suggestion` : ""}, then use New service to save it.` })
   }
   const remove = async (d: AiDraft) => {
-    await invoke("ai_draft_delete", { id: d.id }).catch(() => {})
+    setConfirmRemove(null)
+    try {
+      await invoke("ai_draft_delete", { id: d.id })
+    } catch (e) {
+      toast.error(`Could not remove ${d.title}`, { description: describeError(e) })
+    }
     void load()
   }
 
@@ -81,7 +94,8 @@ export function AiDrafts() {
               Opening a draft replaces the rundown{current ? ` of "${current.title}"` : ""} ({count} {count === 1 ? "item" : "items"}){current ? " and closes that service; what it has saved stays saved" : ""}.{count > 0 || dirty ? " You are asked first." : ""}
             </p>
           )}
-          {drafts.length === 0 && <p className="text-sm text-muted-foreground">None waiting. Ask your assistant to plan a service with Rhema Studio (Settings → AI assistants).</p>}
+          {loadError && <LoadFailedRow what="AI drafts" error={loadError} onRetry={() => void load()} />}
+          {drafts.length === 0 && !loadError && <p className="text-sm text-muted-foreground">None waiting. Ask your assistant to plan a service with Rhema Studio (Settings → AI assistants).</p>}
           <ul className="flex flex-col gap-3">
             {drafts.map((d) => {
               const out = outOf(d)
@@ -129,7 +143,15 @@ export function AiDrafts() {
                     <div className="flex flex-wrap gap-2">
                       <Button size="sm" disabled={items.length === 0} onClick={() => openDraft(d)} title="Put this draft in the rundown here, as an unsaved service">{items.length < all ? `Open ${items.length} of ${all} items in the rundown` : isOpened(d) ? "Open again in the rundown" : "Open in the rundown"}</Button>
                       <Button size="sm" variant="outline" aria-expanded={choosing} onClick={() => setPicking(choosing ? null : { id: d.id, out: new Set() })}>{choosing ? "Keep every item" : "Choose items"}</Button>
-                      <Button size="sm" variant="ghost" onClick={() => void remove(d)}>Remove</Button>
+                      {confirmRemove === d.id ? (
+                        <span role="alert" className="flex flex-wrap items-center gap-2">
+                          <span>Remove this draft? It cannot be opened again.</span>
+                          <Button size="sm" variant="destructive" autoFocus onClick={() => void remove(d)}>Remove</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setConfirmRemove(null)}>Keep</Button>
+                        </span>
+                      ) : (
+                        <Button size="sm" variant="ghost" aria-label={`Remove ${d.title}`} onClick={() => setConfirmRemove(d.id)}>Remove</Button>
+                      )}
                     </div>
                   )}
                 </li>

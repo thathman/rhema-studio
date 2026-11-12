@@ -41,6 +41,25 @@ describe("browser feeds", () => {
     stop()
   })
 
+  it("an overlay feed tells the listener its name and kind, for an OBS companion; a stage feed does not (#848 G4)", () => {
+    const themeId = useBroadcastStore.getState().themes[0].id
+    useBroadcastStore.setState({
+      outputs: [
+        ...useBroadcastStore.getState().outputs.filter((o) => o.type !== "browser"),
+        { id: "l3", name: "Rhema Bible | Lower third", type: "browser", role: "congregation", shows: ["bible"], themeId, monitorIndex: 0, ndi: defaultNdiSettings(), feedToken: "a".repeat(32) },
+        { id: "st", name: "Stage", type: "browser", role: "stage", shows: ["bible"], themeId, monitorIndex: 0, ndi: defaultNdiSettings(), feedToken: "b".repeat(32) },
+      ],
+    })
+    const stop = startBrowserFeeds()
+    expect(calls.filter((c) => c.cmd === "feeds_set").at(-1)?.args).toEqual({
+      feeds: [
+        { id: "l3", token: "a".repeat(32), tvs: [], name: "Rhema Bible | Lower third", kind: "bible" },
+        { id: "st", token: "b".repeat(32), tvs: [] },
+      ],
+    })
+    stop()
+  })
+
   it("publish frames only while on, never to a window; the projector still gets its window", async () => {
     const tv = useBroadcastStore.getState().outputs.find((o) => o.id === "tv")!
     useBroadcastStore.getState().setLiveVerse({ reference: "Romans 8:28", segments: [{ text: "And we know" }], content: "bible" }, null, { goLive: true })

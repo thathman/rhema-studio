@@ -254,6 +254,8 @@ export interface SettingsState {
   /** Rhema MCP (#252): AI assistants may read services, songs and the Bible through `Rhema --mcp`. Off by default. */
   mcpEnabled: boolean
   setMcpEnabled: (on: boolean) => void
+  /** Rhema Engage (#858 G14): the online quiz host in Live → More controls. Deferred, so hidden unless turned on. Off by default. */
+  engageEnabled: boolean
   /** Shared key for OSC/HTTP control; blank means nothing authenticates. */
   remoteSecret: string
   /** Host/Join (ARCH-004): the host this computer joins ("address:port"), the name it paired as, and its token (kept in the keychain). */
@@ -403,6 +405,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   openedFrom: {},
   commentsSeen: [],
   mcpEnabled: false,
+  engageEnabled: false,
   setMcpEnabled: (mcpEnabled) => set({ mcpEnabled }),
   remoteSecret: "",
   joinAddress: "",
@@ -682,6 +685,7 @@ function acceptable(key: string, value: unknown): boolean {
     case "cameraRouterAuto":
     case "companionMode":
     case "mcpEnabled":
+    case "engageEnabled":
     case "requireApproval":
     case "autoMode":
     case "onboardingComplete":
@@ -746,6 +750,7 @@ export const SETTINGS_SECTIONS = {
     "openedPackages",
     "openedFrom",
     "mcpEnabled",
+    "engageEnabled",
     "remoteSecret",
     "joinAddress",
     "joinName",
@@ -825,7 +830,7 @@ export function settingsSection(state: SettingsState, section: SettingsSection):
  */
 export const NOT_IN_BACKUP = [
   "deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "joinToken",
-  "remoteDevices", "remoteAuthRequired", "remoteListeners", "joinAddress", "joinName", "joinSecure", "mcpEnabled", "cloudSpeechConsentAt", "cloudSpeechConsents",
+  "remoteDevices", "remoteAuthRequired", "remoteListeners", "joinAddress", "joinName", "joinSecure", "mcpEnabled", "engageEnabled", "cloudSpeechConsentAt", "cloudSpeechConsents",
   "companionMode", "obsProfiles", "lanAddressAtService",
 ] as const satisfies readonly PersistedKey[]
 const notInBackup = (key: string) => (NOT_IN_BACKUP as readonly string[]).includes(key)

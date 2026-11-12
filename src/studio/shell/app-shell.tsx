@@ -4,15 +4,14 @@ import { toast } from "sonner"
 import "@/stores/journal-store"
 import "@/stores/monitor-store"
 import "@/stores/obs-store"
-import { useCallback, useEffect, useMemo } from "react"
-import { canonicalWorkspace, useShellStore, type Workspace } from "@/studio/shell-store"
+import { useCallback, useEffect, useMemo, useRef } from "react"
+import { canonicalWorkspace, showsJoinedDesk, useShellStore, type Workspace } from "@/studio/shell-store"
 import { bibleActions } from "@/hooks/use-bible"
 import { rememberedServiceId, useServiceStore } from "@/stores/service-store"
 import { useBroadcastStore, useQueueStore } from "@/stores"
 import { HomeWorkspace } from "@/studio/home/home-workspace"
 import { PrepareWorkspace } from "@/studio/prepare/prepare-workspace"
 import { PresentWorkspace } from "@/studio/present/present-workspace"
-import { MoreWorkspace } from "@/studio/more/more-workspace"
 import { DesignWorkspace } from "@/studio/design/design-workspace"
 import { mayLeaveThemeDraft } from "@/lib/theme-draft"
 import { mayLeaveDesignDocumentDraft } from "@/lib/design-document-draft"
@@ -25,6 +24,7 @@ import { TeamWorkspace } from "@/studio/team/team-workspace"
 import { ConnectionsWorkspace } from "@/studio/connections/connections-workspace"
 import { openSettings } from "@/lib/settings-dialog"
 import { Sidebar } from "@/studio/shell/sidebar"
+import { JoinedDeskRoute } from "@/studio/shell/joined-desk-route"
 import { WORKSPACE_ITEMS, churchItems, type NavItem } from "@/studio/shell/nav-items"
 import { cn } from "@/lib/utils"
 import { TopBar } from "@/studio/shell/top-bar"
@@ -60,7 +60,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { REMOTE_EVENTS, REMOTE_REQUEST_WITHDRAWN_EVENT, REMOTE_STAGE_SEND_REQUEST_EVENT } from "@/lib/remote-events"
 
 /** What the top bar calls each page. */
-const TITLES: Record<Workspace, string> = { home: "Home", prepare: "Prepare", present: "Live", production: "Live", library: "Library", design: "Design", permissions: "Permissions", connections: "Connections", team: "Team", archive: "History", settings: "Settings", more: "More tools" }
+const TITLES: Record<Workspace, string> = { home: "Home", prepare: "Prepare", present: "Live", production: "Live", library: "Library", design: "Design", permissions: "Permissions", connections: "Connections", team: "Team", archive: "History", settings: "Settings" }
 
 const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   home: () => <HomeWorkspace />,
@@ -75,7 +75,6 @@ const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   permissions: () => <PermissionsWorkspace />,
   team: () => <TeamWorkspace />,
   settings: () => <SettingsPage />,
-  more: () => <MoreWorkspace />,
 }
 
 export function AppShell() {
@@ -92,6 +91,20 @@ export function AppShell() {
   const church = useMemo(() => churchItems(pendingApprovals), [pendingApprovals])
   // A joined director sees this computer's readiness checks (desk consoles): worked out only while someone is paired.
   const paired = useSettingsStore((s) => s.remoteDevices.length > 0)
+  // Joined to a host (#813 F2): Live is this computer's role desk, full window, the rest behind its menu.
+  const joinedDeskView = useShellStore((s) => s.joinedDeskView)
+  const deskPage = showsJoinedDesk(joinStatus, activeWorkspace, joinedDeskView)
+  useEffect(() => {
+    if (joinStatus === "off") useShellStore.getState().setJoinedDeskView("desk")
+  }, [joinStatus])
+  // Switching between the desk and the shell (or leaving mid-service) replaces the page: put focus
+  // on it so a keyboard or screen reader user is not left on a button that no longer exists.
+  const wasDeskPage = useRef(deskPage)
+  useEffect(() => {
+    if (wasDeskPage.current === deskPage) return
+    wasDeskPage.current = deskPage
+    queueMicrotask(() => document.getElementById("main")?.focus())
+  }, [deskPage])
 
   // Going anywhere from Design first settles an unsaved theme (keep editing, or discard it), as closing the designer did.
   const go = useCallback(async (next: Workspace) => {
@@ -109,7 +122,7 @@ export function AppShell() {
   useEffect(() => {
     if (workspace !== activeWorkspace) setWorkspace(activeWorkspace)
   }, [activeWorkspace, setWorkspace, workspace])
-  // A request to open Design at a section (Present's Design… buttons, More tools).
+  // A request to open Design at a section (Live's Design… buttons, Find anything).
   const designRequest = useShellStore((s) => s.designRequest)
   useEffect(() => {
     if (!designRequest) return
@@ -246,7 +259,7 @@ export function AppShell() {
     })
   }, [])
 
-  // Cmd/Ctrl+1..8 go to a place from anywhere; Cmd/Ctrl+, opens Settings. (Cmd/Ctrl+B is the sidebar's own.)
+  // Cmd/Ctrl+1..6 go to the six main places (nav-items.tsx) from anywhere; Cmd/Ctrl+, opens Settings. (Cmd/Ctrl+B is the sidebar's own.)
   useEffect(() => {
     const items: NavItem[] = [...WORKSPACE_ITEMS, ...church]
     const onKey = (e: KeyboardEvent) => {
@@ -279,6 +292,28 @@ export function AppShell() {
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [go, church])
+
+  if (deskPage) {
+    return (
+      <div className="dark present-surface fixed inset-0 flex flex-col bg-background text-foreground">
+        <a href="#main" className="fixed top-3 left-3 z-50 -translate-y-24 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground focus:translate-y-0">Skip to the page</a>
+        {/* The same bar and watches as every page: Find, recorder status, Talk, and the camera/signal watch never stop. */}
+        <TopBar title="Your desk" workspace="present" />
+        <RecoveryBanner />
+        <SignalWatch />
+        {paired && <ShareReadiness />}
+        <main id="main" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 outline-none">
+          <ErrorBoundary key="joined-desk" name="your desk">
+            <JoinedDeskRoute church={church} onGo={(w) => void go(w)} />
+          </ErrorBoundary>
+        </main>
+        <BroadcastOutputsDialog open={outputsOpen} onOpenChange={setOutputsOpen} />
+        <GlobalSearch />
+        <SetupWizard />
+        <SetupStatusDialog />
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 grid grid-cols-[auto_minmax(0,1fr)] bg-background text-foreground">

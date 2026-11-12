@@ -29,6 +29,25 @@ final class CamAction {
      * TALLY when Rhema has not said, so a camera is never told it is off air when nobody knows.
      */
     static State resolve(boolean paired, boolean sending, boolean live, int tally) {
+        return resolve(paired, sending, live, tally, RECEIVING_UNKNOWN);
+    }
+
+    /** Whether Rhema says its router is getting the picture (#850): unknown from an older Rhema. */
+    static final int RECEIVING_UNKNOWN = -1;
+    static final int NOT_RECEIVED = 0;
+    static final int RECEIVED = 1;
+
+    /** Shown while Rhema confirms it is getting the picture, on no Program (#850). */
+    static final String RECEIVING = "RHEMA RECEIVING";
+    /** Sending, but Rhema says its router has not got the picture (yet). */
+    static final String NOT_RECEIVED_YET = "SENDING · NOT RECEIVED YET";
+
+    /**
+     * As above, and "sending" is not "received" (#850): once Rhema says its router gets the picture
+     * the light says RHEMA RECEIVING; while Rhema says it does not, SENDING · NOT RECEIVED YET. An
+     * older Rhema says neither, and the light says SENDING as before.
+     */
+    static State resolve(boolean paired, boolean sending, boolean live, int tally, int receiving) {
         if (!sending) return new State("NOT SENDING", paired ? "SEND" : "CONNECT");
         if (!live) return new State("CONNECTING", "");
         if (tally < 0) return new State("SENDING · NO TALLY", "");
@@ -36,6 +55,8 @@ final class CamAction {
         if (online && room) return new State("ON AIR · ONLINE + CONGREGATION", "");
         if (online) return new State("ON AIR · ONLINE", "");
         if (room) return new State("ON AIR · CONGREGATION", "");
+        if (receiving == RECEIVED) return new State(RECEIVING, "");
+        if (receiving == NOT_RECEIVED) return new State(NOT_RECEIVED_YET, "");
         return new State("SENDING", "");
     }
 

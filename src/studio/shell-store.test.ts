@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { designTabOf, readShellPrefs, useShellStore, writeShellPrefs, SHELL_PREFS_KEY, type StorageLike } from "./shell-store"
+import { canonicalWorkspace, designTabOf, readShellPrefs, useShellStore, writeShellPrefs, SHELL_PREFS_KEY, type StorageLike } from "./shell-store"
 
 function fakeStorage(initial: Record<string, string> = {}): StorageLike & { map: Map<string, string> } {
   const map = new Map(Object.entries(initial))
@@ -12,21 +12,21 @@ function fakeStorage(initial: Record<string, string> = {}): StorageLike & { map:
 
 describe("shell prefs", () => {
   it("defaults to home + standard with no storage", () => {
-    expect(readShellPrefs(null)).toEqual({ workspace: "home", presentView: "standard", sidebarCollapsed: false })
+    expect(readShellPrefs(null)).toEqual({ workspace: "home", sidebarCollapsed: false })
   })
 
   it("round-trips through storage", () => {
     const s = fakeStorage()
-    writeShellPrefs(s, { workspace: "present", presentView: "production", sidebarCollapsed: true })
-    expect(readShellPrefs(s)).toEqual({ workspace: "present", presentView: "production", sidebarCollapsed: true })
+    writeShellPrefs(s, { workspace: "present", sidebarCollapsed: true })
+    expect(readShellPrefs(s)).toEqual({ workspace: "present", sidebarCollapsed: true })
   })
 
   it("migrates the saved Production route to Live; More (no way in since #218) reopens on Home", () => {
     const s = fakeStorage()
-    writeShellPrefs(s, { workspace: "production", presentView: "standard", sidebarCollapsed: false })
+    writeShellPrefs(s, { workspace: "production", sidebarCollapsed: false })
     expect(readShellPrefs(s).workspace).toBe("present")
     expect(JSON.parse(s.getItem(SHELL_PREFS_KEY)!).workspace).toBe("present")
-    writeShellPrefs(s, { workspace: "more", presentView: "standard", sidebarCollapsed: false })
+    s.setItem(SHELL_PREFS_KEY, JSON.stringify({ workspace: "more", sidebarCollapsed: false }))
     expect(readShellPrefs(s).workspace).toBe("home")
   })
 
@@ -41,19 +41,28 @@ describe("shell prefs", () => {
     const s = fakeStorage({
       [SHELL_PREFS_KEY]: JSON.stringify({ workspace: "nope", presentView: "production" }),
     })
-    expect(readShellPrefs(s)).toEqual({ workspace: "home", presentView: "production", sidebarCollapsed: false })
+    expect(readShellPrefs(s)).toEqual({ workspace: "home", sidebarCollapsed: false })
   })
 
   it("prefs saved before the sidebar could fold open expanded; a bad value does too (#299)", () => {
     const old = fakeStorage({ [SHELL_PREFS_KEY]: JSON.stringify({ workspace: "present", presentView: "standard" }) })
-    expect(readShellPrefs(old)).toEqual({ workspace: "present", presentView: "standard", sidebarCollapsed: false })
-    const bad = fakeStorage({ [SHELL_PREFS_KEY]: JSON.stringify({ workspace: "present", presentView: "standard", sidebarCollapsed: "yes" }) })
+    expect(readShellPrefs(old)).toEqual({ workspace: "present", sidebarCollapsed: false })
+    const bad = fakeStorage({ [SHELL_PREFS_KEY]: JSON.stringify({ workspace: "present", sidebarCollapsed: "yes" }) })
     expect(readShellPrefs(bad).sidebarCollapsed).toBe(false)
+  })
+
+  it("ignores the retired presentView preference and drops it on the next write (#809 R10)", () => {
+    const s = fakeStorage({ [SHELL_PREFS_KEY]: JSON.stringify({ workspace: "present", presentView: "production", sidebarCollapsed: true }) })
+    const prefs = readShellPrefs(s)
+    expect(prefs).toEqual({ workspace: "present", sidebarCollapsed: true })
+    writeShellPrefs(s, prefs)
+    expect(JSON.parse(s.getItem(SHELL_PREFS_KEY)!)).toEqual({ workspace: "present", sidebarCollapsed: true })
+    expect(readShellPrefs(fakeStorage({ [SHELL_PREFS_KEY]: "null" }))).toEqual({ workspace: "home", sidebarCollapsed: false })
   })
 
   it("survives corrupt JSON", () => {
     const s = fakeStorage({ [SHELL_PREFS_KEY]: "{not json" })
-    expect(readShellPrefs(s)).toEqual({ workspace: "home", presentView: "standard", sidebarCollapsed: false })
+    expect(readShellPrefs(s)).toEqual({ workspace: "home", sidebarCollapsed: false })
   })
 })
 
@@ -128,5 +137,14 @@ describe("Design Used On navigation", () => {
     expect(useShellStore.getState().prepareProgramRequest).toEqual({ programId: "p2" })
     expect(useShellStore.getState().prepareMomentFocus).toBeNull()
     expect(useShellStore.getState().prepareMomentSelection).toBeNull()
+  })
+})
+
+describe("an unknown workspace name", () => {
+  it("opens Home instead of a page that does not exist; production still means Live", () => {
+    expect(canonicalWorkspace("live" as never)).toBe("home")
+    expect(canonicalWorkspace("" as never)).toBe("home")
+    expect(canonicalWorkspace("production")).toBe("present")
+    expect(canonicalWorkspace("design")).toBe("design")
   })
 })

@@ -1065,3 +1065,112 @@ describe("putting back a designed moment", () => {
     clean()
   })
 })
+
+describe("an unanswered recovery offer ends at the first new Take (#829)", () => {
+  const crashVerse = { reference: "Psalm 23:1", segments: [{ text: "The Lord is my shepherd" }], content: "bible" as const }
+  const newVerse = { reference: "John 3:16", segments: [{ text: "For God so loved" }], content: "bible" as const }
+
+  async function startWithOffer() {
+    useBroadcastStore.getState().setLiveVerse(crashVerse, null, { goLive: true })
+    const crash = { ...takeSnapshot(), eventId: null, outputsOn: [] }
+    useBroadcastStore.setState({ isLive: false, liveVerse: null, sources: {} })
+    kept.set("snapshot", crash)
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => (cmd === "last_exit_unclean" ? true : null))
+    const stop = await startLiveRecovery()
+    expect(useRecovery.getState().offer).toMatchObject({ liveVerse: { reference: "Psalm 23:1" } })
+    return { crash, stop }
+  }
+
+  it("keeps the crash's recovery point while the offer is open, then ends it, logs it and saves again", async () => {
+    vi.useFakeTimers()
+    try {
+      const { stop } = await startWithOffer()
+      // Something moves while the banner waits but nothing new is taken: the recovery point stays the crash's.
+      useBroadcastStore.getState().setOutputStatus(MAIN_OUTPUT_ID, { previewOpen: true, ndiActive: false })
+      await vi.advanceTimersByTimeAsync(1_500)
+      expect((kept.get("snapshot") as { liveVerse: { reference: string } }).liveVerse.reference).toBe("Psalm 23:1")
+      expect(useRecovery.getState().offer).not.toBeNull()
+
+      useBroadcastStore.getState().setLiveVerse(newVerse, null, { goLive: true })
+      expect(useRecovery.getState()).toMatchObject({ offer: null, dismissed: false })
+      expect(useJournalStore.getState().entries.some((e) => e.kind === "recovery" && /Recovery offer ended/.test(e.label))).toBe(true)
+      await vi.advanceTimersByTimeAsync(1_500)
+      expect((kept.get("snapshot") as { liveVerse: { reference: string } }).liveVerse.reference).toBe("John 3:16")
+      stop()
+    } finally {
+      vi.useRealTimers()
+      vi.mocked(invoke).mockImplementation(async () => null)
+    }
+  })
+
+  it("a scene Take ends the offer too", async () => {
+    const { stop } = await startWithOffer()
+    const scene = { id: "pulpit", name: "Pulpit", background: "#000000", layers: [], createdAt: 1, updatedAt: 1 }
+    const output = useBroadcastStore.getState().outputs[0]
+    useBroadcastStore.setState({ outputs: [{ ...output, sceneId: scene.id }] })
+    expect(useRecovery.getState().offer).toBeNull()
+    stop()
+    vi.mocked(invoke).mockImplementation(async () => null)
+  })
+
+  it("leaving rehearsal puts the screens back without ending the offer; Show this live with new Program ends it", async () => {
+    const sceneA = { id: "scene-a", name: "A", background: "#000000", layers: [], createdAt: 1, updatedAt: 1 }
+    const sceneB = { id: "scene-b", name: "B", background: "#111111", layers: [], createdAt: 1, updatedAt: 1 }
+    const output = useBroadcastStore.getState().outputs[0]
+    useBroadcastStore.setState({ scenes: [sceneA, sceneB], outputs: [{ ...output, sceneId: sceneA.id }] })
+    const { stop } = await startWithOffer()
+    const b = () => useBroadcastStore.getState()
+
+    // The real path: into rehearsal, Take scene B and a verse there, then leave (screens come back).
+    b().setRehearsal(true)
+    b().takeScene(MAIN_OUTPUT_ID, sceneB.id)
+    b().setLiveVerse(newVerse, null, { goLive: true })
+    expect(b().outputs[0].sceneId).toBe(sceneB.id)
+    b().setRehearsal(false)
+    expect(b().outputs[0].sceneId).toBe(sceneA.id)
+    expect(useRecovery.getState().offer).not.toBeNull()
+
+    // Show this live: the rehearsed Program stays, and it is new, so that is a real go-live.
+    b().setRehearsal(true)
+    b().setLiveVerse(newVerse, null, { goLive: true })
+    b().setRehearsal(false, { keepRehearsed: true })
+    expect(b().liveVerse?.reference).toBe("John 3:16")
+    expect(useRecovery.getState().offer).toBeNull()
+    stop()
+    vi.mocked(invoke).mockImplementation(async () => null)
+  })
+
+  it("a Stage or other non-congregation output's scene does not end it (#829 review)", async () => {
+    const output = useBroadcastStore.getState().outputs[0]
+    const { stop } = await startWithOffer()
+    const stage = { ...output, id: "stage-1", name: "Stage", role: "stage" as const }
+    useBroadcastStore.setState({ outputs: [output, stage] })
+    useBroadcastStore.setState({ outputs: [output, { ...stage, sceneId: "stage-scene" }] })
+    expect(useRecovery.getState().offer).not.toBeNull()
+    stop()
+    vi.mocked(invoke).mockImplementation(async () => null)
+  })
+
+  it("Put back itself, a rehearsal Take and an offer already put off (Not now) do not end it here", async () => {
+    const { crash, stop } = await startWithOffer()
+    // Rehearsal is a sandbox.
+    useBroadcastStore.setState({ rehearsal: true })
+    useBroadcastStore.getState().setLiveVerse(newVerse, null, { goLive: true })
+    expect(useRecovery.getState().offer).not.toBeNull()
+    useBroadcastStore.setState({ rehearsal: false, isLive: false, liveVerse: null, sources: {} })
+    // Put off: the Desk menu keeps it for the rest of this run, as before.
+    useRecovery.setState({ dismissed: true })
+    useBroadcastStore.getState().setLiveVerse(newVerse, null, { goLive: true })
+    expect(useRecovery.getState()).toMatchObject({ dismissed: true })
+    expect(useRecovery.getState().offer).not.toBeNull()
+    // Putting back goes live with the crash's content: logged as put back, not as an ended offer.
+    useBroadcastStore.setState({ isLive: false, liveVerse: null, sources: {} })
+    useRecovery.setState({ dismissed: false })
+    useJournalStore.setState({ entries: [] })
+    expect(await putBack(crash)).toBe(true)
+    expect(useJournalStore.getState().entries.map((e) => e.label).some((l) => /Recovery offer ended/.test(l))).toBe(false)
+    expect(useJournalStore.getState().entries.some((e) => /^Put back/.test(e.label))).toBe(true)
+    stop()
+    vi.mocked(invoke).mockImplementation(async () => null)
+  })
+})

@@ -10,12 +10,18 @@ import { NO_RTC, rtcReading, rtcSample, type RtcReading, type RtcSample } from "
 /**
  * Where a feed page asks for a camera. The host's own router lets nobody read by name alone, so a
  * camera there is asked for through the host with the page's key; any other address directly.
+ *
+ * On the https page (every TV, Rhema Studio Receiver 1.7 with mixed content off, #840) any plain-http
+ * camera on the router's WHEP port goes through the host, whatever host name the scene saved: the
+ * host's address changes (DHCP, a second network, a .local name), and plain http from the https page
+ * is blocked anyway. The host plays only a camera its feed's scene shows, by name.
  */
-export function feedCameraUrl(url: string, page: { hostname: string }, feedId: string, feedKey: string): string {
+export function feedCameraUrl(url: string, page: { hostname: string; protocol?: string }, feedId: string, feedKey: string): string {
   try {
     const u = new URL(url)
     const name = /^\/([^/]+)\/whep\/?$/.exec(u.pathname)?.[1]
-    if (name && u.hostname === page.hostname && u.port === "8889") return `/api/v1/feed/${encodeURIComponent(feedId)}/camera/${name}/whep?k=${encodeURIComponent(feedKey)}`
+    const ours = u.hostname === page.hostname || (page.protocol === "https:" && u.protocol === "http:")
+    if (name && u.port === "8889" && ours) return `/api/v1/feed/${encodeURIComponent(feedId)}/camera/${name}/whep?k=${encodeURIComponent(feedKey)}`
   } catch { /* not an address: fetch says so */ }
   return url
 }

@@ -16,9 +16,11 @@ import {
   type SaraswatiScene,
   type SaraswatiTextNode,
 } from "../vendor/avnac/saraswati"
+import { anchorToCenter } from "../vendor/avnac/saraswati/transform/anchor"
 import type { CountdownTo, DesignPin, Scene, SceneCrop, SceneGradient, SceneLayer } from "../types/scene"
 import { gradientCss, gradientFallback, gradientIssue, normalizeGradient } from "../lib/scene-gradient"
 import { imageDrawIssue, normalizeImageDraw } from "../lib/scene-image"
+import { layerRotation, layerTurns } from "../lib/scene-rotation"
 
 /** The editing frame: a 1920×1080 artboard; layer boxes are kept in % of it, as Rhema keeps them. */
 export const DESIGN_WIDTH = 1920
@@ -73,7 +75,7 @@ function basePaint(layer: SceneLayer) {
     visible: layer.visible,
     x: (layer.box.x / 100) * DESIGN_WIDTH,
     y: (layer.box.y / 100) * DESIGN_HEIGHT,
-    rotation: 0,
+    rotation: layer.rotation ?? 0,
     scaleX: 1,
     scaleY: 1,
     opacity: layer.opacity,
@@ -86,8 +88,12 @@ function toNode(layer: SceneLayer): SaraswatiNode {
   const width = (layer.box.w / 100) * DESIGN_WIDTH
   const height = (layer.box.h / 100) * DESIGN_HEIGHT
   if (layer.kind === "text") {
+    // Text that widens both ways (or leftwards) opens anchored where it widens from, as it was saved.
+    const origin = layer.textWiden === "both" ? "center" as const : layer.textWiden === "left" ? "right" as const : "left" as const
     const text: SaraswatiTextNode = {
       ...basePaint(layer),
+      x: (layer.box.x / 100) * DESIGN_WIDTH + (origin === "center" ? width / 2 : origin === "right" ? width : 0),
+      originX: origin,
       type: "text",
       text: layer.text ?? "",
       width,
@@ -143,7 +149,7 @@ export function sceneToDesign(scene: Scene): RhemaDesign {
   for (const layer of scene.layers) {
     design = applyCommand(design, { type: "ADD_NODE", node: toNode(layer) })
     const binding: Record<string, unknown> = { ...layer }
-    for (const k of ["box", "opacity", "visible", "name"]) delete binding[k]
+    for (const k of ["box", "opacity", "visible", "name", "rotation"]) delete binding[k]
     if (layer.kind === "text") binding.textBoxHeight = (layer.box.h / 100) * DESIGN_HEIGHT
     bindings[layer.id] = binding as RhemaBinding
   }
@@ -304,19 +310,26 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
     if (binding.kind === "clock" && binding.clockShows === "until" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(binding.until ?? "")) {
       issues.push({ nodeId: node.id, message: "A clock counting down to a fixed time needs a valid 24-hour time before this version can be used in Prepare" })
     }
-    if (Math.abs(node.rotation) > 0.0001) {
-      issues.push({ nodeId: node.id, message: "Layer rotation cannot be saved into a Rhema scene yet" })
+    const rotation = layerRotation(node.rotation)
+    if (rotation !== undefined && !layerTurns(binding.kind)) {
+      // Outputs play these in a window or strip of their own, which cannot turn yet.
+      issues.push({ nodeId: node.id, message: "Cameras, videos and tickers cannot be turned on Rhema outputs yet; set Rotation back to 0" })
     }
     if (node.shadow || (node.blur ?? 0) > 0) {
       issues.push({ nodeId: node.id, message: "Layer shadow and blur cannot be saved into a Rhema scene yet" })
     }
-    const textBounds = node.type === "text" ? getNodeBounds(node) : null
+    // The unturned box: outputs turn the layer about its centre, as the editor does.
+    const textBounds = node.type === "text" ? getNodeBounds({ ...node, rotation: 0 }) : null
     const { textBoxHeight, ...layerBinding } = binding
     const preservedTextHeight = typeof textBoxHeight === "number" && Number.isFinite(textBoxHeight)
       ? Math.min(DESIGN_HEIGHT, Math.max(1, textBoxHeight))
       : 0
+    // A text box is as wide as the editor wraps its words (the node's width), not the engine's
+    // glyph-count estimate, which a long word stretches: outputs wrap at the box's width.
+    const textWidth = node.type === "text" ? Math.max(1, node.width * Math.abs(node.scaleX)) : 0
+    const textX = node.type === "text" ? anchorToCenter(node.x, node.originX, textWidth, true) - textWidth / 2 : 0
     const size = textBounds
-      ? { w: textBounds.width, h: Math.max(textBounds.height, preservedTextHeight), x: textBounds.x, y: textBounds.y }
+      ? { w: textWidth, h: Math.max(textBounds.height, preservedTextHeight), x: textX, y: textBounds.y }
       : "width" in node && "height" in node
         ? { w: (node.width as number) * node.scaleX, h: (node.height as number) * node.scaleY, x: node.x, y: node.y }
         : { w: 0, h: 0, x: node.x, y: node.y }
@@ -327,6 +340,8 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       opacity: node.opacity,
       visible,
     } as SceneLayer
+    delete layer.rotation
+    if (rotation !== undefined) layer.rotation = rotation
     if (node.type === "text") {
       if (binding.kind !== "text") {
         issues.push({ nodeId: node.id, message: "A text layer needs a Rhema static-text binding" })
@@ -359,6 +374,8 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
           layer.lineHeight = node.lineHeight
           layer.textColor = node.color.color
           layer.underline = node.underline
+          // Saved by the editor: outputs widen an over-wide word as the editor does (from its origin).
+          layer.textWiden = node.originX === "center" ? "both" : node.originX === "right" ? "left" : "right"
         }
       }
     } else if (node.type === "image") {

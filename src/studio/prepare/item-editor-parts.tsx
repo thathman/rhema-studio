@@ -349,7 +349,7 @@ export function CommentsEditor({ item }: { item: QueueItem }) {
           Comment
         </Button>
       </div>
-      {!me && <p className="text-xs text-muted-foreground">Set your name in Team so the team knows who wrote it.</p>}
+      {!me && <p className="text-xs text-muted-foreground">Add your name in the Desk menu (your name at the foot of the sidebar) so the team knows who wrote it.</p>}
       {comments.length >= MAX_COMMENT_HISTORY && <p className="text-xs text-muted-foreground">This thread has reached its retained history limit. Keep this service copy as its audit record.</p>}
     </div>
   )

@@ -20,6 +20,8 @@ import { onlineProgramName } from "@/lib/program-names"
 import { useMediaStore } from "@/stores/media-store"
 import { dropReplacedGradients, gradientCss } from "@/lib/scene-gradient"
 import { dropStaleImageDraws } from "@/lib/scene-image"
+import { layerRotation, layerTurns } from "@/lib/scene-rotation"
+import { framePivot, layerAt, resizeTurned, unturnDelta } from "@/studio/production/scene-hit"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { CountdownSelect } from "@/studio/production/countdown-select"
 import { useProductionTab } from "@/studio/production/production-tab"
@@ -431,6 +433,18 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
     })
   })
 
+  // Where each turned layer turns (#851 G7), as the canvas draws it: the selection ring and the
+  // pointer follow the turn, so a turned layer is grabbed where it shows.
+  const [measure] = useState(() => (typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d")))
+  const frames = new Map(sceneFrame(live, output, scene, true).layers.map((f) => [f.id, f]))
+  const pivots = new Map([...frames.values()].map((f) => [f.id, framePivot(measure, f, W, H)]))
+  // This render's frames, for a drag in progress (kept current without remaking `drag`).
+  const framesNow = useRef(frames)
+  useEffect(() => {
+    framesNow.current = frames
+  })
+  const turnOf = (l: SceneLayer) => (layerTurns(l.kind) ? l.rotation : undefined)
+
   const box = useRef<HTMLDivElement>(null)
   const drag = useCallback((e: React.PointerEvent, l: SceneLayer, mode: "move" | "size") => {
     e.preventDefault()
@@ -441,13 +455,19 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
     const start = { x: e.clientX, y: e.clientY, b: l.box }
     const el = e.currentTarget as HTMLElement
     el.setPointerCapture?.(e.pointerId)
+    const turn = layerTurns(l.kind) ? l.rotation : undefined
+    // Where the layer turns for a given box, so a resize keeps its far corner still on screen.
+    const frame = framesNow.current.get(l.id)
+    const pivotOf = (b: SceneBox) => (frame ? framePivot(measure, { ...frame, box: b }, W, H) : { x: b.x + b.w / 2, y: b.y + b.h / 2 })
     const move = (ev: PointerEvent) => {
-      const dx = ((ev.clientX - start.x) / rect.width) * 100
-      const dy = ((ev.clientY - start.y) / rect.height) * 100
+      // A resize follows the layer's own (turned) edges.
+      const d = mode === "size" ? unturnDelta(ev.clientX - start.x, ev.clientY - start.y, turn) : { dx: ev.clientX - start.x, dy: ev.clientY - start.y }
+      const dx = (d.dx / rect.width) * 100
+      const dy = (d.dy / rect.height) * 100
       const b = start.b
       const next = mode === "move"
         ? { ...b, x: clamp(b.x + dx, 0, 100 - b.w), y: clamp(b.y + dy, 0, 100 - b.h) }
-        : { ...b, w: clamp(b.w + dx, 2, 100 - b.x), h: clamp(b.h + dy, 2, 100 - b.y) }
+        : resizeTurned(b, { w: clamp(b.w + dx, 2, 100), h: clamp(b.h + dy, 2, 100) }, turn, W, H, pivotOf)
       onMove(l.id, round(next))
     }
     const up = () => {
@@ -456,7 +476,17 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
     }
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", up)
-  }, [onMove, onSelect])
+  }, [onMove, onSelect, measure, W, H])
+
+  /** Pick the topmost layer under the pointer where it is drawn (turned or not) and drag it. */
+  const pick = (e: React.PointerEvent) => {
+    const rect = box.current?.getBoundingClientRect()
+    if (!rect || rect.width <= 0 || rect.height <= 0) return
+    const visible = scene.layers.filter((l) => l.visible)
+    const id = layerAt(visible.map((l) => ({ id: l.id, kind: l.kind, box: l.box, rotation: l.rotation, pivot: pivots.get(l.id) })), { x: ((e.clientX - rect.left) / rect.width) * 100, y: ((e.clientY - rect.top) / rect.height) * 100 }, W, H)
+    const hit = visible.find((l) => l.id === id)
+    if (hit) drag(e, hit, "move")
+  }
 
   const nudge = (e: React.KeyboardEvent, l: SceneLayer) => {
     const d = e.shiftKey ? 5 : 1
@@ -468,7 +498,7 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
   }
 
   return (
-    <div ref={box} className="relative w-full overflow-hidden rounded-md bg-[repeating-conic-gradient(#2a3338_0%_25%,#20282c_0%_50%)] bg-[length:16px_16px]" style={{ aspectRatio: `${W} / ${H}` }}>
+    <div ref={box} data-testid="scene-preview" onPointerDown={pick} className="relative w-full overflow-hidden rounded-md bg-[repeating-conic-gradient(#2a3338_0%_25%,#20282c_0%_50%)] bg-[length:16px_16px]" style={{ aspectRatio: `${W} / ${H}` }}>
       <canvas ref={canvasRef} width={W} height={H} aria-label={`Preview of ${scene.name}`} role="img" className="absolute inset-0 size-full" />
       {scene.layers.filter((l) => l.visible).map((l) => (
         <div
@@ -476,13 +506,13 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
           role="button"
           tabIndex={0}
           aria-label={`${l.name}: drag to move, arrow keys to nudge`}
-          onPointerDown={(e) => drag(e, l, "move")}
           onKeyDown={(e) => nudge(e, l)}
           onFocus={() => onSelect(l.id)}
-          className={cn("absolute cursor-move outline-none", l.id === selected ? "ring-2 ring-primary" : "hover:ring-1 hover:ring-white/40 focus-visible:ring-2 focus-visible:ring-primary")}
-          style={{ left: `${l.box.x}%`, top: `${l.box.y}%`, width: `${l.box.w}%`, height: `${l.box.h}%` }}
+          // The pointer is hit-tested by the preview (`pick`), where the layer is drawn turned.
+          className={cn("pointer-events-none absolute cursor-move outline-none", l.id === selected ? "ring-2 ring-primary" : "focus-visible:ring-2 focus-visible:ring-primary")}
+          style={{ left: `${l.box.x}%`, top: `${l.box.y}%`, width: `${l.box.w}%`, height: `${l.box.h}%`, ...turnStyle(l.box, turnOf(l), pivots.get(l.id)) }}
         >
-          {l.id === selected && <span aria-label={`Resize ${l.name}`} role="presentation" onPointerDown={(e) => drag(e, l, "size")} className="absolute -right-1.5 -bottom-1.5 size-3 cursor-se-resize rounded-sm bg-primary" />}
+          {l.id === selected && <span aria-label={`Resize ${l.name}`} role="presentation" onPointerDown={(e) => drag(e, l, "size")} className="pointer-events-auto absolute -right-1.5 -bottom-1.5 size-3 cursor-se-resize rounded-sm bg-primary" />}
         </div>
       ))}
     </div>
@@ -490,6 +520,13 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
+
+/** CSS that turns a layer's outline as the canvas turns the layer: about its pivot (% of the frame). */
+function turnStyle(b: SceneBox, rotation: number | undefined, pivot: { x: number; y: number } | undefined): React.CSSProperties {
+  if (!rotation) return {}
+  const p = pivot ?? { x: b.x + b.w / 2, y: b.y + b.h / 2 }
+  return { transform: `rotate(${rotation}deg)`, transformOrigin: `${((p.x - b.x) / b.w) * 100}% ${((p.y - b.y) / b.h) * 100}%` }
+}
 const round = (b: SceneBox): SceneBox => ({ x: Math.round(b.x * 10) / 10, y: Math.round(b.y * 10) / 10, w: Math.round(b.w * 10) / 10, h: Math.round(b.h * 10) / 10 })
 
 function Num({ label, value, onChange, min = 0, max = 100 }: { label: string; value: number; onChange: (n: number) => void; min?: number; max?: number }) {
@@ -632,6 +669,12 @@ function Inspector({ layer, onChange, onRemove, onOpenDesign, hasPinnedDesign, t
         <Num label="Width %" value={b.w} min={1} max={100 - b.x} onChange={(w) => onChange({ box: { ...b, w } })} />
         <Num label="Height %" value={b.h} min={1} max={100 - b.y} onChange={(h) => onChange({ box: { ...b, h } })} />
       </div>
+      {layerTurns(layer.kind) && (
+        <div className="flex items-end gap-1.5">
+          <div className="w-24"><Num label="Rotation °" value={layer.rotation ?? 0} min={-180} max={180} onChange={(deg) => onChange({ rotation: layerRotation(deg) })} /></div>
+          {layer.rotation ? <Button size="xs" variant="outline" onClick={() => onChange({ rotation: undefined })}>Upright</Button> : null}
+        </div>
+      )}
       {layer.kind === "ticker" && <p className="text-muted-foreground">The ticker that is running (Present → Ticker), in this box. While this scene is up, the ticker shows only here, not across the whole screen. Nothing shows here while no ticker runs.</p>}
       {layer.kind === "lowerThird" && <p className="text-muted-foreground">The lower third that is up (Present → Lower third), laid out in this box. While this scene is up, the lower third shows only here, not across the whole screen.</p>}
       {layer.kind === "logo" && <LogoNote />}

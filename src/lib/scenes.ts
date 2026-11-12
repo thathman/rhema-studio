@@ -8,6 +8,7 @@ import type { BroadcastOutput, BroadcastOutputLanguage, BroadcastTheme, LowerThi
 import { elapsedMs, formatMs, remainingMs, type TimerState } from "@/lib/timer"
 import { countdownTarget, isCountdownTo, type CountdownTargets } from "@/lib/countdown"
 import { normalizeGradient } from "@/lib/scene-gradient"
+import { layerRotation, layerTurns } from "@/lib/scene-rotation"
 import { normalizeImageDraw } from "@/lib/scene-image"
 
 /**
@@ -257,13 +258,16 @@ export function normalizeScene(raw: unknown): Scene | null {
       lineHeight: clamp(l.lineHeight, 0.5, 3, 1.2),
       textColor: typeof l.textColor === "string" && TEXT_COLOR.test(l.textColor) ? l.textColor : "#ffffff",
       underline: l.underline === true,
+      ...(l.textWiden === "right" || l.textWiden === "both" || l.textWiden === "left" ? { textWiden: l.textWiden } : {}),
     } : {}
     const ellipseColor = l.kind === "ellipse" ? (typeof l.color === "string" && TEXT_COLOR.test(l.color) ? l.color : "#3157a4") : undefined
     // A gradient Rhema cannot draw is dropped and the layer shows its solid colour.
     const gradient = l.kind === "color" || l.kind === "ellipse" ? normalizeGradient(l.gradient) : undefined
     // A picture drawing Rhema cannot draw is dropped and the picture covers its box, as before.
     const imageDraw = l.kind === "picture" ? normalizeImageDraw(l.imageDraw) : undefined
-    return [{ ...l, ...staticText, ...(ellipseColor ? { color: ellipseColor } : {}), gradient, imageDraw, clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
+    // Upright stays absent; a kind outputs cannot turn (a camera, video or ticker) stays upright.
+    const rotation = layerTurns(l.kind) ? layerRotation(l.rotation) : undefined
+    return [{ ...l, rotation, ...staticText, ...(ellipseColor ? { color: ellipseColor } : {}), gradient, imageDraw, clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
   const backgroundGradient = normalizeGradient(s.backgroundGradient)
   return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", ...(backgroundGradient ? { backgroundGradient } : {}), layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0), ...(typeof s.updatedBy === "string" ? { updatedBy: s.updatedBy.trim().slice(0, 60) || null } : s.updatedBy === null ? { updatedBy: null } : {}), ...(typeof s.libraryLookId === "string" && s.libraryLookId ? { libraryLookId: s.libraryLookId } : {}), ...(designPin(s.design) ? { design: { id: s.design.id, version: s.design.version, ...(s.design.pageId ? { pageId: s.design.pageId } : {}) } } : {}) }
@@ -401,7 +405,7 @@ function contentKey(f: SceneLayerFrame): string {
   if (f.kind === "camera") return f.cameraUrl ?? f.fallback ?? ""
   // A clock's time moves by itself: only starting, stopping or a different kind of clock is new.
   if (f.kind === "clock") return f.clock?.mode ?? ""
-  if (f.kind === "text") return fingerprint(JSON.stringify([f.text, f.fontFamily, f.fontSize, f.fontWeight, f.fontStyle, f.textAlign, f.lineHeight, f.textColor, f.underline]))
+  if (f.kind === "text") return fingerprint(JSON.stringify([f.text, f.fontFamily, f.fontSize, f.fontWeight, f.fontStyle, f.textAlign, f.lineHeight, f.textColor, f.underline, f.textWiden]))
   return f.gradient ? fingerprint(JSON.stringify(f.gradient)) : (f.color ?? "")
 }
 
@@ -429,7 +433,7 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
   }
 
   function layerFrame(l: SceneLayer): SceneLayerFrame {
-    const base = { id: l.id, kind: l.kind, box: l.box, crop: l.crop, opacity: l.opacity }
+    const base = { id: l.id, kind: l.kind, box: l.box, crop: l.crop, opacity: l.opacity, ...(l.rotation ? { rotation: l.rotation } : {}) }
     if (l.kind === "feed") return { ...base, ...layerContent(s, output, l) }
     if (l.kind === "color") return { ...base, color: l.color ?? "#000000", ...(l.gradient ? { gradient: l.gradient } : {}) }
     if (l.kind === "ellipse") return { ...base, color: l.color ?? "#3157a4", ...(l.gradient ? { gradient: l.gradient } : {}) }
@@ -460,6 +464,7 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
         lineHeight: l.lineHeight ?? 1.2,
         textColor: l.textColor ?? "#ffffff",
         underline: l.underline ?? false,
+        ...(l.textWiden ? { textWiden: l.textWiden } : {}),
       }
     }
     // A camera: its stream, played by each output from the church network. One hidden from scenes

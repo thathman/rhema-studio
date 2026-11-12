@@ -361,7 +361,7 @@ describe("Prepare design version picker", () => {
       setPageValue.call(pageSelect, "yoruba-page")
       pageSelect.dispatchEvent(new Event("change", { bubbles: true }))
     })
-    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use selected page in Prepare")!.click())
+    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use in Prepare")!.click())
 
     expect(document.body.querySelector('[role="alert"]')).toBeNull()
     expect(onSceneSelected).toHaveBeenCalledTimes(1)
@@ -474,8 +474,8 @@ describe("Prepare design version picker", () => {
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
     expect(mockInvoke).toHaveBeenCalledWith("design_save_draft", expect.objectContaining({ id: copy.id, expectedRevision: 1, input: expect.objectContaining({ title: "Opening for Sunday" }) }))
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Create version"))!.click())
-    expect(document.body.textContent).toContain("Use version 1 in Prepare")
-    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use version 1 in Prepare")!.click())
+    expect(document.body.textContent).toContain("Use in Prepare")
+    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use in Prepare")!.click())
 
     const selectedSceneId = onSceneSelected.mock.calls[0]?.[0]
     expect(selectedSceneId).toBeTruthy()
@@ -557,7 +557,7 @@ describe("Prepare design version picker", () => {
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Customize a copy")!.click())
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Create version"))!.click())
 
-    const useVersion = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use version 1 in Prepare")
+    const useVersion = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use in Prepare")
     expect(useVersion).toBeDefined()
     expect(document.body.textContent).not.toContain("cannot be used in Prepare yet")
     await act(async () => useVersion!.click())
@@ -641,11 +641,11 @@ describe("Prepare design version picker", () => {
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
     expect(mockInvoke).toHaveBeenCalledWith("design_save_draft", expect.objectContaining({ id: "design-template-copy", expectedRevision: 1, input: expect.objectContaining({ title: "Sunday welcome" }) }))
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Create version"))!.click())
-    expect(document.body.textContent).toContain("Use version 1 in Prepare")
+    expect(document.body.textContent).toContain("Use in Prepare")
     const itemBeforeVersionUse = useQueueStore.getState().items[0]
     if (itemBeforeVersionUse?.kind !== "slide") throw new Error("Expected the selected service moment to remain a slide")
     expect(itemBeforeVersionUse.slide).not.toHaveProperty("designRef")
-    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use version 1 in Prepare")!.click())
+    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Use in Prepare")!.click())
 
     expect(onSceneSelected).toHaveBeenCalledTimes(1)
     expect(useQueueStore.getState().items[0]).toMatchObject({ slide: { designRef: { id: "design-template-copy", version: 1 } } })

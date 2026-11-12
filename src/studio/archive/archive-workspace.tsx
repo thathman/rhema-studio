@@ -8,8 +8,10 @@ import { approvalState } from "@/lib/approval"
 import { archiveMonthAt, formatServiceCalendarDate, serviceCalendarDate, serviceDateInMonth } from "@/lib/archive-calendar"
 import { validTimeZone } from "@/lib/church-time"
 import { systemTimeZone } from "@/lib/setup-readiness"
-import { SongUsageBlock } from "@/studio/more/song-usage-block"
-import { JournalBlock } from "@/studio/library/library-blocks"
+import { useState } from "react"
+import { SongUsageBlock } from "@/studio/archive/song-usage-block"
+import { JournalBlock } from "@/studio/archive/service-runs"
+import { RunChronologyPage } from "@/studio/archive/run-chronology"
 import { RecorderArchive } from "@/studio/archive/recorder-archive"
 import { useSettingsStore } from "@/stores/settings-store"
 
@@ -50,6 +52,17 @@ export function ArchiveWorkspace() {
       else if (r === "unsaved") toast.warning("Save what is open in Prepare first", { description: "It has changes, or items not yet in a service." })
       else toast.error("Could not open service", { description: useServiceStore.getState().error ?? undefined })
     })
+  // One run's chronology page (#854 G10) replaces the overview until Back.
+  const [openRunId, setOpenRunId] = useState<string | null>(null)
+  if (openRunId) {
+    return (
+      <div className="h-full overflow-y-auto">
+        <div className="mx-auto flex max-w-[1700px] flex-col gap-5 px-8 pt-6 pb-16 max-[1200px]:px-5">
+          <RunChronologyPage runId={openRunId} onBack={() => setOpenRunId(null)} />
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[1700px] flex-col gap-5 px-8 pt-6 pb-16 max-[1200px]:px-5">
@@ -57,7 +70,8 @@ export function ArchiveWorkspace() {
           <div className="min-w-0">
             <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Every Sunday has a story</p>
             <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">History and records.</h1>
-            <p className="mt-1 text-xs text-muted-foreground">Review saved service plans and what happened during a run. Run records are private and read-only; reviewing them never changes an output.</p>
+            {/* #824 F13: the records are not edited here, but logs can be kept, saved and deleted, so it does not claim "read-only". */}
+            <p className="mt-1 text-xs text-muted-foreground">Every saved service, and what happened during each run. Reviewing a run never changes an output or restores a service. You can keep, save or delete logs and add after-action notes; the run's own record is never rewritten.</p>
           </div>
         </header>
 
@@ -83,7 +97,8 @@ export function ArchiveWorkspace() {
         <section aria-labelledby="past" className="flex flex-col gap-3">
           <div className="flex items-baseline justify-between gap-3">
             <h2 id="past" className="text-lg font-bold tracking-[-0.03em]">Saved services</h2>
-            <p className="text-xs text-muted-foreground">{services.length} on this computer, newest first{dirty ? " · save or close the open one to open another" : ""}</p>
+            {/* #804 R5: the one full list of saved services; Home shows the latest few and links here. */}
+            <p className="text-xs text-muted-foreground">Every one on this computer ({services.length}), newest first{dirty ? " · save or close the open one to open another" : ""}</p>
           </div>
           {services.length === 0 && <p className="rounded-lg border border-border bg-card px-5 py-6 text-center text-xs text-muted-foreground">None yet. Create one in Prepare.</p>}
           <ul className="flex flex-col gap-2.5">
@@ -111,10 +126,11 @@ export function ArchiveWorkspace() {
         <RecorderArchive />
 
         <div className="grid grid-cols-2 gap-5 max-[1100px]:grid-cols-1">
-          <Card title="Service runs and logs" sub="Review captured run activity and plan versus actual timing. A run record never restores a service or sends anything to a screen.">
-            <JournalBlock />
+          <Card title="Service runs and logs" sub="This session's log, each saved run's chronology and after-action notes, and the logs you kept. Opening a run never restores a service or sends anything to a screen.">
+            <JournalBlock onOpenRun={setOpenRunId} />
           </Card>
-          <Card title="Songs sung" sub="How often each song was used, for licence reports.">
+          {/* #843 S19: counted from what was shown during runs; a plan-based count is labelled "planned". */}
+          <Card title="Song usage" sub="Songs shown on screen during service runs, for licence reports. Planned counts from saved services are labelled planned.">
             <SongUsageBlock />
           </Card>
         </div>

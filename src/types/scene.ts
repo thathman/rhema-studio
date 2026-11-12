@@ -127,6 +127,12 @@ export interface SceneLayer {
   lineHeight?: number
   textColor?: string
   underline?: boolean
+  /**
+   * text: how a word wider than the box widens the block, as the design editor lays it out: from
+   * the left edge ("right"), both sides ("both") or the right edge ("left"). Set by every save from
+   * the design editor; absent on text saved before, which squeezes the word into the box instead.
+   */
+  textWiden?: "right" | "both" | "left"
   /** picture: drawn as the design editor draws it (crop, rounded corners, clips); see `ImageDraw`. */
   imageDraw?: ImageDraw
   /** picture, video: a library picture or video. A picture also keeps its picture as a data URL (so outputs need nothing else). */
@@ -141,6 +147,11 @@ export interface SceneLayer {
   /** How this layer changes when what it shows changes (a new verse, picture or video): a cut, or a cross-fade of this many ms. Absent: a cut. */
   fadeMs?: number
   box: SceneBox
+  /**
+   * Degrees clockwise about the box's centre, as the design editor turns it (#851 G7). `box` is
+   * the layer's unturned box. Absent or 0: upright. Cameras and videos are never turned.
+   */
+  rotation?: number
   crop?: SceneCrop
   /** 0–1 */
   opacity: number
@@ -189,6 +200,8 @@ export interface SceneLayerFrame {
   id: string
   kind: SceneLayerKind
   box: SceneBox
+  /** Degrees clockwise about the box's centre (absent: upright); see `SceneLayer.rotation`. */
+  rotation?: number
   crop?: SceneCrop
   opacity: number
   theme?: BroadcastTheme
@@ -205,6 +218,8 @@ export interface SceneLayerFrame {
   lineHeight?: number
   textColor?: string
   underline?: boolean
+  /** text: how an over-wide word widens the block (see `SceneLayer.textWiden`). */
+  textWiden?: "right" | "both" | "left"
   imageUrl?: string | null
   /** picture: drawn as the design editor draws it. */
   imageDraw?: ImageDraw

@@ -14,6 +14,7 @@ import { cameraWords } from "@/lib/show-health"
 import { sceneForOutput } from "@/lib/scenes"
 import { LANGUAGE_NAMES } from "@/lib/output-language"
 import type { ContentType } from "@/types/broadcast"
+import { isSongItem } from "@/types"
 import { systemTimeZone } from "@/lib/setup-readiness"
 import { validTimeZone } from "@/lib/church-time"
 import type { OutlineHeader } from "@/lib/run-of-show"
@@ -228,6 +229,8 @@ function checkpointPayload(snapshot: ServiceRunSnapshot) {
     plannedMs: snapshot.context.plannedMs,
     headers: snapshot.context.headers,
     operator: snapshot.context.operator,
+    // The run's church-local start day (#843 S19): song usage dates a run without a service date by it.
+    startedLocalDate: localDateIn(snapshot.context.startedAt, snapshot.context.timeZone),
   }
 }
 
@@ -425,7 +428,7 @@ useBroadcastStore.subscribe((s, prev) => {
     seenBeforeRehearsal = null
     if (before && before.isLive === s.isLive && before.liveVerse === s.liveVerse) return
     if (s.isLive && s.liveVerse && !isQuick(s)) notePlan()
-    if (s.isLive && s.liveVerse) add({ kind: isQuick(s) ? "quick" : "live", label: labelOf(s), itemId: s.liveItemId, ...sourceOf(s) })
+    if (s.isLive && s.liveVerse) add({ kind: isQuick(s) ? "quick" : "live", label: labelOf(s), itemId: s.liveItemId, ...sourceOf(s), ...songOf(s) })
     else if (before?.isLive) add({ kind: "clear", label: labelOf(before), itemId: before.liveItemId, ...sourceOf(before) })
     return
   }
@@ -435,7 +438,7 @@ useBroadcastStore.subscribe((s, prev) => {
   if (wentOn) {
     if (!isQuick(s)) notePlan()
     const restored = prev.liveVerse === s.liveVerse && !prev.isLive
-    add({ kind: restored ? "restore" : isQuick(s) ? "quick" : "live", label: labelOf(s), itemId: s.liveItemId, ...sourceOf(s) })
+    add({ kind: restored ? "restore" : isQuick(s) ? "quick" : "live", label: labelOf(s), itemId: s.liveItemId, ...sourceOf(s), ...songOf(s) })
   }
 })
 
@@ -485,7 +488,7 @@ useBroadcastStore.subscribe((s, prev) => {
     const name = CONTENT_NAMES[id]
     if (b?.on && (!a?.on || a.revision !== b.revision)) {
       const back = a && !a.on && a.revision === b.revision
-      useJournalStore.getState().add({ kind: "source", label: `${name}${back ? " back" : ""}: ${b.value.reference}${b.by && !back ? ` · by ${b.by}` : ""}`, itemId: b.itemId, source: name, revision: b.revision, ...(b.by ? { by: b.by } : {}) })
+      useJournalStore.getState().add({ kind: "source", label: `${name}${back ? " back" : ""}: ${b.value.reference}${b.by && !back ? ` · by ${b.by}` : ""}`, itemId: b.itemId, source: name, revision: b.revision, ...(b.by ? { by: b.by } : {}), ...(songIdOfItem(b.itemId) ? { songId: songIdOfItem(b.itemId) } : {}) })
     } else if (a?.on && !b?.on) {
       useJournalStore.getState().add({ kind: "source", label: `${name} off: ${a.value.reference}`, itemId: a.itemId, source: name, revision: a.revision })
     }
@@ -555,7 +558,39 @@ useServiceStore.subscribe((s, prev) => {
   if (s.current?.id !== prev.current?.id && !useJournalStore.getState().runContext) useJournalStore.setState({ startItemIds: null })
 })
 
-type Aired = { liveVerse: { reference: string; lines?: string[]; screen?: "black" | "logo"; quick?: boolean; content?: ContentType } | null; heldLive?: unknown; liveItemId?: string | null }
+type Aired = { liveVerse: { reference: string; lines?: string[]; screen?: "black" | "logo"; quick?: boolean; content?: ContentType; kind?: string } | null; heldLive?: unknown; liveItemId?: string | null; liveSlide?: { songId: string } | null }
+
+/** The library song of a rundown item, when it is a song. */
+function songIdOfItem(itemId: string | null | undefined): string | undefined {
+  if (!itemId) return undefined
+  const item = useQueueStore.getState().items.find((candidate) => candidate.id === itemId)
+  return item && isSongItem(item) ? item.song.song_id : undefined
+}
+
+/**
+ * Which song was on screen (#843 S19): licence reports count from this. From the live song slide
+ * (a song sent from Library or a feed has no rundown item), else from the rundown item. Never on a
+ * quick screen; rehearsal is never journalled.
+ */
+function songOf(s: Aired): { songId?: string } {
+  if (!s.liveVerse || isQuick(s)) return {}
+  const fromSlide = s.liveVerse.kind === "lyric" || s.liveVerse.content === "song" || s.liveVerse.content === "hymn" ? s.liveSlide?.songId : undefined
+  const songId = fromSlide ?? songIdOfItem(s.liveItemId)
+  return songId ? { songId } : {}
+}
+
+/** The church-local calendar day an ISO time falls on, in `timeZone` (IANA); "" when unknown. */
+export function localDateIn(iso: string, timeZone: string | null | undefined): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ""
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timeZone || undefined, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date)
+    const part = (type: string) => parts.find((p) => p.type === type)?.value ?? ""
+    return `${part("year")}-${part("month")}-${part("day")}`
+  } catch {
+    return ""
+  }
+}
 
 /** The source tag for a program entry: what kind of content it was (not a quick screen). */
 function sourceOf(s: Aired): { source?: string } {

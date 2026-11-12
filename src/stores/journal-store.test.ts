@@ -4,7 +4,7 @@ const mockInvoke = vi.fn<(...args: unknown[]) => Promise<unknown>>(async (comman
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}) }))
 
-import { flushServiceRunCheckpoint, remapJournalItemIds, startNewJournal, useJournalStore } from "./journal-store"
+import { flushServiceRunCheckpoint, localDateIn, remapJournalItemIds, startNewJournal, useJournalStore } from "./journal-store"
 import { useBroadcastStore } from "./broadcast-store"
 import { useQueueStore } from "./queue-store"
 import type { VerseRenderData } from "@/types"
@@ -143,8 +143,36 @@ describe("service log entries (AR-001)", () => {
         checkpointAt: expect.any(Number),
         checkpointMono: expect.any(Number),
         entries: [expect.objectContaining({ kind: "event", label: "Opening" })],
+        startedLocalDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       },
     })
+  })
+
+  it("names the song on a live entry, from the song slide or the rundown item (#843 S19)", () => {
+    // Sent from Library: no rundown item, the live song slide names the song.
+    useBroadcastStore.setState({ isLive: true, liveItemId: null, liveSlide: { itemId: "library-x", songId: "song-library", index: 0, total: 1 }, liveVerse: { kind: "lyric", content: "song", reference: "Amazing Grace", segments: [], lines: ["Amazing grace"] } as unknown as VerseRenderData })
+    // A rundown song item.
+    useQueueStore.setState({ items: [{ id: "item-hymn", kind: "song", song: { song_id: "song-rundown", languages: ["en"] }, reference: "Holy, Holy, Holy", confidence: 1, source: "manual", added_at: 0 }] as never })
+    useBroadcastStore.setState({ liveItemId: "item-hymn", liveSlide: null, liveVerse: { kind: "lyric", content: "hymn", reference: "Holy, Holy, Holy", segments: [], lines: ["Holy"] } as unknown as VerseRenderData })
+    // A verse: no song.
+    useBroadcastStore.setState({ liveItemId: null, liveVerse: slide("John 3:16") })
+    const entries = useJournalStore.getState().entries as Array<{ kind: string; songId?: string }>
+    expect(entries.filter((e) => e.kind === "live").map((e) => e.songId)).toEqual(["song-library", "song-rundown", undefined])
+  })
+
+  it("a song in rehearsal is never journalled (#843 S19)", () => {
+    useBroadcastStore.setState({ rehearsal: true })
+    useJournalStore.getState().clear()
+    useBroadcastStore.setState({ isLive: true, liveItemId: null, liveSlide: { itemId: "library-x", songId: "song-rehearsed", index: 0, total: 1 }, liveVerse: { kind: "lyric", content: "song", reference: "Rehearsed", segments: [], lines: ["x"] } as unknown as VerseRenderData })
+    expect((useJournalStore.getState().entries as Array<{ songId?: string }>).some((e) => e.songId === "song-rehearsed")).toBe(false)
+    useBroadcastStore.setState({ rehearsal: false, isLive: false, liveVerse: null, liveSlide: null })
+  })
+
+  it("dates a run by the church-local day, not the UTC day (#843 S19)", () => {
+    // 19:30 on 31 October in Chicago is 00:30 UTC on 1 November.
+    expect(localDateIn("2026-11-01T00:30:00Z", "America/Chicago")).toBe("2026-10-31")
+    expect(localDateIn("2026-11-01T00:30:00Z", "Africa/Lagos")).toBe("2026-11-01")
+    expect(localDateIn("not a date", "Africa/Lagos")).toBe("")
   })
 })
 

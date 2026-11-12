@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowDownIcon, ArrowUpIcon, CircleIcon, CopyIcon, EyeIcon, EyeOffIcon, PlusIcon, Redo2Icon, SaveIcon, SquareIcon, TextIcon, Trash2Icon, Undo2Icon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, CircleIcon, CopyIcon, EyeIcon, EyeOffIcon, PlusIcon, QrCodeIcon, Redo2Icon, SaveIcon, SquareIcon, TextIcon, Trash2Icon, Undo2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -17,6 +17,7 @@ import type { BroadcastOutputLanguage } from "@/types/broadcast-output"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { gradientCss, normalizeGradient } from "@/lib/scene-gradient"
+import { layerRotation, layerTurns } from "@/lib/scene-rotation"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { clockText, countdownClock, sceneClock, untilClock } from "@/lib/scenes"
 import { crawlElapsed, pageIndex, tickerText } from "@/lib/ticker"
@@ -24,6 +25,7 @@ import { useMediaStore } from "@/stores/media-store"
 import { cameraOfUrl, useRouterHealth, whepUrl } from "@/lib/cameras"
 import type { MediaAssetStatus } from "@/types"
 import { CountdownSelect } from "@/studio/production/countdown-select"
+import { qrDataUrl, safeLink } from "@/lib/qr-bulletin"
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message
@@ -241,6 +243,9 @@ export function DesignDocumentEditor({
   const [previewClockNow, setPreviewClockNow] = useState(() => Date.now())
   const [imagePickerOpen, setImagePickerOpen] = useState(false)
   const [cameraPickerOpen, setCameraPickerOpen] = useState(false)
+  const [qrFormOpen, setQrFormOpen] = useState(false)
+  const [qrLink, setQrLink] = useState("")
+  const [qrMessage, setQrMessage] = useState("")
   const [mediaPickerKind, setMediaPickerKind] = useState<"image" | "video">("image")
   const [imagePickerBusy, setImagePickerBusy] = useState(false)
   const [imagePickerMessage, setImagePickerMessage] = useState("")
@@ -900,6 +905,55 @@ export function DesignDocumentEditor({
     )
     setSelectedId(id)
   }
+  /**
+   * A QR code layer (#851 G7): an ordinary picture layer holding the code for a safe http(s) link,
+   * so it stays editable and saves into scenes like any other picture. The layer is named after
+   * the link so nobody puts a surprise code on screen.
+   */
+  const addQrLayer = async () => {
+    const link = safeLink(qrLink)
+    if (!link) {
+      setQrMessage("Enter a web address that starts with https:// or http:// (no password, at most 300 characters).")
+      return
+    }
+    try {
+      const imageUrl = await qrDataUrl(link)
+      const side = Math.round(scene.artboard.height * 0.36)
+      const id = stableId("qr")
+      const node: SaraswatiImageNode = {
+        id,
+        parentId: activeRootId,
+        name: `QR code · ${link}`.slice(0, 80),
+        visible: true,
+        x: Math.round((scene.artboard.width - side) / 2),
+        y: Math.round((scene.artboard.height - side) / 2),
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+        opacity: 1,
+        originX: "left",
+        originY: "top",
+        type: "image",
+        width: side,
+        height: side,
+        src: imageUrl,
+        cropX: 0,
+        cropY: 0,
+        clipPath: null,
+      }
+      editSceneWithBindings(
+        () => dispatch({ type: "ADD_NODE", node }),
+        (current) => ({ ...current, [id]: { id, kind: "picture", imageUrl } }),
+      )
+      setSelectedId(id)
+      setQrFormOpen(false)
+      setQrLink("")
+      setQrMessage("")
+      setMessage("QR code added as a picture layer. Keep it large and unrotated so it scans; save the draft to keep it.")
+    } catch (error) {
+      setQrMessage("The QR code could not be made: " + errorMessage(error))
+    }
+  }
   const openMediaPicker = (kind: "image" | "video") => {
     setMediaPickerKind(kind)
     setImagePickerOpen(true)
@@ -1194,6 +1248,7 @@ export function DesignDocumentEditor({
               {selectedRenderable?.type === "image" ? "Replace image" : "Image from Library"}
             </Button>
             <Button size="xs" variant="outline" onClick={openVideoPicker} disabled={document.kind === "template" || imagePickerBusy}>Video from Library</Button>
+            <Button size="xs" variant="outline" onClick={() => { setQrFormOpen((open) => !open); setQrMessage("") }} disabled={document.kind === "template"} aria-expanded={qrFormOpen}><QrCodeIcon /> QR code</Button>
             <Button size="xs" variant="outline" onClick={() => addLayer("feed")} disabled={document.kind === "template"}><PlusIcon /> Live content</Button>
             <Button size="xs" variant="outline" onClick={() => setCameraPickerOpen((open) => !open)} disabled={document.kind === "template"}><PlusIcon /> Camera</Button>
             <Button size="xs" variant="outline" onClick={() => addLayer("color")} disabled={document.kind === "template"}><PlusIcon /> Colour layer</Button>
@@ -1252,6 +1307,16 @@ export function DesignDocumentEditor({
                 </p>
               )}
             </section>
+          )}
+          {qrFormOpen && (
+            <form aria-label="QR code" className="flex flex-wrap items-end gap-2 rounded-md border border-border bg-card p-3" onSubmit={(event) => { event.preventDefault(); void addQrLayer() }}>
+              <label className="flex min-w-64 flex-1 flex-col gap-1 text-[0.6875rem] font-semibold">Link the QR code opens
+                <Input aria-label="QR code link" type="url" inputMode="url" placeholder="https://" value={qrLink} maxLength={300} onChange={(event) => { setQrLink(event.currentTarget.value); setQrMessage("") }} className="h-8 text-xs font-normal" />
+              </label>
+              <Button type="submit" size="xs" disabled={!qrLink.trim()}>Add QR code</Button>
+              <Button type="button" size="xs" variant="ghost" onClick={() => setQrFormOpen(false)}>Close</Button>
+              {qrMessage && <p role="alert" className="basis-full text-xs text-destructive">{qrMessage}</p>}
+            </form>
           )}
           {cameraPickerOpen && (
             <section aria-label="Camera sources" className="rounded-md border border-border bg-card p-3">
@@ -1392,7 +1457,9 @@ export function DesignDocumentEditor({
                   {"width" in selectedRenderable && <NumberField label="Width" min={1} max={scene.artboard.width * 2} value={selectedRenderable.width} onCommit={(value) => commitNumber("width", value)} />}
                   {"height" in selectedRenderable && <NumberField label="Height" min={1} max={scene.artboard.height * 2} value={selectedRenderable.height} onCommit={(value) => commitNumber("height", value)} />}
                   <NumberField label="Opacity %" min={0} max={100} value={selectedRenderable.opacity * 100} onCommit={(value) => dispatch({ type: "SET_NODE_OPACITY", id: selectedRenderable.id, opacity: value / 100 })} />
+                  <NumberField label="Rotation °" min={-360} max={360} value={selectedRenderable.rotation} onCommit={(value) => updateNode({ ...selectedRenderable, rotation: value })} />
                 </div>
+                {layerRotation(selectedRenderable.rotation) !== undefined && selectedBinding && !layerTurns(selectedBinding.kind) && <p role="status" className="text-[0.6875rem] text-muted-foreground">Cameras, videos and tickers stay upright on outputs. Set Rotation back to 0 before using a version in Prepare.</p>}
                 {selectedRenderable.type === "image" && selectedBinding?.kind === "picture" && (
                   <section className="space-y-2 border-t border-border pt-3" aria-label="Picture appearance">
                     <div>

@@ -289,11 +289,54 @@ export function watchRouter(): () => void {
 let lastSent = ""
 
 /**
+ * What the host suggests Rhema Studio Cam sends for one camera (#838): a ceiling over the phone's own
+ * size and bitrate. "phone" (or absent) leaves it to the phone. The host's listener knows the same
+ * ids (`rhema_api::cameras::quality_suggestion`) and tells the phone in its tally reply.
+ */
+export type CameraQuality = "phone" | "tv720" | "hd1080" | "light"
+
+export const CAMERA_QUALITIES: readonly { id: CameraQuality; label: string; detail: string }[] = [
+  { id: "phone", label: "The phone decides", detail: "Rhema Studio Cam uses its own size and bitrate (about 14 Mbit/s at 1080p30)." },
+  { id: "tv720", label: "TV-friendly 720p, lower bitrate", detail: "At most 720p and 4 Mbit/s: for a Google TV or a slow player that stutters at a high bitrate." },
+  { id: "hd1080", label: "1080p, moderate bitrate", detail: "At most 1080p and 8 Mbit/s." },
+  { id: "light", label: "Light 720p for a busy network", detail: "At most 720p and 2 Mbit/s: when the Wi-Fi is crowded." },
+]
+
+/** A camera as kept in settings, with the quality suggested for it (kept alongside, absent until chosen). */
+export type CameraWithQuality = CameraSource & { quality?: CameraQuality }
+
+/** The quality suggested for a camera ("phone" when none or an unknown id was kept). */
+export function cameraQuality(cam: CameraSource): CameraQuality {
+  const q = (cam as CameraWithQuality).quality
+  return CAMERA_QUALITIES.some((x) => x.id === q) ? (q as CameraQuality) : "phone"
+}
+
+/** The same cameras with one camera's suggested quality changed ("phone" removes it). */
+export function withCameraQuality(cameras: CameraSource[], name: string, quality: CameraQuality): CameraSource[] {
+  return cameras.map((c) => {
+    if (c.name !== name) return c
+    const next: CameraWithQuality = { ...c }
+    if (quality === "phone") delete next.quality
+    else next.quality = quality
+    return next
+  })
+}
+
+/** What the listener is told about each camera: name and secret, and for Rhema Studio Cam its label and suggested quality. */
+export function cameraListEntries(cameras: CameraSource[]): { name: string; token: string; label: string; quality?: Exclude<CameraQuality, "phone"> }[] {
+  return cameras.map((c) => {
+    const q = cameraQuality(c)
+    return q === "phone" ? { name: c.name, token: c.token, label: c.label } : { name: c.name, token: c.token, label: c.label, quality: q }
+  })
+}
+
+/**
  * The camera list (names and secrets) to the listener that serves the camera page and to the
  * router's settings; a removed camera or a new link also disconnects whoever sends with the old one.
+ * The label and suggested quality go along for Rhema Studio Cam (#838, #850).
  */
 function syncList(cameras: CameraSource[]): Promise<unknown> {
-  const list = cameras.map((c) => ({ name: c.name, token: c.token }))
+  const list = cameraListEntries(cameras)
   const key = JSON.stringify(list)
   if (key === lastSent) return Promise.resolve()
   lastSent = key

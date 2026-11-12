@@ -1,5 +1,4 @@
 import { mayLeaveThemeDraft } from "@/lib/theme-draft"
-import { toast } from "sonner"
 import { useState, useMemo } from "react"
 import { useBroadcastStore } from "@/stores"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
@@ -31,6 +30,7 @@ import {
 import { cn } from "@/lib/utils"
 import { importTheme, exportTheme } from "@/lib/theme-designer-files"
 import { NewThemeDialog } from "./new-theme-dialog"
+import { deleteThemeAsked } from "./delete-asks"
 import type { BroadcastTheme, VerseRenderData } from "@/types"
 
 type FilterTab = "all" | "pinned" | "custom"
@@ -195,10 +195,7 @@ function ThemeCard({
                   className="text-destructive"
                   onClick={(e) => {
                     e.stopPropagation()
-                    const { inUse } = useBroadcastStore.getState().deleteTheme(theme.id)
-                    // The theme being edited is gone: close its draft (Save would bring it back).
-                    if (!inUse.length && useBroadcastStore.getState().editingThemeId === theme.id) useBroadcastStore.getState().stopEditing()
-                    if (inUse.length) toast.error(`${theme.name} is used by ${inUse.join(", ")}`, { description: "Choose another look for those outputs first: Design → Used on… opens each one." })
+                    void deleteThemeAsked(theme)
                   }}
                 >
                   <Trash2Icon className="mr-2 size-3.5" />

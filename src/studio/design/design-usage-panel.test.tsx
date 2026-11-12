@@ -283,3 +283,29 @@ describe("Design usage details", () => {
     expect(document.body.querySelector('[role="alert"]')?.textContent).toContain("Rhema scenes cannot show it yet")
   })
 })
+
+describe("Used On reference graph (#852 G8)", () => {
+  it("groups uses by design version, then service and moment, and names the outputs on a pinned scene", async () => {
+    const localScene = { id: "scene-opening", name: "Opening graphic", layers: [], design: { id: "design-opening", version: 1 } } as unknown as Scene
+    const main = useBroadcastStore.getState().outputs[0]!
+    useBroadcastStore.setState({ scenes: [localScene], outputs: [{ ...main, id: "sanctuary", name: "Sanctuary", sceneId: "scene-opening" }, { ...main, id: "lobby", name: "Lobby", sceneId: undefined }] })
+    mockUsedOn.mockResolvedValue([
+      { programId: "p1", title: "Sunday service", serviceDate: "2026-11-01", revision: 8, approvedRevision: 7, itemId: "m1", reference: "Opening", version: 2 },
+      { programId: "p2", title: "Midweek", serviceDate: null, revision: 2, approvedRevision: null, itemId: "m2", reference: "Welcome", version: 1 },
+    ])
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => root!.render(createElement(DesignUsagePanel, { designId: "design-opening" })))
+
+    const panel = document.body.querySelector('[aria-label="Used On"]')!
+    const headings = [...panel.querySelectorAll("h4")].map((heading) => heading.textContent)
+    expect(headings).toEqual(["Version 2", "Version 1"])
+    const text = panel.textContent ?? ""
+    expect(text.indexOf("Version 2")).toBeLessThan(text.indexOf("Sunday service · 2026-11-01"))
+    expect(text.indexOf("Version 1")).toBeLessThan(text.indexOf("Opening graphic"))
+    expect(text.indexOf("Version 1")).toBeLessThan(text.indexOf("Midweek"))
+    expect(text).toContain("On outputs: Sanctuary")
+    expect(text).not.toContain("Lobby")
+  })
+})

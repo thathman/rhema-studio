@@ -1,5 +1,5 @@
 import { withLanguageOverride } from "@/lib/output-language"
-import { useEffect, useState, type CSSProperties } from "react"
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react"
 import { CheckIcon, CircleAlertIcon, HistoryIcon, RefreshCwIcon, ShieldCheckIcon, XIcon } from "lucide-react"
 import { gradientCss, gradientFallback, normalizeGradient } from "@/lib/scene-gradient"
 import { Badge } from "@/components/ui/badge"
@@ -207,7 +207,13 @@ function stateVariant(state: ApprovalRequest["state"]): "amber" | "green" | "ros
 }
 
 /** Host-backed approval inbox. Scene changes need a separate explicit host-checked Apply action. */
-export function ApprovalRequestsPanel() {
+/**
+ * Permissions → Approval Requests: the one list of requests the host decides (doc 28, #855).
+ * `local` carries requests from desks on older versions, which have no host request ID and live in
+ * this computer's ledger: they show inside this same area and count toward the same pending total,
+ * so no request waits in a second, separate inbox.
+ */
+export function ApprovalRequestsPanel({ local }: { local?: { open: number; content: ReactNode } } = {}) {
   const joinStatus = useJoin((state) => state.status)
   const scenes = useBroadcastStore((state) => state.scenes)
   const outputs = useBroadcastStore((state) => state.outputs)
@@ -337,13 +343,13 @@ export function ApprovalRequestsPanel() {
           <h2 id="host-approval-requests-title" className="font-semibold">Approval Requests</h2>
           <p className="text-xs text-muted-foreground">Durable requests recorded by this host. Approved scenes need an explicit Apply and never Take to Program. An approved Stage cue needs explicit host Apply before it reaches its private display. Service revisions use Prepare.</p>
         </div>
-        <Badge variant={pending.length ? "amber" : "neutral"}>{pending.length} pending</Badge>
+        <Badge variant={pending.length + (local?.open ?? 0) ? "amber" : "neutral"}>{pending.length + (local?.open ?? 0)} pending</Badge>
         <Button size="sm" variant="outline" aria-label="Refresh approval requests" disabled={!isHost || loading} onClick={reload}><RefreshCwIcon /> Refresh</Button>
       </header>
       <div className="p-4">
         {!isHost && <p role="status" className="mb-3 rounded-md border border-border bg-muted/40 p-3 text-sm">Only the main host can review or decide host approval requests. This view is read-only.</p>}
         {error && <p role="alert" className="mb-3 flex items-start gap-2 text-sm text-destructive"><CircleAlertIcon className="mt-0.5 size-4 shrink-0" />Host approval requests could not be loaded: {error}</p>}
-        {!isHost ? <p className="text-sm text-muted-foreground">Open Permissions on the main host to review its approval requests.</p> : !hydrated && !error ? <p role="status" className="text-sm text-muted-foreground">Loading host requests…</p> : requests.length === 0 && error ? <p className="text-sm text-muted-foreground">Retry to see whether the host has recorded requests.</p> : requests.length === 0 ? <p className="text-sm text-muted-foreground">No host-recorded approval requests.</p> : (
+        {!isHost ? <p className="text-sm text-muted-foreground">Open Permissions on the main host to review its approval requests.</p> : !hydrated && !error ? <p role="status" className="text-sm text-muted-foreground">Loading host requests…</p> : requests.length === 0 && error ? <p className="text-sm text-muted-foreground">Retry to see whether the host has recorded requests.</p> : requests.length === 0 ? (local ? null : <p className="text-sm text-muted-foreground">No approval requests.</p>) : (
           <ul className="divide-y divide-border">
             {requests.map((request) => {
               const open = request.state === "submitted"
@@ -436,6 +442,7 @@ export function ApprovalRequestsPanel() {
             })}
           </ul>
         )}
+        {local?.content}
       </div>
     </section>
   )

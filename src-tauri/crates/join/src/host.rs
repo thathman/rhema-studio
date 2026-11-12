@@ -152,7 +152,19 @@ pub async fn me(host: &Host, token: &str) -> Result<serde_json::Value, String> {
 /// its own way to read them while the host's camera router runs. A refusal while the main desk has
 /// taken back control starts with "paused:".
 pub async fn cameras(host: &Host, token: &str) -> Result<serde_json::Value, String> {
-    let r = host.client(Some(Duration::from_secs(8)))?.get(host.url("/api/v1/cameras/watch")).header("X-Rhema-Key", token).send().await.map_err(|e| host.unreachable(&e))?;
+    companion_get(host, token, "/api/v1/cameras/watch").await
+}
+
+/// The host's feeds an OBS companion may add to its scenes as overlays (#848 G4): each one's id,
+/// name, kind (bible, lyrics, name, ticker, timer) and link path, and the host's http port.
+/// Refused as `cameras` is.
+pub async fn overlays(host: &Host, token: &str) -> Result<serde_json::Value, String> {
+    companion_get(host, token, "/api/v1/overlays").await
+}
+
+/// A companion's read from its host; a refusal while the main desk has taken back control starts with "paused:".
+async fn companion_get(host: &Host, token: &str, path: &str) -> Result<serde_json::Value, String> {
+    let r = host.client(Some(Duration::from_secs(8)))?.get(host.url(path)).header("X-Rhema-Key", token).send().await.map_err(|e| host.unreachable(&e))?;
     let status = r.status().as_u16();
     let v = r.json::<serde_json::Value>().await.unwrap_or_default();
     if (200..300).contains(&status) {
@@ -213,6 +225,87 @@ pub async fn withdraw_request(host: &Host, token: &str, id: &str) -> Result<serd
         423 => format!("paused: {why}"),
         _ => why,
     })
+}
+
+/// A plan id the host could accept (`rhema_api::plans`): letters, digits, `-` and `_`, at most 64.
+fn plan_id_ok(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+}
+
+/// The host's refusal of a plan request, said so a joined Editor desk can act on it (#847). The
+/// desk's client reads the prefix: `forbidden:` (403, this role does not work on the plan),
+/// `paused:` (423), `missing:` (404), `conflict:<actual revision>:` (409, someone saved since this
+/// desk opened it) and `refused:` (409 without a revision). Anything else is said as it is.
+fn plan_failure(status: u16, body: &serde_json::Value) -> String {
+    let why = body.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from);
+    match status {
+        401 => "The host no longer knows this computer: pair again".into(),
+        403 => format!("forbidden: {why}"),
+        404 => "missing: The host has no such service plan (or is an older Rhema Studio that does not share plans): refresh the list".into(),
+        409 => match body.get("actual").and_then(serde_json::Value::as_i64) {
+            Some(actual) => format!("conflict:{actual}: {why}"),
+            None => format!("refused: {why}"),
+        },
+        423 => format!("paused: {why}"),
+        _ => why,
+    }
+}
+
+/// One plan call to the host, with this desk's key; the host checks the role and the revision.
+async fn plan_call(host: &Host, token: &str, method: reqwest::Method, path: &str, body: Option<serde_json::Value>) -> Result<serde_json::Value, String> {
+    let mut request = host.client(Some(Duration::from_secs(10)))?.request(method, host.url(path)).header("X-Rhema-Key", token);
+    if let Some(body) = body {
+        request = request.json(&body);
+    }
+    let r = request.send().await.map_err(|e| host.unreachable(&e))?;
+    let status = r.status().as_u16();
+    let body = r.json::<serde_json::Value>().await.unwrap_or_default();
+    if (200..300).contains(&status) {
+        return Ok(body);
+    }
+    Err(plan_failure(status, &body))
+}
+
+const NOT_A_PLAN_ID: &str = "missing: That is not a service plan id: refresh the list";
+
+/// The service plans in use on the host (C5, `docs/contracts/plan-drafts-v1.md`): Editor,
+/// Configure and Present desks may read them.
+pub async fn plans(host: &Host, token: &str) -> Result<serde_json::Value, String> {
+    let list = plan_call(host, token, reqwest::Method::GET, "/api/v1/plans", None).await?;
+    if list.is_array() { Ok(list) } else { Err("The host returned an invalid plan list.".into()) }
+}
+
+/// One service plan, `{ program, items }`, with the revision a draft must be saved against.
+pub async fn plan(host: &Host, token: &str, id: &str) -> Result<serde_json::Value, String> {
+    if !plan_id_ok(id) {
+        return Err(NOT_A_PLAN_ID.into());
+    }
+    plan_call(host, token, reqwest::Method::GET, &format!("/api/v1/plans/{id}"), None).await
+}
+
+/// Save this desk's draft of a plan, only if the host still has it at `expected_revision`. A save
+/// never approves: the main desk's approved revision stays what Live uses.
+pub async fn save_plan(host: &Host, token: &str, id: &str, expected_revision: i64, items: &serde_json::Value) -> Result<serde_json::Value, String> {
+    if !plan_id_ok(id) {
+        return Err(NOT_A_PLAN_ID.into());
+    }
+    if !items.is_array() {
+        return Err("A plan's items are a list".into());
+    }
+    let body = serde_json::json!({ "expectedRevision": expected_revision, "items": items });
+    plan_call(host, token, reqwest::Method::PUT, &format!("/api/v1/plans/{id}"), Some(body)).await
+}
+
+/// Ask the main desk to approve exactly `revision` of a plan: an approval request on the host.
+pub async fn submit_plan(host: &Host, token: &str, id: &str, revision: i64, note: Option<&str>) -> Result<serde_json::Value, String> {
+    if !plan_id_ok(id) {
+        return Err(NOT_A_PLAN_ID.into());
+    }
+    let mut body = serde_json::json!({ "revision": revision });
+    if let Some(note) = note.map(str::trim).filter(|n| !n.is_empty()) {
+        body["note"] = serde_json::Value::String(note.to_string());
+    }
+    plan_call(host, token, reqwest::Method::POST, &format!("/api/v1/plans/{id}/submit"), Some(body)).await
 }
 
 /// An OBS companion's tally to its host: the cameras on its OBS program and preview, and those its
@@ -465,12 +558,13 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn a_paused_companion_is_told_so_and_an_unknown_key_must_pair_again() {
         let address = pretend_host(|path| match path {
-            "/api/v1/cameras/watch" => (423, r#"{"error":"The main desk has taken back control"}"#.into()),
+            "/api/v1/cameras/watch" | "/api/v1/overlays" => (423, r#"{"error":"The main desk has taken back control"}"#.into()),
             _ => (401, "{}".into()),
         })
         .await;
         let host = Host::plain(&address).unwrap();
         assert_eq!(cameras(&host, "k").await.unwrap_err(), "paused: The main desk has taken back control");
+        assert_eq!(overlays(&host, "k").await.unwrap_err(), "paused: The main desk has taken back control");
         assert!(me(&host, "k").await.unwrap_err().contains("pair again"));
     }
 
@@ -489,6 +583,44 @@ pub(crate) mod tests {
         assert!(withdraw_request(&host, "k", "decided").await.unwrap_err().starts_with("stale:"));
         assert!(withdraw_request(&host, "k", "missing").await.unwrap_err().contains("no longer has that request"));
         assert!(withdraw_request(&host, "k", "../pair").await.unwrap_err().contains("not valid"));
+    }
+
+    #[tokio::test]
+    async fn a_plan_is_read_saved_and_submitted_through_the_host_and_its_refusals_are_kept_apart() {
+        let address = pretend_host(|path| match path {
+            "/api/v1/plans" => (200, r#"[{"id":"p1","title":"Sunday","revision":3}]"#.into()),
+            "/api/v1/plans/p1" => (200, r#"{"program":{"id":"p1","revision":4},"items":[]}"#.into()),
+            "/api/v1/plans/p1/submit" => (200, r#"{"id":"request-1","kind":"plan_approve","baseRevision":4,"state":"submitted"}"#.into()),
+            "/api/v1/plans/moved" | "/api/v1/plans/moved/submit" => (409, r#"{"error":"The plan changed since you opened it","expected":3,"actual":5}"#.into()),
+            "/api/v1/plans/decided/submit" => (409, r#"{"error":"Already decided"}"#.into()),
+            "/api/v1/plans/theirs" => (403, r#"{"error":"This desk's role does not work on the service plan"}"#.into()),
+            "/api/v1/plans/held" => (423, r#"{"error":"The main desk has taken back control"}"#.into()),
+            _ => (404, String::new()),
+        })
+        .await;
+        let host = Host::plain(&address).unwrap();
+        let items = serde_json::json!([{ "kind": "verse", "reference": "John 3:16" }]);
+        assert_eq!(plans(&host, "k").await.unwrap()[0]["id"], "p1");
+        assert_eq!(plan(&host, "k", "p1").await.unwrap()["program"]["revision"], 4);
+        assert_eq!(save_plan(&host, "k", "p1", 3, &items).await.unwrap()["program"]["revision"], 4);
+        assert_eq!(submit_plan(&host, "k", "p1", 4, Some(" ready ")).await.unwrap()["state"], "submitted");
+        assert_eq!(save_plan(&host, "k", "moved", 3, &items).await.unwrap_err(), "conflict:5: The plan changed since you opened it");
+        assert!(submit_plan(&host, "k", "moved", 3, None).await.unwrap_err().starts_with("conflict:5:"));
+        assert_eq!(submit_plan(&host, "k", "decided", 3, None).await.unwrap_err(), "refused: Already decided");
+        assert_eq!(save_plan(&host, "k", "theirs", 3, &items).await.unwrap_err(), "forbidden: This desk's role does not work on the service plan");
+        assert!(save_plan(&host, "k", "held", 3, &items).await.unwrap_err().starts_with("paused: "));
+        assert!(plan(&host, "k", "gone").await.unwrap_err().starts_with("missing: "));
+        assert!(plan(&host, "k", "../pair").await.unwrap_err().starts_with("missing: "), "never sent: not a plan id");
+        assert!(save_plan(&host, "k", "p1", 3, &serde_json::json!({})).await.is_err(), "items are a list");
+    }
+
+    #[test]
+    fn a_plan_refusal_keeps_the_hosts_words_and_the_revision_it_has_now() {
+        let said = |status, body: &str| plan_failure(status, &serde_json::from_str(body).unwrap_or_default());
+        assert!(said(401, "{}").contains("pair again"));
+        assert_eq!(said(409, r#"{"error":"moved","actual":7}"#), "conflict:7: moved");
+        assert_eq!(said(422, r#"{"error":"a plan holds at most 500 items"}"#), "a plan holds at most 500 items");
+        assert_eq!(said(503, "{}"), "The host answered 503");
     }
 
     #[tokio::test]

@@ -12,6 +12,7 @@ import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import { NO_SIGNALS } from "@/types/scene"
 import type { Scene, SceneBox, SceneCrop, SceneLayer, SceneLayerKind } from "@/types"
 import { keepHostGradients } from "@/lib/scene-gradient"
+import { layerRotation, layerTurns } from "@/lib/scene-rotation"
 
 /**
  * Scenes made and changed from joined desks (#243 SC.16, SC.17). The host publishes each scene's
@@ -21,7 +22,7 @@ import { keepHostGradients } from "@/lib/scene-gradient"
  *
  * The approval rule, the default until the owner chooses another: a new scene, or a change to a
  * scene that is on no screen, goes in at once. A change to a scene that is on a screen, deleting
- * one, and any scene change while Approvals is on (Team → Approvals), becomes a request the main desk
+ * one, and any scene change while Approvals is on (Permissions → Before a service goes live), becomes a request the main desk
  * accepts or declines in its notices. In rehearsal a desk's changes are not on air, so only a
  * scene on a real screen waits. The server applies the same rule; the host checks again here and
  * never lets a waiting change in by itself.
@@ -111,6 +112,8 @@ function deskLayer(raw: unknown, had: SceneLayer | undefined, cameras: Set<strin
   const cameraUrl = typeof l.cameraUrl === "string" && (cameras.has(l.cameraUrl) || l.cameraUrl === had?.cameraUrl) ? l.cameraUrl : undefined
   const themeId = typeof l.themeId === "string" && themes.has(l.themeId) ? l.themeId : undefined
   const fadeMs = num(l.fadeMs, 0, 3000)
+  // A desk may turn a layer (#851 G7); one that does not say keeps the host's turn.
+  const rotation = !layerTurns(kind) ? undefined : "rotation" in l ? layerRotation(l.rotation) : had?.kind === kind ? had.rotation : undefined
   const until = typeof l.until === "string" && /^\d{1,2}:\d{2}$/.test(l.until) ? l.until : undefined
   const layer: SceneLayer = {
     id,
@@ -144,9 +147,11 @@ function deskLayer(raw: unknown, had: SceneLayer | undefined, cameras: Set<strin
     } : {}),
     ...(kind === "feed" && pick(l.language, ["both", "first", "second"] as const) ? { language: pick(l.language, ["both", "first", "second"] as const) } : {}),
     ...(fadeMs ? { fadeMs } : {}),
+    ...(rotation !== undefined ? { rotation } : {}),
   }
   // Media is the host's: a layer keeps its own picture, video and held copy, a new one has none.
-  if (had && had.kind === kind) for (const k of ["mediaId", "mediaFile", "imageDraw", ...HOST_ONLY] as const) if (had[k] !== undefined) Object.assign(layer, { [k]: had[k] })
+  // So is how its text widens (set only by the design editor's save).
+  if (had && had.kind === kind) for (const k of ["mediaId", "mediaFile", "imageDraw", "textWiden", ...HOST_ONLY] as const) if (had[k] !== undefined) Object.assign(layer, { [k]: had[k] })
   return layer
 }
 
@@ -178,7 +183,7 @@ export function mergeDeskScene(raw: unknown, existing: Scene | undefined, opts: 
 /** Why a change to this scene waits for the main desk, or null when it goes in at once. */
 export function waitsForMainDesk(sceneId: string): string | null {
   const b = useBroadcastStore.getState()
-  if (useSettingsStore.getState().requireApproval && !b.rehearsal) return "Approvals is on at the main desk (Team → Approvals)"
+  if (useSettingsStore.getState().requireApproval && !b.rehearsal) return "Approvals is on at the main desk (Permissions → Before a service goes live)"
   if (scenesOnScreen(b).has(sceneId)) return "that scene is on a screen"
   return null
 }

@@ -148,6 +148,12 @@ pub async fn join_cameras(state: State<'_, JoinRuntime>, address: String, token:
     rhema_join::host::cameras(&state.host(&address)?, &token).await
 }
 
+/// The host's feeds an OBS companion may add to its OBS scenes as overlays (#848 G4). Read only.
+#[tauri::command]
+pub async fn join_overlays(state: State<'_, JoinRuntime>, address: String, token: String) -> Result<serde_json::Value, String> {
+    rhema_join::host::overlays(&state.host(&address)?, &token).await
+}
+
 /// An OBS companion's tally to its host: the cameras on its OBS program and preview, and those its
 /// OBS plays, for the host's Production → Cameras.
 #[tauri::command]
@@ -172,6 +178,30 @@ pub async fn join_requests(state: State<'_, JoinRuntime>, address: String, token
 #[tauri::command]
 pub async fn join_withdraw_request(state: State<'_, JoinRuntime>, address: String, token: String, id: String) -> Result<serde_json::Value, String> {
     rhema_join::host::withdraw_request(&state.host(&address)?, &token, &id).await
+}
+
+/// The service plans in use on the host (#847, C5 plan drafts): an Editor desk picks one to work on.
+#[tauri::command]
+pub async fn join_plans(state: State<'_, JoinRuntime>, address: String, token: String) -> Result<serde_json::Value, String> {
+    rhema_join::host::plans(&state.host(&address)?, &token).await
+}
+
+/// One service plan from the host, with the revision this desk's draft is saved against.
+#[tauri::command]
+pub async fn join_plan(state: State<'_, JoinRuntime>, address: String, token: String, id: String) -> Result<serde_json::Value, String> {
+    rhema_join::host::plan(&state.host(&address)?, &token, &id).await
+}
+
+/// Save this desk's draft of a plan at the revision it opened; the host refuses a stale one.
+#[tauri::command]
+pub async fn join_save_plan(state: State<'_, JoinRuntime>, address: String, token: String, id: String, expected_revision: i64, items: serde_json::Value) -> Result<serde_json::Value, String> {
+    rhema_join::host::save_plan(&state.host(&address)?, &token, &id, expected_revision, &items).await
+}
+
+/// Submit a saved revision of a plan for the main desk's review (an approval request on the host).
+#[tauri::command]
+pub async fn join_submit_plan(state: State<'_, JoinRuntime>, address: String, token: String, id: String, revision: i64, note: Option<String>) -> Result<serde_json::Value, String> {
+    rhema_join::host::submit_plan(&state.host(&address)?, &token, &id, revision, note.as_deref()).await
 }
 
 /// Whether a browser receiver drew the latest Program frame for the outputs this desk may see.

@@ -1501,3 +1501,56 @@ describe("canonical design editor", () => {
     ]))
   })
 })
+
+describe("QR code and rotation layers (#851 G7)", () => {
+  it("adds a QR code for a safe link as an editable picture layer that saves into a scene", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({ ...documentValue, revision: 5, document: input.document }))
+    const element = await render(documentValue)
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "QR code")!.click())
+
+    const link = element.querySelector<HTMLInputElement>('input[aria-label="QR code link"]')!
+    await act(async () => setValue(link, "javascript:alert(1)"))
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add QR code")!.click())
+    expect(element.querySelector('[role="alert"]')?.textContent).toContain("https://")
+
+    await act(async () => setValue(link, "https://example.org/give"))
+    await act(async () => {
+      [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add QR code")!.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    // The code is drawn asynchronously; wait for the layer to land.
+    for (let i = 0; i < 100 && !element.textContent?.includes("QR code added"); i++) {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)) })
+    }
+    expect(element.querySelector('[role="alert"]')?.textContent ?? "").toBe("")
+    expect(element.textContent).toContain("QR code added")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+
+    const input = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const qr = Object.values(input.document.scene.nodes).find((node) => node.type === "image") as SaraswatiImageNode
+    expect(qr.name).toBe("QR code · https://example.org/give")
+    expect(qr.src.startsWith("data:image/png")).toBe(true)
+    expect(qr.width).toBe(qr.height)
+    expect(input.document.bindings[qr.id]).toEqual({ id: qr.id, kind: "picture", imageUrl: qr.src })
+    const prepared = designToScene(input.document)
+    expect(prepared.issues).toEqual([])
+    expect(prepared.scene.layers).toContainEqual(expect.objectContaining({ id: qr.id, kind: "picture", imageUrl: qr.src }))
+  })
+
+  it("rotates a selected layer, saves it, and the scene for Prepare and outputs keeps the turn", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({ ...documentValue, revision: 5, document: input.document }))
+    const element = await render(documentValue)
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Rectangle")!.click())
+    await commitNumberInput(element, "Rotation °", "15")
+    expect(element.textContent).not.toContain("stay upright on outputs")
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+    const input = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const rect = Object.values(input.document.scene.nodes).find((node) => node.name === "Rectangle")!
+    expect(rect.rotation).toBe(15)
+    const prepared = designToScene(input.document)
+    expect(prepared.issues).toEqual([])
+    expect(prepared.scene.layers).toContainEqual(expect.objectContaining({ id: rect.id, rotation: 15 }))
+  })
+})

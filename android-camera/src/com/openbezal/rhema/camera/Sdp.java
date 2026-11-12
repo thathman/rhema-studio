@@ -44,7 +44,7 @@ final class Sdp {
         StringBuilder s = new StringBuilder();
         line(s, "v=0");
         line(s, "o=- " + sessionId + " 1 IN IP4 " + host);
-        line(s, "s=Rhema Camera");
+        line(s, "s=Rhema Studio Cam");
         line(s, "c=IN IP4 " + host);
         line(s, "t=0 0");
         line(s, "m=video 0 RTP/AVP " + VIDEO_PT);

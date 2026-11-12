@@ -14,7 +14,6 @@ pub enum RemoteCommand {
     Show,
     Hide,
     Theme(String),
-    Opacity(f32),
     Confidence(f32),
     OnAir(bool),
     SendToLive,
@@ -468,7 +467,6 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::Show => write!(f, "show"),
             RemoteCommand::Hide => write!(f, "hide"),
             RemoteCommand::Theme(name) => write!(f, "theme({name})"),
-            RemoteCommand::Opacity(val) => write!(f, "opacity({val:.2})"),
             RemoteCommand::Confidence(val) => write!(f, "confidence({val:.2})"),
             RemoteCommand::OnAir(active) => write!(f, "on_air({active})"),
             RemoteCommand::SendToLive => write!(f, "send_to_live"),
@@ -593,9 +591,9 @@ mod tests {
     }
 
     #[test]
-    fn serialize_opacity() {
-        let json = serde_json::to_value(&RemoteCommand::Opacity(0.75)).unwrap();
-        assert_eq!(json, serde_json::json!({"command": "opacity", "value": 0.75}));
+    fn opacity_is_no_longer_a_command() {
+        // Nothing on the screens ever took it (11 Nov review G12): it is not parsed at all now.
+        assert!(serde_json::from_str::<RemoteCommand>(r#"{"command":"opacity","value":0.75}"#).is_err());
     }
 
     #[test]
@@ -690,7 +688,6 @@ mod tests {
             RemoteCommand::Show,
             RemoteCommand::Hide,
             RemoteCommand::Theme("Classic Dark".into()),
-            RemoteCommand::Opacity(0.5),
             RemoteCommand::Confidence(0.9),
             RemoteCommand::OnAir(false),
             RemoteCommand::SendToLive,
@@ -724,11 +721,6 @@ mod tests {
             RemoteCommand::Theme("X".into()).to_string(),
             "theme(X)"
         );
-    }
-
-    #[test]
-    fn display_opacity() {
-        assert_eq!(RemoteCommand::Opacity(0.75).to_string(), "opacity(0.75)");
     }
 
     #[test]
@@ -777,7 +769,6 @@ mod tests {
             RemoteCommand::Show,
             RemoteCommand::Hide,
             RemoteCommand::Theme(String::new()),
-            RemoteCommand::Opacity(0.0),
             RemoteCommand::Confidence(0.0),
             RemoteCommand::OnAir(false),
             RemoteCommand::SendToLive,
@@ -837,7 +828,6 @@ mod tests {
                 RemoteCommand::Show => {}
                 RemoteCommand::Hide => {}
                 RemoteCommand::Theme(_) => {}
-                RemoteCommand::Opacity(_) => {}
                 RemoteCommand::Confidence(_) => {}
                 RemoteCommand::OnAir(_) => {}
                 RemoteCommand::SendToLive => {}
@@ -885,7 +875,7 @@ mod tests {
             }
         }
 
-        assert_eq!(cmds.len(), 50);
+        assert_eq!(cmds.len(), 49);
         assert_eq!(
             serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_adjust","value":1}"#)
                 .unwrap(),
