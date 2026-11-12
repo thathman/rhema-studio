@@ -405,7 +405,7 @@ function CameraCard({ cam, host, router, path, phonePage, onObs }: { cam: Camera
               </div>
             )}
             {rtsp && <Copyable label="For OBS on this computer (Media Source, untick Local File)" value={rtsp} />}
-            {host && ports && router?.running && <CameraApp cam={cam} link={cameraAppLink(host, ports, cam, router.rtspsFingerprint, phonePage)} />}
+            {host && ports && router?.running && <CameraApp cam={cam} link={cameraAppLink(host, ports, cam, router.rtspsFingerprint, phonePage, router.rtspsKeyFingerprint)} />}
             <CamQuality cam={cam} path={path} />
             {rtsp && <p className="text-muted-foreground">OBS on another computer: install Rhema Studio there and choose “This computer runs OBS only”. It adds the cameras to its OBS by itself, encrypted and with its own sign-in.</p>}
             {!host && <p className="text-muted-foreground">Addresses appear once the camera router is on and this computer is on the network.</p>}

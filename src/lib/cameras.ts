@@ -91,6 +91,8 @@ export interface RouterStatus {
   ports: RouterPorts
   /** SHA-256 of the certificate the router serves for RTSPS, while it does; the Rhema Studio Cam app trusts only that one. */
   rtspsFingerprint?: string | null
+  /** SHA-256 of that certificate's public key (doc 48): the same after an address change or renewal; the link's `key`. */
+  rtspsKeyFingerprint?: string | null
   restarts: number
   error: string | null
   paths: RouterPath[]
@@ -215,13 +217,16 @@ export function rtmpsUrl(host: string, ports: RouterPorts, cam: CameraSource, fi
  * The Rhema Studio Cam app's pairing link (Android): where the router's RTSPS is, which camera the phone
  * is, its publish password (the same secret as its page link, so New link closes this too) and the
  * fingerprint of the only certificate the app will send to, and the secure listener's port it
- * reports its battery and heat to. Null while the router has no RTSPS.
+ * reports its battery and heat to. Null while the router has no RTSPS. With `keyFingerprint`, the
+ * certificate's public key too (`key`, doc 48), which a newer app pins so it survives Rhema moving to
+ * another address; an older app reads only `fp`.
  */
-export function cameraAppLink(host: string, ports: RouterPorts, cam: CameraSource, fingerprint: string | null | undefined, apiPort?: number | null): string | null {
+export function cameraAppLink(host: string, ports: RouterPorts, cam: CameraSource, fingerprint: string | null | undefined, apiPort?: number | null, keyFingerprint?: string | null): string | null {
   if (!ports.rtsps || !fingerprint || !/^[0-9a-f]{64}$/.test(fingerprint)) return null
   const q = new URLSearchParams({ host, port: String(ports.rtsps), name: cam.name, user: publishUser(cam.name), token: cam.token, fp: fingerprint, label: cam.label })
   // Rhema's secure listener (same certificate): where the app reports its battery and heat (#213).
   if (apiPort && Number.isInteger(apiPort) && apiPort > 0 && apiPort < 65536) q.set("api", String(apiPort))
+  if (keyFingerprint && /^[0-9a-f]{64}$/.test(keyFingerprint)) q.set("key", keyFingerprint)
   return `rhema-camera://pair?${q.toString().replace(/\+/g, "%20")}`
 }
 

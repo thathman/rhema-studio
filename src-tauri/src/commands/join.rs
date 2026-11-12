@@ -397,24 +397,26 @@ async fn tv_target(address: &str) -> Result<std::net::SocketAddrV4, String> {
 #[tauri::command]
 pub async fn tv_show(http: State<'_, Mutex<super::remote::HttpRuntime>>, address: String, code: String, url: String) -> Result<String, String> {
     let pin = http.lock().map_err(|e| e.to_string())?.tv_pin();
-    let fingerprint = secure_feed(&url, pin)?;
-    show_on_tv(&address, &code, &url, &fingerprint).await
+    let (cert, key) = secure_feed(&url, pin)?;
+    show_on_tv(&address, &code, &url, (&cert, &key)).await
 }
 
-/// The certificate fingerprint to send with a feed link: only for https on the running https port
-/// (`pin` is that port and its certificate's fingerprint, None when https is off).
-fn secure_feed(url: &str, pin: Option<(u16, String)>) -> Result<String, String> {
-    let (port, fingerprint) = pin.ok_or(NO_TLS)?;
+/// The fingerprints to send with a feed link (certificate, server key): only for https on the
+/// running https port (`pin` is that port and both fingerprints, None when https is off).
+fn secure_feed(url: &str, pin: Option<(u16, String, String)>) -> Result<(String, String), String> {
+    let (port, cert, key) = pin.ok_or(NO_TLS)?;
     let u = reqwest::Url::parse(url).map_err(|_| NO_TLS)?;
     if u.scheme() != "https" || u.port() != Some(port) || !u.path().starts_with("/feed/") {
         return Err(NO_TLS.into());
     }
-    Ok(fingerprint)
+    Ok((cert, key))
 }
 
 /// First the code check (`tv_proof`): the link goes only to a TV that proved it shows this code,
-/// and travels encrypted with that check's key, with the certificate the TV must see.
-async fn show_on_tv(address: &str, code: &str, url: &str, cert_fingerprint: &str) -> Result<String, String> {
+/// and travels encrypted with that check's key, with what the TV must see: the certificate
+/// (`certFingerprint`, what every Receiver pins) and its server key (`keyFingerprint`, doc 48: the
+/// same after an address change or renewal; a Receiver from before ignores it).
+async fn show_on_tv(address: &str, code: &str, url: &str, (cert_fingerprint, key_fingerprint): (&str, &str)) -> Result<String, String> {
     if !url.starts_with("https://") {
         return Err(NO_TLS.into());
     }
@@ -435,7 +437,7 @@ async fn show_on_tv(address: &str, code: &str, url: &str, cert_fingerprint: &str
         return Err(OLD_RECEIVER.into());
     }
     let keys = desk.finish(reply.y.as_deref().unwrap_or_default(), &target, reply.proof.as_deref().unwrap_or_default()).ok_or(NOT_THIS_TV)?;
-    let sealed = keys.seal(serde_json::json!({ "url": url, "certFingerprint": cert_fingerprint }).to_string().as_bytes())?;
+    let sealed = keys.seal(serde_json::json!({ "url": url, "certFingerprint": cert_fingerprint, "keyFingerprint": key_fingerprint }).to_string().as_bytes())?;
     let r = http
         .post(format!("{base}/show"))
         .json(&sealed)
@@ -712,31 +714,34 @@ mod tests {
 
     const FEED: &str = "https://192.168.3.10:8081/feed/abc?k=secret";
     const PIN: &str = "abecce707af4a66a8aa18ce9624ebead97a8f362335dd688e9d5899af9428a19";
+    const KEY: &str = "5e3c9a1f0b7d2e4a6c8f1b3d5a7e9c0f2b4d6a8c0e1f3a5b7d9c2e4f6a8b0c1d";
+    const PINS: (&str, &str) = (PIN, KEY);
 
     #[tokio::test]
     async fn tv_show_sends_the_link_only_after_the_tv_proves_the_code() {
         let (address, seen) = pretend_tv(tv_answers_with("111111")).await;
-        assert_eq!(show_on_tv(&address, " 111111 ", FEED, PIN).await.unwrap(), "Hall TV");
+        assert_eq!(show_on_tv(&address, " 111111 ", FEED, PINS).await.unwrap(), "Hall TV");
         let seen = seen.lock().unwrap().clone();
         assert_eq!(seen.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>(), ["/challenge", "/show"]);
         assert!(!seen[0].1.contains("111111"), "the code itself is never sent");
         let show: serde_json::Value = serde_json::from_str(&seen[1].1).unwrap();
         assert!(show.get("url").is_none() && show.get("code").is_none() && !seen[1].1.contains("192.168"), "nothing readable: {show}");
-        // The TV opens it with the key of that exchange: the link and the certificate to insist on.
+        // The TV opens it with the key of that exchange: the link and the certificate to insist on,
+        // both as every Receiver pins it (the whole certificate) and by its server key (doc 48).
         let x = serde_json::from_str::<serde_json::Value>(&seen[0].1).unwrap()["x"].as_str().unwrap().to_string();
         let (_, _, enc) = super::super::tv_proof::tests::tv_answer(&x, "111111", &address, &tv_y()).unwrap();
         let opened = super::super::tv_proof::tests::tv_open(&enc, show["nonce"].as_str().unwrap(), show["data"].as_str().unwrap()).expect("sealed for this TV");
-        assert_eq!(serde_json::from_str::<serde_json::Value>(&opened).unwrap(), serde_json::json!({ "url": FEED, "certFingerprint": PIN }));
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&opened).unwrap(), serde_json::json!({ "url": FEED, "certFingerprint": PIN, "keyFingerprint": KEY }));
     }
 
     #[tokio::test]
     async fn tv_show_sends_only_a_secure_link() {
         let (address, seen) = pretend_tv(tv_answers_with("111111")).await;
-        assert_eq!(show_on_tv(&address, "111111", "http://192.168.3.10:8080/feed/abc?k=secret", PIN).await.unwrap_err(), NO_TLS);
+        assert_eq!(show_on_tv(&address, "111111", "http://192.168.3.10:8080/feed/abc?k=secret", PINS).await.unwrap_err(), NO_TLS);
         assert!(seen.lock().unwrap().is_empty(), "the TV was not even asked");
         // The command's check: https on the running https port, for a feed; nothing when https is off.
-        let pin = || Some((8081u16, PIN.to_string()));
-        assert_eq!(secure_feed(FEED, pin()).unwrap(), PIN);
+        let pin = || Some((8081u16, PIN.to_string(), KEY.to_string()));
+        assert_eq!(secure_feed(FEED, pin()).unwrap(), (PIN.to_string(), KEY.to_string()));
         assert_eq!(secure_feed(FEED, None).unwrap_err(), NO_TLS);
         assert_eq!(secure_feed("http://192.168.3.10:8081/feed/abc?k=secret", pin()).unwrap_err(), NO_TLS);
         assert_eq!(secure_feed("https://192.168.3.10:9443/feed/abc?k=secret", pin()).unwrap_err(), NO_TLS);
@@ -749,11 +754,11 @@ mod tests {
     async fn tv_show_never_sends_the_link_when_the_proof_fails() {
         // A TV with another code, or a pretend TV that accepts anything.
         let (address, seen) = pretend_tv(tv_answers_with("999999")).await;
-        assert_eq!(show_on_tv(&address, "111111", FEED, PIN).await.unwrap_err(), NOT_THIS_TV);
+        assert_eq!(show_on_tv(&address, "111111", FEED, PINS).await.unwrap_err(), NOT_THIS_TV);
         let (address2, seen2) = pretend_tv(|_, _| (200, serde_json::json!({ "ok": true, "v": 2, "y": "2", "proof": "00" }))).await;
-        assert_eq!(show_on_tv(&address2, "111111", FEED, PIN).await.unwrap_err(), NOT_THIS_TV);
+        assert_eq!(show_on_tv(&address2, "111111", FEED, PINS).await.unwrap_err(), NOT_THIS_TV);
         let (address3, seen3) = pretend_tv(|_, _| (200, serde_json::json!({ "ok": true, "v": 2 }))).await;
-        assert_eq!(show_on_tv(&address3, "111111", FEED, PIN).await.unwrap_err(), NOT_THIS_TV);
+        assert_eq!(show_on_tv(&address3, "111111", FEED, PINS).await.unwrap_err(), NOT_THIS_TV);
         for log in [seen, seen2, seen3] {
             let log = log.lock().unwrap();
             assert_eq!(log.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>(), ["/challenge"]);
@@ -764,7 +769,7 @@ mod tests {
     #[tokio::test]
     async fn tv_show_refuses_an_old_receiver_without_the_code_check() {
         let (address, seen) = pretend_tv(|_, _| (404, serde_json::json!({ "ok": false, "error": "Rhema Receiver only takes POST /show and GET /status" }))).await;
-        assert_eq!(show_on_tv(&address, "111111", FEED, PIN).await.unwrap_err(), OLD_RECEIVER);
+        assert_eq!(show_on_tv(&address, "111111", FEED, PINS).await.unwrap_err(), OLD_RECEIVER);
         assert_eq!(seen.lock().unwrap().len(), 1);
     }
 
@@ -777,7 +782,7 @@ mod tests {
             (200, serde_json::json!({ "ok": true, "y": y, "proof": proof }))
         }
         let (address, seen) = pretend_tv(answer_1_2).await;
-        assert_eq!(show_on_tv(&address, "111111", FEED, PIN).await.unwrap_err(), OLD_RECEIVER);
+        assert_eq!(show_on_tv(&address, "111111", FEED, PINS).await.unwrap_err(), OLD_RECEIVER);
         assert_eq!(seen.lock().unwrap().iter().map(|(p, _)| p.clone()).collect::<Vec<_>>(), ["/challenge"]);
     }
 
@@ -807,7 +812,7 @@ mod tests {
     #[test]
     #[ignore = "uses the real network"]
     fn announced_host_is_found_then_gone() {
-        let plan = super::super::host_advert::host_advert("0.0.0.0", 18_080, Some(18_081), "Rhema Test Church", "test").unwrap();
+        let plan = super::super::host_advert::host_advert("0.0.0.0", 18_080, Some(18_081), None, "Rhema Test Church", "test").unwrap();
         let ad = super::super::host_advert::start(plan).unwrap();
         let seen = browse(super::super::host_advert::HOST_SERVICE, Duration::from_millis(3000), "hosts").unwrap();
         let hosts = found_hosts(seen);

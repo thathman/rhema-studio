@@ -50,9 +50,22 @@ pub fn make_ca() -> Result<Pem, String> {
     Ok(Pem { cert: cert.pem(), key: key.serialize_pem() })
 }
 
-/// A server certificate for these names (IP addresses or host names), signed by the CA. 397 days:
-/// iPhones refuse longer ones from a CA a person installed.
+/// A new server key pair (PEM, private). Rhema makes it once and signs every server certificate over
+/// it for the life of the local CA (doc 48), so a Receiver or Rhema Cam that pins its public key
+/// still opens Rhema after the address changes or the certificate is renewed.
+pub fn make_server_key() -> Result<String, String> {
+    Ok(KeyPair::generate().map_err(|e| e.to_string())?.serialize_pem())
+}
+
+/// A server certificate for these names over a new key of its own (see `make_server_with_key`).
 pub fn make_server(ca: &Pem, names: &[String]) -> Result<Pem, String> {
+    make_server_with_key(ca, names, &make_server_key()?)
+}
+
+/// A server certificate for these names (IP addresses or host names), signed by the CA, over the
+/// server key `key` (PEM). 397 days: iPhones refuse longer ones from a CA a person installed.
+pub fn make_server_with_key(ca: &Pem, names: &[String], key: &str) -> Result<Pem, String> {
+    let key = KeyPair::from_pem(key).map_err(|e| format!("the server key is unreadable: {e}"))?;
     let ca_key = KeyPair::from_pem(&ca.key).map_err(|e| format!("the local CA key is unreadable: {e}"))?;
     // The issuer is the same name and key as the saved CA certificate, so the chain checks.
     let issuer = ca_params().self_signed(&ca_key).map_err(|e| e.to_string())?;
@@ -72,7 +85,6 @@ pub fn make_server(ca: &Pem, names: &[String]) -> Result<Pem, String> {
     let now = std::time::SystemTime::now();
     p.not_before = (now - std::time::Duration::from_secs(86_400)).into();
     p.not_after = (now + std::time::Duration::from_secs(397 * 86_400)).into();
-    let key = KeyPair::generate().map_err(|e| e.to_string())?;
     let cert = p.signed_by(&key, &issuer, &ca_key).map_err(|e| e.to_string())?;
     Ok(Pem { cert: cert.pem(), key: key.serialize_pem() })
 }
@@ -83,7 +95,34 @@ pub fn fingerprint(server: &Pem) -> Result<String, String> {
     use rustls::pki_types::{pem::PemObject, CertificateDer};
     use sha2::{Digest, Sha256};
     let leaf = CertificateDer::pem_slice_iter(server.cert.as_bytes()).next().ok_or("no certificate")?.map_err(|e| e.to_string())?;
-    Ok(Sha256::digest(leaf.as_ref()).iter().map(|b| format!("{b:02x}")).collect())
+    Ok(hex(&Sha256::digest(leaf.as_ref())))
+}
+
+/// SHA-256 of the server certificate's `SubjectPublicKeyInfo` DER, lowercase hex (doc 48): the same for
+/// every certificate over the same server key, whatever addresses it names or when it was made. What
+/// a Receiver or Rhema Cam pins from now on, next to the legacy `fingerprint` of the whole certificate.
+pub fn spki_fingerprint(server: &Pem) -> Result<String, String> {
+    use rustls::pki_types::{pem::PemObject, CertificateDer};
+    use sha2::{Digest, Sha256};
+    let leaf = CertificateDer::pem_slice_iter(server.cert.as_bytes()).next().ok_or("no certificate")?.map_err(|e| e.to_string())?;
+    let parsed = rustls::server::ParsedCertificate::try_from(&leaf).map_err(|e| e.to_string())?;
+    Ok(hex(&Sha256::digest(parsed.subject_public_key_info().as_ref())))
+}
+
+/// SHA-256 of a key pair's public key (`SubjectPublicKeyInfo` DER), lowercase hex: equal to the
+/// `spki_fingerprint` of every certificate made over it.
+pub fn key_fingerprint(key: &str) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let key = KeyPair::from_pem(key).map_err(|e| format!("the server key is unreadable: {e}"))?;
+    Ok(hex(&Sha256::digest(key.public_key_der())))
+}
+
+fn hex(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
+        let _ = write!(s, "{b:02x}");
+        s
+    })
 }
 
 /// The rustls server config for a certificate (with its CA after it, as a chain).
@@ -140,6 +179,32 @@ mod tests {
         assert_ne!(fingerprint(&make_server(&ca, &["192.168.1.20".into()]).unwrap()).unwrap(), f, "a new certificate, another one");
         assert_ne!(fingerprint(&Pem { cert: ca.cert.clone(), key: String::new() }).unwrap(), f, "the leaf, not the CA");
         assert!(fingerprint(&Pem { cert: "nonsense".into(), key: String::new() }).is_err());
+    }
+
+    #[test]
+    fn certificates_over_one_server_key_share_its_spki_fingerprint() {
+        let ca = make_ca().unwrap();
+        let key = make_server_key().unwrap();
+        let here = make_server_with_key(&ca, &["192.168.1.20".into(), "localhost".into()], &key).unwrap();
+        let moved = make_server_with_key(&ca, &["10.0.0.5".into()], &key).unwrap();
+        // Another address (or a renewal): another certificate, so the legacy pin changes...
+        assert_ne!(fingerprint(&here).unwrap(), fingerprint(&moved).unwrap());
+        // ...but the key pin does not, and it is the hash of the key's own public key.
+        let pin = spki_fingerprint(&here).unwrap();
+        assert_eq!(pin.len(), 64);
+        assert!(pin.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)));
+        assert_eq!(spki_fingerprint(&moved).unwrap(), pin);
+        assert_eq!(key_fingerprint(&key).unwrap(), pin);
+        assert_ne!(pin, fingerprint(&here).unwrap(), "the key, not the whole certificate");
+        // A certificate over the given key is served with that key.
+        assert_eq!(key_fingerprint(&moved.key).unwrap(), pin);
+        assert!(server_config(&moved, &ca.cert).is_ok());
+        // Another key: another pin; the CA's key is not the server's.
+        assert_ne!(spki_fingerprint(&make_server(&ca, &["192.168.1.20".into()]).unwrap()).unwrap(), pin);
+        assert_ne!(spki_fingerprint(&Pem { cert: ca.cert.clone(), key: String::new() }).unwrap(), pin);
+        assert!(spki_fingerprint(&Pem { cert: "nonsense".into(), key: String::new() }).is_err());
+        assert!(key_fingerprint("nonsense").is_err());
+        assert!(make_server_with_key(&ca, &["10.0.0.5".into()], "nonsense").is_err());
     }
 
     #[test]
