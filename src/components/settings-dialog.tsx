@@ -924,7 +924,7 @@ function RemoteControlSection() {
         </span>
       </label>
       <div className="flex flex-wrap items-center gap-3 rounded-md border border-border p-3 text-xs">
-        <div className="min-w-0 flex-1"><p className="font-semibold">Paired device access</p><p className="text-muted-foreground">Manage roles, pause control or revoke a device in Permissions. Pair new devices from Connections.</p></div>
+        <div className="min-w-0 flex-1"><p className="font-semibold">Paired device access</p><p className="text-muted-foreground">Manage roles and pause control in Permissions. Pair new devices and revoke them in Connections.</p></div>
         <Button size="sm" variant="outline" onClick={() => { useSettingsDialogStore.getState().closeSettings(); useShellStore.getState().goTo("permissions") }}>Manage access</Button>
       </div>
       <ObsSettingsBlock />

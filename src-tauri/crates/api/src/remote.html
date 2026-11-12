@@ -336,7 +336,7 @@
     if (!ref) { say("Type a verse first, e.g. Romans 8:28.", true); return }
     await send("bible_activate", e.submitter || $("verseForm").querySelector("button[type=submit]"), ref)
   })
-  $("forget").addEventListener("click", () => { set(null); show(); say("Unpaired here. Revoke it on the main computer too, in Permissions.") })
+  $("forget").addEventListener("click", () => { set(null); show(); say("Unpaired here. Revoke it on the main computer too, in Connections.") })
 
   let timer, polling = false
   // Two missed answers in a row: what the phone shows is no longer known, so it says so and its
@@ -440,9 +440,8 @@
   // Each live source (ADR 0001): what it shows, and Clear or Restore where this phone's role may.
   // The main computer checks again.
   const NAMES = { bible: "Bible", song: "Songs", hymn: "Hymns", slide: "Slides", picture: "Pictures", quick: "Quick screen", ticker: "Ticker", timer: "Timer" }
-  // Clear pauses the timer (Pause / Resume); a camera is cleared from scenes and restored with the
-  // same Clear / Restore as every other source (#822).
-  const ACTIONS = { timer: ["Pause", "Resume"] }
+  // Clear pauses the timer; for a camera it hides it in every scene (#822: its own words, not Clear).
+  const ACTIONS = { timer: ["Pause", "Resume"], camera: ["Hide camera", "Show camera"] }
   function sources(live) {
     const box = $("sources")
     box.replaceChildren()

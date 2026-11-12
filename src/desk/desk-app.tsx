@@ -259,7 +259,7 @@ function BrowserDesk() {
           {live && fresh.showSince && <span role="status" className="font-semibold text-confidence-mid">Last update {Math.round(fresh.sinceMs / 1000)} s ago</span>}
           {secure === true && <span className="text-muted-foreground">Encrypted</span>}
           <span className="flex-1" />
-          <Button size="sm" variant="ghost" onClick={() => unpair("Unpaired on this device. Remove it on the main computer too, in Permissions.")}>Unpair this device</Button>
+          <Button size="sm" variant="ghost" onClick={() => unpair("Unpaired on this device. Remove it on the main computer too, in Connections.")}>Unpair this device</Button>
         </div>
       </header>
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3 p-4 max-[800px]:p-3">

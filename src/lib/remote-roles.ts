@@ -11,7 +11,7 @@ export const REMOTE_ROLES: readonly { id: RemoteRole; name: string; may: string 
   { id: "worship", name: "Worship", may: "Shows or previews songs and hymns from the main computer's library, changes today's temporary song order, and clears and restores the lyrics." },
   { id: "screens", name: "Screens", may: "Takes and releases only the congregation outputs the main computer assigned it, one output at a time; controls the shared ticker and lower third; and makes or changes scenes. Group Take is unavailable; a change to an on-screen scene waits for the main computer." },
   { id: "stage", name: "Stage", may: "Writes the stage message or sends a private message to an assigned Stage display. Nothing the congregation sees." },
-  { id: "camera", name: "Camera", may: "Answers camera-ready requests, clears a camera from scenes or restores it, and changes the camera boxes in scenes." },
+  { id: "camera", name: "Camera", may: "Answers camera-ready requests, hides a camera from scenes or shows it again, and changes the camera boxes in scenes." },
   { id: "obs", name: "OBS director", may: "Switches OBS scenes through the main computer's own OBS connection (Preview, Take or switch). Never in rehearsal." },
   { id: "obs-companion", name: "OBS companion", may: "A computer that runs OBS only: reads the church's cameras into its own OBS (encrypted, its own sign-in) and says which are on its program. Sends nothing to the service." },
   { id: "editor", name: "Editor", may: "Prepares without going live: puts a verse or a song in the main computer's Preview, adds to the queue, and makes or changes scenes (a change to a scene on a screen waits for the main computer). Shows nothing itself." },

@@ -319,7 +319,7 @@ export function ScreenSources({ live }: { live: LiveStateV1 }) {
   const sourceRevisionUnavailable = rows.some(({ s }) => typeof live.revisions?.[`source:${s.id}`] !== "number")
   const staleConfirmation = !!pending && !!confirming && (staleAtClick || pending.s.on !== confirming.expectedOn || revision !== confirming.revision)
   const confirmLabel = pending && confirming
-    ? `Confirm ${(confirming.command === "clear_source" ? CLEAR : RESTORE).toLowerCase()} the shared ${pending.name.toLowerCase()}`
+    ? `Confirm ${confirming.command === "clear_source" ? "clearing" : "restoring"} the shared ${pending.name.toLowerCase()}`
     : "Confirm shared source change"
   return (
     <div role="group" aria-label="Ticker and lower third" className="flex flex-col gap-1">

@@ -55,7 +55,7 @@ describe("phone remote: live sources", () => {
     const { sent, commands } = host(() => live)
     await vi.waitFor(() => expect(document.querySelectorAll("#sources .src")).toHaveLength(5))
     const rows = [...document.querySelectorAll("#sources .src")].map((r) => r.textContent)
-    expect(rows).toEqual(["Bible · Romans 8:28 (KJV)Clear", "Hymns · off · Amazing Grace · Verse 1Restore", "Ticker · Prayer meetingClear", "Timer · off · Paused · 12:00 leftResume", "Camera · PulpitClear"])
+    expect(rows).toEqual(["Bible · Romans 8:28 (KJV)Clear", "Hymns · off · Amazing Grace · Verse 1Restore", "Ticker · Prayer meetingClear", "Timer · off · Paused · 12:00 leftResume", "Camera · PulpitHide camera"])
     expect(document.getElementById("live")!.textContent).toBe("Amazing Grace · Verse 1")
     expect(sent.find((s) => s.url === "/api/v1/live")?.auth).toBe("Bearer phone-key")
     ;(document.querySelector("#sources .src button") as HTMLButtonElement).click()

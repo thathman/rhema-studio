@@ -411,7 +411,7 @@ export async function startDesk(where: Pick<Location, "protocol" | "hostname" | 
   useJoin.setState({
     connect: async () => begin(),
     leave: async (forget = false) => {
-      if (forget) unpair("Unpaired on this device. Remove it on the main computer too, in Permissions.")
+      if (forget) unpair("Unpaired on this device. Remove it on the main computer too, in Connections.")
       else {
         stop()
         resetJoin()

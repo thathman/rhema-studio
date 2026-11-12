@@ -7,7 +7,7 @@
 //! - a camera desk may change only the camera boxes of an existing scene;
 //! - the approval rule (the default until the owner chooses another): a new scene, or a change to a
 //!   scene that is on no screen, goes in at once; a change to (or deleting) a scene that is on a
-//!   screen, and any scene change while Approvals is on (Team → Approvals), waits for the main desk to
+//!   screen, and any scene change while Approvals is on (Permissions → Before a service goes live), waits for the main desk to
 //!   accept it. In rehearsal nothing a desk changes is on air, so only a scene on a real screen
 //!   waits.
 //!
@@ -160,7 +160,7 @@ fn unsafe_scene(scene: &serde_json::Value, current: Option<&serde_json::Value>, 
         if let Some(url) = o.get("cameraUrl").and_then(serde_json::Value::as_str) {
             let kept = o.get("id").and_then(serde_json::Value::as_str).and_then(had).is_some_and(|h| h["cameraUrl"].as_str() == Some(url));
             if !kept && !cameras.contains(&url) {
-                return Some("That camera is not one of the church's cameras (Production → Cameras on the main computer)".into());
+                return Some("That camera is not one of the church's cameras (Live → Production tools → Cameras on the main computer)".into());
             }
         }
     }
@@ -235,7 +235,7 @@ pub fn judge(live: Option<&str>, role: Role, cmd: &RemoteCommand) -> Result<Opti
     }
     let rehearsal = host.program.is_some_and(|p| p.rehearsal);
     if host.require_approval && !rehearsal {
-        return Ok(Some(Verdict::Request("Approvals is on at the main computer (Team → Approvals)")));
+        return Ok(Some(Verdict::Request("Approvals is on at the main computer (Permissions → Before a service goes live)")));
     }
     if current.is_some_and(on_screen) {
         return Ok(Some(Verdict::Request("that scene is on a screen")));
@@ -299,7 +299,7 @@ mod tests {
     fn with_approvals_on_every_change_waits_but_not_in_rehearsal() {
         let approvals = LIVE.replacen(r#""v":1,"#, r#""v":1,"requireApproval":true,"#, 1);
         let new = save(serde_json::json!({ "id": "n1", "layers": [] }));
-        assert_eq!(judge(Some(&approvals), Role::Screens, &new), Ok(Some(Verdict::Request("Approvals is on at the main computer (Team → Approvals)"))));
+        assert_eq!(judge(Some(&approvals), Role::Screens, &new), Ok(Some(Verdict::Request("Approvals is on at the main computer (Permissions → Before a service goes live)"))));
         let rehearsing = approvals.replace(r#""rehearsal":false"#, r#""rehearsal":true"#);
         assert_eq!(judge(Some(&rehearsing), Role::Screens, &new), Ok(Some(Verdict::Direct)), "rehearsal changes nothing on air");
         let on = scene_in(LIVE, "on");

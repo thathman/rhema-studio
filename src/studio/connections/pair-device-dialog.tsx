@@ -236,7 +236,7 @@ export function PairDeviceDialog({ label = "Pair a device" }: { label?: string }
               </div>
             )}
             {error && <p role="alert" className="text-destructive">{error}</p>}
-            <p className="text-muted-foreground">The paired device starts with Present permission. Choose a narrower role, take back control or revoke it later in Permissions. Internet pairing is not enabled.</p>
+            <p className="text-muted-foreground">The paired device starts with Present permission. Choose a narrower role or take back control later in Permissions, or revoke it in Connections. Internet pairing is not enabled.</p>
             </>}
           </div>
         </DialogContent>

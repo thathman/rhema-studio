@@ -185,7 +185,7 @@ function StageDeskAssignedView({ live, stale, stageOutputs }: { live: LiveStateV
 /** Camera source health and the human Ready/Unable handoff; source availability stays with the host until its impact can be reviewed. */
 export function CameraDesk({ live }: { live: LiveStateV1 }) {
   const cams = live.sources.filter((s) => s.id.startsWith("camera:"))
-  const STATE: Record<string, string> = { sending: "sending", frozen: "frozen (nothing arriving)", "not-sending": "not sending", "router-off": "camera router off", hidden: "cleared from scenes" }
+  const STATE: Record<string, string> = { sending: "sending", frozen: "frozen (nothing arriving)", "not-sending": "not sending", "router-off": "camera router off", hidden: "hidden from scenes" }
   return (
     <section aria-label="Camera desk" className={box}>
       <p className="font-semibold">Cameras</p>
@@ -200,7 +200,7 @@ export function CameraDesk({ live }: { live: LiveStateV1 }) {
           </li>
         ))}
       </ul>
-      <p role="note" className="text-muted-foreground">Clearing or restoring a camera can change every scene and output that uses it. This desk does not receive the scene map needed to review that impact; ask the main computer to check Live → Scenes and current outputs before changing source availability from Live.</p>
+      <p role="note" className="text-muted-foreground">Hiding or showing a camera can change every scene and output that uses it. This desk does not receive the scene map needed to review that impact; ask the main computer to check Live → Scenes and current outputs before changing source availability from Live.</p>
       <p className="text-muted-foreground">“Is it framed?” requests arrive in Notices below: answer Ready or Unable. The camera boxes of each scene are under Scenes.</p>
     </section>
   )

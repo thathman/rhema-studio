@@ -149,10 +149,10 @@ describe("screens desk and the director's output map", () => {
     expect(sent).toHaveLength(0)
     expect(box.textContent).toContain("shared ticker anywhere a congregation output uses it")
     expect(box.textContent).toContain("cannot limit the change to one screen")
-    await click(button(box, "Confirm clear the shared ticker"))
+    await click(button(box, "Confirm clearing the shared ticker"))
     expect(sent.at(-1)).toMatchObject({ command: "clear_source", value: "ticker", seen: { "source:ticker": 2 } })
     await click(button(box, "Restore lower third…"))
-    await click(button(box, "Confirm restore the shared lower third"))
+    await click(button(box, "Confirm restoring the shared lower third"))
     expect(sent.at(-1)).toMatchObject({ command: "restore_source", value: "lowerThird" })
     expect((await render("worship")).querySelector('[aria-label="Ticker and lower third"]')).toBeNull()
   })
@@ -168,7 +168,7 @@ describe("screens desk and the director's output map", () => {
     }
     await act(async () => useJoin.setState({ live: changed }))
     expect(box.querySelector('[role="alert"]')?.textContent).toContain("changed while you were reviewing")
-    expect(button(box, "Confirm clear the shared ticker")).toBeUndefined()
+    expect(button(box, "Confirm clearing the shared ticker")).toBeUndefined()
     expect(sent).toHaveLength(0)
   })
 
@@ -188,7 +188,7 @@ describe("screens desk and the director's output map", () => {
 
     // Model a Live State update just before the click handler runs, before the subscribed view rerenders.
     useJoin.getState().live!.revisions!["source:ticker"] = 3
-    await click(button(box, "Confirm clear the shared ticker"))
+    await click(button(box, "Confirm clearing the shared ticker"))
 
     expect(box.querySelector('[role="alert"]')?.textContent).toContain("changed while you were reviewing")
     expect(sent).toHaveLength(0)
@@ -199,7 +199,7 @@ describe("screens desk and the director's output map", () => {
     await click(button(box, "Clear ticker…"))
     expect(sent).toHaveLength(0)
     expect(box.textContent).toContain("cannot limit the change to one screen")
-    await click(button(box, "Confirm clear the shared ticker"))
+    await click(button(box, "Confirm clearing the shared ticker"))
     expect(sent.at(-1)).toMatchObject({ command: "clear_source", value: "ticker" })
   })
 

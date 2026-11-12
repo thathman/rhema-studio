@@ -3,7 +3,7 @@ import { EyeOffIcon, PauseIcon, PlayIcon, RotateCcwIcon, XIcon } from "lucide-re
 import { Button } from "@/components/ui/button"
 import type { BroadcastOutput } from "@/types"
 import type { Scene } from "@/types/scene"
-import { CLEAR, RESTORE } from "@/lib/wording"
+import { CLEAR, HIDE_CAMERA, RESTORE, SHOW_CAMERA } from "@/lib/wording"
 import { cameraSending, useRouterHealth, watchRouter } from "@/lib/cameras"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { activatedLabel, cameraPathOf, followerCount, followsLowerThird, followsTicker, lowerThirdWords, tickerWords, timerWords, type AnySourceId } from "@/lib/live-sources"
@@ -125,14 +125,14 @@ export function LiveSourcesStrip() {
         const held = x?.on === false
         const sending = cameraSending(router, cam.name)
         const impact = cameraSceneImpact(cam.name, scenes, outputs)
-        const state = held ? "cleared from scenes" : sending ? SENDING_WORDS[sending] : "checking…"
+        const state = held ? "hidden from scenes" : sending ? SENDING_WORDS[sending] : "checking…"
         const name = cameraWords(cam.label)
         return (
           <Chip key={id} on={!held && sending === "sending"} name={name} what={state} who={x ? activatedLabel(x) : ""} extra={`in ${impact.scenes.length} ${impact.scenes.length === 1 ? "scene" : "scenes"}`}>
             {held ? (
-              <IconButton disabled={rehearsal} onClick={() => openCameraReview(id, name, false, x?.revision, impact.signature, "restore")} label={`Review restoring ${name} in scenes`} title="Review the scenes and outputs affected before restoring this camera"><RotateCcwIcon /></IconButton>
+              <IconButton disabled={rehearsal} onClick={() => openCameraReview(id, name, false, x?.revision, impact.signature, "restore")} label={`Review showing ${name} in scenes`} title="Review the scenes and outputs affected before showing this camera again"><RotateCcwIcon /></IconButton>
             ) : (
-              <IconButton disabled={rehearsal} onClick={() => openCameraReview(id, name, true, x?.revision, impact.signature, "hide")} label={`Review clearing ${name} from scenes`} title="Review the scenes and outputs affected before clearing this camera"><EyeOffIcon /></IconButton>
+              <IconButton disabled={rehearsal} onClick={() => openCameraReview(id, name, true, x?.revision, impact.signature, "hide")} label={`Review hiding ${name} from scenes`} title="Review the scenes and outputs affected before hiding this camera"><EyeOffIcon /></IconButton>
             )}
           </Chip>
         )
@@ -148,11 +148,11 @@ export function LiveSourcesStrip() {
           || currentImpact.signature !== cameraConfirmation.impactSignature
         const affectedScenes = currentImpact.scenes.map((scene) => scene.name)
         const affectedOutputs = currentImpact.outputs.map((output) => `${output.name} (${output.sceneName})`)
-        const verb = cameraConfirmation.command === "hide" ? CLEAR : RESTORE
+        const verb = cameraConfirmation.command === "hide" ? HIDE_CAMERA : SHOW_CAMERA
         return (
           <div role="alertdialog" aria-label={`${verb} ${cameraConfirmation.name} across scenes?`} className="flex min-w-full flex-col gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 p-3 text-xs sm:min-w-96">
             <p className="font-semibold">Review camera impact</p>
-            <p>{cameraConfirmation.command === "hide" ? "This will clear this source from every Rhema scene that uses it." : "This will restore this source in every Rhema scene that uses it."} It does not Take a scene. OBS camera inputs are unchanged.</p>
+            <p>{cameraConfirmation.command === "hide" ? "This will hide this source in every Rhema scene that uses it." : "This will restore this source in every Rhema scene that uses it."} It does not Take a scene. OBS camera inputs are unchanged.</p>
             <p><span className="font-semibold">Scenes using this camera:</span> {affectedScenes.length ? affectedScenes.join(", ") : "None in the saved scene list."}</p>
             <p><span className="font-semibold">Current output assignments:</span> {affectedOutputs.length ? affectedOutputs.join(", ") : "None."}</p>
             {stale ? <p role="alert" className="font-semibold text-confidence-mid">The source, scene usage, outputs, or rehearsal state changed while you were reviewing. Cancel and open the review again.</p> : null}
@@ -168,7 +168,7 @@ export function LiveSourcesStrip() {
                 if (cameraConfirmation.command === "hide") latest.clearSource(cameraConfirmation.id)
                 else latest.restoreSource(cameraConfirmation.id)
                 setCameraConfirmation(null)
-              }}>{cameraConfirmation.command === "hide" ? `${CLEAR} from all listed scenes` : `${RESTORE} in all listed scenes`}</Button>
+              }}>{cameraConfirmation.command === "hide" ? "Hide from all listed scenes" : "Show in all listed scenes"}</Button>
               <Button size="sm" variant="ghost" onClick={() => setCameraConfirmation(null)}>Cancel</Button>
             </div>
           </div>

@@ -205,7 +205,7 @@ function HostCard() {
           </li>
         ))}
       </ul>
-      <p className="text-muted-foreground">Take back control stops a desk's commands at once without unpairing it; it still sees the service and stays on Talk. Roles, grants and revoking a device are in Permissions.</p>
+      <p className="text-muted-foreground">Take back control stops a desk's commands at once without unpairing it; it still sees the service and stays on Talk. Roles and grants are in Permissions; revoke a device in Connections.</p>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" aria-label="Manage access and roles in Permissions" onClick={openPermissions}>Manage access and roles…</Button>
         {host?.running && !confirmStop && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirmStop(true)}>Stop hosting</Button>}

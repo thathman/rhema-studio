@@ -15,6 +15,10 @@ export const LEAVE_MAIN_COMPUTER = "Leave this main computer"
 export const CLEAR = "Clear"
 export const RESTORE = "Restore"
 
+/** A different action: a camera taken out of every scene that uses it, and put back in them. */
+export const HIDE_CAMERA = "Hide camera"
+export const SHOW_CAMERA = "Show camera"
+
 /** The tally: on air, naming where; OBS's program is the screen called "OBS". */
 export const OBS_SCREEN = "OBS"
 export const OFF_AIR = "OFF AIR"
