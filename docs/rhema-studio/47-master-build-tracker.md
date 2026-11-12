@@ -45,7 +45,7 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | Area | Status | Evidence / next |
 | --- | --- | --- |
 | Receiver pairing (code check) | PHYSICAL TESTED | Onn Google TV (Android 14), Receiver 1.6.3.1, real Wi-Fi, 11 Nov: a code check and /show through the QA host worked. |
-| Overlapping pairing requests | AUTOMATED TESTED | #789 `PendingCheck`. A forced interleaved race on a device is not tested; `tv_show` does both steps at once. |
+| Overlapping pairing requests | PHYSICAL TESTED | #789 `PendingCheck`. 12 Nov, Onn, host `4b188798`: two Show on TV requests with the same code sent at the same moment (Onn feed and Yorùbá feed) were both refused ("code check did not match" / "must check the code first") and the TV stayed on its current feed; one retry straight after moved it. Display-mode change re-run the same day: density 320 → 300 → 320 kept the Receiver's process and the feed's watcher, and the next frame was acknowledged. |
 | TV feed survives an outputs load failure | AUTOMATED TESTED | #787 |
 | TV: Welcome, Black, Back, Clear, Restore on Program | PHYSICAL TESTED | Onn, host built at `5b816a1f`, 11 Nov. Each step was acknowledged as drawn (frames 5–9). The bilingual Welcome showed Yorùbá diacritics correctly; Clear leaves only the background. |
 | TV revocation (new feed link) and re-pairing | PHYSICAL TESTED | Onn, 11 Nov. After a new link, the old key is refused within 1 s and the TV shows its own "link no longer works" screen with a code. Re-pairing put the frame back about 0.5 s after `tv_show` returned. Receiver 1.6.3.2 no longer shows the host's 403 text behind that screen. |
