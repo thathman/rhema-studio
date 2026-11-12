@@ -193,6 +193,9 @@ describe("OBS companion screen (#209)", () => {
     expect(host.querySelector('[aria-label="Why the host is not connected"]')?.textContent).toContain("Pair a device")
     // Trying a revoked key again cannot help: only Leave (and pair again) is offered.
     expect([...host.querySelectorAll("button")].some((b) => b.textContent === "Try again")).toBe(false)
+    // The crate's certificate-mismatch words (pin.rs) say "pair again" too: a security warning, not a revoked key.
+    await act(async () => useJoin.setState({ status: "reconnecting", error: "The host's certificate is not the one this computer paired with, so nothing was sent: pair again if the host computer was reinstalled (Leave this host, then join with a new code). Otherwise another computer may be pretending to be the host." }))
+    expect(host.querySelector('[aria-label="Host connection status"]')?.textContent).toBe("Host certificate changed: this may not be your Rhema computer")
   })
 
   it("asks before leaving the host, and stays joined on Stay (#831)", async () => {
@@ -226,6 +229,36 @@ describe("OBS companion screen (#209)", () => {
     const scenes = [...host.querySelectorAll('select[aria-label="OBS scene for the overlay"] option')].map((o) => o.textContent)
     expect(scenes).toEqual(["Pick a scene…", "Service", "Wide"])
     expect(obs.requests.some((r) => r.startsWith("Remove") || r === "CreateScene")).toBe(false)
+    // The overlay's key is not shown on screen, only its last four characters.
+    const field = host.querySelector<HTMLInputElement>('input[aria-label="Feed link for Bible (Rhema overlay)"]')!
+    expect(field.value).toBe("http://192.168.1.20:8080/feed/out-bible?k=••••cdef")
+  })
+
+  it("will not add an overlay whose link is for another computer unless the operator says so (#865)", async () => {
+    useSettingsStore.setState({ companionMode: true })
+    const { useObsStore } = await import("@/stores/obs-store")
+    useObsStore.setState({ status: "connected", error: null })
+    await act(async () => root.render(<App />))
+    const form = host.querySelector('form[aria-label="Add an overlay"]')!
+    const set = (el: HTMLInputElement | HTMLSelectElement, v: string) => {
+      const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+      Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, v)
+      el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }))
+    }
+    const add = () => [...form.querySelectorAll("button")].find((b) => b.textContent?.includes("Add to the scene"))!
+    await act(async () => {
+      set(form.querySelector<HTMLSelectElement>('select[aria-label="OBS scene for the overlay"]')!, "Wide")
+      set(form.querySelector<HTMLInputElement>('input[aria-label="Feed link"]')!, "http://10.9.9.9:8080/feed/out-bible?k=0123456789abcdef")
+    })
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+    expect(form.textContent).toContain("not for the host this Companion joined")
+    expect(add().disabled).toBe(true)
+    await act(async () => form.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click())
+    expect(add().disabled).toBe(false)
+    // The paired host's own address needs no confirmation.
+    await act(async () => set(form.querySelector<HTMLInputElement>('input[aria-label="Feed link"]')!, "http://192.168.1.20:8080/feed/out-bible?k=0123456789abcdef"))
+    expect(form.textContent).not.toContain("not for the host this Companion joined")
+    expect(add().disabled).toBe(false)
   })
 
   it("tells the operator when the host gave this computer another role", async () => {

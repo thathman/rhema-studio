@@ -356,10 +356,22 @@ export function browserSourceSettings(url: string, width: number, height: number
   return { url, width: Math.round(width), height: Math.round(height), is_local_file: false, shutdown: false, restart_when_active: false }
 }
 
+/** A host name as written in a link or an address, for comparing: no brackets, no trailing dot, lower case. */
+export function hostKey(host: string): string {
+  return host.trim().replace(/^\[|\]$/g, "").replace(/\.$/, "").toLowerCase()
+}
+
+/** A feed link with its key hidden but its last four characters ("…?k=••••cdef"), for showing on screen. */
+export function maskFeedLink(text: string): string {
+  return text.replace(/([?&]k=)([^&#\s]*)/g, (_, k: string, key: string) => `${k}${key.length > 4 ? "••••" + key.slice(-4) : "••••"}`)
+}
+
 /** One overlay in this OBS: a Browser Source opening one of the host's feeds. */
 export interface OverlayInput {
   input: string
   url: string
+  /** The host the link points at (as written in it). */
+  host: string
   feedId: string
   width: number | null
   height: number | null
@@ -376,7 +388,7 @@ export async function overlayInputs(request: ObsRequest): Promise<OverlayInput[]
     if (!link) continue
     const width = typeof s?.inputSettings?.width === "number" ? s.inputSettings.width : null
     const height = typeof s?.inputSettings?.height === "number" ? s.inputSettings.height : null
-    out.push({ input: i.inputName, url: link.url, feedId: link.id, width, height })
+    out.push({ input: i.inputName, url: link.url, host: link.host, feedId: link.id, width, height })
   }
   return out
 }
@@ -393,6 +405,32 @@ export function overlaySize(v: unknown): number | null {
   return Number.isFinite(n) && n >= 16 && n <= 8192 ? Math.round(n) : null
 }
 
+/**
+ * Whether a source (a scene, or an input) is on OBS's program now: on its own, inside a scene on
+ * program, or in a transition to or from it. When OBS cannot say, it counts as on air.
+ */
+export async function isOnAir(request: ObsRequest, sourceName: string): Promise<boolean> {
+  const active = await request<{ videoActive?: boolean }>("GetSourceActive", { sourceName }).catch(() => null)
+  return active?.videoActive !== false
+}
+
+/** A scene on OBS's program now (its own program scene, or shown inside it or in a transition); unknown counts as on air. */
+async function sceneOnAir(request: ObsRequest, sceneName: string): Promise<boolean> {
+  const program = await request<{ currentProgramSceneName?: string; sceneName?: string }>("GetCurrentProgramScene").catch(() => null)
+  if (!program || (program.currentProgramSceneName ?? program.sceneName) === sceneName) return true
+  return isOnAir(request, sceneName)
+}
+
+/** An overlay is on air: changing its link or size reloads the page, which blanks it on the stream for a moment. */
+export class OverlayOnAirError extends Error {
+  readonly inputName: string
+  constructor(inputName: string) {
+    super(`"${inputName}" is on air now. Changing its link or size reloads it, so it goes blank on the stream for a moment.`)
+    this.name = "OverlayOnAirError"
+    this.inputName = inputName
+  }
+}
+
 const NOT_A_FEED = "That is not a Rhema feed link. On the host, copy the feed's link for OBS and paste it here."
 
 export interface OverlayResult {
@@ -400,50 +438,59 @@ export interface OverlayResult {
   sceneName: string
   /** "added" (a new Browser Source), "updated" (it was in that scene already), "placed" (put in this scene too). */
   done: "added" | "updated" | "placed"
+  /** Added hidden, because the scene is on air: the operator shows it in OBS when ready. */
+  hidden: boolean
 }
 
 /**
- * Add an overlay to an existing OBS scene, on top of what the scene shows. A feed already in OBS
- * keeps its input (with the link and size given) and is put in this scene too if it is not there.
- * Refuses a scene OBS does not have (it never makes one) and a link that is not a host feed.
+ * Add an overlay to an existing OBS scene, on top of what the scene shows. In a scene on air it is
+ * added hidden (never straight onto the stream). A feed already in OBS (the same host and feed)
+ * keeps its input, with the link and size given, and is put in this scene too if it is not there;
+ * changing one that is on air needs `onAirOk`. Refuses a scene OBS does not have (it never makes
+ * one) and a link that is not a host feed.
  */
-export async function addOverlayToObs(request: ObsRequest, overlay: { label: string; url: string; width?: number | null; height?: number | null }, scene: string): Promise<OverlayResult> {
+export async function addOverlayToObs(request: ObsRequest, overlay: { label: string; url: string; width?: number | null; height?: number | null }, scene: string, opts: { onAirOk?: boolean } = {}): Promise<OverlayResult> {
   const link = readFeedLink(overlay.url)
   if (!link) throw new Error(NOT_A_FEED)
   const sceneName = scene.trim()
   const scenes = await request<{ scenes?: { sceneName?: string }[] }>("GetSceneList")
   if (!sceneName || !(scenes.scenes ?? []).some((s) => s.sceneName === sceneName)) throw new Error(`OBS has no scene "${sceneName}". Pick one of OBS's scenes.`)
-  const existing = (await overlayInputs(request)).find((o) => o.feedId === link.id)
-  if (!existing) {
-    const size = overlay.width && overlay.height ? { width: overlay.width, height: overlay.height } : await canvasSize(request)
-    const inputName = overlayNameFor(overlay.label, await allInputNames(request))
-    await request("CreateInput", { sceneName, inputName, inputKind: "browser_source", inputSettings: browserSourceSettings(link.url, size.width, size.height), sceneItemEnabled: true })
-    return { inputName, sceneName, done: "added" }
+  const existing = (await overlayInputs(request)).find((o) => o.feedId === link.id && hostKey(o.host) === hostKey(link.host))
+  if (existing) {
+    await updateOverlay(request, existing.input, { url: link.url === existing.url ? null : link.url, width: overlay.width ?? null, height: overlay.height ?? null }, opts)
+    const items = await request<{ sceneItems?: { sourceName?: string }[] }>("GetSceneItemList", { sceneName })
+    if ((items.sceneItems ?? []).some((i) => i.sourceName === existing.input)) return { inputName: existing.input, sceneName, done: "updated", hidden: false }
   }
-  const inputName = existing.input
-  await updateOverlay(request, inputName, { url: link.url === existing.url ? null : link.url, width: overlay.width ?? null, height: overlay.height ?? null })
-  const items = await request<{ sceneItems?: { sourceName?: string }[] }>("GetSceneItemList", { sceneName })
-  if ((items.sceneItems ?? []).some((i) => i.sourceName === inputName)) return { inputName, sceneName, done: "updated" }
-  await request("CreateSceneItem", { sceneName, sourceName: inputName, sceneItemEnabled: true })
-  return { inputName, sceneName, done: "placed" }
+  // Checked last, just before the change: never put a new item straight onto the stream.
+  const hidden = await sceneOnAir(request, sceneName)
+  if (existing) {
+    await request("CreateSceneItem", { sceneName, sourceName: existing.input, sceneItemEnabled: !hidden })
+    return { inputName: existing.input, sceneName, done: "placed", hidden }
+  }
+  const size = overlay.width && overlay.height ? { width: overlay.width, height: overlay.height } : await canvasSize(request)
+  const inputName = overlayNameFor(overlay.label, await allInputNames(request))
+  await request("CreateInput", { sceneName, inputName, inputKind: "browser_source", inputSettings: browserSourceSettings(link.url, size.width, size.height), sceneItemEnabled: !hidden })
+  return { inputName, sceneName, done: "added", hidden }
 }
 
 /**
  * Change an overlay's link or size. Only a Browser Source that opens a host feed is changed (an
- * operator's own Browser Source is refused); the page is then loaded afresh.
+ * operator's own Browser Source is refused); the page is then loaded afresh. One on air is changed
+ * only with `onAirOk` (the operator confirmed): otherwise it throws `OverlayOnAirError`.
  */
-export async function updateOverlay(request: ObsRequest, inputName: string, change: { url?: string | null; width?: number | null; height?: number | null }): Promise<void> {
-  const s = await request<{ inputKind?: string; inputSettings?: { url?: unknown } }>("GetInputSettings", { inputName })
+export async function updateOverlay(request: ObsRequest, inputName: string, change: { url?: string | null; width?: number | null; height?: number | null }, opts: { onAirOk?: boolean } = {}): Promise<void> {
+  const s = await request<{ inputKind?: string; inputSettings?: { url?: unknown; width?: unknown; height?: unknown } }>("GetInputSettings", { inputName })
   if ((s.inputKind && s.inputKind !== "browser_source") || !readFeedLink(s.inputSettings?.url)) throw new Error(`"${inputName}" is not a Rhema overlay, so it was left as it is.`)
   const settings: Record<string, unknown> = {}
   if (change.url) {
     const link = readFeedLink(change.url)
     if (!link) throw new Error(NOT_A_FEED)
-    settings.url = link.url
+    if (link.url !== s.inputSettings?.url) settings.url = link.url
   }
-  if (change.width) settings.width = Math.round(change.width)
-  if (change.height) settings.height = Math.round(change.height)
+  if (change.width && Math.round(change.width) !== s.inputSettings?.width) settings.width = Math.round(change.width)
+  if (change.height && Math.round(change.height) !== s.inputSettings?.height) settings.height = Math.round(change.height)
   if (!Object.keys(settings).length) return
+  if (!opts.onAirOk && (await isOnAir(request, inputName))) throw new OverlayOnAirError(inputName)
   await request("SetInputSettings", { inputName, inputSettings: settings, overlay: true })
   await request("PressInputPropertiesButton", { inputName, propertyName: "refreshnocache" }).catch(() => {})
 }
@@ -453,32 +500,22 @@ export interface OverlayTest {
   image: string | null
   /** OBS says the overlay is shown somewhere now (program, preview or a projector). */
   showing: boolean
-  /** It was hidden in that scene and shown for the test, then hidden again. */
-  shownBriefly: boolean
-  /** It is hidden in a scene that is on air, so it was not shown (that would put it on the stream). */
-  hiddenOnAir: boolean
+  /** It is on OBS's program now. */
+  onAir: boolean
+  /** It is hidden in that scene (the test leaves it so). */
+  hidden: boolean
 }
-
-const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 /**
- * Test an overlay in a scene: ask OBS for a picture of it and whether it is shown. Hidden in a
- * scene that is not on air, it is shown for a moment and hidden again; hidden in a scene on air
- * (OBS's program, directly or inside another scene), it is left hidden.
+ * Test an overlay in a scene: ask OBS for a picture of it (OBS draws a source for a screenshot
+ * whether or not it is shown) and whether it is shown or on air. Read only: nothing in OBS is shown,
+ * hidden or changed.
  */
-export async function testOverlay(request: ObsRequest, inputName: string, sceneName: string, wait: (ms: number) => Promise<void> = pause): Promise<OverlayTest> {
+export async function testOverlay(request: ObsRequest, inputName: string, sceneName: string): Promise<OverlayTest> {
   const { sceneItemId } = await request<{ sceneItemId: number }>("GetSceneItemId", { sceneName, sourceName: inputName })
   const { sceneItemEnabled } = await request<{ sceneItemEnabled?: boolean }>("GetSceneItemEnabled", { sceneName, sceneItemId })
-  // Unknown counts as on air: never risk putting it on the stream.
-  const onAir = (await request<{ videoActive?: boolean }>("GetSourceActive", { sourceName: sceneName }).catch(() => ({ videoActive: true }))).videoActive !== false
-  const show = sceneItemEnabled === false && !onAir
-  if (show) await request("SetSceneItemEnabled", { sceneName, sceneItemId, sceneItemEnabled: true })
-  try {
-    if (show) await wait(1500)
-    const shot = await request<{ imageData?: string }>("GetSourceScreenshot", { sourceName: inputName, imageFormat: "png", imageWidth: 320 }).catch(() => null)
-    const active = await request<{ videoShowing?: boolean }>("GetSourceActive", { sourceName: inputName }).catch(() => null)
-    return { image: typeof shot?.imageData === "string" && shot.imageData ? shot.imageData : null, showing: active?.videoShowing === true, shownBriefly: show, hiddenOnAir: sceneItemEnabled === false && onAir }
-  } finally {
-    if (show) await request("SetSceneItemEnabled", { sceneName, sceneItemId, sceneItemEnabled: false }).catch(() => {})
-  }
+  const shot = await request<{ imageData?: string }>("GetSourceScreenshot", { sourceName: inputName, imageFormat: "png", imageWidth: 320 }).catch(() => null)
+  const active = await request<{ videoActive?: boolean; videoShowing?: boolean }>("GetSourceActive", { sourceName: inputName }).catch(() => null)
+  return { image: typeof shot?.imageData === "string" && shot.imageData ? shot.imageData : null, showing: active?.videoShowing === true, onAir: active?.videoActive === true, hidden: sceneItemEnabled === false }
 }
+

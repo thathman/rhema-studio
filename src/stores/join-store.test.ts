@@ -170,6 +170,22 @@ describe("joined host state", () => {
       clockSkewMs: null,
     })
   })
+
+  it("a changed or damaged host certificate is not a refusal, though the crate's words say pair again (#865)", async () => {
+    // rhema-join pin.rs, verbatim.
+    for (const why of [
+      "The host's certificate is not the one this computer paired with, so nothing was sent: pair again if the host computer was reinstalled (Leave this host, then join with a new code). Otherwise another computer may be pretending to be the host.",
+      "This computer's record of the host's certificate is damaged: pair again",
+    ]) {
+      invokeMock.mockImplementation(async (command: string) => {
+        if (command === "join_me") throw why
+        return null
+      })
+      await useJoin.getState().connect()
+      expect(useJoin.getState()).toMatchObject({ status: "reconnecting", error: why })
+      await useJoin.getState().leave()
+    }
+  })
 })
 
 describe("a first connect that fails is tried again (#411 Companion hunt)", () => {

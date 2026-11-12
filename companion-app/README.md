@@ -10,9 +10,12 @@ It also puts Rhema's **overlays** (Bible, Lyrics, Name lower third, Ticker, Time
 this OBS already has, as Browser Sources opening the host's browser feeds (#848). On the host,
 add the ready-made feed (Outputs → Add a ready-made feed, as a browser feed), copy its link for
 OBS, and paste it in the Companion's Overlays card with the scene to add it to. An overlay's link
-and size can be changed there, and **Test in this scene** asks OBS for a picture of it (a hidden
-overlay is shown for a moment only in a scene that is not on air). The Companion never removes,
-reorders or hides the operator's own sources, never makes a scene, and never changes OBS's program.
+and size can be changed there (an overlay on air is reloaded only after you confirm, since it
+blanks for a moment), and **Test in this scene** asks OBS for a picture of it and whether it is on
+air, changing nothing. An overlay added to the scene on air comes in hidden: show it in OBS when
+ready. A link for another computer than the paired host is refused unless you confirm it. The
+Companion never removes, reorders or hides the operator's own sources, never makes a scene, and
+never changes OBS's program.
 
 Version 1.1.0.0 (the build tools take three parts, so files say 1.1.0).
 

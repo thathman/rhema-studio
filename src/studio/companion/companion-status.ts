@@ -14,15 +14,24 @@ export interface LinkWords {
   detail: string | null
 }
 
-/** How the reason reads: the host could not be reached at all, its certificate changed, its secure page is off, or something else. */
-export type HostFailure = "unreachable" | "certificate" | "secure-page" | "other"
+/**
+ * How the reason reads: the computer answering shows another certificate (it may not be the
+ * host), this computer's saved pin is damaged, the host's secure page is off, the host could not
+ * be reached at all, or something else.
+ */
+export type HostFailure = "certificate" | "pin-damaged" | "secure-page" | "unreachable" | "other"
 
-/** Which kind of failure a reconnect reason is (the shared join crate's words, or the network library's). */
+// The network library's and the join crate's words for "nothing answered there" (and only those).
+const UNREACHABLE = /could not reach the host|error sending request|connection refused|connection reset|timed out|no route to host|network is unreachable|host is down|dns error|failed to lookup address|the host closed the connection/
+
+/** Which kind of failure a reason is (the shared join crate's words, or the network library's). */
 export function hostFailure(reason: string | null | undefined): HostFailure {
   const r = (reason ?? "").toLowerCase()
+  // Checked first: these also say "pair again", but the key was not revoked.
+  if (r.includes("record of the host's certificate is damaged")) return "pin-damaged"
   if (r.includes("certificate")) return "certificate"
   if (r.includes("secure page is off")) return "secure-page"
-  if (/could not reach|error sending request|connect|timed out|timeout|dns|unreachable|no route|network|refused|reset|closed the connection|broken pipe|os error/.test(r)) return "unreachable"
+  if (UNREACHABLE.test(r)) return "unreachable"
   return "other"
 }
 
@@ -31,11 +40,17 @@ const PAIR_AGAIN = "To pair again: press Leave this host below, then on the host
 /** The host link in words, from the join status and its reason. */
 export function hostWords(status: JoinStatus, error: string | null, address: string): LinkWords {
   const where = address.trim() || "its address"
+  if (status === "connected") return { label: "Connected", tone: "ok", detail: null }
+  if (status === "connecting") return { label: "Connecting…", tone: "warn", detail: null }
+  // A certificate problem comes first, whatever the status: it is a security warning, not a revoked key.
+  const failure = hostFailure(error)
+  if (status !== "off" && failure === "certificate") {
+    return { label: "Host certificate changed: this may not be your Rhema computer", tone: "warn", detail: `${error} Nothing is sent to it. Only if you know the host computer was reinstalled: press Leave this host below, then pair again with a new code from the host (Settings → Remote control → Pair a device).` }
+  }
+  if (status !== "off" && failure === "pin-damaged") {
+    return { label: "Saved host certificate damaged", tone: "warn", detail: `This computer's saved record of the host's certificate cannot be read, so nothing is sent. ${PAIR_AGAIN}` }
+  }
   switch (status) {
-    case "connected":
-      return { label: "Connected", tone: "ok", detail: null }
-    case "connecting":
-      return { label: "Connecting…", tone: "warn", detail: null }
     case "off":
       return { label: "Not joined", tone: "off", detail: error }
     case "refused":
@@ -46,16 +61,9 @@ export function hostWords(status: JoinStatus, error: string | null, address: str
       }
     case "reconnecting": {
       const why = error ? ` (${error})` : ""
-      switch (hostFailure(error)) {
-        case "unreachable":
-          return { label: "Host unreachable", tone: "warn", detail: `This computer cannot reach the host at ${where}. Check that Rhema Studio is open there with Remote control on, and that both computers are on the same network. It keeps trying by itself${why}.` }
-        case "certificate":
-          return { label: "Host certificate changed", tone: "warn", detail: `${error ?? "The host's certificate is not the one this computer paired with."} Nothing is sent until this is settled.` }
-        case "secure-page":
-          return { label: "Host's secure page off", tone: "warn", detail: error }
-        default:
-          return { label: "Host connection failed", tone: "warn", detail: `The host is reachable but the link failed. It keeps trying by itself${why}.` }
-      }
+      if (failure === "unreachable") return { label: "Host unreachable", tone: "warn", detail: `This computer cannot reach the host at ${where}. Check that Rhema Studio is open there with Remote control on, and that both computers are on the same network. It keeps trying by itself${why}.` }
+      if (failure === "secure-page") return { label: "Host's secure page off", tone: "warn", detail: error }
+      return { label: "Host connection failed", tone: "warn", detail: `The link to the host failed. It keeps trying by itself${why}.` }
     }
   }
 }

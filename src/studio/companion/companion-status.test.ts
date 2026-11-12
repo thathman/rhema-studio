@@ -1,15 +1,23 @@
 import { describe, expect, it } from "vitest"
 import { hostFailure, hostWords, obsWords } from "@/studio/companion/companion-status"
 
+// The join crate's own words (src-tauri/crates/join/src/pin.rs NOT_THE_PAIRED_HOST and pinned_host), verbatim.
+const NOT_THE_PAIRED_HOST = "The host's certificate is not the one this computer paired with, so nothing was sent: pair again if the host computer was reinstalled (Leave this host, then join with a new code). Otherwise another computer may be pretending to be the host."
+const PIN_DAMAGED = "This computer's record of the host's certificate is damaged: pair again"
+
 // #842 S18: the Companion says which link failed (host or OBS), why, and what to do.
 describe("Companion link status words (#842)", () => {
   it("tells a host out of reach from other failures, with the reason", () => {
     expect(hostFailure("error sending request for url (https://192.168.1.20:8081/api/v1/live/events)")).toBe("unreachable")
     expect(hostFailure("Could not reach the host: connection refused")).toBe("unreachable")
     expect(hostFailure("the host closed the connection")).toBe("unreachable")
-    expect(hostFailure("The host's certificate is not the one this computer paired with, so nothing was sent")).toBe("certificate")
+    expect(hostFailure("operation timed out")).toBe("unreachable")
+    expect(hostFailure(NOT_THE_PAIRED_HOST)).toBe("certificate")
+    expect(hostFailure(PIN_DAMAGED)).toBe("pin-damaged")
     expect(hostFailure("The host's secure page is off. On the host: …")).toBe("secure-page")
     expect(hostFailure("the host answered 500")).toBe("other")
+    // Narrow: words that merely mention a network or a refusal are not "unreachable".
+    expect(hostFailure("the host refused the request: network settings changed")).toBe("other")
     const away = hostWords("reconnecting", "error sending request for url", "192.168.1.20:8080")
     expect(away.label).toBe("Host unreachable")
     expect(away.detail).toContain("192.168.1.20:8080")
@@ -17,8 +25,16 @@ describe("Companion link status words (#842)", () => {
     const other = hostWords("reconnecting", "the host answered 500", "h:1")
     expect(other.label).toBe("Host connection failed")
     expect(other.detail).toContain("the host answered 500")
-    expect(hostWords("reconnecting", "The host's certificate is not the one this computer paired with", "h:1").label).toBe("Host certificate changed")
     expect(hostWords("connected", null, "h:1")).toEqual({ label: "Connected", tone: "ok", detail: null })
+  })
+
+  it("a changed host certificate is a security warning, never \"Key revoked\", whatever the status", () => {
+    for (const status of ["reconnecting", "refused"] as const) {
+      const w = hostWords(status, NOT_THE_PAIRED_HOST, "h:1")
+      expect(w.label).toBe("Host certificate changed: this may not be your Rhema computer")
+      expect(w.detail).toContain("Nothing is sent")
+    }
+    expect(hostWords("refused", PIN_DAMAGED, "h:1").label).toBe("Saved host certificate damaged")
   })
 
   it("a refusal says the key was revoked and how to pair again", () => {
