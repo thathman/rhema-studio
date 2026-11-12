@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { designTabOf, readShellPrefs, useShellStore, writeShellPrefs, SHELL_PREFS_KEY, type StorageLike } from "./shell-store"
+import { canonicalWorkspace, designTabOf, readShellPrefs, useShellStore, writeShellPrefs, SHELL_PREFS_KEY, type StorageLike } from "./shell-store"
 
 function fakeStorage(initial: Record<string, string> = {}): StorageLike & { map: Map<string, string> } {
   const map = new Map(Object.entries(initial))
@@ -137,5 +137,14 @@ describe("Design Used On navigation", () => {
     expect(useShellStore.getState().prepareProgramRequest).toEqual({ programId: "p2" })
     expect(useShellStore.getState().prepareMomentFocus).toBeNull()
     expect(useShellStore.getState().prepareMomentSelection).toBeNull()
+  })
+})
+
+describe("an unknown workspace name", () => {
+  it("opens Home instead of a page that does not exist; production still means Live", () => {
+    expect(canonicalWorkspace("live" as never)).toBe("home")
+    expect(canonicalWorkspace("" as never)).toBe("home")
+    expect(canonicalWorkspace("production")).toBe("present")
+    expect(canonicalWorkspace("design")).toBe("design")
   })
 })
