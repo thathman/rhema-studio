@@ -33,6 +33,7 @@ import { startCountdownChime } from "@/stores/countdown-chime"
 import { startBrowserFeeds } from "@/lib/browser-feeds"
 import { startNdiStallWatch } from "@/lib/ndi-stall-watch"
 import { startCameras } from "@/lib/cameras"
+import { watchCamerasOnTvs } from "@/lib/camera-tv-quality"
 import { startLiveRecovery } from "@/lib/live-recovery"
 import { RecoveryBanner } from "@/studio/shell/recovery-banner"
 import { SignalWatch } from "@/studio/shell/signal-watch"
@@ -194,6 +195,8 @@ export function AppShell() {
   useEffect(() => { void removeOldTranscripts(transcriptDays) }, [transcriptDays])
   // Cameras (#209): the camera page's list, and the camera router when cameras are added.
   useEffect(() => startCameras(), [])
+  // A camera shown on a Google TV is suggested TV-friendly 720p unless the operator chose a quality.
+  useEffect(() => watchCamerasOnTvs(), [])
   // What was on the screens, for recovery after an unexpected close.
   useEffect(() => {
     let off: (() => void) | undefined

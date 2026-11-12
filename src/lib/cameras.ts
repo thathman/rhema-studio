@@ -290,7 +290,8 @@ let lastSent = ""
 
 /**
  * What the host suggests Rhema Studio Cam sends for one camera (#838): a ceiling over the phone's own
- * size and bitrate. "phone" (or absent) leaves it to the phone. The host's listener knows the same
+ * size and bitrate. "phone" leaves it to the phone; a camera with none chosen is automatic
+ * (`effectiveCameraQuality`: TV-friendly while it is on a Google TV). The host's listener knows the same
  * ids (`rhema_api::cameras::quality_suggestion`) and tells the phone in its tally reply.
  */
 export type CameraQuality = "phone" | "tv720" | "hd1080" | "light"
@@ -302,30 +303,93 @@ export const CAMERA_QUALITIES: readonly { id: CameraQuality; label: string; deta
   { id: "light", label: "Light 720p for a busy network", detail: "At most 720p and 2 Mbit/s: when the Wi-Fi is crowded." },
 ]
 
-/** A camera as kept in settings, with the quality suggested for it (kept alongside, absent until chosen). */
+/**
+ * What the operator chose for a camera: one of the qualities, kept on the camera even when it is
+ * "phone" (an explicit The phone decides is never overridden), or "auto" when nothing was chosen.
+ */
+export type CameraQualityChoice = CameraQuality | "auto"
+
+/** In words, what Automatic does (the panel adds what it does now). */
+export const AUTO_QUALITY_DETAIL = "TV-friendly 720p while this camera is shown on a feed a Google TV watches (a high bitrate there makes the TV stutter), otherwise the phone decides."
+
+/** A camera as kept in settings, with the quality chosen for it (absent until chosen: automatic). */
 export type CameraWithQuality = CameraSource & { quality?: CameraQuality }
 
-/** The quality suggested for a camera ("phone" when none or an unknown id was kept). */
-export function cameraQuality(cam: CameraSource): CameraQuality {
+/** The quality chosen for a camera, or "auto" when none (or an unknown id) was kept. */
+export function cameraQuality(cam: CameraSource): CameraQualityChoice {
   const q = (cam as CameraWithQuality).quality
-  return CAMERA_QUALITIES.some((x) => x.id === q) ? (q as CameraQuality) : "phone"
+  return CAMERA_QUALITIES.some((x) => x.id === q) ? (q as CameraQuality) : "auto"
 }
 
-/** The same cameras with one camera's suggested quality changed ("phone" removes it). */
-export function withCameraQuality(cameras: CameraSource[], name: string, quality: CameraQuality): CameraSource[] {
+/** The same cameras with one camera's quality chosen ("auto" removes the choice; "phone" is kept). */
+export function withCameraQuality(cameras: CameraSource[], name: string, quality: CameraQualityChoice): CameraSource[] {
   return cameras.map((c) => {
     if (c.name !== name) return c
     const next: CameraWithQuality = { ...c }
-    if (quality === "phone") delete next.quality
+    if (quality === "auto") delete next.quality
     else next.quality = quality
     return next
   })
 }
 
+/**
+ * The quality the host suggests for a camera now: the operator's choice when there is one;
+ * otherwise TV-friendly 720p while the camera is shown on a feed a paired Google TV watches
+ * (`tvs`, the TVs' names: a 1080p ~14 Mbit/s phone stream and the TV's own download through one
+ * access point collapsed a TV to 5-9 fps, 12 Nov), else the phone decides.
+ */
+export function effectiveCameraQuality(cam: CameraSource, tvs: readonly string[] | undefined): CameraQuality {
+  const chosen = cameraQuality(cam)
+  if (chosen !== "auto") return chosen
+  return tvs && tvs.length > 0 ? "tv720" : "phone"
+}
+
+/** The cameras shown on a Google TV now, as the listener was last told (camera name -> the TVs' names). */
+export type CamerasOnTvs = Record<string, string[]>
+
+/**
+ * Which of the church's cameras each paired Google TV shows now: a browser feed that is on, with a
+ * TV paired to it that watches it (its own key in feed_status; while the feed's pages are not being
+ * asked, a paired TV counts), whose frame has a camera box playing one of these cameras.
+ */
+export function camerasOnTvs(
+  cameras: readonly Pick<CameraSource, "name">[],
+  outputs: readonly { id: string; type: string; tvs?: readonly { name: string; address: string; token?: string }[] }[],
+  status: Readonly<Record<string, { feedActive?: boolean } | undefined>>,
+  frames: Readonly<Record<string, { scene?: { layers: readonly { cameraUrl?: string }[] } } | undefined>>,
+  health: Readonly<Record<string, { watching: number; tvs?: Record<string, number> } | null | undefined>>,
+): CamerasOnTvs {
+  const out: CamerasOnTvs = {}
+  const names = cameras.map((c) => ({ name: c.name }))
+  for (const o of outputs) {
+    if (o.type !== "browser" || !status[o.id]?.feedActive || !o.tvs?.length) continue
+    const h = health[o.id]
+    // A TV with its own key is counted by feed_status; one sent the shared link only by the feed's pages.
+    const watching = o.tvs.filter((tv) => !h || (tv.token ? (h.tvs?.[tv.address] ?? 0) > 0 : h.watching > 0))
+    if (watching.length === 0) continue
+    const shown = new Set<string>()
+    for (const layer of frames[o.id]?.scene?.layers ?? []) {
+      const cam = cameraOfUrl(layer.cameraUrl, names)
+      if (cam) shown.add(cam)
+    }
+    for (const cam of shown) {
+      const list = (out[cam] ??= [])
+      for (const tv of watching) {
+        const tvName = tv.name || "Google TV"
+        if (!list.includes(tvName)) list.push(tvName)
+      }
+    }
+  }
+  return out
+}
+
+/** The cameras on a Google TV as last applied (after holding steady ~2 s), for the listener and the panel. */
+export const useCamerasOnTvs = create<CamerasOnTvs>(() => ({}))
+
 /** What the listener is told about each camera: name and secret, and for Rhema Studio Cam its label and suggested quality. */
-export function cameraListEntries(cameras: CameraSource[]): { name: string; token: string; label: string; quality?: Exclude<CameraQuality, "phone"> }[] {
+export function cameraListEntries(cameras: CameraSource[], onTvs: CamerasOnTvs = {}): { name: string; token: string; label: string; quality?: Exclude<CameraQuality, "phone"> }[] {
   return cameras.map((c) => {
-    const q = cameraQuality(c)
+    const q = effectiveCameraQuality(c, onTvs[c.name])
     return q === "phone" ? { name: c.name, token: c.token, label: c.label } : { name: c.name, token: c.token, label: c.label, quality: q }
   })
 }
@@ -336,7 +400,7 @@ export function cameraListEntries(cameras: CameraSource[]): { name: string; toke
  * The label and suggested quality go along for Rhema Studio Cam (#838, #850).
  */
 function syncList(cameras: CameraSource[]): Promise<unknown> {
-  const list = cameraListEntries(cameras)
+  const list = cameraListEntries(cameras, useCamerasOnTvs.getState())
   const key = JSON.stringify(list)
   if (key === lastSent) return Promise.resolve()
   lastSent = key
@@ -351,6 +415,7 @@ function syncList(cameras: CameraSource[]): Promise<unknown> {
 export function startCameras(): () => void {
   let stopped = false
   let off = () => {}
+  let offTvs = () => {}
   void hydrateSettings().then(() => {
     if (stopped) return
     const s = useSettingsStore.getState()
@@ -367,9 +432,12 @@ export function startCameras(): () => void {
       if (now.cameras.length === 0 && prev.cameras.length > 0) void stopRouter().catch(() => {})
       else if (now.cameraRouterAuto && now.cameras.length > 0 && prev.cameras.length === 0) void listed.then(startRouter).catch(() => {})
     })
+    // A camera going onto or off a Google TV changes its automatic quality (watchCamerasOnTvs).
+    offTvs = useCamerasOnTvs.subscribe(() => void syncList(useSettingsStore.getState().cameras))
   })
   return () => {
     stopped = true
     off()
+    offTvs()
   }
 }
