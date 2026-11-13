@@ -18,17 +18,27 @@
       "color": "#ff0000",
       "id": "layer-4",
       "kind": "ellipse"
+    },
+    "layer-5": {
+      "color": "#000000",
+      "id": "layer-5",
+      "kind": "color"
+    },
+    "layer-6": {
+      "color": "#000000",
+      "id": "layer-6",
+      "kind": "ellipse"
     }
   },
   "meta": {
     "createdAt": 1700000000000,
-    "id": "scene-6",
+    "id": "scene-8",
     "name": "Edges",
     "updatedAt": 1700000000000
   },
   "pages": [
     {
-      "id": "page-id-5",
+      "id": "page-id-7",
       "nodeId": "page-1",
       "title": "🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏"
     }
@@ -152,11 +162,67 @@
         "x": 0.0,
         "y": 0.0
       },
+      "layer-5": {
+        "fill": {
+          "color": "#000000",
+          "type": "solid"
+        },
+        "height": 100.0,
+        "id": "layer-5",
+        "name": "rect",
+        "opacity": 1.0,
+        "originX": "left",
+        "originY": "top",
+        "parentId": "page-1",
+        "radiusX": 540,
+        "radiusY": 540,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "stroke": {
+          "color": "#ABCDEF",
+          "type": "solid"
+        },
+        "strokeWidth": 0.5,
+        "type": "rect",
+        "visible": true,
+        "width": 100.0,
+        "x": 10.0,
+        "y": 10.0
+      },
+      "layer-6": {
+        "fill": {
+          "color": "#000000",
+          "type": "solid"
+        },
+        "height": 100.0,
+        "id": "layer-6",
+        "name": "ellipse",
+        "opacity": 1.0,
+        "originX": "left",
+        "originY": "top",
+        "parentId": "page-1",
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "stroke": {
+          "color": "#ffffff",
+          "type": "solid"
+        },
+        "strokeWidth": 200,
+        "type": "ellipse",
+        "visible": true,
+        "width": 100.0,
+        "x": 200.0,
+        "y": 10.0
+      },
       "page-1": {
         "children": [
           "layer-2",
           "layer-3",
-          "layer-4"
+          "layer-4",
+          "layer-5",
+          "layer-6"
         ],
         "id": "page-1",
         "name": "🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏🙏",

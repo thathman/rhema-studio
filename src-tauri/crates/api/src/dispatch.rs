@@ -195,7 +195,14 @@ impl CommandDispatcher {
             // One section at a time, either way; or the chorus again.
             RemoteCommand::SongSection(crate::command::SectionMove::Step(n)) => sink.emit_event("remote:song_section", &serde_json::json!({ "step": (*n).signum() }).to_string()),
             RemoteCommand::SongSection(crate::command::SectionMove::To(crate::command::SectionTarget::Chorus)) => sink.emit_event("remote:song_section", &serde_json::json!({ "to": "chorus" }).to_string()),
-            RemoteCommand::QueueRequest(q) => sink.emit_event("remote:queue_request", &serde_json::json!({ "kind": q.kind.as_str(), "value": q.value.trim().chars().take(120).collect::<String>() }).to_string()),
+            RemoteCommand::QueueRequest(q) => {
+                let mut payload = serde_json::json!({ "kind": q.kind.as_str(), "value": q.value.trim().chars().take(120).collect::<String>() });
+                // An event id is only ever matched against the plan's own ids: short, plain, no control characters.
+                if let Some(event) = q.event.as_deref().map(str::trim).filter(|e| !e.is_empty() && e.len() <= 100 && !e.chars().any(char::is_control)) {
+                    payload["event"] = serde_json::json!(event);
+                }
+                sink.emit_event("remote:queue_request", &payload.to_string())
+            }
             // A marker's name is one short line (60 characters), as the main desk's own.
             RemoteCommand::ObsRecord(r) => sink.emit_event("remote:obs_record", &serde_json::json!({ "action": r.action.as_str(), "label": r.label.as_deref().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ").chars().take(60).collect::<String>() }).to_string()),
             RemoteCommand::ObsTransition(name) => sink.emit_event("remote:obs_transition", &serde_json::json!({ "name": name.chars().take(200).collect::<String>() }).to_string()),
@@ -445,13 +452,22 @@ mod tests {
     fn round_two_console_commands_emit_their_events_with_who_and_a_log_line() {
         use crate::command::{ObsRecordIn, QueueIn, QueueKind, RecordAction};
         let sink = MockSink::new();
-        let q = RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Bible, value: format!("  Romans 8:28 {}", "x".repeat(200)) });
+        let q = RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Bible, value: format!("  Romans 8:28 {}", "x".repeat(200)), event: None });
         CommandDispatcher::dispatch_as(&q, &sink, "Ade's phone").unwrap();
         let all = sink.events.lock().unwrap().clone();
         let v: serde_json::Value = serde_json::from_str(&all[all.len() - 2].1).unwrap();
         assert_eq!((all[all.len() - 2].0.as_str(), v["kind"].as_str(), v["by"].as_str()), ("remote:queue_request", Some("bible"), Some("Ade's phone")));
         assert!(v["value"].as_str().unwrap().starts_with("Romans 8:28") && v["value"].as_str().unwrap().chars().count() == 120);
         assert_eq!(all[all.len() - 1].0, "remote:audit", "in the service log with who");
+        assert!(v.get("event").is_none(), "no event asked for: none sent");
+        // Into an event of the plan (#409): its id is passed on; one too long or with control characters is not.
+        for (event, sent) in [(" sermon ", Some("sermon")), ("bad\nid", None), (&*"e".repeat(101), None)] {
+            let q = RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Song, value: "Abide".into(), event: Some(event.into()) });
+            CommandDispatcher::dispatch_as(&q, &sink, "Bible desk").unwrap();
+            let all = sink.events.lock().unwrap().clone();
+            let v: serde_json::Value = serde_json::from_str(&all[all.len() - 2].1).unwrap();
+            assert_eq!(v["event"].as_str(), sent, "{event:?}");
+        }
         let mark = RemoteCommand::ObsRecord(ObsRecordIn { action: RecordAction::Marker, label: Some(format!(" Sermon \n starts {}", "y".repeat(100))) });
         CommandDispatcher::dispatch_as(&mark, &sink, "OBS desk").unwrap();
         let all = sink.events.lock().unwrap().clone();
