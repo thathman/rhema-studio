@@ -27,6 +27,7 @@ import { useReadiness } from "@/studio/use-readiness"
 import { deskEditable } from "@/lib/desk-scenes"
 import { editsScenes, REMOTE_ROLES, roleLabel } from "@/lib/remote-roles"
 import { Card, JoinForm } from "@/studio/production/join-form"
+import { openConnectionsHub } from "@/studio/connections/navigation"
 import { certificateWords } from "@/lib/host-certificate"
 import { presenceRows, readHostStatus, seenWords, type HostStatus } from "@/lib/host-presence"
 import { mayRunAuxTimer } from "@/stores/aux-timers-store"
@@ -133,7 +134,7 @@ function MainDirectorBoard() {
   return <div className="lg:col-span-2"><DirectorBoard readiness={{ ready, checks }} crew={crew} /></div>
 }
 
-function HostCard() {
+export function HostCard() {
   const devices = useSettingsStore((s) => s.remoteDevices)
   const [host, setHost] = useState<HostStatus | null>(null)
   const [confirmStop, setConfirmStop] = useState(false)
@@ -225,7 +226,13 @@ function HostCard() {
 function JoinCard() {
   const status = useJoin((s) => s.status)
   if (status !== "off") return <JoinedDesk layout="card" />
-  return <JoinForm />
+  // Joining another main computer is setup, not operation: it lives in Connections (UX audit slice 4).
+  return (
+    <Card kicker="Another computer" title="Join a main computer">
+      <p className="text-muted-foreground">To follow another Rhema Studio main computer from this one, find it or enter its code in Connections.</p>
+      <div><Button size="sm" variant="outline" onClick={() => openConnectionsHub()}>Open Connections</Button></div>
+    </Card>
+  )
 }
 
 /**

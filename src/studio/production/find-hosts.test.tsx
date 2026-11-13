@@ -9,7 +9,7 @@ vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen:
 
 import { useJoin } from "@/stores/join-store"
 import { useSettingsStore } from "@/stores/settings-store"
-import { OperatorsPanel } from "./operators-panel"
+import { JoinForm } from "./join-form"
 
 /** host_discover answers `found` (then `again`); everything else (the host card's status) answers nothing. */
 function answer(found: unknown, again: unknown = found) {
@@ -24,7 +24,7 @@ async function open() {
   useSettingsStore.getState().setJoin({ joinAddress: "", joinToken: "" })
   const el = document.createElement("div")
   const root = createRoot(el)
-  await act(async () => root.render(<OperatorsPanel />))
+  await act(async () => root.render(<JoinForm />))
   const address = () => el.querySelector<HTMLInputElement>('input[placeholder="192.168.1.20:8080"]')!.value
   const code = () => el.querySelector<HTMLInputElement>('input[inputmode="numeric"]')!.value
   const hosts = () => [...el.querySelectorAll<HTMLButtonElement>('[aria-label="Rhema Studio main computers on this network"] button[aria-pressed]')]

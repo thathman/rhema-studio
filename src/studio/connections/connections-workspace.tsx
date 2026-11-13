@@ -16,6 +16,7 @@ import { openProductionTab } from "@/studio/production/production-tab"
 import { useShellStore } from "@/studio/shell-store"
 import { CamerasPanel } from "@/studio/production/cameras-panel"
 import { JoinForm } from "@/studio/production/join-form"
+import { HostCard } from "@/studio/production/operators-panel"
 import { PairDeviceDialog } from "./pair-device-dialog"
 import { RevokeAction } from "./revoke-action"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -204,6 +205,9 @@ export function ConnectionsWorkspace() {
             </div>
           </div>
         </section>
+
+        {/* Hosting's home (UX audit slice 4): address, secure link, paired desks and Stop hosting. Live's Operators tool shows the same card for the crew and Take back control. */}
+        {joinedStatus === "off" && <section aria-label="Host the service" className="max-w-3xl text-sm"><HostCard /></section>}
 
         <section aria-labelledby="connections-connected">
           <div className="mb-3 flex items-end justify-between gap-3"><div><p className="eyebrow">Current setup</p><h2 id="connections-connected" className="text-base font-bold">Connected</h2></div><span className="text-xs text-muted-foreground">Saved setup and live status, when the device reports it</span></div>
