@@ -34,9 +34,9 @@ function errorWords(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function Card({ title, kicker, icon, count, children }: { title: string; kicker: string; icon: React.ReactNode; count?: number; children: React.ReactNode }) {
+function Card({ title, kicker, icon, count, id, children }: { title: string; kicker: string; icon: React.ReactNode; count?: number; id?: string; children: React.ReactNode }) {
   return (
-    <section aria-label={title} className="flex min-w-0 flex-col rounded-lg border border-border bg-card shadow-panel">
+    <section id={id} aria-label={title} className="flex min-w-0 flex-col rounded-lg border border-border bg-card shadow-panel">
       <header className="flex items-start gap-3 border-b border-border bg-surface-elevated px-4 py-3">
         <span aria-hidden className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-kind-other text-kind-other-foreground [&_svg]:size-4">{icon}</span>
         <div className="min-w-0 flex-1">
@@ -248,7 +248,7 @@ export function ConnectionsWorkspace() {
               <Button size="sm" variant="outline" onClick={openPermissions}>Permissions and roles</Button>
             </Card>
 
-            <Card title="OBS computers" kicker="Online production · separate from room screens" icon={<RadioIcon />} count={obsComputers.length}>
+            <Card id="connections-obs" title="OBS computers" kicker="Online production · separate from room screens" icon={<RadioIcon />} count={obsComputers.length}>
               <Row title="OBS on this computer" detail={obsEnabled ? "Local OBS connection" : "Optional; not configured"} state={!obsEnabled ? "Not set up" : obsStatus === "connected" ? "Connected" : obsStatus === "connecting" ? "Connecting" : "Not connected"} tone={obsEnabled && obsStatus === "connected" ? "ok" : obsEnabled ? "warn" : "off"} />
               {obsComputers.length === 0 ? <p className="text-muted-foreground">No OBS Companion computer is paired. OBS streaming and scene switching remain its own online production.</p> : (
                 <ul aria-label="Paired OBS companion computers">

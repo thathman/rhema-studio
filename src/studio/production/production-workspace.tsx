@@ -700,7 +700,7 @@ function ObsHealth() {
   return (
     <Card kicker="Online (OBS)" title={onlineProgramName(connected ? video : null)} badge={<Badge tone={!enabled ? "off" : connected ? (stream?.active ? "live" : "ok") : "warn"}>{!enabled ? "Off" : connected ? (stream?.active ? "Streaming" : "Connected") : status === "connecting" ? "Connecting" : "Not connected"}</Badge>}>
       {!enabled ? (
-        <p className="text-xs text-muted-foreground">OBS is not connected. It is optional: connect it in Settings → Remote Control to see the online program here.</p>
+        <p className="text-xs text-muted-foreground">OBS is not connected. It is optional: connect it in Live → OBS or Connections → OBS to see the online program here.</p>
       ) : !connected ? (
         <p className="text-xs text-confidence-mid">{status === "connecting" ? "Connecting to OBS…" : `Not connected${error ? `: ${error}` : ""}. Rhema Studio keeps trying every 15 seconds.`}</p>
       ) : (

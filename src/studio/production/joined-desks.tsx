@@ -231,7 +231,7 @@ export function ObsDesk({ live }: { live: LiveStateV1 }) {
       {!obs ? (
         <p className="text-muted-foreground">The main computer is an older Rhema Studio that does not share OBS: update it to switch OBS from here.</p>
       ) : !obs.connected ? (
-        <p className="text-muted-foreground">OBS is not connected on the main computer (Settings → Remote Control → OBS there).</p>
+        <p className="text-muted-foreground">OBS is not connected on the main computer (Connections → OBS there).</p>
       ) : (
         <>
           <p className="text-muted-foreground">Program: <b className="text-foreground">{obs.program ?? "unknown"}</b>{obs.studioMode ? <> · Preview: <b className="text-foreground">{obs.preview ?? "none"}</b></> : null}</p>

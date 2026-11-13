@@ -248,20 +248,25 @@ export function ObsPanel() {
         <p className="text-muted-foreground">
           These are OBS's own scenes, the switcher for the stream. They are separate from Rhema Studio's congregation scenes in Live → Production tools → Scenes, the {congregationProgramName(outputs)}: taking a scene to the screens, or a verse or song going live, never changes OBS. Only the buttons here do.
         </p>
-        {!enabled ? (
-          // Connect OBS here (UX audit S2): the same form as Connections, not a trip to Settings.
+        {!connected ? (
+          // One form in one place for both "off" and "not connected" (UX audit S2): ticking Connect
+          // turns OBS on without swapping the form out, so nothing typed is lost.
           <div className="flex flex-col gap-2">
-            <p>OBS is not connected. Tick Connect, give OBS's address and password (in OBS: Tools → WebSocket Server Settings), then Save.</p>
-            <ObsSettingsBlock />
-          </div>
-        ) : !connected ? (
-          <div className="flex flex-col gap-2">
-            <p role="status">{status === "connecting" ? "Connecting to OBS…" : `Not connected${error ? `: ${error}` : ""}. Rhema Studio keeps trying every 15 seconds.`}</p>
-            <Button size="sm" variant="outline" className="w-fit" onClick={() => void obs.connect()}><RefreshCwIcon /> Try now</Button>
-            <details>
-              <summary className="cursor-pointer text-muted-foreground">Change OBS's address or password</summary>
-              <div className="mt-2"><ObsSettingsBlock /></div>
-            </details>
+            {joined ? (
+              <p className="rounded-md bg-muted px-2.5 py-2">This computer has joined a main computer: OBS is connected and switched from the main computer, in Connections → OBS there.</p>
+            ) : (
+              <>
+                {!enabled ? (
+                  <p>OBS is not connected. Tick Connect, give OBS's address and password (in OBS: Tools → WebSocket Server Settings), then Save.</p>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p role="status" className="min-w-0 flex-1">{status === "connecting" ? "Connecting to OBS…" : `Not connected${error ? `: ${error}` : ""}. Rhema Studio keeps trying every 15 seconds.`}</p>
+                    <Button size="sm" variant="outline" onClick={() => void obs.connect()}><RefreshCwIcon /> Try now</Button>
+                  </div>
+                )}
+                <ObsSettingsBlock />
+              </>
+            )}
           </div>
         ) : (
           <>

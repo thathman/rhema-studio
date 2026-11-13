@@ -928,7 +928,7 @@ function RemoteControlSection() {
       </div>
       <div className="flex flex-wrap items-center gap-3 rounded-md border border-border p-3 text-xs">
         <div className="min-w-0 flex-1"><p className="font-semibold">OBS</p><p className="text-muted-foreground">Connect OBS, and see its status, in Connections.</p></div>
-        <Button size="sm" variant="outline" onClick={() => { useSettingsDialogStore.getState().closeSettings(); openConnectionsHub() }}>Open OBS in Connections</Button>
+        <Button size="sm" variant="outline" onClick={() => { useSettingsDialogStore.getState().closeSettings(); openConnectionsHub("obs") }}>Open OBS in Connections</Button>
       </div>
       {/* OSC */}
       <div className="flex flex-col gap-3">
