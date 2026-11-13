@@ -7,6 +7,7 @@ import { useShellStore, type DesignTab, type LibrarySection, type Workspace } fr
 import { openSettings, type SettingsSection } from "@/lib/settings-dialog"
 import { presentActions } from "@/studio/present-actions"
 import { isImageItem, isSongItem, type QueueItem } from "@/types"
+import { projectRunOfShowEvents } from "@/lib/run-of-show"
 import { openProductionTab } from "@/studio/production/production-tab"
 
 const PLACES: ReadonlyArray<readonly [Workspace, string, React.ReactNode, string]> = [
@@ -87,6 +88,9 @@ export function GlobalSearch() {
   const open = useShellStore((s) => s.searchOpen)
   const inLive = useShellStore((s) => s.workspace === "present")
   const items = useQueueStore((s) => s.items)
+  const headers = useQueueStore((s) => s.headers)
+  // Each item's event (#404), so "Prayer" reads "Opening prayer · Prayer" and is found by either.
+  const eventOf = new Map(projectRunOfShowEvents(items, headers).flatMap((e) => e.moments.map((m) => [m.id, e.title] as const)))
   const [query, setQuery] = useState("")
   const close = () => {
     useShellStore.getState().setSearchOpen(false)
@@ -128,11 +132,11 @@ export function GlobalSearch() {
           <CommandGroup heading={inLive ? "This service (to Live's Preview)" : "This service (opens in Prepare)"}>
             {items.map((it, i) => (
               // In Live it cues Preview (Live's own action); anywhere else it opens in Prepare and Live is untouched (#447).
-              <CommandItem key={it.id} value={`${i + 1} ${it.reference} item`} onSelect={() => run(() => {
+              <CommandItem key={it.id} value={`${i + 1} ${eventOf.get(it.id) ?? ""} ${it.reference} item`} onSelect={() => run(() => {
                 if (inLive) return presentActions.previewItem(it)
                 useShellStore.getState().openInPrepare(it.id)
               })}>
-                {itemIcon(it)} <span className="truncate">{it.reference}</span>
+                {itemIcon(it)} <span className="truncate">{eventOf.has(it.id) && <span className="text-muted-foreground">{eventOf.get(it.id)} · </span>}{it.reference}</span>
                 <span className="ml-auto text-xs text-muted-foreground">{inLive ? "Live preview" : "open in Prepare"}</span>
               </CommandItem>
             ))}
