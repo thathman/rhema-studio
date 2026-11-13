@@ -9,11 +9,13 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { ScenesStrip } from "./scenes-strip"
 import { ProductionWorkspace } from "@/studio/production/production-workspace"
+import { SceneComposer } from "@/studio/production/scene-composer"
 import { openProductionTab, useProductionTab } from "@/studio/production/production-tab"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { SCENE_PRESETS, newScene } from "@/lib/scenes"
 import { MAIN_OUTPUT_ID, defaultNdiSettings } from "@/types"
+import { useShellStore } from "@/studio/shell-store"
 
 /** Present's New / Edit scene sheet (#243 SC.18), the composer's camera picker (SC.10) and language (SC.12), the output card's safe area (#299 4.9). */
 let el: HTMLDivElement
@@ -72,7 +74,8 @@ describe("New / Edit scene from Present", () => {
     await act(async () => buttonText("Open in the composer").click())
     const cam = useBroadcastStore.getState().scenes.find((x) => x.id === "cam")!.layers.find((l) => l.kind === "camera")!
     expect(cam.cameraUrl).toBe("http://192.168.1.10:8889/pulpit/whep")
-    expect(useProductionTab.getState()).toMatchObject({ requested: "programs", scene: "cam" })
+    expect(useProductionTab.getState()).toMatchObject({ scene: "cam" })
+    expect(useShellStore.getState().designTab).toBe("scenes")
   })
 
   it("the camera's box while it is not sending: colour bars by default, with its name if ticked; static, words or nothing", async () => {
@@ -105,7 +108,7 @@ describe("New / Edit scene from Present", () => {
 describe("the composer and the output card", () => {
   it("a camera layer picks the church's cameras by name (typing an address stays under Advanced); a content layer has a language", async () => {
     openProductionTab("programs", { sceneId: "cam" })
-    await act(async () => root.render(<ProductionWorkspace />))
+    await act(async () => root.render(<SceneComposer />))
     const layerButton = (name: string) => [...el.querySelectorAll('[aria-label="Layers, bottom first"] button')].find((b) => b.textContent?.includes(name)) as HTMLButtonElement
     await act(async () => layerButton("Pulpit camera").click())
     const select = byLabel<HTMLSelectElement>("Camera")

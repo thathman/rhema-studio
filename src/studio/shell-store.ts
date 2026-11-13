@@ -17,7 +17,7 @@ export function canonicalWorkspace(workspace: Workspace): Workspace {
  * (#818, see design-groups.ts). "outputs" was the old Output looks table (#299 UX15-4 retired it);
  * it is kept so old links still work and opens "used-on", the Where used overview.
  */
-export type DesignTab = "themes" | "library" | "my-designs" | "lower-thirds" | "ticker" | "stage" | "countdown" | "brand" | "used-on" | "outputs"
+export type DesignTab = "themes" | "library" | "my-designs" | "scenes" | "lower-thirds" | "ticker" | "stage" | "countdown" | "brand" | "used-on" | "outputs"
 
 /** The section a Design link really opens: the old Output looks table is now the Where used overview. */
 export function designTabOf(tab: DesignTab): DesignTab {

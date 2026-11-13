@@ -1,3 +1,4 @@
+import { SceneComposer } from "@/studio/production/scene-composer"
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { ExternalLinkIcon, Layers3Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -162,6 +163,8 @@ export function DesignWorkspace() {
                 if (documentRequest) useShellStore.getState().clearDesignDocumentRequest(documentRequest)
               }}
             />}
+            {/* Scene layout editing lives in Design (UX audit slice 4); taking a scene stays on Live's Scenes strip. */}
+            {tab === "scenes" && <SceneComposer />}
             {tab === "lower-thirds" && <LowerThirdDesigner initialId={styleId} />}
             {tab === "ticker" && <TickerDesigner />}
             {tab === "stage" && <StageDesigner />}

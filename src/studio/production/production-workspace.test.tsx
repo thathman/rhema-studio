@@ -14,6 +14,7 @@ vi.mock("sonner", () => ({ toast: toastMock }))
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { toast } from "sonner"
+import { SceneComposer } from "./scene-composer"
 import { ProductionWorkspace } from "./production-workspace"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -30,6 +31,12 @@ const mount = (el: HTMLElement, embedded = false) => {
   const root = createRoot(el)
   roots.push(root)
   root.render(<ProductionWorkspace embedded={embedded} />)
+}
+// Scenes are arranged in Design → Scenes now (UX audit slice 4): the composer is mounted on its own.
+const mountScenes = (el: HTMLElement) => {
+  const root = createRoot(el)
+  roots.push(root)
+  root.render(<SceneComposer />)
 }
 beforeEach(() => {
   vi.clearAllMocks()
@@ -146,9 +153,7 @@ describe("Production control", () => {
     useSettingsStore.setState({ operatorName: "Tolu" })
     const el = document.createElement("div")
     document.body.appendChild(el)
-    await act(async () => mount(el))
-    const tab = [...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === "Scenes") as HTMLButtonElement
-    await act(async () => tab.click())
+    await act(async () => mountScenes(el))
     const button = (text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent?.includes(text)) as HTMLButtonElement
     await act(async () => button("Bible and lyrics").click())
     const targetName = useBroadcastStore.getState().outputs.find((o) => (o.role ?? "congregation") === "congregation")?.name
@@ -179,7 +184,8 @@ describe("Production control", () => {
     openProductionTab("programs", { sceneId: "b" })
     const el = document.createElement("div")
     document.body.appendChild(el)
-    await act(async () => mount(el))
+    await act(async () => mountScenes(el))
+    expect(useShellStore.getState().designTab).toBe("scenes")
     expect((el.querySelector('[aria-label="Scene name"]') as HTMLInputElement).value).toBe("Clean · Camera and scripture")
     expect(useProductionTab.getState().scene).toBeNull()
     useProductionTab.setState({ requested: null })
@@ -205,7 +211,7 @@ describe("Production control", () => {
     openProductionTab("programs", { sceneId: scene.id })
     const el = document.createElement("div")
     document.body.appendChild(el)
-    await act(async () => mount(el))
+    await act(async () => mountScenes(el))
 
     expect(el.querySelector('[aria-label="Private scene preview"]')?.textContent).toContain("Sunday service · Opening Scripture")
     expect(el.querySelector('[aria-label="Scene name"]')).not.toBeNull()
@@ -244,8 +250,7 @@ describe("Production control", () => {
     useBroadcastStore.setState({ scenes: [scene], outputs: before.outputs, sceneReturn: {}, isLive: true, liveItemId: "live-item" })
     const el = document.createElement("div")
     document.body.appendChild(el)
-    await act(async () => mount(el))
-    await act(async () => ([...el.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === "Scenes") as HTMLButtonElement).click())
+    await act(async () => mountScenes(el))
 
     expect(el.querySelector('[aria-label="Scene appearance details"]')?.textContent).toContain("precise gradient")
     expect(el.querySelector('[aria-label="Scene background gradient preview"]')?.getAttribute("style")).toContain("linear-gradient")
@@ -307,8 +312,7 @@ describe("Production control", () => {
     useBroadcastStore.setState({ scenes: [scene], sceneReturn: {} })
     const el = document.createElement("div")
     document.body.appendChild(el)
-    await act(async () => mount(el))
-    await act(async () => ([...el.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === "Scenes") as HTMLButtonElement).click())
+    await act(async () => mountScenes(el))
     await act(async () => ([...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Open source Design")) as HTMLButtonElement).click())
     expect(useShellStore.getState().designRequest).toBe("my-designs")
     expect(useShellStore.getState().designDocumentRequest).toBe("design-pinned")
@@ -331,7 +335,7 @@ describe("Production control", () => {
     openProductionTab("programs", { sceneId: scene.id })
     const el = document.createElement("div")
     document.body.appendChild(el)
-    await act(async () => mount(el))
+    await act(async () => mountScenes(el))
 
     const background = el.querySelector<HTMLInputElement>('[aria-label="Background colour"]')!
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!
@@ -364,7 +368,6 @@ describe("Production control", () => {
     document.body.appendChild(el)
     await act(async () => mount(el))
     const open = async (name: string) => act(async () => ([...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === name) as HTMLButtonElement).click())
-    await open("Scenes")
     expect(el.textContent).not.toContain("Congregation program (screens, 1080p30)")
     await open("OBS")
     expect(el.querySelector('[aria-label="OBS program"] h3')?.textContent).toBe("Online program (OBS, 720p30)")
@@ -397,14 +400,15 @@ describe("Production control", () => {
     useBroadcastStore.setState({ outputs: before.outputs, outputFrames: before.outputFrames })
   })
 
-  it("OBS sits beside Scenes and says it is OBS's program, separate from Rhema Studio's congregation scenes", async () => {
+  it("OBS is a Live tool and says it is OBS's program, separate from Rhema Studio's congregation scenes (arranged in Design)", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const el = document.createElement("div")
     document.body.appendChild(el)
     await act(async () => mount(el))
     const tabs = [...el.querySelectorAll('[role="tab"]')].map((t) => t.textContent)
     expect(tabs).not.toContain("Programs")
-    expect(tabs.indexOf("OBS")).toBe(tabs.indexOf("Scenes") + 1)
+    expect(tabs).not.toContain("Scenes")
+    expect(tabs).toContain("OBS")
     const tab = [...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === "OBS") as HTMLButtonElement
     await act(async () => tab.click())
     const panel = el.querySelector('[role="tabpanel"]')!

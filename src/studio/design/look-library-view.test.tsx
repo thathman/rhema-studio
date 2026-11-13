@@ -105,7 +105,7 @@ describe("Design → Templates (#299)", () => {
     expect(tabs.map((tab) => tab.getAttribute("aria-selected"))).toEqual(["true", "false", "false"])
     expect(tabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1])
     const sections = () => [...el.querySelectorAll<HTMLButtonElement>('nav[aria-label="Design sections"] button')]
-    expect(sections().map((button) => button.textContent?.trim())).toEqual(["My Designs", "Templates", "Lower thirds", "News ticker", "Countdown", "Stage"])
+    expect(sections().map((button) => button.textContent?.trim())).toEqual(["My Designs", "Templates", "Scenes", "Lower thirds", "News ticker", "Countdown", "Stage"])
     expect(sections().find((button) => button.textContent === "Templates")?.getAttribute("aria-current")).toBe("page")
     expect(el.querySelector("button[aria-label^='Design tools']")).toBeNull()
 
@@ -285,7 +285,7 @@ describe("Design → Templates (#299)", () => {
     expect(card(el, "Clean · Name strip").textContent).toContain("OBS overlay")
   })
 
-  it("Customize a copy on a camera scene adds the copy and opens Live → Scenes", async () => {
+  it("Customize a copy on a camera scene adds the copy and opens Design → Scenes", async () => {
     const el = await render()
     const scene = card(el, "Clean · Camera and scripture")
     const edit = [...scene.querySelectorAll("button")].find((b) => b.textContent?.includes("Customize a copy")) as HTMLButtonElement
@@ -293,8 +293,10 @@ describe("Design → Templates (#299)", () => {
     const s = useBroadcastStore.getState()
     expect(s.scenes).toHaveLength(1)
     expect(s.scenes[0].libraryLookId).toBe("look-clean-scene-bible")
-    expect(useProductionTab.getState()).toMatchObject({ requested: "programs", scene: s.scenes[0].id })
-    expect(useShellStore.getState().goRequest).toBe("present")
+    // Scenes are arranged in Design → Scenes now (UX audit slice 4).
+    expect(useProductionTab.getState()).toMatchObject({ scene: s.scenes[0].id })
+    expect(useShellStore.getState().designTab).toBe("scenes")
+    expect(useShellStore.getState().goRequest).toBe("design")
     // The card now lists the church's copy, with Reset in its menu.
     expect(card(el, "Clean · Camera and scripture").textContent).toContain(`In your scenes: ${s.scenes[0].name}`)
     expect(card(el, "Clean · Camera and scripture").querySelector('[aria-label="More for Clean · Camera and scripture"]')).not.toBeNull()

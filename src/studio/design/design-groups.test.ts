@@ -3,12 +3,12 @@ import { DESIGN_GROUPS, DESIGN_SECTIONS, designGroupOf, designPathOf, designSect
 import { designTabOf, useShellStore, type DesignTab } from "@/studio/shell-store"
 
 /** Every section id Design had before #818 (nine tabs plus the old "outputs" link). */
-const FORMER_TABS: DesignTab[] = ["my-designs", "library", "themes", "lower-thirds", "ticker", "stage", "countdown", "brand", "used-on", "outputs"]
+const FORMER_TABS: DesignTab[] = ["my-designs", "library", "scenes", "themes", "lower-thirds", "ticker", "stage", "countdown", "brand", "used-on", "outputs"]
 
 describe("Design purpose groups (#818)", () => {
   it("lists exactly the expected sections in Make, Style and Where used", () => {
     expect(DESIGN_GROUPS.map((group) => [group.label, group.sections.map((section) => section.id)])).toEqual([
-      ["Make", ["my-designs", "library", "lower-thirds", "ticker", "countdown", "stage"]],
+      ["Make", ["my-designs", "library", "scenes", "lower-thirds", "ticker", "countdown", "stage"]],
       ["Style", ["themes", "brand"]],
       ["Where used", ["used-on"]],
     ])
