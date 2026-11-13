@@ -99,7 +99,8 @@ export function PresentWorkspace() {
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
   // The pill says LIVE only when a screen really shows it (UX audit S1b): taken with every
   // congregation output off is "Not on any screen", amber, with the outputs one click away.
-  const screensOn = useBroadcastStore((s) => s.outputs.filter((o) => (o.role ?? "congregation") !== "stage" && outputOnAir(o, s.outputStatus[o.id])).length)
+  // Congregation screens only: a Stage display or a signage loop does not show what was taken.
+  const screensOn = useBroadcastStore((s) => s.outputs.filter((o) => (o.role ?? "congregation") === "congregation" && outputOnAir(o, s.outputStatus[o.id])).length)
   const onNoScreen = isLive && !rehearsal && screensOn === 0
   const liveStatusLabel = isLive
     ? onNoScreen

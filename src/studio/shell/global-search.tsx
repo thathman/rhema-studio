@@ -159,7 +159,7 @@ export function GlobalSearch() {
           ))}
           {/* Each Live tool by its own name (UX audit S1e): "obs" finds OBS, not a health page. */}
           {LIVE_TOOLS.map(([tab, label, words]) => (
-            <CommandItem key={tab} value={`${label} ${words}`} onSelect={() => run(() => openProductionTab(tab))}><MonitorCogIcon /> Live · {label}</CommandItem>
+            <CommandItem key={tab} value={`${label} ${words} live tools production`} onSelect={() => run(() => openProductionTab(tab))}><MonitorCogIcon /> Live · {label}</CommandItem>
           ))}
           {/* Services are built in Prepare only (#299): a new one starts there too. */}
           <CommandItem value="new service create sunday plan prepare" onSelect={() => run(() => { useShellStore.getState().setNewServiceOpen(true); useShellStore.getState().goTo("prepare") })}><PlusIcon /> New service</CommandItem>

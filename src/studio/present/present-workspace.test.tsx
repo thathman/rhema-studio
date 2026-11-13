@@ -319,6 +319,12 @@ describe("Present's unified Live console", () => {
       outputStatus: { "stage-only": { previewOpen: true, ndiActive: false } },
     }))
     expect(header.textContent).toContain("Not on any screen · Black")
+    // Nor does a signage loop in the lobby.
+    await act(async () => useBroadcastStore.setState({
+      outputs: [{ ...base, id: "lobby", role: "signage" as never }],
+      outputStatus: { lobby: { previewOpen: true, ndiActive: false } },
+    }))
+    expect(header.textContent).toContain("Not on any screen · Black")
     await act(async () => useBroadcastStore.setState({
       outputs: [{ ...base, id: "main-on", role: "congregation" }],
       outputStatus: { "main-on": { previewOpen: true, ndiActive: false } },
