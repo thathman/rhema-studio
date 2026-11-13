@@ -33,8 +33,12 @@ describe("the ticker on a clock window (#187)", () => {
     expect(useBroadcastStore.getState().ticker).not.toBeNull()
     expect(useBroadcastStore.getState().stateSources.ticker?.by).toBe("Ticker window (armed by Ade)")
     // Paused and resumed by the operator (its start moves): still the window's to stop.
+    const realNow = Date.now
+    Date.now = () => realNow() + 60_000
     useBroadcastStore.getState().pauseTicker(true)
+    Date.now = () => realNow() + 180_000
     useBroadcastStore.getState().pauseTicker(false)
+    Date.now = realNow
     checkTickerWindow(at(10, 30))
     expect(stop).toHaveBeenCalledTimes(1)
     expect(useTickerWindow.getState().armed).toBeNull()
