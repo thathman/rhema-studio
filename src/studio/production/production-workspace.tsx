@@ -1051,10 +1051,11 @@ function EventClockBar() {
  */
 function FixedStartsByClock() {
   const armed = useFixedStartAuto((s) => s.armed)
+  const own = useEventClock((s) => s.mode === "own")
   const me = useSettingsStore((s) => s.operatorName.trim()) || "Main computer"
   return (
-    <label className="flex items-center gap-1.5" title="An event with a fixed start begins on the event clock at its time (within two minutes). Screens never change from here. Not kept after a restart.">
-      <input type="checkbox" checked={!!armed} onChange={(e) => (e.target.checked ? useFixedStartAuto.getState().arm(me) : useFixedStartAuto.getState().disarm(me))} />
+    <label className={cn("flex items-center gap-1.5", !own && "opacity-50")} title={own ? "The next event, when it has a fixed start, begins on the event clock at its time (within two minutes; never skipping one, nor one already late). Screens never change from here. Not kept after a restart." : "Only when you start each event (the screens would move the clock otherwise)"}>
+      <input type="checkbox" disabled={!own && !armed} checked={!!armed} onChange={(e) => (e.target.checked ? useFixedStartAuto.getState().arm(me) : useFixedStartAuto.getState().disarm(me))} />
       Start fixed-start events at their time
     </label>
   )

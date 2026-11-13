@@ -100,8 +100,8 @@ own.
   delay; R3 keeps one relative offset.
 - Gap policy choices per pause or per fixed start (a pause that must not absorb, or a fixed start
   that may slide). One service-wide choice now exists: §8.4.
-- Time-of-day automation (start an item by itself at its fixed start). A fixed start is a promise on
-  paper; somebody still presses Start.
+- Time-of-day automation beyond §8.9 (starting the screens by the clock, or an event out of
+  order). A fixed start is otherwise a promise on paper; somebody still presses Start.
 - Stored instants per service instance (two services in one day from one template). The church's
   time zone is decided and built: §8.1.
 
@@ -187,3 +187,14 @@ itself), `timing-state.test.ts`, `item-timing.test.ts`, `stores/timing-run-state
 hold feeding the sermon, a spell of push mode, Finish, and the run state checked each minute.
 Desktop acceptance: 10fd (unverified).
 
+### 8.9 Fixed starts kept by the clock (13 Nov 2026, lead decision under the owner's standing instruction)
+
+The Timekeeper may arm **Start fixed-start events at their time** (Live → Production tools →
+Timekeeper). While armed, the **next** event, when it has a fixed start, begins on the event
+clock at that time. Rules (#246): only in "I start each event" mode (the screens would move the
+clock otherwise); only while the service is running and its timing trusted; it waits in
+rehearsal and on a Hold; never an event out of order, never one already late (rule 2 still
+applies: it starts when what runs before it finishes, by a person), never a milestone; within two
+minutes of its time or not at all; only fixed starts after arming; not kept over a restart. The
+event clock never changes a screen. Code: `src/stores/fixed-start-auto-store.ts`. The armed
+ticker window (#187, `src/stores/ticker-window-store.ts`) follows the same rules for the ticker.

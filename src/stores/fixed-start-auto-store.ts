@@ -4,11 +4,11 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useHold } from "@/stores/hold-store"
 import { useJournalStore } from "@/stores/journal-store"
-import { timingInputNow } from "@/stores/timing-input"
+import { runStateNow, timingInputNow } from "@/stores/timing-input"
 
 /**
- * Fixed starts kept by the clock (#196, time-of-day automation), armed by the Timekeeper: an event
- * with a fixed start begins on the event clock at that time. The event clock never changes a
+ * Fixed starts kept by the clock (#196, time-of-day automation; ADR 25 §8), armed by the
+ * Timekeeper: the next event, when it has a fixed start, begins on the event clock at that time. The event clock never changes a
  * screen, so neither does this. Under the #246 rules: only while armed by a person; it waits in
  * rehearsal and on a Hold; never late: an event is started within two minutes of its time or not
  * at all; arming is not saved, so a restart leaves it off.
@@ -16,7 +16,7 @@ import { timingInputNow } from "@/stores/timing-input"
 const GRACE_MS = 2 * 60_000
 
 interface FixedStartAutoState {
-  armed: { by: string | null } | null
+  armed: { by: string | null; at: number } | null
   /** Events already started by it (each once). */
   started: string[]
   arm: (by?: string) => void
@@ -30,7 +30,7 @@ export const useFixedStartAuto = create<FixedStartAutoState>((set, get) => ({
   started: [],
   arm: (by) => {
     if (get().armed) return
-    set({ armed: { by: by ?? null }, started: [] })
+    set({ armed: { by: by ?? null, at: Date.now() }, started: [] })
     log(`${by ? `${by}: ` : ""}fixed starts now begin events on the clock`)
   },
   disarm: (by) => {
@@ -40,17 +40,26 @@ export const useFixedStartAuto = create<FixedStartAutoState>((set, get) => ({
   },
 }))
 
-/** On the app's tick: start the event whose fixed start has just come, if armed. */
+/**
+ * On the app's tick: start the next event when its fixed start has just come, if armed. Only with
+ * the event clock in the Timekeeper's hands ("I start each event": the screens would undo it
+ * otherwise), only while the service is running and trusted, only the very next event (never
+ * skipping one, nor one already late), never a milestone, and only a fixed start that comes after
+ * arming.
+ */
 export function checkFixedStarts(): void {
   const a = useFixedStartAuto.getState()
   if (!a.armed || useBroadcastStore.getState().rehearsal || useHold.getState().hold) return
+  if (useEventClock.getState().mode !== "own" || runStateNow() !== "running") return
   const input = timingInputNow()
   const t = serviceTiming(input)
   if (!t) return
   const now = input.now
-  const due = t.events.find((e) => e.state === "upcoming" && e.fixedStart !== null && now >= e.fixedStart && now < e.fixedStart + GRACE_MS && !a.started.includes(e.id))
-  if (!due || useEventClock.getState().currentId === due.id) return
-  useFixedStartAuto.setState({ started: [...a.started, due.id] })
-  useEventClock.getState().start(due.id)
-  log(`${due.label} started at its fixed start by the clock${a.armed.by ? ` (armed by ${a.armed.by})` : ""}`)
+  const live = t.events.findIndex((e) => e.state === "live")
+  const next = t.events.slice(live + 1).find((e) => e.state === "upcoming")
+  if (!next || next.milestone || next.conflict || next.fixedStart === null || a.started.includes(next.id)) return
+  if (next.fixedStart < a.armed.at || now < next.fixedStart || now >= next.fixedStart + GRACE_MS) return
+  useFixedStartAuto.setState({ started: [...a.started, next.id] })
+  useEventClock.getState().start(next.id)
+  log(`${next.label} started at its fixed start by the clock${a.armed.by ? ` (armed by ${a.armed.by})` : ""}`)
 }
