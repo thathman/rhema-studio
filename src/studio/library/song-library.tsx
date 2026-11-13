@@ -27,6 +27,7 @@ const LICENCE_BADGE: Record<string, string> = { public_domain: "PD", ccli: "CCLI
  * `privatePreview` (Library, #447): clicking a song shows it in Library's own preview, never in
  * Live's Preview. Elsewhere (Prepare's Add picker) a click previews as before.
  */
+/** `cards` is the Library page's layout (its own New song in the page header); songs are rows either way (UX audit B1: hundreds of songs need a list). */
 export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseItem, privatePreview = false }: { layout?: "list" | "cards"; newRequest?: number; onAdded?: (id: string) => void; onUseItem?: LibraryItemUseHandler; privatePreview?: boolean } = {}) {
   const inspectedId = useLibraryPreview((s) => s.inspected?.item.id ?? null)
   const preview = (song: SongSummary) => {
@@ -116,7 +117,7 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseIte
           </button>
         ))}
       </div>
-      <ul className={cn("mt-2 min-h-0 flex-1 overflow-y-auto", cards ? "-mx-1 grid auto-rows-min grid-cols-3 gap-4 px-1 pt-2 pb-1 max-[1280px]:grid-cols-2 max-[640px]:grid-cols-1" : "flex flex-col gap-0.5")} aria-live="polite">
+      <ul className={cn("mt-2 min-h-0 flex-1 overflow-y-auto", cards ? "flex flex-col divide-y divide-border rounded-lg border border-border bg-card" : "flex flex-col gap-0.5")} aria-live="polite">
         {error && <LoadFailedRow as="li" what="songs" error={error} busy={searching} onRetry={() => search(query)} className={cards ? "col-span-full" : undefined} />}
         {searching && results.length === 0 && <li className="px-2 py-1 text-xs text-muted-foreground">Searching…</li>}
         {!searching && shown.length === 0 && !error && (
@@ -126,7 +127,6 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseIte
         )}
         {shown.map((song) => {
           const isSel = privatePreview ? inspectedId === `library-${song.id}` : !!selectedSlide && isSongItem(selectedSlide.item) && selectedSlide.item.song.song_id === song.id
-          if (cards) return <SongCard key={song.id} song={song} selected={isSel} onPreview={() => preview(song)} onEdit={() => setEditing({ open: true, id: song.id })} onAdd={() => add(song)} />
           return (
             <li key={song.id} className="flex items-stretch gap-1">
               <button
@@ -178,37 +178,3 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseIte
   )
 }
 
-/** A song as a card (the Library's approved design): a flat cover in the kind's colour, what it is, Edit and Add to service. */
-function SongCard({ song, selected, onPreview, onEdit, onAdd }: { song: SongSummary; selected: boolean; onPreview: () => void; onEdit: () => void; onAdd: () => void }) {
-  const choir = isChoir(song.tags)
-  const hymn = song.numbers.length > 0
-  const meta = [choir ? "Choir ministration" : hymn ? `Hymn ${song.numbers.join(", ")}` : "Song", song.languages.map((l) => l.toUpperCase()).join(" / "), song.authors].filter(Boolean).join(" · ")
-  return (
-    <li className={cn("flex min-w-0 flex-col overflow-hidden rounded-[15px] border bg-card transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_15px_32px_#26314914] motion-reduce:transition-none", selected ? "border-primary" : "border-border")}>
-      <button
-        type="button"
-        onClick={onPreview}
-        title="Click to preview"
-        className={cn(
-          "flex aspect-[1.7] items-center justify-center px-6 text-center text-[1.4375rem] leading-tight font-medium text-white outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-          // Flat ink tiles (#215): slate blue for choir, deep teal for hymns, neutral ink for songs.
-          choir ? "bg-[#22334a]" : hymn ? "bg-[#1f3f3b]" : "bg-[#28363b]",
-        )}
-      >
-        <span className="line-clamp-3">{song.title}</span>
-      </button>
-      <div className="flex flex-1 flex-col gap-1 px-[15px] pt-3 pb-3">
-        <p className="truncate text-[0.8125rem] font-bold">{song.title}</p>
-        <p className="truncate text-[0.6875rem] text-muted-foreground">{meta || song.first_line || "—"}</p>
-        <div className="mt-auto flex items-center gap-1.5 pt-2">
-          <span className="rounded-[5px] bg-tone-neutral px-[7px] py-1 text-[0.6875rem] font-semibold text-tone-neutral-foreground">{choir ? "choir" : hymn ? "hymn" : "song"}</span>
-          <span className={cn("rounded-[5px] px-[7px] py-1 text-[0.6875rem] font-semibold", song.licence === "unknown" ? "bg-tone-amber text-tone-amber-foreground" : "bg-tone-neutral text-tone-neutral-foreground")} title={song.licence === "unknown" ? "Licence not recorded yet" : undefined}>
-            {LICENCE_BADGE[song.licence] ?? song.licence}
-          </span>
-          <Button variant="ghost" size="icon-sm" className="ml-auto" aria-label={`Edit ${song.title}`} onClick={onEdit}><PencilIcon /></Button>
-          <Button variant="soft" size="sm" onClick={onAdd}><PlusIcon /> Add to service</Button>
-        </div>
-      </div>
-    </li>
-  )
-}
