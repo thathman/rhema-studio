@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.3.0.0 · 13 Nov 2026 · main `da8fff63`**
+**Version 1.3.0.0 · 13 Nov 2026 · main `1d3fc4a2`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -109,6 +109,8 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | Design fidelity on outputs (#448) | MERGED | #916 (13 Nov): rectangles and ellipses keep their outlines, and rectangles their rounded corners, drawn with the editor's own path code (Skia pixels within 0.1% of the editor), kept through a joined desk's save and through a layer fade. #917: faded and turned groups are saved as the editor draws them (each layer faded and turned). Not yet seen on a TV. |
 | MCP: read and revise its own design drafts (#443) | MERGED | #915 (13 Nov): rhema_get_design (local file and network addresses removed, 256 KB cap) and rhema_update_design_draft (only a draft an assistant made, no person's save since, no version, at the revision read, at most once in 2 minutes). Two security reviews. |
 | AI draft added to the open service (#252) | MERGED | #918 (13 Nov): Prepare → AI drafts → Add to this service puts the chosen items after the service's own, before its closing loop, as plain sections; the item on air stays the same; one Undo. |
+| MCP proposals with outlines and corners (#448 #443) | MERGED | #920 (13 Nov): an assistant's proposed rectangles and ellipses may have outlines, and rectangles rounded corners; the limits are in a golden the editor's adapter opens. |
+| A desk queues into a chosen event (#409) | MERGED | #919 (13 Nov): Notices → Queue has an "into:" choice of the plan's events; the main computer adds the verse or song at that event's end, or refuses with why if the event is gone. |
 | Backup and restore safety | MERGED | #786 (refuses backups from newer versions; restore blocked while on air). |
 
 ### Phase E — Supervised church rehearsal
