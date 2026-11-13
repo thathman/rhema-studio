@@ -35,6 +35,8 @@ export function AiDrafts() {
   // The open service's events: a draft's items can go into one of them (per event) instead of as new phases.
   const events = useQueueStore((s) => s.headers).filter((h) => h.event)
   const [into, setInto] = useState<Record<string, string>>({})
+  // The event chosen for a draft, while the service still has it (else: as new phases, as the choice then shows).
+  const chosenEvent = (d: AiDraft) => (events.some((h) => h.id === into[d.id]) ? into[d.id] : "")
   const count = rundown.length
   const dirty = useServiceStore((s) => s.dirty)
   // The church's looks and scenes: a suggestion naming one becomes the item's look or scene.
@@ -74,10 +76,11 @@ export function AiDrafts() {
   // Added after the open service's own items, as its own phases (#252): nothing already planned changes.
   const addDraft = (d: AiDraft) => {
     const { items, headers } = draftToRundown(leaveOut(d, outOf(d)), undefined, names)
-    if (into[d.id]) {
+    const chosen = chosenEvent(d)
+    if (chosen) {
       // Into one event: the items alone, at its end; the draft's own phases and events are not added.
-      // An event gone since it was chosen adds nothing, never somewhere else.
-      const target = useQueueStore.getState().headers.find((h) => h.id === into[d.id] && h.event)
+      // An event gone since (between drawing and the press) adds nothing, never somewhere else.
+      const target = useQueueStore.getState().headers.find((h) => h.id === chosen && h.event)
       if (!target || !useQueueStore.getState().appendRundown(items, [], target.id)) {
         setInto((m) => ({ ...m, [d.id]: "" }))
         toast.error("The chosen event is no longer in this service", { description: "Nothing was added. Choose another event." })
@@ -177,9 +180,9 @@ export function AiDrafts() {
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       <Button size="sm" disabled={items.length === 0} onClick={() => openDraft(d)} title="Put this draft in the rundown here, as an unsaved service">{items.length < all ? `Open ${items.length} of ${all} items in the rundown` : isOpened(d) ? "Open again in the rundown" : "Open in the rundown"}</Button>
-                      {count > 0 && <Button size="sm" variant="outline" disabled={items.length === 0} onClick={() => addDraft(d)} title={into[d.id] ? "Add these items at the end of the chosen event; nothing already in it changes" : "Add these items after the service you have open, as new phases; nothing already in it changes"}>{into[d.id] ? "Add to this event" : "Add to this service"}</Button>}
+                      {count > 0 && <Button size="sm" variant="outline" disabled={items.length === 0} onClick={() => addDraft(d)} title={chosenEvent(d) ? "Add these items at the end of the chosen event; nothing already in it changes" : "Add these items after the service you have open, as new phases; nothing already in it changes"}>{chosenEvent(d) ? "Add to this event" : "Add to this service"}</Button>}
                       {count > 0 && events.length > 0 && (
-                        <select aria-label={`Add ${d.title} into`} value={events.some((h) => h.id === into[d.id]) ? into[d.id] : ""} onChange={(e) => setInto((m) => ({ ...m, [d.id]: e.target.value }))} className="h-8 max-w-48 rounded-md border border-input bg-transparent px-2 text-xs">
+                        <select aria-label={`Add ${d.title} into`} value={chosenEvent(d)} onChange={(e) => setInto((m) => ({ ...m, [d.id]: e.target.value }))} className="h-8 max-w-48 rounded-md border border-input bg-transparent px-2 text-xs">
                           <option value="">as new phases at the end</option>
                           {events.map((h) => <option key={h.id} value={h.id}>into: {h.name}</option>)}
                         </select>

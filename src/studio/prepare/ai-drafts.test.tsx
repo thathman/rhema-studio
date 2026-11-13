@@ -138,8 +138,10 @@ describe("Prepare → AI drafts", () => {
     const again = document.querySelector('select[aria-label="Add Thanksgiving Service into"]') as HTMLSelectElement
     await act(async () => { again.value = "sermon"; again.dispatchEvent(new Event("change", { bubbles: true })) })
     await act(async () => { useQueueStore.setState({ headers: useQueueStore.getState().headers.filter((h) => h.id !== "sermon") }) })
-    await act(async () => button("Add to this event").click())
-    expect(useQueueStore.getState().items.map((i) => i.reference)).toEqual(["Hymn 1", "Text"])
+    // The choice falls back, and the button says what it will now do.
+    expect(again.value).toBe("")
+    expect(button("Add to this event")).toBeUndefined()
+    expect(button("Add to this service")).toBeTruthy()
   })
 
   it("lets people untick items and groups, shows how it differs from the open service, and opens only what is ticked", async () => {
