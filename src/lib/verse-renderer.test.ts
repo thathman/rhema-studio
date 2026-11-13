@@ -60,6 +60,8 @@ vi.mock("@chenglou/pretext/rich-inline", () => {
 
 import {
   computeVerseLayoutMetrics,
+  textClipped,
+  layOutLanguages,
   measureVerseHeight,
   renderVerse,
 } from "./verse-renderer"
@@ -236,6 +238,18 @@ describe("computeVerseLayoutMetrics — stacked mode", () => {
   })
 })
 
+describe("words too long for the screen (#217)", () => {
+  it("says a verse is cut off only when even the smallest size does not fit", () => {
+    const theme = BUILTIN_THEMES[0]
+    expect(computeVerseLayoutMetrics(stubCtx(), theme, { reference: "John 3:16", segments: [{ text: "For God so loved the world" }] }).clipped).toBe(false)
+    const long = { reference: "Psalm 119", segments: [{ text: "Blessed are the undefiled in the way, who walk in the law of the Lord. ".repeat(60) }] }
+    expect(computeVerseLayoutMetrics(stubCtx(), theme, long).clipped).toBe(true)
+    expect(computeVerseLayoutMetrics(stubCtx(), theme, null).clipped).toBeFalsy()
+    expect(textClipped(theme, long, stubCtx())).toBe(true)
+    expect(textClipped(theme, long, null)).toBe(false)
+  })
+})
+
 describe("dual translation rendering", () => {
   it("reserves a blank line between translation texts", () => {
     const theme = BUILTIN_THEMES[0]
@@ -270,6 +284,44 @@ describe("dual translation rendering", () => {
     const song: VerseRenderData = { kind: "slide", reference: "Amazing Grace", segments: [], lines: ["Amazing grace"], secondaryLines: ["Oore ofe"] }
     const songAt = (languageGap: number | undefined) => measureVerseHeight(stubCtx(), { ...theme, layout: { ...theme.layout, languageGap } }, song, 1200).height
     expect(songAt(100) - songAt(0)).toBe(100)
+  })
+
+  it("places the two languages side by side or line by line when the Design says so (#446)", () => {
+    const theme = BUILTIN_THEMES[0]
+    const at = (bilingual: "stacked" | "side-by-side" | "alternate" | undefined, verse: VerseRenderData) =>
+      measureVerseHeight(stubCtx(), { ...theme, layout: { ...theme.layout, languageGap: 40, bilingual } }, verse, 1200).height
+    const dual: VerseRenderData = { reference: "John 3:16", segments: [{ text: "For God so loved" }], translationLines: ["For God so loved", "Nitori Olorun feran aye to bee gee"] }
+    // Side by side: two columns, each (1200 − 40) / 2 wide; as tall as the taller one.
+    const column = (text: string, style = theme.verseText) => measureVerseHeight(stubCtx(), theme, { reference: "", segments: [{ text }] }, 580, style.fontSize, style).height
+    expect(at("side-by-side", dual)).toBe(Math.max(column("For God so loved"), column("Nitori Olorun feran aye to bee gee", theme.secondaryVerseText ?? theme.verseText)))
+    expect(at("side-by-side", dual)).toBeLessThan(at("stacked", dual))
+    expect(at(undefined, dual)).toBe(at("stacked", dual))
+    // Line by line (songs): a gap between pairs (two here) instead of one between the two blocks.
+    const song: VerseRenderData = { kind: "slide", reference: "Amazing Grace", segments: [], lines: ["Amazing grace", "How sweet", "That saved"], secondaryLines: ["Oore ofe", "Bi o ti dun", "To gba mi"] }
+    expect(at("alternate", song) - at("stacked", song)).toBe(40)
+    // A verse has no lines to pair: alternate draws it stacked.
+    expect(at("alternate", dual)).toBe(at("stacked", dual))
+    // One language looks the same in every mode.
+    const one: VerseRenderData = { kind: "slide", reference: "Amazing Grace", segments: [], lines: ["Amazing grace", "How sweet"] }
+    expect(new Set([at("stacked", one), at("side-by-side", one), at("alternate", one)]).size).toBe(1)
+  })
+
+  it("draws the second language in its own column, interleaved when alternating (#446)", () => {
+    const theme = BUILTIN_THEMES[0]
+    const song: VerseRenderData = { kind: "slide", reference: "Amazing Grace", segments: [], lines: ["Amazing grace", "How sweet"], secondaryLines: ["Oore ofe", "Bi o ti dun"] }
+    const placed = (bilingual: "side-by-side" | "alternate") => {
+      const out: Array<{ text: string; x: number; width: number; y: number }> = []
+      layOutLanguages({ ...theme, layout: { ...theme.layout, languageGap: 40, bilingual } }, song, 100, 1200, undefined, (text, _style, _size, x, width, y) => {
+        out.push({ text, x, width, y })
+        return 50
+      })
+      return out
+    }
+    expect(placed("alternate").map((p) => [p.text, p.y])).toEqual([["Amazing grace", 0], ["Oore ofe", 50], ["How sweet", 140], ["Bi o ti dun", 190]])
+    expect(placed("side-by-side")).toEqual([
+      { text: "Amazing grace", x: 100, width: 580, y: 0 }, { text: "How sweet", x: 100, width: 580, y: 50 },
+      { text: "Oore ofe", x: 720, width: 580, y: 0 }, { text: "Bi o ti dun", x: 720, width: 580, y: 50 },
+    ])
   })
 
   it("uses the secondary language style for the second translation line", () => {

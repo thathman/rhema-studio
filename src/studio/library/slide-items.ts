@@ -14,6 +14,20 @@ export function reusableSlideQueueItem(slide: ReusableSlide, media: ReadonlyArra
 }
 
 /**
+ * A service copy brought up to its source's saved version (#395): the source's words, link and
+ * background, and its revision. Everything else about this moment (notes, timing, design) stays.
+ */
+export function copyAtSourceRevision(item: SlideQueueItem, source: ReusableSlide, media: ReadonlyArray<{ id: string; name: string }>): SlideQueueItem {
+  const slide = { ...item.slide, title: source.title, body: source.body, link: source.link ?? undefined, source_asset_id: source.id, source_revision: source.revision }
+  if (!slide.link) delete slide.link
+  const bg = source.background_media_id
+  const next: SlideQueueItem = { ...item, slide, reference: slideLabel({ title: slide.title, body: slide.body, ...(slide.link ? { link: slide.link } : {}) }) }
+  if (bg) next.background = { media_id: bg, name: media.find((asset) => asset.id === bg)?.name ?? (item.background?.media_id === bg ? item.background.name : "") }
+  else delete next.background
+  return next
+}
+
+/**
  * The reusable slide form, kept while the app is open (#833 S9): switching Library section or
  * leaving Library unmounts the form, and this brings its unsaved words back. In memory only.
  */

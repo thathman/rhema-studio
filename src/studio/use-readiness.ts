@@ -1,6 +1,6 @@
 import { outputOnAir } from "@/lib/output-on-air"
 import { validTimeZone } from "@/lib/church-time"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useApprovalGateStore } from "@/stores/approval-gate-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { approvalState } from "@/lib/approval"
@@ -34,6 +34,8 @@ import { roleLabel } from "@/lib/remote-roles"
 import { useAuxTimers } from "@/stores/aux-timers-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useDismissedChecks } from "@/studio/dismissed-checks"
+import { clippedText } from "@/lib/clipped-text"
+import { onThemeFontsLoaded } from "@/lib/verse-renderer"
 
 watchLanAddressAtService()
 
@@ -181,6 +183,15 @@ export function useReadiness() {
     const size = at === null ? undefined : monitorSizes[at]
     return at === null || !size ? [] : [{ name: o.name, role: o.role ?? "congregation", monitor: monitorNames[at] ?? null, width: size.width, height: size.height, onMain: primaryMonitor === at && monitorSizes.length > 1 }]
   })
+  // Planned words a congregation screen would cut off (#217): measured, so only when they change.
+  const [fontsSeen, setFontsSeen] = useState(0)
+  useEffect(() => onThemeFontsLoaded(() => setFontsSeen((n) => n + 1)), [])
+  const clippedList = useMemo(() => clippedText(items, songs, outputs, themes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fontsSeen: measured again once a look's font arrives
+    [items, songs, outputs, themes, fontsSeen])
+  // Put away for this service with Got it; a different set of long slides asks again.
+  const clippedKey = `clipped:${current?.id ?? ""}:${clippedList.map((c) => c.what + "@" + c.output).join("|")}`
+  const clipped = clippedList.length && !dismissed.includes(clippedKey) ? { list: clippedList, dismiss: clippedKey } : undefined
   const obsLabel = obsProfiles.find((p) => p.host.trim().toLowerCase() === obsSettings.host.trim().toLowerCase() && p.port === obsSettings.port)?.label ?? null
   const { ready, checks } = computeReadiness({
     translationsLoaded: translations.length,
@@ -211,6 +222,7 @@ export function useReadiness() {
     // With "Use my translation" on, those verses show in the operator's translation.
     missingTranslations: overrideTranslations ? [] : missingTranslations,
     unsupportedItems: unsupportedItems.length,
+    clippedText: clipped,
     corruptItems: corruptItems.length,
     timing: planCheck(items, headers, zone),
     camerasWithoutAddress: scenes.filter((sc) => sc.layers.some((l) => l.kind === "camera" && !l.cameraUrl)).map((sc) => sc.name),

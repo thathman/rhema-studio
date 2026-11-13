@@ -2,6 +2,7 @@ import { clockMinutes, type OutlineHeader, type PhaseRole, type PhaseRule } from
 import { cleanTakeSteps, idByName, obsStep, sceneStep } from "@/lib/item-intent"
 import { cleanOnLive } from "@/stores/service-store"
 import type { GoLiveCue, OnLive, QueueItem, TakeStep } from "@/types"
+import { inChurchOrder } from "@/lib/church-languages"
 
 /**
  * A service an AI assistant proposed through Rhema MCP (#252), as saved for review: phases of
@@ -163,7 +164,8 @@ export function draftToRundown(d: AiDraft, newId: () => string = () => crypto.ra
       const verse = it.kind === "verse"
       const base = { id: newId(), confidence: 1, source: "manual" as const, added_at: now, prepared_by: by, assignees: [by], planned_minutes: it.planned_minutes ?? null, ...(endBy ? { end_by: endBy } : {}), notes: it.notes ?? null, ...(look?.id ? { look_id: look.id } : {}), ...(scene?.id ? { scene_id: scene.id } : {}), ...draftPlan(it, names, verse) }
       if (it.kind === "song" && it.song) {
-        const languages = it.languages?.length ? it.languages : [it.song.primary_language, ...it.song.languages.filter((l) => l !== it.song!.primary_language)]
+        // Languages the assistant chose, else the church's order as for a song added by hand (#446).
+        const languages = it.languages?.length ? it.languages : inChurchOrder(it.song.primary_language, it.song.languages)
         items.push({ ...base, kind: "song", reference: it.song.title, song: { song_id: it.song.id, title: it.song.title, arrangement_id: it.arrangement?.id ?? null, languages } })
       } else if (verse && it.book_number && it.chapter && it.verse) {
         items.push({
