@@ -6,7 +6,7 @@ import { applyCommand, buildRenderCommands } from "@/vendor/avnac/saraswati"
 import { canvas2DRendererBackend } from "@/vendor/avnac/renderer/backends/canvas2d/renderer"
 import { designToScene, sceneToDesign } from "@/design-engine/rhema-scene"
 import { normalizeScene, sceneFrame } from "@/lib/scenes"
-import { drawScene } from "@/lib/scene-renderer"
+import { drawScene, LayerFader } from "@/lib/scene-renderer"
 import type { Scene, SceneGradient, SceneLayer } from "@/types"
 
 /**
@@ -62,6 +62,35 @@ describe("scene paint on a real canvas", () => {
     for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i]! - b[i]!), Math.abs(a[i + 1]! - b[i + 1]!), Math.abs(a[i + 2]! - b[i + 2]!), Math.abs(a[i + 3]! - b[i + 3]!)) > 4) differ++
     // Only antialiased ellipse edges may differ by more than rounding.
     expect(differ / (1920 * 1080)).toBeLessThan(0.001)
+  })
+
+  it("draws outlines and rounded corners as the Avnac editor does (#448), and scales them with the screen", async () => {
+    const edged: Scene = {
+      ...painted, id: "edged", backgroundGradient: undefined, background: "#0b1a3a",
+      layers: [
+        layer("card", "color", { color: "#3157a4", box: { x: 10, y: 10, w: 40, h: 50 }, corner: 60, outline: { color: "#ffffff", width: 12 } }),
+        layer("ring", "ellipse", { color: "#d14c62", box: { x: 60, y: 20, w: 25, h: 40 }, outline: { color: "#ffffff", width: 8 } }),
+      ],
+    }
+    const [editor, output] = [await drawEditor(edged), drawOutput(edged, 1920, 1080)]
+    const a = ctxOf(editor).getImageData(0, 0, 1920, 1080).data
+    const b = ctxOf(output).getImageData(0, 0, 1920, 1080).data
+    let differ = 0
+    for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i]! - b[i]!), Math.abs(a[i + 1]! - b[i + 1]!), Math.abs(a[i + 2]! - b[i + 2]!), Math.abs(a[i + 3]! - b[i + 3]!)) > 4) differ++
+    expect(differ / (1920 * 1080)).toBeLessThan(0.001)
+    // The card's corner is rounded (the background shows), its edge is white, its middle blue.
+    const card = { x: 192, y: 108, w: 768, h: 540 }
+    expect(near(pixel(output, card.x + 3, card.y + 3), NAVY)).toBe(true)
+    expect(near(pixel(output, card.x + card.w / 2, card.y + 2), WHITE)).toBe(true)
+    expect(near(pixel(output, card.x + card.w / 2, card.y + card.h / 2), BLUE)).toBe(true)
+    // A stored scene keeps them; a bad outline is dropped, never drawn wrong.
+    const stored = normalizeScene({ ...edged, layers: [...edged.layers, layer("bad", "color", { outline: { color: "red", width: 900 } as never, corner: -5 })] })!
+    expect(stored.layers.map((l) => [l.id, l.outline ?? null, l.corner ?? null])).toEqual([["card", { color: "#ffffff", width: 12 }, 60], ["ring", { color: "#ffffff", width: 8 }, null], ["bad", null, null]])
+    // At 1280×720 the outline is two thirds as wide: 4 px either side of the edge, not 6.
+    const small = drawOutput(edged, 1280, 720)
+    const edgeY = Math.round(108 * 2 / 3)
+    expect(near(pixel(small, 1280 * 0.3, edgeY + 3), WHITE)).toBe(true)
+    expect(near(pixel(small, 1280 * 0.3, edgeY + 6), BLUE)).toBe(true)
   })
 
   it("puts each gradient's colours where the angle says, at 1920×1080 and 1280×720", () => {
@@ -187,5 +216,22 @@ describe("gradient paint outside the editor (review of #656)", () => {
     expect(recoloured.backgroundGradient).toBeUndefined()
     expect(recoloured.layers.find((l) => l.id === "panel")?.gradient).toBeUndefined()
     expect(recoloured.layers.find((l) => l.id === "halo")?.gradient).toEqual(painted.layers[1]!.gradient)
+  })
+
+  it("a joined desk's save keeps a shape's outline and corners, which it cannot set (#448)", async () => {
+    const { mergeDeskScene, sceneForDesk } = await import("@/lib/desk-scenes")
+    const edged: Scene = { ...painted, layers: [layer("card", "color", { color: "#3157a4", corner: 40, outline: { color: "#ffffff", width: 6 }, box: { x: 10, y: 10, w: 30, h: 30 } })] }
+    const sent = JSON.parse(JSON.stringify(sceneForDesk(edged, false)))
+    const moved = mergeDeskScene({ ...sent, layers: sent.layers.map((l: SceneLayer) => ({ ...l, box: { ...l.box, x: 20 }, outline: { color: "#ff0000", width: 50 }, corner: 1 })) }, edged, { cameras: new Set(), themes: new Set() })!
+    expect(moved.layers[0]).toMatchObject({ box: { x: 20 }, corner: 40, outline: { color: "#ffffff", width: 6 } })
+  })
+
+  it("a fading shape keeps the outer half of its outline (#448)", () => {
+    const edged: Scene = { ...painted, backgroundGradient: undefined, layers: [layer("card", "color", { color: "#3157a4", outline: { color: "#ffffff", width: 20 }, fadeMs: 300, box: { x: 10, y: 10, w: 30, h: 30 } })] }
+    const canvas = createCanvas(1920, 1080)
+    const fader = new LayerFader(() => createCanvas(1, 1) as unknown as HTMLCanvasElement, () => 10_000)
+    drawScene(ctxOf(canvas), 1920, 1080, frameOf(edged), { image: () => null, layerCanvas: () => createCanvas(1, 1) as unknown as HTMLCanvasElement, fader })
+    // 8 px outside the top edge (y = 108) is still the outline's white.
+    expect(near(pixel(canvas, 1920 * 0.25, 108 - 8), WHITE)).toBe(true)
   })
 })

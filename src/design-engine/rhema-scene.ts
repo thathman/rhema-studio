@@ -130,13 +130,16 @@ function toNode(layer: SceneLayer): SaraswatiNode {
   if (layer.kind === "ellipse") {
     const ellipse: SaraswatiEllipseNode = {
       ...basePaint(layer), type: "ellipse", width, height,
-      fill: layer.gradient ? gradientPaint(layer.gradient) : { type: "solid", color: layer.color && TEXT_COLOR.test(layer.color) ? layer.color : "#3157a4" }, stroke: null, strokeWidth: 0,
+      fill: layer.gradient ? gradientPaint(layer.gradient) : { type: "solid", color: layer.color && TEXT_COLOR.test(layer.color) ? layer.color : "#3157a4" },
+      stroke: layer.outline ? { type: "solid", color: layer.outline.color } : null, strokeWidth: layer.outline?.width ?? 0,
     }
     return ellipse
   }
   const fill = layer.kind === "color" ? (layer.color ?? "#000000") : (PLACEHOLDER[layer.kind] ?? "#333333")
   const rect: SaraswatiRectNode = {
-    ...basePaint(layer), type: "rect", width, height, fill: layer.kind === "color" && layer.gradient ? gradientPaint(layer.gradient) : { type: "solid", color: fill }, stroke: null, strokeWidth: 0, radiusX: 0, radiusY: 0,
+    ...basePaint(layer), type: "rect", width, height, fill: layer.kind === "color" && layer.gradient ? gradientPaint(layer.gradient) : { type: "solid", color: fill },
+    stroke: layer.kind === "color" && layer.outline ? { type: "solid", color: layer.outline.color } : null, strokeWidth: layer.kind === "color" ? layer.outline?.width ?? 0 : 0,
+    radiusX: layer.kind === "color" ? layer.corner ?? 0 : 0, radiusY: layer.kind === "color" ? layer.corner ?? 0 : 0,
   }
   return rect
 }
@@ -425,8 +428,19 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
           issues.push({ nodeId: node.id, message: "Edited fills on this live layer cannot be saved into a Rhema scene yet" })
         }
       }
-      if (node.stroke || node.strokeWidth !== 0 || node.radiusX !== 0 || node.radiusY !== 0 || node.clipPath || (node.clipPathStack?.length ?? 0) > 0) {
-        issues.push({ nodeId: node.id, message: "Layer stroke, clipping and corner styles cannot be saved into a Rhema scene yet" })
+      if (node.clipPath || (node.clipPathStack?.length ?? 0) > 0) {
+        issues.push({ nodeId: node.id, message: "Layer clipping cannot be saved into a Rhema scene yet" })
+      }
+      const shapeEdge = binding.kind === "color" ? shapeOutline(node, true) : null
+      if (binding.kind !== "color" && (node.stroke || node.strokeWidth !== 0 || node.radiusX !== 0 || node.radiusY !== 0)) {
+        issues.push({ nodeId: node.id, message: "Outlines and rounded corners on this live layer cannot be saved into a Rhema scene yet" })
+      } else if (shapeEdge && "issue" in shapeEdge) {
+        issues.push({ nodeId: node.id, message: shapeEdge.issue })
+      } else if (shapeEdge) {
+        if (shapeEdge.outline) layer.outline = shapeEdge.outline
+        else delete layer.outline
+        if (shapeEdge.corner) layer.corner = shapeEdge.corner
+        else delete layer.corner
       }
     } else if (node.type === "ellipse") {
       let compatible = true
@@ -439,9 +453,11 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       if (node.fill.type === "gradient" && !gradient) refuse(`This ellipse gradient cannot be drawn on Rhema outputs: ${gradientIssue(node.fill)}`)
       else if (node.fill.type === "solid" && !TEXT_COLOR.test(node.fill.color)) refuse("Ellipse colours must be #rrggbb hex for Rhema scene output")
       else if (node.fill.type !== "solid" && node.fill.type !== "gradient") refuse("This ellipse paint cannot be drawn on Rhema outputs")
-      if (node.stroke || node.strokeWidth !== 0 || node.clipPath || (node.clipPathStack?.length ?? 0) > 0) {
-        refuse("Ellipse stroke and clipping cannot be saved into a Rhema scene yet")
-      }
+      if (node.clipPath || (node.clipPathStack?.length ?? 0) > 0) refuse("Ellipse clipping cannot be saved into a Rhema scene yet")
+      const edge = shapeOutline(node, false)
+      if ("issue" in edge) refuse(edge.issue)
+      else if (edge.outline) layer.outline = edge.outline
+      else delete layer.outline
       if (!Number.isFinite(node.scaleX) || !Number.isFinite(node.scaleY) || node.scaleX <= 0 || node.scaleY <= 0) {
         refuse("Ellipse must keep a positive, finite scale for Rhema scene output")
       }
@@ -607,4 +623,31 @@ export function previewDesign(design: RhemaDesign, live: LivePreviewInput): Sara
     })
   }
   return preview
+}
+
+/**
+ * A rectangle's or ellipse's outline and corners as outputs draw them (#448): the editor's stroke
+ * (a solid #rrggbb, 0.5–200 px) centred on the edge, and its corner radius, both scaled as the
+ * editor scales the shape. A shape scaled differently across and down would draw a stretched
+ * outline, so it is refused when it has one.
+ */
+function shapeOutline(
+  node: { stroke?: unknown; strokeWidth: number; radiusX?: number; radiusY?: number; scaleX: number; scaleY: number },
+  corners: boolean,
+): { outline?: { color: string; width: number }; corner?: number } | { issue: string } {
+  const stroke = node.stroke as { type?: string; color?: string } | null | undefined
+  const width = stroke && node.strokeWidth > 0 ? node.strokeWidth : 0
+  const radius = corners ? Math.max(node.radiusX ?? 0, node.radiusY ?? 0) : 0
+  if (!width && !radius) return {}
+  if (Math.abs(Math.abs(node.scaleX) - Math.abs(node.scaleY)) > 0.0001) return { issue: "A stretched shape's outline or corners cannot be drawn on Rhema outputs; make it the same scale across and down" }
+  const scale = Math.abs(node.scaleX)
+  const out: { outline?: { color: string; width: number }; corner?: number } = {}
+  if (width) {
+    if (stroke?.type !== "solid" || typeof stroke.color !== "string" || !TEXT_COLOR.test(stroke.color)) return { issue: "Outline colours must be a solid #rrggbb for Rhema outputs" }
+    const w = width * scale
+    if (w < 0.5 || w > 200) return { issue: "Outlines must be 0.5–200 px wide for Rhema outputs" }
+    out.outline = { color: stroke.color, width: Math.round(w * 100) / 100 }
+  }
+  if (radius) out.corner = Math.min(540, Math.round(radius * scale * 100) / 100)
+  return out
 }
